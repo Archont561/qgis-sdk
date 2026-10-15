@@ -1,0 +1,25 @@
+pre-commit:
+  parallel: false
+  commands:
+    01-ruff-lint:
+      glob: "*.{py,pyi}"
+      run: "pixi run -e default ruff-lint -- {staged_files}"
+      stage_fixed: true
+    02-ruff-format:
+      glob: "*.{py,pyi}"
+      run: "pixi run -e default ruff-format -- {staged_files}"
+      stage_fixed: true
+    03-biome:
+      glob: "*.{js,jsx,ts,tsx,json,jsonc}"
+      run: "pixi run -e bun biome-fix -- {staged_files}"
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: "pixi run -e default convco-check-message {1}"
+
+pre-push:
+  commands:
+    coverage:
+      run: "pixi run -e bun bun run coverage"

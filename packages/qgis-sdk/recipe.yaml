@@ -1,0 +1,32 @@
+context:
+  version: "0.1.0"
+
+package:
+  name: qgis-sdk
+  version: ${{ version }}
+
+source:
+  path: .
+
+build:
+  noarch: python
+  script:
+    - python -m pip install . --no-deps --no-build-isolation -vv
+
+requirements:
+  host:
+    - hatchling ==1.32.4
+    - pip
+    - python >=3.11,<4
+  run:
+    - python >=3.11,<4
+
+tests:
+  - python:
+      imports:
+        - qgis_sdk
+      pip_check: true
+
+about:
+  summary: Python SDK foundations for QGIS plugin development
+  license: MIT

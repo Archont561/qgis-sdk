@@ -1,0 +1,19 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+	"files": {
+		"includes": [
+			"**",
+			"!!**/dist",
+			"!!**/coverage",
+			"!!**/build",
+			"!!**/.pixi",
+			"!!**/.bun",
+			"!!**/.npm",
+			"!!**/.cache",
+			"!!**/.turbo",
+			"!!**/.config/turborepo",
+			"!!**/.agents",
+			"!!**/node_modules"
+		]
+	}
+}

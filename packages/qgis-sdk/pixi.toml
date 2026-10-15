@@ -1,0 +1,15 @@
+[package]
+name = "qgis-sdk"
+version = "0.1.0"
+
+[package.build.backend]
+name = "pixi-build-python"
+version = "==0.8.7"
+channels = ["https://prefix.dev/pixi-build-backends", "https://prefix.dev/conda-forge"]
+
+[package.host-dependencies]
+python = "==3.14.8"
+hatchling = "==1.32.4"
+
+[package.run-dependencies]
+python = ">=3.11,<4"

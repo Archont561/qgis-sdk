@@ -1,0 +1,24 @@
+coverage:
+  precision: 2
+  round: down
+  range: "90...100"
+  status:
+    project:
+      qgis-sdk:
+        target: 90%
+        threshold: 0%
+        flags:
+          - qgis-sdk
+      qgis-sdk-bridge:
+        target: 90%
+        threshold: 0%
+        flags:
+          - qgis-sdk-bridge
+
+flags:
+  qgis-sdk:
+    paths:
+      - packages/qgis-sdk/src/
+  qgis-sdk-bridge:
+    paths:
+      - packages/qgis-sdk-bridge/src/

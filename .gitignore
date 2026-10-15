@@ -1,0 +1,21 @@
+# Sandbox-local shell and user configuration
+/.bashrc
+/.cache/
+/.config/
+
+# Pixi environments/build output and Bun dependency caches
+.pixi/
+.bun/
+.npm/
+node_modules/
+
+# Build and test output
+dist/
+build/
+coverage/
+*.egg-info/
+.turbo/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+.config/turborepo/

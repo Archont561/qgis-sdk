@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@v0.11.2
+        with:
+          environments: >-
+            default
+            bun
+          cache: true
+          locked: true
+
+      - name: Install JavaScript dependencies
+        run: pixi run -e bun install-js
+
+      - name: Check commit messages
+        run: pixi run -e default check-commits
+
+      - name: Lint Python
+        run: pixi run -e default lint-python
+
+      - name: Check Python formatting
+        run: pixi run -e default format-python-check
+
+      - name: Lint and format TypeScript
+        run: pixi run -e bun biome-check
+
+      - name: Lint GitHub Actions
+        run: pixi run -e default lint-github-actions
+
+      - name: Typecheck TypeScript
+        run: pixi run -e bun typecheck
+
+      - name: Check coverage for all packages
+        id: coverage
+        run: pixi run -e bun bun run coverage
+
+      - name: Upload Python coverage
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: packages/qgis-sdk/coverage/lcov.info
+          flags: qgis-sdk
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload TypeScript coverage
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage/qgis-sdk-bridge/lcov.info
+          flags: qgis-sdk-bridge
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}

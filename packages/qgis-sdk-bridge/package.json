@@ -1,0 +1,28 @@
+{
+	"name": "qgis-sdk-bridge",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "bunup",
+		"test": "bun test",
+		"coverage": "bun --cwd=../.. --config=bunfig.toml test --coverage packages/qgis-sdk-bridge/tests",
+		"typecheck": "tsc --noEmit"
+	},
+	"devDependencies": {
+		"@archont561/bun-test-utils": "^0.1.0",
+		"@workspace/config": "workspace:*",
+		"bunup": "^0.16.32"
+	}
+}

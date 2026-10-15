@@ -1,0 +1,23 @@
+{
+  "skill_name": "session",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Start a normal work session in this repository and pick an appropriate next task from the backlog.",
+      "expected_output": "Inspect AGENTS.md and relevant session context, verify Git/environment availability, inspect backlog non-interactively, identify dependencies and evidence, then propose a bounded next task and wait before implementing.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Please make this explicitly requested small bug fix and run the checks. Do not create a commit.",
+      "expected_output": "Proceed without a proposal-and-wait gate, use TDD for the behavior change, run relevant checks, report exact outcomes, and do not commit or merge.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "The pull request has merged to main. Close out the session and tell me what the next agent should do.",
+      "expected_output": "Verify the merged commit and accessible post-merge CI, update only proven backlog criteria, distinguish unavailable evidence, report the merge and remaining work, and provide a self-contained next-session prompt.",
+      "files": []
+    }
+  ]
+}

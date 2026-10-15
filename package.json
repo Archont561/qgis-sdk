@@ -1,0 +1,23 @@
+{
+	"name": "workspace",
+	"private": true,
+	"type": "module",
+	"packageManager": "bun@1.4.2",
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"scripts": {
+		"build": "turbo run build",
+		"test": "turbo run test",
+		"coverage": "turbo run coverage"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.15",
+		"@types/bun": "^1.4.3",
+		"backlog.md": "^1.53.0",
+		"skills": "^1.7.2",
+		"turbo": "^2.11.8",
+		"typescript": "^7.0.2"
+	}
+}

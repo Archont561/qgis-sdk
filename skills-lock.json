@@ -1,0 +1,35 @@
+{
+	"version": 1,
+	"skills": {
+		"backlog": {
+			"source": "Archont561/qgis-rust",
+			"sourceType": "github",
+			"skillPath": ".agents/skills/backlog/SKILL.md",
+			"computedHash": "0852b1eb4a54fc977cc649c87e04eb590f4e83d574e84f1196dc920bf13fe934"
+		},
+		"clean-code-principles": {
+			"source": "Archont561/qgis-rust",
+			"sourceType": "github",
+			"skillPath": ".agents/skills/clean-code-principles/SKILL.md",
+			"computedHash": "894141ab94d23cefbbefc82eb8156ddf16f1814d8dec797321882bf4a7c81469"
+		},
+		"refactor": {
+			"source": "Archont561/qgis-rust",
+			"sourceType": "github",
+			"skillPath": ".agents/skills/refactor/SKILL.md",
+			"computedHash": "458415b990888aa76c2b199e2ab27eab4272df50b7381d2599844376120f7421"
+		},
+		"tdd": {
+			"source": "Archont561/qgis-rust",
+			"sourceType": "github",
+			"skillPath": ".agents/skills/tdd/SKILL.md",
+			"computedHash": "98dbf9941342f962fc8a96b8d6982008ccf80562a9055a9234efd905ef887b68"
+		},
+		"skill-creator": {
+			"source": "Archont561/qgis-rust",
+			"sourceType": "github",
+			"skillPath": ".agents/skills/skill-creator/SKILL.md",
+			"computedHash": "b2bfe91d69ca99994c0566baede889e7d2b9bb8791c6b6106c5d387392f717f6"
+		}
+	}
+}

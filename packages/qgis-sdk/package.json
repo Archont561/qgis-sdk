@@ -1,0 +1,12 @@
+{
+	"name": "qgis-sdk",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"build": "bun run build:pypi && bun run build:conda",
+		"build:pypi": "pixi run -e build python -m build --no-isolation --outdir dist/pypi && pixi run -e build twine check dist/pypi/*",
+		"build:conda": "pixi build --path recipe.yaml --output-dir dist/conda",
+		"test": "cd ../.. && pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests",
+		"coverage": "cd ../.. && pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests --cov=packages/qgis-sdk/src/qgis_sdk --cov-report=term-missing --cov-report=lcov:packages/qgis-sdk/coverage/lcov.info --cov-fail-under=90"
+	}
+}

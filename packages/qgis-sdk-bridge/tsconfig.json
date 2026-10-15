@@ -1,0 +1,13 @@
+{
+	"extends": "../config/tsconfig/library.json",
+	"compilerOptions": {
+		"paths": {
+			"@": ["./src/index.ts"],
+			"@/*": ["./src/*"],
+			"@/src": ["./src/index.ts"],
+			"@/src/*": ["./src/*"]
+		}
+	},
+	"include": ["src/**/*.ts", "tests/**/*.ts"],
+	"exclude": ["dist", "node_modules", "coverage"]
+}
