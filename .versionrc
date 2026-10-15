@@ -49,4 +49,6 @@ linkReferences: true
 merges: false
 firstParent: false
 initialBumpVersion: 0.1.0
+ignoreMessagePattern:
+  - ^Initial commit[[:space:]]*$
 versionScheme: semver
