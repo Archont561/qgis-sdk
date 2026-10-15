@@ -13,8 +13,14 @@ python-build = "==1.6.1"
 twine = "==7.0.0"
 hatchling = "==1.32.4"
 
+# Wheels only: pixi-pack refuses path/sdist PyPI locations, so the workspace package
+# stays on PYTHONPATH rather than an editable extra.
 [feature.python.pypi-dependencies]
-qgis-sdk = { path = "packages/qgis-sdk", editable = true, extras = ["dev"] }
+hypothesis = "==6.169.4"
+pytest-cov = "==7.1.0"
+
+[feature.python.activation.env]
+PYTHONPATH = "packages/qgis-sdk/src"
 
 [feature.utils.dependencies]
 ruff = "==0.17.1"

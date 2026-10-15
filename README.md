@@ -64,7 +64,7 @@ Pixi keeps the toolchains separate:
 - `build`: Python packaging and test tools without QGIS.
 - `bun`: Bun and JavaScript workspace tooling, isolated from the Python environments.
 
-Python development dependencies, including pytest, pytest-cov, Hypothesis, Rich, and Typer, are declared in the `qgis-sdk` `dev` extra and installed into the Python environments from the local package.
+Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis and pytest-cov are pinned there as PyPI wheels (matching the `qgis-sdk` `dev` extra). The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk/src`.
 
 ## Reproducible sandbox
 

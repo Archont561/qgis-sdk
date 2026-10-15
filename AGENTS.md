@@ -14,4 +14,4 @@
 - For Python QGIS SDK and TypeScript bridge work, consult the [workspace skill](.agents/skills/qgis-sdk/SKILL.md).
 - When creating or revising agent skills, follow [Skill Creator](.agents/skills/skill-creator/SKILL.md) and add realistic evaluation prompts.
 - Root commands run through Pixi: `pixi run -e bun bun run test` for local tests, `pixi run -e bun bun run coverage` for CI/pre-push coverage gates, and `pixi run -e bun bun run build` for builds. Do not conflate the local test task with the separate 90% coverage checks.
-- Keep Pixi dependency pins exact, Bun in its separate environment, source tests outside production source directories, and Codecov LCOV paths repository-root-relative.
+- Keep Pixi dependency pins exact, Bun in its separate environment, source tests outside production source directories, and Codecov LCOV paths repository-root-relative. Do not install `qgis-sdk` as a Pixi path/editable PyPI extra: pixi-pack only carries wheels, so keep Hypothesis and pytest-cov as PyPI wheels in the Python feature and `packages/qgis-sdk/src` on `PYTHONPATH`.
