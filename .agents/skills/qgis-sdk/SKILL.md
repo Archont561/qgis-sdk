@@ -16,7 +16,7 @@ Use this skill when changing the `qgis-sdk` Python package, the `qgis-sdk-bridge
 
 ## Development rules
 
-- Keep Python development tools in the `qgis-sdk` `dev` extra in `packages/qgis-sdk/pyproject.toml`. The root Pixi Python feature installs that local extra; avoid duplicating its pytest-cov and Hypothesis pins in the root Pixi dependency list.
+- Keep Python development tools listed in the `qgis-sdk` `dev` extra. Do not add that extra as a Pixi path/editable PyPI dependency (pixi-pack only carries wheels). Pin Hypothesis and pytest-cov as wheels in the Python feature and keep `packages/qgis-sdk/src` on `PYTHONPATH`.
 - Keep direct Pixi dependency versions exactly pinned.
 - Run source tests locally with `pixi run -e bun bun run test`.
 - Run coverage checks with `pixi run -e bun bun run coverage`. Keep the separate 90% checks and Codecov report paths intact.
