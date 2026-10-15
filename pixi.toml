@@ -18,6 +18,7 @@ hatchling = "==1.32.4"
 [feature.python.pypi-dependencies]
 hypothesis = "==6.169.4"
 pytest-cov = "==7.1.0"
+pytest-bdd = "==9.0.0"
 
 [feature.python.activation.env]
 PYTHONPATH = "packages/qgis-sdk/src"
