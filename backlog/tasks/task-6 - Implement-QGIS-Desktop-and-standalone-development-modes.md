@@ -4,9 +4,15 @@ title: Implement QGIS Desktop and standalone development modes
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
+updated_date: '2026-10-16 12:02'
 labels: []
-milestone: m-2
-dependencies: []
+milestone: m-3
+dependencies:
+  - TASK-1
+  - TASK-3
+  - TASK-4
+  - TASK-19
+  - TASK-23
 priority: high
 type: feature
 ordinal: 6000
@@ -15,7 +21,7 @@ ordinal: 6000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Implement qgis-sdk dev for source plugin loading in real QGIS Desktop and a clearly separate standalone PyQt/PyQGIS target. For optional WebEngine UI, run the frontend dev server/HMR and recreate/reload the plugin view on Python changes where safe, with a visible restart fallback.
+Implement real Desktop source-plugin development and an explicit reduced standalone target, with frontend HMR only for web UI. Safe Python replacement is tracked separately in the refresh task.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

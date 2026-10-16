@@ -4,9 +4,12 @@ title: Add a QGIS-aware HTTP client and typed GIS-service layer
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
+updated_date: '2026-10-16 12:02'
 labels: []
 milestone: m-1
-dependencies: []
+dependencies:
+  - TASK-13
+  - TASK-24
 priority: medium
 type: feature
 ordinal: 5000

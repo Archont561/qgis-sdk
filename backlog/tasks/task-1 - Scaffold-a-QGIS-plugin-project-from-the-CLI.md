@@ -4,9 +4,12 @@ title: Scaffold a QGIS plugin project from the CLI
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
+updated_date: '2026-10-16 12:02'
 labels: []
-milestone: m-0
-dependencies: []
+milestone: m-1
+dependencies:
+  - TASK-2
+  - TASK-24
 priority: high
 type: feature
 ordinal: 1000

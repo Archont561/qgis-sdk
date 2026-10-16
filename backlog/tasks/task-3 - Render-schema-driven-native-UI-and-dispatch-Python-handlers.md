@@ -4,10 +4,12 @@ title: Render schema-driven native UI and dispatch Python handlers
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
+updated_date: '2026-10-16 12:02'
 labels: []
 milestone: m-1
 dependencies:
-  - TASK-2
+  - TASK-24
+  - TASK-25
 priority: medium
 type: feature
 ordinal: 3000

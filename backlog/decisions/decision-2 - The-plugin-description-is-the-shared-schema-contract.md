@@ -18,3 +18,7 @@ The SDK will derive one inspectable plugin description from the Python declarati
 - Contract evolution requires an explicit schema/version compatibility policy.
 - Native Qt and WebEngine renderers should be adapters over the same declarations rather than parallel authoring systems.
 - JavaScript bridge messages must use serializable DTOs and an allowlisted operation surface, never raw Qt or QGIS objects.
+
+## Proposed contract refinement (2026-10-16)
+
+Derive endpoint request/result/event schemas from ordinary dataclasses and supported annotations; omit injected host dependencies. Distinguish nullable, required and omittable fields, reject unsupported types, and generate TS DTOs/operation maps/clients plus runtime validators. Keep API/protocol identity and compatibility policy explicit. See [decision-9](decision-9%20-%20Declare-allowlisted-typed-bridge-endpoints-with-runtime-owned-routers.md) for allowlisted router/transport behavior and [decision-10](decision-10%20-%20Use-dataclass-authoring-and-schema-driven-TypeScript-generation.md) for generation/backend evaluation. These refinements do not select a validation library or final decorator syntax.

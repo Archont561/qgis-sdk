@@ -15,6 +15,21 @@ Use this skill to preserve context and evidence across ordinary work sessions an
 4. Inspect the relevant package files and existing tests. Read repository documentation only as needed for the request.
 5. When the user asks what to work on or asks to select backlog work, use the [`backlog`](../backlog/SKILL.md) CLI workflow, read candidate tasks and dependencies, then present a small evidence-based proposal and wait. Do not add this pause to an explicit, scoped task.
 
+### First-run workspace dependencies
+
+After restore and orientation, prepare dependencies before running workspace checks:
+
+- Ensure `pixi` is on `PATH`. If restore materialised it but user-tool registration did not complete, prepend the repository's `.pixi/tools/<platform>` directory (for example, `export PATH="$PWD/.pixi/tools/linux-64:$PATH"` on Linux x86-64). Keep this path available to nested package scripts too; do not substitute a system Python or Bun.
+- A restored Pixi environment does not provide the workspace's JavaScript `node_modules`. On the first run in a fresh checkout, or if dependencies are missing (for example, `turbo: command not found`), run this from the repository root before retrying the requested check:
+
+  ```sh
+  pixi run -e bun bun install --frozen-lockfile
+  ```
+
+  This downloads the locked JavaScript dependencies using Bun in its separate Pixi environment. Reuse an already-installed workspace on later runs; do not reinstall on every command.
+- If downloads are blocked or the frozen install fails, report the command and blocker. Do not drop `--frozen-lockfile`, regenerate lockfiles, upgrade dependencies, or silently switch package managers to get past the failure. Confirm setup did not change tracked dependency files.
+- A successful dependency install does not resolve a failed restore or its integrity warnings. Report those separately. If the user explicitly asks to run checks with the partially restored environment, preserve it and the Pixi lockfile with `export PIXI_FROZEN=true PIXI_NO_INSTALL=true` for both setup and checks (including nested `pixi run` calls), and qualify the results as using an unverified restore. Do not claim full environment verification.
+
 ## 2. Scope the work
 
 - Restate the requested outcome internally as observable acceptance criteria; ask only about ambiguity that would materially change the implementation.

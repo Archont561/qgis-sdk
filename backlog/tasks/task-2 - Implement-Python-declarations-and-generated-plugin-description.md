@@ -4,10 +4,12 @@ title: Implement Python declarations and generated plugin description
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
+updated_date: '2026-10-16 12:02'
 labels: []
 milestone: m-0
 dependencies:
-  - TASK-1
+  - TASK-11
+  - TASK-12
 priority: high
 type: feature
 ordinal: 2000
