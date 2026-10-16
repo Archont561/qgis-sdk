@@ -70,7 +70,8 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
         sys.meta_path.insert(0, RejectNative())
         for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.services',
                        'qgis_sdk.core', 'qgis_sdk.core.contexts',
-                       'qgis_sdk.adapters.pydantic'):
+                       'qgis_sdk.adapters.pydantic',
+                       'qgis_sdk.adapters.webengine'):
             importlib.import_module(module)
         assert 'qgis' not in sys.modules
         assert 'pydantic' not in sys.modules
