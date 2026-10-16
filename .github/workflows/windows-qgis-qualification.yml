@@ -1,0 +1,26 @@
+name: Windows QGIS qualification (dummy)
+
+on:
+  push:
+    branches: [arena/c595bc28-qgis-sdk]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-smoke:
+    name: Windows runner smoke
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Show runner environment
+        shell: pwsh
+        run: |
+          python --version
+          $PSVersionTable | Out-String
+      - name: Dummy qualification placeholder
+        shell: pwsh
+        run: |
+          Write-Host "Windows runner reached successfully."
+          Write-Host "QGIS installation and Desktop/WebEngine smoke are intentionally not performed in this dummy workflow."
