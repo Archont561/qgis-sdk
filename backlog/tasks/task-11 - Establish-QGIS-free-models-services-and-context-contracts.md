@@ -1,10 +1,10 @@
 ---
 id: TASK-11
 title: Establish QGIS free models services and context contracts
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 14:16'
+updated_date: '2026-10-16 18:11'
 labels: []
 milestone: m-0
 dependencies: []
@@ -52,3 +52,9 @@ Follow-up naming rule: added repository convention in AGENTS.md and package READ
 
 2026-10-16 follow-up on the confirmed lifecycle seam: added two bounded Hypothesis properties for owner/child cleanup order, idempotence and best-effort failure collection, plus two pytest-bdd scenarios for view isolation and plugin disposal. Refactored ResourceScope.close to share best-effort cleanup handling in _attempt_cleanup without changing public behavior (core-dry / solid-srp-function). Targeted QGIS-free lifecycle suite: 16 passed. Root Python: 23 passed, 17 candidate-only spike skips; Python/bridge coverage 100%. Ruff, Biome, bridge typecheck, Python wheel/sdist/Twine and bridge build passed. Full root build did not complete: Conda packaging could not reach conda-forge repodata in this sandbox. No merge; keep In Progress.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+PR #5 merged as 689b137e9def05a5538df46238a55f4169863599. All three criteria are implemented in the landed QGIS-free models/services/core contracts, explicit scoped contexts and documented typed errors/native limitations. Post-merge CI 38944159777 succeeded, including Python/TS coverage, lint and typecheck. Sandbox publication 38944159757 succeeded for linux-64; local restore subsequently failed nine RECORD integrity comparisons, which is tracked as an environment qualification gap, not proof of native runtime readiness. Real QGIS adapters remain downstream.
+<!-- SECTION:FINAL_SUMMARY:END -->
