@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import importlib
 import sys
 import textwrap
 from pathlib import Path
 
 import pytest
-
 from qgis_sdk.adapters import webengine
 from qgis_sdk.models.errors import QgisSdkOptionalDependencyError
 
@@ -17,8 +15,8 @@ def test_webengine_adapter_imports_without_native_modules(tmp_path: Path) -> Non
     source_root = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
     script = textwrap.dedent(
         """
-        import importlib
         import sys
+        import importlib
 
         sys.path.insert(0, sys.argv[1])
 
@@ -33,7 +31,6 @@ def test_webengine_adapter_imports_without_native_modules(tmp_path: Path) -> Non
         print('native-free')
         """
     )
-    result = subprocess.run if False else None
     import subprocess
 
     result = subprocess.run(
