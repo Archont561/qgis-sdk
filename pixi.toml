@@ -60,6 +60,7 @@ cmd = "actionlint .github/workflows/*.yml"
 
 [feature.qgis.dependencies]
 qgis = "==4.2.3"
+pyqt6-webengine = "==6.11.0"
 
 [feature.bun.dependencies]
 bun = "==1.4.2"
