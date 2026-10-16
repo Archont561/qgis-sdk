@@ -1,6 +1,7 @@
 {
 	"extends": "../config/tsconfig/library.json",
 	"compilerOptions": {
+		"types": ["bun", "node"],
 		"paths": {
 			"@": ["./src/index.ts"],
 			"@/*": ["./src/*"],

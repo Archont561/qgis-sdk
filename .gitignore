@@ -13,6 +13,7 @@ node_modules/
 dist/
 build/
 coverage/
+/.coverage*
 *.egg-info/
 .turbo/
 .ruff_cache/

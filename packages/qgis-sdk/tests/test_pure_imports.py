@@ -1,0 +1,87 @@
+"""Guard the public, QGIS-free package boundary without running QGIS."""
+
+import ast
+import importlib.util
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
+
+SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
+LAYER_ORDER = {"models": 0, "services": 1, "core": 2}
+
+
+def imports_in(path: Path, layer: str) -> list[tuple[str, int]]:
+    """Read declared imports even inside functions or conditional blocks."""
+    package = f"qgis_sdk.{layer}"
+    imports: list[tuple[str, int]] = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            imports.extend((alias.name, node.lineno) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            name = node.module or ""
+            if node.level:
+                name = importlib.util.resolve_name("." * node.level + name, package)
+            imports.append((name, node.lineno))
+            # `from qgis_sdk import adapters` and `from . import adapters`
+            # must not bypass the dependency-direction check.
+            if name == "qgis_sdk" or node.module is None:
+                imports.extend(
+                    (f"{name}.{alias.name}", node.lineno) for alias in node.names
+                )
+    return imports
+
+
+@pytest.mark.parametrize("layer", LAYER_ORDER)
+def test_pure_layers_only_import_the_stdlib_and_lower_pure_layers(layer: str) -> None:
+    files = sorted((SOURCE_ROOT / layer).rglob("*.py"))
+    assert files, f"Missing public pure layer: {layer}"
+    for file in files:
+        for module, line in imports_in(file, layer):
+            parts = module.split(".")
+            if parts[0] == "qgis_sdk":
+                allowed = len(parts) > 1 and parts[1] in LAYER_ORDER
+                allowed = allowed and LAYER_ORDER[parts[1]] <= LAYER_ORDER[layer]
+            else:
+                allowed = parts[0] in sys.stdlib_module_names
+            assert allowed, (
+                f"{file.relative_to(SOURCE_ROOT)}:{line}: forbidden import {module}"
+            )
+
+
+def test_pure_public_imports_succeed_with_native_modules_forbidden(
+    tmp_path: Path,
+) -> None:
+    script = textwrap.dedent(
+        """
+        import importlib
+        import sys
+
+        sys.path.insert(0, sys.argv[1])
+
+        class RejectNative:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.split('.')[0] in {'qgis', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6'}:
+                    raise AssertionError(f'eager native import: {fullname}')
+                return None
+
+        sys.meta_path.insert(0, RejectNative())
+        for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.services',
+                       'qgis_sdk.core', 'qgis_sdk.core.contexts'):
+            importlib.import_module(module)
+        assert 'qgis' not in sys.modules
+        print('native-free')
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, str(SOURCE_ROOT.parent)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "native-free"

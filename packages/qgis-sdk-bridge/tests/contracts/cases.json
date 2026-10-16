@@ -1,0 +1,146 @@
+[
+	{
+		"name": "request defaults may be omitted",
+		"schema": "run-request",
+		"valid": true,
+		"value": { "kind": "run", "count": 2 }
+	},
+	{
+		"name": "request permits an explicit nullable label",
+		"schema": "run-request",
+		"valid": true,
+		"value": { "kind": "run", "count": 2, "mode": "fast", "label": null }
+	},
+	{
+		"name": "request permits a non-null label",
+		"schema": "run-request",
+		"valid": true,
+		"value": { "kind": "run", "count": 2, "label": "map" }
+	},
+	{
+		"name": "request rejects a numeric string",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run", "count": "2" }
+	},
+	{
+		"name": "request rejects a boolean as integer",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run", "count": true }
+	},
+	{
+		"name": "request rejects a fractional integer",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run", "count": 2.5 }
+	},
+	{
+		"name": "request rejects an unknown field",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run", "count": 2, "extra": 1 }
+	},
+	{
+		"name": "request requires count",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run" }
+	},
+	{
+		"name": "request requires kind",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "count": 2 }
+	},
+	{
+		"name": "request rejects an unknown kind",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "cancel", "count": 2 }
+	},
+	{
+		"name": "request rejects null instead of a defaulted mode",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run", "count": 2, "mode": null }
+	},
+	{
+		"name": "request rejects a number instead of a label",
+		"schema": "run-request",
+		"valid": false,
+		"value": { "kind": "run", "count": 2, "label": 3 }
+	},
+	{
+		"name": "reader permits an omitted note",
+		"schema": "run-result-reader",
+		"valid": true,
+		"value": { "processed": 2 }
+	},
+	{
+		"name": "reader accepts the explicitly supported revision",
+		"schema": "run-result-reader",
+		"valid": true,
+		"value": { "processed": 2, "note": null, "revision": "v2" }
+	},
+	{
+		"name": "reader rejects arbitrary new fields",
+		"schema": "run-result-reader",
+		"valid": false,
+		"value": { "processed": 2, "surprise": "v2" }
+	},
+	{
+		"name": "reader requires processed",
+		"schema": "run-result-reader",
+		"valid": false,
+		"value": { "note": null }
+	},
+	{
+		"name": "reader rejects a boolean count",
+		"schema": "run-result-reader",
+		"valid": false,
+		"value": { "processed": true }
+	},
+	{
+		"name": "reader rejects a numeric string",
+		"schema": "run-result-reader",
+		"valid": false,
+		"value": { "processed": "2" }
+	},
+	{
+		"name": "reader rejects an invalid revision",
+		"schema": "run-result-reader",
+		"valid": false,
+		"value": { "processed": 2, "revision": 9 }
+	},
+	{
+		"name": "writer emits a defaulted null note",
+		"schema": "run-result-writer",
+		"valid": true,
+		"value": { "processed": 2, "note": null }
+	},
+	{
+		"name": "writer emits a string note",
+		"schema": "run-result-writer",
+		"valid": true,
+		"value": { "processed": 2, "note": "done" }
+	},
+	{
+		"name": "writer requires a serialized default",
+		"schema": "run-result-writer",
+		"valid": false,
+		"value": { "processed": 2 }
+	},
+	{
+		"name": "writer rejects reader-only extensions",
+		"schema": "run-result-writer",
+		"valid": false,
+		"value": { "processed": 2, "note": null, "revision": "v2" }
+	},
+	{
+		"name": "writer rejects a numeric string",
+		"schema": "run-result-writer",
+		"valid": false,
+		"value": { "processed": "2", "note": null }
+	}
+]

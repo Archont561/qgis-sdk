@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "count": {
+      "type": "integer"
+    },
+    "kind": {
+      "const": "run"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mode": {
+      "default": "safe",
+      "enum": [
+        "safe",
+        "fast"
+      ]
+    }
+  },
+  "required": [
+    "kind",
+    "count"
+  ],
+  "title": "RunRequest",
+  "type": "object"
+}

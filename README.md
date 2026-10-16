@@ -2,7 +2,7 @@
 
 **A Python-first foundation for developing QGIS plugins, including a bridge for plugin interfaces hosted in `QWebEngineView`.**
 
-The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge is specifically for the web interface running inside QGIS's `QWebEngineView`, connecting that frontend to the plugin's Python/QGIS side. This repository is an early-stage scaffold: the Python package and bridge currently expose smoke-test APIs only; their plugin-facing APIs are not implemented yet.
+The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge is specifically for the web interface running inside QGIS's `QWebEngineView`, connecting that frontend to the plugin's Python/QGIS side. This repository is an early-stage scaffold: the Python package now includes experimental, QGIS-free context and service contracts alongside its smoke-test API; native plugin adapters and the bridge runtime are not implemented yet.
 
 ## Package listings
 
@@ -17,7 +17,7 @@ Use this repository's source packages for development. The package listings are 
 
 | Package | Role | Current state |
 | :-- | :-- | :-- |
-| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Minimal `qgis_sdk.hello()` smoke-test API; PyPI and Conda build pipelines are configured |
+| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | `qgis_sdk.hello()` smoke test plus experimental pure models/services/context contracts; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
 | [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; currently only a minimal `hello()` smoke-test API; built with Bunup |
 | [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
 
@@ -55,6 +55,20 @@ pixi run -e bun typecheck
 Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk` and `qgis-sdk-bridge`, with repository-root-relative LCOV reports for Codecov.
 
 The Python package builds a wheel and source distribution with Hatchling and a Conda package from the explicit `packages/qgis-sdk/recipe.yaml` recipe. Build outputs are under `packages/qgis-sdk/dist/`. The bridge build output is under `packages/qgis-sdk-bridge/dist/`.
+
+## Checked contract-generation example
+
+A **test-only**, QGIS-free example exercises the proposed web-project workflow without declaring a production validation backend or SDK CLI. From the workspace root, after installing the locked Pixi and Bun environments:
+
+```sh
+pixi run -e bun bun run sdk:generate
+pixi run -e bun bun run coverage
+pixi run -e bun typecheck
+```
+
+The `sdk:generate` package script uses Python `mashumaro==3.23` on the ordinary dataclasses in `packages/qgis-sdk/tests/contract_sample/models.py` to export three Draft 2020-12 JSON Schemas. The bridge's locally installed `json2ts` (`json-schema-to-typescript==16.0.0`) generates checked-in TypeScript declarations beside them under `packages/qgis-sdk-bridge/tests/contracts/generated/`. No `npx`/`bunx` download is needed during generation. Python tests compare byte-for-byte schema output and use **test-only** `jsonschema` to evaluate the shared cases; bridge tests use Ajv2020 (no coercion or mutations), compare generated declarations, and the TypeScript checker verifies important optional/nullable distinctions. CI's normal coverage and typecheck tasks detect stale bindings.
+
+These are example contracts, **not** public SDK operations or usable frontend validators. Mashumaro's default Python decoder coerces values and drops unknown fields, so it must not be used as the strict request boundary. `jsonschema` and its native `rpds-py` dependency are only development/test tools here, not plugin runtime dependencies. A strict Python runtime validator, actual SDK generation CLI, numeric/format limits, WebEngine CSP-safe standalone validators, and version/compatibility handshake still need selection and testing before shipping wire contracts.
 
 ## Development environments
 
