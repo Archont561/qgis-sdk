@@ -445,6 +445,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyproj-3.8.0-py314h08533f4_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyqt6-6.11.0-py314h0534870_7.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyqt6-sip-13.13.0-py314hc75f4c6_7.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyqt6-webengine-6.11.0-py314hc75f4c6_7.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.8-hcd007b5_102_cp314.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyyaml-6.0.3-py314h67df5f8_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/qca-qt6-2.3.12-h2f7e02e_0.conda
@@ -1210,7 +1211,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/cffi?source=compressed-mapping
+  - pkg:pypi/cffi?source=hash-mapping
   run_exports: {}
   size: 307262
   timestamp: 1788485305536
@@ -5724,7 +5725,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/nh3?source=compressed-mapping
+  - pkg:pypi/nh3?source=hash-mapping
   run_exports: {}
   size: 690746
   timestamp: 1787526819319
@@ -6248,6 +6249,43 @@ packages:
   run_exports: {}
   size: 84451
   timestamp: 1791872547075
+- conda: https://conda.anaconda.org/conda-forge/linux-64/pyqt6-webengine-6.11.0-py314hc75f4c6_7.conda
+  sha256: 756398bba90e05765f7c5cbdd51f972771a0467cec3c081be965b947ef9387d0
+  md5: daff01d77b132ea1d64c40ebf83c2bcf
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - libegl >=1.7.0,<2.0a0
+  - libgcc >=15
+  - libgl >=1.7.0,<2.0a0
+  - libopengl >=1.7.0,<2.0a0
+  - libstdcxx >=15
+  - pyqt6 >=6.11.0,<6.12.0a0
+  - python >=3.14,<3.15.0a0
+  - python_abi 3.14.* *_cp314
+  - qt6-main >=6.11.2,<7.0a0
+  - qt6-webengine >=6.11.2,<6.12.0a0
+  - sip >=6.15.3,<6.16.0a0
+  - xcb-util >=0.4.1,<0.5.0a0
+  - xcb-util-image >=0.4.0,<0.5.0a0
+  - xcb-util-keysyms >=0.4.1,<0.5.0a0
+  - xcb-util-renderutil >=0.3.10,<0.4.0a0
+  - xcb-util-wm >=0.4.2,<0.5.0a0
+  - xorg-libice >=1.1.2,<2.0a0
+  - xorg-libsm >=1.2.6,<2.0a0
+  - xorg-libx11 >=1.8.13,<2.0a0
+  - xorg-libxcomposite >=0.4.7,<1.0a0
+  - xorg-libxdamage >=1.1.6,<2.0a0
+  - xorg-libxext >=1.3.7,<2.0a0
+  - xorg-libxxf86vm >=1.1.7,<2.0a0
+  license: GPL-3.0-only
+  license_family: GPL
+  purls:
+  - pkg:pypi/pyqt6-webengine?source=hash-mapping
+  run_exports:
+    weak:
+    - pyqt6-webengine >=6.11.0,<6.12.0a0
+  size: 230921
+  timestamp: 1791874369262
 - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.8-hcd007b5_102_cp314.conda
   build_number: 102
   sha256: 32a39d6b85fd55d9949ea48d63887bef0dc61dca46d9844d4b409eb993460617
@@ -8113,7 +8151,7 @@ packages:
   license: MIT
   license_family: MIT
   purls:
-  - pkg:pypi/more-itertools?source=hash-mapping
+  - pkg:pypi/more-itertools?source=compressed-mapping
   run_exports: {}
   size: 73182
   timestamp: 1792042780319
