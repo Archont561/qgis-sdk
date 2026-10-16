@@ -58,10 +58,23 @@ def test_require_webengine_matches_availability() -> None:
         assert exc_info.value.dependency == "pyqt6-webengine"
 
 
-def test_create_webengine_view_matches_availability() -> None:
+def test_create_webengine_view_raises_when_unavailable() -> None:
     if webengine.webengine_available():
-        view = webengine.create_webengine_view()
-        assert view is not None
-    else:
-        with pytest.raises(QgisSdkOptionalDependencyError):
-            webengine.create_webengine_view()
+        pytest.skip("Qt WebEngine bindings are installed in this environment")
+    with pytest.raises(QgisSdkOptionalDependencyError):
+        webengine.create_webengine_view()
+
+
+def test_create_webengine_view_uses_resolved_class(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeView:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self.args = args
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(webengine, "_import_webengine_view", lambda: FakeView)
+    view = webengine.create_webengine_view(1, value=2)
+    assert isinstance(view, FakeView)
+    assert view.args == (1,)
+    assert view.kwargs == {"value": 2}
