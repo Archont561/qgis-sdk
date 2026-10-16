@@ -6,6 +6,7 @@
 			"!!**/dist",
 			"!!**/coverage",
 			"!!**/build",
+			"!!**/tests/contracts/generated",
 			"!!**/.pixi",
 			"!!**/.bun",
 			"!!**/.npm",

@@ -19,6 +19,9 @@ hatchling = "==1.32.4"
 hypothesis = "==6.169.4"
 pytest-cov = "==7.1.0"
 pytest-bdd = "==9.0.0"
+# Test-only contract export and JSON Schema oracle; neither is an SDK runtime backend.
+mashumaro = "==3.23"
+jsonschema = "==4.26.0"
 
 [feature.python.activation.env]
 PYTHONPATH = "packages/qgis-sdk/src"
