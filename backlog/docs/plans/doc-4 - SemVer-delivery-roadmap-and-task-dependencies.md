@@ -3,7 +3,7 @@ id: doc-4
 title: SemVer delivery roadmap and task dependencies
 type: guide
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 12:02'
+updated_date: '2026-10-16 12:03'
 ---
 # SemVer delivery roadmap and task dependencies
 
@@ -81,4 +81,3 @@ Every implementation task includes focused tests; fixture integration is not per
 
 - [TASK-10](../../tasks/task-10%20-%20Prototype-an-optional-Rust-algorithm-backend-after-v1.md): Prototype an optional Rust algorithm backend after v1
 - [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md): Prepare and qualify 0.6.0 release (tentative deferred target)
-
