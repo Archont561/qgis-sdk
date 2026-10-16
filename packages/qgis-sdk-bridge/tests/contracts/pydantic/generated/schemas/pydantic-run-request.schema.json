@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "count": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "title": "Count",
+      "type": "integer"
+    },
+    "kind": {
+      "const": "run",
+      "title": "Kind",
+      "type": "string"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Label"
+    },
+    "mode": {
+      "default": "safe",
+      "enum": [
+        "safe",
+        "fast"
+      ],
+      "title": "Mode",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "count"
+  ],
+  "title": "RunRequest",
+  "type": "object"
+}

@@ -4,7 +4,7 @@ title: Evaluate dataclass validation and TypeScript generation backends
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 19:06'
+updated_date: '2026-10-16 19:48'
 labels: []
 milestone: m-0
 dependencies: []
@@ -70,4 +70,6 @@ Executed approved next steps: ADR-22 now specifies finite integral decoded numbe
 Final qualified checks: root tests 88 Python/46 bridge pass without replay; fresh coverage 100% measured production-source both packages; Ruff lint/format, Biome, TS typecheck, isolated pip checks and diff whitespace check pass. Future-annotation apischema request also passed PyQGIS co-import/decode smoke, not native/Desktop qualification. Frozen/non-installing settings retained; restore integrity still unverified. No full SDK/Conda build or actual Windows QGIS qualification. No commit/push/merge; TASK-12 stays In Progress.
 
 User requested documentation of the proposed next milestone. Recorded optional Pydantic adapter/end-to-end slice in ADR-10 and this plan. Documentation only: adapter not implemented, native-runtime/default-distribution policy unchanged, no startup installer approved, no additional qualification claimed. TASK-12 remains In Progress.
+
+2026-10-16 implemented the optional controlled-deployment Pydantic 2.14.1 adapter slice: lazy strict JSON validation, typed handler/result serialization, safe structured errors, SafeJsonInteger, distinct request/reader/writer schemas, deterministic generated TS/Ajv parity, Hypothesis and four BDD scenarios. Validation: 152 Python passed with 100% measured source coverage; 90 bridge passed with 100% measured source coverage; Ruff, Biome, typecheck, lock check, schema/type generation, wheel/sdist and Twine passed. Restore still fails nine RECORD checks; checks used frozen/non-installing Pixi plus an isolated Pydantic wheel overlay on Linux/Python 3.14.8. Windows/QGIS coexistence, Desktop/WebEngine and Conda remain unqualified; leave In Progress.
 <!-- SECTION:NOTES:END -->

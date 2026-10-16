@@ -63,15 +63,17 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
 
         class RejectNative:
             def find_spec(self, fullname, path=None, target=None):
-                if fullname.split('.')[0] in {'qgis', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6'}:
+                if fullname.split('.')[0] in {'qgis', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'pydantic'}:
                     raise AssertionError(f'eager native import: {fullname}')
                 return None
 
         sys.meta_path.insert(0, RejectNative())
         for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.services',
-                       'qgis_sdk.core', 'qgis_sdk.core.contexts'):
+                       'qgis_sdk.core', 'qgis_sdk.core.contexts',
+                       'qgis_sdk.adapters.pydantic'):
             importlib.import_module(module)
         assert 'qgis' not in sys.modules
+        assert 'pydantic' not in sys.modules
         print('native-free')
         """
     )

@@ -14,6 +14,7 @@ import fnmatch
 import sys
 import zipfile
 from pathlib import Path
+
 from scripts.quick_validate import validate_skill
 
 # Patterns to exclude when packaging skills.
@@ -39,58 +40,39 @@ def should_exclude(rel_path: Path) -> bool:
     return any(fnmatch.fnmatch(name, pat) for pat in EXCLUDE_GLOBS)
 
 
-def package_skill(skill_path, output_dir=None):
-    """
-    Package a skill folder into a .skill file.
-
-    Args:
-        skill_path: Path to the skill folder
-        output_dir: Optional output directory for the .skill file (defaults to current directory)
-
-    Returns:
-        Path to the created .skill file, or None if error
-    """
-    skill_path = Path(skill_path).resolve()
-
-    # Validate skill folder exists
+def _validate_skill(skill_path: Path) -> bool:
     if not skill_path.exists():
         print(f"❌ Error: Skill folder not found: {skill_path}")
-        return None
-
+        return False
     if not skill_path.is_dir():
         print(f"❌ Error: Path is not a directory: {skill_path}")
-        return None
-
-    # Validate SKILL.md exists
-    skill_md = skill_path / "SKILL.md"
-    if not skill_md.exists():
+        return False
+    if not (skill_path / "SKILL.md").exists():
         print(f"❌ Error: SKILL.md not found in {skill_path}")
-        return None
+        return False
 
-    # Run validation before packaging
     print("🔍 Validating skill...")
     valid, message = validate_skill(skill_path)
     if not valid:
         print(f"❌ Validation failed: {message}")
         print("   Please fix the validation errors before packaging.")
-        return None
+        return False
     print(f"✅ {message}\n")
+    return True
 
-    # Determine output location
-    skill_name = skill_path.name
+
+def _resolve_output_path(skill_path: Path, output_dir: str | Path | None) -> Path:
     if output_dir:
         output_path = Path(output_dir).resolve()
         output_path.mkdir(parents=True, exist_ok=True)
-    else:
-        output_path = Path.cwd()
+        return output_path / f"{skill_path.name}.skill"
+    return Path.cwd() / f"{skill_path.name}.skill"
 
-    skill_filename = output_path / f"{skill_name}.skill"
 
-    # Create the .skill file (zip format)
+def _write_skill_archive(skill_path: Path, skill_filename: Path) -> Path | None:
     try:
-        with zipfile.ZipFile(skill_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Walk through the skill directory, excluding build artifacts
-            for file_path in skill_path.rglob('*'):
+        with zipfile.ZipFile(skill_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for file_path in skill_path.rglob("*"):
                 if not file_path.is_file():
                     continue
                 arcname = file_path.relative_to(skill_path.parent)
@@ -102,15 +84,27 @@ def package_skill(skill_path, output_dir=None):
 
         print(f"\n✅ Successfully packaged skill to: {skill_filename}")
         return skill_filename
-
-    except Exception as e:
-        print(f"❌ Error creating .skill file: {e}")
+    except (OSError, ValueError, zipfile.LargeZipFile) as error:
+        print(f"❌ Error creating .skill file: {error}")
         return None
 
 
-def main():
+def package_skill(
+    skill_path: str | Path, output_dir: str | Path | None = None
+) -> Path | None:
+    """Validate and package a skill folder into a distributable .skill archive."""
+    resolved_skill_path = Path(skill_path).resolve()
+    if not _validate_skill(resolved_skill_path):
+        return None
+    skill_filename = _resolve_output_path(resolved_skill_path, output_dir)
+    return _write_skill_archive(resolved_skill_path, skill_filename)
+
+
+def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python utils/package_skill.py <path/to/skill-folder> [output-directory]")
+        print(
+            "Usage: python utils/package_skill.py <path/to/skill-folder> [output-directory]"
+        )
         print("\nExample:")
         print("  python utils/package_skill.py skills/public/my-skill")
         print("  python utils/package_skill.py skills/public/my-skill ./dist")
