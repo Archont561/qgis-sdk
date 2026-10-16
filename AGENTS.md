@@ -5,6 +5,7 @@
 - For normal repository work, read and follow [the session skill](.agents/skills/session/SKILL.md) at session start or resumption, when selecting backlog work, and when preparing a merge or post-merge handoff.
 - For explicit, scoped requests, proceed directly; do not add a proposal-and-wait step unless a material ambiguity needs clarification.
 - Before merge or push, verify the final diff and relevant checks. Do not merge, push, or rewrite shared history without the user's explicit authorization.
+- PRs must not be squash-merged. Prefer a merge commit (`gh pr merge <number> --merge`).
 - After a PR or authorized direct push lands, use the session skill's post-merge closeout: verify the landed commit and CI where accessible, update backlog only for proven work, and report remaining items plus a next-session prompt. Never claim unavailable checks passed.
 
 ## Development guidance

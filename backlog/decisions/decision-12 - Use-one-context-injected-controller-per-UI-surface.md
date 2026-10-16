@@ -1,0 +1,21 @@
+---
+id: decision-12
+title: Use one context injected controller per UI surface
+date: '2026-10-16 08:05'
+status: proposed
+---
+## Context
+
+Dialogs/docks should follow plain-class authoring without a giant plugin superclass. UI construction, behavior and ownership have different responsibilities.
+
+## Decision
+
+Proposed: one decorated controller class per meaningful dialog/dock, with constructor-injected `self.ctx: UiContext`, a lazy `build()` content factory and ordinary event-handler methods. Actions normally remain decorated methods on the plugin/controller, not one class per button. Plugin UI services open registered surface classes; the runtime constructs fresh view contexts/controllers, creates and parents outer QDialog/QDockWidget containers, and owns cleanup. A factory returns content widgets or a supported declarative form specification. Runtime callable bindings stay Python-side; serialized descriptions contain validated binding IDs only.
+
+UiContext combines shared services with view-owned subscriptions/tasks and explicit close/visibility operations, not a bag of all widgets/form values. Default proposal: new dialog per opening, one dock instance per plugin runtime, hide distinct from dispose. Request closure rather than synchronously deleting a controller during its handler. Define close-veto, completion and non-blocking modal semantics. Native widgets use qgis.PyQt in deferred factories or explicitly native modules. Disposal disconnects signals, cancels/detaches work and prevents late callbacks; plugin unload disposes all owned views.
+
+## Consequences
+
+- Pure tests inspect declarations and record UI requests; Qt tests construct content and verify ownership; real Desktop tests verify docks/menus/iface.
+- Custom widgets remain ordinary composed components; trivial message boxes need not become classes.
+- Exact decorators, open APIs, lifecycle hooks and native/web content specification remain proposed.

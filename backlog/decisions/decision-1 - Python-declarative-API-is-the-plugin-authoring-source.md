@@ -19,3 +19,7 @@ Use a Python-first declarative authoring API, including decorators and typed dec
 - The API must make the boundary between declaration and handler behavior clear.
 - Any generated JSON is an output/interchange format, not the source of truth; it needs validation and versioning.
 - A TypeScript/WebEngine UI can consume generated descriptions without moving plugin behavior out of Python.
+
+## Proposed authoring refinement (2026-10-16)
+
+Keep author classes plain: no mandatory Plugin subclass, constructor rewriting or injected base-class lifecycle machinery. Inject a typed PluginContext once through construction, with an explicit factory for custom dependencies. Handler signatures then contain their actual inputs instead of repeating plugin-lifetime context. Decorators attach metadata only; a separate runtime adapter owns QGIS registration and teardown. Curated services and an explicit native escape hatch are described in [decision-6](decision-6%20-%20Separate-models-services-core-and-runtime-adapters.md). Exact public names and hook signatures remain proposed.

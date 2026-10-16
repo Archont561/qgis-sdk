@@ -2,19 +2,22 @@
 id: decision-5
 title: Rust algorithm implementations are post-v1 and backend-neutral
 date: '2026-10-15 23:05'
-status: proposed
+status: accepted
 ---
 ## Context
 
-Rust may be useful for CPU-intensive processing, but coupling the first SDK release to a native extension would add platform, Python ABI, QGIS-version, build, and distribution complexity. Plugin declarations and Processing integration should remain usable without a native toolchain.
+Earlier discussion considered both author-written Rust extensions and SDK-owned acceleration. The 2026-10-16 clarification explicitly selected deferring Rust shipping for v1, rather than making either option a release prerequisite.
 
 ## Decision
 
-Proposed: keep v1 algorithms declared and adapted to QGIS Processing in Python. Consider an optional Rust compute backend only after v1 and only for measured workloads. Keep QGIS/Qt object access, layer lifecycle, and Processing integration in Python; pass plain, typed, batch-oriented data across a backend boundary. The Python implementation remains a fallback/reference and defines the observable contract.
+Keep v1 algorithm authoring and QGIS Processing integration in Python. Do not ship SDK-owned Rust compute or first-class custom Rust scaffolding/build integration in v1. Plugin authors and end users need no SDK-imposed Cargo, Rust compiler, PyO3 or maturin setup. Prefer existing QGIS/native capabilities and measured workflows.
+
+If compute services are justified, expose narrow typed implementation-neutral operations with explicit batching, errors, CRS/units, thread/cancellation and output semantics. Do not create a mandatory qgis-sdk-algorithms crate or a generic backend framework in anticipation of future Rust.
+
+Future SDK-owned acceleration and future author-written native extensions are separate proposals. Evaluate actual speedup including data conversion, supported QGIS/Python/platform artifacts, plugin-private bundling, licensing, crash behavior and cancellation. Where equivalent Python/reference behavior exists, test parity; do not promise a fallback for every operation or silently mask native execution failures. Keep QGIS/Qt objects and lifecycle in Python and exchange plain typed/batched data across any future native boundary.
 
 ## Consequences
 
-- No Rust runtime dependency is required for v1 plugins.
-- The algorithm contract should avoid exposing QGIS objects to a future native backend.
-- A later proposal must include representative benchmarks, parity tests, cancellation/progress behavior, and a platform/Python ABI packaging plan.
-- This is a roadmap direction, not a commitment to build or ship Rust support.
+- No Rust shipping/toolchain requirement is part of the confirmed v1 slice.
+- A later opt-in authoring workflow could use ordinary PyO3 and maturin/Cargo, but is not a supported SDK command today.
+- SDK-owned native acceleration would transfer compilation/distribution responsibility to SDK maintainers, not eliminate it.

@@ -18,6 +18,24 @@
       "prompt": "The pull request has merged to main. Close out the session and tell me what the next agent should do.",
       "expected_output": "Verify the merged commit and accessible post-merge CI, update only proven backlog criteria, distinguish unavailable evidence, report the merge and remaining work, and provide a self-contained next-session prompt.",
       "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "This is a fresh checkout with no node_modules. Restore the development environment and run the local tests through Pixi. Do not change dependencies or commit anything.",
+      "expected_output": "Run the restore script first, orient using repository guidance and Git state, ensure the restored Pixi is on PATH for nested scripts, then run pixi run -e bun bun install --frozen-lockfile from the repository root before pixi run -e bun bun run test. Report actual setup and test outcomes, verify tracked dependency files are unchanged, and do not commit or merge.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "The sandbox restore succeeded, but the first test attempt says turbo: command not found. The registry is unreachable from this machine. Please get the tests running without changing the lockfiles.",
+      "expected_output": "Identify missing workspace JavaScript dependencies, attempt the frozen Bun install through Pixi, and report the download failure and tests as blocked if the dependencies are not cached. Do not regenerate lockfiles, relax frozen mode, switch package managers, or claim tests passed.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Restore materialised the Pixi tools and environments but exited with package RECORD integrity mismatches before registering pixi on PATH. I understand the warnings; run local tests via the restored Pixi anyway. node_modules is missing.",
+      "expected_output": "Keep the restore failure visible, add the repository-local Pixi tools directory to PATH for nested scripts, export PIXI_FROZEN=true and PIXI_NO_INSTALL=true, install JavaScript dependencies with pixi run -e bun bun install --frozen-lockfile, then run the requested local tests. Report actual results with the unverified-restore caveat and confirm tracked dependency files remain unchanged; do not claim installation fixed integrity verification.",
+      "files": []
     }
   ]
 }
