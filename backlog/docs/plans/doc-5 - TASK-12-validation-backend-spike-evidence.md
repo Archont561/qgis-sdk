@@ -53,3 +53,331 @@ The direct-generator probes above used the **same semantic field shapes** as the
 **Do not use any of these three as the SDK's backend or its sole binding generator.** `python-to-typescript-interfaces` may be useful for an opt-in, subclassed legacy DTO project; `py-to-ts-interfaces` is too brittle for this contract; `py-typescript-generator` is the closest *basic dataclass-to-interface* tool on Python 3.11 but fails important Python 3.14 and nullable/union requirements. All would still need an independently chosen strict Python runtime validator and matching frontend runtime schema/validator, plus deterministic cross-language drift tests. Prefer a schema-first generator from a validated description once a Python backend and neutral constraint model are selected. Do not adopt a native runtime indirectly to compensate for these tools.
 
 With the user-requested removal of the spike harness, **there is still no in-repository comparison of production Python request-validation backends**. The live example now covers a narrow subset of strict JSON Schema semantics and generated-TS/Ajv parity, but not a selected Python decoder or actual SDK traffic. Before choosing a production backend or generator, extend persistent contract tests for the remaining unions/recursion, constraints and integer limits, error diagnostics, supported Python/QGIS platforms, and matching Python/runtime/client behavior. The earlier candidate comparisons in this report remain historical evidence, not a substitute for those tests.
+
+## Post-merge verification and strict-validator continuation (2026-10-16)
+
+PR #5 landed as `689b137e9def05a5538df46238a55f4169863599`. GitHub reports
+[post-merge CI](https://github.com/Archont561/qgis-sdk/actions/runs/38944159777)
+and [sandbox publication](https://github.com/Archont561/qgis-sdk/actions/runs/38944159757)
+successful for that exact SHA. CI checks lint/format, TS typechecking and separate
+coverage gates; it does **not** build/qualify the Conda package or test WebEngine.
+Publication covers the `developer` bundle (`default,build,bun`) on **linux-64 only**.
+The published branch snapshot is `86fc5d4`, whose manifest identifies source
+`689b137` and lock SHA-256
+`1cb256b37e4ae0be61789ac6ae79e4cfca07f350d836306fd332e770a81cb68e`.
+
+### Restore failure investigation
+
+`bash scripts/restore.sh` with pixi-sandbox 0.7.0 verified all **594 transport blobs
+(948.5 MiB)**, materialized all three environments, then exited 1 at tree
+verification with **nine RECORD integrity mismatches**:
+
+- build: coverage, hypothesis, jsonschema, mako, pytest-bdd;
+- default: hypothesis, jsonschema, mako, pytest-bdd;
+- bun: zero verification failures.
+
+For example, build Hypothesis RECORD expected
+`79bac6198fa593155ddbce97c1b7339b975d0a8c09a13e56ed93edbcd4491119`, got
+`84f1e20c2825ca81f7a0eed69a6bc7ad9d5446918c5325adc6b66016f31deceb`.
+Inspection of the five affected build distributions against their packed wheels
+found no changed rows shared with the wheels' original RECORDs. Added rows describe
+installer metadata and generated console entrypoints. The restored build
+Hypothesis entrypoint has the local shebang, but its RECORD row records 358 bytes
+versus the actual 337 bytes after relocation (the same 21-byte size difference
+occurs for the other affected build entrypoints). This points investigation toward
+installation/relocation and RECORD normalization, **not a demonstrated transport
+corruption**. It does not establish the exact cause of the manifest mismatch:
+publisher-side RECORD bytes and the verifier's normalization must still be
+compared. Do not “fix” this by dropping integrity checks or accepting new hashes.
+`gh run view 38944159757 --log` could not retrieve the Actions log archive (EOF
+from the results-receiver host); job/step conclusions were available through the
+API. The restore work directory remains ignored under `.pixi/.restore-work`.
+
+The user authorized qualified local checks with `PIXI_FROZEN=true` and
+`PIXI_NO_INSTALL=true`; those results **do not repair or verify the restore**.
+The frozen Bun install succeeded without dependency-file changes.
+
+### Current decision and durable evidence
+
+The agreed test seam remains ordinary dataclass DTOs → decoding/schema → checked
+TS/Ajv. New normal-suite tests in `tests/test_request_validation.py` and three
+additional BDD examples characterize the **existing default decoder**, not a new
+SDK entrypoint:
+
+- Hypothesis generates numeric strings that schema validation rejects but default
+  mashumaro decoding converts to integers, and unknown fields that the schema
+  rejects but decoding silently discards (80 examples/property).
+- Fixed counterexamples also show `true → 1`, `false → 0`, and `2.5 → 2`.
+- A valid-request property checks defaults/nullability and nonmutation by the
+  schema oracle. Construction supplies defaults separately from validation.
+- JSON Schema accepts `2.0` as an integer value. A strict Python token-type rule
+  is **not** equivalent to JSON Schema's numeric semantics or JavaScript numbers.
+  This characterization is not an SDK policy decision.
+
+**Decision boundary:** reject mashumaro's default decoder as the strict request
+validator. Retain its checked schema/serialization example strictly as test tooling.
+Schema-first prevalidation is worth evaluating, but do not promote the current
+`jsonschema` oracle to runtime: its dependency graph includes native `rpds-py`.
+Pydantic remains a native-policy exception, not an implicit fallback. Pure-wheel
+apischema is still a candidate for a focused, durable evaluation, conditional on
+resolving its historical Python 3.14 eager-annotation failure and verifying actual
+pure-wheel resolution. No production backend is selected, and no runtime
+requirements, dependency locks, generated bindings or removed spike files change.
+Avoid a broad hand-written validator/converter merely to bypass these blockers.
+
+Before selecting a backend, agree JSON integer/safe-number limits (including
+integral floating values), nonfinite numbers and duplicate-key handling at the
+raw-JSON boundary; then extend the durable seam for nested/tagged unions,
+recursion, constraints, missing/null/default behavior, structured path diagnostics,
+nonmutation and Python/client parity. Current generated Hypothesis cases run only
+in Python; cross-language coverage remains the 24 shared fixed cases. Production
+handler dispatch, authorization and version compatibility remain downstream.
+
+### Qualification still missing
+
+- **Conda:** publication of development environments is not an SDK recipe build,
+  install or smoke-test qualification. The prior repodata-access failure remains
+  unresolved; no new Conda package success is claimed.
+- **WebEngine/Desktop:** no real request/handler bridge, browser lifecycle,
+  reconnect/cancellation or Qt/WebEngine qualification. Historical PyQGIS co-import
+  is not a substitute.
+- **Platforms:** this session's checks use Linux/Python 3.14.8 in an unverified
+  restore. There is no current full Python 3.11+ matrix, Windows/QGIS installer or
+  macOS qualification, nor a clean-prefix verified sandbox restore.
+
+TASK-11 can close against landed contracts and green post-merge CI. TASK-12 stays
+In Progress: its checked historical comparison criteria do not mean production
+selection or platform qualification is complete. This continuation is local until
+separately reviewed and landed.
+
+Qualified local validation for this continuation: root `bun run test` passed
+**65 Python / 30 bridge** tests (no Turbo replay); root `bun run coverage` passed
+both separate 90% gates with **100% measured production-source coverage** (fresh,
+also rerun after the final test assertion). Commands ran through Pixi's Bun
+environment. Ruff lint/format, Biome, bridge typecheck, Python wheel/sdist + Twine,
+bridge build and `git diff --check` passed. The full root build/Conda build was not
+rerun. No tracked lock/dependency files changed. Test coverage percentages do not
+measure completeness of the still-unimplemented production validator.
+
+## Pydantic binary-wheel build/install probe (2026-10-16)
+
+The user requested a build spike and selected **binary-wheel deployment**, not a
+Rust source build or Conda recipe build. This is an exception for isolated
+**evaluation only**, not a runtime selection or a change to ADR-3. All temporary
+consumer sources, venv, wheelhouse and probe tests live under ignored
+`.pixi/pydantic-wheel-probe/`; the removed `tests/spikes` tree is not restored.
+The ordinary durable contract tests remain unchanged by this probe.
+
+### Built and installed
+
+- Host: Linux x86-64, Pixi Python **3.14.8**, using the previously authorized
+  partially restored environment with `PIXI_FROZEN=true PIXI_NO_INSTALL=true`.
+  The restore integrity failure remains unresolved.
+- Created a fresh venv with `pixi run -e build python -m venv
+  .pixi/pydantic-wheel-probe/venv`. The base build environment has no pip;
+  venv/ensurepip supplied pip **26.2.1** without modifying the base environment.
+- Built a temporary `qgis-sdk-pydantic-probe==0.0.0` stdlib-dataclass consumer via
+  Hatchling **1.32.4**, with `requires-python >=3.11` and runtime requirement
+  `pydantic==2.14.1`. This is **not** a new build of the SDK with Pydantic enabled.
+  `python -m build --no-isolation` built its sdist and
+  `qgis_sdk_pydantic_probe-0.0.0-py3-none-any.whl`.
+- Downloaded with pip `--only-binary=:all:`: Pydantic **2.14.1**, native
+  pydantic-core **2.50.1**, annotated-types **0.8.0**, typing-extensions **4.16.0**,
+  typing-inspection **0.4.4**. The core artifact selected was
+  `pydantic_core-2.50.1-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl`.
+  No Rust/compiler invocation or dependency source build was needed.
+- Installed the consumer and dependencies with `--no-index --find-links` from the
+  downloaded wheelhouse. `pip check`: **No broken requirements found**. Consumer
+  and core imports resolve inside the isolated venv, not the temporary source tree.
+  Resolved versions and wheel SHA-256 values are saved locally in `resolved.txt`
+  and `SHA256SUMS`. These are diagnostic artifacts, not a committed release lock.
+
+### Validation after installation
+
+The consumer copies the existing sample `RunRequest` stdlib dataclass and applies:
+
+```python
+from pydantic import ConfigDict, TypeAdapter, with_config
+
+with_config(ConfigDict(strict=True, extra="forbid"))(RunRequest)
+request_adapter = TypeAdapter(RunRequest)
+# JSON transport entrypoint, not validate_python(dict):
+request_adapter.validate_json('{"kind":"run","count":2}')
+```
+
+Installed-wheel checks ran with the venv's `python -I -m pytest`:
+**19 passed** — 12 existing shared request cases, two Hypothesis properties
+(80 examples each: defaults/numeric-string rejection and unknown-field rejection),
+four strict integer counterexamples (`true`, `false`, `2.5`, `2.0`), and one BDD
+scenario for omitted defaults. Unknown fields report
+`unexpected_keyword_argument`; integer errors locate `count`. Test tools were
+pytest **9.1.1**, Hypothesis **6.169.4**, pytest-bdd **9.0.0**. These scratch checks
+are not an added persistent production-validator regression gate.
+
+The normal Pixi activation's project `PYTHONPATH` did not expose `qgis` initially
+(`ModuleNotFoundError`). Adding `<default-prefix>/share/qgis/python` and the
+isolated venv site-packages explicitly to the **default environment's** `sys.path`
+allowed **QGIS 4.2.3**, Pydantic and the native core to co-import and decode the
+sample request in one process. The core loaded a
+`_pydantic_core.cpython-314-x86_64-linux-gnu.so` from the venv. No installation into
+QGIS's shared environment occurred. This is a co-import/decoding smoke, not a QGIS
+Desktop, application lifecycle or WebEngine test.
+
+### Conclusion and remaining gates
+
+**Binary-wheel deployment is feasible for this Linux/Python target:** the consumer
+stays a universal Python wheel while its dependency supplies the native extension.
+It does not prove Windows/macOS or other QGIS Python versions, source-build
+support, Conda packaging, plugin ZIP assembly, plugin-private import isolation,
+shared-plugin dependency compatibility or a safe end-user installer.
+
+A concrete semantic gap remains: strict Pydantic JSON decoding rejects `2.0` for
+`int`, whereas JSON Schema accepts integral numeric values and JavaScript does not
+preserve the integer/floating token distinction. The 12 fixed request cases agree,
+but this probe does **not** establish general Python/Ajv parity. Resolve numeric
+policy and add durable cross-language tests before selection. Result-reader/writer
+schemas, unions/recursion and constraints are outside this build probe.
+
+No SDK runtime requirements, Pixi/Bun locks, production sources or checked generated
+contracts changed. No dependency installer was implemented. TASK-12 stays open and
+pure-Python-first remains the accepted default; using Pydantic as a mandatory
+runtime still needs explicit packaging-policy approval.
+
+## Numeric policy and bounded pure-Python comparison (2026-10-16)
+
+The user requested execution of the proposed next steps. ADR-22 now specifies
+finite integral JSON-number values within ±9007199254740991 inclusive. Integral
+`2.0` is accepted; strings, booleans, fractions, nonfinite values and out-of-range
+numbers are rejected. This is decoded-number semantics, not arbitrary-precision
+validation of original JSON numeric lexemes.
+
+### Durable sample contract changes
+
+Added an independently specified unsafe-number request case first; its Python
+schema test failed because the unbounded schema accepted it. Then added test-only
+Mashumaro `Minimum`/`Maximum` annotations to request/result integer fields and
+regenerated the three schemas through `sdk:generate`. The failing test passed.
+The generated TS declarations remained unchanged (TypeScript number does not
+express the bounds).
+
+The shared Python/Ajv corpus now contains **40 cases**, including integral numeric
+values, both safe boundaries and both unsafe sides for all three wire directions.
+Normal-suite Hypothesis properties exercise safe integers/integral floats and
+out-of-range values; fixed tests reject nonfinite numbers. Two additional BDD
+scenarios cover integral-float acceptance and unsafe-number rejection. These are
+persistent tests at the existing agreed DTO/schema seam, not a restored backend
+spike or a public numeric type. Candidate-specific experiments remain temporary.
+
+### Apischema 0.19.0 pure-wheel result
+
+PyPI's current release remains 0.19.0. Explicitly downloaded and installed
+`apischema-0.19.0-py3-none-any.whl` with `--no-deps` into a separate venv under
+`.pixi/apischema-probe`. SHA-256:
+`25e253ecb860bebbb4f4f5ed2896b4d69d49c86754c83795eb2ec1ec5c1ed62b`.
+`pip check` passed; no unconditional runtime requirements and no installed `.so`
+modules. Metadata license: MIT. This verifies this artifact, not default resolver
+behavior (other wheel variants can exist).
+
+- The same eager-annotation request shape on Python 3.14.8 still fails:
+  `KeyError('kind')`; a minimal one-field dataclass similarly raises
+  `KeyError('count')`.
+- A module using `from __future__ import annotations` with bounded
+  `Annotated[int, schema(min=..., max=...)]` works, defaults correctly and emits
+  integer/minimum/maximum schema constraints.
+- With `coerce=False, additional_properties=False`, **17/18 shared request cases
+  pass**. The mismatch is integral `2.0`, rejected as “expected type integer,
+  found number.” Inputs were not mutated. Unknown fields report a structured
+  location and “unexpected property.”
+- `coerce=True` accepts `"2"` as integer 2, so blanket coercion violates the
+  agreed policy.
+- Supplemental future-annotation checks: **7 passed** (two 80-example Hypothesis
+  properties covering defaults/numeric strings and unknown fields; five fixed
+  invalid-number cases). This successful subset does not mask the two blockers.
+
+Minimal eager-annotation reproduction in that environment:
+
+```python
+from dataclasses import dataclass
+from apischema import deserialize
+
+@dataclass
+class Request:
+    count: int
+
+deserialize(Request, {"count": 2}, coerce=False, additional_properties=False)
+# Python 3.14.8 / apischema 0.19.0 pure wheel: KeyError('count')
+```
+
+**Outcome:** do not select apischema from this evaluation. Requiring future
+annotations and an additional numeric adapter would change the authoring/support
+contract; neither workaround is silently accepted here.
+
+### Explicit Pydantic numeric adapter
+
+Rebuilt and reinstalled the temporary universal consumer wheel using the existing
+binary-wheel dependency set. The field-scoped adapter is:
+
+```python
+import math
+from typing import Annotated
+from pydantic import BeforeValidator, Field
+
+def integral_json_number(value):
+    if (type(value) is float and math.isfinite(value)
+            and value.is_integer() and abs(value) <= 9007199254740991):
+        return int(value)
+    return value  # strict int still rejects strings, bools and other values
+
+# On the request dataclass; strict=True and extra='forbid' remain enabled.
+count: Annotated[
+    int,
+    Field(ge=-9007199254740991, le=9007199254740991),
+    BeforeValidator(integral_json_number),
+]
+```
+
+**Annotation order mattered in the tested version.** Putting `BeforeValidator`
+before `Field` produced `ge`/`le` keys in the emitted count schema; strict Ajv
+compilation failed with “unknown keyword: ge”. Placing `Field` before the validator
+emitted proper `minimum`/`maximum` keywords and strict Ajv compilation passed.
+Do not suppress Ajv strictness or claim the first schema was compatible.
+
+The installed consumer then passed **24 checks**: all 18 shared request cases,
+two Hypothesis properties, three invalid-number cases and the existing BDD
+scenario. A deterministic Hypothesis run generated **480 numeric cases** from
+80 draws (safe integer, safe integral float, numeric string, bool, unsafe integer
+and fraction per draw). The installed adapter accepted/rejected all as expected;
+Ajv independently checked the same corpus against both the bounded sample schema
+and Pydantic's emitted request schema: **480/480 each, no mutation**. Separate raw
+`NaN`, `Infinity`, `-Infinity` count tokens were rejected by the adapter.
+
+PyQGIS 4.2.3 co-import and decoding `count: 2.0` to Python integer 2 passed with the
+explicit QGIS module path. The probe consumer is still test-only; its rebuilt wheel
+supersedes the earlier scratch consumer, not the SDK package. Generated parity data
+and candidate tests are ignored local artifacts, not new runtime/codegen tools.
+The persistent 40-case corpus and numeric property/BDD tests preserve the agreed
+contract independently of candidate experiments.
+
+### Recommendation and qualification boundary
+
+Pydantic is now the leading **controlled-deployment candidate**, not a selected
+mandatory runtime. Keep ADR-3 pure-Python-first ordinary plugin distribution intact.
+A scoped deployment-policy approval is still needed before implementing Pydantic
+as runtime. Do not build an installer or broad custom validator as a workaround.
+
+Real Windows QGIS testing cannot run in this Linux sandbox. No Windows/macOS
+installation, clean-QGIS conflict test, actual Desktop/WebEngine run, Conda recipe
+build or native source compilation is claimed. These gates cannot close based on
+wheel availability or co-import alone. Advanced constraints/unions/recursion and
+reader/writer runtime adapters are also outside this bounded comparison.
+
+Final qualified checks for this continuation: root `pixi run -e bun bun run test`
+passed **88 Python / 46 bridge** tests without cache replay; root
+`pixi run -e bun bun run coverage` freshly passed both 90% gates with **100%
+measured production-source coverage**. Ruff lint/format, Biome, bridge typecheck,
+both isolated venvs' `pip check` and `git diff --check` passed. Apischema's
+future-annotation integer request also co-imported and decoded with PyQGIS 4.2.3;
+this does not fix eager annotations or integral-float semantics. All Pixi commands
+preserved frozen/non-installing settings in the unverified restore. No new full
+SDK/Conda build or clean-target qualification was performed. No commit, push or
+merge occurred.

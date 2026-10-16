@@ -25,3 +25,23 @@ Initial public releases are experimental 0.x with breaking-change/migration note
 - Spikes and contract tests must validate strictness and asymmetric compatibility independently on both sides.
 - A future stable API/deprecation policy requires another explicit decision after reference workflow and runtime qualification.
 - Exact diagnostic schemas, compatibility algorithm and async implementation remain open; acceptance is not implementation evidence.
+
+## Confirmed JSON integer policy (2026-10-16)
+
+Use JSON-compatible integer **value** semantics rather than Python token-type
+semantics: accept `2` and `2.0` as the same integral value. For integer fields,
+require finite, integral decoded numbers in the inclusive JavaScript safe-integer
+range **-9007199254740991 through 9007199254740991**. Reject numeric strings,
+booleans, fractional values, nonfinite values and values outside that range. Any
+normalization from an accepted integral float to Python int is an explicit,
+field-scoped conversion, not permission to enable general backend coercion.
+Wider exact integers need a separately specified representation, such as a decimal
+string, not an implicit number extension.
+
+Apply this policy consistently to requests, result readers and serialized results.
+The checked test-only sample now bounds its integer fields and tests integral float
+acceptance and range rejection on Python and Ajv. This does not select a runtime
+backend. JSON parsing may already round numeric tokens; this policy concerns decoded
+JSON-number values and does not promise arbitrary-precision lexical validation.
+Duplicate-key handling and exact raw-JSON precision requirements remain separate
+boundary decisions.
