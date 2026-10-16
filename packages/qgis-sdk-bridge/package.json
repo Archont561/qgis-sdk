@@ -19,7 +19,7 @@
 		"test": "bun test",
 		"coverage": "bun --cwd=../.. --config=bunfig.toml test --coverage packages/qgis-sdk-bridge/tests",
 		"typecheck": "tsc --noEmit",
-		"generate:contract-types": "json2ts -i 'tests/contracts/generated/schemas/*.json' -o tests/contracts/generated/types/"
+		"generate:contract-types": "json2ts -i 'tests/contracts/generated/schemas/*.json' -o tests/contracts/generated/types/ && json2ts -i 'tests/contracts/pydantic/generated/schemas/*.json' -o tests/contracts/pydantic/generated/types/"
 	},
 	"devDependencies": {
 		"@archont561/bun-test-utils": "^0.1.0",

@@ -1,0 +1,29 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "processed": {
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "title": "Processed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "processed",
+    "note"
+  ],
+  "title": "RunResult",
+  "type": "object"
+}

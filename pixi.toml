@@ -19,12 +19,16 @@ hatchling = "==1.32.4"
 hypothesis = "==6.169.4"
 pytest-cov = "==7.1.0"
 pytest-bdd = "==9.0.0"
-# Test-only contract export and JSON Schema oracle; neither is an SDK runtime backend.
+# Test-only contract export/oracle plus the optional controlled-deployment adapter.
 mashumaro = "==3.23"
 jsonschema = "==4.26.0"
+pydantic = "==2.14.1"
 
 [feature.python.activation.env]
 PYTHONPATH = "packages/qgis-sdk/src"
+
+[feature.python.tasks.test-skill-creator]
+cmd = "pytest -q .agents/skills/skill-creator/tests"
 
 [feature.utils.dependencies]
 ruff = "==0.17.1"
@@ -46,10 +50,10 @@ cmd = "convco check --from-stdin --strip < '{{ message_file }}'"
 cmd = "convco check"
 
 [feature.utils.tasks.lint-python]
-cmd = "ruff check packages/qgis-sdk/src packages/qgis-sdk/tests"
+cmd = "ruff check packages/qgis-sdk/src packages/qgis-sdk/tests .agents/skills/skill-creator"
 
 [feature.utils.tasks.format-python-check]
-cmd = "ruff format --check packages/qgis-sdk/src packages/qgis-sdk/tests"
+cmd = "ruff format --check packages/qgis-sdk/src packages/qgis-sdk/tests .agents/skills/skill-creator"
 
 [feature.utils.tasks.lint-github-actions]
 cmd = "actionlint .github/workflows/*.yml"

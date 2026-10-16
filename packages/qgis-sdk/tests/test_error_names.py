@@ -19,6 +19,8 @@ def test_public_sdk_exceptions_have_qgis_sdk_prefix() -> None:
         "QgisSdkError",
         "QgisSdkScopeClosedError",
         "QgisSdkUnsupportedCapabilityError",
+        "QgisSdkOptionalDependencyError",
+        "QgisSdkContractValidationError",
     } <= exception_names
     assert all(name.startswith("QgisSdk") for name in exception_names)
 

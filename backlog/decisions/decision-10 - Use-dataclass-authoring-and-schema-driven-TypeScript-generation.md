@@ -126,3 +126,20 @@ support for the intended deployment scope before making it a product requirement
 If it fails, address the demonstrated deployment problem before expanding the
 implementation. Do not close TASK-12 from prototype success alone; require proven,
 landed work and distinguish remaining qualification from historical evidence.
+
+## Optional controlled-deployment slice implemented (2026-10-16)
+
+Implemented the bounded adapter prototype at
+`qgis_sdk.adapters.pydantic.PydanticContractAdapter` with a separately imported
+`SafeJsonInteger` Pydantic annotation. The adapter lazily imports Pydantic, validates
+JSON requests strictly, dispatches a typed handler, serializes result defaults, and
+emits separate request/result-reader/result-writer schemas. Safe SDK errors expose
+structured paths and validator codes without copying rejected values. The explicit
+`controlled-deployment` extra pins Pydantic 2.14.1; it is absent from base runtime
+requirements and is never installed at startup.
+
+Persistent Hypothesis, BDD, schema-generation, Python-oracle, Ajv, generated-TypeScript
+and typecheck tests now exercise the slice against the shared contract corpus. This
+implements the prototype milestone only; mandatory backend selection and clean
+Windows/Linux QGIS, plugin coexistence, Desktop/WebEngine, and Conda/package-delivery
+qualification remain open. See doc-5 for exact local validation and restore caveats.

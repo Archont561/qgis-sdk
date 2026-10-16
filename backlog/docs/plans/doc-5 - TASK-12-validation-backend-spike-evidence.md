@@ -381,3 +381,54 @@ this does not fix eager annotations or integral-float semantics. All Pixi comman
 preserved frozen/non-installing settings in the unverified restore. No new full
 SDK/Conda build or clean-target qualification was performed. No commit, push or
 merge occurred.
+
+## Optional controlled-deployment Pydantic adapter prototype (2026-10-16)
+
+Implemented the agreed bounded contract slice without reviving the removed spike
+harness. `qgis_sdk.adapters.pydantic.PydanticContractAdapter` lazily loads Pydantic
+when explicitly constructed, strictly validates request JSON, dispatches a typed
+handler, validates/serializes writer results with defaults, and exports separate
+request, result-reader, and result-writer schemas. The prototype fails actionably
+when Pydantic is missing or is not exactly the tested **2.14.1**. Its optional
+`controlled-deployment` extra pins Pydantic 2.14.1; the ordinary package metadata
+has no Pydantic base requirement and no startup installer. Pydantic's native
+`pydantic-core` remains opt-in. `qgis_sdk.adapters.pydantic_types.SafeJsonInteger`
+uses a field-scoped integral-number adapter and bounded `Field` metadata in the
+schema-compatible annotation order; integral floats such as `2.0` are accepted,
+while booleans, strings, fractions, nonfinite values, and values outside the
+inclusive JavaScript safe-integer range are rejected.
+
+The persistent model fixtures and exporter are separate from the Mashumaro sample
+under `packages/qgis-sdk/tests/contract_sample/pydantic_*`. Checked schemas and
+`json2ts` declarations live under
+`packages/qgis-sdk-bridge/tests/contracts/pydantic/generated/`. Python's
+`jsonschema` oracle and Ajv2020 each validate the same **40 shared examples** for
+both schema sets with coercion/default insertion/additional-field removal disabled;
+tests also assert payload nonmutation, checked schema/type drift, and TypeScript
+required/default/nullable distinctions. Durable Pydantic coverage includes Hypothesis
+properties for valid typed dispatch, invalid scalar redaction, and unsafe integers,
+plus four pytest-bdd scenarios for defaults, safe error paths, reader/writer
+asymmetry, and integral floating JSON numbers. `QgisSdkContractValidationError`
+contains only direction, paths, and validator codes, not rejected values.
+
+Validation in this session: **152 Python tests passed**, with **100% measured
+production-source coverage**; bridge **90 tests passed**, with **100% measured
+source coverage**; Ruff lint/format, Biome, bridge typecheck, `pixi lock --check`,
+schema/type regeneration, Python wheel/sdist build and Twine checks passed. The
+wheel metadata confirms Pydantic only under optional extras, and a wheel-only smoke
+import without Pydantic exercised the actionable inactive-adapter error. The tests
+used Pixi's restored Linux/Python **3.14.8** plus an isolated binary-wheel overlay
+of Pydantic **2.14.1** / `pydantic-core` **2.50.1** (`pip check` clean); the restored
+Pixi prefixes themselves were not modified to add that overlay.
+
+Restore verification remains failed, not repaired: `bash scripts/restore.sh`
+verified all **594 transport blobs** but exited 1 on **nine RECORD integrity
+mismatches** (build: coverage, hypothesis, jsonschema, mako, pytest-bdd; default:
+hypothesis, jsonschema, mako, pytest-bdd; Bun: zero). Checks preserved
+`PIXI_FROZEN=true` and `PIXI_NO_INSTALL=true`; an isolated ignored venv supplied the
+optional Pydantic wheel. These results are qualified against that **unverified
+restore**, not proof of environment integrity. No Windows or clean QGIS installation,
+plugin coexistence, Desktop/WebEngine, Conda/package delivery, or full native-runtime
+qualification was performed. Pydantic remains an optional prototype and TASK-12
+stays **In Progress** pending those deployment gates and an explicit future policy
+review; no commit, push, or merge occurred.

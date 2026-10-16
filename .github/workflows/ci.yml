@@ -54,6 +54,9 @@ jobs:
       - name: Check Python formatting
         run: pixi run -e default format-python-check
 
+      - name: Test skill-creator tooling
+        run: pixi run -e default test-skill-creator
+
       - name: Lint and format TypeScript
         run: pixi run -e bun biome-check
 

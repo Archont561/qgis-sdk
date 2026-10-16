@@ -11,7 +11,7 @@
 		"build": "turbo run build",
 		"test": "turbo run test",
 		"coverage": "turbo run coverage",
-		"sdk:generate": "pixi run -e build python packages/qgis-sdk/tests/generate_contract.py packages/qgis-sdk-bridge/tests/contracts/generated/schemas && bun run --filter qgis-sdk-bridge generate:contract-types"
+		"sdk:generate": "pixi run -e build python packages/qgis-sdk/tests/generate_contract.py packages/qgis-sdk-bridge/tests/contracts/generated/schemas && pixi run -e build python packages/qgis-sdk/tests/generate_pydantic_contract.py packages/qgis-sdk-bridge/tests/contracts/pydantic/generated/schemas && bun run --filter qgis-sdk-bridge generate:contract-types"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.5.15",
