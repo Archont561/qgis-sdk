@@ -30,7 +30,23 @@ jobs:
         run: pixi run -e bun install-js
 
       - name: Check commit messages
-        run: pixi run -e default check-commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # Review new commits, not already-landed history or the synthetic PR merge.
+          if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]]; then
+            export CONVCO_REV="$BASE_SHA..$GITHUB_SHA"
+          else
+            # New-branch pushes have an all-zero before SHA; manual runs have none.
+            base=$(git merge-base "$GITHUB_SHA" "origin/$DEFAULT_BRANCH")
+            if [[ "$base" == "$GITHUB_SHA" ]]; then
+              export CONVCO_MAX_COUNT=1
+            else
+              export CONVCO_REV="$base..$GITHUB_SHA"
+            fi
+          fi
+          pixi run -e default check-commits
 
       - name: Lint Python
         run: pixi run -e default lint-python
@@ -52,7 +68,7 @@ jobs:
         run: pixi run -e bun bun run coverage
 
       - name: Upload Python coverage
-        if: always()
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         uses: codecov/codecov-action@v5
         with:
           files: packages/qgis-sdk/coverage/lcov.info
@@ -61,7 +77,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload TypeScript coverage
-        if: always()
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         uses: codecov/codecov-action@v5
         with:
           files: coverage/qgis-sdk-bridge/lcov.info
