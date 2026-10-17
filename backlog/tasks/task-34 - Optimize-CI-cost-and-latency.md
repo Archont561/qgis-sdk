@@ -1,10 +1,10 @@
 ---
 id: TASK-34
 title: Optimize CI cost and latency
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-17 18:10'
-updated_date: '2026-10-17 18:44'
+updated_date: '2026-10-17 19:08'
 labels: []
 milestone: m-0
 dependencies: []
@@ -64,3 +64,9 @@ Scope held (TASK-34 AC 4): suites, OS matrix, and coverage gates (single-sourced
 
 Keep/revert ledger (AC 5): keep pip cache (measured win), keep Bun cache (latency-neutral, kept with rationale above), keep concurrency group (verified), keep checkout/setup-python/codecov upgrades (zero-warning requirement), no change to setup-bun (already node24).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged to main in PR #15 (merge commit 5426c63, 2026-10-17). CI now caches pip downloads and the Bun install store on the cross-platform jobs, cancels superseded branch/PR runs while default-branch runs queue, and runs every action on node24 (checkout v7, setup-python v7, codecov-action v7; setup-bun@v2 already node24). Measured against the PR #14 baseline (run 39055033648: checks 1m15s, macOS 32s, Windows 1m39s, ~9.9 Linux-equivalent billed minutes): warm PR run 39058815847 posted checks 1m6s, macOS 20s, Windows 1m5s (151s job-time sum, -27%) at ~6.6 Linux-equivalent billed minutes (-33%); Windows pip install fell 45s to 21s. Cancellation verified on run 39058772930 (conclusion=cancelled after a superseding push); fresh runs carry zero Node 20 deprecation annotations; suites, OS matrix, coverage gates and pixi lock --check unchanged/green. Post-merge main run 39060970680 passed with zero deprecation annotations.
+<!-- SECTION:FINAL_SUMMARY:END -->
