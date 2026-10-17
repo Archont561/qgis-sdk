@@ -4,7 +4,7 @@ title: Implement scoped plugin runtime and native lifecycle adapter
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-17 16:40'
+updated_date: '2026-10-17 17:08'
 labels: []
 milestone: m-1
 dependencies:
@@ -55,4 +55,6 @@ Approved bounded slice: QGIS-free PluginRuntime with explicit context constructi
 - AC2: unload closes the existing PluginContext.scope once and is safe to repeat, including from new, running and failed states. Partial startup failure releases already-registered action/signal/dialog-dock/work cleanups in reverse order, sets failed, and re-raises the author error with cleanup failures attached as __cause__. Unload cleanup failures still reach stopped, attempt all callbacks and raise ExceptionGroup. Pure tests include 16 runtime unit tests, three BDD scenarios, a Hypothesis repeated-unload property and five adapter tests.
 - AC3 remains open: pure lifecycle tests are in place, but there is no real Desktop startup/unload evidence. The new headless harness runs the adapter inside a real QgsApplication with iface=None and no event loop; it is explicitly not a Desktop qualification. TASK-33 tracks the missing Desktop/Windows/macOS evidence.
 Validation this session: root test 256 passed/2 opt-in smoke skipped; root coverage 231 passed/2 skipped, Python 100% (450 statements, runtime 88 and adapters/desktop 23 at 100%), bridge 90 passed at 100%; Ruff lint and scoped format, Biome, bridge typecheck, git diff --check, wheel/sdist build with Twine and bridge build pass. The opt-in headless lifecycle smoke passes against QGIS 4.2.3-Belém do Pará and Qt 6.11.2 (action ping=7, plugin started/unloaded, owned resources released, QGIS exited). Root build still fails at the known conda-forge repodata TLS handshake EOF. No merge yet.
+
+2026-10-17 post-merge closeout: PR #13 merged into main as f9740a80ad0b0b2ba53b7ae19c21d12048b94198 (implementation 611e1ac020bfd21888aca967eb6f1f82e3e39179), merged by Archont561 with a merge commit. Post-merge main runs: CI 39052147058 succeeded (commit-message, lint, format, typecheck, skill tooling, Actions lint and coverage steps all passed) and publish sandbox 39052147023 succeeded. AC1 and AC2 are proven by the landed runtime/adapter modules and the tests included in this PR. AC3 stays open: there is still no real Desktop startup/unload evidence. The headless harness runs the adapter inside a real QgsApplication with iface=None, no display and no event loop, which is not a Desktop qualification; TASK-33 tracks that gap. The task therefore remains In Progress rather than Done. The local environment remains an unverified restore (nine dist-info/RECORD integrity mismatches), so this closure claims merged code and CI, not a verified environment. No dependency or lockfile changes.
 <!-- SECTION:NOTES:END -->
