@@ -4,7 +4,7 @@
 
 `qgis-sdk` is the Python package in the QGIS SDK workspace. It is intended to grow into a reusable foundation for plugin authors who want maintainable, source-testable code and a consistent packaging workflow.
 
-> **Status:** early scaffold with an experimental, QGIS-free contract layer. `qgis_sdk.hello()` remains a smoke-test API. Plugin lifecycle, native QGIS adapters, actual GIS services, declarations, and the bridge runtime are not implemented yet.
+> **Status:** early scaffold with an experimental, QGIS-free contract layer, declarations, and a bounded plugin lifecycle runtime. `qgis_sdk.hello()` remains a smoke-test API. Native GIS services, UI rendering and handler dispatch, jobs, the full Desktop plugin template, and the bridge runtime are not implemented yet.
 
 The [`qgis-sdk` PyPI listing](https://pypi.org/project/qgis-sdk/) is currently a `0.0.0` placeholder with no project description, not a functional SDK release. Use this repository's source package for development; see the [workspace README](../../README.md) for details and the npm bridge listing status.
 
@@ -18,7 +18,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, and `DesktopAccess` protocols; implementations are supplied by the host or by tests |
-| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, and `ResourceScope` |
+| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -217,3 +217,101 @@ Invalid declarations raise `QgisSdkDeclarationError` (a `QgisSdkError` with code
 match `[a-zA-Z][a-zA-Z0-9_.-]*` and titles must be nonblank strings. The public API
 is experimental 0.x. Runtime dispatch, lifecycle hooks, native UI declarations,
 bridge routing and TypeScript generation are separate follow-up work.
+
+## Scoped plugin runtime (experimental, TASK-24)
+
+`PluginRuntime` owns one decorated plain class for the plugin lifetime:
+
+```python
+from qgis_sdk import action, plugin
+from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+
+@plugin(id="example.tools", title="Example tools")
+class Tools:
+    def __init__(self, ctx: PluginContext) -> None:
+        self.ctx = ctx
+        ctx.scope.on_close(lambda: print("disposed"))
+
+    @action(id="run", title="Run")
+    def run(self, value: int) -> int:
+        return value
+
+
+context = PluginContext(notifications=..., scope=ResourceScope())
+runtime = PluginRuntime(Tools, context)
+instance = runtime.start()   # calls Tools(context) exactly once
+runtime.actions["run"](3)    # read-only action ID -> bound method
+runtime.unload()             # closes the owned scope once
+runtime.unload()             # safe no-op
+```
+
+The default factory calls `plugin_class(context)`. Pass
+`PluginRuntime(..., instance_factory=factory)` when a plugin needs custom
+dependencies; the runtime never inspects or rewrites the constructor.
+Declarations are validated at construction time, but no author code runs until
+`start()`. After construction, every declared action must resolve to a callable
+on the instance; otherwise `QgisSdkPluginLifecycleError`
+(`code="invalid_plugin_lifecycle"`) is raised and startup is rolled back.
+
+`PluginRuntimeState` is `new`, `running`, `stopped` or `failed`. `start()` is
+valid only from `new`; starting twice or restarting a stopped runtime raises
+`QgisSdkPluginLifecycleError`. `unload()` is valid from `new` and `running`,
+closes the context scope and drops the instance and action bindings. Repeated
+`unload()` calls are no-ops, including after a failed startup.
+
+Ownership stays with the existing `ResourceScope`: actions, signal connections,
+dialogs/docks and work register cleanup through `ctx.scope`. A partial startup
+failure closes that scope, releases resources in reverse registration order,
+sets the runtime to `failed` and re-raises the original author error; a cleanup
+failure is attached as its `__cause__`. If cleanup fails during `unload`, the
+runtime still reaches `stopped`, all remaining callbacks run, and the failures
+are raised as an `ExceptionGroup`. Scope closure is not proof that in-flight work
+stopped, and the runtime does not create Qt actions, dialogs, docks or jobs.
+
+## Desktop lifecycle adapter (experimental, TASK-24)
+
+A QGIS plugin package can expose the adapter through its normal entry point:
+
+```python
+from qgis_sdk.adapters.desktop import create_class_factory
+
+classFactory = create_class_factory(Tools, context_factory=build_context)
+```
+
+`build_context(iface)` returns the typed `PluginContext` for that host,
+including any `DesktopAccess` service. The adapter imports neither QGIS nor Qt,
+never serializes `iface`, calls `runtime.start()` from `initGui()` and
+`runtime.unload()` from `unload()`. Repeated `unload()` calls are safe. It is
+lifecycle glue, not a complete plugin template: plugin metadata, native action
+registration, menus and dialogs remain the caller's or later tasks' work.
+
+The headless lifecycle harness uses a real `QgsApplication` and the adapter:
+
+```sh
+pixi run -e default python packages/qgis-sdk/tests/qualification/desktop_lifecycle_smoke.py
+```
+
+```json
+{
+  "action_names": ["ping"],
+  "action_result": 7,
+  "error": null,
+  "owned_resources_released": true,
+  "passed": true,
+  "plugin_started": true,
+  "plugin_unloaded": true,
+  "qgis_exited": true,
+  "qgis_initialised": true,
+  "qgis_version": "4.2.3-Belém do Pará",
+  "qt_version": "6.11.2"
+}
+```
+
+The harness passes `iface=None`, starts no event loop and does not exercise
+menus, dialogs or docks. It is **not** a real Desktop startup/unload
+qualification; that evidence is still unavailable and tracked by TASK-33. Run
+the opt-in test with:
+
+```sh
+QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_qualification_lifecycle.py
+```

@@ -10,7 +10,13 @@ from pathlib import Path
 import pytest
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
-LAYER_ORDER = {"models": 0, "services": 1, "core": 2}
+LAYER_ORDER = {"models": 0, "declarations": 1, "services": 1, "core": 2}
+LAYER_PATHS = {
+    "core": SOURCE_ROOT / "core",
+    "declarations": SOURCE_ROOT / "declarations.py",
+    "models": SOURCE_ROOT / "models",
+    "services": SOURCE_ROOT / "services",
+}
 
 
 def imports_in(path: Path, layer: str) -> list[tuple[str, int]]:
@@ -36,7 +42,8 @@ def imports_in(path: Path, layer: str) -> list[tuple[str, int]]:
 
 @pytest.mark.parametrize("layer", LAYER_ORDER)
 def test_pure_layers_only_import_the_stdlib_and_lower_pure_layers(layer: str) -> None:
-    files = sorted((SOURCE_ROOT / layer).rglob("*.py"))
+    path = LAYER_PATHS[layer]
+    files = sorted(path.rglob("*.py")) if path.is_dir() else [path]
     assert files, f"Missing public pure layer: {layer}"
     for file in files:
         for module, line in imports_in(file, layer):
@@ -68,8 +75,10 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
                 return None
 
         sys.meta_path.insert(0, RejectNative())
-        for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.services',
-                       'qgis_sdk.core', 'qgis_sdk.core.contexts',
+        for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
+                       'qgis_sdk.services', 'qgis_sdk.core',
+                       'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
+                       'qgis_sdk.adapters.desktop',
                        'qgis_sdk.adapters.pydantic',
                        'qgis_sdk.adapters.webengine'):
             importlib.import_module(module)

@@ -37,3 +37,25 @@ Provide a deliberate native escape hatch for Desktop-specific work; it is unavai
 ## Related scoped runtime refinements
 
 Use separate context lifetimes for plugins, algorithms, views and jobs; algorithms and jobs receive fresh execution instances. See [decision-11](decision-11%20-%20Use-one-context-injected-class-per-Processing-algorithm.md), [decision-12](decision-12%20-%20Use-one-context-injected-controller-per-UI-surface.md), [decision-13](decision-13%20-%20Use-runtime-bound-Celery-inspired-local-jobs.md), [decision-14](decision-14%20-%20Enforce-QGIS-free-import-boundaries-during-check.md).
+
+## Confirmed TASK-24 bounded runtime foundation (2026-10-17)
+
+The user approved the initial runtime seams: a QGIS-free `PluginRuntime` in
+`qgis_sdk.core` that constructs a decorated plain class through
+`plugin_class(context)` by default, with an explicit `instance_factory`
+escape hatch and no constructor inspection or rewriting. Declarations are
+validated before construction; declared actions are exposed as a read-only
+ID-to-bound-method mapping. `unload()` closes the existing `PluginContext.scope`
+once, repeated unload is a no-op, and a partial startup failure disposes
+already-registered resources before re-raising the author error. Ownership of
+actions, signals, dialogs/docks and work continues to use `ResourceScope`
+rather than a new registry or global lookup.
+
+A delegating `DesktopLifecycleAdapter` and `create_class_factory(...)` helper in
+`qgis_sdk.adapters.desktop` implement the QGIS `classFactory`/`initGui`/`unload`
+shape without importing QGIS or Qt; the author-provided
+`context_factory(iface)` supplies typed capabilities. A headless harness runs
+this adapter inside a real `QgsApplication` and proves construction, action
+binding and disposal. It passes no real Desktop `iface`, renders no UI and is
+not a Desktop startup/unload qualification. Real Desktop evidence remains open
+and is tracked by TASK-33.
