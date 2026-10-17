@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
@@ -167,6 +168,13 @@ class StreamingProcess:
         return self.returncode
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason=(
+        "run_eval streams with select() on the CLI stdout pipe; Windows select() "
+        "only accepts sockets, so this path is POSIX-only"
+    ),
+)
 def test_streamed_skill_call_is_detected_even_without_a_trailing_newline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

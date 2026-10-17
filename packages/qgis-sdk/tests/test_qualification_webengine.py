@@ -39,18 +39,21 @@ def test_headless_environment_disables_the_chromium_sandbox_and_gpu() -> None:
 
 
 def test_headless_environment_exposes_the_qgis_prefix_and_python_path() -> None:
-    overrides = headless_environment(Path("/opt/qgis"), {})
+    prefix = Path("/opt/qgis")
+    overrides = headless_environment(prefix, {})
 
-    assert overrides["QGIS_PREFIX_PATH"] == "/opt/qgis"
-    assert overrides["PROJ_LIB"] == "/opt/qgis/share/proj"
-    assert overrides["PYTHONPATH"] == "/opt/qgis/share/qgis/python"
-    assert qgis_python_path(Path("/opt/qgis")) == Path("/opt/qgis/share/qgis/python")
+    assert overrides["QGIS_PREFIX_PATH"] == str(prefix)
+    assert overrides["PROJ_LIB"] == str(prefix / "share" / "proj")
+    assert overrides["PYTHONPATH"] == str(prefix / "share" / "qgis" / "python")
+    assert qgis_python_path(prefix) == prefix / "share" / "qgis" / "python"
 
 
 def test_headless_environment_keeps_an_existing_python_path() -> None:
-    overrides = headless_environment(Path("/opt/qgis"), {"PYTHONPATH": "/work/src"})
+    prefix = Path("/opt/qgis")
+    overrides = headless_environment(prefix, {"PYTHONPATH": "/work/src"})
 
-    assert overrides["PYTHONPATH"] == "/opt/qgis/share/qgis/python:/work/src"
+    expected = os.pathsep.join([str(prefix / "share" / "qgis" / "python"), "/work/src"])
+    assert overrides["PYTHONPATH"] == expected
 
 
 def test_chromium_version_is_read_from_the_user_agent() -> None:
