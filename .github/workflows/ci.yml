@@ -132,25 +132,33 @@ jobs:
           --junitxml=python-tests.xml
 
       # Job logs are served from a blob host that some networks cannot read, so
-      # turn a red job into per-test annotations the API can return.
-      - name: Annotate failing Python tests
-        if: failure()
+      # report the counts and every failure as annotations the API can return.
+      - name: Report Python test results
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           python - <<'PY'
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
+          def find_problem(case):
+              """Return the failure or error node of one JUnit test case."""
+              problem = case.find("failure")
+              return case.find("error") if problem is None else problem
+
           report = Path("python-tests.xml")
           if not report.exists():
               print("::error::pytest did not write python-tests.xml")
               raise SystemExit(0)
-          for case in ET.parse(report).iter("testcase"):
-              problem = case.find("failure")
-              if problem is None:
-                  problem = case.find("error")
-              if problem is None:
-                  continue
+          cases = list(ET.parse(report).iter("testcase"))
+          failures = [case for case in cases if find_problem(case) is not None]
+          skipped = [case for case in cases if case.find("skipped") is not None]
+          print(
+              f"::notice::pytest: {len(cases)} collected, "
+              f"{len(failures)} failed, {len(skipped)} skipped"
+          )
+          for case in failures:
+              problem = find_problem(case)
               detail = (problem.get("message") or problem.text or "failed").strip()
               first = detail.splitlines()[0][:600]
               print(
@@ -158,6 +166,19 @@ jobs:
                   f"{case.get('classname')}::{case.get('name')}: {first}"
               )
           PY
+
+      - name: Test TypeScript bridge
+        shell: bash
+        run: |
+          set -o pipefail
+          bun test packages/qgis-sdk-bridge/tests | tee bun-tests.log
+
+      - name: Report TypeScript test results
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          summary=$(grep -Eo '[0-9]+ pass' bun-tests.log | head -1 || true)
+          echo "::notice::bun test: ${summary:-no summary line}"
 
       - name: Test TypeScript bridge
         run: bun test packages/qgis-sdk-bridge/tests
