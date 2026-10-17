@@ -28,9 +28,11 @@ Plugin authors receive explicit, typed capabilities rather than retrieving servi
 from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 
+
 class Messages:
     def info(self, message: str) -> None:
         print(message)
+
 
 plugin_scope = ResourceScope()  # the runtime owns and eventually closes it
 ctx = PluginContext(notifications=Messages(), scope=plugin_scope)
@@ -54,6 +56,7 @@ Pure tests check declared import direction throughout the three layers and impor
 
 ```python
 from qgis_sdk import hello
+
 print(hello())  # hello world
 ```
 
@@ -76,6 +79,49 @@ The checked contract-generation examples live in `tests/contract_sample/` and ar
 `qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
 
 Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux/Python 3.14.8; Windows/QGIS coexistence, Desktop/WebEngine behavior, and Conda delivery are still qualification gates.
+
+## Headless QGIS and WebEngine qualification
+
+`tests/qualification/webengine_smoke.py` is a repeatable harness for the headless path QGIS uses to host a `QWebEngineView`. It starts a real QGIS application, loads a page in a real WebEngine view, tears QGIS down again and prints a machine-readable report:
+
+```sh
+pixi run -e default python packages/qgis-sdk/tests/qualification/webengine_smoke.py
+```
+
+```json
+{
+  "chromium_version": "140.0.0.0",
+  "error": null,
+  "load_finished": true,
+  "platform": "Linux-6.1.158+-x86_64-with-glibc2.36",
+  "python_version": "3.14.8",
+  "qgis_exited": true,
+  "qgis_initialised": true,
+  "qgis_version": "4.2.3-Belém do Pará",
+  "qt_version": "6.11.2",
+  "qualified": true,
+  "webengine_available": true
+}
+```
+
+The harness resolves everything it needs from the active prefix, so the same command works in any environment that provides a QGIS installation. It sets `QT_QPA_PLATFORM=offscreen`, the Chromium flags `--no-sandbox --disable-gpu --disable-dev-shm-usage --single-process`, the `PROJ_LIB` and `QGIS_PREFIX_PATH` of that prefix, and puts the QGIS Python bindings on `PYTHONPATH`.
+
+| Requirement | Linux (qualified) | macOS | Windows |
+| :-- | :-- | :-- | :-- |
+| QGIS with Python bindings | Pixi `default` environment, QGIS 4.2.3 | not qualified | not qualified |
+| Qt WebEngine Python bindings | `pyqt6-webengine` 6.11.0 | not qualified | not qualified |
+| Display | none, `offscreen` | none, `offscreen` | none, `offscreen` |
+| Chromium sandbox | disabled by the flags above | same | same |
+
+Without the Chromium flags the WebEngine process fails with `eglInitialize: Failed to get system egl display`. ANGLE, EGL, dbus and PDAL messages printed during a run are noise and do not affect the result.
+
+`tests/test_qualification_webengine.py` covers the harness helpers in the QGIS-free suite. The end-to-end run is opt-in, because it needs a real QGIS installation:
+
+```sh
+QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_qualification_webengine.py
+```
+
+The headless path is **not** a Desktop GUI or plugin-lifecycle qualification: the development sandbox has no display and no Xvfb, and no Windows or macOS QGIS candidate has been tested. `qgis_sdk.adapters.webengine` therefore only proves that the optional bindings can be located and that a missing installation is reported with an actionable error.
 
 ## Build artifacts
 

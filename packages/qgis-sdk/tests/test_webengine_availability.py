@@ -58,11 +58,42 @@ def test_require_webengine_matches_availability() -> None:
         assert exc_info.value.dependency == "pyqt6-webengine"
 
 
-def test_create_webengine_view_raises_when_unavailable() -> None:
-    if webengine.webengine_available():
-        pytest.skip("Qt WebEngine bindings are installed in this environment")
-    with pytest.raises(QgisSdkOptionalDependencyError):
+def test_create_webengine_view_raises_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(webengine, "_import_webengine_view", lambda: None)
+    with pytest.raises(QgisSdkOptionalDependencyError) as exc_info:
         webengine.create_webengine_view()
+    assert exc_info.value.dependency == "pyqt6-webengine"
+
+
+def test_availability_is_false_when_the_bindings_cannot_be_imported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for module_name in (
+        "qgis.PyQt.QtWebEngineWidgets",
+        "PyQt6.QtWebEngineWidgets",
+        "PyQt5.QtWebEngineWidgets",
+    ):
+        monkeypatch.setitem(sys.modules, module_name, None)
+
+    assert webengine.webengine_available() is False
+
+
+def test_require_webengine_raises_an_actionable_error_without_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for module_name in (
+        "qgis.PyQt.QtWebEngineWidgets",
+        "PyQt6.QtWebEngineWidgets",
+        "PyQt5.QtWebEngineWidgets",
+    ):
+        monkeypatch.setitem(sys.modules, module_name, None)
+
+    with pytest.raises(QgisSdkOptionalDependencyError) as exc_info:
+        webengine.require_webengine()
+    assert exc_info.value.dependency == "pyqt6-webengine"
+    assert "pyqt6-webengine" in exc_info.value.installation_hint
 
 
 def test_create_webengine_view_uses_resolved_class(
