@@ -1,10 +1,10 @@
 ---
 id: TASK-12
 title: Evaluate dataclass validation and TypeScript generation backends
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-17 15:14'
+updated_date: '2026-10-17 15:58'
 labels: []
 milestone: m-0
 dependencies: []
@@ -80,4 +80,12 @@ Current-checkout verification in the unverified restore (PIXI_FROZEN=true PIXI_N
 doc-5 gained a closeout section recording landed commits/CI, this verification, a historical-versus-reproducible evidence split (removed apischema/TypeAdapter harness, direct generators and wheel probe are historical; the mashumaro schema example and the Pydantic adapter slice are durable tests), and the gates that remain before any mandatory backend selection with their owning tasks. ADR-10 gained a closeout section: no mandatory runtime selected, pure-Python-first unchanged, and ADR-10 deliberately stays proposed until a production generator/backend lands (TASK-2/TASK-17).
 
 Validation for this change: root test 181 Python passed/1 skipped, 90 bridge passed; coverage Python 98.55% and bridge 100% against the 90% gates; Ruff lint/format, Biome, bridge typecheck, actionlint, skill-creator tests (25 passed), pixi lock --check and git diff --check all pass. No commit, push or merge yet; the task stays In Progress until this lands, CI is confirmed and closing is explicitly authorized.
+
+2026-10-17 closeout (user-authorized): the user chose to close this spike through the Backlog.md CLI with a summary that separates historical from durable evidence. Status moved to Done and the remaining gates are named with their owning tasks in the final summary. This closure selects no production backend and changes no runtime dependency, lockfile, generated contract or production source.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+PRs #6 (c37dc73), #7 (7287a54) and #8 (ae361d0) landed the durable output of this spike, and PR #9 (0379305) recorded the closeout. All three acceptance criteria are met, and the evidence splits in two. Historical, not rerunnable from a fresh checkout: the apischema 0.19.0 versus Pydantic TypeAdapter 2.14.1 comparison with its 25-case corpus, the Ajv 8.20.0 and json-schema-to-typescript 16.0.0 runs, the three direct Python-to-TypeScript generator probes, and the Pydantic binary-wheel build and install probe; that harness was removed on 2026-10-16, so reproducing it means rebuilding the harness rather than running a test. Reproducible today: the mashumaro JSON Schema example with 40 shared Python/Ajv cases, schema and type drift checks, Hypothesis serialization and BDD scenarios, and the optional controlled-deployment Pydantic adapter slice covering strict request validation, typed handler dispatch, result serialization, SafeJsonInteger bounds, distinct request, reader and writer schemas, and generated-schema Ajv parity. Outcome: no mandatory runtime backend is selected, pure-Python-first ordinary plugin distribution is unchanged, Pydantic 2.14.1 remains the leading controlled-deployment candidate behind the explicit controlled-deployment extra, apischema 0.19.0 is not selected, mashumaro default decoding is ruled out as a strict validator, and the jsonschema oracle stays test-only. ADR-10 deliberately stays proposed until a production generator and backend land. The gates that remain are owned elsewhere: advanced contract coverage and the backend-selection decision ahead of TASK-2 and TASK-17; clean supported Windows and Linux QGIS installations, native imports and coexistence with another Pydantic-using plugin under TASK-23; Desktop and WebEngine lifecycle tests of the bridge and adapter under TASK-4 and TASK-17; Conda and plugin-ZIP delivery qualification under TASK-8; and an explicit deployment-scope policy review before a native validator can become mandatory under ADR-3.
+<!-- SECTION:FINAL_SUMMARY:END -->
