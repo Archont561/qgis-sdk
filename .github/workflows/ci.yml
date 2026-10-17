@@ -170,8 +170,9 @@ jobs:
       - name: Test TypeScript bridge
         shell: bash
         run: |
+          # bun writes its summary to stderr; keep both streams and bun's status.
           set -o pipefail
-          bun test packages/qgis-sdk-bridge/tests | tee bun-tests.log
+          bun test packages/qgis-sdk-bridge/tests 2>&1 | tee bun-tests.log
 
       - name: Report TypeScript test results
         if: ${{ !cancelled() }}
