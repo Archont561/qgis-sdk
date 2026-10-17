@@ -1,0 +1,4 @@
+# Check every platform out with LF so byte-for-byte comparisons hold: the
+# bridge contract tests compare checked-in declarations against generated text,
+# and a Windows checkout with core.autocrlf would otherwise rewrite them.
+* text=auto eol=lf
