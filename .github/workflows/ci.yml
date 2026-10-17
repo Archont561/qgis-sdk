@@ -80,7 +80,9 @@ jobs:
 
       - name: Upload Python coverage
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
-        uses: codecov/codecov-action@v5
+        # v6+ is the first codecov major whose embedded github-script targets
+        # node24; v5 makes fresh runs emit Node 20 deprecation warnings.
+        uses: codecov/codecov-action@v7
         with:
           files: packages/qgis-sdk/coverage/lcov.info
           flags: qgis-sdk
@@ -89,7 +91,7 @@ jobs:
 
       - name: Upload TypeScript coverage
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: coverage/qgis-sdk-bridge/lcov.info
           flags: qgis-sdk-bridge
