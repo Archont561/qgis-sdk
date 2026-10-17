@@ -23,8 +23,41 @@ def test_sort_tags_orders_by_semver_and_ignores_noise():
 def test_first_release_refuses_the_push_trigger(sample_config):
     plan = compute_plan("push", (), _log("feat: something"), sample_config)
     assert plan.action == "skip"
-    assert plan.first
+    assert plan.first and not plan.stable_exists
     assert "deliberate" in plan.reason
+
+
+def test_prerelease_only_history_still_refuses_the_push_trigger(sample_config):
+    # The rc bootstrap must not arm clean publishes: with only prerelease tags,
+    # a landed feat/fix would otherwise tag a stable version and hit registries.
+    plan = compute_plan(
+        "push", ("v0.1.0-rc.2",), _log("feat: next slice"), sample_config
+    )
+    assert plan.action == "skip"
+    assert not plan.first and not plan.stable_exists
+    assert "deliberate" in plan.reason
+
+
+def test_dispatch_continues_the_rc_train_from_a_prerelease_base(sample_config):
+    plan = compute_plan(
+        "dispatch",
+        ("v0.1.0-rc.2",),
+        _log("feat: next slice"),
+        sample_config,
+        suffix="rc.3",
+    )
+    assert plan.action == "tag" and plan.tag == "v0.2.0-rc.3"
+
+
+def test_dispatch_can_bootstrap_the_deliberate_stable_release(sample_config):
+    plan = compute_plan(
+        "dispatch",
+        ("v0.1.0-rc.2",),
+        _log("chore: anything"),
+        sample_config,
+        version_override="0.1.0",
+    )
+    assert plan.action == "tag" and plan.tag == "v0.1.0"
 
 
 def test_first_release_tags_on_dispatch_with_initial_version(sample_config):
@@ -79,7 +112,7 @@ def test_breaking_escalates_minor_before_one_and_major_after(sample_config):
 
 
 def test_prerelease_base_bumps_from_its_core(sample_config):
-    plan = compute_plan("push", ("v0.1.0-rc.1",), _log("feat: next"), sample_config)
+    plan = compute_plan("dispatch", ("v0.1.0-rc.1",), _log("feat: next"), sample_config)
     assert plan.tag == "v0.2.0"
 
 
@@ -117,6 +150,7 @@ def test_to_json_is_workflow_shaped(sample_config):
     assert payload == {
         "trigger": "dispatch",
         "first": True,
+        "stable_exists": False,
         "base_tag": None,
         "version": "0.1.0",
         "tag": "v0.1.0",

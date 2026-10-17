@@ -5,9 +5,10 @@ Release planning and publishing CLI for the QGIS SDK workspace (TASK-35).
 The tool encapsulates everything `autorelease.yml` and `release.yml` need:
 
 - `plan` — next SemVer + changelog from conventional commits per `.versionrc`,
-  with the policy that the push-to-main trigger never creates the *first* tag
-  (the first release is a deliberate `workflow_dispatch` act) and that a
-  prerelease suffix keeps registries closed.
+  with the policy that the push-to-main trigger never creates a tag while no
+  *stable* tag exists (bootstrapping and the first stable release are
+  deliberate `workflow_dispatch` acts; prerelease suffixes keep iterating the
+  rc train without arming registry publishes).
 - `classify` — whether a tag is a clean release or a prerelease.
 - `tag` — annotated tag creation, optionally pushed.
 - `stamp` — write the release version into `packages/qgis-sdk/pyproject.toml`
