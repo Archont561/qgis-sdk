@@ -4,10 +4,11 @@ name: autorelease
 # stdlib-only qgis-sdk-release tool decides whether a release is due; when one
 # is, it pushes an annotated tag that release.yml turns into artifacts.
 #
-# The push trigger never creates the *first* tag: bootstrapping the train is a
-# deliberate workflow_dispatch act (optionally with a prerelease suffix), so an
-# accidental merge can never consume a registry version. Registries only ever
-# see clean vX.Y.Z tags - see the gating in release.yml.
+# The push trigger never creates a tag while no *stable* tag exists:
+# bootstrapping the train and the first stable release are deliberate
+# workflow_dispatch acts (optionally with a prerelease suffix that keeps
+# iterating the rc train), so an accidental merge can never consume a registry
+# version. Registries only ever see clean vX.Y.Z tags - see release.yml.
 
 on:
   push:

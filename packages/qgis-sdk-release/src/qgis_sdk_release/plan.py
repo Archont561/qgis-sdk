@@ -2,11 +2,14 @@
 
 Policy (decided 2026-10-17 with the trusted-publishing gating):
 
-* With no tag yet, the push-to-main trigger never tags: the first release is a
-  deliberate act (TASK-27 territory) bootstrapped through ``workflow_dispatch``.
-* Once a tag exists, every landed feat/fix continues the train automatically.
-* A prerelease suffix keeps registries closed: ``release.yml`` publishes to
-  PyPI/npm only for clean ``vX.Y.Z`` tags and dry-runs for prereleases.
+* The push-to-main trigger never tags while no *stable* (non-prerelease) tag
+  exists: bootstrapping the train and the first stable release are deliberate
+  ``workflow_dispatch`` acts (TASK-27 territory). A prerelease suffix keeps
+  iterating the rc train without arming clean publishes.
+* Once a stable tag exists, every landed feat/fix continues the train
+  automatically.
+* ``release.yml`` publishes to PyPI/npm only for clean ``vX.Y.Z`` tags and
+  dry-runs both registries for prereleases.
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ class Plan:
 
     trigger: str
     first: bool
+    stable_exists: bool
     base_tag: str | None
     version: Version | None
     tag: str | None
@@ -55,6 +59,7 @@ class Plan:
         return {
             "trigger": self.trigger,
             "first": self.first,
+            "stable_exists": self.stable_exists,
             "base_tag": self.base_tag,
             "version": str(self.version) if self.version else None,
             "tag": self.tag,
@@ -90,6 +95,7 @@ def compute_plan(
     ordered = sort_tags(tags)
     base_tag = ordered[0] if ordered else None
     first = base_tag is None
+    stable_exists = any(not version_from_tag(tag).is_prerelease for tag in ordered)
     if version_override:
         version = Version.parse(version_override)
     elif first:
@@ -101,6 +107,7 @@ def compute_plan(
             return Plan(
                 trigger,
                 first,
+                stable_exists,
                 base_tag,
                 None,
                 None,
@@ -115,6 +122,7 @@ def compute_plan(
         return Plan(
             trigger,
             first,
+            stable_exists,
             base_tag,
             version,
             tag,
@@ -122,20 +130,32 @@ def compute_plan(
             f"tag {tag} already exists",
             "",
         )
-    if first and trigger == "push":
+    if not stable_exists and trigger == "push":
         return Plan(
             trigger,
             first,
+            stable_exists,
             base_tag,
             version,
             tag,
             "skip",
-            "no tag exists yet; the first release is deliberate - "
-            "run the autorelease workflow dispatch to bootstrap it",
+            "no stable tag exists yet; the first stable release is deliberate - "
+            "run the autorelease workflow dispatch (a prerelease suffix "
+            "continues the rc train without arming registry publishes)",
             "",
         )
     reason = (
         "bootstrap release" if first else f"release-worthy commits since {base_tag}"
     )
     changelog = render_changelog(version, commits, config, base_tag, repo_slug)
-    return Plan(trigger, first, base_tag, version, tag, "tag", reason, changelog)
+    return Plan(
+        trigger,
+        first,
+        stable_exists,
+        base_tag,
+        version,
+        tag,
+        "tag",
+        reason,
+        changelog,
+    )
