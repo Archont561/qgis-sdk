@@ -22,3 +22,17 @@ The SDK will derive one inspectable plugin description from the Python declarati
 ## Proposed contract refinement (2026-10-16)
 
 Derive endpoint request/result/event schemas from ordinary dataclasses and supported annotations; omit injected host dependencies. Distinguish nullable, required and omittable fields, reject unsupported types, and generate TS DTOs/operation maps/clients plus runtime validators. Keep API/protocol identity and compatibility policy explicit. See [decision-9](decision-9%20-%20Declare-allowlisted-typed-bridge-endpoints-with-runtime-owned-routers.md) for allowlisted router/transport behavior and [decision-10](decision-10%20-%20Use-dataclass-authoring-and-schema-driven-TypeScript-generation.md) for generation/backend evaluation. These refinements do not select a validation library or final decorator syntax.
+
+## Confirmed TASK-2 foundation (2026-10-17)
+
+The user approved a typed `PluginDescription` with deterministic versioned JSON
+and action metadata/request/result schemas, without callables or host objects.
+The implemented initial representation uses `schema_version: 1`, plugin ID/title,
+and ID-sorted actions with binding names and JSON Schema 2020-12 keyword subsets.
+Request inputs are keyed by method parameter name; result schemas describe the
+writer, not an extensible reader. Defaulted request fields are omittable; result
+writer fields are all required. Nullable types remain distinct from defaults.
+This bounded stdlib-only structural exporter does not select a runtime validation
+backend, TypeScript generator, lifecycle protocol, or compatibility algorithm.
+Unsupported annotations fail explicitly; the test-only backend-spike exporters
+remain separate evidence. See the package README for format and type limits.

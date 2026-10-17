@@ -134,3 +134,86 @@ pixi run -e bun bun run --filter qgis-sdk build
 The combined build produces a wheel and source distribution under `dist/pypi/`, checks them with Twine, and builds the Conda artifact under `dist/conda/`.
 
 See the [workspace README](../../README.md) for the full development setup, coverage tasks, Pixi environments, and the TypeScript bridge for QGIS `QWebEngineView` plugin interfaces.
+
+## Experimental Python declarations (TASK-2)
+
+Declare structure on plain classes; keep behavior in ordinary instance methods:
+
+```python
+from dataclasses import dataclass
+
+from qgis_sdk import action, describe_plugin, plugin
+
+
+@dataclass
+class RunRequest:
+    count: int
+    label: str | None = None
+
+
+@plugin(id="example.tools", title="Example tools")
+class Tools:
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    @action(id="run", title="Run")
+    def run(self, request: RunRequest) -> int:
+        return request.count
+
+
+description = describe_plugin(Tools)
+print(description.to_json())
+```
+
+`plugin` and `action` attach metadata and return their original targets. No base
+class, constructor rewrite, host imports or runtime registration is required.
+`describe_plugin` does not instantiate the class, dispatch handlers, evaluate
+properties, or call dataclass default factories. It resolves annotations with
+`typing.get_type_hints`, which may evaluate forward references: inspect **trusted
+Python code only**, not untrusted modules. Put DTOs in module scope so postponed
+annotations resolve normally; function-local forward-reference names are not
+reconstructed from vanished local scopes.
+
+### Version 1 description contract
+
+The public `PluginDescription` contains `schema_version: 1`, `id`, `title`, and
+an action tuple. Each `ActionDescription` contains `id`, `title`, `handler` (a
+Python binding name), `request`, and `result`. `to_dict()` returns an independent
+JSON-compatible value; `to_json()` sorts keys and uses compact JSON. Actions sort
+by ID, not discovery order. The schema version is independent of package versions
+and future bridge protocol versions. Consumers must reject unsupported versions;
+no compatibility negotiation or reader-extension policy is implemented here.
+
+Request/result schemas use the JSON Schema 2020-12 keyword subset `type`,
+`properties`, `required`, `additionalProperties`, `anyOf`, `enum`, `items`,
+`minimum`, and `maximum`. Supported annotations are `str`, `bool`, `float`, `int`,
+`None`, parameterized `list[T]`, unions (including nullable unions), JSON-valued
+`Literal` (strings, safe integers, booleans, null), and nonrecursive dataclasses.
+Integers are bounded to ±9007199254740991, consistent with ADR-22. `Any`, arbitrary
+host/native objects, mappings, recursive DTOs, and `Annotated` metadata (including
+backend-specific constraints in the test-only spike sample) are rejected rather
+than silently weakened. No validation dependency or runtime backend is selected.
+
+Each action must be an ordinary synchronous instance method with first parameter
+`self`, annotated inputs and an explicit result annotation (`-> None` for no
+result). Inputs may be positional-or-keyword or keyword-only; variadic and
+positional-only inputs, static/class/property actions, coroutines and generators
+are unsupported. Constructor dependencies are not described. The request schema
+is an object keyed by parameter name (the example has a `request` property).
+Inherited actions follow Python MRO and ordinary overrides; each inspected class
+must have its own `@plugin` metadata. Duplicate action IDs are errors.
+
+A default makes an input omittable, not nullable; only a union with `None` makes
+it nullable. Dataclass request fields without defaults are required; result
+writer schemas require **all** dataclass fields, including defaulted fields.
+Defaults are not executed, validated, or emitted as schema values. Unknown object
+properties are disallowed. These are structural writer/request schemas, not an
+extensible result-reader policy or a serializer for result instances. Runtime
+validation must additionally reject nonfinite numbers and implement ADR-22's
+explicit integer normalization; JSON Schema alone is not a Python validator.
+
+Invalid declarations raise `QgisSdkDeclarationError` (a `QgisSdkError` with code
+`invalid_declaration`), naming the action/binding/field where applicable. IDs must
+match `[a-zA-Z][a-zA-Z0-9_.-]*` and titles must be nonblank strings. The public API
+is experimental 0.x. Runtime dispatch, lifecycle hooks, native UI declarations,
+bridge routing and TypeScript generation are separate follow-up work.
