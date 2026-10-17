@@ -1,10 +1,10 @@
 ---
 id: TASK-23
 title: Qualify candidate QGIS 4 Windows and Linux toolchains
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-17 15:58'
+updated_date: '2026-10-17 16:06'
 labels: []
 milestone: m-0
 dependencies: []
@@ -58,4 +58,12 @@ Side effect to handle when this task resumes: tests/test_webengine_availability.
 - The coverage side effect of PR #8 is resolved: adapters/webengine.py previously left lines 39, 50 and 59 uncovered because tests/test_webengine_availability.py skipped the unavailable-bindings branch when the bindings are installed. That branch is now exercised deterministically by hiding the candidate modules through sys.modules, so the environment-dependent skip is gone and measured Python production coverage is back to 100% against the 90% gate. The only remaining skip is the opt-in headless smoke.
 - Still not qualified, recorded as prerequisites: no Windows QGIS candidate, no macOS QGIS candidate, no display and no Xvfb for a real QGIS Desktop GUI run, and no clean-prefix plugin coexistence test. This is a headless harness path, not a Desktop GUI or plugin-lifecycle qualification.
 - Validation for this change: root test 192 Python passed/1 skipped and 90 bridge passed; coverage Python 100% and bridge 100% against the 90% gates; Ruff lint/format, Biome, bridge typecheck, actionlint, skill-creator tests (25 passed), pixi lock --check, wheel/sdist build with Twine and git diff --check all pass. The Conda recipe build is still blocked on conda-forge repodata access (tls handshake eof) and was not rerun. No dependency or lockfile change; no production source change.
+
+2026-10-17 landed: PR #10 merged as a37def9; post-merge CI checks, plan and publish succeeded. The headless harness and its documentation are in main, and the unavailable targets are tracked by the new TASK-33. Closed by user decision after the Linux headless and WebEngine evidence was accepted.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+PR #10 merged as a37def9aa2057fd808d67e2f5df09448756cf74d; post-merge CI (checks, plan, publish) succeeded. Demonstrated on Linux x86_64 with QGIS 4.2.3-Belem do Para, Qt 6.11.2, Chromium 140.0.0.0 and Python 3.14.8: a repeatable headless setup that starts a real QgsApplication, loads a page in a real QWebEngineView and exits cleanly, delivered as the checked-in harness packages/qgis-sdk/tests/qualification/webengine_smoke.py and documented with its platform prerequisites in the package README. All three acceptance criteria are met as written. Explicitly NOT qualified and now tracked by TASK-33: a clean supported Windows QGIS installation, a macOS QGIS candidate, a real QGIS Desktop GUI run (this sandbox has no display and no Xvfb) and coexistence with another plugin that already uses the optional native runtime. This is a headless harness qualification, not a universal QGIS 4 support claim, and it does not qualify the plugin lifecycle or the bridge. The sandbox restore still fails nine RECORD integrity comparisons, so the environment is an unverified restore and no platform qualification beyond this Linux host is claimed.
+<!-- SECTION:FINAL_SUMMARY:END -->
