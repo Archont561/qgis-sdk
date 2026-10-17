@@ -1,9 +1,10 @@
 ---
 id: TASK-34
 title: Optimize CI cost and latency
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-17 18:10'
+updated_date: '2026-10-17 18:29'
 labels: []
 milestone: m-0
 dependencies: []
