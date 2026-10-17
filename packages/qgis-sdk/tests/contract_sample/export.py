@@ -31,8 +31,12 @@ def write_schemas(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for name, schema in build_schemas().items():
         path = output_dir / f"{name}.schema.json"
+        # Pin LF so a Windows checkout stays byte-identical to the
+        # checked-in schema, which the determinism tests compare directly.
         path.write_text(
-            json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(schema, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
         )
 
 
