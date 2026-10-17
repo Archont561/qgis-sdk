@@ -1,0 +1,125 @@
+"""Tests for the repeatable headless QGIS plugin lifecycle harness.
+
+The end-to-end run is opt-in because it needs a real QGIS installation. It is
+not a Desktop GUI qualification: the harness passes an opaque ``None`` iface
+and only exercises construction, action binding and disposal.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from qualification.desktop_lifecycle_smoke import (
+    LifecycleReport,
+    headless_environment,
+)
+
+TEST_DIR = Path(__file__).resolve().parent
+SMOKE_SCRIPT = TEST_DIR / "qualification" / "desktop_lifecycle_smoke.py"
+SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_LIFECYCLE"
+
+
+def successful_report() -> LifecycleReport:
+    return LifecycleReport(
+        platform="Linux-6.1.0-x86_64",
+        python_version="3.14.8",
+        qgis_version="4.2.3-Belem do Para",
+        qt_version="6.11.2",
+        qgis_initialised=True,
+        plugin_started=True,
+        action_names=("ping",),
+        action_result=7,
+        plugin_unloaded=True,
+        owned_resources_released=True,
+        qgis_exited=True,
+    )
+
+
+def test_headless_environment_selects_offscreen_and_the_qgis_prefix() -> None:
+    overrides = headless_environment(Path("/opt/qgis"), {})
+
+    assert overrides["QT_QPA_PLATFORM"] == "offscreen"
+    assert overrides["QGIS_PREFIX_PATH"] == "/opt/qgis"
+    assert overrides["PROJ_LIB"] == "/opt/qgis/share/proj"
+    assert overrides["PYTHONPATH"] == "/opt/qgis/share/qgis/python"
+
+
+def test_headless_environment_keeps_an_existing_python_path() -> None:
+    overrides = headless_environment(Path("/opt/qgis"), {"PYTHONPATH": "/work/src"})
+
+    assert overrides["PYTHONPATH"] == "/opt/qgis/share/qgis/python:/work/src"
+
+
+def test_report_passes_only_when_every_lifecycle_stage_succeeds() -> None:
+    assert successful_report().passed is True
+    assert successful_report().to_dict()["passed"] is True
+
+    failed = LifecycleReport(
+        platform="Linux-6.1.0-x86_64",
+        python_version="3.14.8",
+        qgis_version=None,
+        qt_version=None,
+        qgis_initialised=False,
+        plugin_started=False,
+        action_names=(),
+        action_result=None,
+        plugin_unloaded=False,
+        owned_resources_released=False,
+        qgis_exited=False,
+        error="QGIS import failed",
+    )
+
+    assert failed.passed is False
+    assert failed.to_dict()["error"] == "QGIS import failed"
+
+
+def test_report_serialises_to_a_stable_json_shape() -> None:
+    payload = json.loads(json.dumps(successful_report().to_dict(), sort_keys=True))
+
+    assert payload["action_names"] == ["ping"]
+    assert set(payload) == {
+        "action_names",
+        "action_result",
+        "error",
+        "owned_resources_released",
+        "passed",
+        "platform",
+        "plugin_started",
+        "plugin_unloaded",
+        "python_version",
+        "qgis_exited",
+        "qgis_initialised",
+        "qgis_version",
+        "qt_version",
+    }
+
+
+@pytest.mark.skipif(
+    os.environ.get(SMOKE_ENV_FLAG) != "1",
+    reason=f"set {SMOKE_ENV_FLAG}=1 to run the real headless QGIS lifecycle smoke",
+)
+def test_headless_lifecycle_smoke_starts_and_unloads_a_plugin() -> None:
+    result = subprocess.run(
+        [sys.executable, str(SMOKE_SCRIPT)],
+        cwd=TEST_DIR.parents[2],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["passed"] is True
+    assert payload["qgis_initialised"] is True
+    assert payload["plugin_started"] is True
+    assert payload["action_names"] == ["ping"]
+    assert payload["action_result"] == 7
+    assert payload["plugin_unloaded"] is True
+    assert payload["owned_resources_released"] is True
+    assert payload["qgis_exited"] is True

@@ -1,10 +1,10 @@
 ---
 id: TASK-24
 title: Implement scoped plugin runtime and native lifecycle adapter
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 12:02'
+updated_date: '2026-10-17 16:40'
 labels: []
 milestone: m-1
 dependencies:
@@ -34,7 +34,25 @@ Implement scoped plugin runtime and native lifecycle adapter. Implement only the
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Construct plain author classes through explicit context/factories without constructor rewriting.
-- [ ] #2 Own/dispose actions, signals, dialogs/docks and work; repeated unload and partial startup failure are safe.
+- [x] #1 Construct plain author classes through explicit context/factories without constructor rewriting.
+- [x] #2 Own/dispose actions, signals, dialogs/docks and work; repeated unload and partial startup failure are safe.
 - [ ] #3 Provide focused pure lifecycle tests and real Desktop startup/unload evidence with no fake fallback.
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Approved bounded slice: QGIS-free PluginRuntime with explicit context construction (default cls(context), optional instance factory), read-only bound action mapping, idempotent unload via the existing ResourceScope, and safe partial-startup cleanup. Add a delegating Desktop lifecycle adapter (classFactory/initGui/unload, lazy native boundary) and an opt-in headless QGIS lifecycle smoke. Pure tests own representative action/signal/dialog/work cleanups. Real Desktop startup/unload evidence remains open under TASK-33; do not claim AC3.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-17 session: user approved the bounded slice (pure runtime + Desktop adapter + action binding), construction seam cls(context) with explicit factory override, ResourceScope as sole ownership mechanism, and a PR that includes the reproduced TASK-2 post-merge closure. Environment is an unverified restore (nine RECORD mismatches); baseline 226 passed/1 skipped. No implementation claimed yet.
+
+2026-10-17 bounded slice implemented (unverified restore environment; no dependency or lockfile changes):
+- AC1: PluginRuntime validates declarations at construction, then constructs the plain class once via the default plugin_class(context) factory or an explicit instance_factory. It never inspects or rewrites the constructor; tests prove a constructor trap is bypassed and an undeclared class is never constructed. Declared actions bind to instance methods and expose a read-only ID mapping.
+- AC2: unload closes the existing PluginContext.scope once and is safe to repeat, including from new, running and failed states. Partial startup failure releases already-registered action/signal/dialog-dock/work cleanups in reverse order, sets failed, and re-raises the author error with cleanup failures attached as __cause__. Unload cleanup failures still reach stopped, attempt all callbacks and raise ExceptionGroup. Pure tests include 16 runtime unit tests, three BDD scenarios, a Hypothesis repeated-unload property and five adapter tests.
+- AC3 remains open: pure lifecycle tests are in place, but there is no real Desktop startup/unload evidence. The new headless harness runs the adapter inside a real QgsApplication with iface=None and no event loop; it is explicitly not a Desktop qualification. TASK-33 tracks the missing Desktop/Windows/macOS evidence.
+Validation this session: root test 256 passed/2 opt-in smoke skipped; root coverage 231 passed/2 skipped, Python 100% (450 statements, runtime 88 and adapters/desktop 23 at 100%), bridge 90 passed at 100%; Ruff lint and scoped format, Biome, bridge typecheck, git diff --check, wheel/sdist build with Twine and bridge build pass. The opt-in headless lifecycle smoke passes against QGIS 4.2.3-Belém do Pará and Qt 6.11.2 (action ping=7, plugin started/unloaded, owned resources released, QGIS exited). Root build still fails at the known conda-forge repodata TLS handshake EOF. No merge yet.
+<!-- SECTION:NOTES:END -->
