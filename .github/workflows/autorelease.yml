@@ -1,0 +1,78 @@
+name: autorelease
+
+# Conventional-commit release train (TASK-35). On every landed push to main the
+# stdlib-only qgis-sdk-release tool decides whether a release is due; when one
+# is, it pushes an annotated tag that release.yml turns into artifacts.
+#
+# The push trigger never creates the *first* tag: bootstrapping the train is a
+# deliberate workflow_dispatch act (optionally with a prerelease suffix), so an
+# accidental merge can never consume a registry version. Registries only ever
+# see clean vX.Y.Z tags - see the gating in release.yml.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: >-
+          Explicit version override (for example 0.1.0). Leave blank to compute
+          the next version from conventional commits per .versionrc.
+        required: false
+        default: ""
+      suffix:
+        description: >-
+          Prerelease suffix appended with a hyphen (for example rc.1). Tags
+          carrying a suffix dry-run the registries instead of publishing.
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+# Release decisions race on the same history, so runs queue instead of
+# cancelling: a cancelled tag push could split the release train in two.
+concurrency:
+  group: autorelease-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan-and-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The plan reads every conventional commit since the last tag.
+          fetch-depth: 0
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          environments: build
+          cache: true
+          locked: true
+
+      - name: Plan the next release
+        id: plan
+        run: >-
+          pixi run -e build release-plan
+          --trigger "${{ github.event_name == 'workflow_dispatch' && 'dispatch' || 'push' }}"
+          --version-override "${{ github.event.inputs.version || '' }}"
+          --suffix "${{ github.event.inputs.suffix || '' }}"
+          --json
+
+      - name: Push the release tag
+        if: steps.plan.outputs.action == 'tag'
+        run: >-
+          pixi run -e build release-tag
+          --tag "${{ steps.plan.outputs.tag }}"
+          --message-file "${{ steps.plan.outputs.changelog_file }}"
+          --push
+
+      - name: Report a skipped release
+        if: steps.plan.outputs.action != 'tag'
+        run: >-
+          echo "autorelease: ${{ steps.plan.outputs.reason }}"
+          >> "$GITHUB_STEP_SUMMARY"

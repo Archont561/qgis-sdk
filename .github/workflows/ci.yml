@@ -65,6 +65,9 @@ jobs:
       - name: Test skill-creator tooling
         run: pixi run -e default test-skill-creator
 
+      - name: Test release tooling
+        run: pixi run -e default test-release-tool
+
       - name: Lint and format TypeScript
         run: pixi run -e bun biome-check
 

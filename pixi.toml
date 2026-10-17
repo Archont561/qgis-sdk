@@ -30,6 +30,45 @@ PYTHONPATH = "packages/qgis-sdk/src"
 [feature.python.tasks.test-skill-creator]
 cmd = "pytest -q .agents/skills/skill-creator/tests"
 
+# Release train entrypoints (TASK-35): every autorelease.yml/release.yml step
+# reaches the stdlib-only tool through one of these tasks, and the identical
+# invocations work locally from a restored sandbox. The task-level PYTHONPATH
+# replaces the feature activation value; the tool never imports qgis_sdk.
+[feature.python.tasks.test-release-tool]
+cmd = "python -m pytest -c packages/qgis-sdk-release/pyproject.toml packages/qgis-sdk-release/tests -q"
+
+[feature.python.tasks.release-plan]
+cmd = "python -m qgis_sdk_release plan"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-classify]
+cmd = "python -m qgis_sdk_release classify"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-tag]
+cmd = "python -m qgis_sdk_release tag"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-stamp]
+cmd = "python -m qgis_sdk_release stamp"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-build-python]
+cmd = "python -m qgis_sdk_release build-python"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-verify-python]
+cmd = "python -m qgis_sdk_release verify-python"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-checksums]
+cmd = "python -m qgis_sdk_release checksums"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
+[feature.python.tasks.release-github]
+cmd = "python -m qgis_sdk_release github-release"
+env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+
 [feature.utils.dependencies]
 ruff = "==0.17.1"
 lefthook = "==2.2.2"
@@ -50,10 +89,10 @@ cmd = "convco check --from-stdin --strip < '{{ message_file }}'"
 cmd = "convco check"
 
 [feature.utils.tasks.lint-python]
-cmd = "ruff check packages/qgis-sdk/src packages/qgis-sdk/tests .agents/skills/skill-creator"
+cmd = "ruff check packages/qgis-sdk/src packages/qgis-sdk/tests packages/qgis-sdk-release/src packages/qgis-sdk-release/tests .agents/skills/skill-creator"
 
 [feature.utils.tasks.format-python-check]
-cmd = "ruff format --check packages/qgis-sdk/src packages/qgis-sdk/tests .agents/skills/skill-creator"
+cmd = "ruff format --check packages/qgis-sdk/src packages/qgis-sdk/tests packages/qgis-sdk-release/src packages/qgis-sdk-release/tests .agents/skills/skill-creator"
 
 [feature.utils.tasks.lint-github-actions]
 cmd = "actionlint .github/workflows/*.yml"
