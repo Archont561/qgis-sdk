@@ -108,6 +108,11 @@ jobs:
       id-token: write
       contents: read
     steps:
+      # setup-pixi needs the workspace manifest, so the pypi job checks out
+      # even though the wheel itself arrives as an artifact.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Download wheel artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -176,13 +181,30 @@ jobs:
         if: needs.build.outputs.prerelease == 'true'
         working-directory: bridge
         run: |
-          npm publish --dry-run --access public ./*.tgz
-          echo "npm publish skipped: ${{ needs.build.outputs.version }} is a prerelease." >> "$GITHUB_STEP_SUMMARY"
+          set -o pipefail
+          # npm refuses to publish a prerelease without an explicit dist-tag,
+          # even for a dry run; `next` keeps `latest` untouched.
+          npm publish --dry-run --access public --tag next ./*.tgz 2>&1 | tee ../npm-publish.log
+          echo "npm publish skipped: ${{ needs.build.outputs.version }} is a prerelease (dry-run only, dist-tag next)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish to npm
         if: needs.build.outputs.prerelease == 'false'
         working-directory: bridge
-        run: npm publish --access public ./*.tgz
+        run: |
+          set -o pipefail
+          npm publish --access public ./*.tgz 2>&1 | tee ../npm-publish.log
+
+      # Job log blobs are served from a host some networks cannot read, so a
+      # failing publish reports its npm output as annotations (the ci.yml
+      # cross-platform pattern) instead of leaving the failure unexplainable.
+      - name: Report npm publish output on failure
+        if: failure()
+        run: |
+          if [ -f npm-publish.log ]; then
+            tail -n 10 npm-publish.log | while IFS= read -r line; do
+              echo "::error::npm publish: $line"
+            done
+          fi
 
   github-release:
     needs: [build, npm]
