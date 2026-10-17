@@ -432,3 +432,96 @@ plugin coexistence, Desktop/WebEngine, Conda/package delivery, or full native-ru
 qualification was performed. Pydantic remains an optional prototype and TASK-12
 stays **In Progress** pending those deployment gates and an explicit future policy
 review; no commit, push, or merge occurred.
+
+## Spike closeout: landed state and remaining gates (2026-10-17)
+
+This section records what actually landed from the work described above, what a
+fresh checkout can reproduce today, and which claims stay historical. It does
+**not** select a production backend, change runtime requirements or dependency
+locks, or claim platform qualification. Checks below ran in this Linux sandbox
+with `PIXI_FROZEN=true PIXI_NO_INSTALL=true` against a restore that still fails
+integrity verification (transport verified: **603 blobs, 953.9 MiB**; then
+**nine** `RECORD` mismatches — build: coverage, hypothesis, jsonschema, mako,
+pytest-bdd; default: hypothesis, jsonschema, mako, pytest-bdd; bun: zero).
+
+**Supersedes:** the closing paragraphs of the sections above state that "no
+commit, push, or merge occurred". That describes their pre-landing state; the
+corresponding content is now in `main` (see the commits below).
+
+### Landed commits and CI
+
+| PR | Merge commit | Content | CI for that commit |
+| :-- | :-- | :-- | :-- |
+| [#6](https://github.com/Archont561/qgis-sdk/pull/6) | `c37dc73184aadc4f5158bb4e4885e206861da8fd` | ADR-22 JSON integer policy, bounded durable sample schemas, 40-case Python/Ajv corpus | `checks`, `plan`, `publish` success |
+| [#7](https://github.com/Archont561/qgis-sdk/pull/7) | `7287a5481034e4e70cf38bc104dc206000a35ebe` | Optional controlled-deployment Pydantic adapter slice (`adapters/pydantic.py`, `adapters/_pydantic_compat.py`, `adapters/pydantic_types.py`), persistent Python/BDD/Hypothesis/generation tests, checked Pydantic schemas and `json2ts` declarations | `checks`, `plan`, `publish` success |
+| [#8](https://github.com/Archont561/qgis-sdk/pull/8) | `ae361d058455b2ad781fb0053e46895bae842d94` | Optional WebEngine host adapter and the `pyqt6-webengine` pin (TASK-23 work; changes the dev environment, not this spike's deliverables) | `checks`, `plan`, `publish` success |
+
+### Current-checkout verification (2026-10-17)
+
+Environment: Linux x86_64, Pixi `default` environment Python **3.14.8**, QGIS
+**4.2.3-Belém do Pará**, Qt **6.11.2**.
+
+- `pixi run -e bun bun run test` at `ae361d0`: **181 Python passed, 1 skipped**;
+  **90 bridge tests passed**. The single skip is
+  `tests/test_webengine_availability.py::test_create_webengine_view_raises_when_unavailable`
+  ("Qt WebEngine bindings are installed in this environment"): the unavailable-
+  binding branch no longer runs in this environment because PR #8 pinned
+  `pyqt6-webengine` **6.11.0**.
+- Focused contract/Pydantic selection (7 files: `test_pydantic_adapter.py`,
+  `test_pydantic_contract_bdd.py`, `test_pydantic_contract_generation.py`,
+  `test_pydantic_optional_boundary.py`, `test_request_validation.py`,
+  `test_contract_bdd.py`, `test_contract_generation.py`): **129 passed**.
+- Pydantic **2.14.1** / `pydantic-core` **2.50.1** now come from the Pixi
+  `python` feature's PyPI pins in `pixi.toml`, **not** from the ignored isolated
+  wheel overlay that earlier sessions needed. No Pixi prefix was extended for
+  these checks.
+- Packaging re-check: Hatchling **1.32.4** wheel/sdist build and `twine check`
+  passed. Wheel metadata shows `Provides-Extra: controlled-deployment` and
+  `Requires-Dist: pydantic==2.14.1; extra == 'controlled-deployment'`, with no
+  unconditional Pydantic requirement; the wheel ships the adapter modules.
+- **Conda is still blocked, not qualified:** `pixi build --path
+  packages/qgis-sdk/recipe.yaml` fails with `failed to query the conda gateway`
+  → `Request failed after 3 retries` →
+  `https://conda.anaconda.org/conda-forge/linux-64/repodata_shards.msgpack.zst`
+  → `tls handshake eof`. Network access to conda-forge is unavailable here.
+
+### Historical versus reproducible evidence
+
+| Evidence | Status in a fresh checkout |
+| :-- | :-- |
+| apischema 0.19.0 vs Pydantic TypeAdapter 2.14.1 comparison, 25-case corpus, Ajv 8.20.0 parity, `json-schema-to-typescript` 16.0.0 generation | **Historical.** The harness was removed on 2026-10-16 at the user's request; reproducing it means rebuilding the harness, not running a test. |
+| Direct Python-to-TS generator assessment (three projects) | **Historical** install/probe observations; none of the tools is installed or locked. |
+| Pydantic binary-wheel build/install probe and PyQGIS co-import smoke | **Historical**, and now superseded for environment purposes: Pydantic comes from the Pixi pins. |
+| Durable mashumaro → JSON Schema → `json2ts`/Ajv sample: 40 shared cases, schema/type drift checks, Hypothesis serialization, BDD | **Reproducible:** `tests/contract_sample/`, `tests/test_contract_*.py`, bridge `contracts.test.ts`. |
+| Durable Pydantic slice: strict request validation, typed handler dispatch, result serialization, `SafeJsonInteger` bounds, missing/unqualified-dependency errors, BDD/Hypothesis, generated-schema/Ajv parity | **Reproducible:** `tests/test_pydantic_*.py`, `tests/contract_sample/pydantic_*`, bridge Pydantic schema/type tests. |
+| QGIS Desktop lifecycle, WebEngine, Windows/macOS, clean-prefix plugin coexistence, Conda delivery | **Not performed.** Still open (see below). |
+
+### Outcome recorded by the spike
+
+Pure-Python-first ordinary plugin distribution ([ADR-3](../../decisions/decision-3%20-%20Development-and-distribution-artifacts-are-separate.md))
+is unchanged, and **no mandatory runtime backend is selected**. Pydantic
+**2.14.1** remains the leading **controlled-deployment candidate**, reachable
+only through the explicit `controlled-deployment` extra and never installed at
+startup. apischema **0.19.0** is not selected (Python 3.14 eager-annotation
+failure and rejection of integral `2.0`). Mashumaro's default decoder is ruled
+out as the strict request validator; its schema export stays test-only. The
+`jsonschema` oracle also stays test-only because it pulls native `rpds-py`.
+No dependency installer, startup download or plugin-ZIP change is authorized by
+this closeout.
+
+### Gates that remain before any production backend selection
+
+These are **not** TASK-12 acceptance criteria; they are prerequisites for
+turning the prototype into a mandatory runtime, and they are owned elsewhere.
+
+- Tagged unions, recursion and advanced constraints at the durable contract seam
+  (future backend-selection decision, ahead of TASK-2/TASK-17).
+- Clean supported Windows and Linux QGIS installations, native imports, and
+  coexistence with another Pydantic-using plugin (**TASK-23** for toolchain
+  qualification).
+- Desktop/WebEngine lifecycle tests of the bridge and adapter
+  (**TASK-4**, **TASK-17**).
+- Conda/package delivery and plugin ZIP qualification (**TASK-8**), including
+  the repodata blocker recorded above.
+- An explicit deployment-scope policy review before a native validator can
+  become mandatory for ordinary plugin distribution (**ADR-3**).

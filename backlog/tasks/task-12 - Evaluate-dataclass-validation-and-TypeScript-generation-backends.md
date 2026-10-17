@@ -4,7 +4,7 @@ title: Evaluate dataclass validation and TypeScript generation backends
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 19:48'
+updated_date: '2026-10-17 15:14'
 labels: []
 milestone: m-0
 dependencies: []
@@ -72,4 +72,12 @@ Final qualified checks: root tests 88 Python/46 bridge pass without replay; fres
 User requested documentation of the proposed next milestone. Recorded optional Pydantic adapter/end-to-end slice in ADR-10 and this plan. Documentation only: adapter not implemented, native-runtime/default-distribution policy unchanged, no startup installer approved, no additional qualification claimed. TASK-12 remains In Progress.
 
 2026-10-16 implemented the optional controlled-deployment Pydantic 2.14.1 adapter slice: lazy strict JSON validation, typed handler/result serialization, safe structured errors, SafeJsonInteger, distinct request/reader/writer schemas, deterministic generated TS/Ajv parity, Hypothesis and four BDD scenarios. Validation: 152 Python passed with 100% measured source coverage; 90 bridge passed with 100% measured source coverage; Ruff, Biome, typecheck, lock check, schema/type generation, wheel/sdist and Twine passed. Restore still fails nine RECORD checks; checks used frozen/non-installing Pixi plus an isolated Pydantic wheel overlay on Linux/Python 3.14.8. Windows/QGIS coexistence, Desktop/WebEngine and Conda remain unqualified; leave In Progress.
+
+2026-10-17 closeout pass (documentation only; no runtime, lock or code change): verified the landed spike state at ae361d0. PR #6 c37dc73 (ADR-22 integer policy, bounded durable schemas, 40-case corpus) and PR #7 7287a54 (optional controlled-deployment Pydantic adapter slice) both have green CI (checks/plan/publish); PR #8 ae361d0 is TASK-23 work that changed the dev environment only.
+
+Current-checkout verification in the unverified restore (PIXI_FROZEN=true PIXI_NO_INSTALL=true; Linux/Python 3.14.8, QGIS 4.2.3-Belem do Para, Qt 6.11.2): root test 181 Python passed/1 skipped and 90 bridge passed; the seven focused contract/Pydantic test files pass 129 tests; Pydantic 2.14.1/pydantic-core 2.50.1 now come from the Pixi python-feature pins instead of an isolated overlay; wheel/sdist build plus Twine check pass with pydantic only under the controlled-deployment extra and no unconditional requirement; the Conda recipe build still fails on conda-forge repodata access (tls handshake eof).
+
+doc-5 gained a closeout section recording landed commits/CI, this verification, a historical-versus-reproducible evidence split (removed apischema/TypeAdapter harness, direct generators and wheel probe are historical; the mashumaro schema example and the Pydantic adapter slice are durable tests), and the gates that remain before any mandatory backend selection with their owning tasks. ADR-10 gained a closeout section: no mandatory runtime selected, pure-Python-first unchanged, and ADR-10 deliberately stays proposed until a production generator/backend lands (TASK-2/TASK-17).
+
+Validation for this change: root test 181 Python passed/1 skipped, 90 bridge passed; coverage Python 98.55% and bridge 100% against the 90% gates; Ruff lint/format, Biome, bridge typecheck, actionlint, skill-creator tests (25 passed), pixi lock --check and git diff --check all pass. No commit, push or merge yet; the task stays In Progress until this lands, CI is confirmed and closing is explicitly authorized.
 <!-- SECTION:NOTES:END -->
