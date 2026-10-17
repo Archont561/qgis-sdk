@@ -180,6 +180,3 @@ jobs:
         run: |
           summary=$(grep -Eo '[0-9]+ pass' bun-tests.log | head -1 || true)
           echo "::notice::bun test: ${summary:-no summary line}"
-
-      - name: Test TypeScript bridge
-        run: bun test packages/qgis-sdk-bridge/tests
