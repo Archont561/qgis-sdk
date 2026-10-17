@@ -21,6 +21,9 @@ dev = [
 	"pytest==9.1.1",
 	"pytest-cov==7.1.0",
 	"pytest-bdd==9.0.0",
+	# skill-creator's quick_validate reads YAML frontmatter; pixi only gets PyYAML
+	# transitively, so a pip-only test environment needs it declared.
+	"pyyaml==6.0.3",
 	"rich==15.0.0",
 	"typer==0.27.3",
 ]

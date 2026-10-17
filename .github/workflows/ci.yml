@@ -87,3 +87,96 @@ jobs:
           flags: qgis-sdk-bridge
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Portable Python/TypeScript suites on the other supported host platforms.
+  # This is compatibility evidence only: it is not QGIS Desktop, WebEngine or
+  # plugin-coexistence qualification (see TASK-33), and it does not repeat the
+  # coverage gate or Codecov uploads owned by `checks`.
+  cross-platform:
+    name: cross-platform (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Plain pip rather than pixi: pixi.lock is linux-64 only, and a pip
+      # install proves the package builds and runs without the conda prefix.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # Track the minor version pinned in pixi.toml without requiring the
+          # runner tool cache to carry that exact patch release.
+          python-version: "3.14"
+
+      - name: Install Python test dependencies
+        run: python -m pip install --disable-pip-version-check -e "packages/qgis-sdk[dev]"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # Keep in sync with `packageManager` in package.json.
+          bun-version: "1.4.2"
+
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test Python SDK and skill tooling
+        shell: bash
+        run: >-
+          python -m pytest -c packages/qgis-sdk/pyproject.toml
+          packages/qgis-sdk/tests .agents/skills/skill-creator/tests -q
+          --junitxml=python-tests.xml
+
+      # Job logs are served from a blob host that some networks cannot read, so
+      # report the counts and every failure as annotations the API can return.
+      - name: Report Python test results
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          def find_problem(case):
+              """Return the failure or error node of one JUnit test case."""
+              problem = case.find("failure")
+              return case.find("error") if problem is None else problem
+
+          report = Path("python-tests.xml")
+          if not report.exists():
+              print("::error::pytest did not write python-tests.xml")
+              raise SystemExit(0)
+          cases = list(ET.parse(report).iter("testcase"))
+          failures = [case for case in cases if find_problem(case) is not None]
+          skipped = [case for case in cases if case.find("skipped") is not None]
+          print(
+              f"::notice::pytest: {len(cases)} collected, "
+              f"{len(failures)} failed, {len(skipped)} skipped"
+          )
+          for case in failures:
+              problem = find_problem(case)
+              detail = (problem.get("message") or problem.text or "failed").strip()
+              first = detail.splitlines()[0][:600]
+              print(
+                  f"::error file={case.get('file')}::"
+                  f"{case.get('classname')}::{case.get('name')}: {first}"
+              )
+          PY
+
+      - name: Test TypeScript bridge
+        shell: bash
+        run: |
+          # bun writes its summary to stderr; keep both streams and bun's status.
+          set -o pipefail
+          bun test packages/qgis-sdk-bridge/tests 2>&1 | tee bun-tests.log
+
+      - name: Report TypeScript test results
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          summary=$(grep -Eo '[0-9]+ pass' bun-tests.log | head -1 || true)
+          echo "::notice::bun test: ${summary:-no summary line}"
