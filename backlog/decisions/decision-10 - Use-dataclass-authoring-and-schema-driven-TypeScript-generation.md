@@ -143,3 +143,41 @@ and typecheck tests now exercise the slice against the shared contract corpus. T
 implements the prototype milestone only; mandatory backend selection and clean
 Windows/Linux QGIS, plugin coexistence, Desktop/WebEngine, and Conda/package-delivery
 qualification remain open. See doc-5 for exact local validation and restore caveats.
+
+## Validation-backend spike closeout (2026-10-17)
+
+The backend spike ([TASK-12](../tasks/task-12%20-%20Evaluate-dataclass-validation-and-TypeScript-generation-backends.md))
+asked for a comparison, a compatibility exercise, and a recorded recommendation
+with blockers. All three are answered by evidence in
+[doc-5](../docs/plans/doc-5%20-%20TASK-12-validation-backend-spike-evidence.md),
+and the bounded optional Pydantic slice it proposed landed in `main` (PR #7,
+`7287a54`, CI green; the numeric policy landed in PR #6, `c37dc73`).
+
+**Recommendation: no mandatory runtime backend is selected.** Pydantic **2.14.1**
+stays the leading controlled-deployment candidate behind the optional
+`controlled-deployment` extra; apischema **0.19.0** is not selected; mashumaro
+remains test-only schema export; the `jsonschema` oracle remains test-only.
+[ADR-3](decision-3%20-%20Development-and-distribution-artifacts-are-separate.md)
+pure-Python-first distribution is unchanged, and no startup installer or
+download is authorized.
+
+Distinguish the two evidence classes recorded in doc-5: the original
+apischema/TypeAdapter comparison is **historical** (its harness was removed at
+the user's request and cannot be rerun from the checkout), while the mashumaro
+schema example and the Pydantic adapter slice are **durable, persistent tests**.
+Closing TASK-12 records that the spike's question is answered; it is not
+evidence of Windows/macOS QGIS qualification, clean-prefix plugin coexistence,
+Desktop/WebEngine behavior, or Conda/package delivery.
+
+**This decision stays `proposed`.** The authoring/generation direction becomes
+accepted only when a production description, generator and backend are selected
+and landed ([TASK-2](../tasks/task-2%20-%20Implement-Python-declarations-and-generated-plugin-description.md),
+[TASK-17](../tasks/task-17%20-%20Generate-checked-in-TypeScript-contracts-clients-and-validators.md));
+the current examples are test-only and are not a general SDK generator or public
+operation. The remaining gates — tagged unions/recursion/advanced constraints,
+Windows and clean Linux QGIS qualification with plugin coexistence
+([TASK-23](../tasks/task-23%20-%20Qualify-candidate-QGIS-4-Windows-and-Linux-toolchains.md)),
+Desktop/WebEngine lifecycle ([TASK-4](../tasks/task-4%20-%20Add-the-versioned-WebEngine-bridge-contract.md)),
+and Conda/ZIP delivery ([TASK-8](../tasks/task-8%20-%20Build-a-validated-QGIS-installable-plugin-ZIP.md))
+— must be proven before any native validator becomes mandatory, followed by an
+explicit ADR-3 deployment-scope review.
