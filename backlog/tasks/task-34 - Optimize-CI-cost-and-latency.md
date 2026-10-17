@@ -1,9 +1,10 @@
 ---
 id: TASK-34
 title: Optimize CI cost and latency
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-17 18:10'
+updated_date: '2026-10-17 18:44'
 labels: []
 milestone: m-0
 dependencies: []
@@ -26,15 +27,40 @@ The cross-platform matrix job (macos-latest, windows-latest) added alongside thi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Cross-platform jobs cache Python and Bun dependency layers, with warm-run job times captured in the task notes and compared against the PR #14 baseline.
-- [ ] #2 Pushing a new commit to an open PR cancels the in-progress run for the superseded head, verified in the Actions UI or API.
-- [ ] #3 Fresh workflow runs emit no action-runtime deprecation warnings, after upgrading actions/checkout, actions/setup-python and oven-sh/setup-bun as needed.
-- [ ] #4 The tested surface is unchanged: same suites and OS matrix, coverage gates still single-sourced on the checks job, and pixi lock --check still green; any scope change such as path filters or matrix narrowing requires an explicit decision note with rationale.
-- [ ] #5 The task closes with before/after wall-clock and estimated billing numbers, keeping or reverting each change based on those numbers.
+- [x] #1 Cross-platform jobs cache Python and Bun dependency layers, with warm-run job times captured in the task notes and compared against the PR #14 baseline.
+- [x] #2 Pushing a new commit to an open PR cancels the in-progress run for the superseded head, verified in the Actions UI or API.
+- [x] #3 Fresh workflow runs emit no action-runtime deprecation warnings, after upgrading actions/checkout, actions/setup-python and oven-sh/setup-bun as needed.
+- [x] #4 The tested surface is unchanged: same suites and OS matrix, coverage gates still single-sourced on the checks job, and pixi lock --check still green; any scope change such as path filters or matrix narrowing requires an explicit decision note with rationale.
+- [x] #5 The task closes with before/after wall-clock and estimated billing numbers, keeping or reverting each change based on those numbers.
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Created 2026-10-17 at user request alongside the cross-platform CI job (PR #14). Cost context: GitHub-hosted runners bill macOS at 10x and Windows at 2x the per-minute Linux rate, so caching and cancellation pay for themselves quickly as the matrix stays in place.
+
+TASK-34 measurement pass (2026-10-17, PR #15, branch arena/8a84c609-qgis-sdk).
+
+Baseline (PR #14 run 39055033648, job time): checks 1m15s, cross-platform (macos-latest) 32s, cross-platform (windows-latest) 1m39s; run wall 1m42s. Estimated billing 9.9 Linux-equivalent minutes (checks 1.25x1 + macOS 5.33x10 + Windows 3.30x2).
+
+Changes, all in .github/workflows/ci.yml:
+- Concurrency group `${{ github.workflow }}-${{ github.head_ref || github.ref }}` with cancel-in-progress everywhere except the default branch, where runs queue so a landed commit's result is never discarded mid-run.
+- pip download cache via setup-python `cache: pip` keyed on packages/qgis-sdk/pyproject.toml, and a Bun install store cache via actions/cache@v6 keyed on bun.lock (setup-bun only caches the Bun executable).
+- Node 24 actions: checkout v4->v7, setup-python v5->v7, codecov-action v5->v7 (v5 embedded github-script@60a0d83 v7.0.1 on node20, the last deprecation source in checks). setup-bun@v2 already resolves to v2.2.0 on node24, so no bump was needed.
+
+Cold run (first run, populates caches): 39058323856, wall 1m46s, success; jobs checks 57s, macOS 35s, Windows 1m41s.
+
+Warm runs (commit 5055ded, caches restored; job times):
+- PR run 39058815847 (like-for-like with the baseline PR run): checks 1m6s, macOS 20s, Windows 1m5s. Sum 151s vs baseline 206s (-27%); estimated billing 6.6 Linux-equivalent minutes (-33% vs 9.9).
+- Push run 39058811718: checks 1m10s, macOS 41s, Windows 1m23s. Sum 194s; the macOS 41s is a slow-runner outlier against the same commit's 20s - the small macOS job varies roughly 20-41s run to run, so single samples should not be over-read.
+- Step evidence: Windows pip install 45s -> 21s, macOS 11s -> 5s; Bun install 11s -> 10s (Windows) - the Bun store cache is latency-neutral at today's dependency size. Decision: keep it anyway for registry independence and headroom as the workspace grows (~80-100 MB per OS, well inside the 10 GB per-repo cache budget); its value scales with the download layer while pip carries the wall-clock win today.
+- Run wall-clock is queue-dominated (the warm PR run waited ~50s for a macOS-capacity-constrained runner), so job time is the comparison metric, matching how the baseline was recorded.
+
+Cancellation evidence: pushing 5055ded while PR run 39058772930 (head 3f256be) was in flight ended it with API conclusion=cancelled (checks and Windows stopped mid-job; macOS had just finished). Superseded heads no longer burn a full matrix; default-branch runs are exempt from cancellation by design.
+
+Deprecation evidence: the baseline named actions/checkout@v4 and actions/setup-python@v5 on both cross-platform jobs and actions/github-script@60a0d83 (via codecov@v5) on checks. Fresh runs 39058811718 and 39058815847 carry zero Node 20 deprecation annotations, verified through the checks/annotations API (job log blobs are unreadable from this sandbox).
+
+Scope held (TASK-34 AC 4): suites, OS matrix, and coverage gates (single-sourced on checks, Codecov uploads untouched) are unchanged; no path filters or matrix narrowing were added; `pixi lock --check` is green on PR #15 (relock run 39058815845: lock guard success, no drift).
+
+Keep/revert ledger (AC 5): keep pip cache (measured win), keep Bun cache (latency-neutral, kept with rationale above), keep concurrency group (verified), keep checkout/setup-python/codecov upgrades (zero-warning requirement), no change to setup-bun (already node24).
 <!-- SECTION:NOTES:END -->
