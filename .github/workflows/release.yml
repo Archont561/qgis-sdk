@@ -1,0 +1,233 @@
+name: release
+
+# Artifact pipeline for every release tag (TASK-35). Builds the qgis-sdk wheel
+# and the qgis-sdk-bridge npm package, publishes a GitHub Release with
+# SHA256SUMS, and hands the artifacts to the registries.
+#
+# Registry publishing runs under the OIDC trusted-publishing bindings the
+# repository owner provisioned: PyPI project `qgis-sdk` accepts tokens from
+# this workflow file (release.yml) under GitHub environment `pypi`, and npm
+# package `qgis-sdk-bridge` from release.yml under environment `npm`. Renaming
+# this file or those environments breaks publishing. Prerelease tags
+# (vX.Y.Z-suffix) dry-run both registries instead of uploading, so version
+# space is only consumed by a deliberate clean release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.classify.outputs.version }}
+      prerelease: ${{ steps.classify.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          environments: >-
+            build
+            bun
+          cache: true
+          locked: true
+
+      - name: Classify the tag
+        id: classify
+        run: pixi run -e build release-classify --tag "$GITHUB_REF_NAME"
+
+      - name: Cache Bun install store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-install-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-install-
+
+      - name: Install JavaScript dependencies
+        run: pixi run -e bun install-js
+
+      - name: Stamp release versions
+        run: >-
+          pixi run -e build release-stamp
+          --version "${{ steps.classify.outputs.version }}"
+
+      - name: Build and check the Python wheel
+        run: pixi run -e build release-build-python
+
+      - name: Build the TypeScript bridge
+        run: pixi run -e bun bun run --filter qgis-sdk-bridge build
+
+      - name: Capture the tag annotation as release notes
+        run: |
+          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "Release $GITHUB_REF_NAME" > release-notes.md
+          fi
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python-dist
+          path: dist/pypi
+
+      - name: Upload bridge package artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bridge-package
+          path: |
+            packages/qgis-sdk-bridge/package.json
+            packages/qgis-sdk-bridge/dist
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    # Trusted-publishing binding: PyPI project `qgis-sdk` accepts OIDC tokens
+    # from release.yml running under the `pypi` environment only. A job-level
+    # permissions block replaces the workflow-level one, so id-token is named
+    # here explicitly (the trap publish-sandbox.yml documents).
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download wheel artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python-dist
+          path: dist/pypi
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          environments: build
+          cache: true
+          locked: true
+
+      - name: Verify the wheel without uploading
+        if: needs.build.outputs.prerelease == 'true'
+        run: |
+          pixi run -e build release-verify-python --dist dist/pypi
+          echo "PyPI upload skipped: ${{ needs.build.outputs.version }} is a prerelease; registries only accept clean tags." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to PyPI
+        if: needs.build.outputs.prerelease == 'false'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/pypi
+
+  npm:
+    needs: build
+    runs-on: ubuntu-latest
+    # Trusted-publishing binding: npm package `qgis-sdk-bridge` accepts OIDC
+    # tokens from release.yml running under the `npm` environment only. npm
+    # trusted publishing needs npm >= 11.5.1, so the runner's npm is replaced
+    # with an exact pin before packing or publishing.
+    environment: npm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download bridge package artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bridge-package
+          path: bridge
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Pin npm to an OIDC-capable version
+        run: |
+          npm install -g npm@12.2.0
+          npm --version
+
+      - name: Pack the bridge tarball
+        working-directory: bridge
+        run: npm pack
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-tgz
+          path: bridge/*.tgz
+
+      - name: Dry-run the publish
+        if: needs.build.outputs.prerelease == 'true'
+        working-directory: bridge
+        run: |
+          npm publish --dry-run --access public ./*.tgz
+          echo "npm publish skipped: ${{ needs.build.outputs.version }} is a prerelease." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to npm
+        if: needs.build.outputs.prerelease == 'false'
+        working-directory: bridge
+        run: npm publish --access public ./*.tgz
+
+  github-release:
+    needs: [build, npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          environments: build
+          cache: true
+          locked: true
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python-dist
+          path: dist/pypi
+
+      - name: Download tarball artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-tgz
+          path: npm
+
+      - name: Download release notes artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
+
+      - name: Write SHA256SUMS
+        run: >-
+          pixi run -e build release-checksums
+          --out dist/SHA256SUMS
+          dist/pypi/*.whl npm/*.tgz
+
+      - name: Publish the GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          pixi run -e build release-github
+          --tag "$GITHUB_REF_NAME"
+          --body-file notes/release-notes.md
+          --asset dist/pypi/*.whl npm/*.tgz dist/SHA256SUMS
