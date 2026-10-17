@@ -1,0 +1,44 @@
+---
+id: TASK-33
+title: 'Qualify Windows, macOS and Desktop QGIS targets'
+status: To Do
+assignee: []
+created_date: '2026-10-17 16:06'
+updated_date: '2026-10-17 16:06'
+labels: []
+milestone: m-0
+dependencies: []
+references:
+  - >-
+    backlog/tasks/task-23 -
+    Qualify-candidate-QGIS-4-Windows-and-Linux-toolchains.md
+  - >-
+    backlog/decisions/decision-17 -
+    Deliver-a-qualified-Python-first-vertical-slice-for-v1.md
+  - >-
+    backlog/decisions/decision-3 -
+    Development-and-distribution-artifacts-are-separate.md
+priority: high
+type: spike
+ordinal: 33000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+Qualify the QGIS targets that the Linux sandbox cannot reach: a clean supported Windows QGIS installation, a macOS QGIS candidate, a real QGIS Desktop GUI run and coexistence with another plugin that already uses the optional native runtime. TASK-23 recorded the Linux headless and WebEngine evidence and closed with these targets explicitly unqualified, so they are tracked here instead of being left as loose blockers.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 Record a clean supported Windows QGIS installation with its Python, Qt and Chromium builds and a successful native import.
+- [ ] #2 Demonstrate the QGIS Desktop GUI path on a platform with a display, including the WebEngine host inside a running Desktop session.
+- [ ] #3 Demonstrate coexistence with another plugin that already uses the same optional native runtime dependency.
+- [ ] #4 Publish evidence and blockers for any target that remains unavailable, without claiming universal QGIS 4 support.
+<!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Created at the TASK-23 closeout (2026-10-17) so the targets the Linux sandbox cannot reach stay tracked instead of being left as loose blockers. TASK-23 qualified the Linux headless and Qt WebEngine path and closed with a Windows candidate, a macOS candidate, a real Desktop GUI run and clean-prefix plugin coexistence explicitly unqualified. The headless harness it produced is at packages/qgis-sdk/tests/qualification/webengine_smoke.py and is reusable on the other targets.
+<!-- SECTION:NOTES:END -->
