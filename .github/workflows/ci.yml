@@ -125,9 +125,39 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Test Python SDK and skill tooling
+        shell: bash
         run: >-
           python -m pytest -c packages/qgis-sdk/pyproject.toml
           packages/qgis-sdk/tests .agents/skills/skill-creator/tests -q
+          --junitxml=python-tests.xml
+
+      # Job logs are served from a blob host that some networks cannot read, so
+      # turn a red job into per-test annotations the API can return.
+      - name: Annotate failing Python tests
+        if: failure()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report = Path("python-tests.xml")
+          if not report.exists():
+              print("::error::pytest did not write python-tests.xml")
+              raise SystemExit(0)
+          for case in ET.parse(report).iter("testcase"):
+              problem = case.find("failure")
+              if problem is None:
+                  problem = case.find("error")
+              if problem is None:
+                  continue
+              detail = (problem.get("message") or problem.text or "failed").strip()
+              first = detail.splitlines()[0][:600]
+              print(
+                  f"::error file={case.get('file')}::"
+                  f"{case.get('classname')}::{case.get('name')}: {first}"
+              )
+          PY
 
       - name: Test TypeScript bridge
         run: bun test packages/qgis-sdk-bridge/tests
