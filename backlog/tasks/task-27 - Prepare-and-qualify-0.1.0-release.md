@@ -4,7 +4,7 @@ title: Prepare and qualify 0.1.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:36'
+updated_date: '2026-10-21 21:56'
 labels: []
 milestone: m-0
 dependencies:
@@ -15,6 +15,7 @@ dependencies:
   - TASK-23
 references:
   - doc-7
+  - doc-8
 priority: high
 type: chore
 ordinal: 27000
@@ -50,5 +51,10 @@ Merge-evidence gap to resolve before 0.1.0 ships: GitHub Actions cannot start jo
 created: 2026-10-21 21:36
 ---
 2026-10-21 hello() decision resolved (this task's open 0.1.0-boundary item): PR #23, merge 4162829, drops qgis_sdk.hello() and the bridge's hello(). Public surface is now pinned by tests/test_init.py against qgis_sdk.__all__; the bridge entry module is intentionally empty (test asserts it) and its package.json lost the types mapping because bunup emits no declaration for an exportless entry. Local evidence: coverage 285 passed/3 skipped at 100.00% (792 stmts, -2 for the deleted function), opt-in real-QGIS suite 288 passed/0 skipped on QGIS 4.2.3, bridge 90 tests + tsc + bunup build green, biome/ruff/format/actionlint/skill-creator clean, sdk:generate zero drift, wheel rebuilt with twine PASSED and verified hello-free. Not a breaking bump: PyPI/npm still hold 0.0.0 placeholders and release-plan says action=skip. AC1-AC4 stay unchecked - CI evidence is still impossible on this account (billing/spending-limit annotation reconfirmed on this PR, same 2-4s zero-step failures), which is exactly what #1 requires before 0.1.0 can be qualified.
+---
+
+created: 2026-10-21 21:56
+---
+blocked-by-actions (doc-8): November 2026 at the earliest, and this is now a hard publish block, not only an evidence gap: `release.yml` is the only publisher (OIDC trusted publishing under the pypi/npm environments), so 0.1.0 cannot reach PyPI or npm during the window, and hand-publishing with long-lived registry credentials stays refused per TASK-35. AC4 cannot be produced at all, and AC1 cannot conclude while TASK-13 AC1 and TASK-33 stay open. The boundary is still rehearsed locally - `release-plan` returns action=skip (first-stable guard intact, so nothing is lost by waiting), and release-build-python plus release-verify-python pass on current main.
 ---
 <!-- COMMENTS:END -->

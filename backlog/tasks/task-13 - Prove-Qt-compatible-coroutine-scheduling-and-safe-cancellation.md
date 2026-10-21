@@ -4,7 +4,7 @@ title: Prove Qt compatible coroutine scheduling and safe cancellation
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:22'
+updated_date: '2026-10-21 21:56'
 labels: []
 milestone: m-0
 dependencies:
@@ -22,6 +22,7 @@ references:
   - backlog/docs/plans/doc-6 - TASK-13-Qt-scheduler-spike-evidence.md
   - backlog/tasks/task-33 - Qualify-Windows-macOS-and-Desktop-QGIS-targets.md
   - doc-7
+  - doc-8
 priority: high
 type: spike
 ordinal: 13000
@@ -91,5 +92,10 @@ Audit follow-up (doc-7), behaviour preserved: the scheduler's private handoff pr
 created: 2026-10-21 21:22
 ---
 Landed on main as merge commit 761121e (PR #21, 2026-10-21): core/scheduling.py with Yield/Handoff/CancellationToken/Job/StepScheduler, the deterministic/BDD/property suites, the opt-in real-Qt harness and the relocation of the standalone scripts to packages/qgis-sdk/scripts/. Local evidence at the tip: 309 passed / 3 skipped, coverage 100.00%, ruff and format clean, generated contracts byte-identical on CPython 3.14.8 and 3.11.2, wheel and sdist passing Twine, and 110 opt-in harness tests passing against QGIS 4.2.3 with all four flags set. AC1 STAYS OPEN: only the Linux/3.14.8 QGIS candidate was exercised, and Windows, macOS and a real Desktop session remain TASK-33 work. No CI evidence exists for this merge - see the TASK-27 note about GitHub Actions being unable to start any job.
+---
+
+created: 2026-10-21 21:56
+---
+blocked-by-actions (doc-8): Actions cannot start jobs on this account until billing is handled next month, so no runner can supply Windows/macOS/Desktop evidence for AC1, and this sandbox has neither a display nor a non-Linux platform. AC1 stays open deliberately: the 2026-10-21 re-run (288 passed / 0 skipped with QGIS_SDK_HEADLESS_LIFECYCLE=1 QGIS_SDK_HEADLESS_SMOKE=1 QGIS_SDK_QT_SCHEDULER=1, plus the full gate sets recorded for PR #21 and PR #23) is Linux/CPython 3.14.8 evidence and must not be read as multi-runtime qualification. AC2 and AC3 keep their landed evidence.
 ---
 <!-- COMMENTS:END -->
