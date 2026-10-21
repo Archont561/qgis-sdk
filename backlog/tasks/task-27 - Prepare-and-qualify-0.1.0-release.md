@@ -4,7 +4,7 @@ title: Prepare and qualify 0.1.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:22'
+updated_date: '2026-10-21 21:36'
 labels: []
 milestone: m-0
 dependencies:
@@ -45,5 +45,10 @@ Open decision for the 0.1.0 boundary, recorded by the clean-code audit (doc-7): 
 created: 2026-10-21 21:22
 ---
 Merge-evidence gap to resolve before 0.1.0 ships: GitHub Actions cannot start jobs on this account - every job on every branch, including main's scheduled publish-sandbox run, fails in 2-4 seconds with no step executed and the annotation 'The job was not started because recent account payments have failed or your spending limit needs to be increased.' PR #21 was therefore merged on local verification only (full gate set above), not on green CI. checks/plan/publish evidence for 0.1.0 remains unavailable until billing or the spending limit is fixed, so no release qualification claim that depends on CI can be made yet.
+---
+
+created: 2026-10-21 21:36
+---
+2026-10-21 hello() decision resolved (this task's open 0.1.0-boundary item): PR #23, merge 4162829, drops qgis_sdk.hello() and the bridge's hello(). Public surface is now pinned by tests/test_init.py against qgis_sdk.__all__; the bridge entry module is intentionally empty (test asserts it) and its package.json lost the types mapping because bunup emits no declaration for an exportless entry. Local evidence: coverage 285 passed/3 skipped at 100.00% (792 stmts, -2 for the deleted function), opt-in real-QGIS suite 288 passed/0 skipped on QGIS 4.2.3, bridge 90 tests + tsc + bunup build green, biome/ruff/format/actionlint/skill-creator clean, sdk:generate zero drift, wheel rebuilt with twine PASSED and verified hello-free. Not a breaking bump: PyPI/npm still hold 0.0.0 placeholders and release-plan says action=skip. AC1-AC4 stay unchecked - CI evidence is still impossible on this account (billing/spending-limit annotation reconfirmed on this PR, same 2-4s zero-step failures), which is exactly what #1 requires before 0.1.0 can be qualified.
 ---
 <!-- COMMENTS:END -->
