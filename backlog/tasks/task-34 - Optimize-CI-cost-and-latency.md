@@ -106,6 +106,11 @@ next billing cycle, so no run here was executed by CI. Evidence is local only -
 grep proving no test or lint target reads `backlog/**`. Whether the path gates skip
 cleanly instead of leaving required checks pending needs the first post-restoration
 run.
+
+Recorded on the branch that takes it: PR #32. This note also exercises the new
+`paths-ignore` gate: the commit touching it changes only `backlog/**`, so `ci.yml`
+and `relock.yml` must not start a run for it at all.
+
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
