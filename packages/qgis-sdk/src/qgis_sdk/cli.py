@@ -1,0 +1,121 @@
+"""The ``qgis-sdk`` command line: argument parsing over the public API, nothing else.
+
+The workspace rule that keeps display-dependent tools out of ``src/qgis_sdk`` and
+in ``packages/qgis-sdk/scripts`` still holds: this entry point imports neither QGIS
+nor Qt and needs no display, because generating a project is a file operation. The
+logic lives in :mod:`qgis_sdk.scaffold` so other callers reach it without a shell.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Annotated
+
+import typer
+
+from qgis_sdk.scaffold import (
+    QgisSdkScaffoldError,
+    ScaffoldOptions,
+    plan_scaffold,
+    write_scaffold,
+)
+
+app = typer.Typer(
+    add_completion=False,
+    help="Generate and inspect qgis-sdk plugin projects.",
+)
+
+
+@app.command()
+def scaffold(
+    target: Annotated[
+        Path, typer.Argument(help="Directory to create the plugin project in.")
+    ],
+    plugin: Annotated[
+        str | None,
+        typer.Option(help="Plugin package name; defaults to the target name."),
+    ] = None,
+    title: Annotated[
+        str | None, typer.Option(help="Human-readable plugin title.")
+    ] = None,
+    author: Annotated[
+        str | None, typer.Option(help="Author recorded in metadata.txt.")
+    ] = None,
+    email: Annotated[
+        str | None, typer.Option(help="Author email recorded in metadata.txt.")
+    ] = None,
+    version: Annotated[
+        str | None, typer.Option(help="Plugin version recorded in metadata.txt.")
+    ] = None,
+    qgis_minimum_version: Annotated[
+        str | None,
+        typer.Option(help="Lowest QGIS version allowed to load the plugin."),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option(help="Print the file plan and write nothing.")
+    ] = False,
+    force: Annotated[
+        bool, typer.Option(help="Regenerate files that already exist.")
+    ] = False,
+) -> None:
+    """Write a minimal, loadable plugin project at TARGET."""
+    try:
+        options = _resolve(
+            target,
+            plugin=plugin,
+            title=title,
+            author=author,
+            email=email,
+            version=version,
+            qgis_minimum_version=qgis_minimum_version,
+        )
+        _report(options, target, dry_run=dry_run, force=force)
+    except QgisSdkScaffoldError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+
+@app.callback()
+def _callback() -> None:
+    """Keep ``scaffold`` a subcommand, so the verb stays explicit."""
+
+
+def _resolve(
+    target: Path,
+    *,
+    plugin: str | None,
+    title: str | None,
+    author: str | None,
+    email: str | None,
+    version: str | None,
+    qgis_minimum_version: str | None,
+) -> ScaffoldOptions:
+    """Pass only what the caller chose, so the API keeps its own defaults."""
+    given = {"plugin": plugin or target.name}
+    for key, value in (
+        ("title", title),
+        ("author", author),
+        ("email", email),
+        ("version", version),
+        ("qgis_minimum_version", qgis_minimum_version),
+    ):
+        if value is not None:
+            given[key] = value
+    return ScaffoldOptions.resolve(**given)
+
+
+def _report(
+    options: ScaffoldOptions, target: Path, *, dry_run: bool, force: bool
+) -> None:
+    """Echo one project-relative path per line, planned or written."""
+    if dry_run:
+        for file in plan_scaffold(options):
+            typer.echo(file.path)
+        return
+    for path in write_scaffold(options, target, force=force):
+        typer.echo(path.relative_to(target).as_posix())
+
+
+def main() -> None:
+    """Run the command line; the wheel registers this as ``qgis-sdk``."""
+    app()

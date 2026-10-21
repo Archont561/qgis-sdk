@@ -10,9 +10,16 @@ from pathlib import Path
 import pytest
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
-LAYER_ORDER = {"models": 0, "declarations": 1, "services": 1, "core": 2}
+LAYER_ORDER = {
+    "models": 0,
+    "declarations": 1,
+    "services": 1,
+    "scaffold": 1,
+    "core": 2,
+}
 LAYER_PATHS = {
     "core": SOURCE_ROOT / "core",
+    "scaffold": SOURCE_ROOT / "scaffold",
     "declarations": SOURCE_ROOT / "declarations.py",
     "models": SOURCE_ROOT / "models",
     "services": SOURCE_ROOT / "services",
@@ -76,7 +83,7 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
 
         sys.meta_path.insert(0, RejectNative())
         for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
-                       'qgis_sdk.services', 'qgis_sdk.core',
+                       'qgis_sdk.services', 'qgis_sdk.scaffold', 'qgis_sdk.core',
                        'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
                        'qgis_sdk.adapters.desktop',
                        'qgis_sdk.adapters.pydantic',
