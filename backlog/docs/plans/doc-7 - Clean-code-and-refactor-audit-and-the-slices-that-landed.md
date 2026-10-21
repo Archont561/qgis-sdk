@@ -56,14 +56,20 @@ environment flags set against QGIS `4.2.3-Belém do Pará`.
 - `qgis-sdk-release` `compute_plan()` and `create_release()` at 7 parameters: one internal
   caller each; a parameter object would move the same seven fields without reducing coupling.
 
-## Still open, and not refactoring
+## Resolved after the audit: the `hello()` placeholders
 
-Removing `qgis_sdk.hello()` and the bridge's `hello()` is an API decision, not a
-behaviour-preserving edit: it is exported from `qgis_sdk/__init__.py`, mirrored in
-`qgis-sdk-bridge/src/index.ts`, and documented as intentional in the package README, while
-`tests/test_pure_imports.py` already proves the wiring they were standing in for. Same for
-the tautological `tests/test_init.py`. A 0.1.0-boundary call, so it is recorded against
-TASK-27 rather than taken unilaterally.
+The one API decision this audit deliberately left open - deleting `qgis_sdk.hello()` and the
+bridge's `hello()` - was taken by the user and landed in PR #23 (merge `4162829`). It was
+never a refactor: it changes the public surface instead of preserving behaviour, so it stayed
+out of the slices until it was authorised. What landed: `qgis_sdk.__all__` is now exactly the
+declarations API and `tests/test_init.py` pins that list (and fails if it names something the
+module does not export); the bridge entry module is a documented, intentionally empty export
+with `tests/index.test.ts` asserting it stays empty while still exercising the `@` and
+`@/src` aliases; and the bridge `package.json` lost its `types` mapping because `bunup`
+emits no declaration file for an exportless entry, so keeping it would have shipped a dangling
+path. The commit is `fix(sdk)` without a breaking marker - nothing published ever contained
+`hello()` except the `v0.1.0-rc.2` prerelease, and `pixi run release-plan` on it reports
+`action=skip`, the first-stable-release guard still holding.
 
 Environment note for anyone repeating this: the sandbox reset between sessions dropped
 `.pixi` and `node_modules`, restored here with `bash scripts/restore.sh` followed by
