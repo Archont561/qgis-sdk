@@ -4,7 +4,7 @@ title: Prove Qt compatible coroutine scheduling and safe cancellation
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:15'
+updated_date: '2026-10-21 21:22'
 labels: []
 milestone: m-0
 dependencies:
@@ -86,5 +86,10 @@ Scheduling follow-up on this branch (2026-10-21): the two probe findings are clo
 created: 2026-10-21 21:15
 ---
 Audit follow-up (doc-7), behaviour preserved: the scheduler's private handoff protocol (`_attach`, `_take`, `_report`, `_suspend_on`, `_settle_on_error`, `_advance`, `_blockers`) now states who may call it, and the suite is split into stepping, handoff, cancellation and disposal modules with the collected node IDs proven identical (35 before, 35 after). `core/scheduling.py` was deliberately left as one module: the step protocol's invariants are why Job, Handoff and StepScheduler sit together. Coverage stays 100.00% over 318 statements.
+---
+
+created: 2026-10-21 21:22
+---
+Landed on main as merge commit 761121e (PR #21, 2026-10-21): core/scheduling.py with Yield/Handoff/CancellationToken/Job/StepScheduler, the deterministic/BDD/property suites, the opt-in real-Qt harness and the relocation of the standalone scripts to packages/qgis-sdk/scripts/. Local evidence at the tip: 309 passed / 3 skipped, coverage 100.00%, ruff and format clean, generated contracts byte-identical on CPython 3.14.8 and 3.11.2, wheel and sdist passing Twine, and 110 opt-in harness tests passing against QGIS 4.2.3 with all four flags set. AC1 STAYS OPEN: only the Linux/3.14.8 QGIS candidate was exercised, and Windows, macOS and a real Desktop session remain TASK-33 work. No CI evidence exists for this merge - see the TASK-27 note about GitHub Actions being unable to start any job.
 ---
 <!-- COMMENTS:END -->

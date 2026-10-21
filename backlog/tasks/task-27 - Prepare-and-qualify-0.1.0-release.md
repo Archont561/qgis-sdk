@@ -4,7 +4,7 @@ title: Prepare and qualify 0.1.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:15'
+updated_date: '2026-10-21 21:22'
 labels: []
 milestone: m-0
 dependencies:
@@ -40,5 +40,10 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 created: 2026-10-21 21:15
 ---
 Open decision for the 0.1.0 boundary, recorded by the clean-code audit (doc-7): `qgis_sdk.hello()` and the bridge's `hello()` are placeholder public API - exported from `qgis_sdk/__init__.py`, documented as a smoke-test API in the package README, and their only test (`tests/test_init.py`) asserts a constant against itself. `tests/test_pure_imports.py` already proves the wiring they were standing in for, importing the package and every pure subpackage with native modules forbidden, so deleting the placeholders costs no coverage. Removal changes the public surface, so it is not a refactor and was deliberately not done here.
+---
+
+created: 2026-10-21 21:22
+---
+Merge-evidence gap to resolve before 0.1.0 ships: GitHub Actions cannot start jobs on this account - every job on every branch, including main's scheduled publish-sandbox run, fails in 2-4 seconds with no step executed and the annotation 'The job was not started because recent account payments have failed or your spending limit needs to be increased.' PR #21 was therefore merged on local verification only (full gate set above), not on green CI. checks/plan/publish evidence for 0.1.0 remains unavailable until billing or the spending limit is fixed, so no release qualification claim that depends on CI can be made yet.
 ---
 <!-- COMMENTS:END -->
