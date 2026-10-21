@@ -26,6 +26,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       version: ${{ steps.classify.outputs.version }}
       prerelease: ${{ steps.classify.outputs.prerelease }}
@@ -99,6 +100,7 @@ jobs:
   pypi:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Trusted-publishing binding: PyPI project `qgis-sdk` accepts OIDC tokens
     # from release.yml running under the `pypi` environment only. A job-level
     # permissions block replaces the workflow-level one, so id-token is named
@@ -108,9 +110,13 @@ jobs:
       id-token: write
       contents: read
     steps:
-      # setup-pixi needs the workspace manifest, so the pypi job checks out
-      # even though the wheel itself arrives as an artifact.
+      # Only the prerelease dry-run reads the repository: it verifies the wheel with the
+      # workspace's own release tool, which needs the manifest to set up Pixi. A clean
+      # publish consumes nothing but the downloaded artifact, so checkout and the
+      # environment install are gated on the same condition as that verify step
+      # instead of being paid on every real release.
       - name: Checkout
+        if: needs.build.outputs.prerelease == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download wheel artifact
@@ -120,6 +126,7 @@ jobs:
           path: dist/pypi
 
       - name: Set up Pixi
+        if: needs.build.outputs.prerelease == 'true'
         uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           pixi-version: v0.81.0
@@ -142,6 +149,7 @@ jobs:
   npm:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Trusted-publishing binding: npm package `qgis-sdk-bridge` accepts OIDC
     # tokens from release.yml running under the `npm` environment only. npm
     # trusted publishing needs npm >= 11.5.1, so the runner's npm is replaced
@@ -209,6 +217,7 @@ jobs:
   github-release:
     needs: [build, npm]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
