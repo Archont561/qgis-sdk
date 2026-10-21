@@ -107,9 +107,21 @@ grep proving no test or lint target reads `backlog/**`. Whether the path gates s
 cleanly instead of leaving required checks pending needs the first post-restoration
 run.
 
-Recorded on the branch that takes it: PR #32. This note also exercises the new
-`paths-ignore` gate: the commit touching it changes only `backlog/**`, so `ci.yml`
-and `relock.yml` must not start a run for it at all.
+Recorded on the branch that takes it: PR #32. Pushing this note was also an experiment, and it
+corrected a claim written here. Measured against the live runs API on 2026-10-22, while the billing
+block left every job at zero steps but still recorded the events:
+
+- `push: branches: [main]` works. Neither push on PR #32 produced a `push`-event `CI` run, while the
+  previous branch's backlog-only push (e5bacbf) did bill a full `CI | push` run under the old bare
+  `push:` trigger. The duplicate matrix per push is gone.
+- `cross-platform`'s `if: github.event_name != 'push'` is accepted and evaluates true for
+  `pull_request`: both host jobs exist for both PR heads. They never started only because the
+  spending limit blocks job start (steps=0, "recent account payments have failed").
+- `paths-ignore` on a `pull_request` filter does not look at the pushed commit: it evaluates the
+  whole base...head diff, so a backlog-only commit inside a mixed pull request still runs CI.
+  Consequence for the maintainer: a pull request whose entire diff is `backlog/**` or `AGENTS.md`
+  gets no `ci.yml` run at all, so a branch-protection rule requiring `checks` can never be satisfied
+  by such a pull request - it needs one non-ignored file, or an admin merge.
 
 <!-- SECTION:NOTES:END -->
 
