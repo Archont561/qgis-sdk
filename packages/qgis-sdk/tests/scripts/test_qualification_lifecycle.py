@@ -14,13 +14,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from qualification.desktop_lifecycle_smoke import (
+from desktop_lifecycle_smoke import (
     LifecycleReport,
     headless_environment,
 )
 
-TEST_DIR = Path(__file__).resolve().parent
-SMOKE_SCRIPT = TEST_DIR / "qualification" / "desktop_lifecycle_smoke.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+SMOKE_SCRIPT = SCRIPTS_DIR / "desktop_lifecycle_smoke.py"
 SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_LIFECYCLE"
 
 
@@ -109,7 +109,7 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 def test_headless_lifecycle_smoke_starts_and_unloads_a_plugin() -> None:
     result = subprocess.run(
         [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=TEST_DIR.parents[2],
+        cwd=SCRIPTS_DIR.parents[1],
         capture_output=True,
         text=True,
         timeout=180,

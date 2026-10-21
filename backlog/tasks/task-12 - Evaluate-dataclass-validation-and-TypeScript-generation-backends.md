@@ -4,7 +4,7 @@ title: Evaluate dataclass validation and TypeScript generation backends
 status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-17 15:58'
+updated_date: '2026-10-21 20:51'
 labels: []
 milestone: m-0
 dependencies: []
@@ -83,6 +83,15 @@ Validation for this change: root test 181 Python passed/1 skipped, 90 bridge pas
 
 2026-10-17 closeout (user-authorized): the user chose to close this spike through the Backlog.md CLI with a summary that separates historical from durable evidence. Status moved to Done and the remaining gates are named with their owning tasks in the final summary. This closure selects no production backend and changes no runtime dependency, lockfile, generated contract or production source.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-21 20:51
+---
+Contract-generator portability (2026-10-21, found while running the suite on CPython 3.11.2): the two generators used to depend on the ambient PYTHONPATH that the Pixi environment exports for qgis_sdk, so invoking them from a non-activated interpreter failed inside contract_sample's SDK import while the workspace task looked healthy. scripts/generate_contract.py and scripts/generate_pydantic_contract.py now insert their own src/ and tests/ roots, and a 3.11.2 run produced schemas byte-identical to the checked-in ones; bun run sdk:generate leaves zero drift in the bridge contract tree. No contract semantics or schema content changed.
+---
+<!-- COMMENTS:END -->
 
 ## Final Summary
 

@@ -7,16 +7,30 @@ from .runtime import (
     PluginRuntimeState,
     QgisSdkPluginLifecycleError,
 )
+from .scheduling import (
+    Handoff,
+    Job,
+    JobState,
+    QuiesceOutcome,
+    StepScheduler,
+    Yield,
+)
 from .scope import ResourceScope
 
 __all__ = [
     "AlgorithmContext",
+    "Handoff",
+    "Job",
     "JobContext",
+    "JobState",
     "PluginContext",
     "PluginFactory",
     "PluginRuntime",
     "PluginRuntimeState",
     "QgisSdkPluginLifecycleError",
+    "QuiesceOutcome",
     "ResourceScope",
+    "StepScheduler",
     "UiContext",
+    "Yield",
 ]

@@ -7,7 +7,7 @@ machine-readable report describing what actually ran.
 
 Run it from the workspace root with the default Pixi environment::
 
-    pixi run -e default python packages/qgis-sdk/tests/qualification/webengine_smoke.py
+    pixi run -e default python packages/qgis-sdk/scripts/webengine_smoke.py
 
 The module is importable without Qt or QGIS: the environment and report
 helpers are pure, so the QGIS-free suite can test them, while the optional

@@ -8,7 +8,7 @@ real Desktop path remains tracked separately.
 
 Run it from the workspace root with the default Pixi environment::
 
-    pixi run -e default python packages/qgis-sdk/tests/qualification/desktop_lifecycle_smoke.py
+    pixi run -e default python packages/qgis-sdk/scripts/desktop_lifecycle_smoke.py
 
 The report helpers are pure, so the QGIS-free suite can test them; the
 end-to-end run is opt-in through the test suite.
@@ -26,8 +26,8 @@ from pathlib import Path
 
 HEADLESS_PLATFORM = "offscreen"
 PING_VALUE = 7
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
-SOURCE_ROOT = REPOSITORY_ROOT / "packages" / "qgis-sdk" / "src"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = PROJECT_ROOT / "src"
 
 
 def qgis_python_path(prefix: Path) -> Path:

@@ -76,3 +76,33 @@ class QgisSdkContractValidationError(QgisSdkError):
             "direction": self.direction,
             "issues": [issue.as_dict() for issue in self.issues],
         }
+
+
+class QgisSdkJobCancelledError(QgisSdkError):
+    """Cancellation reached a job at its next suspension point.
+
+    The scheduler throws this into the coroutine so author ``finally`` blocks
+    run; suppressing it lets the work continue, because cancellation is
+    cooperative and never proof that the worker stopped.
+    """
+
+    code = "job_cancelled"
+
+    def __init__(self, job_id: int) -> None:
+        self.job_id = job_id
+        super().__init__(f"Job {job_id} was cancelled at its next suspension point")
+
+
+class QgisSdkSchedulingBlockedError(QgisSdkError):
+    """The scheduler refused a submission or in-process replacement.
+
+    Work that cannot reach a safe point is named as the blocker: replacing the
+    runtime anyway would delete native resources under a running worker.
+    """
+
+    code = "scheduling_blocked"
+
+    def __init__(self, blockers: Iterable[str]) -> None:
+        self.blockers = tuple(blockers)
+        listed = "; ".join(self.blockers)
+        super().__init__(f"Scheduling is blocked: {listed}")

@@ -1,0 +1,37 @@
+# Repository-wide Ruff settings.
+#
+# The workspace `lint-python` and `format-python-check` tasks run Ruff over the whole
+# checkout (`ruff check .` / `ruff format --check .`) so that any new Python directory
+# is covered without anyone remembering to extend a hand-maintained path list. Ruff
+# already skips gitignored trees; these exclusions keep generated, installed and
+# vendored Python out of the run even if `.gitignore` changes or a task is invoked from
+# a checkout without one.
+#
+# Rule selection, line length and target version are deliberately left at Ruff's
+# defaults: this file narrows *scope*, it does not re-decide the rule set.
+extend-exclude = [
+  # Restored Pixi environments and their build work dir (tens of thousands of .py files).
+  ".pixi",
+  # Bun/Node dependency store and turbo cache.
+  "node_modules",
+  ".turbo",
+  # Build and coverage output.
+  "**/dist",
+  "**/build",
+  "**/coverage",
+  "*.egg-info",
+  # Local virtual environments and caches.
+  "**/.venv",
+  "**/venv",
+  "**/__pycache__",
+  "**/.pytest_cache",
+  "**/.ruff_cache",
+  # Vendored Python inside a Conda prefix, if a prefix is materialised in-tree.
+  "**/site-packages",
+  "**/share/qgis/python",
+  # Ruff formats Python code blocks found inside Markdown. This repository's Markdown
+  # is mostly backlog evidence (task notes, decisions, spike records), which is a
+  # historical record rather than source, so a formatter must not rewrite it. The
+  # whole-checkout scope therefore covers Python files only.
+  "**/*.md",
+]

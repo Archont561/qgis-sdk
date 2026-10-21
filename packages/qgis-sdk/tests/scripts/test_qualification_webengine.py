@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from qualification.webengine_smoke import (
+from webengine_smoke import (
     CHROMIUM_FLAGS,
     QualificationReport,
     chromium_version,
@@ -17,8 +17,8 @@ from qualification.webengine_smoke import (
     qgis_python_path,
 )
 
-TEST_DIR = Path(__file__).resolve().parent
-SMOKE_SCRIPT = TEST_DIR / "qualification" / "webengine_smoke.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+SMOKE_SCRIPT = SCRIPTS_DIR / "webengine_smoke.py"
 SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_SMOKE"
 
 
@@ -141,7 +141,7 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 def test_headless_webengine_smoke_loads_a_page_and_exits_cleanly() -> None:
     result = subprocess.run(
         [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=TEST_DIR.parents[2],
+        cwd=SCRIPTS_DIR.parents[1],
         capture_output=True,
         text=True,
         timeout=180,

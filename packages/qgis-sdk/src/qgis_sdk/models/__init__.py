@@ -3,7 +3,9 @@
 from .errors import (
     QgisSdkContractValidationError,
     QgisSdkError,
+    QgisSdkJobCancelledError,
     QgisSdkOptionalDependencyError,
+    QgisSdkSchedulingBlockedError,
     QgisSdkScopeClosedError,
     QgisSdkUnsupportedCapabilityError,
     QgisSdkValidationIssue,
@@ -12,7 +14,9 @@ from .errors import (
 __all__ = [
     "QgisSdkContractValidationError",
     "QgisSdkError",
+    "QgisSdkJobCancelledError",
     "QgisSdkOptionalDependencyError",
+    "QgisSdkSchedulingBlockedError",
     "QgisSdkScopeClosedError",
     "QgisSdkUnsupportedCapabilityError",
     "QgisSdkValidationIssue",
