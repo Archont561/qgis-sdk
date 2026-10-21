@@ -36,9 +36,11 @@ class MessageBarNotifications:
         self._iface = iface
 
     def info(self, message: str) -> None:
-        bar = getattr(self._iface, "messageBar", None)
-        if bar is not None:
-            bar.pushInfo("{title}", message)
+        # ``QgisInterface.messageBar`` is a method, and the bar exists only when a
+        # host supplied an interface, so a plain attribute lookup would crash here.
+        if self._iface is None:
+            return
+        self._iface.messageBar().pushInfo("{title}", message)
 
 
 @dataclass(frozen=True, slots=True)
