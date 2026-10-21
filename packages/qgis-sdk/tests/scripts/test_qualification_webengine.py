@@ -85,17 +85,8 @@ def test_report_is_qualified_only_when_every_stage_succeeds() -> None:
     assert successful.qualified is True
     assert successful.to_dict()["qualified"] is True
 
-    failed = QualificationReport(
-        platform="Linux-6.1.0-x86_64",
-        python_version="3.14.8",
-        qgis_version=None,
-        qt_version=None,
-        chromium_version=None,
-        webengine_available=False,
-        qgis_initialised=False,
-        load_finished=False,
-        qgis_exited=False,
-        error="Qt WebEngine bindings are not installed",
+    failed = QualificationReport.unavailable(
+        error="Qt WebEngine bindings are not installed"
     )
 
     assert failed.qualified is False

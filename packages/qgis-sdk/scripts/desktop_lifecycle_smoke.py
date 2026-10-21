@@ -78,6 +78,29 @@ class LifecycleReport:
             and self.qgis_exited
         )
 
+    @classmethod
+    def unavailable(cls, error: str | None = None) -> LifecycleReport:
+        """Return the report for a host where nothing could run.
+
+        Every stage is false and no version is known. The harness answers with this
+        instead of raising, so a broken environment still produces a machine-readable
+        report - and one place decides what "did not get that far" looks like.
+        """
+        return cls(
+            platform=platform.platform(),
+            python_version=platform.python_version(),
+            qgis_version=None,
+            qt_version=None,
+            qgis_initialised=False,
+            plugin_started=False,
+            action_names=(),
+            action_result=None,
+            plugin_unloaded=False,
+            owned_resources_released=False,
+            qgis_exited=False,
+            error=error,
+        )
+
     def to_dict(self) -> dict[str, object]:
         """Return the report as a JSON-serialisable mapping."""
         payload = asdict(self)
@@ -95,19 +118,7 @@ def run_smoke(prefix: Path | None = None) -> LifecycleReport:
     if str(SOURCE_ROOT) not in sys.path:
         sys.path.insert(0, str(SOURCE_ROOT))
 
-    failed = LifecycleReport(
-        platform=platform.platform(),
-        python_version=platform.python_version(),
-        qgis_version=None,
-        qt_version=None,
-        qgis_initialised=False,
-        plugin_started=False,
-        action_names=(),
-        action_result=None,
-        plugin_unloaded=False,
-        owned_resources_released=False,
-        qgis_exited=False,
-    )
+    failed = LifecycleReport.unavailable()
     try:
         return _run_lifecycle(prefix)
     except Exception as error:  # noqa: BLE001 - report broken environments

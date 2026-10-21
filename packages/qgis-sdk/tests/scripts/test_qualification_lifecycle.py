@@ -62,20 +62,7 @@ def test_report_passes_only_when_every_lifecycle_stage_succeeds() -> None:
     assert successful_report().passed is True
     assert successful_report().to_dict()["passed"] is True
 
-    failed = LifecycleReport(
-        platform="Linux-6.1.0-x86_64",
-        python_version="3.14.8",
-        qgis_version=None,
-        qt_version=None,
-        qgis_initialised=False,
-        plugin_started=False,
-        action_names=(),
-        action_result=None,
-        plugin_unloaded=False,
-        owned_resources_released=False,
-        qgis_exited=False,
-        error="QGIS import failed",
-    )
+    failed = LifecycleReport.unavailable(error="QGIS import failed")
 
     assert failed.passed is False
     assert failed.to_dict()["error"] == "QGIS import failed"
