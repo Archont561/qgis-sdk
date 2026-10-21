@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Annotated
 
-from qgis_sdk.models import QgisSdkOptionalDependencyError
+from qgis_sdk.models import MAX_SAFE_INTEGER, QgisSdkOptionalDependencyError
 
 from ._pydantic_compat import OPTIONAL_PYDANTIC_PROVISIONING_HINT
 
@@ -15,8 +15,6 @@ except ImportError as error:
     raise QgisSdkOptionalDependencyError(
         "pydantic", OPTIONAL_PYDANTIC_PROVISIONING_HINT
     ) from error
-
-MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 
 def _normalize_integral_safe_number(value: object) -> object:

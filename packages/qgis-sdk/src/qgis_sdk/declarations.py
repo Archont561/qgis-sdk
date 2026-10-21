@@ -16,7 +16,7 @@ from typing import (
     get_type_hints,
 )
 
-from .models import QgisSdkError
+from .models import MAX_SAFE_INTEGER, QgisSdkError
 
 T = TypeVar("T")
 
@@ -146,7 +146,7 @@ def _schema(
     if primitive is not None:
         schema = {"type": primitive}
         if annotation is int:
-            schema.update(minimum=-9007199254740991, maximum=9007199254740991)
+            schema.update(minimum=-MAX_SAFE_INTEGER, maximum=MAX_SAFE_INTEGER)
         return schema
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
@@ -163,7 +163,7 @@ def _schema(
             raise QgisSdkDeclarationError(
                 f"{path}: Literal supports only JSON strings, safe integers, booleans and null"
             )
-        if any(type(value) is int and abs(value) > 9007199254740991 for value in args):
+        if any(type(value) is int and abs(value) > MAX_SAFE_INTEGER for value in args):
             raise QgisSdkDeclarationError(
                 f"{path}: Literal integer exceeds the safe-integer range"
             )

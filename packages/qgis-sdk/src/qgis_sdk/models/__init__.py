@@ -10,8 +10,10 @@ from .errors import (
     QgisSdkUnsupportedCapabilityError,
     QgisSdkValidationIssue,
 )
+from .limits import MAX_SAFE_INTEGER
 
 __all__ = [
+    "MAX_SAFE_INTEGER",
     "QgisSdkContractValidationError",
     "QgisSdkError",
     "QgisSdkJobCancelledError",
