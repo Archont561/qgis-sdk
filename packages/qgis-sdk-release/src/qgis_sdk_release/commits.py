@@ -41,15 +41,19 @@ class Classification:
     breaking: bool
 
 
+# sha, subject and body: the fields LOG_FORMAT emits between the record separators.
+LOG_FIELD_COUNT = 3
+
+
 def parse_log(raw: str) -> tuple[Commit, ...]:
     """Parse ``git log --format=$LOG_FORMAT`` output into commits."""
     commits: list[Commit] = []
-    for record in raw.split("\x1e"):
-        record = record.strip("\n")
+    for chunk in raw.split("\x1e"):
+        record = chunk.strip("\n")
         if not record.strip():
             continue
         parts = record.split("\x1f")
-        if len(parts) != 3:
+        if len(parts) != LOG_FIELD_COUNT:
             raise QgisSdkReleaseError(f"malformed git log record: {record!r}")
         commits.append(Commit(sha=parts[0].strip(), subject=parts[1], body=parts[2]))
     return tuple(commits)
