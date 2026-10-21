@@ -1,10 +1,10 @@
 ---
 id: TASK-24
 title: Implement scoped plugin runtime and native lifecycle adapter
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 22:45'
+updated_date: '2026-10-21 23:24'
 labels: []
 milestone: m-1
 dependencies:
@@ -37,13 +37,15 @@ Implement scoped plugin runtime and native lifecycle adapter. Implement only the
 <!-- AC:BEGIN -->
 - [x] #1 Construct plain author classes through explicit context/factories without constructor rewriting.
 - [x] #2 Own/dispose actions, signals, dialogs/docks and work; repeated unload and partial startup failure are safe.
-- [ ] #3 Provide focused pure lifecycle tests and real Desktop startup/unload evidence with no fake fallback.
+- [x] #3 Provide focused pure lifecycle tests and real Desktop startup/unload evidence with no fake fallback.
 <!-- AC:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
-Approved bounded slice: QGIS-free PluginRuntime with explicit context construction (default cls(context), optional instance factory), read-only bound action mapping, idempotent unload via the existing ResourceScope, and safe partial-startup cleanup. Add a delegating Desktop lifecycle adapter (classFactory/initGui/unload, lazy native boundary) and an opt-in headless QGIS lifecycle smoke. Pure tests own representative action/signal/dialog/work cleanups. Real Desktop startup/unload evidence remains open under TASK-33; do not claim AC3.
+Approved bounded slice: QGIS-free PluginRuntime with explicit context construction (default cls(context), optional instance factory), read-only bound action mapping, idempotent unload via the existing ResourceScope, and safe partial-startup cleanup. Add a delegating Desktop lifecycle adapter (classFactory/initGui/unload, lazy native boundary) and an opt-in headless QGIS lifecycle smoke. Pure tests own representative action/signal/dialog/work cleanups.
+
+2026-10-22 correction: the earlier sentence here read "Real Desktop startup/unload evidence remains open under TASK-33; do not claim AC3". That was a belief about the environment, not a blocker - the Desktop binary can be driven headless, so scripts/desktop_adapter_smoke.py now runs a fixture plugin through the real QGIS plugin manager and AC3 is closed by PR #30. What stays TASK-33 work: GUI, canvas, 3D and WebEngine rendering, plus every non-Linux candidate, because offscreen Qt shows no window and renders nothing.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -58,6 +60,13 @@ Approved bounded slice: QGIS-free PluginRuntime with explicit context constructi
 Validation this session: root test 256 passed/2 opt-in smoke skipped; root coverage 231 passed/2 skipped, Python 100% (450 statements, runtime 88 and adapters/desktop 23 at 100%), bridge 90 passed at 100%; Ruff lint and scoped format, Biome, bridge typecheck, git diff --check, wheel/sdist build with Twine and bridge build pass. The opt-in headless lifecycle smoke passes against QGIS 4.2.3-Belém do Pará and Qt 6.11.2 (action ping=7, plugin started/unloaded, owned resources released, QGIS exited). Root build still fails at the known conda-forge repodata TLS handshake EOF. No merge yet.
 
 2026-10-17 post-merge closeout: PR #13 merged into main as f9740a80ad0b0b2ba53b7ae19c21d12048b94198 (implementation 611e1ac020bfd21888aca967eb6f1f82e3e39179), merged by Archont561 with a merge commit. Post-merge main runs: CI 39052147058 succeeded (commit-message, lint, format, typecheck, skill tooling, Actions lint and coverage steps all passed) and publish sandbox 39052147023 succeeded. AC1 and AC2 are proven by the landed runtime/adapter modules and the tests included in this PR. AC3 stays open: there is still no real Desktop startup/unload evidence. The headless harness runs the adapter inside a real QgsApplication with iface=None, no display and no event loop, which is not a Desktop qualification; TASK-33 tracks that gap. The task therefore remains In Progress rather than Done. The local environment remains an unverified restore (nine dist-info/RECORD integrity mismatches), so this closure claims merged code and CI, not a verified environment. No dependency or lockfile changes.
+
+2026-10-22 AC3 closed by PR #30 (commits ec1482a, 94e7992), on a fresh sandbox after scripts/restore.sh and install-js rebuilt .pixi and node_modules.
+- Evidence: the real QGIS 4.2.3 Desktop application loads, starts and unloads a fixture plugin built on create_class_factory, through qgis.utils.loadPlugin/startPlugin/unloadPlugin - QGIS's own sequence. Report: iface_is_host, native_context_matches, started, runtime_running, message_bar_received, action_result 7, unloaded, runtime_stopped, scope_released, actions_detached all true, error null, passed true.
+- No fake fallback is enforced in the probe: it fails outright if qgis.utils.iface is None, requires the adapter to hold the identical object, requires require_native() to return that same host, and requires the notifications service to add a real widget to the host message bar.
+- Bug this found: the generated plugin read iface.messageBar as an attribute, so pushInfo would have raised on a real host while staying silent without one (fixed in ec1482a, with a stub-host behaviour test).
+- Non-claim: QGIS's _plugin_modules cache is not asserted. An earlier module_released field was dropped because unloadPlugin only drops modules QGIS recorded, which is QGIS bookkeeping rather than an SDK promise.
+- Gates: 361 passed / 5 skipped by default; 366 passed / 0 skipped with all five opt-in harness flags; coverage TOTAL 918 0 100%; ruff lint and format clean; turbo 2/2 with Cached: 0; bridge 90 tests, typecheck and biome clean; wheel rebuilt and twine PASSED. No CI ran (Actions billing out until next month), so no claim here is CI-verified.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -72,5 +81,11 @@ author: qgis-sdk agent
 created: 2026-10-21 22:45
 ---
 Finding from TASK-1 (PR #26, harness `packages/qgis-sdk/scripts/scaffold_desktop_smoke.py`): a **real QGIS Desktop binary run is achievable in this sandbox** headless, so the Desktop-path part of this task is not blocked by the absence of a display. Three variables make it work and none is obvious: `QT_QPA_PLATFORM=offscreen`, a placeholder `DISPLAY` (QGIS exits immediately with 'QGIS starting in non-interactive mode not supported' when it is unset - it judges interactivity from that variable alone), and `PYTHONHOME` at the live prefix (QGIS carries its build-time prefix in the embedded interpreter, so a relocated install starts and then cannot even `import sys`, hanging on an error dialog with `--code` never running). Reuse the harness instead of rewriting it; note offscreen is still not a rendering or GUI qualification, so a criterion demanding visible GUI behaviour stays open.
+---
+
+author: qgis-sdk agent
+created: 2026-10-21 23:24
+---
+AC3 checked on local evidence by PR #30. The criterion names no CI, runner, registry or display, so the project protocol allows closing it on reproducible sandbox evidence, and that evidence is now a repeatable harness rather than a claim: the opt-in QGIS_SDK_DESKTOP_ADAPTER=1 test runs the fixture through the real Desktop plugin manager and asserts every stage, with a QGIS-free suite covering the report logic, the fixture shape and two drift guards. GUI-level qualification is NOT claimed by this task and stays in TASK-33.
 ---
 <!-- COMMENTS:END -->
