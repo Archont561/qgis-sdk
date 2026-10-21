@@ -157,6 +157,34 @@ def test_the_entry_point_exposes_class_factory_for_qgis_to_call() -> None:
     assert "from .plugin import classFactory" in entry
 
 
+def test_generated_notifications_use_the_method_qgis_actually_exposes(
+    tmp_path: Path,
+) -> None:
+    """A host that hands out its bar by method must not be read as an attribute.
+
+    QGIS exposes the message bar through ``messageBar()``, which only a real Desktop
+    run makes obvious; a bare attribute lookup would raise there and stay silent
+    without a host, so both halves are pinned here.
+    """
+    project = tmp_path / "project"
+    write_scaffold(ScaffoldOptions.resolve("demo_tools"), project)
+
+    statement = (
+        "import types;"
+        "from demo_tools.plugin import MessageBarNotifications;"
+        "pushed = [];"
+        "bar = types.SimpleNamespace(pushInfo=lambda *a: pushed.append(a));"
+        "iface = types.SimpleNamespace(messageBar=lambda: bar);"
+        "MessageBarNotifications(iface).info('ready');"
+        "MessageBarNotifications(None).info('ignored');"
+        "print(pushed)"
+    )
+    result = run_generated_project(project, statement)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "[('Demo Tools', 'ready')]"
+
+
 def test_generated_python_is_parsable_and_uses_the_sdk_framework_explicitly() -> None:
     module = content_of(
         plan_scaffold(ScaffoldOptions.resolve("demo_tools")), "demo_tools/plugin.py"
