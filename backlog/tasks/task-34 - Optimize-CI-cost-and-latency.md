@@ -4,7 +4,7 @@ title: Optimize CI cost and latency
 status: Done
 assignee: []
 created_date: '2026-10-17 18:10'
-updated_date: '2026-10-17 19:08'
+updated_date: '2026-10-22 01:43'
 labels: []
 milestone: m-0
 dependencies: []
@@ -63,6 +63,66 @@ Deprecation evidence: the baseline named actions/checkout@v4 and actions/setup-p
 Scope held (TASK-34 AC 4): suites, OS matrix, and coverage gates (single-sourced on checks, Codecov uploads untouched) are unchanged; no path filters or matrix narrowing were added; `pixi lock --check` is green on PR #15 (relock run 39058815845: lock guard success, no drift).
 
 Keep/revert ledger (AC 5): keep pip cache (measured win), keep Bun cache (latency-neutral, kept with rationale above), keep concurrency group (verified), keep checkout/setup-python/codecov upgrades (zero-warning requirement), no change to setup-bun (already node24).
+
+Second pass (2026-10-22, branch arena/f9eacfee-qgis-sdk, PR pending): the two items
+AC 4 explicitly left open as follow-ups are now partly taken - ci.yml gained
+`paths-ignore: backlog/**, AGENTS.md` on both triggers and `push: branches: [main]`
+(pull_request already tests every proposal, so reacting to push on the same branch
+billed the matrix twice per push), and cross-platform now carries
+`if: github.event_name != 'push'`, so a merge to main no longer re-bills macOS at 10x
+and Windows at 2x for a tree the PR proved. `checks` stays unconditional on main
+because release tooling reads its coverage artifact and commit provenance. Matrix
+narrowing (dropping an OS) is still refused: that removes compatibility evidence,
+which is a policy change and not a caching trick.
+
+Cost hygiene in the hand-written workflows: every job in ci.yml, release.yml and
+autorelease.yml got `timeout-minutes` (the whole workspace previously had exactly one,
+relock.yml's `verdict: 65`, so everything else inherited the 360-minute default).
+autorelease dropped `prefix-dev/setup-pixi` and calls `python3 -m qgis_sdk_release
+plan|tag` with `PYTHONPATH=packages/qgis-sdk-release/src`: the package declares no
+dependencies, needs only Python >= 3.11, and shells out to nothing but `git`, so
+installing a 279 MB environment to answer "no release is due" on every push to main
+was pure overhead. `release.yml`'s `pypi` job gates checkout + setup-pixi on
+`needs.build.outputs.prerelease == 'true'`, because that environment exists only for
+the dry-run verify step.
+
+Two proposals measured, then rejected with evidence. Merging the two Codecov uploads
+into one `files:` list looks free, but codecov.yml scopes each `status.project` target
+to its own flag and a combined upload would let both reports reach both flags - the
+gate is worth more than the ~20s step. Splitting `checks` into more parallel jobs was
+already rejected by AC 4 and stays rejected: each job re-pays checkout, setup and
+cache restore.
+
+relock.yml and publish-sandbox.yml are generated ("Regenerate this file instead of
+editing it"), so they were not hand-patched; publish-sandbox is the only workflow in
+the repo with no `concurrency:` block and no paths filter, and runs a multi-OS pack on
+every push to main - both asks belong upstream in pixi-sandbox.
+
+Verification limit, stated plainly: the Actions spending limit is exhausted until the
+next billing cycle, so no run here was executed by CI. Evidence is local only -
+`actionlint .github/workflows/*.yml` exit 0, YAML round-trip of every edited job's
+`timeout-minutes`/`if`/`paths-ignore`, `python3 -m qgis_sdk_release plan --trigger push
+--json` printing the documented `skip` on CPython 3.11.2 and 3.14, and a repo-wide
+grep proving no test or lint target reads `backlog/**`. Whether the path gates skip
+cleanly instead of leaving required checks pending needs the first post-restoration
+run.
+
+Recorded on the branch that takes it: PR #32. Pushing this note was also an experiment, and it
+corrected a claim written here. Measured against the live runs API on 2026-10-22, while the billing
+block left every job at zero steps but still recorded the events:
+
+- `push: branches: [main]` works. Neither push on PR #32 produced a `push`-event `CI` run, while the
+  previous branch's backlog-only push (e5bacbf) did bill a full `CI | push` run under the old bare
+  `push:` trigger. The duplicate matrix per push is gone.
+- `cross-platform`'s `if: github.event_name != 'push'` is accepted and evaluates true for
+  `pull_request`: both host jobs exist for both PR heads. They never started only because the
+  spending limit blocks job start (steps=0, "recent account payments have failed").
+- `paths-ignore` on a `pull_request` filter does not look at the pushed commit: it evaluates the
+  whole base...head diff, so a backlog-only commit inside a mixed pull request still runs CI.
+  Consequence for the maintainer: a pull request whose entire diff is `backlog/**` or `AGENTS.md`
+  gets no `ci.yml` run at all, so a branch-protection rule requiring `checks` can never be satisfied
+  by such a pull request - it needs one non-ignored file, or an admin merge.
+
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
