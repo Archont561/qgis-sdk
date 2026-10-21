@@ -16,13 +16,15 @@ import sys
 from pathlib import Path
 
 import pytest
+from desktop_smoke_kit import (
+    PROFILE_PROBE,
+    desktop_command,
+    headless_environment,
+)
 from scaffold_desktop_smoke import (
     LIFECYCLE_PROBE,
-    PROFILE_PROBE,
     DesktopScaffoldReport,
-    desktop_command,
     expected_metadata,
-    headless_environment,
     request_document,
     run_smoke,
 )
@@ -67,7 +69,7 @@ def test_desktop_command_starts_the_app_with_no_plugins_and_the_probe_last() -> 
     )
 
     assert "--noplugins" in command
-    assert command[command.index("--profile") + 1] == "sdk-scaffold"
+    assert command[command.index("--profile") + 1] == "sdk-qualification"
     assert command[-2:] == ["--code", "/tmp/run/probe.py"]
     assert "/tmp/run/profiles" in command
 
@@ -110,7 +112,7 @@ def test_each_probe_is_python_that_ends_the_process_itself(probe: str) -> None:
 
     assert tree.body, "the probe must not be empty"
     assert "os._exit" in probe, "the probe must exit without waiting for the GUI loop"
-    assert 'os.environ["QGIS_SDK_SCAFFOLD_WORKSPACE"]' in probe
+    assert 'os.environ["QGIS_SDK_DESKTOP_WORKSPACE"]' in probe
 
 
 def test_unavailable_reports_every_stage_as_false() -> None:

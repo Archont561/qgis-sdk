@@ -154,7 +154,8 @@ live prefix (QGIS carries its build-time prefix in the embedded interpreter, so 
 relocated install starts and then cannot even `import sys`). This qualifies the
 Desktop plugin path, not GUI behaviour: no widget is shown, so canvas, map and 3D
 rendering still need a real display. Last run here: QGIS 4.2.3 and CPython 3.14.8
-on Linux, `"passed": true`.
+on Linux, `"passed": true`. The same kit backs the adapter evidence in
+[Desktop lifecycle adapter](#real-desktop-startup-and-unload-evidence).
 
 ## Developer scripts
 
@@ -402,12 +403,63 @@ pixi run -e default python packages/qgis-sdk/scripts/desktop_lifecycle_smoke.py
 ```
 
 The harness passes `iface=None`, starts no event loop and does not exercise
-menus, dialogs or docks. It is **not** a real Desktop startup/unload
-qualification; that evidence is still unavailable and tracked by TASK-33. Run
-the opt-in test with:
+menus, dialogs or docks, so it is the always-runnable fallback and **not** a real
+Desktop startup/unload qualification. Run the opt-in test with:
 
 ```sh
 QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_lifecycle.py
+```
+
+### Real Desktop startup and unload evidence
+
+`scripts/desktop_adapter_smoke.py` supplies the evidence that harness cannot: it writes
+a small fixture plugin that uses `create_class_factory`, installs it into a clean
+throwaway profile, and lets the **QGIS Desktop application's own plugin manager** load,
+start and unload it. The fixture belongs to this harness rather than to the scaffolded
+project, so the adapter contract is proven without depending on `qgis_sdk.scaffold`.
+
+```sh
+pixi run -e default python packages/qgis-sdk/scripts/desktop_adapter_smoke.py
+```
+
+```json
+{
+  "action_result": 7,
+  "actions_detached": true,
+  "error": null,
+  "iface_is_host": true,
+  "message_bar_received": true,
+  "native_context_matches": true,
+  "passed": true,
+  "runtime_running": true,
+  "runtime_stopped": true,
+  "scope_released": true,
+  "started": true,
+  "unloaded": true
+}
+```
+
+"No fake fallback" is what makes each field worth reading: the run fails outright if
+QGIS provides no interface object, `iface_is_host` requires the adapter to hold the very
+same object as `qgis.utils.iface`, `native_context_matches` requires
+`ctx.require_native()` to hand that live object back through the typed escape hatch, and
+`message_bar_received` requires the notifications service to add a real widget to QGIS's
+own bar. `scope_released` and `actions_detached` are the runtime's side of the same
+cycle: the owned scope closed and no stale callable survived `unload()`.
+
+QGIS's module cache is deliberately not asserted. `unloadPlugin` drops only the modules
+`_plugin_modules` happened to record, which is QGIS bookkeeping rather than a promise of
+this SDK, so a check there would prove the wrong thing.
+
+The headless-Desktop rules that are easy to get wrong - `QT_QPA_PLATFORM=offscreen`, the
+placeholder `DISPLAY` QGIS needs to consider itself interactive, and `PYTHONHOME` at the
+live prefix so the embedded interpreter can `import sys` - live in
+`scripts/desktop_smoke_kit.py`, shared with the scaffold harness. Offscreen Qt shows no
+window and renders nothing: GUI, canvas, 3D and WebEngine behaviour remain under
+TASK-33, as does every non-Linux candidate.
+
+```sh
+QGIS_SDK_DESKTOP_ADAPTER=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_desktop_adapter.py
 ```
 
 The Qt scheduler harness exercises the `StepScheduler` seam inside a real

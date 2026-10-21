@@ -1,76 +1,58 @@
-"""Generate the scaffold, then load and unload it inside a real QGIS Desktop run.
+"""Load and unload a generated plugin inside a real QGIS Desktop run (TASK-1 AC2).
 
 This is TASK-1 AC2's evidence: the generated plugin is placed in a clean profile's
 user-plugin directory and QGIS's own plugin machinery parses ``metadata.txt``
-(``qgis.utils.findPlugins``), starts the plugin (``startPlugin``) and unloads it
-(``unloadPlugin``) - the same calls the Plugins dialog makes.
+(``qgis.utils.findPlugins``), starts the plugin (``loadPlugin`` + ``startPlugin``)
+and unloads it (``unloadPlugin``) - the same calls the Plugins dialog makes.
 
-There is **no display**, and running the Desktop binary headless needs three
-variables that are easy to get wrong, which is why they are set here rather than
-in a recipe: ``QT_QPA_PLATFORM=offscreen`` (no window system, nothing rendered),
-``DISPLAY`` (QGIS refuses to start when it judges itself non-interactive, and it
-judges that from ``DISPLAY`` alone - with the offscreen platform nothing ever
-connects to the placeholder address) and ``PYTHONHOME`` (QGIS carries its
-build-time prefix in the embedded interpreter, so a relocated install starts and
-then cannot even ``import sys``). So this proves the Desktop plugin path, not GUI
-or rendering qualification (see ``doc-8`` and TASK-33).
+The headless Desktop rules - ``QT_QPA_PLATFORM=offscreen``, a placeholder
+``DISPLAY``, ``PYTHONHOME`` at the live prefix, and the probe/report exchange - are
+in ``desktop_smoke_kit``, which ``desktop_adapter_smoke.py`` also uses. This proves
+the Desktop plugin path, not GUI or rendering qualification (see ``doc-8`` and
+TASK-33).
 
 Run it from the workspace root with the default Pixi environment::
 
     pixi run -e default python packages/qgis-sdk/scripts/scaffold_desktop_smoke.py
 
-The report helpers and the two probe sources are pure, so the QGIS-free suite can
-test them; the end-to-end run is opt-in through
+The report helpers and the probe source are pure, so the QGIS-free suite can test
+them; the end-to-end run is opt-in through
 ``tests/scripts/test_qualification_scaffold.py``.
+
+Exit codes: 0 = the Desktop lifecycle passed, 1 = it failed or QGIS is unavailable,
+in which case the report's ``error`` field records which, so the gap is reported
+rather than hidden.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import shutil
-import subprocess
 import sys
 import tempfile
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import Final
 
-HEADLESS_PLATFORM: Final = "offscreen"
-# QGIS refuses to start when it decides it is non-interactive, which it judges by
-# ``DISPLAY`` being unset. The offscreen Qt platform plugin means nothing ever
-# connects to that address; the value only satisfies the application's own guard.
-PLACEHOLDER_DISPLAY: Final = ":99"
-PROFILE_NAME: Final = "sdk-scaffold"
-WORKSPACE_ENV_VAR: Final = "QGIS_SDK_SCAFFOLD_WORKSPACE"
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = PROJECT_ROOT / "src"
+from desktop_smoke_kit import (
+    PING_VALUE,
+    REPORT_FILE,
+    REQUEST_FILE,
+    ensure_source_root_on_path,
+    profile_plugin_dir,
+    qgis_executable,
+    read_report,
+    run_desktop_probe,
+    write_workspace_file,
+)
+
 DEFAULT_PLUGIN: Final = "scaffold_demo"
 EXPECTED_MINIMUM_VERSION: Final = "4.0"
-PING_VALUE: Final = 7
-DESKTOP_TIMEOUT_SECONDS: Final = 300
 
-#: Both probes are written verbatim into the workspace and executed by
-#: ``qgis --code``. They take no arguments and interpolate nothing: they find
-#: their inputs by name under ``$QGIS_SDK_SCAFFOLD_WORKSPACE``, so the same text
-#: can be parsed and asserted on without a display.
-PROFILE_PROBE: Final = '''"""Ask the Desktop application where user plugins belong."""
-
-import os
-from pathlib import Path
-
-workspace = Path(os.environ["QGIS_SDK_SCAFFOLD_WORKSPACE"])
-
-from qgis.utils import HOME_PLUGIN_PATH
-
-with (workspace / "profile-dir.txt").open("w", encoding="utf-8") as handle:
-    handle.write(str(HOME_PLUGIN_PATH))
-    handle.flush()
-    os.fsync(handle.fileno())
-os._exit(0)
-'''
+#: The metadata fields whose values the Desktop parser has to read back.
+METADATA_KEYS: Final = ("name", "qgisMinimumVersion")
 
 LIFECYCLE_PROBE: Final = '''"""Drive the generated plugin through the Desktop application's plugin machinery."""
 
@@ -80,7 +62,7 @@ import platform
 import sys
 from pathlib import Path
 
-workspace = Path(os.environ["QGIS_SDK_SCAFFOLD_WORKSPACE"])
+workspace = Path(os.environ["QGIS_SDK_DESKTOP_WORKSPACE"])
 request = json.loads((workspace / "request.json").read_text(encoding="utf-8"))
 plugin = request["plugin"]
 payload = {
@@ -155,9 +137,6 @@ REPORT_FIELDS: Final = (
     "error",
 )
 
-#: The metadata fields whose values the Desktop parser has to read back.
-METADATA_KEYS: Final = ("name", "qgisMinimumVersion")
-
 
 @dataclass(frozen=True)
 class DesktopScaffoldReport:
@@ -211,64 +190,13 @@ class DesktopScaffoldReport:
 
     @classmethod
     def from_payload(cls, payload: dict[str, object]) -> DesktopScaffoldReport:
-        """Build the report from the probe's JSON, which owns its own keys."""
-        return cls(
-            **{  # type: ignore[arg-type]
-                field: payload[field] for field in REPORT_FIELDS if field in payload
-            }
-        )
+        """Build a report from a probe's JSON, ignoring anything unexpected."""
+        known = {field.name for field in fields(cls)}
+        return cls(**{key: value for key, value in payload.items() if key in known})
 
     def to_payload(self) -> dict[str, object]:
-        """Return the report as a JSON-serialisable mapping."""
-        report = asdict(self)
-        report["passed"] = self.passed
-        return report
-
-
-def qgis_python_path(prefix: Path) -> Path:
-    """Return the directory holding the QGIS Python bindings of a prefix."""
-    return prefix / "share" / "qgis" / "python"
-
-
-def qgis_executable(prefix: Path) -> Path:
-    """Return the Desktop application binary of a prefix."""
-    return prefix / "bin" / "qgis"
-
-
-def headless_environment(prefix: Path, environ: dict[str, str]) -> dict[str, str]:
-    """Return the overrides a headless Desktop plugin run needs.
-
-    ``PYTHONHOME`` is not decoration: QGIS carries the *build-time* prefix in its
-    embedded interpreter, and a relocated or restored environment leaves that path
-    pointing somewhere that no longer exists, so the app starts and then cannot even
-    ``import sys``. Pointing it at the live prefix is what makes ``--code`` run.
-    """
-    python_path = [str(qgis_python_path(prefix)), str(SOURCE_ROOT)]
-    existing = environ.get("PYTHONPATH")
-    if existing:
-        python_path.append(existing)
-    return {
-        "QT_QPA_PLATFORM": HEADLESS_PLATFORM,
-        "PROJ_LIB": str(prefix / "share" / "proj"),
-        "QGIS_PREFIX_PATH": str(prefix),
-        "PYTHONPATH": os.pathsep.join(python_path),
-        "PYTHONHOME": str(prefix),
-        "DISPLAY": PLACEHOLDER_DISPLAY,
-    }
-
-
-def desktop_command(executable: Path, workspace: Path, probe: Path) -> list[str]:
-    """Return the QGIS Desktop invocation that runs one probe and loads nothing."""
-    return [
-        str(executable),
-        "--noplugins",
-        "--profiles-path",
-        str(workspace / "profiles"),
-        "--profile",
-        PROFILE_NAME,
-        "--code",
-        str(probe),
-    ]
+        """Return the report as JSON-compatible data, including the verdict."""
+        return {**asdict(self), "passed": self.passed}
 
 
 def expected_metadata(title: str) -> dict[str, str]:
@@ -298,63 +226,31 @@ def plugin_title(plugin: str) -> str:
     return " ".join(word.title() for word in plugin.split("_"))
 
 
-def _write(workspace: Path, name: str, text: str) -> Path:
-    path = workspace / name
-    path.write_text(text, encoding="utf-8", newline="\n")
-    return path
-
-
-def _desktop_run(executable: Path, prefix: Path, workspace: Path, probe: Path) -> None:
-    """Start QGIS Desktop once with one probe and wait for it to finish."""
-    environment = headless_environment(prefix, dict(os.environ))
-    environment["HOME"] = str(workspace / "home")
-    environment[WORKSPACE_ENV_VAR] = str(workspace)
-    subprocess.run(
-        desktop_command(executable, workspace, probe),
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=DESKTOP_TIMEOUT_SECONDS,
-        check=False,
-    )
-
-
-def _profile_plugin_dir(executable: Path, prefix: Path, workspace: Path) -> Path:
-    """Ask a first Desktop run where user plugins belong, so nothing is guessed."""
-    probe = _write(workspace, "profile-probe.py", PROFILE_PROBE)
-    _desktop_run(executable, prefix, workspace, probe)
-    answer = workspace / "profile-dir.txt"
-    if not answer.is_file():
-        raise RuntimeError("QGIS Desktop did not report its user plugin directory")
-    return Path(answer.read_text(encoding="utf-8").strip())
-
-
 def _run_lifecycle(
     executable: Path, prefix: Path, workspace: Path, plugin: str, title: str
 ) -> DesktopScaffoldReport:
     """Generate the project, install it into the profile, then drive it in Desktop."""
-    if str(SOURCE_ROOT) not in sys.path:
-        sys.path.insert(0, str(SOURCE_ROOT))
+    ensure_source_root_on_path()
     from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
 
     project = workspace / "project"
     write_scaffold(ScaffoldOptions.resolve(plugin), project)
-    plugins_root = _profile_plugin_dir(executable, prefix, workspace)
+    plugins_root = profile_plugin_dir(executable, prefix, workspace)
     plugins_root.mkdir(parents=True, exist_ok=True)
     shutil.copytree(project / plugin, plugins_root / plugin)
 
-    _write(workspace, "request.json", request_document(plugins_root, plugin, title))
-    probe = _write(workspace, "lifecycle-probe.py", LIFECYCLE_PROBE)
-    _desktop_run(executable, prefix, workspace, probe)
-
-    report = workspace / "report.json"
-    if not report.is_file():
-        return DesktopScaffoldReport.unavailable(
-            plugin, "the Desktop probe wrote no report file"
-        )
-    return DesktopScaffoldReport.from_payload(
-        json.loads(report.read_text(encoding="utf-8"))
+    write_workspace_file(
+        workspace, REQUEST_FILE, request_document(plugins_root, plugin, title)
     )
+    probe = write_workspace_file(workspace, "lifecycle-probe.py", LIFECYCLE_PROBE)
+    run_desktop_probe(executable, prefix, workspace, probe)
+
+    payload = read_report(workspace)
+    if payload is None:
+        return DesktopScaffoldReport.unavailable(
+            plugin, f"the Desktop probe wrote no {REPORT_FILE}"
+        )
+    return DesktopScaffoldReport.from_payload(payload)
 
 
 def run_smoke(
