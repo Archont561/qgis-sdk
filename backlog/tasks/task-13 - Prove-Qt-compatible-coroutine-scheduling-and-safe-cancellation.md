@@ -4,7 +4,7 @@ title: Prove Qt compatible coroutine scheduling and safe cancellation
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 20:51'
+updated_date: '2026-10-21 21:15'
 labels: []
 milestone: m-0
 dependencies:
@@ -21,6 +21,7 @@ references:
     Use-strict-inputs-extensible-results-and-experimental-contracts.md
   - backlog/docs/plans/doc-6 - TASK-13-Qt-scheduler-spike-evidence.md
   - backlog/tasks/task-33 - Qualify-Windows-macOS-and-Desktop-QGIS-targets.md
+  - doc-7
 priority: high
 type: spike
 ordinal: 13000
@@ -80,5 +81,10 @@ Scheduling correctness follow-ups implemented (2026-10-21), uncommitted on this 
 created: 2026-10-21 20:51
 ---
 Scheduling follow-up on this branch (2026-10-21): the two probe findings are closed in the working tree and re-verified against their original scenarios. (1) A host interrupt raised inside a job step now escapes tick() to the caller instead of being absorbed, while the job still records it as its error, and drain() then returns 0 - parametrised over KeyboardInterrupt, SystemExit and a private BaseException, plus a BDD scenario. (2) A job abandoned by disposal mid-tick is never re-driven, so no author code runs and no 'cannot reuse already awaited coroutine' escapes; _advance() checks settled/membership per step and prunes settled jobs in a finally so an unwinding interrupt cannot leave a settled job in the active set. core/scheduling.py is 318 statements at 100% covered, package suite 282 passed / 3 opt-in skips on CPython 3.14.8 and identically on 3.11.2. AC1 stays open: this is Linux only, and the real-Qt harnesses have only been run under 3.14.8.
+---
+
+created: 2026-10-21 21:15
+---
+Audit follow-up (doc-7), behaviour preserved: the scheduler's private handoff protocol (`_attach`, `_take`, `_report`, `_suspend_on`, `_settle_on_error`, `_advance`, `_blockers`) now states who may call it, and the suite is split into stepping, handoff, cancellation and disposal modules with the collected node IDs proven identical (35 before, 35 after). `core/scheduling.py` was deliberately left as one module: the step protocol's invariants are why Job, Handoff and StepScheduler sit together. Coverage stays 100.00% over 318 statements.
 ---
 <!-- COMMENTS:END -->

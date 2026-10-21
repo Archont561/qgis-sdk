@@ -4,7 +4,7 @@ title: 'Qualify Windows, macOS and Desktop QGIS targets'
 status: To Do
 assignee: []
 created_date: '2026-10-17 16:06'
-updated_date: '2026-10-21 20:17'
+updated_date: '2026-10-21 21:15'
 labels: []
 milestone: m-0
 dependencies: []
@@ -18,6 +18,7 @@ references:
   - >-
     backlog/decisions/decision-3 -
     Development-and-distribution-artifacts-are-separate.md
+  - doc-7
 priority: high
 type: spike
 ordinal: 33000
@@ -49,5 +50,10 @@ Created at the TASK-23 closeout (2026-10-17) so the targets the Linux sandbox ca
 created: 2026-10-21 20:17
 ---
 Path correction for the next attempt: the reusable headless harnesses are now at `packages/qgis-sdk/scripts/webengine_smoke.py`, `desktop_lifecycle_smoke.py` and `qt_scheduler_smoke.py` (previously `packages/qgis-sdk/tests/qualification/`). Run them from the repository root of a Windows or macOS candidate with `pixi run -e default python packages/qgis-sdk/scripts/<name>.py`; their QGIS-free tests sit in `packages/qgis-sdk/tests/scripts/` and stay opt-in through `QGIS_SDK_HEADLESS_SMOKE`, `QGIS_SDK_HEADLESS_LIFECYCLE` and `QGIS_SDK_QT_SCHEDULER`. No Desktop, Windows or macOS qualification is claimed.
+---
+
+created: 2026-10-21 21:15
+---
+The scheduler harness was restructured for this port (doc-7): `packages/qgis-sdk/scripts/qt_scheduler_smoke.py` now drives one function per phase over a shared heartbeat sampler, so retuning a Windows or macOS run means changing one phase instead of reading a 208-line function. The sampler's offset rule is unit-tested, and the named constants (`GUI_STALL_SAMPLES`, `CANCELLATION_POLL_ROUNDS`, `POOL_DRAIN_MS`, `LATE_REPORT_DELAY_MS`, `DISPOSED_DRAIN_S`) are the knobs to adjust per platform. Linux evidence is unchanged: same 25 keys, same phase sample counts, same verdict.
 ---
 <!-- COMMENTS:END -->
