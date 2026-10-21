@@ -40,12 +40,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Pixi
-        uses: prefix-dev/setup-pixi@v0.11.2
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           environments: >-
             default
@@ -104,7 +104,7 @@ jobs:
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         # v6+ is the first codecov major whose embedded github-script targets
         # node24; v5 makes fresh runs emit Node 20 deprecation warnings.
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: packages/qgis-sdk/coverage/lcov.info
           flags: qgis-sdk
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload TypeScript coverage
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage/qgis-sdk-bridge/lcov.info
           flags: qgis-sdk-bridge
@@ -142,12 +142,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Plain pip rather than pixi: pixi.lock is linux-64 only, and a pip
       # install proves the package builds and runs without the conda prefix.
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           # Track the minor version pinned in pixi.toml without requiring the
           # runner tool cache to carry that exact patch release.
@@ -161,7 +161,7 @@ jobs:
         run: python -m pip install --disable-pip-version-check -e "packages/qgis-sdk[dev]"
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           # Keep in sync with `packageManager` in package.json.
           bun-version: "1.4.2"
@@ -169,7 +169,7 @@ jobs:
       # setup-bun only caches the Bun executable itself; the install store is
       # keyed on the lockfile so warm runs skip re-downloading packages.
       - name: Cache Bun install store
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-install-${{ hashFiles('bun.lock') }}
