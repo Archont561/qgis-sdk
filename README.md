@@ -17,8 +17,8 @@ Use this repository's source packages for development. The package listings are 
 
 | Package | Role | Current state |
 | :-- | :-- | :-- |
-| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | `qgis_sdk.hello()` smoke test plus experimental pure models/services/context contracts; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
-| [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; currently only a minimal `hello()` smoke-test API; built with Bunup |
+| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations and a bounded plugin lifecycle runtime; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
+| [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; no bridge API yet, so the entry module is deliberately empty (a test pins that) and ships JavaScript only - no `types` mapping, because `bunup` emits no declaration for an exportless entry; built with Bunup |
 | [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
 
 The Python package is source-based and configured for a Python 3.11+ runtime. The Pixi `default` environment also provides QGIS for development and integration work.
@@ -35,13 +35,13 @@ pixi install -e bun
 pixi run -e bun install-js
 ```
 
-Try the current Python package API from the workspace:
+Check the package wiring from the workspace - `__all__` is the entire public surface:
 
 ```sh
-pixi run -e default python -c 'from qgis_sdk import hello; print(hello())'
+pixi run -e default python -c 'import qgis_sdk; print(qgis_sdk.__all__)'
 ```
 
-`hello()` is currently a scaffold/smoke-test function, not a QGIS plugin API. The package README and tests describe the current surface.
+That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. The package README and tests describe the current surface, and `packages/qgis-sdk/tests/test_init.py` fails if a name is exported without a decision.
 
 ## Test and build
 

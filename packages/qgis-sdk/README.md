@@ -4,7 +4,7 @@
 
 `qgis-sdk` is the Python package in the QGIS SDK workspace. It is intended to grow into a reusable foundation for plugin authors who want maintainable, source-testable code and a consistent packaging workflow.
 
-> **Status:** early scaffold with an experimental, QGIS-free contract layer, declarations, and a bounded plugin lifecycle runtime. `qgis_sdk.hello()` remains a smoke-test API. Native GIS services, UI rendering and handler dispatch, jobs, the full Desktop plugin template, and the bridge runtime are not implemented yet.
+> **Status:** early scaffold with an experimental, QGIS-free contract layer, declarations, and a bounded plugin lifecycle runtime. The public surface is exactly `qgis_sdk.__all__` - the declaration decorators and their descriptions - and a test pins it. Native GIS services, UI rendering and handler dispatch, jobs, the full Desktop plugin template, and the bridge runtime are not implemented yet.
 
 The [`qgis-sdk` PyPI listing](https://pypi.org/project/qgis-sdk/) is currently a `0.0.0` placeholder with no project description, not a functional SDK release. Use this repository's source package for development; see the [workspace README](../../README.md) for details and the npm bridge listing status.
 
@@ -52,13 +52,16 @@ Only a Desktop runtime may inject `DesktopAccess`. Its `iface` is deliberately t
 
 Pure tests check declared import direction throughout the three layers and import the public modules in a fresh subprocess that rejects native imports. This is not a security sandbox or a full dynamic-import/side-effect analyzer; the CLI static checker and real QGIS adapters are separate backlog work.
 
-`qgis_sdk.hello()` still validates package wiring:
+The package root exports nothing beyond the declarations API, which is what `tests/test_init.py` pins:
 
 ```python
-from qgis_sdk import hello
+import qgis_sdk
 
-print(hello())  # hello world
+print(qgis_sdk.__all__)
+# ['ActionDescription', 'PluginDescription', 'QgisSdkDeclarationError', 'action', 'describe_plugin', 'plugin']
 ```
+
+Importing the package with native modules forbidden is the real wiring check, so a placeholder API is no longer needed to prove it.
 
 ## Development
 
