@@ -1,8 +1,24 @@
 name: CI
 
 on:
+  # `pull_request` already tests every proposed change, so reacting to `push` on the
+  # same branch bills the whole matrix twice per push. `push` is therefore limited to
+  # the branch whose result release tooling reads. It names `main` literally: trigger
+  # filters take no expressions, so a default-branch rename has to change this line
+  # (everything inside the jobs uses `github.event.repository.default_branch`).
   push:
+    branches: [main]
+    # Docs-only and backlog-only changes cannot move a test, a build or a release.
+    # These are the paths relock.yml ignores; the two lists are spelled out per
+    # trigger instead of shared through an anchor because GitHub parses `on:` with its
+    # own quirks, and that cannot be checked locally while runners are unusable.
+    paths-ignore:
+      - "backlog/**"
+      - "AGENTS.md"
   pull_request:
+    paths-ignore:
+      - "backlog/**"
+      - "AGENTS.md"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +35,9 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # Bound the job: the Actions default is 360 minutes, and a run hung on a step that
+    # never finishes is not a result anybody is waiting for.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -112,6 +131,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest]
+    # A push to the default branch is the merge of a head that already passed this
+    # matrix: macOS bills 10x and Windows 2x to re-test a tree that is already green.
+    # `checks` keeps running on every push to main because its coverage artifact and
+    # commit-message provenance are what the release path reads. PR runs and
+    # `workflow_dispatch` release runs are untouched, so a release cut without a pull
+    # request still builds both hosts.
+    if: ${{ github.event_name != 'push' }}
+    # A hung macOS/Windows job must not sit until the 360-minute default either.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
