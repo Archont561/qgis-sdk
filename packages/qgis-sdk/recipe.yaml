@@ -20,6 +20,9 @@ requirements:
     - python >=3.11,<4
   run:
     - python >=3.11,<4
+    # The shipped `qgis-sdk` console command is Typer-based, so the Conda package
+    # carries the same runtime requirement the wheel declares.
+    - typer ==0.27.3
 
 tests:
   - python:

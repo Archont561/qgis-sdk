@@ -1,0 +1,191 @@
+"""The ``qgis-sdk`` command: the same plan, reachable from a shell."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from qgis_sdk.cli import app, main
+from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
+from typer.testing import CliRunner
+
+SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
+
+runner = CliRunner()
+
+
+def run_cli(*arguments: str) -> tuple[int, str]:
+    result = runner.invoke(app, list(arguments))
+    return result.exit_code, result.output
+
+
+def test_scaffold_writes_every_planned_file_and_reports_the_paths(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "field_tools"
+
+    exit_code, output = run_cli("scaffold", str(target), "--plugin", "field_tools")
+
+    assert exit_code == 0, output
+    written = sorted(
+        path.relative_to(target).as_posix()
+        for path in target.rglob("*")
+        if path.is_file()
+    )
+    assert written == [
+        "README.md",
+        "field_tools/__init__.py",
+        "field_tools/metadata.txt",
+        "field_tools/plugin.py",
+        "pyproject.toml",
+        "tests/test_plugin_smoke.py",
+    ]
+    for path in written:
+        assert path in output
+
+
+def test_the_plugin_name_defaults_to_the_target_directory_name(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "survey_helper"
+
+    exit_code, output = run_cli("scaffold", str(target))
+
+    assert exit_code == 0, output
+    assert "survey_helper/plugin.py" in output
+
+
+def test_the_choices_reach_the_generated_files(tmp_path: Path) -> None:
+    target = tmp_path / "field_tools"
+
+    exit_code, output = run_cli(
+        "scaffold",
+        str(target),
+        "--plugin",
+        "field_tools",
+        "--title",
+        "Field Survey Tools",
+        "--author",
+        "Ada Lovelace",
+        "--email",
+        "ada@example.test",
+        "--version",
+        "1.2.3",
+        "--qgis-minimum-version",
+        "4.2",
+    )
+
+    assert exit_code == 0, output
+    metadata = (target / "field_tools" / "metadata.txt").read_text(encoding="utf-8")
+    assert "name=Field Survey Tools" in metadata
+    assert "author=Ada Lovelace" in metadata
+    assert "email=ada@example.test" in metadata
+    assert "version=1.2.3" in metadata
+    assert "qgisMinimumVersion=4.2" in metadata
+    assert "# Field Survey Tools" in (target / "README.md").read_text(encoding="utf-8")
+    plugin_module = (target / "field_tools" / "plugin.py").read_text(encoding="utf-8")
+    assert '@plugin(id="field_tools", title="Field Survey Tools")' in plugin_module
+
+
+def test_dry_run_prints_the_plan_and_touches_nothing(tmp_path: Path) -> None:
+    target = tmp_path / "field_tools"
+
+    exit_code, output = run_cli(
+        "scaffold", str(target), "--plugin", "field_tools", "--dry-run"
+    )
+
+    assert exit_code == 0, output
+    assert "field_tools/metadata.txt" in output
+    assert not target.exists()
+
+
+def test_a_collision_is_reported_on_stderr_with_a_failing_exit_code(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "field_tools"
+    run_cli("scaffold", str(target), "--plugin", "field_tools")
+
+    exit_code, output = run_cli("scaffold", str(target), "--plugin", "field_tools")
+
+    assert exit_code == 1
+    assert "Refusing to overwrite" in output
+
+
+def test_force_is_offered_for_an_intentional_regeneration(tmp_path: Path) -> None:
+    target = tmp_path / "field_tools"
+    run_cli("scaffold", str(target), "--plugin", "field_tools")
+    (target / "README.md").write_text("stale\n", encoding="utf-8")
+
+    exit_code, _ = run_cli(
+        "scaffold", str(target), "--plugin", "field_tools", "--force"
+    )
+
+    assert exit_code == 0
+    assert "Desktop mode" in (target / "README.md").read_text(encoding="utf-8")
+
+
+def test_an_invalid_plugin_name_is_rejected_before_any_file_is_written(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "field_tools"
+
+    exit_code, output = run_cli("scaffold", str(target), "--plugin", "Field Tools")
+
+    assert exit_code == 1
+    assert "package name" in output
+    assert not target.exists()
+
+
+def test_the_command_documents_the_options_it_accepts() -> None:
+    exit_code, output = run_cli("scaffold", "--help")
+
+    assert exit_code == 0
+    for option in (
+        "--plugin",
+        "--title",
+        "--author",
+        "--email",
+        "--version",
+        "--qgis-minimum-version",
+        "--dry-run",
+        "--force",
+    ):
+        assert option in output
+
+
+def test_main_is_the_callable_the_console_script_registers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wheel maps ``qgis-sdk`` to this function, so it is tested as such."""
+    target = tmp_path / "field_tools"
+    monkeypatch.setattr(
+        sys, "argv", ["qgis-sdk", "scaffold", str(target), "--plugin", "field_tools"]
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+
+    assert exit_info.value.code == 0
+
+    assert (target / "field_tools" / "metadata.txt").is_file()
+    assert (target / "tests" / "test_plugin_smoke.py").is_file()
+
+
+def test_the_generated_starter_tests_pass_inside_the_generated_project(
+    tmp_path: Path,
+) -> None:
+    """AC3's smoke test is a real pytest run, not a quoted string."""
+    project = tmp_path / "field_tools"
+    write_scaffold(ScaffoldOptions.resolve("field_tools"), project)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q"],
+        cwd=project,
+        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": f"{project}:{SDK_SOURCE}"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "2 passed" in result.stdout

@@ -83,6 +83,82 @@ The checked contract-generation examples live in `tests/contract_sample/` and ar
 
 Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8, which is the interpreter carrying PyQGIS in the workspace, and the QGIS-free suite additionally on CPython 3.11.2, the minimum supported version; the real-Qt harnesses have only been run under 3.14.8. Windows/QGIS coexistence, Desktop/WebEngine behavior, and Conda delivery are still qualification gates.
 
+## Project scaffold
+
+`qgis-sdk scaffold <directory>` writes a minimal but genuinely loadable QGIS plugin
+project, built from the public declaration API instead of generated boilerplate.
+The command is a thin Typer layer in `src/qgis_sdk/cli.py` over the public
+`qgis_sdk.scaffold` API, and Typer is a runtime dependency of the wheel for this
+command alone:
+
+```sh
+# the installed console script
+qgis-sdk scaffold /tmp/demo --title "Demo Tools"
+
+# or from workspace source, driving the public API the CLI wraps
+pixi run -e default python -c 'from pathlib import Path
+from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
+write_scaffold(ScaffoldOptions.resolve("demo_tools"), Path("/tmp/demo"))'
+```
+
+`ScaffoldOptions.resolve` validates everything before a single byte is written: the
+plugin name must be a lowercase Python identifier that neither QGIS nor the
+standard library already owns, and the version fields must be dot-separated
+digits. The result is an in-memory plan written with LF endings, so the same
+options always produce the same bytes: `README.md`, `pyproject.toml`,
+`<plugin>/__init__.py`, `<plugin>/metadata.txt`, `<plugin>/plugin.py` and
+`tests/test_plugin_smoke.py`. There is no template directory to keep in sync;
+`--dry-run` prints the plan without touching disk, and an existing file is refused
+unless `--force` is passed.
+
+`<plugin>/__init__.py` exposes only `classFactory`, because that is the one name
+QGIS calls. `<plugin>/plugin.py` carries the whole design in plain view - one
+`@plugin` class, one `@action`, a `build_context` that hands the host `iface` to
+the SDK exactly once, and `classFactory` produced by
+`qgis_sdk.adapters.desktop.create_class_factory` - and imports no Qt or QGIS
+module. `metadata.txt` carries the nine fields QGIS reads, and tests pin that the
+generated project imports nothing native.
+
+### Choosing Desktop or standalone Qt mode
+
+The generated README teaches both modes; they differ in one thing, whether a host
+`iface` exists:
+
+| Mode | How it runs | What the SDK sees |
+| :-- | :-- | :-- |
+| Desktop | copy `<plugin>/` into a profile's `python/plugins/` and enable it under Plugins, Manage and Install Plugins, or launch `qgis --profiles-path <dir> --profile <name>` | `iface` is present, so `context.require_native()` succeeds and messages reach the real message bar |
+| Standalone Qt | call `build_context(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so `require_native()` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
+
+The starter tests are the standalone mode: in the generated project,
+`PYTHONPATH=<this workspace>/packages/qgis-sdk/src pytest -q` runs load, action and
+unload through the SDK runtime with no QGIS installation at all.
+
+### Load and unload evidence in real QGIS Desktop
+
+A standalone run cannot prove QGIS accepts the package, so
+`scripts/scaffold_desktop_smoke.py` scaffolds into a temporary directory, installs
+the plugin package into a clean throwaway profile, and runs the **QGIS Desktop
+binary** so that QGIS's own plugin machinery - `qgis.utils.findPlugins`,
+`loadPlugin`, `startPlugin`, `unloadPlugin` - discovers it, parses its
+`metadata.txt` with QGIS's own parser, calls `classFactory(iface)` and `initGui()`,
+invokes the declared action and unloads it, with the SDK reporting `running` and
+then `stopped`:
+
+```sh
+pixi run -e default python packages/qgis-sdk/scripts/scaffold_desktop_smoke.py
+QGIS_SDK_SCAFFOLD_DESKTOP=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_scaffold.py
+```
+
+Headless Desktop needs three variables that are easy to get wrong, which is why the
+harness sets them instead of leaving them to a recipe: `QT_QPA_PLATFORM=offscreen`
+(no window system, nothing rendered), a placeholder `DISPLAY` (QGIS decides it is
+non-interactive from `DISPLAY` alone and refuses to start), and `PYTHONHOME` at the
+live prefix (QGIS carries its build-time prefix in the embedded interpreter, so a
+relocated install starts and then cannot even `import sys`). This qualifies the
+Desktop plugin path, not GUI behaviour: no widget is shown, so canvas, map and 3D
+rendering still need a real display. Last run here: QGIS 4.2.3 and CPython 3.14.8
+on Linux, `"passed": true`.
+
 ## Developer scripts
 
 Standalone executables live in `scripts/` next to `src/`: they are runnable

@@ -17,7 +17,7 @@ Use this repository's source packages for development. The package listings are 
 
 | Package | Role | Current state |
 | :-- | :-- | :-- |
-| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations and a bounded plugin lifecycle runtime; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
+| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations, a bounded plugin lifecycle runtime and the `qgis-sdk scaffold` project generator; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
 | [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; no bridge API yet, so the entry module is deliberately empty (a test pins that) and ships JavaScript only - no `types` mapping, because `bunup` emits no declaration for an exportless entry; built with Bunup |
 | [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
 
@@ -41,7 +41,7 @@ Check the package wiring from the workspace - `__all__` is the entire public sur
 pixi run -e default python -c 'import qgis_sdk; print(qgis_sdk.__all__)'
 ```
 
-That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. The package README and tests describe the current surface, and `packages/qgis-sdk/tests/test_init.py` fails if a name is exported without a decision.
+That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. To start a plugin project that uses them, install the wheel (which provides the `qgis-sdk` console script) and run `qgis-sdk scaffold <directory>`; `qgis_sdk.scaffold` is the public API behind it, and `packages/qgis-sdk/README.md` covers Desktop versus standalone Qt mode and the headless QGIS Desktop load/unload evidence. The package README and tests describe the current surface, and `packages/qgis-sdk/tests/test_init.py` fails if a name is exported without a decision.
 
 ## Test and build
 
