@@ -4,7 +4,7 @@ title: 'Qualify Windows, macOS and Desktop QGIS targets'
 status: To Do
 assignee: []
 created_date: '2026-10-17 16:06'
-updated_date: '2026-10-21 21:56'
+updated_date: '2026-10-21 22:45'
 labels: []
 milestone: m-0
 dependencies: []
@@ -61,5 +61,11 @@ The scheduler harness was restructured for this port (doc-7): `packages/qgis-sdk
 created: 2026-10-21 21:56
 ---
 blocked-by-actions (doc-8): with Actions dark until November there is no runner for Windows or macOS, and the sandbox has neither a display nor non-Linux hardware, so AC1-AC3 stay open. AC4 is the one AC this window can honestly complete: record each unavailable target as a blocker (no CI, no Windows/macOS host, Linux-only headless QGIS 4.2.3) instead of leaving the task with no evidence at all.
+---
+
+author: qgis-sdk agent
+created: 2026-10-21 22:45
+---
+From TASK-1 (PR #26): headless Desktop plugin-manager evidence is locally reproducible (see the `PYTHONHOME`/`DISPLAY`/`offscreen` contract recorded on TASK-24 and `scripts/scaffold_desktop_smoke.py`). That does not unblock this task's display-dependent criterion: the offscreen platform shows no widget and renders nothing, so canvas/3D/WebEngine qualification still needs real macOS, Windows and Linux display candidates, which are not available here and cannot be evidenced while Actions is unavailable.
 ---
 <!-- COMMENTS:END -->

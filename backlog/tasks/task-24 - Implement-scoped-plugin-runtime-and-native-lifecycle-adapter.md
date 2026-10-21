@@ -4,7 +4,7 @@ title: Implement scoped plugin runtime and native lifecycle adapter
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:56'
+updated_date: '2026-10-21 22:45'
 labels: []
 milestone: m-1
 dependencies:
@@ -66,5 +66,11 @@ Validation this session: root test 256 passed/2 opt-in smoke skipped; root cover
 created: 2026-10-21 21:56
 ---
 blocked-by-actions (doc-8): AC3 asks for real Desktop startup/unload evidence with no fake fallback. A display session is unreachable from here and ci.yml's `cross-platform (${ matrix.os })` job is dark until November, so AC3 stays open. The headless lifecycle smoke (QGIS_SDK_HEADLESS_LIFECYCLE=1, passed 2026-10-21) is recorded as headless evidence only and does not satisfy AC3.
+---
+
+author: qgis-sdk agent
+created: 2026-10-21 22:45
+---
+Finding from TASK-1 (PR #26, harness `packages/qgis-sdk/scripts/scaffold_desktop_smoke.py`): a **real QGIS Desktop binary run is achievable in this sandbox** headless, so the Desktop-path part of this task is not blocked by the absence of a display. Three variables make it work and none is obvious: `QT_QPA_PLATFORM=offscreen`, a placeholder `DISPLAY` (QGIS exits immediately with 'QGIS starting in non-interactive mode not supported' when it is unset - it judges interactivity from that variable alone), and `PYTHONHOME` at the live prefix (QGIS carries its build-time prefix in the embedded interpreter, so a relocated install starts and then cannot even `import sys`, hanging on an error dialog with `--code` never running). Reuse the harness instead of rewriting it; note offscreen is still not a rendering or GUI qualification, so a criterion demanding visible GUI behaviour stays open.
 ---
 <!-- COMMENTS:END -->
