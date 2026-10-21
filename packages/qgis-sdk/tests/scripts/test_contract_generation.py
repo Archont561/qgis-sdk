@@ -14,8 +14,10 @@ from hypothesis import strategies as st
 from jsonschema import Draft202012Validator
 from mashumaro.codecs.json import JSONEncoder
 
-TEST_DIR = Path(__file__).resolve().parent
-BRIDGE_CONTRACTS = TEST_DIR.parents[1] / "qgis-sdk-bridge" / "tests" / "contracts"
+# scripts/ sits beside tests/, so the project root is the test dir's grandparent.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# The sibling qgis-sdk-bridge package sits one level above the project root.
+BRIDGE_CONTRACTS = PROJECT_ROOT.parent / "qgis-sdk-bridge" / "tests" / "contracts"
 SCHEMAS_DIR = BRIDGE_CONTRACTS / "generated" / "schemas"
 CASES: list[dict[str, Any]] = json.loads(
     (BRIDGE_CONTRACTS / "cases.json").read_text(encoding="utf-8")
@@ -45,7 +47,7 @@ def test_checked_in_schemas_match_python_dataclasses(
 def test_schema_export_is_deterministic_outside_the_workspace(
     tmp_path: Path, schemas: dict[str, dict[str, Any]]
 ) -> None:
-    exporter = TEST_DIR / "generate_contract.py"
+    exporter = PROJECT_ROOT / "scripts" / "generate_contract.py"
     command = [sys.executable, str(exporter), str(tmp_path)]
     subprocess.run(command, check=True, capture_output=True, text=True)
     first = {path.name: path.read_bytes() for path in tmp_path.glob("*.json")}

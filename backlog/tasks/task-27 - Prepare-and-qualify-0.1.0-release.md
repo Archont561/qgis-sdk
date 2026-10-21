@@ -4,6 +4,7 @@ title: Prepare and qualify 0.1.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
+updated_date: '2026-10-21 21:15'
 labels: []
 milestone: m-0
 dependencies:
@@ -12,6 +13,8 @@ dependencies:
   - TASK-12
   - TASK-13
   - TASK-23
+references:
+  - doc-7
 priority: high
 type: chore
 ordinal: 27000
@@ -30,3 +33,12 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-21 21:15
+---
+Open decision for the 0.1.0 boundary, recorded by the clean-code audit (doc-7): `qgis_sdk.hello()` and the bridge's `hello()` are placeholder public API - exported from `qgis_sdk/__init__.py`, documented as a smoke-test API in the package README, and their only test (`tests/test_init.py`) asserts a constant against itself. `tests/test_pure_imports.py` already proves the wiring they were standing in for, importing the package and every pure subpackage with native modules forbidden, so deleting the placeholders costs no coverage. Removal changes the public surface, so it is not a refactor and was deliberately not done here.
+---
+<!-- COMMENTS:END -->

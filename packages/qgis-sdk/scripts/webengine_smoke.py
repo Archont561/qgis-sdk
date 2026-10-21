@@ -7,7 +7,7 @@ machine-readable report describing what actually ran.
 
 Run it from the workspace root with the default Pixi environment::
 
-    pixi run -e default python packages/qgis-sdk/tests/qualification/webengine_smoke.py
+    pixi run -e default python packages/qgis-sdk/scripts/webengine_smoke.py
 
 The module is importable without Qt or QGIS: the environment and report
 helpers are pure, so the QGIS-free suite can test them, while the optional
@@ -24,7 +24,7 @@ import platform
 import re
 import sys
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 HEADLESS_PLATFORM = "offscreen"
@@ -88,6 +88,27 @@ class QualificationReport:
             and self.qgis_exited
         )
 
+    @classmethod
+    def unavailable(cls, error: str | None = None) -> QualificationReport:
+        """Return the report for a host that cannot offer QGIS or WebEngine.
+
+        Every stage is false and no version is known: the harness answers with this
+        instead of raising, so a broken environment still produces a machine-readable
+        report - and one place decides what "did not get that far" looks like.
+        """
+        return cls(
+            platform=platform.platform(),
+            python_version=platform.python_version(),
+            qgis_version=None,
+            qt_version=None,
+            chromium_version=None,
+            webengine_available=False,
+            qgis_initialised=False,
+            load_finished=False,
+            qgis_exited=False,
+            error=error,
+        )
+
     def to_dict(self) -> dict[str, object]:
         """Return the report as a JSON-serialisable mapping."""
         payload = asdict(self)
@@ -109,34 +130,13 @@ def run_smoke(
         os.environ[key] = value
     sys.path.insert(0, str(qgis_python_path(prefix)))
 
-    report = QualificationReport(
-        platform=platform.platform(),
-        python_version=platform.python_version(),
-        qgis_version=None,
-        qt_version=None,
-        chromium_version=None,
-        webengine_available=False,
-        qgis_initialised=False,
-        load_finished=False,
-        qgis_exited=False,
-    )
+    report = QualificationReport.unavailable()
     try:
         report = _run_headless_load(prefix, timeout_ms)
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001 - report a broken environment as a failure
         # The report records any failure instead of raising, so a broken
         # environment still produces machine-readable output.
-        report = QualificationReport(
-            platform=report.platform,
-            python_version=report.python_version,
-            qgis_version=report.qgis_version,
-            qt_version=report.qt_version,
-            chromium_version=report.chromium_version,
-            webengine_available=report.webengine_available,
-            qgis_initialised=report.qgis_initialised,
-            load_finished=report.load_finished,
-            qgis_exited=report.qgis_exited,
-            error=f"{type(error).__name__}: {error}",
-        )
+        report = replace(report, error=f"{type(error).__name__}: {error}")
     return report
 
 

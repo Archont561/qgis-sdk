@@ -76,16 +76,26 @@ The checked contract-generation examples live in `tests/contract_sample/` and ar
 
 ## Optional controlled-deployment adapter (experimental)
 
-`qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
+`qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound, which both it and the schema generator take from the one `qgis_sdk.models.MAX_SAFE_INTEGER` constant while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
 
-Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux/Python 3.14.8; Windows/QGIS coexistence, Desktop/WebEngine behavior, and Conda delivery are still qualification gates.
+Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8, which is the interpreter carrying PyQGIS in the workspace, and the QGIS-free suite additionally on CPython 3.11.2, the minimum supported version; the real-Qt harnesses have only been run under 3.14.8. Windows/QGIS coexistence, Desktop/WebEngine behavior, and Conda delivery are still qualification gates.
+
+## Developer scripts
+
+Standalone executables live in `scripts/` next to `src/`: they are runnable
+tools rather than test data, so they stay out of `tests/`, and they must stay out
+of `src/qgis_sdk/` because a wheel cannot ship a command that imports a display
+server. Each script is covered by a module in `tests/scripts/`, and the harnesses
+themselves are opt-in through the environment flags below. `scripts/` is not an
+importable package: the repository root already owns that top-level name, so
+tests import a harness by module name via `tests/conftest.py`.
 
 ## Headless QGIS and WebEngine qualification
 
-`tests/qualification/webengine_smoke.py` is a repeatable harness for the headless path QGIS uses to host a `QWebEngineView`. It starts a real QGIS application, loads a page in a real WebEngine view, tears QGIS down again and prints a machine-readable report:
+`scripts/webengine_smoke.py` is a repeatable harness for the headless path QGIS uses to host a `QWebEngineView`. It starts a real QGIS application, loads a page in a real WebEngine view, tears QGIS down again and prints a machine-readable report:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/tests/qualification/webengine_smoke.py
+pixi run -e default python packages/qgis-sdk/scripts/webengine_smoke.py
 ```
 
 ```json
@@ -115,10 +125,10 @@ The harness resolves everything it needs from the active prefix, so the same com
 
 Without the Chromium flags the WebEngine process fails with `eglInitialize: Failed to get system egl display`. ANGLE, EGL, dbus and PDAL messages printed during a run are noise and do not affect the result.
 
-`tests/test_qualification_webengine.py` covers the harness helpers in the QGIS-free suite. The end-to-end run is opt-in, because it needs a real QGIS installation:
+`tests/scripts/test_qualification_webengine.py` covers the harness helpers in the QGIS-free suite. The end-to-end run is opt-in, because it needs a real QGIS installation:
 
 ```sh
-QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_qualification_webengine.py
+QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_webengine.py
 ```
 
 The headless path is **not** a Desktop GUI or plugin-lifecycle qualification: the development sandbox has no display and no Xvfb, and no Windows or macOS QGIS candidate has been tested. `qgis_sdk.adapters.webengine` therefore only proves that the optional bindings can be located and that a missing installation is reported with an actionable error.
@@ -288,7 +298,7 @@ registration, menus and dialogs remain the caller's or later tasks' work.
 The headless lifecycle harness uses a real `QgsApplication` and the adapter:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/tests/qualification/desktop_lifecycle_smoke.py
+pixi run -e default python packages/qgis-sdk/scripts/desktop_lifecycle_smoke.py
 ```
 
 ```json
@@ -313,5 +323,34 @@ qualification; that evidence is still unavailable and tracked by TASK-33. Run
 the opt-in test with:
 
 ```sh
-QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_qualification_lifecycle.py
+QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_lifecycle.py
+```
+
+The Qt scheduler harness exercises the `StepScheduler` seam inside a real
+`QgsApplication` on the offscreen platform: alternating GUI phases and worker
+handoffs, cancellation acknowledgement, refusal of late reports after disposal,
+and quiesce blocking on an unresolved handoff. It compares tick latency while a
+worker is blocked against latency while phases are scheduled:
+
+```sh
+pixi run -e default python packages/qgis-sdk/scripts/qt_scheduler_smoke.py
+```
+
+```json
+{
+  "blocking_phase_max_ms": 61.412,
+  "passed": true,
+  "scheduled_phase_max_ms": 2.593,
+  "scope_review_criteria": [],
+  "verdict": "adopt-scheduler-seam"
+}
+```
+
+The numbers are one Linux/offscreen sample, not a latency guarantee; the
+reasoning and the repeated runs are recorded in
+`backlog/docs/plans/doc-6 - TASK-13-Qt-scheduler-spike-evidence.md`. Run the
+opt-in test with:
+
+```sh
+QGIS_SDK_QT_SCHEDULER=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_scheduler.py
 ```

@@ -5,7 +5,9 @@ from typing import Annotated, Literal
 
 from mashumaro.jsonschema.annotations import Maximum, Minimum
 
-# Test-only wire policy, not a public SDK type or runtime validator.
+# Test-only wire policy, not a public SDK type or runtime validator. The bound is
+# spelled out rather than imported from qgis_sdk.models so the generated schema is
+# checked against an independent value instead of the constant that produced it.
 SafeInteger = Annotated[int, Minimum(-9007199254740991), Maximum(9007199254740991)]
 
 

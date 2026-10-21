@@ -14,13 +14,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from qualification.desktop_lifecycle_smoke import (
+from desktop_lifecycle_smoke import (
     LifecycleReport,
     headless_environment,
 )
 
-TEST_DIR = Path(__file__).resolve().parent
-SMOKE_SCRIPT = TEST_DIR / "qualification" / "desktop_lifecycle_smoke.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+SMOKE_SCRIPT = SCRIPTS_DIR / "desktop_lifecycle_smoke.py"
 SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_LIFECYCLE"
 
 
@@ -62,20 +62,7 @@ def test_report_passes_only_when_every_lifecycle_stage_succeeds() -> None:
     assert successful_report().passed is True
     assert successful_report().to_dict()["passed"] is True
 
-    failed = LifecycleReport(
-        platform="Linux-6.1.0-x86_64",
-        python_version="3.14.8",
-        qgis_version=None,
-        qt_version=None,
-        qgis_initialised=False,
-        plugin_started=False,
-        action_names=(),
-        action_result=None,
-        plugin_unloaded=False,
-        owned_resources_released=False,
-        qgis_exited=False,
-        error="QGIS import failed",
-    )
+    failed = LifecycleReport.unavailable(error="QGIS import failed")
 
     assert failed.passed is False
     assert failed.to_dict()["error"] == "QGIS import failed"
@@ -109,7 +96,7 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 def test_headless_lifecycle_smoke_starts_and_unloads_a_plugin() -> None:
     result = subprocess.run(
         [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=TEST_DIR.parents[2],
+        cwd=SCRIPTS_DIR.parents[1],
         capture_output=True,
         text=True,
         timeout=180,

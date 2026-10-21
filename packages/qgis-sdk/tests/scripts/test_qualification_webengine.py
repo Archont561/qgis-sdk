@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from qualification.webengine_smoke import (
+from webengine_smoke import (
     CHROMIUM_FLAGS,
     QualificationReport,
     chromium_version,
@@ -17,8 +17,8 @@ from qualification.webengine_smoke import (
     qgis_python_path,
 )
 
-TEST_DIR = Path(__file__).resolve().parent
-SMOKE_SCRIPT = TEST_DIR / "qualification" / "webengine_smoke.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+SMOKE_SCRIPT = SCRIPTS_DIR / "webengine_smoke.py"
 SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_SMOKE"
 
 
@@ -85,17 +85,8 @@ def test_report_is_qualified_only_when_every_stage_succeeds() -> None:
     assert successful.qualified is True
     assert successful.to_dict()["qualified"] is True
 
-    failed = QualificationReport(
-        platform="Linux-6.1.0-x86_64",
-        python_version="3.14.8",
-        qgis_version=None,
-        qt_version=None,
-        chromium_version=None,
-        webengine_available=False,
-        qgis_initialised=False,
-        load_finished=False,
-        qgis_exited=False,
-        error="Qt WebEngine bindings are not installed",
+    failed = QualificationReport.unavailable(
+        error="Qt WebEngine bindings are not installed"
     )
 
     assert failed.qualified is False
@@ -141,7 +132,7 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 def test_headless_webengine_smoke_loads_a_page_and_exits_cleanly() -> None:
     result = subprocess.run(
         [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=TEST_DIR.parents[2],
+        cwd=SCRIPTS_DIR.parents[1],
         capture_output=True,
         text=True,
         timeout=180,
