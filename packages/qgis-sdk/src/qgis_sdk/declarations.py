@@ -129,25 +129,28 @@ def _hints(target: Any, path: str) -> dict[str, Any]:
         ) from error
 
 
+# Matched by identity rather than lookup: an Annotated extra can be an unhashable
+# object, and a dict lookup would raise on the very declarations this must reject.
+_PRIMITIVE_JSON_TYPES: dict[Any, str] = {
+    str: "string",
+    bool: "boolean",
+    float: "number",
+    int: "integer",
+    type(None): "null",
+    None: "null",
+}
+
+
 def _schema(
     annotation: Any, path: str, *, result: bool, stack: tuple = ()
 ) -> dict[str, Any]:
-    primitives = {
-        str: "string",
-        bool: "boolean",
-        float: "number",
-        int: "integer",
-        type(None): "null",
-        None: "null",
-    }
+    """Describe one annotation using the JSON Schema subset the contract allows."""
     primitive = next(
-        (name for cls, name in primitives.items() if annotation is cls), None
+        (name for cls, name in _PRIMITIVE_JSON_TYPES.items() if annotation is cls),
+        None,
     )
     if primitive is not None:
-        schema = {"type": primitive}
-        if annotation is int:
-            schema.update(minimum=-MAX_SAFE_INTEGER, maximum=MAX_SAFE_INTEGER)
-        return schema
+        return _primitive_schema(annotation, primitive)
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
         return {
@@ -159,43 +162,62 @@ def _schema(
             "items": _schema(args[0], path + "[]", result=result, stack=stack),
         }
     if origin is Literal:
-        if not all(type(value) in (str, int, bool, type(None)) for value in args):
-            raise QgisSdkDeclarationError(
-                f"{path}: Literal supports only JSON strings, safe integers, booleans and null"
-            )
-        if any(type(value) is int and abs(value) > MAX_SAFE_INTEGER for value in args):
-            raise QgisSdkDeclarationError(
-                f"{path}: Literal integer exceeds the safe-integer range"
-            )
-        return {"enum": list(args)}
+        return _literal_schema(args, path)
     if inspect.isclass(annotation) and is_dataclass(annotation):
-        if annotation in stack:
-            raise QgisSdkDeclarationError(
-                f"{path}: recursive dataclasses are not supported"
-            )
-        hints = _hints(annotation, path)
-        properties, required = {}, []
-        for field in fields(annotation):
-            properties[field.name] = _schema(
-                hints[field.name],
-                f"{path}.{field.name}",
-                result=result,
-                stack=(*stack, annotation),
-            )
-            if result or (
-                field.default is MISSING and field.default_factory is MISSING
-            ):
-                required.append(field.name)
-        return _object_schema(properties, required)
+        return _dataclass_schema(annotation, path, result=result, stack=stack)
     raise QgisSdkDeclarationError(
         f"{path}: unsupported annotation {annotation!r}; use JSON primitives, list, union, Literal or a dataclass"
     )
 
 
-def _describe_action(
-    name: str, method: Any, declaration: _Metadata
-) -> ActionDescription:
-    path = f"action {declaration.id} ({name})"
+def _primitive_schema(annotation: Any, json_type: str) -> dict[str, Any]:
+    """Bound integers to the magnitude a JavaScript peer reads back exactly."""
+    if annotation is not int:
+        return {"type": json_type}
+    return {
+        "type": json_type,
+        "minimum": -MAX_SAFE_INTEGER,
+        "maximum": MAX_SAFE_INTEGER,
+    }
+
+
+def _literal_schema(args: tuple[Any, ...], path: str) -> dict[str, Any]:
+    """Enumerate literal values the wire can carry without reinterpretation."""
+    if not all(type(value) in (str, int, bool, type(None)) for value in args):
+        raise QgisSdkDeclarationError(
+            f"{path}: Literal supports only JSON strings, safe integers, booleans and null"
+        )
+    if any(type(value) is int and abs(value) > MAX_SAFE_INTEGER for value in args):
+        raise QgisSdkDeclarationError(
+            f"{path}: Literal integer exceeds the safe-integer range"
+        )
+    return {"enum": list(args)}
+
+
+def _dataclass_schema(
+    annotation: type[Any], path: str, *, result: bool, stack: tuple
+) -> dict[str, Any]:
+    """Describe a declared dataclass, refusing a cycle the wire cannot express."""
+    if annotation in stack:
+        raise QgisSdkDeclarationError(
+            f"{path}: recursive dataclasses are not supported"
+        )
+    hints = _hints(annotation, path)
+    properties, required = {}, []
+    for field in fields(annotation):
+        properties[field.name] = _schema(
+            hints[field.name],
+            f"{path}.{field.name}",
+            result=result,
+            stack=(*stack, annotation),
+        )
+        if result or (field.default is MISSING and field.default_factory is MISSING):
+            required.append(field.name)
+    return _object_schema(properties, required)
+
+
+def _require_plain_method(method: Any, path: str) -> None:
+    """Refuse anything that would borrow the host's loop instead of the SDK's."""
     if (
         not inspect.isfunction(method)
         or inspect.iscoroutinefunction(method)
@@ -205,7 +227,10 @@ def _describe_action(
         raise QgisSdkDeclarationError(
             f"{path}: requires an ordinary synchronous instance method"
         )
-    parameters = list(inspect.signature(method).parameters.values())
+
+
+def _require_self_first(parameters: list[Any], path: str) -> None:
+    """Require a bound method, so the descriptor is per plugin instance."""
     if (
         not parameters
         or parameters[0].name != "self"
@@ -216,9 +241,14 @@ def _describe_action(
         )
     ):
         raise QgisSdkDeclarationError(f"{path}: first parameter must be self")
-    hints = _hints(method, path)
+
+
+def _action_inputs(
+    parameters: list[Any], hints: dict[str, Any], path: str
+) -> tuple[dict[str, Any], list[str]]:
+    """Describe the accepted inputs and say which of them must arrive."""
     properties, required = {}, []
-    for parameter in parameters[1:]:
+    for parameter in parameters:
         if parameter.kind not in (
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
             inspect.Parameter.KEYWORD_ONLY,
@@ -233,6 +263,18 @@ def _describe_action(
         )
         if parameter.default is inspect.Parameter.empty:
             required.append(parameter.name)
+    return properties, required
+
+
+def _describe_action(
+    name: str, method: Any, declaration: _Metadata
+) -> ActionDescription:
+    path = f"action {declaration.id} ({name})"
+    _require_plain_method(method, path)
+    parameters = list(inspect.signature(method).parameters.values())
+    _require_self_first(parameters, path)
+    hints = _hints(method, path)
+    properties, required = _action_inputs(parameters[1:], hints, path)
     result = _schema(
         hints.get("return", inspect.Signature.empty), f"{path}.return", result=True
     )
