@@ -1,9 +1,15 @@
 """The ``qgis-sdk`` command line: argument parsing over the public API, nothing else.
 
-The workspace rule that keeps display-dependent tools out of ``src/qgis_sdk`` and
-in ``packages/qgis-sdk/scripts`` still holds: this entry point imports neither QGIS
-nor Qt and needs no display, because generating a project is a file operation. The
-logic lives in :mod:`qgis_sdk.scaffold` so other callers reach it without a shell.
+This module is what the wheel's ``qgis-sdk`` console script points at, and
+``python -m qgis_sdk`` reaches the same :func:`main`, so a pip or
+``pixi add --pypi`` install gets the command without an activated environment. It is
+the one executable-shaped file inside ``src/qgis_sdk`` and it is there for that
+reason: unlike the automation tools in ``packages/qgis-sdk/scripts``, which are
+development-only and are not part of either distribution, generating a project is a
+library operation with no display, no QGIS and no Qt, so shipping it is the point.
+
+All behaviour lives in :mod:`qgis_sdk.scaffold`, so callers that do not want a shell
+reach the same API directly.
 """
 
 from __future__ import annotations
@@ -119,3 +125,7 @@ def _report(
 def main() -> None:
     """Run the command line; the wheel registers this as ``qgis-sdk``."""
     app()
+
+
+if __name__ == "__main__":
+    main()

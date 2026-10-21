@@ -87,18 +87,15 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
 
 `qgis-sdk scaffold <directory>` writes a minimal but genuinely loadable QGIS plugin
 project, built from the public declaration API instead of generated boilerplate.
-The command is a thin Typer layer in `src/qgis_sdk/cli.py` over the public
-`qgis_sdk.scaffold` API, and Typer is a runtime dependency of the wheel for this
-command alone:
+The command is a thin Typer layer in `src/qgis_sdk/__main__.py` over the public
+`qgis_sdk.scaffold` API, so a pip or `pixi add --pypi` install gets the console
+script and `python -m qgis_sdk` reaches the identical entry point. Typer is a
+runtime dependency of the wheel for this command alone:
 
 ```sh
-# the installed console script
-qgis-sdk scaffold /tmp/demo --title "Demo Tools"
-
-# or from workspace source, driving the public API the CLI wraps
-pixi run -e default python -c 'from pathlib import Path
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
-write_scaffold(ScaffoldOptions.resolve("demo_tools"), Path("/tmp/demo"))'
+qgis-sdk scaffold /tmp/demo --title "Demo Tools"            # installed console script
+python -m qgis_sdk scaffold /tmp/demo --title "Demo Tools"  # same command via -m
+pixi run -e default python -m qgis_sdk scaffold /tmp/demo   # from workspace source
 ```
 
 `ScaffoldOptions.resolve` validates everything before a single byte is written: the
@@ -168,6 +165,14 @@ server. Each script is covered by a module in `tests/scripts/`, and the harnesse
 themselves are opt-in through the environment flags below. `scripts/` is not an
 importable package: the repository root already owns that top-level name, so
 tests import a harness by module name via `tests/conftest.py`.
+
+None of it is shipped. `[tool.hatch.build.targets.wheel].packages` packs
+`src/qgis_sdk` and nothing else, and `recipe.yaml` builds the Conda package by
+pip-installing that same project, so neither the wheel nor the Conda artifact can
+carry a harness, a generator or a test path. The one executable-shaped file inside
+the package is `qgis_sdk/__main__.py`, and it belongs there because it *is* the
+distributed command; `scripts/` would be the wrong home for it, since a user who
+installed the wheel has no `scripts/` directory to point at.
 
 ## Headless QGIS and WebEngine qualification
 

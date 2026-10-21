@@ -83,7 +83,8 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
 
         sys.meta_path.insert(0, RejectNative())
         for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
-                       'qgis_sdk.services', 'qgis_sdk.scaffold', 'qgis_sdk.core',
+                       'qgis_sdk.services', 'qgis_sdk.scaffold', 'qgis_sdk.__main__',
+                       'qgis_sdk.core',
                        'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
                        'qgis_sdk.adapters.desktop',
                        'qgis_sdk.adapters.pydantic',
