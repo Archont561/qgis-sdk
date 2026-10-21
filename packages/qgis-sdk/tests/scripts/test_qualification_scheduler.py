@@ -21,6 +21,7 @@ from qt_scheduler_smoke import (
     VERDICT_REVIEW,
     GapSummary,
     SchedulerReport,
+    _Heartbeat,
     decide_verdict,
     delivered_only_on,
     ran_on_a_different_thread,
@@ -30,6 +31,29 @@ from qt_scheduler_smoke import (
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 SMOKE_SCRIPT = SCRIPTS_DIR / "qt_scheduler_smoke.py"
 SMOKE_ENV_FLAG = "QGIS_SDK_QT_SCHEDULER"
+
+
+def test_a_phase_measures_only_the_heartbeats_after_its_own_baseline() -> None:
+    """The sampler is shared by every phase, so a phase must not read another's gaps."""
+    heartbeat = _Heartbeat([1.0, 1.01, 1.025, 1.03])
+
+    assert heartbeat.baseline_index() == 3
+    assert heartbeat.gaps_since(1) == pytest.approx([15.0, 5.0])
+    assert heartbeat.has_at_least(3)
+    assert not heartbeat.has_at_least(5)
+    summary = heartbeat.phase(1)
+    assert summary.count == 2
+    assert summary.max_ms == pytest.approx(15.0)
+    assert summary.mean_ms == pytest.approx(10.0)
+
+
+def test_an_unstarted_heartbeat_yields_no_gaps_rather_than_a_negative_index() -> None:
+    """A port that samples before the first beat must summarise zero, not crash."""
+    heartbeat = _Heartbeat([])
+
+    assert heartbeat.baseline_index() == 0
+    assert heartbeat.gaps_since(0) == []
+    assert heartbeat.phase(0).count == 0
 
 
 def all_criteria() -> dict[str, bool]:

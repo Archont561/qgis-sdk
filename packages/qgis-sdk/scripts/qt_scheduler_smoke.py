@@ -37,6 +37,15 @@ STUCK_ACK_MS = 250
 QUIESCE_TICKS = 8
 PHASE_DEADLINE_MS = 8000
 
+# Sampling and draining knobs for the phases below, kept beside the budgets so a
+# port to another platform can retune one list instead of hunting literals.
+GUI_STALL_SAMPLES = 3
+CANCELLATION_POLL_ROUNDS = 10_000
+CANCELLATION_POLL_INTERVAL_S = 0.001
+LATE_REPORT_DELAY_MS = 50
+DISPOSED_DRAIN_S = 0.2
+POOL_DRAIN_MS = 2000
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 SOURCE_ROOT = SCRIPT_DIR.parent / "src"
 
@@ -201,67 +210,94 @@ def _pump_once(application: object, scheduler: object) -> None:
     time.sleep(0.001)
 
 
-def _run_phases(application: object) -> SchedulerReport:
-    """Exercise the scheduler against a live Qt event loop and thread pool."""
-    from PyQt6.QtCore import QT_VERSION_STR, QRunnable, QThread, QThreadPool
-    from qgis_sdk.core import Handoff, JobState, ResourceScope, StepScheduler
-    from qgis_sdk.models import QgisSdkJobCancelledError
+@dataclass(frozen=True)
+class _Heartbeat:
+    """Heartbeat timestamps sampled on the GUI thread, and the windows inside them.
 
-    class _Worker(QRunnable):
-        """Run a callable on the pool; the callable owns its own reporting."""
+    A phase takes the baseline index before it starts and reads its latency picture
+    out of the same marks afterwards, which is why measuring and stepping stay apart.
+    """
 
-        def __init__(self, action: Callable[[], None]) -> None:
-            super().__init__()
-            self._action = action
-            self.setAutoDelete(True)
+    marks: list[float]
 
-        def run(self) -> None:
-            self._action()
+    def baseline_index(self) -> int:
+        """Return the index of the most recent heartbeat, as a gap starting point."""
+        return max(len(self.marks) - 1, 0)
 
-    gui_thread = int(QThread.currentThreadId())
-    marks: list[float] = []
-
-    from PyQt6.QtCore import QTimer
-
-    timer = QTimer()
-    timer.setInterval(HEARTBEAT_INTERVAL_MS)
-
-    def beat() -> None:
-        marks.append(time.perf_counter())
-
-    timer.timeout.connect(beat)
-    timer.start()
-
-    def gaps_since(start_index: int) -> list[float]:
+    def gaps_since(self, start_index: int) -> list[float]:
         """Return the inter-heartbeat gaps from a recorded baseline index onward."""
-        window = marks[start_index:]
+        window = self.marks[start_index:]
         return [
             (window[index] - window[index - 1]) * 1000
             for index in range(1, len(window))
         ]
 
-    def baseline_index() -> int:
-        """Return the index of the most recent heartbeat, as a gap starting point."""
-        return max(len(marks) - 1, 0)
+    def phase(self, start_index: int) -> GapSummary:
+        """Summarise the gaps sampled since a phase took its baseline."""
+        return summarise_gaps(self.gaps_since(start_index))
 
-    pool = QThreadPool.globalInstance()
+    def has_at_least(self, count: int) -> bool:
+        """Whether this many heartbeats have been sampled."""
+        return len(self.marks) >= count
 
-    # Phases 1-3 run under one owner scope. Disposal gets its own scope, because a
-    # disposed scope must refuse new work (ADR-21) rather than be reused.
-    scope = ResourceScope()
-    scheduler = StepScheduler(scope)
 
-    # Phase 1 (control): a blocking handler on the GUI thread must starve the loop.
-    _pump(application, scheduler, lambda: len(marks) >= 3)
-    control_start = baseline_index()
+@dataclass(frozen=True)
+class _Harness:
+    """What every phase shares: the live loop, the pool, and the GUI thread id."""
+
+    application: object
+    pool: object
+    worker: Callable[[Callable[[], None]], object]
+    gui_thread: int
+    heartbeat: _Heartbeat
+
+    def start(self, action: Callable[[], None]) -> None:
+        """Run ``action`` on the pool, so it is provably not on the GUI thread."""
+        self.pool.start(self.worker(action))
+
+    def pump(self, scheduler: object, done: Callable[[], bool]) -> bool:
+        """Drive the loop and ``scheduler`` until ``done`` or the phase deadline."""
+        return _pump(self.application, scheduler, done)
+
+
+@dataclass(frozen=True)
+class _ScheduledEvidence:
+    """Thread ids and the value carried by one off-thread handoff."""
+
+    summary: GapSummary
+    polled: bool
+    worker_thread_ids: tuple[int, ...]
+    delivery_thread_ids: tuple[int, ...]
+    results: tuple[object, ...]
+
+
+@dataclass(frozen=True)
+class _ReplacementEvidence:
+    """What a stuck job did to an in-process replacement attempt."""
+
+    refused: bool
+    blocker: str | None
+    still_waiting: bool
+
+
+def _phase_blocking_control(
+    harness: _Harness, scheduler: object
+) -> tuple[GapSummary, bool]:
+    """Phase 1 (control): a blocking handler on the GUI thread must starve the loop."""
+    heartbeat = harness.heartbeat
+    harness.pump(scheduler, lambda: heartbeat.has_at_least(GUI_STALL_SAMPLES))
+    start = heartbeat.baseline_index()
     time.sleep(BLOCKING_HANDLER_MS / 1000)
-    event_loop_polled = _pump(
-        application, scheduler, lambda: len(marks) > control_start + 1
-    )
-    blocking_phase = summarise_gaps(gaps_since(control_start))
+    polled = harness.pump(scheduler, lambda: len(heartbeat.marks) > start + 1)
+    return heartbeat.phase(start), polled
 
-    # Phase 2: the same duration of work off-thread, resumed on the GUI thread.
-    scheduled_start = baseline_index()
+
+def _phase_scheduled_work(harness: _Harness, scheduler: object) -> _ScheduledEvidence:
+    """Phase 2: the same duration of work off-thread, resumed on the GUI thread."""
+    from PyQt6.QtCore import QThread
+    from qgis_sdk.core import Handoff
+
+    start = harness.heartbeat.baseline_index()
     handoff = Handoff()
     worker_ids: list[int] = []
     delivery_ids: list[int] = []
@@ -278,13 +314,27 @@ def _run_phases(application: object) -> SchedulerReport:
         handoff.resolve("payload")
 
     job = scheduler.submit(scheduled())
-    pool.start(_Worker(do_work))
-    scheduled_polled = _pump(application, scheduler, lambda: job.state.settled)
-    scheduled_phase = summarise_gaps(gaps_since(scheduled_start))
+    harness.start(do_work)
+    polled = harness.pump(scheduler, lambda: job.state.settled)
+    return _ScheduledEvidence(
+        summary=harness.heartbeat.phase(start),
+        polled=polled,
+        worker_thread_ids=tuple(worker_ids),
+        delivery_thread_ids=tuple(delivery_ids),
+        results=tuple(results),
+    )
 
-    # Phase 3: cancellation is cooperative - the worker acknowledges, then cleanup runs.
+
+def _phase_cancellation(
+    harness: _Harness, scheduler: object
+) -> tuple[tuple[int, ...], bool, bool]:
+    """Phase 3: cancellation is cooperative - the worker acknowledges, then cleanup runs."""
+    from PyQt6.QtCore import QThread
+    from qgis_sdk.core import Handoff
+    from qgis_sdk.models import QgisSdkJobCancelledError
+
     cancel_handoff = Handoff()
-    cancel_worker_ids: list[int] = []
+    worker_ids: list[int] = []
     iterations: list[int] = []
     cancelled: list[bool] = []
 
@@ -296,11 +346,14 @@ def _run_phases(application: object) -> SchedulerReport:
             raise
 
     def do_cancellable_work() -> None:
-        cancel_worker_ids.append(int(QThread.currentThreadId()))
+        worker_ids.append(int(QThread.currentThreadId()))
         rounds = 0
-        while rounds < 10_000 and not cancel_job.cancellation.is_cancelled():
+        while (
+            rounds < CANCELLATION_POLL_ROUNDS
+            and not cancel_job.cancellation.is_cancelled()
+        ):
             rounds += 1
-            time.sleep(0.001)
+            time.sleep(CANCELLATION_POLL_INTERVAL_S)
         iterations.append(rounds)
         cancel_handoff.resolve("acknowledged")
 
@@ -308,14 +361,21 @@ def _run_phases(application: object) -> SchedulerReport:
     # Start the job into its suspension first: cancelling a queued job runs no
     # author code at all, which would not exercise the cooperative path here.
     scheduler.tick()
-    pool.start(_Worker(do_cancellable_work))
+    harness.start(do_cancellable_work)
     time.sleep(WORKER_DURATION_MS / 1000)
     cancel_job.cancel()
-    _pump(application, scheduler, lambda: cancel_job.state.settled)
-    worker_acknowledged = bool(iterations) and cancelled == [True]
-    scope.close()
+    harness.pump(scheduler, lambda: cancel_job.state.settled)
+    return (
+        tuple(worker_ids),
+        bool(iterations) and cancelled == [True],
+        cancelled == [True],
+    )
 
-    # Phase 4: a report that arrives after the owner disposed must not be delivered.
+
+def _phase_late_report(harness: _Harness) -> bool:
+    """Phase 4: a report that arrives after the owner disposed must not be delivered."""
+    from qgis_sdk.core import Handoff, JobState, ResourceScope, StepScheduler
+
     late_scope = ResourceScope()
     late_scheduler = StepScheduler(late_scope)
     late_handoff = Handoff()
@@ -328,19 +388,23 @@ def _run_phases(application: object) -> SchedulerReport:
     late_scheduler.tick()
 
     def report_late() -> None:
-        time.sleep(0.05)
+        time.sleep(LATE_REPORT_DELAY_MS / 1000)
         late_handoff.resolve("too late")
 
-    pool.start(_Worker(report_late))
+    harness.start(report_late)
     late_scope.close()
-    _pump_for(application, late_scheduler, 0.2)
-    late_report_dropped = (
+    _pump_for(harness.application, late_scheduler, DISPOSED_DRAIN_S)
+    return (
         late_scheduler.dropped_reports == 1
         and late_deliveries == []
         and late_job.state is JobState.FAILED
     )
 
-    # Phase 5: stuck work that ignores cancellation refuses an in-process replacement.
+
+def _phase_stuck_replacement(harness: _Harness) -> _ReplacementEvidence:
+    """Phase 5: stuck work that ignores cancellation refuses an in-process replacement."""
+    from qgis_sdk.core import Handoff, JobState, ResourceScope, StepScheduler
+
     stuck_scope = ResourceScope()
     stuck_scheduler = StepScheduler(stuck_scope)
     stuck_handoff = Handoff()
@@ -354,33 +418,92 @@ def _run_phases(application: object) -> SchedulerReport:
         time.sleep(STUCK_ACK_MS / 1000)
         stuck_handoff.resolve("late acknowledgement")
 
-    pool.start(_Worker(acknowledge_late))
+    harness.start(acknowledge_late)
     stuck_scheduler.tick()
     outcome = stuck_scheduler.quiesce(max_ticks=QUIESCE_TICKS)
     blocker = outcome.blockers[0] if outcome.blockers else None
-    refusal_left_the_job_running = stuck_job.state is JobState.WAITING
+    still_waiting = stuck_job.state is JobState.WAITING
     stuck_scheduler.resume()
-    _pump(application, stuck_scheduler, lambda: stuck_job.state.settled)
+    harness.pump(stuck_scheduler, lambda: stuck_job.state.settled)
     stuck_scope.close()
+    return _ReplacementEvidence(
+        refused=outcome.refused and bool(blocker) and still_waiting,
+        blocker=blocker,
+        still_waiting=still_waiting,
+    )
+
+
+def _run_phases(application: object) -> SchedulerReport:
+    """Exercise the scheduler against a live Qt event loop and thread pool.
+
+    Each phase owns its own measurement and evidence; this function only wires the
+    shared harness together and assembles the report, so porting one phase to a new
+    platform cannot silently change what another one asserts.
+    """
+    from PyQt6.QtCore import QT_VERSION_STR, QRunnable, QThread, QThreadPool, QTimer
+    from qgis_sdk.core import ResourceScope, StepScheduler
+
+    class _Worker(QRunnable):
+        """Run a callable on the pool; the callable owns its own reporting."""
+
+        def __init__(self, action: Callable[[], None]) -> None:
+            super().__init__()
+            self._action = action
+            self.setAutoDelete(True)
+
+        def run(self) -> None:
+            self._action()
+
+    marks: list[float] = []
+
+    def beat() -> None:
+        marks.append(time.perf_counter())
+
+    timer = QTimer()
+    timer.setInterval(HEARTBEAT_INTERVAL_MS)
+    timer.timeout.connect(beat)
+    timer.start()
+
+    harness = _Harness(
+        application=application,
+        pool=QThreadPool.globalInstance(),
+        worker=_Worker,
+        gui_thread=int(QThread.currentThreadId()),
+        heartbeat=_Heartbeat(marks),
+    )
+
+    # Phases 1-3 run under one owner scope. Disposal gets its own scope, because a
+    # disposed scope must refuse new work (ADR-21) rather than be reused.
+    scope = ResourceScope()
+    scheduler = StepScheduler(scope)
+    blocking_phase, control_polled = _phase_blocking_control(harness, scheduler)
+    scheduled = _phase_scheduled_work(harness, scheduler)
+    cancel_worker_ids, worker_acknowledged, cleanup_ran = _phase_cancellation(
+        harness, scheduler
+    )
+    scope.close()
+
+    late_report_dropped = _phase_late_report(harness)
+    replacement = _phase_stuck_replacement(harness)
 
     timer.stop()
-    pool.waitForDone(2000)
+    harness.pool.waitForDone(POOL_DRAIN_MS)
 
     criteria = {
-        "gui_responsive_for_scheduled_work": scheduled_phase.responsive(
-            GUI_GAP_BUDGET_MS
-        )
+        "gui_responsive_for_scheduled_work": scheduled.polled
+        and control_polled
+        and scheduled.summary.responsive(GUI_GAP_BUDGET_MS)
         and blocking_phase.stalled(GUI_GAP_BUDGET_MS),
-        "handoff_delivered_on_gui_thread": delivered_only_on(gui_thread, delivery_ids)
-        and results == ["payload"],
+        "handoff_delivered_on_gui_thread": delivered_only_on(
+            harness.gui_thread, list(scheduled.delivery_thread_ids)
+        )
+        and scheduled.results == ("payload",),
         "work_ran_off_the_gui_thread": ran_on_a_different_thread(
-            gui_thread, worker_ids
+            harness.gui_thread, list(scheduled.worker_thread_ids)
         ),
         "worker_acknowledged_cancellation": worker_acknowledged,
         "late_report_dropped_after_disposal": late_report_dropped,
-        "replacement_refused_while_stuck": outcome.refused
-        and bool(blocker)
-        and refusal_left_the_job_running,
+        "replacement_refused_while_stuck": replacement.refused,
     }
     verdict, reasons = decide_verdict(criteria)
 
@@ -390,22 +513,22 @@ def _run_phases(application: object) -> SchedulerReport:
         qgis_version=_qgis_version(),
         qt_version=QT_VERSION_STR,
         qgis_initialised=True,
-        event_loop_polled=event_loop_polled and scheduled_polled,
-        gui_thread_id=gui_thread,
-        worker_thread_ids=tuple(worker_ids + cancel_worker_ids),
-        delivery_thread_ids=tuple(delivery_ids),
+        event_loop_polled=control_polled and scheduled.polled,
+        gui_thread_id=harness.gui_thread,
+        worker_thread_ids=scheduled.worker_thread_ids + cancel_worker_ids,
+        delivery_thread_ids=scheduled.delivery_thread_ids,
         blocking_phase=blocking_phase,
-        scheduled_phase=scheduled_phase,
+        scheduled_phase=scheduled.summary,
         gui_responsive_for_scheduled_work=criteria["gui_responsive_for_scheduled_work"],
         handoff_delivered_on_gui_thread=criteria["handoff_delivered_on_gui_thread"],
         work_ran_off_the_gui_thread=criteria["work_ran_off_the_gui_thread"],
         worker_acknowledged_cancellation=criteria["worker_acknowledged_cancellation"],
-        author_cleanup_ran=cancelled == [True],
+        author_cleanup_ran=cleanup_ran,
         late_report_dropped_after_disposal=criteria[
             "late_report_dropped_after_disposal"
         ],
         replacement_refused_while_stuck=criteria["replacement_refused_while_stuck"],
-        refused_blocker=blocker,
+        refused_blocker=replacement.blocker,
         verdict=verdict,
         scope_review_criteria=reasons,
     )

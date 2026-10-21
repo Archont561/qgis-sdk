@@ -122,7 +122,7 @@ def run_smoke(
     )
     try:
         report = _run_headless_load(prefix, timeout_ms)
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001 - report a broken environment as a failure
         # The report records any failure instead of raising, so a broken
         # environment still produces machine-readable output.
         report = QualificationReport(
