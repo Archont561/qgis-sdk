@@ -41,7 +41,7 @@ Check the package wiring from the workspace - `__all__` is the entire public sur
 pixi run -e default python -c 'import qgis_sdk; print(qgis_sdk.__all__)'
 ```
 
-That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. To start a plugin project that uses them, install the wheel (which provides the `qgis-sdk` console script) and run `qgis-sdk scaffold <directory>`; `qgis_sdk.scaffold` is the public API behind it, and `packages/qgis-sdk/README.md` covers Desktop versus standalone Qt mode and the headless QGIS Desktop load/unload evidence. The package README and tests describe the current surface, and `packages/qgis-sdk/tests/test_init.py` fails if a name is exported without a decision.
+That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. To start a plugin project that uses them, install the package (`pip install qgis-sdk` or `pixi add --pypi qgis-sdk`) and run `qgis-sdk scaffold <directory>`, which is the same entry point as `python -m qgis_sdk`; `qgis_sdk.scaffold` is the public API behind it, and `packages/qgis-sdk/README.md` covers Desktop versus standalone Qt mode and the headless QGIS Desktop load/unload evidence. The package README and tests describe the current surface, and `packages/qgis-sdk/tests/test_init.py` fails if a name is exported without a decision.
 
 ## Test and build
 

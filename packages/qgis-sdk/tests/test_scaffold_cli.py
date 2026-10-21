@@ -1,11 +1,12 @@
-"""The ``qgis-sdk`` command: the same plan, reachable from a shell."""
+"""The ``qgis-sdk`` command: the same plan, reachable from a shell or ``-m``."""
 
+import runpy
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from qgis_sdk.cli import app, main
+from qgis_sdk.__main__ import app, main
 from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
 from typer.testing import CliRunner
 
@@ -189,3 +190,22 @@ def test_the_generated_starter_tests_pass_inside_the_generated_project(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "2 passed" in result.stdout
+
+
+def test_dash_m_reaches_the_same_command_as_the_console_script(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``python -m qgis_sdk`` must not be a second implementation of the command."""
+    target = tmp_path / "demo_tools"  # the package name follows the target directory
+    monkeypatch.setattr(sys, "argv", ["qgis_sdk", "scaffold", str(target)])
+    # The module is already imported by this file's own import, so drop the cached
+    # copy: runpy must execute the entry point the way `-m` does, not reuse it.
+    monkeypatch.delitem(sys.modules, "qgis_sdk.__main__", raising=False)
+
+    with pytest.raises(SystemExit) as exit_info:  # click exits zero when standalone
+        runpy.run_module("qgis_sdk", run_name="__main__")
+
+    assert exit_info.value.code == 0
+    assert (target / "pyproject.toml").is_file()
+    assert (target / "demo_tools" / "metadata.txt").is_file()
+    assert (target / "tests" / "test_plugin_smoke.py").is_file()
