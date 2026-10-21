@@ -130,15 +130,26 @@ class Handoff:
         self._report(_Report(error, None))
 
     def _report(self, report: _Report) -> None:
+        """Hand a worker outcome to the owning job, or count it as too late.
+
+        A report for a detached handoff is dropped rather than queued: nothing is
+        ever delivered to an owner that disposal already settled.
+        """
         if isinstance(self._owner, _Discarded):
             self._dropped += 1
             return
         self._box.put(report)
 
     def __await__(self) -> Generator[Handoff, object, object]:
+        """Yield this handoff itself, so the scheduler sees what the job waits on."""
         return (yield self)
 
     def _attach(self, job: Job) -> None:
+        """Claim this handoff for the job suspending on it.
+
+        Called by :class:`Job._suspend_on` on the way into ``WAITING``; the owner is
+        who a worker report is routed to, so a handoff has exactly one claimant.
+        """
         self._owner = job
 
     def _release(self) -> None:
@@ -153,6 +164,11 @@ class Handoff:
             self._dropped += 1
 
     def _take(self) -> _Report | None:
+        """Claim the reported outcome once, without blocking the calling thread.
+
+        Called by :class:`Job._step` at the job's next step, never from the worker
+        thread; an empty box returns ``None`` so one report cannot settle two steps.
+        """
         try:
             return self._box.get_nowait()
         except Empty:
@@ -345,6 +361,7 @@ class Job:
         return self._state.settled
 
     def _settle_on_error(self, error: BaseException) -> _StepOutcome:
+        """Record how author code ended, keeping a disposal outcome in front of it."""
         if self._settled_by_disposal():
             return _StepOutcome.SETTLED
         if isinstance(error, QgisSdkJobCancelledError):
@@ -355,6 +372,7 @@ class Job:
         return _StepOutcome.SETTLED
 
     def _suspend_on(self, suspended: object) -> _StepOutcome:
+        """Park the job on what it yielded, or fail it on an unknown awaitable."""
         if isinstance(suspended, Yield):
             self._yielded = True
             self._state = JobState.WAITING
@@ -514,6 +532,7 @@ class StepScheduler:
         self._active.clear()
 
     def _blockers(self) -> Iterable[str]:
+        """Name every job that cannot reach a safe point, in submission order."""
         for job in self._active.values():
             if job.awaiting is not None:
                 yield f"job {job.id} is waiting on an unresolved worker handoff"
@@ -521,6 +540,11 @@ class StepScheduler:
                 yield f"job {job.id} is still {job.state.value} after cancellation"
 
     def _advance(self, job: Job) -> None:
+        """Spend one job's step budget, stopping at the first unsafe point.
+
+        The membership check is what keeps a job that this very loop abandoned -
+        disposal can land mid-step - from being driven a second time.
+        """
         try:
             for _ in range(self._max_steps_per_job):
                 if job.settled or job.id not in self._active:
