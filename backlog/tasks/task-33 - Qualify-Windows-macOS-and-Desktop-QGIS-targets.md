@@ -4,7 +4,7 @@ title: 'Qualify Windows, macOS and Desktop QGIS targets'
 status: To Do
 assignee: []
 created_date: '2026-10-17 16:06'
-updated_date: '2026-10-21 21:15'
+updated_date: '2026-10-21 21:56'
 labels: []
 milestone: m-0
 dependencies: []
@@ -19,6 +19,7 @@ references:
     backlog/decisions/decision-3 -
     Development-and-distribution-artifacts-are-separate.md
   - doc-7
+  - doc-8
 priority: high
 type: spike
 ordinal: 33000
@@ -55,5 +56,10 @@ Path correction for the next attempt: the reusable headless harnesses are now at
 created: 2026-10-21 21:15
 ---
 The scheduler harness was restructured for this port (doc-7): `packages/qgis-sdk/scripts/qt_scheduler_smoke.py` now drives one function per phase over a shared heartbeat sampler, so retuning a Windows or macOS run means changing one phase instead of reading a 208-line function. The sampler's offset rule is unit-tested, and the named constants (`GUI_STALL_SAMPLES`, `CANCELLATION_POLL_ROUNDS`, `POOL_DRAIN_MS`, `LATE_REPORT_DELAY_MS`, `DISPOSED_DRAIN_S`) are the knobs to adjust per platform. Linux evidence is unchanged: same 25 keys, same phase sample counts, same verdict.
+---
+
+created: 2026-10-21 21:56
+---
+blocked-by-actions (doc-8): with Actions dark until November there is no runner for Windows or macOS, and the sandbox has neither a display nor non-Linux hardware, so AC1-AC3 stay open. AC4 is the one AC this window can honestly complete: record each unavailable target as a blocker (no CI, no Windows/macOS host, Linux-only headless QGIS 4.2.3) instead of leaving the task with no evidence at all.
 ---
 <!-- COMMENTS:END -->

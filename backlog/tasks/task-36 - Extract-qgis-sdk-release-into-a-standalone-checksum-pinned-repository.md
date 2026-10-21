@@ -4,6 +4,7 @@ title: Extract qgis-sdk-release into a standalone checksum-pinned repository
 status: To Do
 assignee: []
 created_date: '2026-10-17 21:23'
+updated_date: '2026-10-21 21:56'
 labels: []
 milestone: m-3
 dependencies:
@@ -16,6 +17,7 @@ references:
   - >-
     backlog/tasks/task-35 -
     Add-autorelease-and-release-workflows-driven-by-a-pinned-qgis-sdk-release-package.md
+  - doc-8
 priority: low
 type: chore
 ordinal: 36000
@@ -40,3 +42,12 @@ TASK-35 shipped the release tool in-repo at packages/qgis-sdk-release (user deci
 <!-- SECTION:NOTES:BEGIN -->
 Created 2026-10-17 as the deferred half of TASK-35: the user chose in-repo implementation now with later extraction. Note the known interaction with the restore RECORD integrity warnings: the tool as an external uv-installed PyPI package with console scripts would add RECORD files to the class pixi-sandbox 0.7.0 verification currently flags, so prefer a python -m entrypoint over a console script or resolve the pixi-sandbox side first.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-21 21:56
+---
+blocked-by-actions (doc-8): the extracted repository would publish from the same account, so AC1's release pipeline and AC4's 'one full autorelease-then-release cycle runs green against the external pin' cannot be recorded before November; creating the repo and moving the tool does not escape the outage. AC2 and AC3 (exact version+checksum pin, workspace removal, identical local invocations) stay locally verifiable, and the in-tree `pixi run release-*` tasks exercise exactly those invocations today.
+---
+<!-- COMMENTS:END -->

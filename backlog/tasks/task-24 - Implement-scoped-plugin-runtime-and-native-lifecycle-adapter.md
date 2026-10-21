@@ -4,7 +4,7 @@ title: Implement scoped plugin runtime and native lifecycle adapter
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-17 17:08'
+updated_date: '2026-10-21 21:56'
 labels: []
 milestone: m-1
 dependencies:
@@ -21,6 +21,7 @@ references:
   - >-
     backlog/decisions/decision-21 -
     Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md
+  - doc-8
 priority: medium
 type: feature
 ordinal: 24000
@@ -58,3 +59,12 @@ Validation this session: root test 256 passed/2 opt-in smoke skipped; root cover
 
 2026-10-17 post-merge closeout: PR #13 merged into main as f9740a80ad0b0b2ba53b7ae19c21d12048b94198 (implementation 611e1ac020bfd21888aca967eb6f1f82e3e39179), merged by Archont561 with a merge commit. Post-merge main runs: CI 39052147058 succeeded (commit-message, lint, format, typecheck, skill tooling, Actions lint and coverage steps all passed) and publish sandbox 39052147023 succeeded. AC1 and AC2 are proven by the landed runtime/adapter modules and the tests included in this PR. AC3 stays open: there is still no real Desktop startup/unload evidence. The headless harness runs the adapter inside a real QgsApplication with iface=None, no display and no event loop, which is not a Desktop qualification; TASK-33 tracks that gap. The task therefore remains In Progress rather than Done. The local environment remains an unverified restore (nine dist-info/RECORD integrity mismatches), so this closure claims merged code and CI, not a verified environment. No dependency or lockfile changes.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-21 21:56
+---
+blocked-by-actions (doc-8): AC3 asks for real Desktop startup/unload evidence with no fake fallback. A display session is unreachable from here and ci.yml's `cross-platform (${ matrix.os })` job is dark until November, so AC3 stays open. The headless lifecycle smoke (QGIS_SDK_HEADLESS_LIFECYCLE=1, passed 2026-10-21) is recorded as headless evidence only and does not satisfy AC3.
+---
+<!-- COMMENTS:END -->

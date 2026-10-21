@@ -4,7 +4,7 @@ title: Generate checked in TypeScript contracts clients and validators
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 12:02'
+updated_date: '2026-10-21 21:56'
 labels: []
 milestone: m-2
 dependencies:
@@ -20,6 +20,7 @@ references:
   - >-
     backlog/decisions/decision-23 -
     Adapt-Tauri-invocation-resource-and-testing-patterns-to-QWebChannel.md
+  - doc-8
 priority: medium
 type: feature
 ordinal: 17000
@@ -37,3 +38,12 @@ Generate checked in TypeScript contracts clients and validators. Implement only 
 - [ ] #2 Compile-time tests reject invalid names/arguments; runtime tests reject malformed responses with asymmetric additive compatibility.
 - [ ] #3 Unsupported annotations fail rather than emit any; CI drift checks protect generated-file ownership.
 <!-- AC:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+created: 2026-10-21 21:56
+---
+blocked-by-actions (doc-8): AC3 ('CI drift checks protect generated-file ownership') cannot be satisfied while every job fails to start. The local stand-in is `bun run sdk:generate` followed by `git status --porcelain`: it proves no drift for one change, which is not the protection AC3 asks for. Keep AC3 unchecked and wire it when runners return.
+---
+<!-- COMMENTS:END -->
