@@ -61,18 +61,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          # Review new commits, not already-landed history or the synthetic PR merge.
-          if [[ -n "$BASE_SHA" && ! "$BASE_SHA" =~ ^0+$ ]]; then
-            export CONVCO_REV="$BASE_SHA..$GITHUB_SHA"
-          else
-            # New-branch pushes have an all-zero before SHA; manual runs have none.
-            base=$(git merge-base "$GITHUB_SHA" "origin/$DEFAULT_BRANCH")
-            if [[ "$base" == "$GITHUB_SHA" ]]; then
-              export CONVCO_MAX_COUNT=1
-            else
-              export CONVCO_REV="$base..$GITHUB_SHA"
-            fi
-          fi
+          python scripts/compute_commit_base.py
           pixi run -e default check-commits
 
       - name: Lint Python
@@ -190,37 +179,7 @@ jobs:
       # report the counts and every failure as annotations the API can return.
       - name: Report Python test results
         if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          python - <<'PY'
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-
-          def find_problem(case):
-              """Return the failure or error node of one JUnit test case."""
-              problem = case.find("failure")
-              return case.find("error") if problem is None else problem
-
-          report = Path("python-tests.xml")
-          if not report.exists():
-              print("::error::pytest did not write python-tests.xml")
-              raise SystemExit(0)
-          cases = list(ET.parse(report).iter("testcase"))
-          failures = [case for case in cases if find_problem(case) is not None]
-          skipped = [case for case in cases if case.find("skipped") is not None]
-          print(
-              f"::notice::pytest: {len(cases)} collected, "
-              f"{len(failures)} failed, {len(skipped)} skipped"
-          )
-          for case in failures:
-              problem = find_problem(case)
-              detail = (problem.get("message") or problem.text or "failed").strip()
-              first = detail.splitlines()[0][:600]
-              print(
-                  f"::error file={case.get('file')}::"
-                  f"{case.get('classname')}::{case.get('name')}: {first}"
-              )
-          PY
+        run: python scripts/report_test_results.py python-tests.xml
 
       - name: Test TypeScript bridge
         shell: bash

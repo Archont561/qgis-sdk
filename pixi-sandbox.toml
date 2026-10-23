@@ -6,3 +6,15 @@ cargo_vendor = false
 name = "developer"
 environments = ["default", "build", "bun"]
 platforms = ["linux-64"]
+
+# Publish only when a path that can change the packed transport is touched.
+# Docs-only, backlog-only, and README pushes are ignored — no pack, no push,
+# no runner minutes. Derived from pixi-sandbox task-53 ([workflow] table).
+[workflow]
+push_paths = [
+  "pixi-sandbox.toml",
+  "pixi.toml",
+  "pixi.lock",
+  "package.json",
+  "bun.lock",
+]
