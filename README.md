@@ -1,10 +1,14 @@
 # QGIS SDK
 
+<p align="center">
+  <a href="https://github.com/Archont561/qgis-sdk/actions/workflows/ci.yml"><img src="https://github.com/Archont561/qgis-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://bun.sh"><img src="https://img.shields.io/badge/Bun-%E2%89%A51.1-black?logo=bun" alt="Bun >=1.1"></a>
+  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript" alt="TypeScript strict"></a>
+</p>
+
 **A Python-first foundation for developing QGIS plugins, including a bridge for plugin interfaces hosted in `QWebEngineView`.**
 
-The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge is specifically for the web interface running inside QGIS's `QWebEngineView`, connecting that frontend to the plugin's Python/QGIS side. This repository is an early-stage scaffold: the Python package now includes experimental, QGIS-free context and service contracts alongside its smoke-test API; native plugin adapters and the bridge runtime are not implemented yet.
-
-## Package listings
+The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge connects the web frontend running inside QGIS's `QWebEngineView` to the plugin's Python/QGIS side. This repository is an early-stage scaffold: the Python package now includes experimental, QGIS-free context and service contracts alongside its smoke-test API; native plugin adapters and the bridge runtime are not implemented yet.
 
 The registry entries currently point to placeholders, not usable SDK releases:
 
@@ -12,16 +16,6 @@ The registry entries currently point to placeholders, not usable SDK releases:
 - [`@archont561/qgis-sdk-bridge` on npm](https://www.npmjs.com/package/@archont561/qgis-sdk-bridge) is version `0.0.0` and exists only to configure OIDC trusted publishing; its npm README states that it contains no executable code and should not be installed as a dependency.
 
 Use this repository's source packages for development. The package listings are not installation instructions; replace this note with consumer install guidance when functional releases are published.
-
-## What is here
-
-| Package | Role | Current state |
-| :-- | :-- | :-- |
-| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations, a bounded plugin lifecycle runtime and the `qgis-sdk scaffold` project generator; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
-| [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; no bridge API yet, so the entry module is deliberately empty (a test pins that) and ships JavaScript only - no `types` mapping, because `bunup` emits no declaration for an exportless entry; built with Bunup |
-| [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
-
-The Python package is source-based and configured for a Python 3.11+ runtime. The Pixi `default` environment also provides QGIS for development and integration work.
 
 ## Quick start
 
@@ -35,13 +29,23 @@ pixi install -e bun
 pixi run -e bun install-js
 ```
 
-Check the package wiring from the workspace - `__all__` is the entire public surface:
+Check the package wiring from the workspace — `__all__` is the entire public surface:
 
 ```sh
 pixi run -e default python -c 'import qgis_sdk; print(qgis_sdk.__all__)'
 ```
 
-That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. To start a plugin project that uses them, install the package (`pip install qgis-sdk` or `pixi add --pypi qgis-sdk`) and run `qgis-sdk scaffold <directory>`, which is the same entry point as `python -m qgis_sdk`; `qgis_sdk.scaffold` is the public API behind it, and `packages/qgis-sdk/README.md` covers Desktop versus standalone Qt mode and the headless QGIS Desktop load/unload evidence. The package README and tests describe the current surface, and `packages/qgis-sdk/tests/test_init.py` fails if a name is exported without a decision.
+That prints the declaration decorators and their descriptions, and nothing else; there is no QGIS plugin API yet. To start a plugin project that uses them, install the package (`pip install qgis-sdk` or `pixi add --pypi qgis-sdk`) and run `qgis-sdk scaffold <directory>`, which is the same entry point as `python -m qgis_sdk`; `qgis_sdk.scaffold` is the public API behind it, and `packages/qgis-sdk/README.md` covers Desktop versus standalone Qt mode and the headless QGIS Desktop load/unload evidence.
+
+## What it provides
+
+| Package | Role | Current state |
+| :-- | :-- | :-- |
+| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations, a bounded plugin lifecycle runtime and the `qgis-sdk scaffold` project generator; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
+| [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; no bridge API yet, so the entry module is deliberately empty (a test pins that) and ships JavaScript only - no `types` mapping, because `bunup` emits no declaration for an exportless entry; built with Bunup |
+| [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
+
+The Python package is source-based and configured for a Python 3.11+ runtime. The Pixi `default` environment also provides QGIS for development and integration work.
 
 ## Test and build
 
@@ -54,9 +58,7 @@ pixi run -e bun typecheck
 
 Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk` and `qgis-sdk-bridge`, with repository-root-relative LCOV reports for Codecov.
 
-The Python package builds a wheel and source distribution with Hatchling and a Conda package from the explicit `packages/qgis-sdk/recipe.yaml` recipe. Build outputs are under `packages/qgis-sdk/dist/`. The bridge build output is under `packages/qgis-sdk-bridge/dist/`.
-
-## Checked contract-generation example
+## Contract generation (checked example)
 
 A **test-only**, QGIS-free example exercises the proposed web-project workflow without declaring a production validation backend or SDK CLI. From the workspace root, after installing the locked Pixi and Bun environments:
 
@@ -92,6 +94,32 @@ bash scripts/restore.sh
 
 Pushes to `main` publish the developer sandbox branch; pull requests with stale Pixi locks are relocked and revalidated. The devcontainer setup installs the pinned Pixi Sandbox CLI and then runs a locked Pixi install.
 
+## Repository layout
+
+| Path | Role |
+| :-- | :-- |
+| `packages/qgis-sdk` | Python package: pure contract layer, declarations, scaffold command, lifecycle runtime |
+| `packages/qgis-sdk/scripts` | Standalone developer executables (qualification harnesses, contract generators), covered by QGIS-free tests in `packages/qgis-sdk/tests/scripts` |
+| `packages/qgis-sdk/tests` | Python tests for the package |
+| `packages/qgis-sdk-bridge` | TypeScript bridge for QWebEngineView plugin interfaces |
+| `packages/qgis-sdk-bridge/tests` | Bun tests for the bridge |
+| `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
+| `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
+| `scripts` | Repository-root developer scripts (restore) |
+
+## Development
+
+| Task | Command | Purpose |
+| :-- | :-- | :-- |
+| Test | `pixi run -e bun bun run test` | Source tests, no coverage gate |
+| Coverage | `pixi run -e bun bun run coverage` | Separate 90% Python/TypeScript coverage gates |
+| Build | `pixi run -e bun bun run build` | Build workspace packages |
+| Typecheck | `pixi run -e bun typecheck` | TypeScript bridge typecheck |
+| Lint Python | `pixi run lint-python` | Ruff lint across the whole checkout |
+| Format check Python | `pixi run format-python-check` | Ruff format check across the whole checkout |
+
+Keep Python development tools in `packages/qgis-sdk/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
+
 ## Contributing
 
 - Keep source tests alongside each package's `tests/` directory.
@@ -99,3 +127,5 @@ Pushes to `main` publish the developer sandbox branch; pull requests with stale 
 - Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change.
 - Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 - Lefthook runs staged-file Ruff/Biome checks, Convco validates commit messages, and pre-push runs the coverage task.
+
+Commit messages use Conventional Commits form (validated by Convco). See [AGENTS.md](AGENTS.md) for the session and merge workflow, and the agent skills under [`.agents/skills/`](.agents/skills) for TDD, refactor, clean-code, backlog, and skill-creator guidance. Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` and export only prefixed exception names.
