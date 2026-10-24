@@ -38,6 +38,13 @@ class ChannelTransport:
     binding: ViewBinding
     send: Callable[[str], None]
     refused: int = field(default=0)
+    _receiving: bool = field(default=False, repr=False)
+    _woken: bool = field(default=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # A pushed stream's reply lands on a later event loop turn; the
+        # dispatcher wakes this transport so the frames go out right away.
+        self.dispatcher.watch(self.binding, self._wake)
 
     def receive(self, text: str) -> bool:
         """Handle one message from the channel; ``False`` if it was unusable.
@@ -58,8 +65,17 @@ class ChannelTransport:
             return False
         # Invocations, subscriptions, disposals and releases all arrive here as
         # the same text and leave through the same narrow entry point.
-        reply = self.dispatcher.dispatch(self.binding, message)
-        self._send_reply(reply)
+        self._receiving, self._woken = True, False
+        try:
+            reply = self.dispatcher.dispatch(self.binding, message)
+            self._send_reply(reply)
+        finally:
+            self._receiving = False
+        # A frame pushed while the call was being handled waits until the
+        # acknowledgement is out: the view has to know the subscription id
+        # before it sees the id's first frame.
+        if self._woken:
+            self.flush()
         return True
 
     def flush(self, *, limit: int = MAX_FRAMES_PER_PUMP) -> int:
@@ -70,8 +86,15 @@ class ChannelTransport:
         return len(frames)
 
     def dispose(self) -> int:
-        """Close every subscription this view opened."""
+        """Close every subscription this view opened and stop being woken."""
+        self.dispatcher.unwatch(self.binding)
         return self.dispatcher.dispose(self.binding)
+
+    def _wake(self) -> None:
+        if self._receiving:
+            self._woken = True
+            return
+        self.flush()
 
     def _send_reply(self, reply: Mapping[str, Any]) -> None:
         self.send(json.dumps(reply, separators=(",", ":"), sort_keys=True))

@@ -5,10 +5,19 @@ transport: :class:`~qgis_sdk.bridge.dispatch.Dispatcher` works with plain
 dictionaries, so the whole contract - including subscriptions, their ordering
 and their bounded buffers - is testable without a running application. The Qt
 side only has to deliver envelopes, send replies back and pump the frames.
+:class:`~qgis_sdk.bridge.authority.HostAuthority` is the host's record of what
+each view was granted - file refs and a network grant - checked on every use.
 """
 
 from __future__ import annotations
 
+from qgis_sdk.bridge.authority import (
+    DEFAULT_EXPORT_BYTES,
+    MAX_FILE_REFS_PER_VIEW,
+    FileOperation,
+    FileRef,
+    HostAuthority,
+)
 from qgis_sdk.bridge.dispatch import Dispatcher, ViewBinding
 from qgis_sdk.bridge.protocol import (
     BRIDGE_PROTOCOL_VERSION,
@@ -29,11 +38,16 @@ from qgis_sdk.bridge.streams import (
 
 __all__ = [
     "BRIDGE_PROTOCOL_VERSION",
+    "DEFAULT_EXPORT_BYTES",
+    "MAX_FILE_REFS_PER_VIEW",
     "MAX_FRAMES_PER_PUMP",
     "MAX_QUEUED_EVENTS",
     "BridgeErrorCode",
     "BridgeOperation",
     "Dispatcher",
+    "FileOperation",
+    "FileRef",
+    "HostAuthority",
     "InvokeEnvelope",
     "StreamEventType",
     "StreamTerminal",

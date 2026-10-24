@@ -30,7 +30,7 @@ not by whatever the transport happens to do with a callback.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
 
@@ -51,7 +51,9 @@ from qgis_sdk.bridge.streams import (
     MAX_FRAMES_PER_PUMP,
     MAX_SUBSCRIPTIONS_PER_VIEW,
     DisposalRequest,
+    PushSource,
     StreamEventType,
+    StreamSink,
     StreamSource,
     Subscription,
     SubscriptionRequest,
@@ -59,6 +61,7 @@ from qgis_sdk.bridge.streams import (
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
     QgisSdkBridgeProtocolError,
+    QgisSdkBridgeRefusalError,
     QgisSdkError,
 )
 
@@ -77,7 +80,15 @@ class ViewBinding:
 
 
 Handler = Callable[[Mapping[str, Any]], Any]
+#: A handler that needs to know who is calling: it receives the host-minted
+#: binding first, because an operation that resolves a scoped handle has to
+#: check it against the caller and must never take that identity from the payload.
+BoundHandler = Callable[[ViewBinding, Mapping[str, Any]], Any]
+BoundStreamSource = Callable[
+    [ViewBinding, Mapping[str, Any]], Iterator[Mapping[str, Any]] | PushSource | None
+]
 Authorizer = Callable[[ViewBinding, str], bool]
+Waker = Callable[[], None]
 
 
 class Dispatcher:
@@ -94,8 +105,9 @@ class Dispatcher:
         self._authorize = authorize
         self._ledger = ledger if ledger is not None else ReleaseLedger()
         self._ledger.dispose_subscription = self._dispose_subscription
-        self._handlers: dict[str, Handler] = {}
-        self._streams: dict[str, StreamSource] = {}
+        self._handlers: dict[str, BoundHandler] = {}
+        self._streams: dict[str, BoundStreamSource] = {}
+        self._wakers: dict[str, Waker] = {}
         self._operations: dict[str, BridgeOperation] = {}
         self._subscriptions: dict[str, Subscription] = {}
         self._counter = 0
@@ -199,10 +211,18 @@ class Dispatcher:
 
     def register(self, operation: BridgeOperation, handler: Handler) -> None:
         """Allowlist one operation and bind it to its handler."""
-        if operation.id in self._handlers or operation.id in self._streams:
-            raise QgisSdkBridgeError(f"duplicate operation id {operation.id!r}")
-        if not callable(handler):
-            raise QgisSdkBridgeError(f"{operation.id}: handler must be callable")
+        self._check_registration(operation, handler, "handler")
+        self._operations[operation.id] = operation
+        self._handlers[operation.id] = lambda binding, payload: handler(payload)
+
+    def register_bound(self, operation: BridgeOperation, handler: BoundHandler) -> None:
+        """Allowlist one operation whose handler receives the caller's binding.
+
+        The binding is the one the host minted for the channel the call arrived
+        on; nothing in it came from the payload. This is how an operation that
+        takes a scoped handle checks the handle belongs to the view using it.
+        """
+        self._check_registration(operation, handler, "handler")
         self._operations[operation.id] = operation
         self._handlers[operation.id] = handler
 
@@ -218,14 +238,43 @@ class Dispatcher:
         A factory may return ``None`` instead, for a stream a host pushes into
         with :meth:`emit` rather than allows to be pulled - a Qt task reporting
         progress, for instance. Such a subscription ends when it is disposed or
-        when its buffer overruns, never by itself.
+        when its buffer overruns, never by itself. Or it may return a
+        :class:`~qgis_sdk.bridge.streams.PushSource`, which the dispatcher
+        starts with a sink once the subscription exists: the source then ends
+        the stream itself when its work completes or fails.
         """
-        if operation.id in self._handlers or operation.id in self._streams:
-            raise QgisSdkBridgeError(f"duplicate operation id {operation.id!r}")
-        if not callable(factory):
-            raise QgisSdkBridgeError(f"{operation.id}: factory must be callable")
+        self._check_registration(operation, factory, "factory")
+        self._operations[operation.id] = operation
+        self._streams[operation.id] = lambda binding, payload: factory(payload)
+
+    def register_bound_stream(
+        self, operation: BridgeOperation, factory: BoundStreamSource
+    ) -> None:
+        """Allowlist one streaming operation whose factory sees the caller."""
+        self._check_registration(operation, factory, "factory")
         self._operations[operation.id] = operation
         self._streams[operation.id] = factory
+
+    def _check_registration(
+        self, operation: BridgeOperation, target: Any, role: str
+    ) -> None:
+        if operation.id in self._handlers or operation.id in self._streams:
+            raise QgisSdkBridgeError(f"duplicate operation id {operation.id!r}")
+        if not callable(target):
+            raise QgisSdkBridgeError(f"{operation.id}: {role} must be callable")
+
+    def watch(self, binding: ViewBinding, wake: Waker) -> None:
+        """Ask to be woken when a pushed stream queues frames for this view.
+
+        A channel adapter registers its flush here, so a reply that arrives on
+        a later event loop turn reaches the page without anyone polling. One
+        waker per view: a new channel for the same view replaces the old one.
+        """
+        self._wakers[binding.view_id] = wake
+
+    def unwatch(self, binding: ViewBinding) -> None:
+        """Stop waking this view; a wake after this is simply not delivered."""
+        self._wakers.pop(binding.view_id, None)
 
     def operations(self) -> tuple[BridgeOperation, ...]:
         """Return the allowlisted operations in id order."""
@@ -333,7 +382,9 @@ class Dispatcher:
             return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, refusal)
 
         try:
-            value = handler(payload)
+            value = handler(binding, payload)
+        except QgisSdkBridgeRefusalError as error:
+            return failure(call_id, BridgeErrorCode(error.code), str(error))
         except QgisSdkError as error:
             return failure(call_id, BridgeErrorCode.OPERATION_FAILED, str(error))
         except Exception:  # noqa: BLE001 - a reply must always be produced
@@ -399,7 +450,7 @@ class Dispatcher:
             if subscription.view_id == binding.view_id
         ]
         for subscription in disposal:
-            subscription.close_source()
+            subscription.dispose()
             self._subscriptions.pop(subscription.id, None)
         return len(disposal)
 
@@ -446,7 +497,9 @@ class Dispatcher:
             return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, refusal)
 
         try:
-            source = factory(payload)
+            source = factory(binding, payload)
+        except QgisSdkBridgeRefusalError as error:
+            return failure(call_id, BridgeErrorCode(error.code), str(error))
         except QgisSdkError as error:
             return failure(call_id, BridgeErrorCode.OPERATION_FAILED, str(error))
         except Exception:  # noqa: BLE001 - a reply must always be produced
@@ -455,7 +508,8 @@ class Dispatcher:
                 BridgeErrorCode.OPERATION_FAILED,
                 "The subscription failed; the host recorded the details",
             )
-        if source is not None and not hasattr(source, "__next__"):
+        pushed = isinstance(source, PushSource) and not hasattr(source, "__next__")
+        if source is not None and not pushed and not hasattr(source, "__next__"):
             return failure(
                 call_id,
                 BridgeErrorCode.OPERATION_FAILED,
@@ -475,10 +529,32 @@ class Dispatcher:
         self._ledger.track(
             binding.view_id, Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id)
         )
+        if pushed:
+            sink = StreamSink(subscription, wake=self._waker_for(binding.view_id))
+            try:
+                source.start(sink)  # type: ignore[union-attr]
+            except Exception as error:  # noqa: BLE001 - the stream must still end
+                # The subscription exists and the view holds its id, so the
+                # failure is a terminal frame, exactly as a pulled source's is.
+                sink.fail(error)
         return success(
             call_id,
             {"subscription_id": subscription.id, "capacity": subscription.capacity},
         )
+
+    def _waker_for(self, view_id: str) -> Waker:
+        """Return a wake callback that looks the view's waker up when it fires.
+
+        Looked up late on purpose: a channel registered after the subscription
+        opened still gets woken, and one that unwatched is left alone.
+        """
+
+        def wake() -> None:
+            waker = self._wakers.get(view_id)
+            if waker is not None:
+                waker()
+
+        return wake
 
     def _unsubscribe(
         self, binding: ViewBinding, raw: Mapping[str, Any]
@@ -519,7 +595,7 @@ class Dispatcher:
                 BridgeErrorCode.NOT_AUTHORIZED,
                 "This view is not authorized for that operation",
             )
-        subscription.close_source()
+        subscription.dispose()
         self._subscriptions.pop(subscription.id, None)
         self._ledger.forget(
             binding.view_id,
@@ -578,7 +654,7 @@ class Dispatcher:
         subscription = self._subscriptions.pop(subscription_id, None)
         if subscription is None:
             return False
-        subscription.close_source()
+        subscription.dispose()
         return True
 
     def _refuse(
@@ -616,7 +692,7 @@ class Dispatcher:
 
     def _dispose_all(self) -> None:
         for subscription in self._subscriptions.values():
-            subscription.close_source()
+            subscription.dispose()
             self._ledger.forget(
                 subscription.view_id,
                 Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),

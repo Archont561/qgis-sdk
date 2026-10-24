@@ -226,7 +226,8 @@ def contract_fingerprint(description: Any) -> str:
 
     Only what crosses the wire is hashed: the description version, the plugin id,
     each action's id, request and result, and each stream's id, request and
-    events. Titles and the Python handler name stay out, so renaming a method or
+    events. Titles - of operations and of the schema objects that name generated
+    types - and the Python handler name stay out, so renaming a method or
     rewording a label does not invalidate an already-generated client, while any
     change a frontend could observe does. A surface without streams hashes
     exactly as it did before streams existed: its wire did not change.
@@ -240,9 +241,24 @@ def contract_fingerprint(description: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _untitled(schema: Any) -> Any:
+    """Return ``schema`` without the ``title`` keys that only name generated types."""
+    if isinstance(schema, Mapping):
+        return {
+            key: _untitled(value) for key, value in schema.items() if key != "title"
+        }
+    if isinstance(schema, list):
+        return [_untitled(item) for item in schema]
+    return schema
+
+
 def _contract_view(description: Mapping[str, Any]) -> dict[str, Any]:
     actions = [
-        {"id": action["id"], "request": action["request"], "result": action["result"]}
+        {
+            "id": action["id"],
+            "request": _untitled(action["request"]),
+            "result": _untitled(action["result"]),
+        }
         for action in sorted(description["actions"], key=lambda item: str(item["id"]))
     ]
     view: dict[str, Any] = {
@@ -255,8 +271,8 @@ def _contract_view(description: Mapping[str, Any]) -> dict[str, Any]:
         view["streams"] = [
             {
                 "id": item["id"],
-                "request": item.get("request"),
-                "events": item.get("events"),
+                "request": _untitled(item.get("request")),
+                "events": _untitled(item.get("events")),
             }
             for item in sorted(streams, key=lambda item: str(item["id"]))
         ]
@@ -365,21 +381,22 @@ def _declared_name(preferred: Any, fallback: str, *, kind: str, action: str) -> 
     """
     if preferred is None:
         return fallback
+    label = kind if kind == "title" else f"{kind}_name"
     if not isinstance(preferred, str):
         raise QgisSdkBridgeError(
-            f"{action}: {kind}_name must be a string, got {preferred!r}"
+            f"{action}: {label} must be a string, got {preferred!r}"
         )
     if not _is_identifier(preferred):
         raise QgisSdkBridgeError(
-            f"{action}: {kind}_name {preferred!r} is not a TypeScript identifier"
+            f"{action}: {label} {preferred!r} is not a TypeScript identifier"
         )
     if preferred in _TS_KEYWORDS:
         raise QgisSdkBridgeError(
-            f"{action}: {kind}_name {preferred!r} is a TypeScript keyword"
+            f"{action}: {label} {preferred!r} is a TypeScript keyword"
         )
     if preferred in _RESERVED_NAMES:
         raise QgisSdkBridgeError(
-            f"{action}: {kind}_name {preferred!r} collides with a name the "
+            f"{action}: {label} {preferred!r} collides with a name the "
             "generated module already declares"
         )
     return preferred
@@ -613,6 +630,11 @@ class _Generator:
         if schema.get("type") == "object":
             if id(schema) in self._names:
                 return
+            if "title" in schema:
+                # A titled object is exported under its own name wherever it
+                # appears: a branded reference reads as ``FileRef``, not as the
+                # field path it happened to be declared under first.
+                name = _declared_name(schema["title"], name, kind="title", action=name)
             if any(existing == name for existing, _ in self._objects):
                 raise QgisSdkBridgeError(
                     f"{name}: two declarations would generate the same type name; "
@@ -1120,8 +1142,13 @@ def _field_type(schema: Mapping[str, Any], generator: _Generator) -> str:
     if name is not None:
         return name
     if schema.get("type") == "array":
-        return f"readonly {_field_type(schema['items'], generator)}[]"
+        return f"readonly {_element(_field_type(schema['items'], generator))}[]"
     return _inline_type(schema)
+
+
+def _element(rendered: str) -> str:
+    """Parenthesise a union so ``readonly (a | b)[]`` is the array it means."""
+    return f"({rendered})" if " | " in rendered else rendered
 
 
 def _member_validator(
@@ -1144,7 +1171,7 @@ def _inline_type(schema: Mapping[str, Any]) -> str:
         return " | ".join(_literal(value) for value in schema["enum"])
     declared = schema.get("type")
     if declared == "array":
-        return f"readonly {_inline_type(schema['items'])}[]"
+        return f"readonly {_element(_inline_type(schema['items']))}[]"
     if declared in _SIMPLE_TYPES:
         return _SIMPLE_TYPES[declared]
     if declared == "object":
@@ -1184,16 +1211,17 @@ def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
     if declared == "boolean":
         return f'typeof {expression} === "boolean"'
     if declared == "number":
-        return f'typeof {expression} === "number" && Number.isFinite({expression})'
+        checks = [f'typeof {expression} === "number" && Number.isFinite({expression})']
+        checks.extend(_bound_checks(schema, expression))
+        if len(checks) == 1:
+            return checks[0]
+        return "(" + " && ".join(checks) + ")"
     if declared == "integer":
         # The safe range is already `isSafeInteger`; a tighter bound the manifest
         # declared (a page size, say) is worth refusing before the transport,
         # because the host would refuse it anyway and the page could have known.
         checks = [f"isSafeInteger({expression})"]
-        for keyword, operator in (("minimum", ">="), ("maximum", "<=")):
-            bound = schema.get(keyword)
-            if isinstance(bound, int) and abs(bound) != MAX_SAFE_INTEGER:
-                checks.append(f"{expression} {operator} {bound}")
+        checks.extend(_bound_checks(schema, expression))
         if len(checks) == 1:
             return checks[0]
         return "(" + " && ".join(checks) + ")"
@@ -1202,6 +1230,19 @@ def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
     if declared == "object":
         return f"isRecord({expression})"
     raise QgisSdkBridgeError(f"cannot validate {declared!r}")
+
+
+def _bound_checks(schema: Mapping[str, Any], expression: str) -> list[str]:
+    """Render the declared ``minimum``/``maximum`` the host will enforce too."""
+    checks: list[str] = []
+    for keyword, operator in (("minimum", ">="), ("maximum", "<=")):
+        bound = schema.get(keyword)
+        if isinstance(bound, bool) or not isinstance(bound, int | float):
+            continue
+        if abs(bound) == MAX_SAFE_INTEGER:
+            continue
+        checks.append(f"{expression} {operator} {json.dumps(bound)}")
+    return checks
 
 
 def _pattern_test(pattern: Any, expression: str) -> str:

@@ -56,6 +56,7 @@ from qgis_sdk.models import (
     QgisSdkTlsError,
     Response,
 )
+from qgis_sdk.network.grants import origin_of
 from qgis_sdk.services import Deliver
 
 __all__ = ["NativeNetworkTransport"]
@@ -327,6 +328,16 @@ class _Exchange(QObject):
         if current.scheme().lower() == "https" and target.scheme().lower() == "http":
             return QgisSdkRedirectError(
                 "redirect from https to http refused",
+                method=self._method,
+                url=target_url,
+            )
+        allowed = self._request.allowed_origins
+        if allowed is not None and origin_of(target_url) not in allowed:
+            # The grant that constrained this request named the origins a hop
+            # may reach; a redirect is how a granted origin would otherwise
+            # hand the view's request to one that was not.
+            return QgisSdkRedirectError(
+                f"redirect to {origin_of(target_url)!r} leaves the granted origins",
                 method=self._method,
                 url=target_url,
             )

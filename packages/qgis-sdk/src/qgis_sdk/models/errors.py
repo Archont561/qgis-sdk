@@ -233,6 +233,46 @@ class QgisSdkBridgeProtocolError(QgisSdkBridgeError):
     code = "invalid_bridge_message"
 
 
+class QgisSdkBridgeRefusalError(QgisSdkBridgeError):
+    """An operation refused a call for a reason the view can act on.
+
+    Unlike an ordinary failure, which the dispatcher reports as
+    ``operation_failed``, a refusal keeps its own ``code`` on the wire: a view
+    that is told ``stale_handle`` asks the user to pick the file again, one told
+    ``grant_refused`` stops offering the action. The message names the handle
+    or the rule, never the path or the secret behind it.
+    """
+
+    code = "grant_refused"
+
+
+class QgisSdkGrantRefusedError(QgisSdkBridgeRefusalError):
+    """The view holds no grant that allows what it asked for."""
+
+    code = "grant_refused"
+
+
+class QgisSdkUnknownHandleError(QgisSdkBridgeRefusalError):
+    """A handle is not one the host minted for this view.
+
+    A handle minted for another view is reported exactly like one that never
+    existed: the reply must not become an oracle for other views' handles.
+    """
+
+    code = "unknown_handle"
+
+
+class QgisSdkStaleHandleError(QgisSdkBridgeRefusalError):
+    """A handle this view did hold is no longer valid.
+
+    It was minted for a runtime generation that was replaced, it expired, or
+    the host revoked it. The view has to obtain a fresh one; nothing is resolved
+    by matching names or paths.
+    """
+
+    code = "stale_handle"
+
+
 class QgisSdkNetworkError(QgisSdkError):
     """Base of the network failures a caller can tell apart by ``code``.
 

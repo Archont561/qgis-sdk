@@ -706,8 +706,13 @@ def test_a_surface_without_streams_hashes_as_it_did_before_streams_existed() -> 
     del described["streams"]
     assert contract_fingerprint(described) == contract_fingerprint(_actions_only())
     assert generate_typescript(described) == generate_typescript(_actions_only())
-    assert generate_host_typescript() == generate_host_typescript(
-        {**host_description(), "streams": []}
+    host = host_description()
+    actions_only = {key: value for key, value in host.items() if key != "streams"}
+    assert generate_host_typescript({**actions_only, "streams": []}) == (
+        generate_host_typescript(actions_only)
+    )
+    assert contract_fingerprint({**actions_only, "streams": []}) == (
+        contract_fingerprint(actions_only)
     )
 
 
@@ -789,3 +794,104 @@ def test_the_kernel_speaks_the_same_event_vocabulary_as_python() -> None:
     for kind in StreamTerminal:
         assert f'\t| "{kind.value}"' in bridge
     assert bridge.count('\t| "') == len(StreamTerminal)
+
+
+# -- titled nested objects (TASK-20) -----------------------------------------
+
+
+def _titled(title: Any) -> dict[str, Any]:
+    ref = {
+        "type": "object",
+        "title": title,
+        "properties": {"kind": {"enum": ["file"]}, "id": {"type": "string"}},
+        "required": ["kind", "id"],
+        "additionalProperties": False,
+    }
+    return _single(
+        "open",
+        request={
+            "type": "object",
+            "properties": {"file": ref, "again": ref},
+            "required": ["file"],
+            "additionalProperties": False,
+        },
+        result={"type": "null"},
+    )
+
+
+def test_a_titled_nested_object_is_exported_under_its_title_once() -> None:
+    """A branded ref is declared as ``FileRef``, not ``OpenRequestFile``."""
+    rendered = generate_typescript(_titled("FileRef"))
+    assert "export interface FileRef {" in rendered
+    assert 'readonly kind: "file";' in rendered
+    assert "readonly file: FileRef;" in rendered
+    assert "readonly again?: FileRef;" in rendered
+    assert "OpenRequestFile" not in rendered
+    assert rendered.count("export interface FileRef {") == 1
+
+
+def test_a_title_that_cannot_name_a_type_is_refused_with_the_path() -> None:
+    with pytest.raises(
+        QgisSdkBridgeError, match="title 'file ref' is not a TypeScript"
+    ):
+        generate_typescript(_titled("file ref"))
+    with pytest.raises(QgisSdkBridgeError, match="keyword"):
+        generate_typescript(_titled("class"))
+    with pytest.raises(QgisSdkBridgeError, match="title must be a string"):
+        generate_typescript(_titled(7))
+
+
+def test_a_titled_object_does_not_change_the_fingerprint() -> None:
+    """The title names a type; the wire shape is what it was."""
+    assert contract_fingerprint(_titled("FileRef")) == contract_fingerprint(
+        _titled("Other")
+    )
+
+
+def test_an_array_of_a_union_is_rendered_as_an_array_of_the_union() -> None:
+    """``readonly "a" | "b"[]`` is a TypeScript error; the element is grouped."""
+    rendered = generate_typescript(
+        _single(
+            "tags",
+            request={
+                "type": "object",
+                "properties": {
+                    "kinds": {"type": "array", "items": {"enum": ["read", "write"]}},
+                    "mixed": {
+                        "type": "array",
+                        "items": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    },
+                    "plain": {"type": "array", "items": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            },
+            result={"type": "null"},
+        )
+    )
+    assert 'readonly kinds?: readonly ("read" | "write")[];' in rendered
+    assert "readonly mixed?: readonly (string | null)[];" in rendered
+    assert "readonly plain?: readonly string[];" in rendered
+
+
+def test_a_bounded_number_is_refused_by_the_generated_validator_too() -> None:
+    """The host checks ``minimum``/``maximum`` on numbers; the page can know first."""
+    rendered = generate_typescript(
+        _single(
+            "wait",
+            request={
+                "type": "object",
+                "properties": {
+                    "seconds": {"type": "number", "minimum": 0.1, "maximum": 300},
+                    "ratio": {"type": "number"},
+                },
+                "additionalProperties": False,
+            },
+            result={"type": "null"},
+        )
+    )
+    assert 'value["seconds"] >= 0.1 && value["seconds"] <= 300' in rendered
+    assert (
+        'typeof value["ratio"] === "number" && Number.isFinite(value["ratio"])'
+        in rendered
+    )
+    assert 'value["ratio"] >=' not in rendered

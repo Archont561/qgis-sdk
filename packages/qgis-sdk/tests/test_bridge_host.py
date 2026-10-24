@@ -9,11 +9,14 @@ Qt, QGIS or a browser anywhere in the picture.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
 from qgis_sdk.bridge import BridgeErrorCode, Dispatcher
+from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.bridge.host import (
     DEFAULT_PAGE,
     DEFERRED_HOST_METHODS,
@@ -27,12 +30,15 @@ from qgis_sdk.bridge.host import (
 from qgis_sdk.bridge.protocol import BRIDGE_PROTOCOL_VERSION, HOST_SCHEMA_VERSION
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.models.layers import VectorLayerInfo
+from qgis_sdk.network import NetworkGrant
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.layers import Layers
+from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
 from qgis_sdk.services.settings import Settings
 from qgis_sdk.services.styles import Styles
+from qgis_sdk.testing import FakeNetworkTransport, reply
 
 ORIGIN = "qgis://desktop"
 
@@ -60,11 +66,14 @@ def _methods(protocol: type) -> set[str]:
 @dataclass
 class FakeLayers:
     layers: list[VectorLayerInfo] = field(default_factory=list)
+    opened: list[Path] = field(default_factory=list)
 
-    def open_vector(
-        self, source: Any
-    ) -> VectorLayerInfo:  # pragma: no cover - deferred
-        raise AssertionError("open_vector is not on the wire")
+    def open_vector(self, source: Path) -> VectorLayerInfo:
+        assert isinstance(source, Path)
+        self.opened.append(source)
+        info = _info(len(self.layers))
+        self.layers.append(info)
+        return info
 
     def list_layers(self) -> tuple[VectorLayerInfo, ...]:
         return tuple(self.layers)
@@ -129,13 +138,20 @@ def _info(index: int) -> VectorLayerInfo:
     )
 
 
-def _services(count: int = 5) -> HostServices:
+def _services(
+    count: int = 5,
+    *,
+    authority: HostAuthority | None = None,
+    network: FakeNetworkTransport | None = None,
+) -> HostServices:
     return HostServices(
         layers=FakeLayers(layers=[_info(index) for index in range(count)]),
         project=FakeProject(ids=[f"layer-{index}" for index in range(count)]),
         settings=FakeSettings(values={"theme": "dark"}),
         styles=FakeStyles(),
         notifications=FakeNotifications(),
+        authority=authority if authority is not None else HostAuthority(),
+        network=network,
     )
 
 
@@ -155,8 +171,15 @@ def _dispatcher(
     return dispatcher
 
 
-def _call(dispatcher: Dispatcher, operation: str, payload: Any = None) -> dict:
-    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+def _call(
+    dispatcher: Dispatcher,
+    operation: str,
+    payload: Any = None,
+    *,
+    binding: Any = None,
+) -> dict:
+    if binding is None:
+        binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     request = {
         "protocol": BRIDGE_PROTOCOL_VERSION,
         "call_id": "call",
@@ -164,6 +187,23 @@ def _call(dispatcher: Dispatcher, operation: str, payload: Any = None) -> dict:
         "payload": {} if payload is None else payload,
     }
     return dispatcher.dispatch(binding, request)
+
+
+def _subscribe(
+    dispatcher: Dispatcher, operation: str, payload: Any = None, *, binding: Any = None
+) -> dict:
+    if binding is None:
+        binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    return dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "sub",
+            "operation": operation,
+            "payload": {} if payload is None else payload,
+        },
+    )
 
 
 # -- the inventory ---------------------------------------------------------
@@ -185,11 +225,21 @@ def test_every_protocol_method_is_either_on_the_wire_or_recorded_as_absent() -> 
     )
 
 
-def test_each_operation_wraps_a_method_its_protocol_really_has() -> None:
+#: Where an operation's ``source`` may point: the curated Protocols, plus the
+#: two TASK-20 owners that are not Protocols - the authority behind file refs
+#: and the network transport behind the fetch stream.
+SOURCES: dict[str, type] = {
+    **PROTOCOLS,
+    "HostAuthority": HostAuthority,
+    "NetworkTransport": NetworkTransport,
+}
+
+
+def test_each_operation_wraps_a_method_its_source_really_has() -> None:
     for operation in HOST_OPERATIONS:
-        protocol_name, _, method = operation.source.partition(".")
-        assert protocol_name in PROTOCOLS, operation.source
-        assert method in _methods(PROTOCOLS[protocol_name]), operation.source
+        owner, _, method = operation.source.partition(".")
+        assert owner in SOURCES, operation.source
+        assert method in _methods(SOURCES[owner]), operation.source
 
 
 def test_a_deferred_method_says_who_owns_it() -> None:
@@ -215,10 +265,13 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
     assert set(grants) == {operation.id for operation in HOST_OPERATIONS}
     assert set(grants.values()) == {
         "layers.read",
+        "layers.open",
         "project.read",
         "settings.read",
         "notifications.info",
         "styles.apply",
+        "files.export",
+        "network.fetch",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.
@@ -231,7 +284,10 @@ def test_the_description_is_the_manifest_in_the_generator_shape() -> None:
     assert described["schema_version"] == HOST_SCHEMA_VERSION
     assert described["id"] == "qgis.host"
     assert [action["id"] for action in described["actions"]] == [
-        operation.id for operation in HOST_OPERATIONS
+        operation.id for operation in HOST_OPERATIONS if operation.events is None
+    ]
+    assert [stream["id"] for stream in described["streams"]] == [
+        operation.id for operation in HOST_OPERATIONS if operation.events is not None
     ]
     for action in described["actions"]:
         assert action["request"]["type"] == "object"
@@ -241,6 +297,10 @@ def test_the_description_is_the_manifest_in_the_generator_shape() -> None:
             or result.get("type") == "null"
             or "anyOf" in result
         )
+    for stream in described["streams"]:
+        assert stream["request"]["type"] == "object"
+        assert "result" not in stream
+        assert set(stream["events"]) == {"data"}
 
 
 # -- paging ----------------------------------------------------------------
@@ -454,3 +514,337 @@ def test_a_conflicting_registration_leaves_the_dispatcher_untouched() -> None:
         ]
         is True
     )
+
+
+# -- scoped authority: file refs and network grants (TASK-20) --------------
+
+
+def _granted(tmp_path: Path):
+    """A dispatcher, its services, the owning binding and a readable ref."""
+    dataset = tmp_path / "sites.geojson"
+    dataset.write_text("{}", encoding="utf-8")
+    services = _services(1)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    ref = services.authority.grant_file(binding, dataset, source="picker")
+    return dispatcher, services, binding, ref, dataset
+
+
+def test_open_vector_takes_a_host_minted_ref_and_opens_its_canonical_path(
+    tmp_path: Path,
+) -> None:
+    dispatcher, services, binding, ref, dataset = _granted(tmp_path)
+
+    opened = _call(
+        dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=binding
+    )
+
+    assert opened["ok"] is True
+    assert opened["value"]["id"] == "layer-1"
+    assert services.layers.opened == [dataset.resolve()]
+
+
+def test_open_vector_refuses_a_path_a_foreign_ref_and_a_stale_ref(
+    tmp_path: Path,
+) -> None:
+    dispatcher, services, _binding, ref, dataset = _granted(tmp_path)
+
+    path = _call(dispatcher, "layers.open_vector", {"file": str(dataset)})
+    assert path["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
+    forged_kind = _call(
+        dispatcher, "layers.open_vector", {"file": {"kind": "layer", "id": ref.id}}
+    )
+    assert forged_kind["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
+
+    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
+    foreign = _call(
+        dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=other
+    )
+    assert foreign["error"]["code"] == BridgeErrorCode.UNKNOWN_HANDLE.value
+
+    dispatcher.advance_generation()
+    later = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    stale = _call(
+        dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=later
+    )
+    assert stale["error"]["code"] == BridgeErrorCode.STALE_HANDLE.value
+    assert services.layers.opened == []
+    for refusal in (path, forged_kind, foreign, stale):
+        assert str(dataset) not in refusal["error"]["message"]
+
+
+def test_a_write_only_ref_cannot_be_opened(tmp_path: Path) -> None:
+    services = _services(1)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    ref = services.authority.grant_file(
+        binding, tmp_path / "out.csv", operations=("write",)
+    )
+    refused = _call(
+        dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=binding
+    )
+    assert refused["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+
+
+def test_files_export_writes_through_a_write_ref_and_reports_the_size(
+    tmp_path: Path,
+) -> None:
+    services = _services(1)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    ref = services.authority.grant_file(
+        binding, tmp_path / "out.csv", operations=("write",), source="picker"
+    )
+
+    written = _call(
+        dispatcher,
+        "files.export",
+        {"file": ref.to_wire(), "content": "a,b\n"},
+        binding=binding,
+    )
+
+    assert written["ok"] is True
+    assert written["value"] == {"bytes_written": 4, "name": "out.csv"}
+    assert (tmp_path / "out.csv").read_text(encoding="utf-8") == "a,b\n"
+
+    again = _call(
+        dispatcher,
+        "files.export",
+        {"file": ref.to_wire(), "content": "changed"},
+        binding=binding,
+    )
+    assert again["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+    assert (tmp_path / "out.csv").read_text(encoding="utf-8") == "a,b\n"
+
+
+def test_files_export_through_a_read_ref_is_refused(tmp_path: Path) -> None:
+    dispatcher, _, binding, ref, dataset = _granted(tmp_path)
+    refused = _call(
+        dispatcher,
+        "files.export",
+        {"file": ref.to_wire(), "content": "x"},
+        binding=binding,
+    )
+    assert refused["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+    assert dataset.read_text(encoding="utf-8") == "{}"
+
+
+def _fetching(hold: bool = True):
+    network = FakeNetworkTransport()
+    services = _services(1, network=network)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    services.authority.grant_network(
+        binding, NetworkGrant(origins=("https://api.example.org",), max_body_bytes=64)
+    )
+    return dispatcher, services, binding, network
+
+
+def test_network_fetch_is_a_stream_that_answers_once_through_the_grant() -> None:
+    dispatcher, _, binding, network = _fetching()
+    network.expect(
+        "GET",
+        "https://api.example.org/collections",
+        reply(json={"collections": []}, headers={"X-Trace": "t1"}),
+        hold=True,
+    )
+
+    opened = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {
+            "url": "https://api.example.org/collections",
+            "headers": [{"name": "Accept", "value": "application/json"}],
+        },
+        binding=binding,
+    )
+
+    assert opened["ok"] is True
+    (sent,) = network.requests
+    assert sent.method == "GET"
+    assert sent.headers["accept"] == "application/json"
+    assert sent.allowed_origins == frozenset({"https://api.example.org"})
+    assert sent.max_body_bytes == 64
+    assert dispatcher.pump(binding) == []
+
+    network.pending[0].deliver()
+    data, terminal = dispatcher.pump(binding)
+
+    assert data["event"]["kind"] == "data"
+    assert data["event"]["payload"] == {
+        "url": "https://api.example.org/collections",
+        "status_code": 200,
+        "reason": "OK",
+        "headers": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "X-Trace", "value": "t1"},
+        ],
+        "text": '{"collections": []}',
+        "base64": None,
+    }
+    assert terminal["terminal"] == {"kind": "complete"}
+
+
+def test_network_fetch_without_a_grant_or_outside_it_is_refused_before_sending() -> (
+    None
+):
+    dispatcher, _, binding, network = _fetching()
+    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
+
+    ungranted = _subscribe(
+        dispatcher, "network.fetch", {"url": "https://api.example.org/"}, binding=other
+    )
+    assert ungranted["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+    elsewhere = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://evil.example.org/"},
+        binding=binding,
+    )
+    assert elsewhere["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+    assert "evil.example.org" in elsewhere["error"]["message"]
+    method = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/", "method": "DELETE"},
+        binding=binding,
+    )
+    assert method["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+    auth = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/", "auth_config": "cfg1"},
+        binding=binding,
+    )
+    assert auth["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
+    malformed = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://u:p@api.example.org/"},
+        binding=binding,
+    )
+    assert malformed["error"]["code"] == BridgeErrorCode.OPERATION_FAILED.value
+    assert network.requests == []
+
+
+def test_network_fetch_hands_a_status_over_as_data_and_a_failure_as_terminal() -> None:
+    dispatcher, _, binding, network = _fetching()
+    network.expect("GET", "https://api.example.org/down", reply(503, body="later"))
+    opened = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/down"},
+        binding=binding,
+    )
+    assert opened["ok"] is True
+    data, terminal = dispatcher.pump(binding)
+    assert data["event"]["payload"]["status_code"] == 503
+    assert terminal["terminal"]["kind"] == "complete"
+
+    network.expect(
+        "GET",
+        "https://api.example.org/big",
+        reply(200, body=b"x" * 65),
+    )
+    opened = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/big"},
+        binding=binding,
+    )
+    assert opened["ok"] is True
+    (terminal,) = dispatcher.pump(binding)
+    assert terminal["terminal"]["kind"] == "error"
+    assert "64" in terminal["terminal"]["message"]
+
+
+def test_network_fetch_hands_a_binary_body_over_as_base64() -> None:
+    dispatcher, _, binding, network = _fetching()
+    payload = bytes([0x89, 0x50, 0x4E, 0x47, 0xFF, 0xFE])
+    network.expect(
+        "GET",
+        "https://api.example.org/tile",
+        reply(200, body=payload, headers={"Content-Type": "image/png"}),
+    )
+    _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/tile"},
+        binding=binding,
+    )
+    data, _terminal = dispatcher.pump(binding)
+    assert data["event"]["payload"]["text"] is None
+    assert base64.b64decode(data["event"]["payload"]["base64"]) == payload
+
+
+def test_disposing_a_fetch_cancels_the_request_and_a_late_reply_is_dropped() -> None:
+    dispatcher, _, binding, network = _fetching()
+    network.expect(
+        "GET", "https://api.example.org/slow", reply(200, body="late"), hold=True
+    )
+    opened = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/slow"},
+        binding=binding,
+    )
+
+    dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "unsubscribe",
+            "call_id": "unsub",
+            "subscription_id": opened["value"]["subscription_id"],
+        },
+    )
+
+    assert len(network.cancelled) == 1
+    assert dispatcher.pump(binding) == []
+
+
+def test_network_fetch_posts_a_body_and_keeps_the_methods_the_grant_allows() -> None:
+    dispatcher, services, binding, network = _fetching()
+    services.authority.grant_network(
+        binding,
+        NetworkGrant(origins=("https://api.example.org",), methods=("POST",)),
+    )
+    network.expect("POST", "https://api.example.org/items", reply(201, body="made"))
+
+    opened = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {
+            "url": "https://api.example.org/items",
+            "method": "POST",
+            "body": '{"a": 1}',
+            "headers": [{"name": "Content-Type", "value": "application/json"}],
+            "timeout_seconds": 5,
+        },
+        binding=binding,
+    )
+
+    assert opened["ok"] is True
+    (sent,) = network.requests
+    assert sent.body == b'{"a": 1}'
+    assert sent.timeout_seconds == 5
+    data, _terminal = dispatcher.pump(binding)
+    assert data["event"]["payload"]["status_code"] == 201
+
+
+def test_network_fetch_without_a_transport_fails_rather_than_pretending() -> None:
+    services = _services(1)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    services.authority.grant_network(
+        binding, NetworkGrant(origins=("https://api.example.org",))
+    )
+    opened = _subscribe(
+        dispatcher,
+        "network.fetch",
+        {"url": "https://api.example.org/"},
+        binding=binding,
+    )
+    assert opened["ok"] is False
+    assert opened["error"]["code"] == BridgeErrorCode.OPERATION_FAILED.value
+    assert "network" in opened["error"]["message"]

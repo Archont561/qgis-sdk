@@ -132,3 +132,14 @@ Still deferred from the rules above, and not claimed by the slice: generated
 `StyleRef` handles (they arrive with TASK-20), the `createBridgeClient`
 composition, client-side serialisation of GUI-affine calls, and advertising
 *grants* rather than ids in the handshake.
+
+## Second slice, 2026-10-25 (TASK-20)
+
+`layers.open_vector` leaves the deferred list: it takes a `FileRef` the host
+minted (`HostAuthority.grant_file` from a picker result or a plugin grant) and
+the host resolves the ref against the calling binding on every call, exactly as
+the rules above asked. Two operations arrive with it: `files.export(FileRef,
+content)` writes through a `write` ref, and the `network.fetch` stream answers
+one request through the view's `NetworkGrant` over the TASK-5 transport. The
+generated module exports `FileRef` and `HttpHeader` under their titles; the
+`StyleRef` brand, `tryX` unions and advertised grants stay deferred.
