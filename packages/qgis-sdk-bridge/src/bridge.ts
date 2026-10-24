@@ -158,7 +158,11 @@ export class QgisSdkBridgeSequenceError extends QgisSdkError {
 	public readonly expected: number;
 	public readonly received: number;
 
-	public constructor(subscriptionId: string, expected: number, received: number) {
+	public constructor(
+		subscriptionId: string,
+		expected: number,
+		received: number,
+	) {
 		super(
 			`Subscription ${JSON.stringify(subscriptionId)} expected frame ${expected} but received ${received}`,
 			"stream_gap",
@@ -178,7 +182,8 @@ export class QgisSdkBridgeStreamEndedError extends QgisSdkError {
 
 	public constructor(subscriptionId: string, terminal: BridgeStreamTerminal) {
 		super(
-			terminal.message ?? `Subscription ${JSON.stringify(subscriptionId)} ended: ${terminal.kind}`,
+			terminal.message ??
+				`Subscription ${JSON.stringify(subscriptionId)} ended: ${terminal.kind}`,
 			terminal.kind,
 		);
 		this.subscriptionId = subscriptionId;
@@ -351,7 +356,10 @@ export function parseStreamFrame(raw: unknown): BridgeStreamFrame {
 			`${raw.subscription_id}: ${String(kind)} is not a terminal kind`,
 		);
 	}
-	if (raw.terminal.message !== undefined && typeof raw.terminal.message !== "string") {
+	if (
+		raw.terminal.message !== undefined &&
+		typeof raw.terminal.message !== "string"
+	) {
 		throw new QgisSdkBridgeProtocolError(
 			`${raw.subscription_id}: terminal.message must be a string`,
 		);
@@ -370,7 +378,9 @@ export function parseStreamFrame(raw: unknown): BridgeStreamFrame {
 			...(typeof raw.terminal.message === "string"
 				? { message: raw.terminal.message }
 				: {}),
-			...(isIndex(raw.terminal.dropped) ? { dropped: raw.terminal.dropped } : {}),
+			...(isIndex(raw.terminal.dropped)
+				? { dropped: raw.terminal.dropped }
+				: {}),
 		}),
 	});
 }

@@ -252,7 +252,10 @@ function streamFixture(): {
 	};
 }
 
-function ackFor(callId: string, subscriptionId: string): Record<string, unknown> {
+function ackFor(
+	callId: string,
+	subscriptionId: string,
+): Record<string, unknown> {
 	return replyFor(callId, {
 		ok: true,
 		value: { subscription_id: subscriptionId, capacity: 64 },
