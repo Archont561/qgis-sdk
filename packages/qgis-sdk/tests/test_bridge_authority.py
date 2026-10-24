@@ -275,6 +275,43 @@ def test_releasing_a_view_drops_its_refs_and_grants_but_not_the_files(
     assert authority.resolve_file(other, kept.to_wire(), FileOperation.READ)
 
 
+def test_pruning_a_replaced_generation_forgets_its_refs_and_grants(
+    authority: HostAuthority, dispatcher: Dispatcher, dataset: Path
+) -> None:
+    old = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    authority.grant_file(old, dataset)
+    authority.grant_network(old, NetworkGrant(origins=("https://api.example.org",)))
+    dispatcher.advance_generation()
+    new = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    kept = authority.grant_file(new, dataset)
+
+    assert authority.prune(new.generation) == 1
+    assert authority.prune(new.generation) == 0
+    assert authority.network_grant(new) is None
+    assert authority.refs(new) == (kept,)
+    assert dataset.exists()
+
+
+def test_a_write_destination_whose_parent_was_replaced_is_stale(
+    authority: HostAuthority, dispatcher: Dispatcher, tmp_path: Path
+) -> None:
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    folder = tmp_path / "out"
+    folder.mkdir()
+    ref = authority.grant_file(
+        binding, folder / "export.geojson", operations=("write",)
+    )
+
+    folder.rename(tmp_path / "elsewhere")
+    with pytest.raises(QgisSdkStaleHandleError, match="destination"):
+        authority.export_file(binding, ref.to_wire(), "{}")
+
+    (tmp_path / "elsewhere").rename(folder)
+    (folder / "export.geojson").mkdir()
+    with pytest.raises(QgisSdkStaleHandleError, match="no longer names a file"):
+        authority.export_file(binding, ref.to_wire(), "{}")
+
+
 def test_a_ref_whose_file_moved_or_changed_identity_is_stale(
     authority: HostAuthority, dispatcher: Dispatcher, dataset: Path, tmp_path: Path
 ) -> None:
