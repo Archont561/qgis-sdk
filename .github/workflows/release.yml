@@ -297,7 +297,7 @@ jobs:
         working-directory: bridge
         run: |
           set -o pipefail
-          if npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+          if [ "$(npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
             echo "npm already has @archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}; skipping."
           else
             npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee ../npm-publish.log
@@ -356,7 +356,7 @@ jobs:
         working-directory: bridge
         run: |
           set -o pipefail
-          if npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+          if [ "$(npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://npm.pkg.github.com 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
             echo "GitHub Packages already has @archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}; skipping."
           else
             npm publish --registry=https://npm.pkg.github.com 2>&1 | tee ../gh-pkg-publish.log
