@@ -71,6 +71,10 @@ on:
 
 permissions:
   contents: write
+  # The tag push below is made with GITHUB_TOKEN, and GitHub does not start a
+  # workflow for an event that token caused - so the tag alone can never reach
+  # release.yml. This permission lets the train hand the tag over explicitly.
+  actions: write
 
 # Release decisions race on the same history, so runs queue instead of
 # cancelling: a cancelled tag push could split the release train in two.
@@ -176,6 +180,20 @@ jobs:
           --tag "${{ steps.plan.outputs.tag }}"
           --message-file "${{ steps.plan.outputs.changelog_file }}"
           --push
+
+      - name: Hand the tag to the release workflow
+        # The tag was pushed with GITHUB_TOKEN, so its own push event starts
+        # nothing (GitHub's recursion guard). Without this step a dispatch or
+        # milestone release leaves an annotated tag and no artifacts, which is
+        # how v0.2.0 looked on 2026-10-24 before the tag was deleted.
+        if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh workflow run release.yml
+          --repo "$GITHUB_REPOSITORY"
+          --ref "${{ steps.plan.outputs.tag }}"
+          -f tag="${{ steps.plan.outputs.tag }}"
 
       - name: Report dry-run release
         if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.dry_run == 'true'

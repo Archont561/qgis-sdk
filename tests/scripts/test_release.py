@@ -1249,6 +1249,22 @@ def test_autorelease_workflow_has_milestone_triggers_paths_ignore_and_dispatch_i
     assert "RELEASE_SCOPE" in text
 
 
+def test_the_autorelease_train_hands_its_tag_to_the_release_workflow():
+    """A tag pushed with GITHUB_TOKEN starts no workflow, so the hop is explicit.
+
+    Without the dispatch a dispatch- or milestone-triggered release produced an
+    annotated tag that release.yml never saw: the tag existed, nothing was
+    published, and no run recorded the gap.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    text = (repo_root / ".github/workflows/autorelease.yml").read_text(encoding="utf-8")
+
+    assert "actions: write" in text
+    assert "gh workflow run release.yml" in text
+    hand_over = text.split("Hand the tag to the release workflow", 1)[1]
+    assert "dry_run != 'true'" in hand_over.split("Report dry-run release", 1)[0]
+
+
 def test_the_coverage_config_is_tracked_so_ci_measures_the_same_code():
     """The QGIS adapter omit lives in `.coveragerc`, which CI must receive.
 
