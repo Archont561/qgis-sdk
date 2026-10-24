@@ -29,12 +29,12 @@ from qgis_sdk.bridge.streams import (
 
 __all__ = [
     "BRIDGE_PROTOCOL_VERSION",
+    "MAX_FRAMES_PER_PUMP",
+    "MAX_QUEUED_EVENTS",
     "BridgeErrorCode",
     "BridgeOperation",
     "Dispatcher",
     "InvokeEnvelope",
-    "MAX_FRAMES_PER_PUMP",
-    "MAX_QUEUED_EVENTS",
     "StreamEventType",
     "StreamTerminal",
     "Subscription",

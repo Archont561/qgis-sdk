@@ -13,9 +13,9 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-
 from qgis_sdk.bridge import BridgeOperation, Dispatcher
 from qgis_sdk.bridge.resources import Handle, HandleKind, ReleaseLedger, ReleaseOutcome
+from qgis_sdk.models.errors import QgisSdkBridgeError
 
 ORIGIN = "qgis://desktop"
 TICKS = BridgeOperation(id="demo.ticks", title="Emit a tick")
@@ -126,7 +126,7 @@ def test_a_handle_carries_a_kind_and_an_id_and_nothing_else() -> None:
         {"kind": "owned", "id": "tmp-1", "callable": "delete_everything"},
         "owned:tmp-1",
     ):
-        with pytest.raises(Exception):
+        with pytest.raises(QgisSdkBridgeError):
             Handle.parse(raw)
 
 

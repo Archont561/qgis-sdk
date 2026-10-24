@@ -66,7 +66,9 @@ def _stream_host() -> Dispatcher:
         description={"schema_version": 1, "id": "demo.plugin", "title": "Demo"},
         authorize=lambda binding, operation: True,
     )
-    dispatcher.register_stream(TICKS, lambda payload: iter([{"index": 0}, {"index": 1}]))
+    dispatcher.register_stream(
+        TICKS, lambda payload: iter([{"index": 0}, {"index": 1}])
+    )
     dispatcher.register_stream(PUSHED, lambda payload: None)
     return dispatcher
 
@@ -197,16 +199,10 @@ def _stream_cases() -> list[dict[str, Any]]:
     coalesced = _stream_host()
     binding = coalesced.bind(view_id="view-1", origin="qgis://desktop")
     subscription_id = _subscribe(coalesced, binding, PUSHED.id)
-    coalesced.emit(
-        subscription_id, {"percent": 10}, kind=StreamEventType.PROGRESS
-    )
-    coalesced.emit(
-        subscription_id, {"percent": 20}, kind=StreamEventType.PROGRESS
-    )
+    coalesced.emit(subscription_id, {"percent": 10}, kind=StreamEventType.PROGRESS)
+    coalesced.emit(subscription_id, {"percent": 20}, kind=StreamEventType.PROGRESS)
     coalesced.emit(subscription_id, {"row": 1})
-    streams.append(
-        {"name": "progress-coalesced", "frames": coalesced.pump(binding)}
-    )
+    streams.append({"name": "progress-coalesced", "frames": coalesced.pump(binding)})
 
     overflow = _stream_host()
     binding = overflow.bind(view_id="view-1", origin="qgis://desktop")

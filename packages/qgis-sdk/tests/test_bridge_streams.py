@@ -12,8 +12,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-import pytest
-
 from qgis_sdk.bridge import BridgeOperation, Dispatcher, ViewBinding
 from qgis_sdk.bridge.streams import (
     MAX_FRAMES_PER_PUMP,
@@ -60,7 +58,11 @@ def _broken(payload: Any) -> Iterator[dict[str, Any]]:
 
 
 def _subscribe(
-    dispatcher: Dispatcher, binding: ViewBinding, *, operation: str = TICKS.id, **payload
+    dispatcher: Dispatcher,
+    binding: ViewBinding,
+    *,
+    operation: str = TICKS.id,
+    **payload,
 ) -> dict[str, Any]:
     return dispatcher.dispatch(
         binding,

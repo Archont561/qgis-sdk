@@ -374,7 +374,9 @@ class Dispatcher:
             {"subscription_id": subscription.id, "capacity": subscription.capacity},
         )
 
-    def _unsubscribe(self, binding: ViewBinding, raw: Mapping[str, Any]) -> dict[str, Any]:
+    def _unsubscribe(
+        self, binding: ViewBinding, raw: Mapping[str, Any]
+    ) -> dict[str, Any]:
         """Dispose one subscription, idempotently.
 
         A second disposal of the same id - or one that arrives for a
@@ -417,13 +419,9 @@ class Dispatcher:
             binding.view_id,
             Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
         )
-        return success(
-            call_id, {"subscription_id": subscription.id, "disposed": True}
-        )
+        return success(call_id, {"subscription_id": subscription.id, "disposed": True})
 
-    def track(
-        self, binding: ViewBinding, kind: HandleKind, handle_id: str
-    ) -> Handle:
+    def track(self, binding: ViewBinding, kind: HandleKind, handle_id: str) -> Handle:
         """Record a handle the view now holds, so it can be released later."""
         handle = Handle(kind=kind, id=handle_id)
         self._ledger.track(binding.view_id, handle)
@@ -465,7 +463,9 @@ class Dispatcher:
             handles = [Handle.parse(item) for item in requested]
         except QgisSdkBridgeError as error:
             return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, str(error))
-        return success(call_id, {"released": self._ledger.release_all(binding.view_id, handles)})
+        return success(
+            call_id, {"released": self._ledger.release_all(binding.view_id, handles)}
+        )
 
     def _dispose_subscription(self, subscription_id: str) -> bool:
         """Dispose a subscription by id; ``False`` when it already ended."""

@@ -119,7 +119,10 @@ class ReleaseLedger:
     def handles(self, view_id: str) -> tuple[Handle, ...]:
         """Every handle the view holds, in a stable order."""
         return tuple(
-            sorted(self._held.get(view_id, set()), key=lambda item: (item.kind.value, item.id))
+            sorted(
+                self._held.get(view_id, set()),
+                key=lambda item: (item.kind.value, item.id),
+            )
         )
 
     def release(self, view_id: str, handle: Handle) -> ReleaseOutcome:
@@ -156,7 +159,9 @@ class ReleaseLedger:
             )
         return results
 
-    def release_all(self, view_id: str, handles: Iterable[Handle]) -> list[dict[str, str]]:
+    def release_all(
+        self, view_id: str, handles: Iterable[Handle]
+    ) -> list[dict[str, str]]:
         """Release a named list of handles, reporting each outcome."""
         return [
             {

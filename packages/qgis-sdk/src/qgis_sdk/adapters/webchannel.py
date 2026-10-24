@@ -28,7 +28,9 @@ def _import_webchannel() -> tuple[Any, Any, Any] | None:
     candidates = ("qgis.PyQt.QtCore", "PyQt6.QtCore", "PyQt5.QtCore")
     for module_name in candidates:
         try:
-            module = __import__(module_name, fromlist=("QObject", "pyqtSignal", "pyqtSlot"))
+            module = __import__(
+                module_name, fromlist=("QObject", "pyqtSignal", "pyqtSlot")
+            )
         except ImportError:
             continue
         qobject = getattr(module, "QObject", None)

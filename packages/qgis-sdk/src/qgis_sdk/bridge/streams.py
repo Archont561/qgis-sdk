@@ -229,9 +229,7 @@ class Subscription:
         if kind is StreamEventType.PROGRESS and self._queue:
             tail = self._queue[-1]
             if tail.get("event", {}).get("kind") == StreamEventType.PROGRESS.value:
-                frame = event_frame(
-                    self.id, tail["seq"], kind=kind, payload=payload
-                )
+                frame = event_frame(self.id, tail["seq"], kind=kind, payload=payload)
                 self._queue[-1] = frame
                 return True
         if len(self._queue) >= self.capacity:
@@ -245,9 +243,7 @@ class Subscription:
                 dropped=self.dropped,
             )
             return False
-        self._queue.append(
-            event_frame(self.id, self.seq, kind=kind, payload=payload)
-        )
+        self._queue.append(event_frame(self.id, self.seq, kind=kind, payload=payload))
         self.seq += 1
         return True
 
