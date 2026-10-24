@@ -1,10 +1,10 @@
 ---
 id: TASK-33
 title: 'Qualify Windows, macOS and Desktop QGIS targets'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-17 16:06'
-updated_date: '2026-10-21 22:45'
+updated_date: '2026-10-24 10:24'
 labels: []
 milestone: m-0
 dependencies: []
@@ -35,14 +35,19 @@ Qualify the QGIS targets that the Linux sandbox cannot reach: a clean supported 
 <!-- AC:BEGIN -->
 - [ ] #1 Record a clean supported Windows QGIS installation with its Python, Qt and Chromium builds and a successful native import.
 - [ ] #2 Demonstrate the QGIS Desktop GUI path on a platform with a display, including the WebEngine host inside a running Desktop session.
-- [ ] #3 Demonstrate coexistence with another plugin that already uses the same optional native runtime dependency.
-- [ ] #4 Publish evidence and blockers for any target that remains unavailable, without claiming universal QGIS 4 support.
+- [x] #3 Demonstrate coexistence with another plugin that already uses the same optional native runtime dependency.
+- [x] #4 Publish evidence and blockers for any target that remains unavailable, without claiming universal QGIS 4 support.
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 Created at the TASK-23 closeout (2026-10-17) so the targets the Linux sandbox cannot reach stay tracked instead of being left as loose blockers. TASK-23 qualified the Linux headless and Qt WebEngine path and closed with a Windows candidate, a macOS candidate, a real Desktop GUI run and clean-prefix plugin coexistence explicitly unqualified. The headless harness it produced is at packages/qgis-sdk/tests/qualification/webengine_smoke.py and is reusable on the other targets.
+
+2026-10-24 (TASK-33 AC #3 & AC #4 completed; GitHub Actions restored):
+- AC #3 (optional native-runtime plugin coexistence): Implemented `packages/qgis-sdk/scripts/plugin_coexistence_smoke.py` and `packages/qgis-sdk/tests/scripts/test_qualification_coexistence.py` (`QGIS_SDK_PLUGIN_COEXISTENCE=1`, 23 tests). In a clean throwaway QGIS 4.2.3-Belem do Para Desktop profile on Linux x86-64 (CPython 3.14.8, Qt 6.11.2, `QT_QPA_PLATFORM=offscreen`), `neighbor_pydantic_probe` loads first and imports `pydantic==2.14.1` and `pydantic_core==2.50.1` into `sys.modules`; `sdk_pydantic_probe` (built on `create_class_factory` and `PydanticContractAdapter` with `SafeJsonInteger`) loads alongside it; both plugins are active simultaneously, share the identical `pydantic` and `pydantic_core._pydantic_core` modules in `sys.modules`, validate and reject payloads independently, and unloading `sdk_pydantic_probe` closes its `ResourceScope` while leaving `neighbor_pydantic_probe` loaded and functional (`passed: true`, `action_result: 7`).
+- AC #4 (published evidence and blockers): Updated `packages/qgis-sdk/README.md` and `backlog/docs/plans/doc-8` with the full qualification and blocker table. GitHub Actions CI is live again (PR #38 / commit `a023948`): `cross-platform (macos-latest)` (`120842898256`, arm64, CPython 3.14, Bun 1.4.2: 391 collected, 0 failed, 5 skipped; bridge 90 pass) and `cross-platform (windows-latest)` (`120842898251`, x86_64, CPython 3.14, Bun 1.4.2: 391 collected, 0 failed, 6 skipped; bridge 90 pass) qualify the `pip`-installed QGIS-free SDK, `PydanticContractAdapter` (`pydantic-core` native wheel), and TypeScript bridge on macOS and Windows.
+- Remaining blockers (AC #1 & AC #2 stay unchecked): AC #1 remains blocked because `pixi.toml` pins `platforms = ["linux-64"]` and neither the sandbox nor the `pip`-only `cross-platform` CI job provisions a Windows or macOS QGIS 4 installation. AC #2 remains blocked because neither the Linux sandbox nor headless CI runners have a display server or `Xvfb` (`QT_QPA_PLATFORM=offscreen` renders no widgets, canvas, 3D or visible in-Desktop `QWebEngineView`). Universal QGIS 4 support is not claimed.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

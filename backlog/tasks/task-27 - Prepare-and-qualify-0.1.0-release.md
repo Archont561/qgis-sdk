@@ -1,10 +1,10 @@
 ---
 id: TASK-27
 title: Prepare and qualify 0.1.0 release
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:56'
+updated_date: '2026-10-24 10:24'
 labels: []
 milestone: m-0
 dependencies:
@@ -29,11 +29,21 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Required 0.1.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
-- [ ] #2 Use valid SemVer and prereleases such as 0.1.0-alpha.1; update actual manifests only for released packages and document migration notes.
-- [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
+- [x] #1 Required 0.1.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
+- [x] #2 Use valid SemVer and prereleases such as 0.1.0-alpha.1; update actual manifests only for released packages and document migration notes.
+- [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 (TASK-27 AC #1, #2, #3 verified; AC #4 held at pre-publish gate per user direction):
+- AC #1 (0.1.0 milestone outcomes & blocker accounting): All milestone m-0 tasks (`TASK-2`, `TASK-11`, `TASK-12`, `TASK-13`, `TASK-23`) and `TASK-1`/`TASK-24` are `Done` with verified evidence; `TASK-33` AC #3 (in-Desktop `pydantic==2.14.1` / `pydantic_core==2.50.1` plugin coexistence) and AC #4 (published platform qualification & blocker matrix) are verified and checked, while `TASK-33` AC #1 (Windows/macOS QGIS 4 installation) and AC #2 (display-server GUI + visible in-Desktop WebEngine session) remain documented target blockers. The earlier GitHub Actions outage (`doc-8`) is resolved: on `main` (`a023948`) and PR #37/#38, `ci.yml` (`checks` `120843196144`, `cross-platform (macos-latest)` `120842898256`, `cross-platform (windows-latest)` `120842898251`), `publish-sandbox.yml` (`plan` `120839883187`, `publish` `120839914192`), and `autorelease.yml` (`plan-and-tag` `120843196402`) all succeeded, and `scripts/restore.sh` restores `build`, `bun`, and `default` with 0 manifest integrity failures.
+- AC #2 (SemVer, prereleases, scoped manifests, migration notes): `scripts/release.py` (`107 passed` in `tests/scripts/test_release.py`) enforces valid SemVer (`0.1.0`) and prereleases (`0.1.0-alpha.1`, `0.1.0-beta.1`, `0.1.0-rc.1`) and supports `--scope sdk|bridge|all` so only released package manifests are stamped. Documented the 0.1.0 experimental SemVer policy, scoped manifest stamping, and pre-0.1.0 `hello()` removal / public surface in `packages/qgis-sdk/README.md`.
+- AC #3 (compatibility, licenses, generated-file consistency, clean installation, independent protocol versions): Added root MIT `LICENSE` and `"license": "MIT"` in `packages/qgis-sdk-bridge/package.json` to match `packages/qgis-sdk/pyproject.toml` and `recipe.yaml`. Verified zero contract-generation drift (`pixi run -e bun bun run sdk:generate` + `git status --porcelain`), 100% Python coverage (`383 passed, 6 skipped`, 918/918 statements) and 100% TypeScript coverage (`90 pass`), all 6 opt-in real-QGIS harnesses passing (`389 passed, 0 skipped` on QGIS 4.2.3 / Qt 6.11.2 / Chromium 140.0.0.0 / CPython 3.14.8), `release-build-python` + `release-verify-python` (`twine check --strict` PASSED), clean isolated `venv` wheel installation (`qgis_sdk.__all__` verified), and independent `PluginDescription.schema_version = 1`.
+- AC #4 (explicit publishing approval): Left unchecked by explicit user choice (`qualify_only`). `pixi run -e default release-plan` reports `action=skip scope=all tag=v0.1.0 reason=no stable tag exists yet`; no stable `1.0.0` promise is made and no automatic publication occurs until the user dispatches `autorelease.yml`.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

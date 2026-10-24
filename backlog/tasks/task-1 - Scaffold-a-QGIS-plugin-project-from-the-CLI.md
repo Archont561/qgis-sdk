@@ -3,8 +3,8 @@ id: TASK-1
 title: Scaffold a QGIS plugin project from the CLI
 status: Done
 assignee: []
-created_date: 2026-10-15 23:06
-updated_date: '2026-10-24T08:54:00Z'
+created_date: '2026-10-15 23:06'
+updated_date: '2026-10-24 10:24'
 labels: []
 milestone: m-1
 dependencies:
@@ -23,10 +23,16 @@ Provide qgis-sdk new plugin with a compact, valid plugin layout, metadata, Pytho
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Generated project has valid QGIS plugin metadata and an importable classFactory entry point.
-- [ ] #2 The minimal scaffold can be loaded and unloaded in QGIS Desktop.
-- [ ] #3 Generated files include a smoke test and clear instructions for selecting Desktop or standalone Qt mode.
+- [x] #1 Generated project has valid QGIS plugin metadata and an importable classFactory entry point.
+- [x] #2 The minimal scaffold can be loaded and unloaded in QGIS Desktop.
+- [x] #3 Generated files include a smoke test and clear instructions for selecting Desktop or standalone Qt mode.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24: Checked AC #1, #2, and #3 after GitHub Actions returned (`doc-8` resolved) and `ci.yml` passed across `checks` (`ubuntu-latest`), `cross-platform (macos-latest)`, and `cross-platform (windows-latest)` on PR #38 / commit `a023948`, alongside `QGIS_SDK_SCAFFOLD_DESKTOP=1` passing against real QGIS 4.2.3 Desktop.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

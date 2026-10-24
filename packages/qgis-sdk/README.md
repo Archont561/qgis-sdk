@@ -81,7 +81,7 @@ The checked contract-generation examples live in `tests/contract_sample/` and ar
 
 `qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound, which both it and the schema generator take from the one `qgis_sdk.models.MAX_SAFE_INTEGER` constant while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
 
-Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8, which is the interpreter carrying PyQGIS in the workspace, and the QGIS-free suite additionally on CPython 3.11.2, the minimum supported version; the real-Qt harnesses have only been run under 3.14.8. Windows/QGIS coexistence, Desktop/WebEngine behavior, and Conda delivery are still qualification gates.
+Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8 (which carries PyQGIS in the workspace), the QGIS-free suite on CPython 3.11.2 (the minimum supported version), and GitHub Actions `macos-latest` (`arm64`) and `windows-latest` (`x86_64`) on CPython 3.14 (`pip install -e "packages/qgis-sdk[dev]"`). In-process coexistence with another Pydantic-using plugin inside the real QGIS 4.2.3 Desktop application is proven on Linux by `scripts/plugin_coexistence_smoke.py`; Windows/macOS QGIS installations, display-server Desktop/WebEngine rendering, and Conda delivery remain explicit qualification gates.
 
 ## Project scaffold
 
@@ -201,12 +201,16 @@ pixi run -e default python packages/qgis-sdk/scripts/webengine_smoke.py
 
 The harness resolves everything it needs from the active prefix, so the same command works in any environment that provides a QGIS installation. It sets `QT_QPA_PLATFORM=offscreen`, the Chromium flags `--no-sandbox --disable-gpu --disable-dev-shm-usage --single-process`, the `PROJ_LIB` and `QGIS_PREFIX_PATH` of that prefix, and puts the QGIS Python bindings on `PYTHONPATH`.
 
-| Requirement | Linux (qualified) | macOS | Windows |
+| Requirement | Linux (`linux-64`) | macOS (`macos-latest` arm64) | Windows (`windows-latest` x86-64) |
 | :-- | :-- | :-- | :-- |
-| QGIS with Python bindings | Pixi `default` environment, QGIS 4.2.3 | not qualified | not qualified |
-| Qt WebEngine Python bindings | `pyqt6-webengine` 6.11.0 | not qualified | not qualified |
-| Display | none, `offscreen` | none, `offscreen` | none, `offscreen` |
-| Chromium sandbox | disabled by the flags above | same | same |
+| QGIS-free Python SDK + `PydanticContractAdapter` (`pydantic==2.14.1`) | Qualified (CPython 3.14.8 & 3.11.2) | Qualified in CI (`pip`, CPython 3.14) | Qualified in CI (`pip`, CPython 3.14) |
+| TypeScript bridge (`packages/qgis-sdk-bridge`) | Qualified (Bun 1.4.2, 90 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 90 tests) | Qualified in CI (Bun 1.4.2, 90 tests) |
+| QGIS with Python bindings | Qualified (Pixi `default`, QGIS 4.2.3) | Blocker: no macOS QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) | Blocker: no Windows QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) |
+| Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
+| Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
+| Two-plugin `pydantic` / `pydantic_core` coexistence in QGIS Desktop | Qualified on Linux (`plugin_coexistence_smoke.py`, TASK-33 AC #3) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
+| Display-server Desktop GUI + in-Desktop `QWebEngineView` rendering | Blocker: no display server or `Xvfb` in sandbox/CI (`offscreen` renders no widgets, TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) |
+| Chromium sandbox | Disabled by headless flags above | N/A | N/A |
 
 Without the Chromium flags the WebEngine process fails with `eglInitialize: Failed to get system egl display`. ANGLE, EGL, dbus and PDAL messages printed during a run are noise and do not affect the result.
 
@@ -216,7 +220,7 @@ Without the Chromium flags the WebEngine process fails with `eglInitialize: Fail
 QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_webengine.py
 ```
 
-The headless path is **not** a Desktop GUI or plugin-lifecycle qualification: the development sandbox has no display and no Xvfb, and no Windows or macOS QGIS candidate has been tested. `qgis_sdk.adapters.webengine` therefore only proves that the optional bindings can be located and that a missing installation is reported with an actionable error.
+The headless path is **not** a visible Desktop GUI qualification and does **not** claim universal QGIS 4 support: the Linux sandbox and CI runners have no display server or `Xvfb`, and `pixi.toml` locks `linux-64` only, so no Windows or macOS QGIS 4 installation has been tested. `qgis_sdk.adapters.webengine` therefore only proves that the optional bindings can be located on a qualified host and that a missing installation is reported with an actionable error.
 
 ## Build artifacts
 
@@ -490,3 +494,74 @@ opt-in test with:
 ```sh
 QGIS_SDK_QT_SCHEDULER=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_scheduler.py
 ```
+
+### Optional native-runtime plugin coexistence (TASK-33 AC #3)
+
+QGIS plugins share one embedded Python interpreter and `sys.modules` table inside the
+Desktop process. `scripts/plugin_coexistence_smoke.py` proves that an SDK plugin using
+`qgis_sdk.adapters.pydantic.PydanticContractAdapter` (`pydantic==2.14.1` and its native
+`pydantic_core` extension) coexists cleanly with a pre-existing non-SDK plugin that
+already imports and validates with Pydantic:
+
+```sh
+pixi run -e default python packages/qgis-sdk/scripts/plugin_coexistence_smoke.py
+QGIS_SDK_PLUGIN_COEXISTENCE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_coexistence.py
+```
+
+```json
+{
+  "action_result": 7,
+  "both_loaded": true,
+  "error": null,
+  "neighbor_plugin": "neighbor_pydantic_probe",
+  "neighbor_started": true,
+  "neighbor_survives_sdk_unload": true,
+  "neighbor_unloaded_cleanly": true,
+  "neighbor_validates_while_coexisting": true,
+  "passed": true,
+  "platform": "Linux-6.1.158+-x86_64-with-glibc2.36",
+  "pydantic_core_version": "2.50.1",
+  "pydantic_preloaded": true,
+  "pydantic_version": "2.14.1",
+  "python_version": "3.14.8",
+  "qgis_version": "4.2.3-Belém do Pará",
+  "sdk_contract_dispatched": true,
+  "sdk_plugin": "sdk_pydantic_probe",
+  "sdk_started": true,
+  "sdk_unloaded_cleanly": true,
+  "shared_native_runtime": true
+}
+```
+
+The harness installs both plugins into a clean throwaway profile, loads and starts the
+neighbor plugin first so `pydantic` and `pydantic_core._pydantic_core` are already in
+`sys.modules`, loads and starts the SDK plugin alongside it, confirms both share the
+identical native module objects, exercises strict request validation and rejection in
+`PydanticContractAdapter` while the neighbor also validates payloads, and verifies that
+unloading the SDK plugin closes its `ResourceScope` while leaving the neighbor plugin
+loaded and functional.
+
+## 0.1.0 experimental release and migration policy (TASK-27)
+
+- **Experimental `0.x` SemVer:** `0.1.0` (and prereleases such as `0.1.0-alpha.1`,
+  `0.1.0-beta.1`, `0.1.0-rc.1`) is an experimental milestone target; no `1.0.0`
+  stability promise is made. Breaking changes during `0.x` require a documented minor
+  version bump (`0.Y.0`) with migration notes; compatible bug fixes and additive
+  changes use patch releases (`0.Y.Z`).
+- **Scoped manifest updates:** `scripts/release.py` (`pixi run release-stamp`) updates
+  only the manifests in the selected release scope (`sdk` for `packages/qgis-sdk`,
+  `bridge` for `packages/qgis-sdk-bridge`, or `all`). Because `qgis-sdk-bridge`
+  currently exposes an intentionally empty entry point, `0.1.0` can be released with
+  `scope=sdk` without bumping or publishing the bridge placeholder.
+- **Independent protocol versions:** `PluginDescription.schema_version = 1` in
+  `qgis_sdk.declarations` and future WebEngine IPC protocol versions are versioned
+  independently of the `qgis-sdk` and `qgis-sdk-bridge` package versions.
+- **0.1.0 surface & migration note:** The placeholder `qgis_sdk.hello()` and bridge
+  `hello()` smoke functions were removed prior to the first release (PR #23); the
+  public root surface of `qgis_sdk` is `qgis_sdk.__all__` (`ActionDescription`,
+  `PluginDescription`, `QgisSdkDeclarationError`, `action`, `describe_plugin`,
+  `plugin`), plus the explicit submodules `qgis_sdk.models`, `qgis_sdk.services`,
+  `qgis_sdk.core`, `qgis_sdk.adapters.desktop`, `qgis_sdk.adapters.webengine`,
+  `qgis_sdk.adapters.pydantic`, `qgis_sdk.adapters.pydantic_types`, and
+  `qgis_sdk.scaffold` (`qgis-sdk scaffold` CLI). All packages and the repository root
+  are licensed under MIT (`LICENSE`).
