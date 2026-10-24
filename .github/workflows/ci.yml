@@ -86,11 +86,15 @@ jobs:
         id: s09
         run: pixi run -e default test-release-tool
 
+      - name: Verify the scoped versions and the shared contract
+        id: s10
+        run: pixi run -e default release-verify-versions
+
       # The default environment carries the QGIS feature, so this is the only
       # place the native form path actually executes: a developer machine needs a
       # display setup and this sandbox has no Qt at all.
       - name: Test native forms offscreen
-        id: s10
+        id: s11
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
@@ -124,15 +128,15 @@ jobs:
           exit "$status"
 
       - name: Lint and format TypeScript
-        id: s11
+        id: s12
         run: pixi run -e bun biome-check
 
       - name: Lint GitHub Actions
-        id: s12
+        id: s13
         run: pixi run -e default lint-github-actions
 
       - name: Typecheck TypeScript
-        id: s13
+        id: s14
         run: pixi run -e bun typecheck
 
       - name: Check coverage for all packages
@@ -142,7 +146,7 @@ jobs:
           pixi run -e bun bun run coverage 2>&1 | tee coverage-output.log
 
       - name: Annotate the coverage failure
-        id: s14
+        id: s15
         if: failure() && steps.coverage.outcome == 'failure'
         run: |
           # The job log is not always retrievable, but annotations are: surface
@@ -152,7 +156,7 @@ jobs:
             | while IFS= read -r line; do echo "::error::$line"; done
 
       - name: Upload Python coverage
-        id: s15
+        id: s16
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         # v6+ is the first codecov major whose embedded github-script targets
         # node24; v5 makes fresh runs emit Node 20 deprecation warnings.
@@ -164,7 +168,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload TypeScript coverage
-        id: s16
+        id: s17
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
@@ -183,7 +187,7 @@ jobs:
       # and the log archive is not reachable from every client. Every step above
       # carries an id so this can name the one that actually failed.
       - name: Report the failed step
-        id: s17
+        id: s18
         if: failure()
         env:
           STEPS: ${{ toJSON(steps) }}
