@@ -1,10 +1,10 @@
 ---
 id: TASK-17
 title: Generate checked in TypeScript contracts clients and validators
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 21:01'
+updated_date: '2026-10-24 21:04'
 labels: []
 milestone: m-2
 dependencies:
@@ -45,6 +45,8 @@ Generate checked in TypeScript contracts clients and validators. Implement only 
 2026-10-24: the curated host surface landed (decision-27 accepted); the slice detail is in the comments below. AC #1 keeps its one open half: generated **event/stream** types. Stream frames are still hand-written on the client side, so this task stays In Progress and the host module is described as a surface, not as events.
 
 2026-10-24 (events, the last half of AC #1): streams are operations now ([decision-28](../decisions/decision-28%20-%20Declare-streams-as-operations-and-generate-their-events-not-the-frame-envelope.md), accepted). `@stream(id, title, events={kind: Dataclass})` marks a sync method returning an iterator of `StreamEvent`s; `PluginDescription.streams` is serialized beside `actions` in the same dotted id namespace; `BridgeOperation.events` is advertised in the handshake and the host refuses to emit an undeclared kind or a payload that breaks its schema (the subscription ends with an `error` terminal). The generator renders one type per declared event kind, a `{Base}Event` discriminated union with a predicate, `StreamHandlers`/`StreamHandle`/`StreamTerminal`, a `subscribe` requirement on `BridgeClientLike` and a stream member `(input, handlers, options?) => Promise<StreamHandle>` - and only when a stream is declared, so a stream-less module (and `host.ts`) is byte-identical to before. The frame envelope (`protocol`, `subscription_id`, `seq`, `gap`) stays hand-written in `bridge.ts`; a Python test pins its kind unions to `StreamEventType`/`StreamTerminal`. Evidence: sample `SitesPlugin` gained `sites.watch` and `tests/contracts/generated/clients/sites.ts` was regenerated in the same commit (fingerprint `sha256:7e24395d...`); `generated.types.ts` fails the build for a handler that reads a progress field off a data event, and `generated.test.ts` drives a real `BridgeClient` through subscribe, typed events, a schema-breaking frame and a seq gap. Refusals a generator cannot render: an action with events, a stream with a result, a non-event kind, an empty events map, a schema outside the subset. Python 778 passed / TS 142 passed via Pixi.
+
+2026-10-24 final summary: the generator now covers DTOs, operation maps, clients, validators, the curated host surface and stream events, all from Python declarations and none of it needing QGIS or a handler. Landed across PR #51-#54 on main; the closing slice (streams, decision-28) merged as a32478a with CI green on all three runners and the full Pixi gate passing locally. Both checked-in artifacts are current under `generate_bridge_clients.py --check`. Follow-ups live in their own tasks: TASK-18 (React hooks over the generated client), TASK-5, TASK-20, TASK-15, TASK-29.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
