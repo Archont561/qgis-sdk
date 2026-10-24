@@ -442,6 +442,11 @@ export class BridgeClient {
 		});
 	}
 
+	/** Whether {@link close} has run; a closed client answers nothing. */
+	public get isClosed(): boolean {
+		return this.closed;
+	}
+
 	/** Replies that named no pending call: a late duplicate, or a stray message. */
 	public get unmatchedReplies(): number {
 		return this.unmatched;

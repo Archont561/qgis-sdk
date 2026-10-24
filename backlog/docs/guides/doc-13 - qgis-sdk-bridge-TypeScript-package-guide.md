@@ -181,3 +181,101 @@ const handle = await operations.sites.watch(
 	},
 );
 ```
+
+## React bindings
+
+`./react` is an optional entry point ([decision-18](../../decisions/decision-18%20-%20Ship-a-framework-neutral-bridge-and-explicit-web-scaffolding-choices.md)):
+it is the only subpath that imports React, `react` is an optional peer, and
+the root, `./bridge` and `./host` stay free of any framework or browser global
+(`tests/surface.test.ts` bundles them and fails on a stray `react`). The
+bindings add no second client. A `BridgeProvider` shares the same `BridgeClient`
+a vanilla page builds, and the hooks take the members a generated module already
+exports, so the typed contract is the generated one.
+
+```ts
+import { BridgeProvider, useOperation, useOperations, useStream } from "@archont561/qgis-sdk-bridge/react";
+import { createOperations } from "./bridge";
+
+function App() {
+	// Owns a client for `transport` and closes it on unmount. Pass `client`
+	// instead to share one the page already owns; the provider then never
+	// closes it. Exactly one of the two is required.
+	return createElement(BridgeProvider, { transport }, createElement(Sites));
+}
+
+function Sites() {
+	const operations = useOperations(createOperations); // memoised per client
+	const [summary, loadSummary] = useOperation(operations.sites.summary);
+	const watch = useStream(operations.sites.watch, { layer_id: "sites" }, {
+		onEvent: (event) => { if (event.kind === "data") render(event.payload.change); },
+	});
+	// summary.status: idle | pending | ok (value) | error (error)
+	// watch.status:   idle | opening | open | ended (terminal) | failed (error)
+}
+```
+
+- **`useOperation(fn)`** returns `[state, run, { abort, reset }]`. `run(input)`
+  resolves with the value, or with `undefined` when the call failed, was aborted
+  or was superseded - the state carries the error, so the promise never rejects
+  into an event handler. Only the latest run can change the state; unmounting
+  aborts whatever is in flight and settles nothing afterwards.
+- **`useStream(open, input | null, handlers)`** keeps one subscription open
+  while the component is mounted. It follows the *content* of `input` (a new
+  object with equal fields does not reopen it), `null` closes it, handlers are
+  read fresh on every frame, and unmount closes the stream even when the host
+  has not acknowledged it yet. A host terminal moves the state to `ended`; a
+  refused subscription is `failed` with the `QgisSdkBridgeRemoteError`.
+- **StrictMode.** The simulated remount closes the owned client and the hook
+  subscriptions; the effects that follow make exactly one new client and one
+  new subscription, which the tests assert through the harness below.
+- **Unmounting the provider** closes an owned client, which detaches the
+  transport; a closed client sends no unsubscribe, the view going away is what
+  disposes its subscriptions host-side ([decision-23](../../decisions/decision-23%20-%20Adapt-Tauri-invocation-resource-and-testing-patterns-to-QWebChannel.md)).
+  Unmounting a component under a live provider does send one.
+
+## Testing against a scripted host
+
+`./testing` is a `WireTransport` a test hands to its own `BridgeClient`, so the
+page's real client, the generated module's validation and the React bindings
+all run unchanged against a host the test scripts. Nothing global is mutated:
+two harnesses are two hosts, and a test can prove nothing crosses between
+their clients.
+
+```ts
+import { BridgeClient } from "@archont561/qgis-sdk-bridge/bridge";
+import { SILENCE, createBridgeHarness, fault } from "@archont561/qgis-sdk-bridge/testing";
+import { type OperationId, createOperations } from "./bridge";
+
+const harness = createBridgeHarness<OperationId>();
+const operations = createOperations(new BridgeClient(harness));
+
+harness.expectInvoke<SitesSummaryRequest, SitesSummaryResult>("sites.summary", (payload) => ({ total: 1, largest: payload.layer_id, mode: "fast" }));
+harness.expectInvoke("sites.summary", () => fault("forbidden", "not yours"));
+harness.expectInvoke("sites.summary", () => SILENCE); // the client's own timeout speaks
+harness.expectSubscribe("sites.watch", (_payload, stream) => {
+	stream.emit("data", { change: "added" });
+	stream.skip(2); // the next frame is a gap, ended the way the kernel promises
+	stream.end({ kind: "complete" });
+});
+
+await operations.sites.summary({ layer_id: "sites" });
+harness.calls;      // every envelope the client sent, in order
+harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscriptions, handler throws
+```
+
+- Expectations are consumed FIFO per operation. A call no expectation covers is
+  answered with the `unexpected_call` failure code and remembered; a handler
+  that throws answers `harness_error` and is reported by `assertSatisfied()`.
+  Both are `QgisSdkBridgeHarnessError`s, as is an envelope that is not
+  protocol 1.
+- Deliveries are asynchronous and ordered: an acknowledgement reaches the
+  client before the first frame a script emitted, and `await harness.settled()`
+  waits for everything queued.
+- `expectSubscribe(op, script, { ack })` delays the acknowledgement until the
+  `ack()` promise settles, for tests of what a component does while a
+  subscription is still opening.
+- **Evidence boundary.** A green harness test says the page handles the frames
+  a host *could* send; it says nothing about a `QWebEngineView` or a running
+  host. That evidence lives in the Python suite and the qualification harnesses
+  of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
+  the two apart in reports and never cite a mocked run as native behaviour.
