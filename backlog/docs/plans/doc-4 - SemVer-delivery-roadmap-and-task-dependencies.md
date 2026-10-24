@@ -52,6 +52,9 @@ Every implementation task includes focused tests; fixture integration is not per
 - [TASK-13](../../tasks/task-13%20-%20Prove-Qt-compatible-coroutine-scheduling-and-safe-cancellation.md): Prove Qt compatible coroutine scheduling and safe cancellation
 - [TASK-23](../../tasks/task-23%20-%20Qualify-candidate-QGIS-4-Windows-and-Linux-toolchains.md): Qualify candidate QGIS 4 Windows and Linux toolchains
 - [TASK-27](../../tasks/task-27%20-%20Prepare-and-qualify-0.1.0-release.md): Prepare and qualify 0.1.0 release
+- [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md): Qualify Windows, macOS and Desktop QGIS targets
+- [TASK-34](../../tasks/task-34%20-%20Optimize-CI-cost-and-latency.md): Optimize CI cost and latency
+- [TASK-37](../../tasks/task-37%20-%20Add-milestone-triggered-autorelease-and-CI-optimizations-from-playtest-patterns.md): Add milestone triggered autorelease and CI optimizations from playtest patterns
 
 ### 0.2.0
 
@@ -65,6 +68,7 @@ Re-scoped on 2026-10-24: TASK-5 and TASK-15 moved to 0.3.0, because they block n
 - [TASK-24](../../tasks/task-24%20-%20Implement-scoped-plugin-runtime-and-native-lifecycle-adapter.md): Implement scoped plugin runtime and native lifecycle adapter
 - [TASK-25](../../tasks/task-25%20-%20Implement-curated-native-services-and-packaged-style-support.md): Implement curated native services and packaged style support
 - [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md): Prepare and qualify 0.2.0 release
+- [TASK-39](../../tasks/task-39%20-%20Register-provider-algorithms-in-the-QGIS-Processing-toolbox.md): Register provider algorithms in the QGIS Processing toolbox
 - [TASK-38](../../tasks/task-38%20-%20Epic-v2-0.2.0-native-runtime-and-Processing-algorithms.md): Epic for this milestone. A tracking container only, with no scope of its own; the sprint order it encodes is in [doc-9](doc-9%20-%20V2-sprint-train-and-0.2.0-dependency-order.md).
 
 ### 0.3.0
@@ -91,6 +95,8 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-21](../../tasks/task-21%20-%20Implement-generation-safe-development-refresh-and-reconnection.md): Implement generation safe development refresh and reconnection
 - [TASK-26](../../tasks/task-26%20-%20Implement-environment-aware-test-CLI-and-runtime-selection.md): Implement environment aware test CLI and runtime selection
 - [TASK-30](../../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md): Prepare and qualify 0.4.0 release
+- [TASK-35](../../tasks/task-35%20-%20Add-autorelease-and-release-workflows-driven-by-a-pinned-qgis-sdk-release-package.md): Add autorelease and release workflows driven by a pinned qgis-sdk-release package
+- [TASK-36](../../tasks/task-36%20-%20Extract-qgis-sdk-release-into-a-standalone-checksum-pinned-repository.md): Extract qgis-sdk-release into a standalone checksum pinned repository
 
 ### 0.5.0
 
