@@ -869,6 +869,94 @@ def stamp_package_json(text: str, version: Version) -> str:
     return json.dumps(data, indent="\t") + "\n"
 
 
+_PEP440 = re.compile(r"^(?P<core>\d+\.\d+\.\d+)(?:(?P<pre>a|b|rc)(?P<num>\d+))?$")
+
+
+def version_from_pep440(text: str) -> Version:
+    """Turn a PEP 440 rendering back into the SemVer form the tool works in.
+
+    ``stamp`` writes ``0.2.0-rc.1`` into package.json as ``0.2.0rc1`` for
+    hatchling; comparing the two manifests therefore needs the inverse.
+    """
+    match = _PEP440.fullmatch(text.strip())
+    if match is None:
+        raise QgisSdkReleaseVersionError(f"not a PEP 440 version: {text!r}")
+    pre = match.group("pre")
+    if pre is None:
+        return Version.parse(match.group("core"))
+    return Version.parse(f"{match.group('core')}-{pre}.{match.group('num')}")
+
+
+def read_pyproject_version(text: str) -> Version:
+    """Read the stamped version out of ``pyproject.toml``."""
+    match = _VERSION_LINE.search(text)
+    if match is None:
+        raise QgisSdkReleaseError("no top-level version line found in pyproject.toml")
+    return version_from_pep440(match.group(0).split('"')[1])
+
+
+def read_recipe_version(text: str) -> Version:
+    """Read the stamped version out of ``recipe.yaml``."""
+    match = _RECIPE_VERSION_LINE.search(text)
+    if match is None:
+        raise QgisSdkReleaseError("no quoted version line found in recipe.yaml")
+    return version_from_pep440(match.group(0).rsplit('"', 2)[1])
+
+
+def read_package_json_version(text: str) -> Version:
+    """Read the stamped version out of the bridge ``package.json``."""
+    return Version.parse(str(json.loads(text)["version"]))
+
+
+@dataclass(frozen=True)
+class ManifestVersions:
+    """The version each released manifest currently carries."""
+
+    pyproject: Version
+    package_json: Version
+    recipe: Version | None = None
+
+    def items(self) -> tuple[tuple[str, Version], ...]:
+        """Return the labelled versions that exist, in reporting order."""
+        found = [
+            ("pyproject.toml", self.pyproject),
+            ("package.json", self.package_json),
+        ]
+        if self.recipe is not None:
+            found.append(("recipe.yaml", self.recipe))
+        return tuple(found)
+
+    def agreed(self) -> Version:
+        """Return the shared version, or raise naming every disagreement.
+
+        One version across the Python package, the conda recipe and the TypeScript
+        bridge is a release policy, not an accident of stamping: a consumer may
+        pair them, so a silent divergence is exactly what this refuses.
+        """
+        versions = {version for _, version in self.items()}
+        if len(versions) > 1:
+            listed = ", ".join(f"{name}={version}" for name, version in self.items())
+            raise QgisSdkReleaseVersionError(
+                f"released manifests disagree: {listed}; one version is required"
+            )
+        return self.items()[0][1]
+
+    def to_json(self) -> dict:
+        """Serialize the versions for diagnostics."""
+        return {name: str(version) for name, version in self.items()}
+
+
+def manifest_versions(
+    pyproject_text: str, package_text: str, recipe_text: str | None = None
+) -> ManifestVersions:
+    """Read all released manifests and return what each one carries."""
+    return ManifestVersions(
+        pyproject=read_pyproject_version(pyproject_text),
+        package_json=read_package_json_version(package_text),
+        recipe=read_recipe_version(recipe_text) if recipe_text is not None else None,
+    )
+
+
 # ---------------------------------------------------------------------------
 # GitHub REST
 # ---------------------------------------------------------------------------
@@ -1143,6 +1231,26 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_verify_versions(args: argparse.Namespace) -> int:
+    recipe_text = _RECIPE.read_text(encoding="utf-8") if _RECIPE.is_file() else None
+    versions = manifest_versions(
+        _PYPROJECT.read_text(encoding="utf-8"),
+        _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
+        recipe_text,
+    )
+    shared = versions.agreed()
+    if getattr(args, "json", False):
+        print(
+            json.dumps(
+                {"version": str(shared), "manifests": versions.to_json()}, indent=2
+            )
+        )
+        return 0
+    listed = ", ".join(name for name, _ in versions.items())
+    print(f"released manifests agree on {shared}: {listed}")
+    return 0
+
+
 def _cmd_build_python(args: argparse.Namespace) -> int:
     outdir = Path(args.outdir)
     build_wheel(args.package, outdir)
@@ -1251,6 +1359,12 @@ def _build_parser() -> argparse.ArgumentParser:
     stamp = sub.add_parser("stamp", help="stamp versions into manifests")
     stamp.add_argument("--version", required=True)
     stamp.set_defaults(handler=_cmd_stamp)
+
+    versions = sub.add_parser(
+        "verify-versions", help="require one version across released manifests"
+    )
+    versions.add_argument("--json", action="store_true", help="machine-readable output")
+    versions.set_defaults(handler=_cmd_verify_versions)
 
     build = sub.add_parser("build-python", help="build and check the wheel")
     build.add_argument("--package", default="packages/qgis-sdk")

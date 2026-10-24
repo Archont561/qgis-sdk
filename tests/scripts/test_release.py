@@ -21,10 +21,15 @@ from release import (
     compute_plan,
     create_release,
     detect_scope_from_files,
+    main,
+    manifest_versions,
     parse_log,
     parse_milestone_tag,
     parse_release_tag,
     parse_versionrc,
+    read_package_json_version,
+    read_pyproject_version,
+    read_recipe_version,
     render_changelog,
     sort_tags,
     stamp_package_json,
@@ -1166,3 +1171,136 @@ def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
     )
     assert "SHA256SUMS" in publish_text
     assert "pixi global install" not in publish_text
+
+
+# ---------------------------------------------------------------------------
+# One version across the released manifests (decision-24)
+# ---------------------------------------------------------------------------
+
+
+def test_three_agreeing_manifests_report_their_shared_version():
+    versions = manifest_versions(PYPROJECT, PACKAGE_JSON, RECIPE_YAML)
+
+    assert str(versions.agreed()) == "0.1.0"
+    assert versions.to_json() == {
+        "pyproject.toml": "0.1.0",
+        "package.json": "0.1.0",
+        "recipe.yaml": "0.1.0",
+    }
+
+
+def test_a_pep440_prerelease_and_its_semver_spelling_agree():
+    """stamp writes 0.2.0-rc.1 to package.json as 0.2.0rc1 for hatchling."""
+    pyproject = PYPROJECT.replace('version = "0.1.0"', 'version = "0.2.0rc1"')
+    package = PACKAGE_JSON.replace('"version": "0.1.0"', '"version": "0.2.0-rc.1"')
+    recipe = RECIPE_YAML.replace('version: "0.1.0"', 'version: "0.2.0rc1"')
+
+    versions = manifest_versions(pyproject, package, recipe)
+
+    assert str(versions.agreed()) == "0.2.0-rc.1"
+
+
+def test_a_disagreeing_manifest_is_named_with_every_value():
+    package = PACKAGE_JSON.replace('"version": "0.1.0"', '"version": "0.1.1"')
+
+    with pytest.raises(QgisSdkReleaseVersionError) as error:
+        manifest_versions(PYPROJECT, package, RECIPE_YAML).agreed()
+
+    message = str(error.value)
+    assert "disagree" in message
+    assert "pyproject.toml=0.1.0" in message
+    assert "package.json=0.1.1" in message
+
+
+def test_a_missing_version_line_is_refused():
+    with pytest.raises(QgisSdkReleaseError, match="no top-level version"):
+        read_pyproject_version('[project]\nname = "qgis-sdk"\n')
+    with pytest.raises(QgisSdkReleaseError, match="no quoted version"):
+        read_recipe_version("schema_version: 1\n")
+
+
+def test_the_recipe_is_optional_because_a_workspace_may_not_build_conda():
+    versions = manifest_versions(PYPROJECT, PACKAGE_JSON)
+
+    assert versions.recipe is None
+    assert [name for name, _ in versions.items()] == ["pyproject.toml", "package.json"]
+
+
+def test_the_verify_versions_command_reports_the_repository(capsys):
+    assert main(["verify-versions"]) == 0
+
+    assert "released manifests agree on" in capsys.readouterr().out
+
+
+def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
+    assert main(["verify-versions", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["version"] == payload["manifests"]["pyproject.toml"]
+
+
+def test_the_repository_manifests_actually_agree():
+    """The invariant decision-24 relies on, checked against the real files."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    versions = manifest_versions(
+        (repo_root / "packages/qgis-sdk/pyproject.toml").read_text(encoding="utf-8"),
+        (repo_root / "packages/qgis-sdk-bridge/package.json").read_text(
+            encoding="utf-8"
+        ),
+        (repo_root / "packages/qgis-sdk/recipe.yaml").read_text(encoding="utf-8"),
+    )
+
+    assert versions.agreed() == read_package_json_version(
+        (repo_root / "packages/qgis-sdk-bridge/package.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# The release policy itself, pinned against the real .versionrc
+# ---------------------------------------------------------------------------
+
+
+def _repository_config():
+    repo_root = Path(__file__).resolve().parents[2]
+    return parse_versionrc((repo_root / ".versionrc").read_text(encoding="utf-8"))
+
+
+def test_feature_work_inside_a_milestone_is_a_patch_bump():
+    """decision-24: minor is the milestone (breaking) axis, not the feature axis."""
+    config = _repository_config()
+
+    plan = compute_plan("dispatch", ("v0.2.0",), _log("feat: another slice"), config)
+
+    assert str(plan.version) == "0.2.1"
+
+
+def test_a_breaking_change_is_what_moves_the_minor():
+    config = _repository_config()
+
+    plan = compute_plan(
+        "dispatch", ("v0.2.0",), _log("feat!: drop the old contract"), config
+    )
+
+    assert str(plan.version) == "0.3.0"
+
+
+def test_a_milestone_release_sets_the_minor_explicitly():
+    """The one place a minor moves on purpose: the milestone close."""
+    config = _repository_config()
+
+    plan = compute_plan(
+        "dispatch", ("v0.1.1",), _log("chore: milestone close"), config, bump="minor"
+    )
+
+    assert (plan.action, str(plan.version), plan.tag) == ("tag", "0.2.0", "v0.2.0")
+
+
+def test_the_repository_config_still_keeps_features_visible_in_the_changelog():
+    config = _repository_config()
+
+    rule = config.rule_for("feat")
+
+    assert (rule.increment, rule.section, rule.hidden) == ("Patch", "Features", False)

@@ -92,6 +92,9 @@ jobs:
           pixi run -e build release-stamp
           --version "${{ steps.classify.outputs.version }}"
 
+      - name: Verify the manifests share one version
+        run: pixi run -e build release-verify-versions
+
       - name: Build and check the Python wheel
         if: steps.classify.outputs.python == 'true'
         run: pixi run -e build release-build-python

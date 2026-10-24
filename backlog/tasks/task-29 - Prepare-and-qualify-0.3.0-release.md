@@ -30,7 +30,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Required 0.3.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
-- [ ] #2 Use valid SemVer and prereleases such as 0.3.0-alpha.1; update actual manifests only for released packages and document migration notes.
+- [ ] #2 Use valid SemVer and prereleases such as 0.3.0-alpha.1; stamp the one shared version into both released manifests, advance the minor explicitly at this milestone close, and document migration notes.
 - [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 <!-- AC:END -->

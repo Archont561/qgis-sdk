@@ -117,7 +117,7 @@ conditions are already a backlog task:
 | decision-8 | separate check/test/dev/build workflows | TASK-16 (check), TASK-26 (test/dev) |
 | decision-9 | allowlisted typed bridge endpoints | TASK-4 (m-2) |
 | decision-10 | dataclass authoring + schema-driven TS generation | TASK-17; its own closeout says so |
-| decision-11 | one context-injected class per algorithm | TASK-14 (m-1) |
+| decision-11 | one context-injected class per algorithm | class-per-algorithm and provider registration landed (TASK-14, TASK-39); open on `QgsProcessingAlgorithm`/`createInstance` phases, mid-flight cancellation and a thread-affinity proof |
 | decision-12 | one context-injected controller per surface | TASK-3 (m-1) |
 | decision-13 | runtime-bound local jobs | TASK-15 (m-1) |
 | decision-14 | QGIS-free import rules in `check` | TASK-16 (m-3); `QGIS001`/`ARCH001` do not exist |

@@ -1,7 +1,7 @@
 header: "# Changelog\n"
 types:
   - type: feat
-    increment: Minor
+    increment: Patch
     section: Features
     hidden: false
   - type: fix
