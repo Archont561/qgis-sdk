@@ -51,6 +51,7 @@ Every implementation task includes focused tests; fixture integration is not per
 - [TASK-24](../../tasks/task-24%20-%20Implement-scoped-plugin-runtime-and-native-lifecycle-adapter.md): Implement scoped plugin runtime and native lifecycle adapter
 - [TASK-25](../../tasks/task-25%20-%20Implement-curated-native-services-and-packaged-style-support.md): Implement curated native services and packaged style support
 - [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md): Prepare and qualify 0.2.0 release
+- [TASK-38](../../tasks/task-38%20-%20Epic-v2-0.2.0-native-runtime-and-Processing-algorithms.md): Epic for this milestone. A tracking container only, with no scope of its own; the sprint order it encodes is in [doc-9](doc-9%20-%20V2-sprint-train-and-0.2.0-dependency-order.md).
 
 ### 0.3.0
 
