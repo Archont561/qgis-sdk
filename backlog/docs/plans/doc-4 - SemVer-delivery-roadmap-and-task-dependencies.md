@@ -21,8 +21,8 @@ Milestones use valid major.minor.patch targets. Experimental 0.x breaking change
 | 0.2.0 | [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md) | Native runtime, Processing algorithms, UI dispatch, HTTP, jobs | **None** — source unchanged since 0.1.1; alignment release | [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md) |
 | 0.3.0 | [m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-and-web-ui.md) | Transport host side, per-view authority, generated fixtures | **Source change**: transport contract, generated clients, React helpers, resource authority | [TASK-29](../../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md) |
 | 0.4.0 | [m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md) | Scaffolds, check/test/dev/build, ZIP packaging | **None** — new consumers (generated projects), not new surface | [TASK-30](../../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md) |
-| 0.5.0 | [m-5](../../milestones/m-5%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) | Qualified reference workflow and compatibility gates | **Qualified as a pair**; source change only for defects found | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) |
-| 0.6.0 | [m-4](../../milestones/m-4%20-%200.6.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) | Tentative deferred research only | None planned; no release unless revived | [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md) |
+| 0.5.0 | [m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) | Qualified reference workflow and compatibility gates | **Qualified as a pair**; source change only for defects found | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) |
+| 0.6.0 | [m-5](../../milestones/m-5%20-%200.6.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) | Tentative deferred research only | None planned; no release unless revived | [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md) |
 
 ## Bridge across milestones
 
@@ -30,7 +30,7 @@ Both artifacts are published at one shared version ([decision-24](../../decision
 
 - **Source change** — only 0.3.0 ([m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-and-web-ui.md)): TASK-4, TASK-17, TASK-18 and TASK-20 own the transport, generated clients, React helpers and resource authority.
 - **New consumers** — 0.4.0 ([m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md)): generated vanilla and React projects pin the published bridge, and the plugin ZIP ships its bundle; the surface itself should not move.
-- **Alignment release** — 0.2.0 ([m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)) and, absent defects, 0.5.0 ([m-5](../../milestones/m-5%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md)): the package is stamped, built, packed and published unchanged.
+- **Alignment release** — 0.2.0 ([m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)) and, absent defects, 0.5.0 ([m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md)): the package is stamped, built, packed and published unchanged.
 
 An alignment release is a release, not a skip: the gate still builds the bridge, verifies the shared version across `pyproject.toml`, `recipe.yaml` and `packages/qgis-sdk-bridge/package.json`, packs the tarball and checks licenses. The npm changelog entry for such a release says the surface is unchanged and names the last version that changed it. A bridge change that appears without a milestone claiming it is a planning defect, not a detail.
 
