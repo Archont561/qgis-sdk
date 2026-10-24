@@ -1,6 +1,6 @@
 {
 	"name": "@archont561/qgis-sdk-bridge",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "TypeScript bridge contracts and error primitives for QGIS SDK WebEngine plugin interfaces.",
 	"license": "MIT",
 	"type": "module",

@@ -8,7 +8,7 @@
 
 **A Python-first foundation for developing QGIS plugins, including a bridge for plugin interfaces hosted in `QWebEngineView`.**
 
-The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge connects the web frontend running inside QGIS's `QWebEngineView` to the plugin's Python/QGIS side. This repository is an early-stage scaffold: the Python package now includes experimental, QGIS-free context and service contracts alongside its smoke-test API; native plugin adapters and the bridge runtime are not implemented yet.
+The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge connects the web frontend running inside QGIS's `QWebEngineView` to the plugin's Python/QGIS side. This repository ships the `0.1.0` experimental foundation: Python declarations, JSON Schema contracts, bounded lifecycle & Qt step scheduling, Desktop and WebEngine adapters, the `qgis-sdk scaffold` CLI, and the TypeScript bridge contract/error surface; full native GIS services and `QWebChannel` transport bindings are scheduled for subsequent `0.x` milestones.
 
 The `0.1.0` experimental packages are published across registries:
 
@@ -39,7 +39,7 @@ That prints the declaration decorators and their descriptions, and nothing else;
 
 | Package | Role | Current state |
 | :-- | :-- | :-- |
-| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations, a bounded plugin lifecycle runtime and the `qgis-sdk scaffold` project generator; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
+| [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations, bounded `PluginRuntime` and Qt `StepScheduler`, Desktop/WebEngine adapters, optional `PydanticContractAdapter`, and `qgis-sdk scaffold` CLI; published to PyPI and `prefix.dev` |
 | [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge (`@archont561/qgis-sdk-bridge`) for a plugin web UI hosted in QGIS `QWebEngineView` | Experimental `0.1.0` contract, safe-integer wire bounds (`MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `isSafeJsonInteger`), `parsePluginDescription`, and `QgisSdk*` error hierarchy with `.d.ts` declarations; built with Bunup (`QWebChannel` transport and generated clients are scheduled for milestone `0.3.0`) |
 | [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
 

@@ -4,9 +4,21 @@
 
 `qgis-sdk` is the Python package in the QGIS SDK workspace. It is intended to grow into a reusable foundation for plugin authors who want maintainable, source-testable code and a consistent packaging workflow.
 
-> **Status:** early scaffold with an experimental, QGIS-free contract layer, declarations, and a bounded plugin lifecycle runtime. The public surface is exactly `qgis_sdk.__all__` - the declaration decorators and their descriptions - and a test pins it. Native GIS services, UI rendering and handler dispatch, jobs, the full Desktop plugin template, and the bridge runtime are not implemented yet.
+> **Status (`0.1.0` experimental):** Exposes the version 1 plugin/action declaration API (`@plugin`, `@action`, `describe_plugin`, `PluginDescription`, `ActionDescription`), pure QGIS-free models/services/context contracts (`qgis_sdk.models`, `qgis_sdk.services`, `qgis_sdk.core`), bounded `PluginRuntime` and Qt `StepScheduler`, `create_class_factory` Desktop adapter, headless WebEngine availability probe, optional `PydanticContractAdapter`, and the `qgis-sdk scaffold` CLI. Full native GIS services, visible WebEngine UI transport, and background job orchestration are scheduled for subsequent `0.x` milestones.
 
-The [`qgis-sdk` PyPI listing](https://pypi.org/project/qgis-sdk/) is currently a `0.0.0` placeholder with no project description, not a functional SDK release. Use this repository's source package for development; see the [workspace README](../../README.md) for details and the npm bridge listing status.
+## Installation
+
+Install from [PyPI](https://pypi.org/project/qgis-sdk/) or from the [`prefix.dev` Conda channel (`archont561/archont561`)](https://prefix.dev/channels/archont561/packages/qgis-sdk):
+
+```sh
+pip install qgis-sdk
+# or with the optional Pydantic controlled-deployment adapter:
+pip install "qgis-sdk[controlled-deployment]"
+# or in a Pixi workspace via the prefix.dev Conda channel:
+pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
+```
+
+The companion TypeScript package [`@archont561/qgis-sdk-bridge`](https://www.npmjs.com/package/@archont561/qgis-sdk-bridge) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk-bridge); see the [workspace README](https://github.com/Archont561/qgis-sdk#readme) for repository-wide documentation.
 
 ## Pure contract layer (experimental)
 
@@ -75,7 +87,7 @@ pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk
 
 The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis, pytest-cov, and Pydantic 2.14.1 as wheels; Pydantic is needed only to test the optional adapter. The workspace package is loaded from `packages/qgis-sdk/src` on `PYTHONPATH` rather than installed as a Pixi path dependency.
 
-The checked contract-generation examples live in `tests/contract_sample/` and are run via the workspace's `sdk:generate` package script; see the [workspace README](../../README.md#checked-contract-generation-example). Mashumaro remains a separate test-only schema-export example. The Pydantic example uses the optional adapter, emits its own request/reader/writer schemas, and is checked against the same Python/Ajv case corpus. Neither example is a general SDK generator or public operation.
+The checked contract-generation examples live in `tests/contract_sample/` and are run via the workspace's `sdk:generate` package script; see the [workspace README](https://github.com/Archont561/qgis-sdk#contract-generation-checked-example). Mashumaro remains a separate test-only schema-export example. The Pydantic example uses the optional adapter, emits its own request/reader/writer schemas, and is checked against the same Python/Ajv case corpus. Neither example is a general SDK generator or public operation.
 
 ## Optional controlled-deployment adapter (experimental)
 
@@ -204,7 +216,7 @@ The harness resolves everything it needs from the active prefix, so the same com
 | Requirement | Linux (`linux-64`) | macOS (`macos-latest` arm64) | Windows (`windows-latest` x86-64) |
 | :-- | :-- | :-- | :-- |
 | QGIS-free Python SDK + `PydanticContractAdapter` (`pydantic==2.14.1`) | Qualified (CPython 3.14.8 & 3.11.2) | Qualified in CI (`pip`, CPython 3.14) | Qualified in CI (`pip`, CPython 3.14) |
-| TypeScript bridge (`packages/qgis-sdk-bridge`) | Qualified (Bun 1.4.2, 90 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 90 tests) | Qualified in CI (Bun 1.4.2, 90 tests) |
+| TypeScript bridge (`packages/qgis-sdk-bridge`) | Qualified (Bun 1.4.2, 95 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 95 tests) | Qualified in CI (Bun 1.4.2, 95 tests) |
 | QGIS with Python bindings | Qualified (Pixi `default`, QGIS 4.2.3) | Blocker: no macOS QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) | Blocker: no Windows QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) |
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
@@ -232,7 +244,7 @@ pixi run -e bun bun run --filter qgis-sdk build
 
 The combined build produces a wheel and source distribution under `dist/pypi/`, checks them with Twine, and builds the Conda artifact under `dist/conda/`.
 
-See the [workspace README](../../README.md) for the full development setup, coverage tasks, Pixi environments, and the TypeScript bridge for QGIS `QWebEngineView` plugin interfaces.
+See the [workspace README](https://github.com/Archont561/qgis-sdk#readme) for the full development setup, coverage tasks, Pixi environments, and the TypeScript bridge for QGIS `QWebEngineView` plugin interfaces.
 
 ## Experimental Python declarations (TASK-2)
 
