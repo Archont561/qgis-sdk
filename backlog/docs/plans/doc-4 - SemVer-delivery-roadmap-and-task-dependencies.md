@@ -28,7 +28,7 @@ Milestones use valid major.minor.patch targets. Experimental 0.x breaking change
 
 ## Bridge across milestones
 
-The two artifacts are published independently, so each milestone states a version for each one under its **Bridge track** heading. There are three states:
+The two artifacts are published independently, so each milestone opens its bridge section with a table of concrete changes and the bridge version each one produces, then explains the ones it declined to make. There are three states:
 
 - **Released with its own version** — 0.3.0 ([m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-runtime-web-ui-networking-and-local-jobs.md)) is the only milestone that changes bridge source, and it releases the bridge at **0.2.0** (a minor set explicitly at the close) while Python ships 0.3.0. The numbers differ because the histories differ, which is the point of [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md).
 - **Not released** — 0.2.0 ([m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)) touches no bridge source, so it publishes no bridge version at all and `package.json` keeps 0.1.1. No npm version is consumed.
