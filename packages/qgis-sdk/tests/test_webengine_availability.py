@@ -109,3 +109,25 @@ def test_create_webengine_view_uses_resolved_class(
     assert isinstance(view, FakeView)
     assert view.args == (1,)
     assert view.kwargs == {"value": 2}
+
+
+def test_create_restricted_page_raises_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(webengine, "_import_webengine_core", lambda: None)
+    with pytest.raises(QgisSdkOptionalDependencyError) as exc_info:
+        webengine.create_restricted_page(webengine.BrowserPolicy())
+    assert exc_info.value.dependency == "pyqt6-webengine"
+
+
+def test_the_core_import_is_none_when_the_bindings_cannot_be_imported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for module_name in (
+        "qgis.PyQt.QtWebEngineCore",
+        "PyQt6.QtWebEngineCore",
+        "PyQt5.QtWebEngineWidgets",
+        "PyQt5.QtWebEngineCore",
+    ):
+        monkeypatch.setitem(sys.modules, module_name, None)
+    assert webengine._import_webengine_core() is None
