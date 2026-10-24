@@ -20,3 +20,26 @@ Algorithms produce headlessly usable data; optional output styling occurs throug
 
 - Layer styles/resources and UI themes have separate contracts, models, adapters and tests.
 - Rich declarative styles, token names, theme synchronization and exact ctx.styles/ctx.ui.theme APIs remain proposed rather than v1 commitments.
+
+## Status review (2026-10-24): stays `proposed`
+
+The layer-style half of this decision is now implemented and proven, so the
+separation it asks for is no longer a plan (TASK-25.4):
+
+- styles are requested by catalog identifier and resolved from the installed
+  package (`qgis_sdk.resources`), never from an ambient path;
+- one shared pure rule (`StyleSpec.incompatibilities`) decides compatibility, so
+  the in-memory fake and the PyQGIS adapter cannot disagree;
+- mismatches are refused before any QML is loaded, as a structured
+  `QgisSdkStyleIncompatibleError` listing every reason;
+- the application stylesheet and palette are proven unchanged across an
+  application, by test and by the real-host harness - so layer styling genuinely
+  does not touch UI theming.
+
+**Why it still reads `proposed`:** the Consequences section says rich declarative
+styles, token names, theme synchronization and the exact `ctx.styles` /
+`ctx.ui.theme` APIs "remain proposed rather than v1 commitments", and none of them
+exists. The *boundary* is accepted in practice; the *theme half of the contract*
+does not exist yet, and promoting now would ratify an API surface nobody has
+designed. Promote when a UI theme surface is defined, or amend this decision to
+cover only the layer-style half that has landed.

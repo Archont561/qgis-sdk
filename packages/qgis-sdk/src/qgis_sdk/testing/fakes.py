@@ -18,6 +18,7 @@ from qgis_sdk.models import (
     QgisSdkStyleIncompatibleError,
     VectorLayerInfo,
 )
+from qgis_sdk.resources import require_style
 from qgis_sdk.services import Layers
 
 __all__ = [
@@ -159,27 +160,31 @@ class FakeSettings:
 
 
 class FakeStyles:
-    """A ``Styles`` backend that records applications and declared mismatches."""
+    """A ``Styles`` backend that validates with the shared catalog rule.
 
-    def __init__(self, layers: Layers) -> None:
+    It deliberately does not emulate rendering: it applies the same
+    ``StyleSpec.incompatibilities`` decision the native adapter makes, then
+    records the application so a pure test can observe it.
+    """
+
+    def __init__(self, layers: Layers, scope: ResourceScope) -> None:
         self._layers = layers
+        self._scope = scope
         self._applied: dict[str, list[str]] = {}
-        self._incompatible: dict[str, str] = {}
-
-    def declare_incompatible(self, style: str, reason: str) -> None:
-        """Declare a style no layer can take; setup, not part of the contract."""
-        self._incompatible[style] = reason
 
     def apply_style(self, layer_id: str, style: str) -> None:
-        """Apply or refuse a packaged style for the given layer."""
-        self._layers.layer(layer_id)
-        reason = self._incompatible.get(style)
-        if reason is not None:
-            raise QgisSdkStyleIncompatibleError(layer_id, style, (reason,))
+        """Validate the target, then record the application."""
+        self._scope.ensure_open()
+        info = self._layers.layer(layer_id)
+        spec = require_style(style)
+        reasons = spec.incompatibilities(info)
+        if reasons:
+            raise QgisSdkStyleIncompatibleError(layer_id, style, reasons)
         self._applied.setdefault(layer_id, []).append(style)
 
     def applied(self, layer_id: str) -> tuple[str, ...]:
         """Return styles applied to a layer; observation, not part of the contract."""
+        self._scope.ensure_open()
         self._layers.layer(layer_id)
         return tuple(self._applied.get(layer_id, ()))
 

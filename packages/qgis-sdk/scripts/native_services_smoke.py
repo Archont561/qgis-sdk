@@ -6,8 +6,9 @@ made through QGIS is readable through the contract, and proves that closing the
 owner scope releases the layers and refuses further work. It prints a
 machine-readable report.
 
-It covers both the layer/project services and, since TASK-25.3, the scoped
-settings service and the notification contract.
+It covers the layer/project services, the scoped settings service and the
+notification contract (TASK-25.3), and packaged style application with the
+application theme proven unchanged across it (TASK-25.4).
 
 It is **not** a Desktop GUI qualification: there is no display, no canvas and no
 widget in this sandbox, and no Windows or macOS claim comes from it. Those remain
@@ -45,6 +46,16 @@ SETTINGS_VALUE = "metres"
 NOTIFICATION = "reference workflow opened"
 # One fixed prefix keeps repeated runs from accumulating keys in the profile.
 SETTINGS_PREFIX = "qgis-sdk/native-services-smoke"
+COMPATIBLE_STYLE = "reference/point-output"
+INCOMPATIBLE_STYLE = "reference/line-output"
+THEME_ROLES = (
+    "Window",
+    "WindowText",
+    "Base",
+    "Text",
+    "Button",
+    "Highlight",
+)
 
 
 @dataclass(frozen=True)
@@ -69,6 +80,9 @@ class NativeServicesReport:
     settings_refused_after_close: bool
     notification_delivered: bool
     notification_refused_after_close: bool
+    style_applied: bool
+    style_incompatible_refused: bool
+    theme_unchanged: bool
     qgis_exited: bool
     error: str | None = None
 
@@ -90,6 +104,9 @@ class NativeServicesReport:
             and self.settings_refused_after_close
             and self.notification_delivered
             and self.notification_refused_after_close
+            and self.style_applied
+            and self.style_incompatible_refused
+            and self.theme_unchanged
             and self.qgis_exited
         )
 
@@ -121,6 +138,9 @@ class NativeServicesReport:
             settings_refused_after_close=False,
             notification_delivered=False,
             notification_refused_after_close=False,
+            style_applied=False,
+            style_incompatible_refused=False,
+            theme_unchanged=False,
             qgis_exited=False,
             error=error,
         )
@@ -153,6 +173,18 @@ def run_smoke(prefix: Path | None = None) -> NativeServicesReport:
         return replace(failed, error=f"{type(error).__name__}: {error}")
 
 
+def _theme_snapshot() -> tuple[object, ...]:
+    """Read the application stylesheet and the palette roles a theme paints with."""
+    from PyQt6.QtWidgets import QApplication
+
+    application = QApplication.instance()
+    palette = application.palette()
+    colours = tuple(
+        palette.color(getattr(palette.ColorRole, role)).name() for role in THEME_ROLES
+    )
+    return (application.styleSheet(), colours)
+
+
 def _run_services(prefix: Path) -> NativeServicesReport:
     """Drive one native services run inside a real headless QgsApplication."""
     from PyQt6.QtCore import QT_VERSION_STR
@@ -167,15 +199,17 @@ def _run_services(prefix: Path) -> NativeServicesReport:
         NativeNotifications,
         NativeProject,
         NativeSettings,
+        NativeStyles,
     )
     from qgis_sdk.core import ResourceScope
-    from qgis_sdk.models import QgisSdkScopeClosedError
+    from qgis_sdk.models import QgisSdkScopeClosedError, QgisSdkStyleIncompatibleError
 
     QgsProject.instance().removeAllMapLayers()
     scope = ResourceScope()
     layers = NativeLayers(scope)
     project = NativeProject(layers, scope)
     settings = NativeSettings(scope, prefix=SETTINGS_PREFIX)
+    styles = NativeStyles(layers, scope)
     delivered: list[str] = []
     notifications = NativeNotifications(scope, sink=delivered.append)
     # The default sink writes to the QGIS message log, which QGIS swallows from
@@ -189,6 +223,18 @@ def _run_services(prefix: Path) -> NativeServicesReport:
     QgsProject.instance().mapLayer(info.id).selectByIds(list(SELECTED_FEATURES))
     selection = tuple(sorted(layers.selection(info.id)))
     project_layer_ids = project.layer_ids()
+
+    theme_before = _theme_snapshot()
+    styles.apply_style(info.id, COMPATIBLE_STYLE)
+    renderer = QgsProject.instance().mapLayer(info.id).renderer()
+    style_applied = renderer is not None and renderer.type() == "singleSymbol"
+    try:
+        styles.apply_style(info.id, INCOMPATIBLE_STYLE)
+    except QgisSdkStyleIncompatibleError:
+        style_refused = True
+    else:
+        style_refused = False
+    theme_unchanged = _theme_snapshot() == theme_before
 
     settings.set(SETTINGS_KEY, SETTINGS_VALUE)
     settings_round_trip = settings.get(SETTINGS_KEY) == SETTINGS_VALUE
@@ -239,6 +285,9 @@ def _run_services(prefix: Path) -> NativeServicesReport:
         settings_refused_after_close=settings_refused,
         notification_delivered=notification_delivered,
         notification_refused_after_close=notification_refused,
+        style_applied=style_applied,
+        style_incompatible_refused=style_refused,
+        theme_unchanged=theme_unchanged,
         qgis_exited=True,
     )
 

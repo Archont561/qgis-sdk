@@ -122,7 +122,7 @@ conditions are already a backlog task:
 | decision-13 | runtime-bound local jobs | TASK-15 (m-1) |
 | decision-14 | QGIS-free import rules in `check` | TASK-16 (m-3); `QGIS001`/`ARCH001` do not exist |
 | decision-15 | refresh through owned runtime generations | TASK-21 (m-3) |
-| decision-16 | reusable layer styles vs UI themes | TASK-25.4 (m-1) |
+| decision-16 | reusable layer styles vs UI themes | layer-style half landed (TASK-25.4); open on the `ctx.styles`/`ctx.ui.theme` surface it defers |
 | decision-23 | Tauri-inspired QWebChannel patterns | TASK-4 (m-2) |
 
 Two decisions have no inbound reference anywhere: `decision-5` (Rust algorithms

@@ -13,5 +13,12 @@ from .layers import NativeLayers
 from .notifications import NativeNotifications
 from .project import NativeProject
 from .settings import NativeSettings
+from .styles import NativeStyles
 
-__all__ = ["NativeLayers", "NativeNotifications", "NativeProject", "NativeSettings"]
+__all__ = [
+    "NativeLayers",
+    "NativeNotifications",
+    "NativeProject",
+    "NativeSettings",
+    "NativeStyles",
+]

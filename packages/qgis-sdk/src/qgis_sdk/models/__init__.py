@@ -6,14 +6,17 @@ from .errors import (
     QgisSdkJobCancelledError,
     QgisSdkLayerNotFoundError,
     QgisSdkOptionalDependencyError,
+    QgisSdkPackagedResourceError,
     QgisSdkSchedulingBlockedError,
     QgisSdkScopeClosedError,
     QgisSdkStyleIncompatibleError,
+    QgisSdkStyleNotFoundError,
     QgisSdkUnsupportedCapabilityError,
     QgisSdkValidationIssue,
 )
 from .layers import GeometryType, VectorLayerInfo
 from .limits import MAX_SAFE_INTEGER
+from .styles import StyleSpec
 
 __all__ = [
     "MAX_SAFE_INTEGER",
@@ -23,10 +26,13 @@ __all__ = [
     "QgisSdkJobCancelledError",
     "QgisSdkLayerNotFoundError",
     "QgisSdkOptionalDependencyError",
+    "QgisSdkPackagedResourceError",
     "QgisSdkSchedulingBlockedError",
     "QgisSdkScopeClosedError",
     "QgisSdkStyleIncompatibleError",
+    "QgisSdkStyleNotFoundError",
     "QgisSdkUnsupportedCapabilityError",
     "QgisSdkValidationIssue",
+    "StyleSpec",
     "VectorLayerInfo",
 ]

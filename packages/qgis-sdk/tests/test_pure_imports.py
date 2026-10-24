@@ -18,6 +18,7 @@ LAYER_ORDER = {
     "declarations": 1,
     "services": 1,
     "scaffold": 1,
+    "resources": 1,
     "core": 2,
     "testing": 3,
 }
@@ -27,6 +28,7 @@ LAYER_PATHS = {
     "declarations": SOURCE_ROOT / "declarations.py",
     "models": SOURCE_ROOT / "models",
     "services": SOURCE_ROOT / "services",
+    "resources": SOURCE_ROOT / "resources",
     "testing": SOURCE_ROOT / "testing",
 }
 

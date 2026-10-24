@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.models import QgisSdkLayerNotFoundError
+from qgis_sdk.models import QgisSdkLayerNotFoundError, QgisSdkStyleIncompatibleError
 from qgis_sdk.testing import (
     FakeLayers,
     FakeSettings,
@@ -26,7 +26,7 @@ def _opened_layer(layers: FakeLayers) -> str:
         source,
         name="points",
         geometry_type="point",
-        field_names=("id",),
+        field_names=("id", "value"),
     )
     return layers.open_vector(source).id
 
@@ -42,19 +42,31 @@ def test_recorded_notifications_are_readable_in_order() -> None:
 
 def test_applied_styles_are_readable_per_layer() -> None:
     layers = FakeLayers(ResourceScope())
-    styles = FakeStyles(layers)
+    styles = FakeStyles(layers, ResourceScope())
     layer_id = _opened_layer(layers)
 
-    styles.apply_style(layer_id, "reference/output.qml")
+    styles.apply_style(layer_id, "reference/point-output")
 
-    assert styles.applied(layer_id) == ("reference/output.qml",)
+    assert styles.applied(layer_id) == ("reference/point-output",)
+
+
+def test_a_refused_style_leaves_nothing_applied() -> None:
+    """No partial application: the refusal happens before anything is recorded."""
+    layers = FakeLayers(ResourceScope())
+    styles = FakeStyles(layers, ResourceScope())
+    layer_id = _opened_layer(layers)
+
+    with pytest.raises(QgisSdkStyleIncompatibleError):
+        styles.apply_style(layer_id, "reference/line-output")
+
+    assert styles.applied(layer_id) == ()
 
 
 def test_style_application_to_an_unknown_layer_is_refused() -> None:
-    styles = FakeStyles(FakeLayers(ResourceScope()))
+    styles = FakeStyles(FakeLayers(ResourceScope()), ResourceScope())
 
     with pytest.raises(QgisSdkLayerNotFoundError):
-        styles.apply_style("no-such-layer", "reference/output.qml")
+        styles.apply_style("no-such-layer", "reference/point-output")
 
 
 def test_settings_accept_initial_values() -> None:

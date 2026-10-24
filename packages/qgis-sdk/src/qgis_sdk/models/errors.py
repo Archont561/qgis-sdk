@@ -81,6 +81,31 @@ class QgisSdkStyleIncompatibleError(QgisSdkError):
         )
 
 
+class QgisSdkStyleNotFoundError(QgisSdkError):
+    """No reviewed style with this identifier is packaged with the SDK."""
+
+    code = "style_not_found"
+
+    def __init__(self, style: str) -> None:
+        self.style = style
+        super().__init__(f"No packaged style {style!r} is available")
+
+
+class QgisSdkPackagedResourceError(QgisSdkError):
+    """A resource the package must ship is missing or unusable.
+
+    This is a packaging defect, not a caller mistake: the style was requested by
+    a known identifier and the layer was already found compatible.
+    """
+
+    code = "packaged_resource_unavailable"
+
+    def __init__(self, style: str, detail: str) -> None:
+        self.style = style
+        self.detail = detail
+        super().__init__(f"Packaged style {style!r} could not be used: {detail}")
+
+
 @dataclass(frozen=True, slots=True)
 class QgisSdkValidationIssue:
     """Safe, structured location and category for a rejected contract value."""

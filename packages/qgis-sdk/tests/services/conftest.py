@@ -30,9 +30,14 @@ from qgis_sdk.core import ResourceScope
 from qgis_sdk.services import Layers, Notifications, Project, Settings, Styles
 
 NATIVE_ENV_FLAG = "QGIS_SDK_NATIVE_SERVICES"
-FIXTURE_DATASET = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "reference" / "points.geojson"
-)
+# Catalog identifiers, identical on both backends because the catalog is shipped
+# with the package rather than declared by the test.
+COMPATIBLE_STYLE = "reference/point-output"
+INCOMPATIBLE_STYLE = "reference/line-output"
+FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "reference"
+FIXTURE_DATASET = FIXTURE_ROOT / "points.geojson"
+LINE_DATASET = FIXTURE_ROOT / "lines.geojson"
+MINIMAL_DATASET = FIXTURE_ROOT / "points-minimal.geojson"
 FIXTURE_NAME = "points"
 FIXTURE_GEOMETRY = "point"
 FIXTURE_FIELDS = ("id", "value")
@@ -52,6 +57,8 @@ class Services:
     notifications: Notifications
     scope: ResourceScope
     dataset: Path
+    line_dataset: Path
+    minimal_dataset: Path
     compatible_style: str
     incompatible_style: str
     select: Callable[[str, Sequence[int]], None]
@@ -113,11 +120,21 @@ def _fake_services() -> Services:
         field_names=FIXTURE_FIELDS,
         crs=FIXTURE_CRS,
     )
-    styles = FakeStyles(layers)
-    styles.declare_incompatible(
-        "reference/line-only.qml",
-        "style targets line geometry; this layer is a point layer",
+    layers.register(
+        LINE_DATASET,
+        name="lines",
+        geometry_type="line",
+        field_names=("id",),
+        crs=FIXTURE_CRS,
     )
+    layers.register(
+        MINIMAL_DATASET,
+        name="points-minimal",
+        geometry_type="point",
+        field_names=("id",),
+        crs=FIXTURE_CRS,
+    )
+    styles = FakeStyles(layers, scope)
     return Services(
         layers=layers,
         project=FakeProject(layers, scope),
@@ -126,8 +143,10 @@ def _fake_services() -> Services:
         notifications=RecordingNotifications(scope),
         scope=scope,
         dataset=FIXTURE_DATASET,
-        compatible_style="reference/output.qml",
-        incompatible_style="reference/line-only.qml",
+        line_dataset=LINE_DATASET,
+        minimal_dataset=MINIMAL_DATASET,
+        compatible_style=COMPATIBLE_STYLE,
+        incompatible_style=INCOMPATIBLE_STYLE,
         select=layers.select,
     )
 
@@ -143,7 +162,7 @@ def _native_services() -> Services:
         NativeProject,
         NativeSettings,
     )
-    from qgis_sdk.testing import FakeStyles
+    from qgis_sdk.adapters.qgis.styles import NativeStyles
 
     # Contract tests share one application, so each backend instance starts from
     # an empty project instead of inheriting the previous test's layers.
@@ -152,11 +171,7 @@ def _native_services() -> Services:
     scope = ResourceScope()
     layers = NativeLayers(scope)
     project = NativeProject(layers, scope)
-    styles = FakeStyles(layers)
-    styles.declare_incompatible(
-        "reference/line-only.qml",
-        "style targets line geometry; this layer is a point layer",
-    )
+    styles = NativeStyles(layers, scope)
 
     def select(layer_id: str, feature_ids: Sequence[int]) -> None:
         # Selecting is a host action: the curated contract reads a selection and
@@ -175,8 +190,10 @@ def _native_services() -> Services:
         notifications=NativeNotifications(scope),
         scope=scope,
         dataset=FIXTURE_DATASET,
-        compatible_style="reference/output.qml",
-        incompatible_style="reference/line-only.qml",
+        line_dataset=LINE_DATASET,
+        minimal_dataset=MINIMAL_DATASET,
+        compatible_style=COMPATIBLE_STYLE,
+        incompatible_style=INCOMPATIBLE_STYLE,
         select=select,
     )
 
@@ -201,3 +218,11 @@ def _stop_qgis_after_the_session() -> object:
     if application is not None:
         _APPLICATION = None
         application.exitQgis()  # type: ignore[attr-defined]
+
+
+@pytest.fixture
+def native_services() -> Services:
+    """Build the native backend, skipping when QGIS is not opted in."""
+    if "native" not in BACKENDS:
+        pytest.skip(f"set {NATIVE_ENV_FLAG}=1 with QGIS installed for native checks")
+    return BACKENDS["native"]()

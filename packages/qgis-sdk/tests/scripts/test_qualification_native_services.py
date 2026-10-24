@@ -50,6 +50,9 @@ def successful_report() -> NativeServicesReport:
         settings_refused_after_close=True,
         notification_delivered=True,
         notification_refused_after_close=True,
+        style_applied=True,
+        style_incompatible_refused=True,
+        theme_unchanged=True,
         qgis_exited=True,
     )
 
@@ -79,6 +82,8 @@ def test_report_passes_only_when_every_stage_matches_its_expected_value() -> Non
     assert no_project.passed is False
     assert lost_setting.passed is False
     assert leaked_after_close.passed is False
+    assert replace(successful_report(), theme_unchanged=False).passed is False
+    assert replace(successful_report(), style_applied=False).passed is False
 
 
 def test_unavailable_report_is_serialisable_and_never_passes() -> None:
@@ -101,6 +106,9 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
         "notification_refused_after_close",
         "settings_refused_after_close",
         "settings_round_trip",
+        "style_applied",
+        "style_incompatible_refused",
+        "theme_unchanged",
         "layer_crs",
         "layer_field_names",
         "layer_geometry_type",
@@ -148,4 +156,7 @@ def test_native_services_smoke_opens_a_layer_and_releases_it() -> None:
     assert payload["settings_refused_after_close"] is True
     assert payload["notification_delivered"] is True
     assert payload["notification_refused_after_close"] is True
+    assert payload["style_applied"] is True
+    assert payload["style_incompatible_refused"] is True
+    assert payload["theme_unchanged"] is True
     assert payload["qgis_exited"] is True
