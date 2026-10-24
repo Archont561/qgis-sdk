@@ -43,7 +43,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 author: qgis-sdk agent
 created: 2026-10-24 19:10
 ---
-AC #5 was added on 2026-10-24 to carry the bridge obligation [m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md) already states: 0.4.0 adds consumers of the published bridge, not surface, and the milestone says outright that this is a claim the release gate tests rather than assumes. No criterion had been checked, so nothing was invalidated. The bridge versions independently ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)), so a consumer-driven fix is a patch of the bridge's own number, never a renumbering to match Python.
+AC #5 was added on 2026-10-24 to carry the bridge obligation [m-3](../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md) already states: 0.4.0 adds consumers of the published bridge, not surface, and the milestone says outright that this is a claim the release gate tests rather than assumes. No criterion had been checked, so nothing was invalidated. The bridge versions independently ([decision-25](../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)), so a consumer-driven fix is a patch of the bridge's own number, never a renumbering to match Python.
 ---
 
 created: 2026-10-21 21:56

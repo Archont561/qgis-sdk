@@ -39,7 +39,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 author: qgis-sdk agent
 created: 2026-10-24 19:10
 ---
-AC #5 was added on 2026-10-24 to carry the bridge obligation [m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) already states: this milestone qualifies the bridge instead of extending it, TASK-9's compatibility gate has to name the pair, TASK-22 is the first evidence the transport works in a real view, and a defect found here is a bridge source change that does not hide inside "qualification fixes". The earlier criteria said "update actual manifests only for released packages", which is true but silent about who qualifies the bridge and how a defect is published. No criterion had been checked.
+AC #5 was added on 2026-10-24 to carry the bridge obligation [m-4](../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) already states: this milestone qualifies the bridge instead of extending it, TASK-9's compatibility gate has to name the pair, TASK-22 is the first evidence the transport works in a real view, and a defect found here is a bridge source change that does not hide inside "qualification fixes". The earlier criteria said "update actual manifests only for released packages", which is true but silent about who qualifies the bridge and how a defect is published. No criterion had been checked.
 ---
 
 created: 2026-10-21 21:56
