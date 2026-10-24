@@ -9,6 +9,12 @@ transport it owns, so a claim inside the payload cannot change who the caller is
 The protocol version is deliberately not the package version. A wire break bumps
 it, a package release does not, and the two languages agree on it the way they
 agree on ``PLUGIN_DESCRIPTION_SCHEMA_VERSION``.
+
+Subscriptions (``kind: "subscribe"``) did not bump it. A subscription is a call
+a client chooses to make, and the host only sends frames for a subscription that
+client opened, so a client which never subscribes still sees nothing but replies
+to its own calls. The ordering, buffering and termination rules that go with
+those frames live in :mod:`qgis_sdk.bridge.streams`.
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkBridgeProtocolErro
 BRIDGE_PROTOCOL_VERSION = 1
 MAX_CALL_ID_LENGTH = 128
 MAX_WIRE_DEPTH = 32
+
 
 _OPERATION_ID = re.compile(r"[a-zA-Z][a-zA-Z0-9_.-]*")
 
@@ -45,6 +52,7 @@ class BridgeErrorCode(str, Enum):
     NOT_SERIALIZABLE = "not_serializable"
     OPERATION_FAILED = "operation_failed"
     CANCELLED = "cancelled"
+    LIMIT_EXCEEDED = "limit_exceeded"
 
 
 def to_wire(value: Any, *, depth: int = 0) -> Any:

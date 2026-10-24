@@ -5,6 +5,7 @@ import {
 	BRIDGE_PROTOCOL_VERSION,
 	BridgeClient,
 	parseInvokeReply,
+	parseStreamFrame,
 	QgisSdkBridgeAbortedError,
 	QgisSdkBridgeClosedError,
 	QgisSdkBridgeProtocolError,
@@ -234,4 +235,207 @@ test("closing rejects what is pending and stops listening", async () => {
 	await expect(client.invoke("demo.echo")).rejects.toThrow(
 		QgisSdkBridgeClosedError,
 	);
+});
+
+type FrameCase = {
+	readonly name: string;
+	readonly frames: readonly unknown[];
+};
+
+function streamFixture(): {
+	readonly protocol: number;
+	readonly streams: readonly FrameCase[];
+} {
+	return JSON.parse(readFileSync(casesPath, "utf8")) as {
+		readonly protocol: number;
+		readonly streams: readonly FrameCase[];
+	};
+}
+
+function ackFor(callId: string, subscriptionId: string): Record<string, unknown> {
+	return replyFor(callId, {
+		ok: true,
+		value: { subscription_id: subscriptionId, capacity: 64 },
+	});
+}
+
+function frame(subscriptionId: string, seq: number, payload: unknown): unknown {
+	return {
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		subscription_id: subscriptionId,
+		seq,
+		event: { kind: "data", payload },
+	};
+}
+
+function ended(subscriptionId: string, seq: number, kind: string): unknown {
+	return {
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		subscription_id: subscriptionId,
+		seq,
+		terminal: { kind },
+	};
+}
+
+test("both languages agree on the checked-in stream frames", () => {
+	const fixtureStreams = streamFixture();
+	expect(fixtureStreams.protocol).toBe(BRIDGE_PROTOCOL_VERSION);
+	expect(fixtureStreams.streams.length).toBeGreaterThan(0);
+
+	for (const item of fixtureStreams.streams) {
+		const seen = new Map<string, number>();
+		for (const raw of item.frames) {
+			const parsed = parseStreamFrame(raw);
+			const expected = seen.get(parsed.subscription_id) ?? 0;
+			expect(parsed.seq).toBe(expected);
+			seen.set(parsed.subscription_id, expected + 1);
+		}
+	}
+});
+
+test("parseStreamFrame refuses frames a host could not have produced", () => {
+	const refused: unknown[] = [
+		null,
+		[],
+		{ protocol: 1, seq: 0, event: { kind: "data", payload: 1 } },
+		{ protocol: 2, subscription_id: "s1", seq: 0, event: { kind: "data" } },
+		{ protocol: 1, subscription_id: "s1", seq: -1, event: { kind: "data" } },
+		{ protocol: 1, subscription_id: "s1", seq: 0 },
+		{
+			protocol: 1,
+			subscription_id: "s1",
+			seq: 0,
+			event: { kind: "data", payload: 1 },
+			terminal: { kind: "complete" },
+		},
+		{ protocol: 1, subscription_id: "s1", seq: 0, event: { kind: "nope" } },
+		{ protocol: 1, subscription_id: "s1", seq: 0, terminal: { kind: "nope" } },
+		{
+			protocol: 1,
+			subscription_id: "s1",
+			seq: 0,
+			terminal: { kind: "gap", dropped: -1 },
+		},
+	];
+
+	for (const raw of refused) {
+		expect(() => parseStreamFrame(raw)).toThrow(QgisSdkBridgeProtocolError);
+	}
+});
+
+test("a subscription delivers events in order and ends once", async () => {
+	const scripted = scriptedTransport();
+	const client = new BridgeClient(scripted.transport);
+	const events: unknown[] = [];
+	const terminals: string[] = [];
+
+	const pending = client.subscribe(
+		"demo.ticks",
+		{},
+		{
+			onEvent: (event) => {
+				events.push(event.payload);
+			},
+			onTerminal: (terminal) => {
+				terminals.push(terminal.kind);
+			},
+		},
+	);
+	expect(scripted.sent[0]?.kind).toBe("subscribe");
+	scripted.deliver(ackFor("c1", "s1"));
+	const subscription = await pending;
+
+	expect(subscription.id).toBe("s1");
+	expect(client.activeSubscriptions).toEqual(["s1"]);
+	scripted.deliver(frame("s1", 0, { index: 0 }));
+	scripted.deliver(frame("s1", 1, { index: 1 }));
+	scripted.deliver(ended("s1", 2, "complete"));
+
+	expect(events).toEqual([{ index: 0 }, { index: 1 }]);
+	expect(terminals).toEqual(["complete"]);
+	expect(client.activeSubscriptions).toEqual([]);
+	// A terminal frame ends the subscription; the client does not unsubscribe
+	// what the host has already ended.
+	expect(scripted.sent.filter((m) => m.kind === "unsubscribe")).toEqual([]);
+});
+
+test("a frame that skips a sequence ends the subscription instead of delivering", async () => {
+	const scripted = scriptedTransport();
+	const client = new BridgeClient(scripted.transport);
+	const terminals: string[] = [];
+
+	const pending = client.subscribe(
+		"demo.ticks",
+		{},
+		{ onTerminal: (terminal) => terminals.push(terminal.kind) },
+	);
+	scripted.deliver(ackFor("c1", "s1"));
+	await pending;
+
+	scripted.deliver(frame("s1", 0, { index: 0 }));
+	scripted.deliver(frame("s1", 2, { index: 2 }));
+
+	expect(terminals).toEqual(["gap"]);
+	expect(client.sequenceBreaks).toBe(1);
+	expect(client.activeSubscriptions).toEqual([]);
+	expect(scripted.sent.some((m) => m.kind === "unsubscribe")).toBe(true);
+});
+
+test("closing a subscription notifies the host once", async () => {
+	const scripted = scriptedTransport();
+	const client = new BridgeClient(scripted.transport);
+	const terminals: string[] = [];
+
+	const pending = client.subscribe(
+		"demo.ticks",
+		{},
+		{ onTerminal: (terminal) => terminals.push(terminal.kind) },
+	);
+	scripted.deliver(ackFor("c1", "s1"));
+	const subscription = await pending;
+
+	subscription.close();
+	subscription.close();
+
+	const disposals = scripted.sent.filter((m) => m.kind === "unsubscribe");
+	expect(disposals.length).toBe(1);
+	expect(disposals[0]?.subscription_id).toBe("s1");
+	expect(terminals).toEqual(["disposed"]);
+	expect(subscription.closed).toBe(true);
+
+	scripted.deliver(ackFor("c2", "s1"));
+	expect(client.unmatchedReplies).toBe(0);
+});
+
+test("closing the client ends its subscriptions and ignores later frames", async () => {
+	const scripted = scriptedTransport();
+	const client = new BridgeClient(scripted.transport);
+	const terminals: string[] = [];
+
+	const pending = client.subscribe(
+		"demo.ticks",
+		{},
+		{ onTerminal: (terminal) => terminals.push(terminal.kind) },
+	);
+	scripted.deliver(ackFor("c1", "s1"));
+	await pending;
+
+	client.close();
+	scripted.deliver(frame("s1", 0, { index: 0 }));
+
+	expect(terminals).toEqual(["disposed"]);
+	expect(client.activeSubscriptions).toEqual([]);
+	expect(scripted.listeners()).toBe(0);
+});
+
+test("frames for a subscription the client does not hold are counted, not routed", async () => {
+	const scripted = scriptedTransport();
+	const client = new BridgeClient(scripted.transport);
+
+	scripted.deliver(frame("s9", 0, { index: 0 }));
+	scripted.deliver({ protocol: 1, subscription_id: "s9", seq: 0 });
+
+	expect(client.activeSubscriptions).toEqual([]);
+	expect(client.unmatchedReplies).toBe(2);
+	expect(client.protocolError).toBeInstanceOf(QgisSdkBridgeProtocolError);
 });

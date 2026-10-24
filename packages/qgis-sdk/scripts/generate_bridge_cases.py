@@ -38,9 +38,15 @@ from qgis_sdk.bridge import (
     BridgeOperation,
     Dispatcher,
 )
+from qgis_sdk.bridge.streams import (
+    MAX_QUEUED_EVENTS,
+    StreamEventType,
+)
 from qgis_sdk.models import QgisSdkLayerNotFoundError
 
 ECHO = BridgeOperation(id="demo.echo", title="Echo the payload")
+TICKS = BridgeOperation(id="demo.ticks", title="A pulled stream of ticks")
+PUSHED = BridgeOperation(id="demo.pushed", title="A stream the host pushes into")
 FAILS = BridgeOperation(id="demo.fails", title="Fail with an SDK error")
 NATIVE = BridgeOperation(id="demo.native", title="Return a value that cannot cross")
 
@@ -52,6 +58,31 @@ def _request(operation: str, payload: Any = None, call_id: str = "case") -> dict
         "operation": operation,
         "payload": {} if payload is None else payload,
     }
+
+
+def _stream_host() -> Dispatcher:
+    """A host with one pulled stream and one pushed stream."""
+    dispatcher = Dispatcher(
+        description={"schema_version": 1, "id": "demo.plugin", "title": "Demo"},
+        authorize=lambda binding, operation: True,
+    )
+    dispatcher.register_stream(TICKS, lambda payload: iter([{"index": 0}, {"index": 1}]))
+    dispatcher.register_stream(PUSHED, lambda payload: None)
+    return dispatcher
+
+
+def _subscribe(dispatcher: Dispatcher, binding, operation: str) -> str:
+    reply = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "stream-case",
+            "operation": operation,
+            "payload": {},
+        },
+    )
+    return reply["value"]["subscription_id"]
 
 
 def _host(*, allow: bool = True) -> Dispatcher:
@@ -142,7 +173,54 @@ def build_cases() -> dict[str, Any]:
         }
     )
 
-    return {"protocol": BRIDGE_PROTOCOL_VERSION, "cases": cases}
+    return {
+        "protocol": BRIDGE_PROTOCOL_VERSION,
+        "cases": cases,
+        "streams": _stream_cases(),
+    }
+
+
+def _stream_cases() -> list[dict[str, Any]]:
+    """Return the stream frames the TypeScript client has to reach too.
+
+    The point is the same as for the replies: the frames are produced by the real
+    dispatcher, so a change to ordering, terminal shapes or the gap rule fails on
+    both sides until the fixture is regenerated.
+    """
+    streams: list[dict[str, Any]] = []
+
+    ordered = _stream_host()
+    binding = ordered.bind(view_id="view-1", origin="qgis://desktop")
+    _subscribe(ordered, binding, TICKS.id)
+    streams.append({"name": "ordered-complete", "frames": ordered.pump(binding)})
+
+    coalesced = _stream_host()
+    binding = coalesced.bind(view_id="view-1", origin="qgis://desktop")
+    subscription_id = _subscribe(coalesced, binding, PUSHED.id)
+    coalesced.emit(
+        subscription_id, {"percent": 10}, kind=StreamEventType.PROGRESS
+    )
+    coalesced.emit(
+        subscription_id, {"percent": 20}, kind=StreamEventType.PROGRESS
+    )
+    coalesced.emit(subscription_id, {"row": 1})
+    streams.append(
+        {"name": "progress-coalesced", "frames": coalesced.pump(binding)}
+    )
+
+    overflow = _stream_host()
+    binding = overflow.bind(view_id="view-1", origin="qgis://desktop")
+    subscription_id = _subscribe(overflow, binding, PUSHED.id)
+    for index in range(MAX_QUEUED_EVENTS + 1):
+        overflow.emit(subscription_id, {"index": index})
+    streams.append(
+        {
+            "name": "gap-overflow",
+            "frames": overflow.pump(binding, limit=MAX_QUEUED_EVENTS + 1),
+        }
+    )
+
+    return streams
 
 
 def main() -> int:

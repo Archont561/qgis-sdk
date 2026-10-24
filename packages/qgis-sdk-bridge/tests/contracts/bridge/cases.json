@@ -288,5 +288,788 @@
 			}
 		}
 	],
-	"protocol": 1
+	"protocol": 1,
+	"streams": [
+		{
+			"frames": [
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 0
+						}
+					},
+					"protocol": 1,
+					"seq": 0,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 1
+						}
+					},
+					"protocol": 1,
+					"seq": 1,
+					"subscription_id": "s1"
+				},
+				{
+					"protocol": 1,
+					"seq": 2,
+					"subscription_id": "s1",
+					"terminal": {
+						"kind": "complete"
+					}
+				}
+			],
+			"name": "ordered-complete"
+		},
+		{
+			"frames": [
+				{
+					"event": {
+						"kind": "progress",
+						"payload": {
+							"percent": 20
+						}
+					},
+					"protocol": 1,
+					"seq": 0,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"row": 1
+						}
+					},
+					"protocol": 1,
+					"seq": 1,
+					"subscription_id": "s1"
+				}
+			],
+			"name": "progress-coalesced"
+		},
+		{
+			"frames": [
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 0
+						}
+					},
+					"protocol": 1,
+					"seq": 0,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 1
+						}
+					},
+					"protocol": 1,
+					"seq": 1,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 2
+						}
+					},
+					"protocol": 1,
+					"seq": 2,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 3
+						}
+					},
+					"protocol": 1,
+					"seq": 3,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 4
+						}
+					},
+					"protocol": 1,
+					"seq": 4,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 5
+						}
+					},
+					"protocol": 1,
+					"seq": 5,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 6
+						}
+					},
+					"protocol": 1,
+					"seq": 6,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 7
+						}
+					},
+					"protocol": 1,
+					"seq": 7,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 8
+						}
+					},
+					"protocol": 1,
+					"seq": 8,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 9
+						}
+					},
+					"protocol": 1,
+					"seq": 9,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 10
+						}
+					},
+					"protocol": 1,
+					"seq": 10,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 11
+						}
+					},
+					"protocol": 1,
+					"seq": 11,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 12
+						}
+					},
+					"protocol": 1,
+					"seq": 12,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 13
+						}
+					},
+					"protocol": 1,
+					"seq": 13,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 14
+						}
+					},
+					"protocol": 1,
+					"seq": 14,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 15
+						}
+					},
+					"protocol": 1,
+					"seq": 15,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 16
+						}
+					},
+					"protocol": 1,
+					"seq": 16,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 17
+						}
+					},
+					"protocol": 1,
+					"seq": 17,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 18
+						}
+					},
+					"protocol": 1,
+					"seq": 18,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 19
+						}
+					},
+					"protocol": 1,
+					"seq": 19,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 20
+						}
+					},
+					"protocol": 1,
+					"seq": 20,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 21
+						}
+					},
+					"protocol": 1,
+					"seq": 21,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 22
+						}
+					},
+					"protocol": 1,
+					"seq": 22,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 23
+						}
+					},
+					"protocol": 1,
+					"seq": 23,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 24
+						}
+					},
+					"protocol": 1,
+					"seq": 24,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 25
+						}
+					},
+					"protocol": 1,
+					"seq": 25,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 26
+						}
+					},
+					"protocol": 1,
+					"seq": 26,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 27
+						}
+					},
+					"protocol": 1,
+					"seq": 27,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 28
+						}
+					},
+					"protocol": 1,
+					"seq": 28,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 29
+						}
+					},
+					"protocol": 1,
+					"seq": 29,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 30
+						}
+					},
+					"protocol": 1,
+					"seq": 30,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 31
+						}
+					},
+					"protocol": 1,
+					"seq": 31,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 32
+						}
+					},
+					"protocol": 1,
+					"seq": 32,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 33
+						}
+					},
+					"protocol": 1,
+					"seq": 33,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 34
+						}
+					},
+					"protocol": 1,
+					"seq": 34,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 35
+						}
+					},
+					"protocol": 1,
+					"seq": 35,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 36
+						}
+					},
+					"protocol": 1,
+					"seq": 36,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 37
+						}
+					},
+					"protocol": 1,
+					"seq": 37,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 38
+						}
+					},
+					"protocol": 1,
+					"seq": 38,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 39
+						}
+					},
+					"protocol": 1,
+					"seq": 39,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 40
+						}
+					},
+					"protocol": 1,
+					"seq": 40,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 41
+						}
+					},
+					"protocol": 1,
+					"seq": 41,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 42
+						}
+					},
+					"protocol": 1,
+					"seq": 42,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 43
+						}
+					},
+					"protocol": 1,
+					"seq": 43,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 44
+						}
+					},
+					"protocol": 1,
+					"seq": 44,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 45
+						}
+					},
+					"protocol": 1,
+					"seq": 45,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 46
+						}
+					},
+					"protocol": 1,
+					"seq": 46,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 47
+						}
+					},
+					"protocol": 1,
+					"seq": 47,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 48
+						}
+					},
+					"protocol": 1,
+					"seq": 48,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 49
+						}
+					},
+					"protocol": 1,
+					"seq": 49,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 50
+						}
+					},
+					"protocol": 1,
+					"seq": 50,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 51
+						}
+					},
+					"protocol": 1,
+					"seq": 51,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 52
+						}
+					},
+					"protocol": 1,
+					"seq": 52,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 53
+						}
+					},
+					"protocol": 1,
+					"seq": 53,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 54
+						}
+					},
+					"protocol": 1,
+					"seq": 54,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 55
+						}
+					},
+					"protocol": 1,
+					"seq": 55,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 56
+						}
+					},
+					"protocol": 1,
+					"seq": 56,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 57
+						}
+					},
+					"protocol": 1,
+					"seq": 57,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 58
+						}
+					},
+					"protocol": 1,
+					"seq": 58,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 59
+						}
+					},
+					"protocol": 1,
+					"seq": 59,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 60
+						}
+					},
+					"protocol": 1,
+					"seq": 60,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 61
+						}
+					},
+					"protocol": 1,
+					"seq": 61,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 62
+						}
+					},
+					"protocol": 1,
+					"seq": 62,
+					"subscription_id": "s1"
+				},
+				{
+					"event": {
+						"kind": "data",
+						"payload": {
+							"index": 63
+						}
+					},
+					"protocol": 1,
+					"seq": 63,
+					"subscription_id": "s1"
+				},
+				{
+					"protocol": 1,
+					"seq": 64,
+					"subscription_id": "s1",
+					"terminal": {
+						"dropped": 1,
+						"kind": "gap",
+						"message": "The view did not consume this subscription fast enough and events were dropped"
+					}
+				}
+			],
+			"name": "gap-overflow"
+		}
+	]
 }
