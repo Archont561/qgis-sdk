@@ -19,10 +19,18 @@ type CaseExpectation = {
 	readonly code?: string;
 };
 
+type BridgeReply = {
+	readonly protocol: number;
+	readonly call_id: string;
+	readonly ok: boolean;
+	readonly value?: unknown;
+	readonly error?: { readonly code: string; readonly message: string };
+};
+
 type BridgeCase = {
 	readonly name: string;
 	readonly request: Record<string, unknown>;
-	readonly reply: Record<string, unknown>;
+	readonly reply: BridgeReply;
 	readonly expect: CaseExpectation;
 };
 
