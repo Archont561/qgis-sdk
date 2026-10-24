@@ -1172,6 +1172,20 @@ def test_autorelease_workflow_has_milestone_triggers_paths_ignore_and_dispatch_i
     assert "RELEASE_SCOPE" in text
 
 
+def test_the_coverage_config_is_tracked_so_ci_measures_the_same_code():
+    """The QGIS adapter omit lives in `.coveragerc`, which CI must receive.
+
+    `.gitignore` once swallowed it through a `/.coverage*` glob, so CI measured
+    the host-only adapters as uncovered (81%) while a local checkout reported
+    100% - the same command, two different denominators.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config = repo_root / ".coveragerc"
+
+    assert config.is_file()
+    assert "adapters/qgis/*" in config.read_text(encoding="utf-8")
+
+
 def test_ci_verifies_the_scoped_versions_and_the_contract_on_every_push():
     repo_root = Path(__file__).resolve().parents[2]
     text = (repo_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
