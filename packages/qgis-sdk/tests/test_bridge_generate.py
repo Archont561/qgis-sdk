@@ -69,6 +69,7 @@ def _actions(*, reverse: bool = False, **overrides: Any) -> dict[str, Any]:
         "id": "org.example.sites",
         "title": "Sites",
         "actions": actions,
+        "streams": json.loads(json.dumps(SAMPLE["streams"])),
     }
 
 
@@ -188,7 +189,7 @@ def test_an_object_inside_a_union_is_refused() -> None:
 def test_duplicate_operation_ids_are_refused() -> None:
     described = _actions()
     described["actions"].append(json.loads(json.dumps(described["actions"][0])))
-    with pytest.raises(QgisSdkBridgeError, match="duplicate action id"):
+    with pytest.raises(QgisSdkBridgeError, match="duplicate operation id"):
         generate_typescript(described)
 
 
@@ -577,3 +578,214 @@ def test_a_declared_string_pattern_is_emitted_as_a_whole_string_test() -> None:
 def test_the_host_pattern_survives_into_the_checked_in_host_module() -> None:
     host = generate_host_typescript()
     assert 'new RegExp("^(?:[0-9]+)$")' in host
+
+
+# -- streams (decision-28) ------------------------------------------------------
+
+
+def _stream_record(**overrides: Any) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "id": "sites.watch",
+        "title": "Watch",
+        "handler": "watch",
+        "request": {
+            "type": "object",
+            "properties": {"layer_id": {"type": "string"}},
+            "required": ["layer_id"],
+            "additionalProperties": False,
+        },
+        "events": {
+            "data": {
+                "type": "object",
+                "properties": {"count": {"type": "integer"}},
+                "required": ["count"],
+            },
+            "progress": {"type": "integer"},
+        },
+    }
+    record.update(overrides)
+    return record
+
+
+def _with_stream(**overrides: Any) -> dict[str, Any]:
+    described = _actions()
+    described["streams"] = [_stream_record(**overrides)]
+    return described
+
+
+def _actions_only() -> dict[str, Any]:
+    described = _actions()
+    described["streams"] = []
+    return described
+
+
+def test_the_sample_plugin_declares_a_stream_and_the_module_renders_it() -> None:
+    generated = generate_typescript(SAMPLE)
+    assert [item["id"] for item in SAMPLE["streams"]] == ["sites.watch"]
+    assert '\t"sites.watch",' in generated
+    assert "export interface SitesWatchData {" in generated
+    assert "export interface SitesWatchProgress {" in generated
+    assert "export type SitesWatchEvent =" in generated
+    assert (
+        '\t| { readonly kind: "data"; readonly payload: SitesWatchData }' in generated
+    )
+    assert (
+        "export function SitesWatchEvent(value: unknown, strict = false): "
+        "value is SitesWatchEvent {"
+    ) in generated
+    assert (
+        "readonly watch: (input: SitesWatchRequest, "
+        "handlers: StreamHandlers<SitesWatchEvent>, options?: InvokeOptions) "
+        "=> Promise<StreamHandle>;"
+    ) in generated
+    assert 'open<SitesWatchEvent>(\n\t\t\t\t\tclient, "sites.watch"' in generated
+
+
+def test_stream_support_is_rendered_only_when_a_stream_is_declared() -> None:
+    without = generate_typescript(_actions_only())
+    with_stream = generate_typescript(_with_stream())
+    for name in ("StreamHandlers", "StreamHandle", "StreamTerminal"):
+        assert f"export interface {name}" not in without
+        assert f"export interface {name}" in with_stream
+    assert "subscribe(" not in without
+    assert "async function open<" not in without
+    assert "subscribe(" in with_stream
+    assert "async function open<" in with_stream
+
+
+def test_the_event_and_terminal_vocabularies_come_from_the_python_enums() -> None:
+    from qgis_sdk.bridge.streams import StreamEventType, StreamTerminal
+
+    generated = generate_typescript(_with_stream())
+    kinds = " | ".join(f'"{kind.value}"' for kind in StreamEventType)
+    ends = " | ".join(f'"{kind.value}"' for kind in StreamTerminal)
+    assert f"readonly kind: {kinds};" in generated
+    assert f"readonly kind: {ends};" in generated
+
+
+def test_a_non_object_event_payload_is_an_inline_type_and_predicate() -> None:
+    generated = generate_typescript(_with_stream())
+    assert '\t| { readonly kind: "progress"; readonly payload: number };' in generated
+    assert (
+        '\tif (value.kind === "progress") return isSafeInteger(value.payload);'
+        in generated
+    )
+    assert (
+        '\tif (value.kind === "data") return SitesWatchData(value.payload, strict);'
+        in generated
+    )
+
+
+def test_stream_order_and_event_order_do_not_change_the_output() -> None:
+    reordered = _with_stream(
+        events={
+            "progress": {"type": "integer"},
+            "data": {
+                "type": "object",
+                "properties": {"count": {"type": "integer"}},
+                "required": ["count"],
+            },
+        }
+    )
+    reordered["actions"].reverse()
+    assert generate_typescript(reordered) == generate_typescript(_with_stream())
+
+
+def test_the_fingerprint_covers_streams_but_not_their_titles() -> None:
+    base = contract_fingerprint(_with_stream())
+    assert base != contract_fingerprint(_actions_only())
+    assert base == contract_fingerprint(_with_stream(title="Other", handler="x"))
+    assert base != contract_fingerprint(
+        _with_stream(events={"data": {"type": "string"}})
+    )
+
+
+def test_a_surface_without_streams_hashes_as_it_did_before_streams_existed() -> None:
+    """An empty stream list is the same wire, so it is the same digest."""
+    described = _actions_only()
+    del described["streams"]
+    assert contract_fingerprint(described) == contract_fingerprint(_actions_only())
+    assert generate_typescript(described) == generate_typescript(_actions_only())
+    assert generate_host_typescript() == generate_host_typescript(
+        {**host_description(), "streams": []}
+    )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"events": {}}, "at least one event kind"),
+        (
+            {"events": {"ticks": {"type": "integer"}}},
+            "ticks is not a stream event kind",
+        ),
+        ({"events": {"data": "nope"}}, "events.data must be a schema object"),
+        ({"events": None}, "declared request schema and an events map"),
+        ({"request": None}, "declared request schema and an events map"),
+        ({"result": {"type": "null"}}, "a stream declares events, not a result"),
+        ({"events": {"data": {"$ref": "#/x"}}}, "unsupported schema keyword"),
+        ({"id": "sites.summary"}, "duplicate operation id 'sites.summary'"),
+    ],
+)
+def test_a_stream_the_generator_cannot_render_is_refused(
+    overrides: dict[str, Any], message: str
+) -> None:
+    with pytest.raises(QgisSdkBridgeError, match=message):
+        generate_typescript(_with_stream(**overrides))
+
+
+def test_an_action_that_claims_events_is_refused() -> None:
+    described = _actions()
+    described["actions"][0]["events"] = {"data": {"type": "null"}}
+    with pytest.raises(QgisSdkBridgeError, match="belongs in description.streams"):
+        generate_typescript(described)
+
+
+def test_a_stream_list_that_is_not_a_list_is_refused() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="streams must be a list"):
+        generate_typescript({**_actions_only(), "streams": {"id": "x"}})
+    with pytest.raises(QgisSdkBridgeError, match="every stream needs an id"):
+        generate_typescript({**_actions_only(), "streams": [{"title": "x"}]})
+
+
+def test_a_stream_prefix_that_is_also_an_action_is_refused() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="conflicts"):
+        generate_typescript(_with_stream(id="sites.summary.live"))
+
+
+def test_the_host_surface_renders_a_stream_under_its_own_names() -> None:
+    """The first host stream will reuse this path; its names must not collide."""
+    described = {**host_description(), "streams": [_stream_record(id="jobs.watch")]}
+    host = generate_host_typescript(described)
+    plugin = generate_typescript(_with_stream())
+    for name in ("HostStreamHandlers", "HostStreamHandle", "HostStreamTerminal"):
+        assert f"export interface {name}" in host
+        assert name not in plugin
+    assert "HostStreamHandlers<JobsWatchEvent>" in host
+    assert "): Promise<HostStreamHandle> {" in host
+    assert "HostHostStream" not in host
+    assert "new HostContractError(" in host
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["StreamHandlers", "StreamHandle", "StreamTerminal", "HostStreamHandle", "open"],
+)
+def test_the_stream_helper_names_are_reserved(name: str) -> None:
+    with pytest.raises(QgisSdkBridgeError, match="already declares"):
+        generate_typescript(_with_stream(request_name=name))
+
+
+def test_the_kernel_speaks_the_same_event_vocabulary_as_python() -> None:
+    """The frame envelope stays hand-written in bridge.ts (decision-28), so the
+    kind unions it switches on are pinned to the Python enums here."""
+    from qgis_sdk.bridge.streams import StreamEventType, StreamTerminal
+
+    bridge = (
+        PROJECT_ROOT.parents[1] / "packages" / "qgis-sdk-bridge" / "src" / "bridge.ts"
+    ).read_text(encoding="utf-8")
+    events = " | ".join(f'"{kind.value}"' for kind in StreamEventType)
+    assert f"export type StreamEventKind = {events};" in bridge
+    for kind in StreamTerminal:
+        assert f'\t| "{kind.value}"' in bridge
+    assert bridge.count('\t| "') == len(StreamTerminal)

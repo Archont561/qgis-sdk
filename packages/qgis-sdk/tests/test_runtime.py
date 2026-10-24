@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import pytest
-from qgis_sdk import QgisSdkDeclarationError, action, plugin
+from qgis_sdk import QgisSdkDeclarationError, action, plugin, stream
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
@@ -335,4 +336,52 @@ def test_non_callable_action_binding_fails_and_cleans_up() -> None:
 
     assert "handler 'run'" in str(caught.value)
     assert released == ["registered"]
+    assert runtime.state is PluginRuntimeState.FAILED
+
+
+def test_declared_streams_are_bound_beside_the_actions_and_cleared_on_unload() -> None:
+    @plugin(id="example.watch", title="Watch")
+    class Watch:
+        def __init__(self, ctx: PluginContext) -> None:
+            self.ctx = ctx
+
+        @action(id="run", title="Run")
+        def run(self) -> None:
+            return None
+
+        @stream(id="ticks", title="Ticks", events={"data": int})
+        def ticks(self, count: int) -> Iterator[dict]:
+            for index in range(count):
+                yield {"kind": "data", "payload": index}
+
+    runtime = PluginRuntime(Watch, plugin_context())
+    assert dict(runtime.streams) == {}
+
+    runtime.start()
+
+    assert list(runtime.actions) == ["run"]
+    assert list(runtime.streams) == ["ticks"]
+    assert "ticks" not in runtime.actions
+    assert [item["payload"] for item in runtime.streams["ticks"](2)] == [0, 1]
+    with pytest.raises(TypeError):
+        runtime.streams["other"] = lambda: None  # type: ignore[index]
+
+    runtime.unload()
+
+    assert dict(runtime.streams) == {}
+
+
+def test_non_callable_stream_binding_names_the_stream() -> None:
+    @plugin(id="example.watch", title="Watch")
+    class Watch:
+        def __init__(self, ctx: PluginContext) -> None:
+            self.ticks = "shadowed"
+
+        @stream(id="ticks", title="Ticks", events={"data": int})
+        def ticks(self) -> None:
+            return None
+
+    runtime = PluginRuntime(Watch, plugin_context())
+    with pytest.raises(QgisSdkPluginLifecycleError, match="stream 'ticks'"):
+        runtime.start()
     assert runtime.state is PluginRuntimeState.FAILED

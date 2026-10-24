@@ -12,10 +12,11 @@ to follow.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
-from qgis_sdk.declarations import action, plugin
+from qgis_sdk.declarations import action, plugin, stream
 
 
 @dataclass(frozen=True)
@@ -44,9 +45,26 @@ class Details:
     options: DetailsOptions
 
 
+@dataclass(frozen=True)
+class SiteChange:
+    """A data event: what changed on a layer, and how many features it touched."""
+
+    layer_id: str
+    change: Literal["added", "removed", "modified"]
+    count: int
+
+
+@dataclass(frozen=True)
+class ScanProgress:
+    """A progress event, which the host may coalesce while it is queued."""
+
+    done: int
+    total: int
+
+
 @plugin(id="org.example.sites", title="Sites")
 class SitesPlugin:
-    """Three actions that between them cover the whole emitted surface."""
+    """Three actions and one stream that between them cover the emitted surface."""
 
     @action(id="sites.summary", title="Summarize one layer")
     def summary(
@@ -67,5 +85,22 @@ class SitesPlugin:
         """No inputs at all: the generated method's argument is optional."""
         return Summary(total=0, largest="")
 
+    @stream(
+        id="sites.watch",
+        title="Watch one layer for changes",
+        events={"data": SiteChange, "progress": ScanProgress},
+    )
+    def watch(self, layer_id: str, every_ms: int = 500) -> Iterator[Any]:
+        """A stream beside the actions: typed data and progress events."""
+        yield {"kind": "progress", "payload": ScanProgress(done=0, total=1)}
+        yield SiteChange(layer_id=layer_id, change="added", count=every_ms)
 
-__all__ = ["Details", "DetailsOptions", "SitesPlugin", "Summary"]
+
+__all__ = [
+    "Details",
+    "DetailsOptions",
+    "ScanProgress",
+    "SiteChange",
+    "SitesPlugin",
+    "Summary",
+]

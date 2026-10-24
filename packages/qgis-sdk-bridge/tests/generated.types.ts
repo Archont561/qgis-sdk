@@ -5,17 +5,26 @@
  * `@ts-expect-error` fails the build if the line below it stops being an error,
  * so a generator that loosened the types would have to delete the comment too.
  */
+import type { BridgeClient } from "../src/bridge";
 import {
 	type BridgeClientLike,
 	createOperations,
 	OPERATIONS,
 	type OperationId,
 	type PluginOperations,
+	type SitesWatchEvent,
+	type StreamHandle,
 } from "./contracts/generated/clients/sites";
 
 declare const client: BridgeClientLike;
 const operations: PluginOperations = createOperations(client);
 void operations;
+
+// The hand-written kernel is a client the generated module accepts as it is:
+// nothing has to be adapted between `BridgeClient` and the generated surface.
+declare const kernel: BridgeClient;
+const kernelAccepted: BridgeClientLike = kernel;
+void kernelAccepted;
 
 // An operation id is one of the declared literals, so a typo is a type error.
 const summaryId: OperationId = "sites.summary";
@@ -63,3 +72,59 @@ void operations.sites.summary({
 	// @ts-expect-error `slow` is not a declared literal.
 	mode: "slow",
 });
+
+// -- streams (decision-28) -----------------------------------------------------
+
+// A stream id is an operation id like any other.
+const watchId: OperationId = "sites.watch";
+void watchId;
+
+// A stream member resolves with a handle, not with a result.
+const opened: Promise<StreamHandle> = operations.sites.watch(
+	{ layer_id: "roads" },
+	{},
+);
+void opened;
+
+// The event handler is typed by the stream's own union, narrowed by kind.
+void operations.sites.watch(
+	{ layer_id: "roads" },
+	{
+		onEvent: (event: SitesWatchEvent) => {
+			if (event.kind === "data") {
+				const change: "added" | "removed" | "modified" = event.payload.change;
+				void change;
+				// @ts-expect-error `done` belongs to a progress payload, not a data one.
+				void event.payload.done;
+			} else {
+				const done: number = event.payload.done;
+				void done;
+			}
+			// @ts-expect-error `state` is not an event kind this stream declared.
+			if (event.kind === "state") {
+				void event;
+			}
+		},
+		onTerminal: (terminal) => {
+			const kind: "complete" | "error" | "cancelled" | "gap" | "disposed" =
+				terminal.kind;
+			void kind;
+		},
+	},
+);
+
+// A stream request is as strict as an action request.
+void operations.sites.watch(
+	{
+		layer_id: "roads",
+		// @ts-expect-error `guess` is not a declared argument.
+		guess: true,
+	},
+	{},
+);
+
+// @ts-expect-error The handlers are required; a stream without a listener is a leak.
+void operations.sites.watch({ layer_id: "roads" });
+
+// @ts-expect-error A stream is not invoked like an action: there is no result to await.
+void operations.sites.watch({ layer_id: "roads" }).then((value) => value.total);

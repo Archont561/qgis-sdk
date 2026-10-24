@@ -57,6 +57,7 @@ class PluginRuntime:
         self._state = PluginRuntimeState.NEW
         self._instance: object | None = None
         self._actions: Mapping[str, Callable[..., object]] = _EMPTY_ACTIONS
+        self._streams: Mapping[str, Callable[..., object]] = _EMPTY_ACTIONS
 
     @property
     def state(self) -> PluginRuntimeState:
@@ -78,6 +79,11 @@ class PluginRuntime:
         """Return declared handlers bound to the instance, keyed by action ID."""
         return self._actions
 
+    @property
+    def streams(self) -> Mapping[str, Callable[..., object]]:
+        """Return declared stream factories bound to the instance, keyed by id."""
+        return self._streams
+
     def start(self) -> object:
         """Construct and bind the plugin once, or raise a typed lifecycle error."""
         if self._state is not PluginRuntimeState.NEW:
@@ -94,7 +100,8 @@ class PluginRuntime:
                     f"Plugin {self._description.id!r}: the instance factory returned "
                     f"{type(instance).__name__}, not {self._plugin_class.__name__}"
                 )
-            actions = self._bind_actions(instance)
+            actions = self._bind(instance, self._description.actions, "action")
+            streams = self._bind(instance, self._description.streams, "stream")
         except BaseException as error:
             cleanup_error = self._discard_after_failed_start()
             if cleanup_error is not None:
@@ -102,6 +109,7 @@ class PluginRuntime:
             raise
         self._instance = instance
         self._actions = MappingProxyType(actions)
+        self._streams = MappingProxyType(streams)
         self._state = PluginRuntimeState.RUNNING
         return instance
 
@@ -117,6 +125,7 @@ class PluginRuntime:
         self._state = PluginRuntimeState.STOPPED
         self._instance = None
         self._actions = _EMPTY_ACTIONS
+        self._streams = _EMPTY_ACTIONS
         self._context.scope.close()
 
     def _construct(self) -> object:
@@ -125,13 +134,15 @@ class PluginRuntime:
             return self._plugin_class(self._context)
         return factory(self._context)
 
-    def _bind_actions(self, instance: object) -> dict[str, Callable[..., object]]:
+    def _bind(
+        self, instance: object, declared: tuple, noun: str
+    ) -> dict[str, Callable[..., object]]:
         bound: dict[str, Callable[..., object]] = {}
-        for description in self._description.actions:
+        for description in declared:
             handler = getattr(instance, description.handler, None)
             if not callable(handler):
                 raise QgisSdkPluginLifecycleError(
-                    f"Plugin {self._description.id!r}: action {description.id!r} "
+                    f"Plugin {self._description.id!r}: {noun} {description.id!r} "
                     f"handler {description.handler!r} is not callable on the "
                     "constructed instance"
                 )
@@ -142,6 +153,7 @@ class PluginRuntime:
         self._state = PluginRuntimeState.FAILED
         self._instance = None
         self._actions = _EMPTY_ACTIONS
+        self._streams = _EMPTY_ACTIONS
         try:
             self._context.scope.close()
         except BaseException as cleanup_error:  # noqa: BLE001 - preserve cleanup evidence

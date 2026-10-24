@@ -4,7 +4,7 @@
 
 `qgis-sdk` is the Python package in the QGIS SDK workspace. It is intended to grow into a reusable foundation for plugin authors who want maintainable, source-testable code and a consistent packaging workflow.
 
-> **Status (`0.1.0` experimental):** Exposes the version 1 plugin/action declaration API (`@plugin`, `@action`, `describe_plugin`, `PluginDescription`, `ActionDescription`), pure QGIS-free models/services/context contracts (`qgis_sdk.models`, `qgis_sdk.services`, `qgis_sdk.core`), bounded `PluginRuntime` and Qt `StepScheduler`, `create_class_factory` Desktop adapter, headless WebEngine availability probe, optional `PydanticContractAdapter`, and the `qgis-sdk scaffold` CLI. Full native GIS services, visible WebEngine UI transport, and background job orchestration are scheduled for subsequent `0.x` milestones.
+> **Status (`0.1.0` experimental):** Exposes the version 1 plugin/action declaration API (`@plugin`, `@action`, `@stream`, `describe_plugin`, `PluginDescription`, `ActionDescription`, `StreamDescription`), pure QGIS-free models/services/context contracts (`qgis_sdk.models`, `qgis_sdk.services`, `qgis_sdk.core`), bounded `PluginRuntime` and Qt `StepScheduler`, `create_class_factory` Desktop adapter, headless WebEngine availability probe, optional `PydanticContractAdapter`, and the `qgis-sdk scaffold` CLI. Full native GIS services, visible WebEngine UI transport, and background job orchestration are scheduled for subsequent `0.x` milestones.
 
 ## Installation
 
@@ -249,8 +249,9 @@ reply = dispatcher.dispatch(binding, request)     # never raises
 - **Trusted identity only.** `ViewBinding` is minted by the host; a forged
   `view_id` or `generation` inside the payload is ignored, and
   `advance_generation()` retires every live binding with `stale_generation`.
-- **Subscriptions.** `register_stream(operation, factory)` declares a stream, and
-  `dispatch` accepts `{"kind": "subscribe"}`. Frames carry a per-subscription
+- **Subscriptions.** `@stream` on the plugin or `register_stream(operation,
+  factory)` on the dispatcher declares a stream, and `dispatch` accepts
+  `{"kind": "subscribe"}`. Frames carry a per-subscription
   `seq`, the queue is bounded (`MAX_QUEUED_EVENTS`), a pushed stream that
   overruns it ends with a `gap` terminal carrying the dropped count, progress may
   be coalesced while it is still queued and data never is, and `pump(binding)`
@@ -285,6 +286,16 @@ wrote web/src/bridge.ts
 - **Strict in, lenient out.** A generated validator refuses unknown arguments and
   accepts a response that gained a field, so a newer host does not break an older
   view.
+- **Streams come from the same declarations (decision-28).** `@stream(id=...,
+  events={"data": SiteChange, "progress": ScanProgress})` marks a method that
+  returns an iterator of `StreamEvent`s; its request schema is bound like an
+  action's, and each declared event kind is a dataclass schema. The runtime
+  registers the stream under its id in the same namespace as the actions, the
+  host advertises the event schemas in the handshake and refuses to emit an
+  event the stream did not declare (the subscription ends with `error`), and the
+  generated client exposes `operations.sites.watch(input, handlers)` with a
+  typed event union. The frame envelope (`seq`, `gap`) is not generated: it is
+  the protocol's, owned by the TypeScript kernel.
 
 ### Host surface (decision-27)
 

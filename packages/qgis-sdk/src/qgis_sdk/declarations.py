@@ -21,6 +21,11 @@ from .models import MAX_SAFE_INTEGER, QgisSdkError
 
 T = TypeVar("T")
 
+#: The event kinds a stream may declare: the same three the frame carries
+#: (``qgis_sdk.bridge.streams.StreamEventType``), spelled here so a declaration
+#: module never has to import the bridge.
+STREAM_EVENT_KINDS = ("data", "progress", "state")
+
 #: Version of the plugin-description wire contract. It is deliberately not the
 #: package version: the bridge mirrors this number, and a release that changes a
 #: serialized shape has to move it for both sides at once.
@@ -71,12 +76,58 @@ def action(*, id: str, title: str) -> Callable[[T], T]:
     def decorate(method: T) -> T:
         if not inspect.isfunction(method):
             raise QgisSdkDeclarationError("@action requires an instance method")
-        if hasattr(method, "__qgis_sdk_action__"):
-            raise QgisSdkDeclarationError(f"{id}: duplicate @action declaration")
+        _require_undeclared(method, id, "@action")
         method.__qgis_sdk_action__ = metadata
         return method
 
     return decorate
+
+
+@dataclass(frozen=True)
+class _StreamMetadata(_Metadata):
+    events: dict[str, Any]
+
+
+def stream(*, id: str, title: str, events: Any) -> Callable[[T], T]:
+    """Attach stream metadata to an instance method that produces events.
+
+    ``events`` maps each event kind the stream emits (``data``, ``progress``,
+    ``state``) to the annotation of that kind's payload. It is the declaration of
+    the wire (decision-28): the method's parameters are the subscribe request,
+    its return annotation is not described (it still has to resolve, like every
+    annotation), and a kind the map does not name is one the host refuses to
+    emit.
+    """
+    metadata = _metadata(id, title)
+    if not isinstance(events, dict):
+        raise QgisSdkDeclarationError(f"{id}: events must be a mapping of kind to type")
+    if not events:
+        raise QgisSdkDeclarationError(
+            f"{id}: a stream declares at least one event kind"
+        )
+    for kind in events:
+        if kind not in STREAM_EVENT_KINDS:
+            raise QgisSdkDeclarationError(
+                f"{id}: {kind!r} is not a stream event kind; "
+                f"use one of {', '.join(STREAM_EVENT_KINDS)}"
+            )
+    declared = _StreamMetadata(metadata.id, metadata.title, dict(events))
+
+    def decorate(method: T) -> T:
+        if not inspect.isfunction(method):
+            raise QgisSdkDeclarationError("@stream requires an instance method")
+        _require_undeclared(method, id, "@stream")
+        method.__qgis_sdk_stream__ = declared
+        return method
+
+    return decorate
+
+
+def _require_undeclared(method: Any, id: str, decorator: str) -> None:
+    """One method is one operation: it cannot be an action and a stream at once."""
+    for marker in ("__qgis_sdk_action__", "__qgis_sdk_stream__"):
+        if hasattr(method, marker):
+            raise QgisSdkDeclarationError(f"{id}: duplicate {decorator} declaration")
 
 
 @dataclass(frozen=True)
@@ -95,6 +146,26 @@ class ActionDescription:
 
 
 @dataclass(frozen=True)
+class StreamDescription:
+    """Serializable stream structure: a request in, declared event kinds out.
+
+    ``events`` maps each declared kind to the schema of its payload. There is no
+    ``result``: the reply to a subscription is the protocol's acknowledgement,
+    not something an author declares (decision-28).
+    """
+
+    id: str
+    title: str
+    handler: str
+    request: dict[str, Any]
+    events: dict[str, dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return an independent JSON-compatible value."""
+        return json.loads(json.dumps(vars(self), allow_nan=False))
+
+
+@dataclass(frozen=True)
 class PluginDescription:
     """Version 1 description, independent of SDK and future bridge versions."""
 
@@ -102,6 +173,7 @@ class PluginDescription:
     title: str
     actions: tuple[ActionDescription, ...]
     schema_version: int = PLUGIN_DESCRIPTION_SCHEMA_VERSION
+    streams: tuple[StreamDescription, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return the transport representation."""
@@ -110,6 +182,7 @@ class PluginDescription:
             "id": self.id,
             "title": self.title,
             "actions": [action.to_dict() for action in self.actions],
+            "streams": [item.to_dict() for item in self.streams],
         }
 
     def to_json(self) -> str:
@@ -255,12 +328,17 @@ def _dataclass_schema(
     return _object_schema(properties, required)
 
 
-def _require_plain_method(method: Any, path: str) -> None:
-    """Refuse anything that would borrow the host's loop instead of the SDK's."""
+def _require_plain_method(method: Any, path: str, *, generator: bool = False) -> None:
+    """Refuse anything that would borrow the host's loop instead of the SDK's.
+
+    A stream may be a generator function - that is the natural way to produce
+    events the dispatcher pulls - but neither kind of operation may be a
+    coroutine or an async generator.
+    """
     if (
         not inspect.isfunction(method)
         or inspect.iscoroutinefunction(method)
-        or inspect.isgeneratorfunction(method)
+        or (inspect.isgeneratorfunction(method) and not generator)
         or inspect.isasyncgenfunction(method)
     ):
         raise QgisSdkDeclarationError(
@@ -326,11 +404,36 @@ def _describe_action(
     )
 
 
+def _describe_stream(
+    name: str, method: Any, declaration: _StreamMetadata
+) -> StreamDescription:
+    path = f"stream {declaration.id} ({name})"
+    _require_plain_method(method, path, generator=True)
+    parameters = list(inspect.signature(method).parameters.values())
+    _require_self_first(parameters, path)
+    hints = _hints(method, path)
+    properties, required = _action_inputs(parameters[1:], hints, path)
+    events = {
+        kind: _schema(annotation, f"{path}.events.{kind}", result=True)
+        for kind, annotation in declaration.events.items()
+    }
+    return StreamDescription(
+        declaration.id,
+        declaration.title,
+        name,
+        _object_schema(properties, required),
+        events,
+    )
+
+
 def describe_plugin(cls: type) -> PluginDescription:
     """Inspect trusted author code without constructing it or invoking handlers.
 
     Annotation resolution may evaluate forward references; this is not a sandbox
     for untrusted Python modules. Dataclass default factories are never called.
+
+    Actions and streams share one id namespace (decision-28): the dispatcher
+    allowlists both by id, so a duplicate across the two is refused here.
     """
     if not inspect.isclass(cls) or "__qgis_sdk_plugin__" not in vars(cls):
         raise QgisSdkDeclarationError("describe_plugin requires a class with @plugin")
@@ -338,7 +441,9 @@ def describe_plugin(cls: type) -> PluginDescription:
     members = {}
     for base in reversed(cls.__mro__):
         members.update(vars(base))
-    actions, ids = [], set()
+    actions: list[ActionDescription] = []
+    streams: list[StreamDescription] = []
+    ids: set[str] = set()
     for name, member in members.items():
         method = (
             member.__func__
@@ -350,14 +455,23 @@ def describe_plugin(cls: type) -> PluginDescription:
         if not inspect.isfunction(method):
             continue
         declaration = getattr(method, "__qgis_sdk_action__", None)
-        if declaration is None:
+        streamed = getattr(method, "__qgis_sdk_stream__", None)
+        declared = declaration if declaration is not None else streamed
+        if declared is None:
             continue
-        if declaration.id in ids:
+        if declared.id in ids:
             raise QgisSdkDeclarationError(
-                f"action {declaration.id}: duplicate id at {name}"
+                f"{'stream' if declaration is None else 'action'} {declared.id}: "
+                f"duplicate id at {name}"
             )
-        ids.add(declaration.id)
-        actions.append(_describe_action(name, member, declaration))
+        ids.add(declared.id)
+        if declaration is not None:
+            actions.append(_describe_action(name, member, declaration))
+        else:
+            streams.append(_describe_stream(name, member, streamed))
     return PluginDescription(
-        metadata.id, metadata.title, tuple(sorted(actions, key=lambda item: item.id))
+        metadata.id,
+        metadata.title,
+        tuple(sorted(actions, key=lambda item: item.id)),
+        streams=tuple(sorted(streams, key=lambda item: item.id)),
     )

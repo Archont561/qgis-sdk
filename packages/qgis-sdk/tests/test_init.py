@@ -8,9 +8,11 @@ def test_public_surface_is_the_declarations_api() -> None:
         "ActionDescription",
         "PluginDescription",
         "QgisSdkDeclarationError",
+        "StreamDescription",
         "action",
         "describe_plugin",
         "plugin",
+        "stream",
     ]
 
 
