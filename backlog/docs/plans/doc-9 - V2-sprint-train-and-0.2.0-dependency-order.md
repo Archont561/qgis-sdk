@@ -165,7 +165,31 @@ only display-dependent blockers.
 - **Sprint 3 — TASK-5 and TASK-15 remainder, then TASK-28.** Close the
   networking and job streams, then run the release gate. TASK-28 is a gate, not
   permission: it needs verified outcomes plus explicit publishing approval and
-  must not claim checks that did not run.
+  must not claim checks that did not run. *Superseded on 2026-10-24 — see 4a:
+  both tasks moved to m-2 and Sprint 3 is now only the gate.*
+
+## 4a. 0.2.0 re-scope (2026-10-24)
+
+Sprint 3 as written above was "whatever remains of TASK-5 and TASK-15, then
+TASK-28". Both moved to m-2 instead, so 0.2.0 now closes on **TASK-3 + TASK-28**.
+
+Why:
+
+- Neither task is on the critical path. TASK-5 and TASK-15 depend only on work
+  that landed (TASK-13, TASK-24) and unblock nothing inside m-1, so keeping them
+  added tail latency to a release that is otherwise finished.
+- Neither belongs to the milestone's name. 0.2.0 is "native runtime and
+  Processing algorithms", and that surface - TASK-24, TASK-25 with its five
+  slices, TASK-14, TASK-39 - is implemented and evidenced.
+- Both were waiting on design, not just code: TASK-5 says it must resolve
+  decision-4's networking transport, and TASK-15 builds on decision-13's job
+  transport. Both decisions are still `proposed`. Rushing them into a release
+  gate would have meant deciding the transport under deadline.
+
+Consequences recorded on the board: TASK-5 and TASK-15 are `m-2`; TASK-28 no
+longer depends on them; TASK-29 (the 0.3.0 gate) now does; the TASK-38 epic
+tracks one open feature instead of five. TASK-3 is the last thing between this
+milestone and its release gate.
 
 ## 5. Verification commands
 

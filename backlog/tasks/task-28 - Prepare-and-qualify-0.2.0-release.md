@@ -4,15 +4,13 @@ title: Prepare and qualify 0.2.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 16:25'
+updated_date: '2026-10-24 16:54'
 labels: []
 milestone: m-1
 dependencies:
   - TASK-1
   - TASK-3
-  - TASK-5
   - TASK-14
-  - TASK-15
   - TASK-24
   - TASK-25
   - TASK-27
@@ -55,5 +53,11 @@ author: qgis-sdk agent
 created: 2026-10-24 16:25
 ---
 AC #2 amended again on 2026-10-24, still before any criterion was checked: decision-25 replaced decision-24 while this task was open. The Python manifests are stamped on their own and the bridge is deliberately left at 0.1.1 and not published. Practical consequences for this gate: plan with 'release.py plan --scope python --bump minor' (a plain plan proposes python-v0.1.2), stamp with 'stamp --scope python --version 0.2.0', and verify with 'verify-versions --scope python --version 0.2.0', which also refuses a plugin-description contract version that disagreed across the two languages. No ts-v* tag is created; the bridge's next release is m-2's.
+---
+
+author: qgis-sdk agent
+created: 2026-10-24 16:54
+---
+Dependencies updated on 2026-10-24: TASK-5 and TASK-15 moved to m-2 under the 0.2.0 re-scope and were removed from this gate. Among feature work the gate now waits on TASK-3 alone (TASK-1, TASK-14, TASK-24, TASK-25 and TASK-27 are Done; TASK-39 landed as part of the Processing half). AC #2 is unchanged: the Python manifests are stamped at an explicitly advanced minor, the bridge stays at 0.1.1 and is not published.
 ---
 <!-- COMMENTS:END -->

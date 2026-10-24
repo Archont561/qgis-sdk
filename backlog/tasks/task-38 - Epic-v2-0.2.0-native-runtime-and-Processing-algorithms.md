@@ -4,7 +4,7 @@ title: 'Epic: v2 (0.2.0) native runtime and Processing algorithms'
 status: To Do
 assignee: []
 created_date: '2026-10-24 14:14'
-updated_date: '2026-10-24 16:30'
+updated_date: '2026-10-24 16:54'
 labels: []
 milestone: m-1
 dependencies:
@@ -28,14 +28,16 @@ ordinal: 38000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Tracking container for milestone m-1 (0.2.0), the first v2 increment after v0.1.1. It adds no scope of its own: the work is the five remaining m-1 feature tasks plus the 0.2.0 release gate (TASK-28), and the sprint train recorded in doc-9.
+Tracking container for milestone m-1 (0.2.0), the first v2 increment after v0.1.1. It adds no scope of its own: the work is the remaining m-1 feature tasks plus the 0.2.0 release gate (TASK-28), and the sprint train recorded in doc-9.
 
-Why the container exists: the dependency graph already declares an order, but nothing on the board shows it. Two of the five feature tasks (TASK-14, TASK-3) are blocked on TASK-25, while TASK-5 and TASK-15 depend only on work that has landed. Reading m-1 as a flat list hides that TASK-25 is the only gateway on the critical path.
+Why the container exists: the dependency graph already declares an order, but nothing on the board shows it. TASK-14 and TASK-3 were both blocked on TASK-25, which was the only gateway on the critical path; reading m-1 as a flat list hid that.
 
 Sprint train (detail and rationale in doc-9):
-1. Sprint 1 - TASK-25 curated native layer/project/notification/settings services and packaged QML. It is the only task that unblocks two others. Parallel, best-effort: TASK-15, which builds on the landed StepScheduler, or TASK-5, which needs only TASK-13 and TASK-24.
-2. Sprint 2 - TASK-14 classified Processing algorithms with non-destructive outputs, plus TASK-3 schema-driven native UI, both consuming the TASK-25 contracts and both depending on TASK-25.
-3. Sprint 3 - whatever remains of TASK-5 and TASK-15, then the TASK-28 release gate, which depends on all five.
+1. Sprint 1 - TASK-25 curated native layer/project/notification/settings services and packaged QML. Done: TASK-25 and its five slices closed 2026-10-24 with doc-11 as evidence.
+2. Sprint 2 - TASK-14 classified Processing algorithms with non-destructive outputs, plus TASK-3 schema-driven native UI, both consuming the TASK-25 contracts. TASK-14 is Done; TASK-3 is the remaining feature.
+3. Sprint 3 - the TASK-28 release gate.
+
+Re-scoped on 2026-10-24: TASK-5 (QGIS-aware HTTP client) and TASK-15 (scoped local jobs) moved to m-2. They blocked nothing here, they are not part of the "native runtime and Processing" surface this milestone is named for, and both still depend on design decisions that are only proposed (decision-4 for the networking transport, decision-13 for job transport). Leaving them in m-1 delayed a release that is otherwise ready. The rationale is recorded in m-1 and in doc-9 section 4a.
 
 Pairing: 0.2.0 releases the Python package only. The bridge has no source
 change in m-1, so it is not published and stays at 0.1.1
@@ -50,8 +52,8 @@ Evidence rule for every increment: pure tests plus a real QGIS 4.2.3 host test w
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every remaining m-1 feature task (TASK-25, TASK-14, TASK-3, TASK-15, TASK-5) is closed with its own recorded evidence, including a real QGIS 4.2.3 host test wherever its criteria require native behaviour.
-- [ ] #2 TASK-25 lands before TASK-14 and TASK-3 are started, so neither dependency-blocked feature is opened against services that do not exist yet.
-- [ ] #3 The 0.2.0 release gate (TASK-28) is evaluated only after all five children are closed, and records actual artifacts, checks and explicit publishing approval — including the contract version agreeing across both languages, with no bridge version published.
+- [ ] #1 Every m-1 feature task is closed with its own recorded evidence, including a real QGIS 4.2.3 host test wherever its criteria require native behaviour: TASK-25 (and its slices), TASK-14, TASK-39 and TASK-3. TASK-5 and TASK-15 left the milestone on 2026-10-24 and are m-2's.
+- [ ] #2 TASK-25 landed before TASK-14 and TASK-3 were opened, so neither dependency-blocked feature was started against services that did not exist yet. Satisfied: TASK-25 closed 2026-10-24 before TASK-14 landed, and TASK-3 was never opened early.
+- [ ] #3 The 0.2.0 release gate (TASK-28) is evaluated only after its children are closed, and records actual artifacts, checks and explicit publishing approval - including the contract version agreeing across both languages, with no bridge version published.
 - [ ] #4 Unavailable targets stay explicit blockers rather than implied support: no Desktop GUI, Windows or macOS qualification is claimed from this epic (TASK-33 owns those).
 <!-- AC:END -->

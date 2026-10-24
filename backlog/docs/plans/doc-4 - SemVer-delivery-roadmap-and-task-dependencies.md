@@ -57,11 +57,11 @@ Every implementation task includes focused tests; fixture integration is not per
 
 No task in this milestone changes `packages/qgis-sdk-bridge`, so the 0.2.0 release publishes only the Python package and the bridge stays at 0.1.1 (see [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)).
 
+Re-scoped on 2026-10-24: TASK-5 and TASK-15 moved to 0.3.0, because they block nothing here, sit outside the milestone's name, and were both still waiting on decisions that are only `proposed` (decision-4, decision-13). TASK-3 is the last open feature.
+
 - [TASK-1](../../tasks/task-1%20-%20Scaffold-a-QGIS-plugin-project-from-the-CLI.md): Scaffold a QGIS plugin project from the CLI
 - [TASK-3](../../tasks/task-3%20-%20Render-schema-driven-native-UI-and-dispatch-Python-handlers.md): Render schema-driven native UI and dispatch Python handlers
-- [TASK-5](../../tasks/task-5%20-%20Add-a-QGIS-aware-HTTP-client-and-typed-GIS-service-layer.md): Add a QGIS-aware HTTP client and typed GIS-service layer
 - [TASK-14](../../tasks/task-14%20-%20Implement-class-based-Processing-algorithms-and-safe-outputs.md): Implement class based Processing algorithms and safe outputs
-- [TASK-15](../../tasks/task-15%20-%20Implement-scoped-local-jobs-and-typed-result-handles.md): Implement scoped local jobs and typed result handles
 - [TASK-24](../../tasks/task-24%20-%20Implement-scoped-plugin-runtime-and-native-lifecycle-adapter.md): Implement scoped plugin runtime and native lifecycle adapter
 - [TASK-25](../../tasks/task-25%20-%20Implement-curated-native-services-and-packaged-style-support.md): Implement curated native services and packaged style support
 - [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md): Prepare and qualify 0.2.0 release
@@ -72,7 +72,9 @@ No task in this milestone changes `packages/qgis-sdk-bridge`, so the 0.2.0 relea
 The only milestone that changes bridge source, and the only one that releases the bridge on its own version (0.2.0). The remaining tasks are the Python-side contract and fixture work they depend on.
 
 - [TASK-4](../../tasks/task-4%20-%20Add-the-versioned-WebEngine-bridge-contract.md): Add the versioned WebEngine bridge contract — **bridge source**
+- [TASK-5](../../tasks/task-5%20-%20Add-a-QGIS-aware-HTTP-client-and-typed-GIS-service-layer.md): Add a QGIS-aware HTTP client and typed GIS-service layer — moved from 0.2.0
 - [TASK-7](../../tasks/task-7%20-%20Add-layered-pytest-support-and-BDD-fixtures.md): Add layered pytest support and BDD fixtures
+- [TASK-15](../../tasks/task-15%20-%20Implement-scoped-local-jobs-and-typed-result-handles.md): Implement scoped local jobs and typed result handles — moved from 0.2.0
 - [TASK-17](../../tasks/task-17%20-%20Generate-checked-in-TypeScript-contracts-clients-and-validators.md): Generate checked in TypeScript contracts clients and validators — **bridge source**
 - [TASK-18](../../tasks/task-18%20-%20Add-thin-React-bindings-and-isolated-frontend-test-harnesses.md): Add thin React bindings and isolated frontend test harnesses — **bridge source**
 - [TASK-20](../../tasks/task-20%20-%20Enforce-scoped-file-network-and-browser-resource-authority.md): Enforce scoped file network and browser resource authority — **bridge source**
