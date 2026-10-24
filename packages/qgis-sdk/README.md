@@ -34,6 +34,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `algorithms` | `@algorithm`, `describe_algorithm`, `invoke`, and `AlgorithmResult`; request and result schemas come from the same generator the plugin declarations use (TASK-14) |
 | `providers` | `Provider` and `@provider.algorithm` registration, plus `parameter_kinds` - which host parameter each request field deserves (TASK-39) |
 | `reference` | `BufferLayer` and `CentroidLayer`, the two operations the reference workflow runs (decision-19) |
+| `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -77,6 +78,49 @@ print(qgis_sdk.__all__)
 ```
 
 Importing the package with native modules forbidden is the real wiring check, so a placeholder API is no longer needed to prove it.
+
+## Native forms and handler dispatch (experimental, TASK-3)
+
+A declared action already describes its inputs as JSON Schema and its handler as a
+*binding name*, never a callable, so nothing in the description can carry Python
+code. `qgis_sdk.ui` turns that description into renderable fields, and
+`qgis_sdk.adapters.qgis.NativeForms` builds the Qt dialog and dispatches the
+validated values:
+
+```python
+from typing import Annotated
+from qgis_sdk import action, plugin
+from qgis_sdk.adapters.qgis import NativeForms
+from qgis_sdk.models import LayerInput
+
+@plugin(id="demo:forms", title="Form demo")
+class Demo:
+    @action(id="demo:buffer", title="Buffer layer")
+    def buffer(self, layer_id: Annotated[str, LayerInput()], distance: float) -> str:
+        return layer_id
+
+forms = NativeForms(runtime)          # needs a started runtime
+result = forms.run("demo:buffer")     # dialog, coercion, handler; None when cancelled
+```
+
+The split is deliberate. `form_fields` maps a schema (plus the author's
+`Annotated` markers) to a widget *family* - text, integer, number, metres, layer,
+CRS, boolean, choice - and refuses anything else, so the adapter never has to
+guess a widget at run time. `coerce_values` is strict in the other direction:
+`"3"` becomes `3` for an integer field, `"three"` is refused with the field name
+and the expected type, and the submitted value is never echoed because a field
+can hold a path or a credential. Optional fields that were not submitted are
+absent from the result, so the handler's own defaults apply.
+
+Widget selection follows `models.parameters`: an `Annotated[str, LayerInput()]`
+becomes a vector-layer combo box, `CrsInput()` a CRS selector, `Metres()` a
+spin box labelled in metres, a `Literal` a combo box, and the rest the obvious
+primitive widget.
+
+The escape hatch is not a second API: `PluginRuntime.actions` is keyed by action
+id and holds ordinary bound methods, so conventional PyQt code can build its own
+dialog and call `NativeForms.dispatch(action_id, values)` - or the handler
+directly - with the same validation.
 
 ## Processing algorithms and safe outputs (experimental, TASK-14)
 

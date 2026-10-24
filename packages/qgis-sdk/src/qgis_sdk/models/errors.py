@@ -201,3 +201,16 @@ class QgisSdkAlgorithmCancelledError(QgisSdkError):
     def __init__(self, algorithm_id: str) -> None:
         self.algorithm_id = algorithm_id
         super().__init__(f"Algorithm {algorithm_id!r} was cancelled")
+
+
+class QgisSdkFormError(QgisSdkError):
+    """A declared action cannot be rendered, or the submitted values are refused.
+
+    Raised by the QGIS-free form rules, so it carries no Qt objects and can be
+    asserted without a host: rendering failures name the field that has no
+    widget, and coercion failures name the field and the type it expected. The
+    offending value is never echoed, because a form field can hold a path or a
+    credential.
+    """
+
+    code = "invalid_form_values"
