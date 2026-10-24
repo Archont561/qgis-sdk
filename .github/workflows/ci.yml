@@ -90,19 +90,22 @@ jobs:
         id: s10
         run: pixi run -e default release-verify-versions
 
-      # The generated client is source: it is reviewed like any other file, and
+      # The generated clients are source: it is reviewed like any other file, and
       # nothing may edit it by hand. A stale copy fails here with the command that
       # regenerates it, and the `git status` sweep catches a file the generator
       # renamed or stopped writing, which a byte comparison alone would miss.
       # (TASK-17 AC 3)
-      - name: Check the generated bridge client is current
+      - name: Check the generated bridge clients are current
         id: s19
         run: |
-          python packages/qgis-sdk/scripts/generate_bridge_client.py
-          generated=$(git status --porcelain -- packages/qgis-sdk-bridge/tests/contracts/generated)
+          python packages/qgis-sdk/scripts/generate_bridge_clients.py
+          # Both artifacts: the plugin client under tests, and the host module the
+          # package ships under src. A generator that stopped writing one of them
+          # shows up as an unexpected deletion, not as a stale byte comparison.
+          generated=$(git status --porcelain -- packages/qgis-sdk-bridge)
           if [ -n "$generated" ]; then
-            git --no-pager diff -- packages/qgis-sdk-bridge/tests/contracts/generated
-            echo "::error title=generated client is stale::Run \`python packages/qgis-sdk/scripts/generate_bridge_client.py\` and commit the result."
+            git --no-pager diff -- packages/qgis-sdk-bridge
+            echo "::error title=generated client is stale::Run \`python packages/qgis-sdk/scripts/generate_bridge_clients.py\` and commit the result."
             exit 1
           fi
 
