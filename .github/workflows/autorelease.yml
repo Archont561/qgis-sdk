@@ -6,11 +6,17 @@ name: autorelease
 # one is, it runs pre-release quality gates and pushes an annotated release tag
 # that release.yml turns into artifacts.
 #
-# The branch push trigger never creates a tag while no *stable* tag exists:
-# bootstrapping the train and the first stable release are deliberate
-# workflow_dispatch or milestone-tag acts (optionally with a prerelease suffix
-# that keeps iterating the rc train), so an accidental merge can never consume a
-# registry version. Registries only ever see clean release tags - see release.yml.
+# Two triggers can never consume a version:
+#   - A branch push to main is always a DRY RUN. It plans the candidate, runs the
+#     quality gates and the packaging check, and stops. Cutting the tag is an
+#     explicit act: workflow_dispatch, or a milestone tag. On 2026-10-24 a merge
+#     planned `v0.2.0` for both packages - a package minor, from a `feat!` - and
+#     only luck kept it from tagging; `resolve_dry_run` now makes that
+#     impossible.
+#   - No *stable* tag exists yet. Bootstrapping the train is likewise a dispatch
+#     or milestone-tag act (optionally with a prerelease suffix that keeps
+#     iterating the rc train).
+# Registries only ever see clean release tags - see release.yml.
 
 on:
   push:
