@@ -44,6 +44,7 @@ from qgis_sdk.bridge.protocol import (
     success,
     to_wire,
 )
+from qgis_sdk.bridge.resources import Handle, HandleKind, ReleaseLedger
 from qgis_sdk.bridge.streams import (
     MAX_FRAMES_PER_PUMP,
     MAX_SUBSCRIPTIONS_PER_VIEW,
@@ -85,9 +86,12 @@ class Dispatcher:
         *,
         description: Mapping[str, Any] | None = None,
         authorize: Authorizer | None = None,
+        ledger: ReleaseLedger | None = None,
     ) -> None:
         self._description = None if description is None else to_wire(description)
         self._authorize = authorize
+        self._ledger = ledger if ledger is not None else ReleaseLedger()
+        self._ledger.dispose_subscription = self._dispose_subscription
         self._handlers: dict[str, Handler] = {}
         self._streams: dict[str, StreamSource] = {}
         self._operations: dict[str, BridgeOperation] = {}
@@ -197,6 +201,8 @@ class Dispatcher:
             return self._subscribe(binding, raw, cancelled=cancelled)
         if kind == "unsubscribe":
             return self._unsubscribe(binding, raw)
+        if kind == "release":
+            return self._release(binding, raw)
         if kind != "invoke":
             return failure(
                 call_id,
@@ -360,6 +366,9 @@ class Dispatcher:
         )
         subscription.attach(source)
         self._subscriptions[subscription.id] = subscription
+        self._ledger.track(
+            binding.view_id, Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id)
+        )
         return success(
             call_id,
             {"subscription_id": subscription.id, "capacity": subscription.capacity},
@@ -404,9 +413,67 @@ class Dispatcher:
             )
         subscription.close_source()
         self._subscriptions.pop(subscription.id, None)
+        self._ledger.forget(
+            binding.view_id,
+            Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
+        )
         return success(
             call_id, {"subscription_id": subscription.id, "disposed": True}
         )
+
+    def track(
+        self, binding: ViewBinding, kind: HandleKind, handle_id: str
+    ) -> Handle:
+        """Record a handle the view now holds, so it can be released later."""
+        handle = Handle(kind=kind, id=handle_id)
+        self._ledger.track(binding.view_id, handle)
+        return handle
+
+    def _release(self, binding: ViewBinding, raw: Mapping[str, Any]) -> dict[str, Any]:
+        """Release handles the view names, one outcome per handle.
+
+        The view names kinds and ids, never a callable: releasing a borrowed
+        handle is a no-op by construction, so a compromised view cannot turn one
+        into a delete of the project's layer.
+        """
+        call_id = peek_call_id(raw) or ""
+        if binding.generation != self._generation:
+            return failure(
+                call_id,
+                BridgeErrorCode.STALE_GENERATION,
+                "This view belongs to a runtime generation that no longer exists",
+            )
+        if not self._is_authorized(binding, "bridge.release"):
+            return failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This view is not authorized to release resources",
+            )
+        payload = raw.get("payload", {})
+        if not isinstance(payload, Mapping):
+            return failure(
+                call_id, BridgeErrorCode.INVALID_PAYLOAD, "payload must be an object"
+            )
+        requested = payload.get("handles", [])
+        if not isinstance(requested, list):
+            return failure(
+                call_id,
+                BridgeErrorCode.INVALID_PAYLOAD,
+                "handles must be a list of handles",
+            )
+        try:
+            handles = [Handle.parse(item) for item in requested]
+        except QgisSdkBridgeError as error:
+            return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, str(error))
+        return success(call_id, {"released": self._ledger.release_all(binding.view_id, handles)})
+
+    def _dispose_subscription(self, subscription_id: str) -> bool:
+        """Dispose a subscription by id; ``False`` when it already ended."""
+        subscription = self._subscriptions.pop(subscription_id, None)
+        if subscription is None:
+            return False
+        subscription.close_source()
+        return True
 
     def _refuse(
         self, binding: ViewBinding, operation: str
@@ -444,6 +511,10 @@ class Dispatcher:
     def _dispose_all(self) -> None:
         for subscription in self._subscriptions.values():
             subscription.close_source()
+            self._ledger.forget(
+                subscription.view_id,
+                Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
+            )
         self._subscriptions.clear()
 
     def _is_authorized(self, binding: ViewBinding, operation: str) -> bool:
