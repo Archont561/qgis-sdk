@@ -44,13 +44,6 @@ jobs:
     # and a push. Both are stdlib work, so the whole job is capped tightly: an
     # unbounded default would bill 360 minutes to a step that should take seconds.
     timeout-minutes: 10
-    env:
-      # The release tool declares no dependencies and needs only Python >= 3.11, so
-      # it runs on the runner's interpreter. Importing it from `src` is exactly what
-      # the previous `release-plan` invocation did through the environment manager,
-      # minus installing a 279 MB environment to answer "no release is due", which is
-      # what most pushes to main ask it to decide.
-      PYTHONPATH: ${{ github.workspace }}/packages/qgis-sdk-release/src
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -61,7 +54,7 @@ jobs:
       - name: Plan the next release
         id: plan
         run: >-
-          python3 -m qgis_sdk_release plan
+          python3 scripts/release.py plan
           --trigger "${{ github.event_name == 'workflow_dispatch' && 'dispatch' || 'push' }}"
           --version-override "${{ github.event.inputs.version || '' }}"
           --suffix "${{ github.event.inputs.suffix || '' }}"
@@ -70,7 +63,7 @@ jobs:
       - name: Push the release tag
         if: steps.plan.outputs.action == 'tag'
         run: >-
-          python3 -m qgis_sdk_release tag
+          python3 scripts/release.py tag
           --tag "${{ steps.plan.outputs.tag }}"
           --message-file "${{ steps.plan.outputs.changelog_file }}"
           --push
