@@ -17,6 +17,8 @@ TASK-33.
 Run it from the workspace root with the default Pixi environment::
 
     pixi run -e default python packages/qgis-sdk/scripts/native_services_smoke.py
+    # or name a candidate root explicitly, e.g. on a Windows/macOS host
+    pixi run -e default python packages/qgis-sdk/scripts/native_services_smoke.py --prefix /opt/qgis
 
 The report helpers are pure, so the QGIS-free suite tests them; the end-to-end
 run is opt-in through the test suite.
@@ -28,6 +30,7 @@ import json
 import os
 import platform
 import sys
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
@@ -292,9 +295,23 @@ def _run_services(prefix: Path) -> NativeServicesReport:
     )
 
 
-def main() -> int:
-    """Run the harness and print its JSON report."""
-    report = run_smoke()
+def parse_prefix(arguments: Sequence[str]) -> Path | None:
+    """Read an optional ``--prefix`` so a candidate root can be named explicitly."""
+    for index, argument in enumerate(arguments):
+        if argument == "--prefix" and index + 1 < len(arguments):
+            return Path(arguments[index + 1])
+        if argument.startswith("--prefix="):
+            return Path(argument.split("=", 1)[1])
+    return None
+
+
+def main(arguments: Sequence[str] | None = None) -> int:
+    """Run the harness and print its JSON report.
+
+    A host that cannot run the services still exits with a serialisable report and
+    a non-zero status, which is what the QGIS-free test asserts.
+    """
+    report = run_smoke(parse_prefix(sys.argv[1:] if arguments is None else arguments))
     print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
     return 0 if report.passed else 1
 

@@ -127,6 +127,27 @@ Each slice should be independently reviewable and should keep the suite green:
 - TASK-14 and TASK-3 are unblocked on the board: no dependency on TASK-25
   remains, and the contracts they need are importable and documented.
 
+## 3a. Sprint 1 outcome (2026-10-24)
+
+TASK-25 and all five slices are `Done`. Evidence:
+[doc-11](doc-11%20-%20TASK-25-native-services-qualification-evidence.md).
+
+| Slice | Result |
+| --- | --- |
+| TASK-25.1 | Layers/Project/Settings/Styles contracts + in-memory fakes, `qgis_sdk.testing` |
+| TASK-25.2 | `NativeLayers`/`NativeProject` on PyQGIS, post-close refusal as contract |
+| TASK-25.3 | `NativeSettings` (prefixed `QgsSettings`), `NativeNotifications` (unwidened Protocol) |
+| TASK-25.4 | reviewed packaged QML catalog, shared compatibility rule, theme proven unchanged |
+| TASK-25.5 | headless qualification on QGIS 4.2.3, six explicit non-claims |
+
+Both of sprint 1's exit conditions are met: TASK-25's criteria are checked with
+recorded evidence, and **TASK-14 and TASK-3 are unblocked** — their TASK-25
+dependency is the only one that was missing.
+
+What sprint 1 did **not** change: TASK-5 and TASK-15 are still open and still feed
+only the release gate, and TASK-33's AC #1/#2 (Windows, Desktop GUI) remain the
+only display-dependent blockers.
+
 ## 4. Sprint 2 and sprint 3 sketch
 
 - **Sprint 2 — TASK-14 + TASK-3.** Both consume the TASK-25 contracts. TASK-14

@@ -4,7 +4,7 @@ title: 'Qualify Windows, macOS and Desktop QGIS targets'
 status: In Progress
 assignee: []
 created_date: '2026-10-17 16:06'
-updated_date: '2026-10-24 10:24'
+updated_date: '2026-10-24 15:17'
 labels: []
 milestone: m-0
 dependencies: []
@@ -72,5 +72,11 @@ author: qgis-sdk agent
 created: 2026-10-21 22:45
 ---
 From TASK-1 (PR #26): headless Desktop plugin-manager evidence is locally reproducible (see the `PYTHONHOME`/`DISPLAY`/`offscreen` contract recorded on TASK-24 and `scripts/scaffold_desktop_smoke.py`). That does not unblock this task's display-dependent criterion: the offscreen platform shows no widget and renders nothing, so canvas/3D/WebEngine qualification still needs real macOS, Windows and Linux display candidates, which are not available here and cannot be evidenced while Actions is unavailable.
+---
+
+author: qgis-sdk agent
+created: 2026-10-24 15:17
+---
+From TASK-25 closeout (doc-11): the curated native services are now qualified headless on QGIS 4.2.3-Belém do Pará / Qt 6.11.2 / CPython 3.14.8 for layer open, selection reads, explicit project addition, scoped settings, notifications and packaged QML application, with the application theme proven unchanged. This does not touch this task's criteria: AC #1 (clean Windows QGIS installation) and AC #2 (Desktop GUI path, including an in-Desktop QWebEngine host) stay open because the run is offscreen and Linux-only. Reusable on any candidate: scripts/native_services_smoke.py, now with --prefix so a candidate root can be named, reported as JSON.
 ---
 <!-- COMMENTS:END -->

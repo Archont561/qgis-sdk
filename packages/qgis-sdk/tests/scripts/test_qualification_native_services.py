@@ -23,6 +23,7 @@ from native_services_smoke import (
     FIXTURE_DATASET,
     SELECTED_FEATURES,
     NativeServicesReport,
+    parse_prefix,
 )
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
@@ -160,3 +161,35 @@ def test_native_services_smoke_opens_a_layer_and_releases_it() -> None:
     assert payload["style_incompatible_refused"] is True
     assert payload["theme_unchanged"] is True
     assert payload["qgis_exited"] is True
+
+
+def test_prefix_argument_is_read_in_both_spellings() -> None:
+    assert parse_prefix([]) is None
+    assert parse_prefix(["--prefix", "/opt/qgis"]) == Path("/opt/qgis")
+    assert parse_prefix(["--prefix=/opt/qgis"]) == Path("/opt/qgis")
+    assert parse_prefix(["--other", "value"]) is None
+
+
+def test_unusable_host_produces_a_report_and_a_non_zero_status(tmp_path: Path) -> None:
+    """A host without QGIS must answer, not skip silently or crash.
+
+    This runs the real script against a prefix that cannot hold QGIS: the run
+    cannot silently pass, and it cannot die with a traceback either. It asserts the
+    contract a caller relies on - serialisable JSON on stdout, every stage false,
+    an error naming the failure, and a non-zero exit.
+    """
+    result = subprocess.run(
+        [sys.executable, str(SMOKE_SCRIPT), "--prefix", str(tmp_path / "no-qgis")],
+        cwd=SCRIPTS_DIR.parents[1],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 1
+    assert payload["passed"] is False
+    assert payload["qgis_initialised"] is False
+    assert payload["layer_opened"] is False
+    assert payload["error"], "an unusable host must say what went wrong"
