@@ -35,3 +35,25 @@ Promise resolution is not a threading, cancellation or retry guarantee. A local 
 - [Channel ordering/lifetime](https://github.com/tauri-apps/tauri/blob/136a28eaa879e8aa706f9b2e05a050c46dcc1f4f/crates/tauri/src/ipc/channel.rs)
 - [Caller-aware authority](https://github.com/tauri-apps/tauri/blob/136a28eaa879e8aa706f9b2e05a050c46dcc1f4f/crates/tauri/src/ipc/authority.rs)
 - [IPC mocks](https://github.com/tauri-apps/tauri/blob/136a28eaa879e8aa706f9b2e05a050c46dcc1f4f/packages/api/src/mocks.ts)
+
+## Stream limits, settled 2026-10-24
+
+The limits this decision left open are now fixed by `qgis_sdk.bridge.streams` and
+its tests, and the choice is deliberately conservative:
+
+| Question | Answer | Why |
+| --- | --- | --- |
+| Sequence scope | one counter per subscription, starting at 0 | a gap in one stream says nothing about another |
+| Buffer bound | 64 frames per subscription, 8 subscriptions per view | a stalled view must not grow the host's memory |
+| Pull overflow | impossible - the source is not pulled | a pull model has natural backpressure |
+| Push overflow | subscription ends with `gap` and a dropped count | losing events silently is worse than saying so |
+| Coalescing | progress only, and only while queued | data payloads are never merged or replaced |
+| Terminal | exactly one of `complete`/`error`/`cancelled`/`gap`/`disposed` | every end is a frame the client can act on |
+| Disposal | idempotent; `disposed: false` when already gone | a closing UI races the terminal frame |
+| Generation advance | sources closed, no frames delivered | a stale view cannot be trusted to interpret state |
+| Protocol version | stays 1 | the client only sees frames for subscriptions it opened |
+
+Status stays `proposed`: the invocation, authority, stream and resource patterns
+are implemented and tested, but the Qt half of the adapter has not yet carried a
+real page's traffic (TASK-22), and this decision should not read as qualified
+before that happens.

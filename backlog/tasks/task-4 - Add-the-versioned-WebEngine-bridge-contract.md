@@ -4,7 +4,7 @@ title: Add the versioned WebEngine bridge contract
 status: In Progress
 assignee: []
 created_date: '2026-10-15 23:06'
-updated_date: '2026-10-24 18:23'
+updated_date: '2026-10-24 20:40'
 labels: []
 milestone: m-2
 dependencies:
@@ -37,9 +37,9 @@ Integrate the versioned optional bridge with the dedicated code-generation, secu
 - [ ] #3 Bridge behavior can be tested without relying on live external services.
 - [ ] #4 Generated operation-specific clients reject unknown operations and invalid inputs at compile time and validate responses at runtime; a manually asserted invoke<T> is not the public type-safety guarantee.
 - [ ] #5 All calls pass through a narrow dispatcher with trusted host-bound view/origin/generation; forged payload caller IDs and direct-object paths cannot bypass per-view/resource authorization.
-- [ ] #6 Invocation replies, subscriptions and operation streams have tested ordering, terminal/disposal/reconnect semantics and documented bounded buffering, gap/overflow policy and progress coalescing where applicable.
-- [ ] #7 Resource release distinguishes borrowed layer handles from subscriptions and owned temporary outputs; releasing a borrowed handle never deletes the project layer, and repeated/in-flight close behavior is tested.
-- [ ] #8 Client-local injected transports support typed scripted handlers, faults/events, isolated clients and leak checks; local abort/timeout is distinct from acknowledged host cancellation and never causes automatic unknown-outcome retries.
+- [x] #6 Invocation replies, subscriptions and operation streams have tested ordering, terminal/disposal/reconnect semantics and documented bounded buffering, gap/overflow policy and progress coalescing where applicable.
+- [x] #7 Resource release distinguishes borrowed layer handles from subscriptions and owned temporary outputs; releasing a borrowed handle never deletes the project layer, and repeated/in-flight close behavior is tested.
+- [x] #8 Client-local injected transports support typed scripted handlers, faults/events, isolated clients and leak checks; local abort/timeout is distinct from acknowledged host cancellation and never causes automatic unknown-outcome retries.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -57,6 +57,15 @@ Tauri source review (2026-10-16): follow proposed decision-23 and doc-2 section 
 - Still open, and not claimed: AC #4 (operation-specific generated clients, which TASK-17 owns), AC #6 (subscriptions and streams with ordering, bounded buffering and an explicit gap policy), AC #7 (borrowed handles versus subscriptions versus owned outputs), and the QWebChannel adapter that carries these envelopes over a real view.
 
 2026-10-24 (CI evidence for the slice): run 40120350822 is green on PR #49. The cross-platform jobs report `bun test: 104 pass` on both Windows and macOS - 90 from before plus the 14 bridge tests this slice adds - and `pytest: 630 collected, 0 failed, 34 skipped` on Windows and `630 collected, 0 failed, 33 skipped` on macOS. The checks job also typechecks the new TypeScript under `strict` with `isolatedDeclarations`, which is where the loose fixture record type was caught.
+2026-10-24 (second slice: streams, release semantics, the channel adapter):
+- Subscriptions are a call, not a second transport. `{"kind": "subscribe"}` passes the same protocol, generation, authorization and allowlist checks as an invocation, and the frames that follow belong to the view and generation that opened them. `register_stream(operation, factory)` declares one; a factory returning `None` declares a stream the host pushes into with `Dispatcher.emit` (a Qt task's progress) instead of pulling.
+- AC #6 is met. Ordering is scoped to the subscription: `seq` starts at zero and advances by one, so a client that sees a different number ends the subscription with `gap` rather than assembling a plausible sequence. Buffering is bounded (`MAX_QUEUED_EVENTS = 64` per subscription, `MAX_SUBSCRIPTIONS_PER_VIEW = 8`): a pulled stream has natural backpressure because it is simply not pulled, and a pushed stream that overruns the bound is terminated with `gap` and the number of events dropped - growth without bound is the one outcome the queue refuses. Progress may replace the newest queued progress frame (coalescing); data events are never merged, replaced or dropped silently. Completion, `error`, `cancelled`, `gap` and disposal each end a subscription exactly once, disposal is idempotent, and a new generation closes the sources so their `finally` blocks run instead of draining into a view that no longer exists. The TypeScript client mirrors all of it: `client.subscribe(operation, payload, {onEvent, onTerminal})`, frames matched by id and sequence, `sequenceBreaks` counted, `activeSubscriptions` for leak checks, and a `close()` that notifies the host once.
+- AC #7 is met. `ReleaseLedger` distinguishes the three things a view can hold: a borrowed layer is never deleted (releasing it only drops the reference), an owned temporary output is deleted exactly once, and a subscription is disposed - or reported `already_released` when it ended on its own, because a closing UI racing the terminal frame is normal, not an error. The dispatcher exposes this as `{"kind": "release"}`, authorized like every other call and scoped to the view that holds the handles; a malformed handle list is refused before anything is released. Repeated release, in-flight close, cross-view release and stale-generation release are all covered.
+- AC #8 completed. The TypeScript suite scripts faults and events through the injected transport, checks that a malformed frame is counted rather than routed, and asserts no subscription survives a terminal, a sequence break or `client.close()`.
+- The adapter exists in two halves: `qgis_sdk.bridge.transport.ChannelTransport` moves JSON text in and out and decides nothing, and `qgis_sdk.adapters.webchannel.create_channel_object` wraps it in the `QObject` a `QWebChannel` registers, importing Qt lazily and raising the same actionable optional-dependency error as the WebEngine probe. The pure half is tested; the Qt half is exercised in CI, where the `default` pixi environment carries QGIS 4.2.3.
+- Protocol version stays 1. A subscription is a call a client chooses to make and the host only sends frames for a subscription that client opened, so a client that never subscribes sees exactly the traffic it saw before. The nine reply cases are unchanged; `cases.json` now also carries three stream cases produced by the real dispatcher.
+- Still open, and not claimed: AC #4, which is TASK-17's generated operation-specific clients. That is also why TASK-4 itself stays `In Progress` - its own dependency list names TASK-17, so the criterion cannot be met from here without duplicating that task's generator.
+- Verification: `test_bridge_streams.py` 20, `test_bridge_resources.py` 11, `test_bridge_transport.py` 8, `test_adapters_webchannel.py` 2, plus the existing 21 dispatcher and 4 fixture tests; package suite 612 passed / 33 skipped (the one local `test_pure_imports` failure is the known sandbox-only typer case); TypeScript 111 pass under bun, `tsc --noEmit` clean under `strict` + `isolatedDeclarations`.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
