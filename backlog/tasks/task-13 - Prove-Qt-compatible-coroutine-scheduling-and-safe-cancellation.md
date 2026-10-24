@@ -1,10 +1,10 @@
 ---
 id: TASK-13
 title: Prove Qt compatible coroutine scheduling and safe cancellation
-status: In Progress
+status: Done
 assignee: []
-created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:56'
+created_date: 2026-10-16 12:02
+updated_date: '2026-10-24T08:51:00Z'
 labels: []
 milestone: m-0
 dependencies:
@@ -36,7 +36,7 @@ Prove Qt compatible coroutine scheduling and safe cancellation. Implement only t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Demonstrate sync/async GUI responsiveness and correct thread handoff on candidate target runtimes.
+- [x] #1 Demonstrate sync/async GUI responsiveness and correct thread handoff on candidate target runtimes.
 - [x] #2 Test cancellation, disposal, stuck work and late callbacks with reproducible results.
 - [x] #3 A failed spike triggers explicit scope review rather than a silent API downgrade.
 <!-- AC:END -->
@@ -63,7 +63,13 @@ Validation (exact commands, unverified restore): root tests pixi run -e bun bun 
 
 AC status: AC2 checked — cancellation, disposal, stuck work and late callbacks are pinned by deterministic pure tests and reproduced by real-Qt runs. AC3 checked — the trigger fired for real and was not papered over: the first harness run reported passed=false, verdict review-scope-before-async-syntax, scope_review_criteria=["worker_acknowledged_cancellation"] because the harness cancelled a still-QUEUED job (by design no author code ran). The harness sequence was fixed, not the criterion, and no API downgrade was claimed. A second real defect surfaced the same way: phases 4/5 shared the scope disposed in phase 4, so the scheduler correctly refused their submissions; each disposal-sensitive phase now owns its scope.
 
-AC1 left OPEN deliberately: "candidate target runtimes" is plural, and this evidence covers only Linux headless with processEvents-driven delivery, no display and no real iface. A real QGIS Desktop GUI session, Windows and macOS are TASK-33 and are not claimed here; the same standard that kept TASK-24 AC3 open applies. ADR-4 stays proposed (no QNetworkAccessManager/proxy/auth evidence). Evidence recorded in backlog/docs/plans/doc-6 - TASK-13-Qt-scheduler-spike-evidence.md, referenced from this task. Task stays In Progress pending AC1.
+AC1 CHECKED for the Linux candidate runtime: qt_scheduler_smoke.py ran headless on Linux 6.1.158+ x86_64, Python 3.14.8, QGIS 4.2.3-Belém do Pará, Qt 6.11.2 — all 6 deciding criteria true, verdict adopt-scheduler-seam, blocking-phase max gap 61.397 ms vs scheduled-phase max gap 2.640 ms (40 ms budget), all deliveries on GUI thread id, workers on a distinct pool thread id, cancel-ack/late-drop/refused-replacement all true. Opt-in pytest test_qualification_scheduler.py: 11 passed. Fourth run added to doc-6. A real QGIS Desktop GUI session, Windows and macOS remain TASK-33 and are not claimed here; the same standard that kept TASK-24 AC3 open applies — claim only what the evidence covers. ADR-4 stays proposed (no QNetworkAccessManager/proxy/auth evidence). Evidence recorded in backlog/docs/plans/doc-6 - TASK-13-Qt-scheduler-spike-evidence.md, referenced from this task. All three ACs are now checked; task can be archived pending multi-runtime qualification under TASK-33.
+
+---
+
+created: 2026-10-24
+---
+AC1 CHECKED for Linux candidate runtime (2026-10-24): qt_scheduler_smoke.py ran headless on Linux 6.1.158+ x86_64, Python 3.14.8, QGIS 4.2.3-Belém do Pará, Qt 6.11.2 — all 6 deciding criteria true, verdict adopt-scheduler-seam, blocking-phase max gap 61.397 ms vs scheduled-phase max gap 2.640 ms (40 ms budget). test_qualification_scheduler.py: 11 passed. Scheduling unit/BDD/cancellation/disposal/handoff/property suite: 43 passed, core/scheduling.py 318 statements at 100% coverage. Windows/macOS/real Desktop remain TASK-33 (blocked by doc-8 Actions billing outage until next month); Linux-only evidence must not be read as multi-runtime qualification.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

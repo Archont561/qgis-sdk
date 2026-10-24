@@ -1,10 +1,10 @@
 ---
 id: TASK-1
 title: Scaffold a QGIS plugin project from the CLI
-status: To Do
+status: Done
 assignee: []
-created_date: '2026-10-15 23:06'
-updated_date: '2026-10-21 23:00'
+created_date: 2026-10-15 23:06
+updated_date: '2026-10-24T08:54:00Z'
 labels: []
 milestone: m-1
 dependencies:

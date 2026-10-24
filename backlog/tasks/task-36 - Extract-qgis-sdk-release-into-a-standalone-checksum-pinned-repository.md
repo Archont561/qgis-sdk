@@ -1,10 +1,10 @@
 ---
 id: TASK-36
 title: Extract qgis-sdk-release into a standalone checksum-pinned repository
-status: To Do
+status: Done
 assignee: []
-created_date: '2026-10-17 21:23'
-updated_date: '2026-10-21 21:56'
+created_date: 2026-10-17 21:23
+updated_date: '2026-10-24T08:16:00Z'
 labels: []
 milestone: m-3
 dependencies:
@@ -40,7 +40,7 @@ TASK-35 shipped the release tool in-repo at packages/qgis-sdk-release (user deci
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Created 2026-10-17 as the deferred half of TASK-35: the user chose in-repo implementation now with later extraction. Note the known interaction with the restore RECORD integrity warnings: the tool as an external uv-installed PyPI package with console scripts would add RECORD files to the class pixi-sandbox 0.7.0 verification currently flags, so prefer a python -m entrypoint over a console script or resolve the pixi-sandbox side first.
+Archived per user request. Partial work completed: packages/qgis-sdk-release removed from workspace; release tool consolidated into standalone scripts/release.py (stdlib-only, __file__-resolved paths); pixi release-* tasks and autorelease.yml updated to invoke scripts/release.py; 69 tests migrated to tests/scripts/test_release.py. ACs NOT fully met: AC1 (external Archont561/qgis-sdk-release repo not created), AC2 (no exact version+checksum pin), AC3 (tasks invoke local script, not external pinned tool), AC4 (no external pin autorelease-then-release cycle). Blocked by doc-8 external outage until November per task comments. Local invocations proven green via pixi run release-* tasks.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
