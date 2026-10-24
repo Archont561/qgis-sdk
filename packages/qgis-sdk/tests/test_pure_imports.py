@@ -10,12 +10,16 @@ from pathlib import Path
 import pytest
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
+# Ranked dependency direction: a layer may import only itself and lower layers.
+# `testing` is outermost on purpose: the in-memory service fakes depend on the
+# contracts, and nothing that ships may depend on the fakes (TASK-25.1).
 LAYER_ORDER = {
     "models": 0,
     "declarations": 1,
     "services": 1,
     "scaffold": 1,
     "core": 2,
+    "testing": 3,
 }
 LAYER_PATHS = {
     "core": SOURCE_ROOT / "core",
@@ -23,6 +27,7 @@ LAYER_PATHS = {
     "declarations": SOURCE_ROOT / "declarations.py",
     "models": SOURCE_ROOT / "models",
     "services": SOURCE_ROOT / "services",
+    "testing": SOURCE_ROOT / "testing",
 }
 
 
@@ -88,7 +93,8 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
                        'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
                        'qgis_sdk.adapters.desktop',
                        'qgis_sdk.adapters.pydantic',
-                       'qgis_sdk.adapters.webengine'):
+                       'qgis_sdk.adapters.webengine',
+                       'qgis_sdk.testing'):
             importlib.import_module(module)
         from qgis_sdk import action, describe_plugin, plugin
 
@@ -114,3 +120,29 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "native-free"
+
+
+def test_only_the_testing_package_imports_the_test_doubles() -> None:
+    """A fake must never become a runtime fallback for a missing adapter."""
+    offenders: list[str] = []
+    for path in sorted(SOURCE_ROOT.rglob("*.py")):
+        if path.is_relative_to(SOURCE_ROOT / "testing"):
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            imported: list[str] = []
+            if isinstance(node, ast.ImportFrom):
+                if node.module == "qgis_sdk.testing":
+                    imported.append("qgis_sdk.testing")
+                if node.level and node.module in (None, "testing"):
+                    imported.append("relative testing")
+            elif isinstance(node, ast.Import):
+                imported.extend(
+                    alias.name
+                    for alias in node.names
+                    if alias.name == "qgis_sdk.testing"
+                )
+            offenders.extend(
+                f"{path.relative_to(SOURCE_ROOT)}:{node.lineno}: {name}"
+                for name in imported
+            )
+    assert offenders == []

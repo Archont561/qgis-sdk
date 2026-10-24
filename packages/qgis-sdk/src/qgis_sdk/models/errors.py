@@ -43,6 +43,44 @@ class QgisSdkOptionalDependencyError(QgisSdkError):
         )
 
 
+class QgisSdkLayerNotFoundError(QgisSdkError):
+    """No layer or dataset with this identifier exists in the runtime.
+
+    The identifier is either a layer id or a dataset location, whichever the
+    caller used, so the message never claims to know which kind was meant.
+    """
+
+    code = "layer_not_found"
+
+    def __init__(self, identifier: str) -> None:
+        self.identifier = identifier
+        super().__init__(f"No layer {identifier!r} is available in this runtime")
+
+
+class QgisSdkStyleIncompatibleError(QgisSdkError):
+    """A packaged style cannot be applied to the target layer.
+
+    Reasons are short, user-readable statements about the mismatch that was
+    detected, never the rejected layer object.
+    """
+
+    code = "style_incompatible"
+
+    def __init__(
+        self,
+        layer_id: str,
+        style: str,
+        reasons: Iterable[str],
+    ) -> None:
+        self.layer_id = layer_id
+        self.style = style
+        self.reasons = tuple(reasons)
+        listed = "; ".join(self.reasons)
+        super().__init__(
+            f"Style {style!r} is incompatible with layer {layer_id!r}: {listed}"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class QgisSdkValidationIssue:
     """Safe, structured location and category for a rejected contract value."""
