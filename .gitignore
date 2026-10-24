@@ -5,6 +5,10 @@
 
 # Pixi environments/build output and Bun dependency caches
 .pixi/
+.pixi-sandbox/
+/pixi-sandbox
+/pixi-sandbox.exe
+/SHA256SUMS
 .bun/
 .npm/
 node_modules/

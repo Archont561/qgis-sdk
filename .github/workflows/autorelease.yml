@@ -1,32 +1,67 @@
 name: autorelease
 
-# Conventional-commit release train (TASK-35). On every landed push to main the
-# stdlib-only qgis-sdk-release tool decides whether a release is due; when one
-# is, it pushes an annotated tag that release.yml turns into artifacts.
+# Conventional-commit and milestone release train (TASK-35, TASK-37). On every
+# landed push to main or milestone tag push (milestone-v*, milestone/*, m-v*),
+# the stdlib-only scripts/release.py tool decides whether a release is due; when
+# one is, it runs pre-release quality gates and pushes an annotated release tag
+# that release.yml turns into artifacts.
 #
-# The push trigger never creates a tag while no *stable* tag exists:
+# The branch push trigger never creates a tag while no *stable* tag exists:
 # bootstrapping the train and the first stable release are deliberate
-# workflow_dispatch acts (optionally with a prerelease suffix that keeps
-# iterating the rc train), so an accidental merge can never consume a registry
-# version. Registries only ever see clean vX.Y.Z tags - see release.yml.
+# workflow_dispatch or milestone-tag acts (optionally with a prerelease suffix
+# that keeps iterating the rc train), so an accidental merge can never consume a
+# registry version. Registries only ever see clean release tags - see release.yml.
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+    tags:
+      - "milestone-v*"
+      - "milestone/*"
+      - "m-v*"
+    paths-ignore:
+      - "backlog/**"
+      - ".agents/**"
+      - ".devcontainer/**"
+      - "*.md"
   workflow_dispatch:
     inputs:
+      scope:
+        description: >-
+          Force target scope (leave blank for all, or set auto, python,
+          typescript).
+        required: false
+        default: ""
+        type: string
+      bump:
+        description: >-
+          Force version bump (leave blank for conventional-commit
+          auto-calculation: patch, minor, major, or explicit X.Y.Z).
+        required: false
+        default: ""
+        type: string
+      dry-run:
+        description: >-
+          Dry run: detect changes and verify quality gates without pushing
+          tags.
+        required: false
+        default: false
+        type: boolean
       version:
         description: >-
           Explicit version override (for example 0.1.0). Leave blank to compute
           the next version from conventional commits per .versionrc.
         required: false
         default: ""
+        type: string
       suffix:
         description: >-
           Prerelease suffix appended with a hyphen (for example rc.1). Tags
           carrying a suffix dry-run the registries instead of publishing.
         required: false
         default: ""
+        type: string
 
 permissions:
   contents: write
@@ -40,10 +75,10 @@ concurrency:
 jobs:
   plan-and-tag:
     runs-on: ubuntu-latest
-    # The decision is a git-log read and a changelog render; the tag is a `git tag`
-    # and a push. Both are stdlib work, so the whole job is capped tightly: an
-    # unbounded default would bill 360 minutes to a step that should take seconds.
-    timeout-minutes: 10
+    # Planning is stdlib-only and exits in seconds when no release is due; when
+    # a release is planned, pre-release quality gates run in the locked Pixi
+    # environments before cutting the release tag.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,18 +90,86 @@ jobs:
         id: plan
         run: >-
           python3 scripts/release.py plan
-          --trigger "${{ github.event_name == 'workflow_dispatch' && 'dispatch' || 'push' }}"
-          --version-override "${{ github.event.inputs.version || '' }}"
-          --suffix "${{ github.event.inputs.suffix || '' }}"
+          --trigger "${{ github.event_name == 'workflow_dispatch' && 'dispatch' || (github.ref_type == 'tag' && 'milestone' || 'push') }}"
+          --milestone-tag "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          --scope "${{ inputs.scope || '' }}"
+          --bump "${{ inputs.bump || '' }}"
+          --version-override "${{ inputs.version || '' }}"
+          --suffix "${{ inputs.suffix || '' }}"
+          --dry-run "${{ inputs.dry-run && 'true' || 'false' }}"
           --json
 
-      - name: Push the release tag
+      - name: Set up Pixi for pre-release quality gates
         if: steps.plan.outputs.action == 'tag'
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          environments: >-
+            default
+            build
+            bun
+          cache: true
+          locked: true
+
+      - name: Cache Bun install store
+        if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.typescript == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-install-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-install-
+
+      - name: Install JavaScript dependencies
+        if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.typescript == 'true'
+        run: pixi run -e bun install-js
+
+      - name: Run quality gate
+        if: steps.plan.outputs.action == 'tag'
+        run: |
+          SCOPE="${{ steps.plan.outputs.scope }}"
+          echo "Executing pre-release quality gates for scope: $SCOPE"
+          if [ "$SCOPE" = "all" ]; then
+            pixi run -e default lint-python
+            pixi run -e default format-python-check
+            pixi run -e default test-release-tool
+            pixi run -e bun biome-check
+            pixi run -e bun typecheck
+            pixi run -e bun bun run test
+          elif [ "$SCOPE" = "python" ]; then
+            pixi run -e default lint-python
+            pixi run -e default format-python-check
+            pixi run -e default test-release-tool
+            pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -q
+          elif [ "$SCOPE" = "typescript" ]; then
+            pixi run -e bun biome-check
+            pixi run -e bun typecheck
+            pixi run -e bun bun test packages/qgis-sdk-bridge/tests
+          fi
+
+      - name: Dry-run packaging check
+        if: steps.plan.outputs.action == 'tag'
+        run: |
+          if [ "${{ steps.plan.outputs.python }}" = "true" ]; then
+            pixi run -e build release-build-python
+          fi
+          if [ "${{ steps.plan.outputs.typescript }}" = "true" ]; then
+            pixi run -e bun bun run --filter qgis-sdk-bridge build
+          fi
+
+      - name: Push the release tag
+        if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.dry_run != 'true'
         run: >-
           python3 scripts/release.py tag
           --tag "${{ steps.plan.outputs.tag }}"
           --message-file "${{ steps.plan.outputs.changelog_file }}"
           --push
+
+      - name: Report dry-run release
+        if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.dry_run == 'true'
+        run: >-
+          echo "autorelease dry-run: would push ${{ steps.plan.outputs.tag }} (scope: ${{ steps.plan.outputs.scope }})"
+          >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report a skipped release
         if: steps.plan.outputs.action != 'tag'

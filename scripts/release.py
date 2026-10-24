@@ -72,10 +72,54 @@ def _default_runner(command: Sequence[str]) -> str:
 
 
 def list_tags(runner: Runner | None = None) -> tuple[str, ...]:
-    """List every ``v``-prefixed tag in the repository."""
+    """List every git tag in the repository."""
     run = runner or _default_runner
-    out = run(["git", "tag", "--list", "v*"])
+    out = run(["git", "tag", "--list"])
     return tuple(line.strip() for line in out.splitlines() if line.strip())
+
+
+def list_changed_files(
+    revision_range: str | None = None, runner: Runner | None = None
+) -> tuple[str, ...]:
+    """List files changed in ``revision_range`` (or tracked files when omitted)."""
+    run = runner or _default_runner
+    command = (
+        ["git", "diff", "--name-only", revision_range]
+        if revision_range
+        else ["git", "ls-files"]
+    )
+    out = run(command)
+    return tuple(line.strip() for line in out.splitlines() if line.strip())
+
+
+def detect_scope_from_files(files: Iterable[str]) -> str:
+    """Classify changed paths into ``all``, ``python``, ``typescript``, or ``none``."""
+    py = False
+    ts = False
+    core = False
+    for raw in files:
+        path = raw.strip()
+        if not path:
+            continue
+        if (
+            path.startswith(("backlog/", ".agents/", ".devcontainer/"))
+            or path.endswith(".md")
+            or path in ("codecov.yml", ".codecov.yml")
+        ):
+            continue
+        if path.startswith("packages/qgis-sdk/"):
+            py = True
+        elif path.startswith("packages/qgis-sdk-bridge/"):
+            ts = True
+        else:
+            core = True
+    if core or (py and ts):
+        return "all"
+    if py:
+        return "python"
+    if ts:
+        return "typescript"
+    return "none"
 
 
 LOG_FORMAT = "%H%x1f%s%x1f%b%x1e"
@@ -250,16 +294,89 @@ class Version:
         return f"{self.major}.{self.minor}.{self.patch}{text}"
 
 
-def tag_for_version(version: Version) -> str:
-    """Return the git tag carrying this version."""
-    return f"v{version}"
+_SCOPE_ALIASES = {
+    "all": "all",
+    "python": "python",
+    "py": "python",
+    "qgis-sdk": "python",
+    "typescript": "typescript",
+    "ts": "typescript",
+    "bridge": "typescript",
+    "qgis-sdk-bridge": "typescript",
+    "bun": "typescript",
+}
+_SCOPE_PREFIXES = {
+    "all": "v",
+    "python": "python-v",
+    "typescript": "ts-v",
+}
+
+
+def normalize_scope(scope: str) -> str:
+    """Normalize a scope alias to ``all``, ``python``, or ``typescript``."""
+    key = scope.strip().lower()
+    if not key:
+        return "all"
+    if key not in _SCOPE_ALIASES:
+        raise QgisSdkReleaseVersionError(f"unknown release scope: {scope!r}")
+    return _SCOPE_ALIASES[key]
+
+
+def parse_milestone_tag(tag: str) -> tuple[str, Version] | None:
+    """Parse ``milestone-v*``, ``milestone/*``, or ``m-v*`` into ``(scope, Version)``.
+
+    Returns ``None`` when ``tag`` is not a milestone tag, and raises
+    :class:`QgisSdkReleaseVersionError` when a milestone prefix carries an
+    invalid scope or version.
+    """
+    text = tag.strip()
+    if text.startswith("milestone-"):
+        rest = text[len("milestone-") :]
+    elif text.startswith("milestone/"):
+        rest = text[len("milestone/") :]
+    elif text.startswith("m-v"):
+        rest = text[len("m-") :]
+    else:
+        return None
+
+    scope = "all"
+    if "-v" in rest and not rest.startswith("v"):
+        raw_scope, _, ver_part = rest.partition("-v")
+        scope = normalize_scope(raw_scope)
+        ver_text = ver_part
+    elif rest.startswith("v"):
+        ver_text = rest[1:]
+    else:
+        ver_text = rest
+    return scope, Version.parse(ver_text)
+
+
+def tag_for_version(version: Version, scope: str = "all") -> str:
+    """Return the git tag carrying this version and optional scope."""
+    canonical = normalize_scope(scope)
+    prefix = _SCOPE_PREFIXES[canonical]
+    return f"{prefix}{version}"
+
+
+_SCOPED_TAG = re.compile(r"^(?P<scope>[A-Za-z0-9_+-]+)[/-]v(?P<ver>.+)$")
+
+
+def parse_release_tag(tag: str) -> tuple[str, Version]:
+    """Parse ``vX.Y.Z`` or ``<scope>[-/]vX.Y.Z`` into ``(scope, Version)``."""
+    text = tag.strip()
+    if text.startswith("v"):
+        return "all", Version.parse(text[1:])
+    match = _SCOPED_TAG.match(text)
+    if match is None:
+        raise QgisSdkReleaseVersionError(f"release tags are v-prefixed: {tag!r}")
+    scope = normalize_scope(match.group("scope"))
+    return scope, Version.parse(match.group("ver"))
 
 
 def version_from_tag(tag: str) -> Version:
-    """Parse a ``v``-prefixed git tag into a version."""
-    if not tag.startswith("v"):
-        raise QgisSdkReleaseVersionError(f"release tags are v-prefixed: {tag!r}")
-    return Version.parse(tag[1:])
+    """Parse a release git tag into a version."""
+    _, version = parse_release_tag(tag)
+    return version
 
 
 # ---------------------------------------------------------------------------
@@ -417,9 +534,10 @@ def render_changelog(
     config: VersionConfig,
     base_tag: str | None = None,
     repo_slug: str | None = None,
+    scope: str = "all",
 ) -> str:
     """Render the markdown changelog for one release."""
-    tag = tag_for_version(version)
+    tag = tag_for_version(version, scope=scope)
     lines = [config.header.rstrip("\n"), "", f"## {tag}", ""]
     breaking = [commit for commit in commits if classify(commit, config).breaking]
     if breaking:
@@ -480,9 +598,10 @@ class Plan:
     action: str
     reason: str
     changelog: str
+    scope: str = "all"
 
     def to_json(self) -> dict:
-        return {
+        payload = {
             "trigger": self.trigger,
             "first": self.first,
             "stable_exists": self.stable_exists,
@@ -492,6 +611,9 @@ class Plan:
             "action": self.action,
             "reason": self.reason,
         }
+        if self.scope != "all":
+            payload["scope"] = self.scope
+        return payload
 
 
 def _bump_from(base: Version, commits: tuple[Commit, ...], config: VersionConfig):
@@ -506,6 +628,17 @@ def _bump_from(base: Version, commits: tuple[Commit, ...], config: VersionConfig
     return base.bump(best) if best else None
 
 
+def _resolve_forced_bump(
+    bump: str, first: bool, base_tag: str | None, config: VersionConfig
+) -> Version:
+    kind = bump.strip().lower()
+    if kind in _RANK:
+        if first or base_tag is None:
+            return config.initial_bump_version
+        return version_from_tag(base_tag).bump(kind)
+    return Version.parse(bump.strip())
+
+
 def compute_plan(
     trigger: str,
     tags: Iterable[str],
@@ -514,16 +647,46 @@ def compute_plan(
     suffix: str = "",
     version_override: str | None = None,
     repo_slug: str | None = None,
+    milestone_tag: str | None = None,
+    scope: str = "all",
+    bump: str = "",
 ) -> Plan:
     """Decide the next release action for the current history."""
-    if trigger not in ("push", "dispatch"):
+    if trigger not in ("push", "dispatch", "milestone"):
         raise QgisSdkReleaseVersionError(f"unknown trigger: {trigger!r}")
+    milestone_info = parse_milestone_tag(milestone_tag) if milestone_tag else None
+    if milestone_tag and milestone_info is None:
+        raise QgisSdkReleaseVersionError(f"not a milestone tag: {milestone_tag!r}")
     ordered = sort_tags(tags)
     base_tag = ordered[0] if ordered else None
     first = base_tag is None
     stable_exists = any(not version_from_tag(tag).is_prerelease for tag in ordered)
+    if scope.strip().lower() == "none":
+        return Plan(
+            trigger,
+            first,
+            stable_exists,
+            base_tag,
+            None,
+            None,
+            "skip",
+            "no release-worthy changes for scope",
+            "",
+            scope="none",
+        )
+    if scope.strip() and scope.strip().lower() != "all":
+        resolved_scope = normalize_scope(scope)
+    elif milestone_info is not None:
+        resolved_scope = milestone_info[0]
+    else:
+        resolved_scope = "all"
+
     if version_override:
         version = Version.parse(version_override)
+    elif bump.strip():
+        version = _resolve_forced_bump(bump, first, base_tag, config)
+    elif milestone_info is not None:
+        _, version = milestone_info
     elif first:
         version = config.initial_bump_version
     else:
@@ -540,11 +703,12 @@ def compute_plan(
                 "skip",
                 f"no release-worthy commits since {base_tag}",
                 "",
+                scope=resolved_scope,
             )
     if suffix:
         version = version.with_prerelease(suffix)
-    tag = tag_for_version(version)
-    if tag in ordered:
+    tag = tag_for_version(version, scope=resolved_scope)
+    if tag in ordered or tag in set(tags):
         return Plan(
             trigger,
             first,
@@ -555,8 +719,9 @@ def compute_plan(
             "skip",
             f"tag {tag} already exists",
             "",
+            scope=resolved_scope,
         )
-    if not stable_exists and trigger == "push":
+    if not stable_exists and trigger == "push" and milestone_info is None:
         return Plan(
             trigger,
             first,
@@ -569,11 +734,19 @@ def compute_plan(
             "run the autorelease workflow dispatch (a prerelease suffix "
             "continues the rc train without arming registry publishes)",
             "",
+            scope=resolved_scope,
         )
-    reason = (
-        "bootstrap release" if first else f"release-worthy commits since {base_tag}"
+    if milestone_info is not None:
+        reason = f"milestone release from {milestone_tag}"
+    elif first:
+        reason = "bootstrap release"
+    elif bump.strip() or version_override:
+        reason = f"forced release from {base_tag}"
+    else:
+        reason = f"release-worthy commits since {base_tag}"
+    changelog = render_changelog(
+        version, commits, config, base_tag, repo_slug, scope=resolved_scope
     )
-    changelog = render_changelog(version, commits, config, base_tag, repo_slug)
     return Plan(
         trigger,
         first,
@@ -584,6 +757,7 @@ def compute_plan(
         "tag",
         reason,
         changelog,
+        scope=resolved_scope,
     )
 
 
@@ -783,7 +957,13 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     tags = list_tags()
     ordered = sort_tags(tags)
     base_tag = ordered[0] if ordered else None
-    raw = log_commits(f"{base_tag}..HEAD" if base_tag else None)
+    revision_range = f"{base_tag}..HEAD" if base_tag else None
+    raw = log_commits(revision_range)
+    requested_scope = getattr(args, "scope", "") or ""
+    if requested_scope.strip().lower() == "auto":
+        requested_scope = detect_scope_from_files(list_changed_files(revision_range))
+    dry_run_raw = str(getattr(args, "dry_run", "false")).strip().lower()
+    dry_run = dry_run_raw in ("true", "1", "yes")
     plan = compute_plan(
         trigger=args.trigger,
         tags=tags,
@@ -792,6 +972,9 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         suffix=args.suffix,
         version_override=args.version_override or None,
         repo_slug=os.environ.get("GITHUB_REPOSITORY"),
+        milestone_tag=getattr(args, "milestone_tag", "") or None,
+        scope=requested_scope or "all",
+        bump=getattr(args, "bump", "") or "",
     )
     changelog_file = ""
     if plan.changelog:
@@ -808,39 +991,60 @@ def _cmd_plan(args: argparse.Namespace) -> int:
             "prerelease": (
                 "true" if plan.version and plan.version.is_prerelease else "false"
             ),
+            "scope": plan.scope,
+            "python": "true" if plan.scope in ("all", "python") else "false",
+            "typescript": "true" if plan.scope in ("all", "typescript") else "false",
+            "dry_run": "true" if dry_run else "false",
             "reason": plan.reason,
             "changelog_file": changelog_file,
         }
     )
     if args.json:
         payload = plan.to_json()
+        payload["scope"] = plan.scope
+        payload["dry_run"] = dry_run
         payload["changelog_file"] = changelog_file
         print(json.dumps(payload, indent=2))
     else:
-        print(f"action={plan.action} tag={plan.tag or '-'} reason={plan.reason}")
+        print(
+            f"action={plan.action} scope={plan.scope} "
+            f"tag={plan.tag or '-'} reason={plan.reason}"
+        )
     return 0
 
 
 def _cmd_classify(args: argparse.Namespace) -> int:
-    version = version_from_tag(args.tag)
-    _write_output(
-        {
-            "version": str(version),
-            "pep440": version.to_pep440(),
-            "prerelease": "true" if version.is_prerelease else "false",
-        }
-    )
-    print(
-        json.dumps(
+    scope, version = parse_release_tag(args.tag)
+    outputs = {
+        "version": str(version),
+        "pep440": version.to_pep440(),
+        "prerelease": "true" if version.is_prerelease else "false",
+    }
+    if getattr(args, "scoped", False):
+        outputs.update(
             {
-                "tag": args.tag,
-                "version": str(version),
-                "pep440": version.to_pep440(),
-                "prerelease": version.is_prerelease,
-            },
-            indent=2,
+                "scope": scope,
+                "python": "true" if scope in ("all", "python") else "false",
+                "typescript": "true" if scope in ("all", "typescript") else "false",
+                "tag_name": args.tag,
+            }
         )
-    )
+    _write_output(outputs)
+    payload: dict[str, object] = {
+        "tag": args.tag,
+        "version": str(version),
+        "pep440": version.to_pep440(),
+        "prerelease": version.is_prerelease,
+    }
+    if getattr(args, "scoped", False):
+        payload.update(
+            {
+                "scope": scope,
+                "python": scope in ("all", "python"),
+                "typescript": scope in ("all", "typescript"),
+            }
+        )
+    print(json.dumps(payload, indent=2))
     return 0
 
 
@@ -940,15 +1144,22 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     plan = sub.add_parser("plan", help="decide the next release action")
-    plan.add_argument("--trigger", choices=("push", "dispatch"), default="push")
+    plan.add_argument(
+        "--trigger", choices=("push", "dispatch", "milestone"), default="push"
+    )
     plan.add_argument("--config", default=str(_VERSIONRC))
     plan.add_argument("--suffix", default="")
     plan.add_argument("--version-override", default="")
+    plan.add_argument("--scope", default="")
+    plan.add_argument("--bump", default="")
+    plan.add_argument("--milestone-tag", default="")
+    plan.add_argument("--dry-run", default="false")
     plan.add_argument("--json", action="store_true")
     plan.set_defaults(handler=_cmd_plan)
 
     classify = sub.add_parser("classify", help="classify one release tag")
     classify.add_argument("--tag", required=True)
+    classify.add_argument("--scoped", action="store_true")
     classify.set_defaults(handler=_cmd_classify)
 
     tag = sub.add_parser("tag", help="create an annotated release tag")
