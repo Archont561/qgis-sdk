@@ -1,292 +1,292 @@
 {
-  "cases": [
-    {
-      "expect": {
-        "ok": true,
-        "value": {
-          "echo": {
-            "name": "A"
-          }
-        }
-      },
-      "name": "success",
-      "reply": {
-        "call_id": "case-success",
-        "ok": true,
-        "protocol": 1,
-        "value": {
-          "echo": {
-            "name": "A"
-          }
-        }
-      },
-      "request": {
-        "call_id": "case-success",
-        "operation": "demo.echo",
-        "payload": {
-          "name": "A"
-        },
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "unknown_operation",
-        "ok": false
-      },
-      "name": "unknown-operation",
-      "reply": {
-        "call_id": "case-unknown",
-        "error": {
-          "code": "unknown_operation",
-          "message": "No operation 'demo.missing' is exposed by this plugin"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-unknown",
-        "operation": "demo.missing",
-        "payload": {},
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "not_authorized",
-        "ok": false
-      },
-      "name": "not-authorized",
-      "reply": {
-        "call_id": "case-denied",
-        "error": {
-          "code": "not_authorized",
-          "message": "This view is not authorized for that operation"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-denied",
-        "operation": "demo.echo",
-        "payload": {},
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "stale_generation",
-        "ok": false
-      },
-      "name": "stale-generation",
-      "reply": {
-        "call_id": "case-stale",
-        "error": {
-          "code": "stale_generation",
-          "message": "This view belongs to a runtime generation that no longer exists"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-stale",
-        "operation": "demo.echo",
-        "payload": {},
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "invalid_bridge_message",
-        "ok": false
-      },
-      "name": "invalid-protocol",
-      "reply": {
-        "call_id": "case-protocol",
-        "error": {
-          "code": "invalid_bridge_message",
-          "message": "Unsupported bridge protocol: 99; this host speaks 1"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-protocol",
-        "operation": "demo.echo",
-        "payload": {},
-        "protocol": 99
-      }
-    },
-    {
-      "expect": {
-        "code": "invalid_payload",
-        "ok": false
-      },
-      "name": "invalid-payload",
-      "reply": {
-        "call_id": "case-payload",
-        "error": {
-          "code": "invalid_payload",
-          "message": "value is nested deeper than 32"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-payload",
-        "operation": "demo.echo",
-        "payload": {
-          "nested": [
-            [
-              [
-                [
-                  [
-                    [
-                      [
-                        [
-                          [
-                            [
-                              [
-                                [
-                                  [
-                                    [
-                                      [
-                                        [
-                                          [
-                                            [
-                                              [
-                                                [
-                                                  [
-                                                    [
-                                                      [
-                                                        [
-                                                          [
-                                                            [
-                                                              [
-                                                                [
-                                                                  [
-                                                                    [
-                                                                      [
-                                                                        [
-                                                                          [
-                                                                            [
-                                                                              [
-                                                                                [
-                                                                                  [
-                                                                                    [
-                                                                                      [
-                                                                                        [
-                                                                                          []
-                                                                                        ]
-                                                                                      ]
-                                                                                    ]
-                                                                                  ]
-                                                                                ]
-                                                                              ]
-                                                                            ]
-                                                                          ]
-                                                                        ]
-                                                                      ]
-                                                                    ]
-                                                                  ]
-                                                                ]
-                                                              ]
-                                                            ]
-                                                          ]
-                                                        ]
-                                                      ]
-                                                    ]
-                                                  ]
-                                                ]
-                                              ]
-                                            ]
-                                          ]
-                                        ]
-                                      ]
-                                    ]
-                                  ]
-                                ]
-                              ]
-                            ]
-                          ]
-                        ]
-                      ]
-                    ]
-                  ]
-                ]
-              ]
-            ]
-          ]
-        },
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "not_serializable",
-        "ok": false
-      },
-      "name": "not-serializable",
-      "reply": {
-        "call_id": "case-native",
-        "error": {
-          "code": "not_serializable",
-          "message": "object is not wire-serializable"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-native",
-        "operation": "demo.native",
-        "payload": {},
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "operation_failed",
-        "ok": false
-      },
-      "name": "operation-failed",
-      "reply": {
-        "call_id": "case-failed",
-        "error": {
-          "code": "operation_failed",
-          "message": "No layer 'sites' is available in this runtime"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-failed",
-        "operation": "demo.fails",
-        "payload": {},
-        "protocol": 1
-      }
-    },
-    {
-      "expect": {
-        "code": "cancelled",
-        "ok": false
-      },
-      "name": "cancelled",
-      "reply": {
-        "call_id": "case-cancelled",
-        "error": {
-          "code": "cancelled",
-          "message": "The operation was cancelled"
-        },
-        "ok": false,
-        "protocol": 1
-      },
-      "request": {
-        "call_id": "case-cancelled",
-        "operation": "demo.echo",
-        "payload": {},
-        "protocol": 1
-      }
-    }
-  ],
-  "protocol": 1
+	"cases": [
+		{
+			"expect": {
+				"ok": true,
+				"value": {
+					"echo": {
+						"name": "A"
+					}
+				}
+			},
+			"name": "success",
+			"reply": {
+				"call_id": "case-success",
+				"ok": true,
+				"protocol": 1,
+				"value": {
+					"echo": {
+						"name": "A"
+					}
+				}
+			},
+			"request": {
+				"call_id": "case-success",
+				"operation": "demo.echo",
+				"payload": {
+					"name": "A"
+				},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "unknown_operation",
+				"ok": false
+			},
+			"name": "unknown-operation",
+			"reply": {
+				"call_id": "case-unknown",
+				"error": {
+					"code": "unknown_operation",
+					"message": "No operation 'demo.missing' is exposed by this plugin"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-unknown",
+				"operation": "demo.missing",
+				"payload": {},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "not_authorized",
+				"ok": false
+			},
+			"name": "not-authorized",
+			"reply": {
+				"call_id": "case-denied",
+				"error": {
+					"code": "not_authorized",
+					"message": "This view is not authorized for that operation"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-denied",
+				"operation": "demo.echo",
+				"payload": {},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "stale_generation",
+				"ok": false
+			},
+			"name": "stale-generation",
+			"reply": {
+				"call_id": "case-stale",
+				"error": {
+					"code": "stale_generation",
+					"message": "This view belongs to a runtime generation that no longer exists"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-stale",
+				"operation": "demo.echo",
+				"payload": {},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "invalid_bridge_message",
+				"ok": false
+			},
+			"name": "invalid-protocol",
+			"reply": {
+				"call_id": "case-protocol",
+				"error": {
+					"code": "invalid_bridge_message",
+					"message": "Unsupported bridge protocol: 99; this host speaks 1"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-protocol",
+				"operation": "demo.echo",
+				"payload": {},
+				"protocol": 99
+			}
+		},
+		{
+			"expect": {
+				"code": "invalid_payload",
+				"ok": false
+			},
+			"name": "invalid-payload",
+			"reply": {
+				"call_id": "case-payload",
+				"error": {
+					"code": "invalid_payload",
+					"message": "value is nested deeper than 32"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-payload",
+				"operation": "demo.echo",
+				"payload": {
+					"nested": [
+						[
+							[
+								[
+									[
+										[
+											[
+												[
+													[
+														[
+															[
+																[
+																	[
+																		[
+																			[
+																				[
+																					[
+																						[
+																							[
+																								[
+																									[
+																										[
+																											[
+																												[
+																													[
+																														[
+																															[
+																																[
+																																	[
+																																		[
+																																			[
+																																				[
+																																					[
+																																						[
+																																							[
+																																								[
+																																									[
+																																										[
+																																											[
+																																												[
+																																													[]
+																																												]
+																																											]
+																																										]
+																																									]
+																																								]
+																																							]
+																																						]
+																																					]
+																																				]
+																																			]
+																																		]
+																																	]
+																																]
+																															]
+																														]
+																													]
+																												]
+																											]
+																										]
+																									]
+																								]
+																							]
+																						]
+																					]
+																				]
+																			]
+																		]
+																	]
+																]
+															]
+														]
+													]
+												]
+											]
+										]
+									]
+								]
+							]
+						]
+					]
+				},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "not_serializable",
+				"ok": false
+			},
+			"name": "not-serializable",
+			"reply": {
+				"call_id": "case-native",
+				"error": {
+					"code": "not_serializable",
+					"message": "object is not wire-serializable"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-native",
+				"operation": "demo.native",
+				"payload": {},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "operation_failed",
+				"ok": false
+			},
+			"name": "operation-failed",
+			"reply": {
+				"call_id": "case-failed",
+				"error": {
+					"code": "operation_failed",
+					"message": "No layer 'sites' is available in this runtime"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-failed",
+				"operation": "demo.fails",
+				"payload": {},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"code": "cancelled",
+				"ok": false
+			},
+			"name": "cancelled",
+			"reply": {
+				"call_id": "case-cancelled",
+				"error": {
+					"code": "cancelled",
+					"message": "The operation was cancelled"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-cancelled",
+				"operation": "demo.echo",
+				"payload": {},
+				"protocol": 1
+			}
+		}
+	],
+	"protocol": 1
 }

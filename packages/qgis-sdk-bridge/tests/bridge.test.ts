@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@archont561/bun-test-utils";
 import {
-	BridgeClient,
 	BRIDGE_PROTOCOL_VERSION,
+	BridgeClient,
 	parseInvokeReply,
 	QgisSdkBridgeAbortedError,
 	QgisSdkBridgeClosedError,
@@ -131,7 +131,9 @@ test("a call resolves with the value the host produced", async () => {
 	expect(envelope?.operation).toBe("demo.echo");
 	expect(envelope?.payload).toEqual({ name: "A" });
 
-	scripted.deliver(replyFor("c1", { ok: true, value: { echo: { name: "A" } } }));
+	scripted.deliver(
+		replyFor("c1", { ok: true, value: { echo: { name: "A" } } }),
+	);
 
 	expect(await call).toEqual({ echo: { name: "A" } });
 	expect(client.pendingCalls).toBe(0);
@@ -201,7 +203,11 @@ test("a malformed message settles nothing and is remembered", async () => {
 	const client = new BridgeClient(scripted.transport, { timeoutMs: 5 });
 
 	const call = client.invoke("demo.echo");
-	scripted.deliver({ protocol: BRIDGE_PROTOCOL_VERSION, call_id: "c1", ok: "yes" });
+	scripted.deliver({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		call_id: "c1",
+		ok: "yes",
+	});
 
 	expect(client.protocolError).toBeInstanceOf(QgisSdkBridgeProtocolError);
 	await expect(call).rejects.toThrow(QgisSdkBridgeTimeoutError);

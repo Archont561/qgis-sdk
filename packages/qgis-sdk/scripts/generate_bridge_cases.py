@@ -148,8 +148,10 @@ def build_cases() -> dict[str, Any]:
 def main() -> int:
     cases = build_cases()
     CASES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Tabs and sorted keys are what biome writes for the same file, so the
+    # generator and the formatter do not fight over it on every run.
     CASES_PATH.write_text(
-        json.dumps(cases, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(cases, indent="\t", sort_keys=True) + "\n", encoding="utf-8"
     )
     print(f"wrote {len(cases['cases'])} cases to {CASES_PATH}")
     return 0

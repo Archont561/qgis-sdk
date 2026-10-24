@@ -138,19 +138,20 @@ export function parseInvokeReply(raw: unknown): InvokeReply {
 			`Unsupported bridge protocol: ${String(raw.protocol)}; this client speaks ${BRIDGE_PROTOCOL_VERSION}`,
 		);
 	}
-	if (!isNonEmptyString(raw.call_id) || raw.call_id.length > MAX_CALL_ID_LENGTH) {
+	if (
+		!isNonEmptyString(raw.call_id) ||
+		raw.call_id.length > MAX_CALL_ID_LENGTH
+	) {
 		throw new QgisSdkBridgeProtocolError(
 			`call_id must be a nonempty string of at most ${MAX_CALL_ID_LENGTH} characters`,
 		);
 	}
 	const callId = raw.call_id;
 	if (typeof raw.ok !== "boolean") {
-		throw new QgisSdkBridgeProtocolError(
-			`${callId}: ok must be a boolean`,
-		);
+		throw new QgisSdkBridgeProtocolError(`${callId}: ok must be a boolean`);
 	}
 	if (raw.ok) {
-		if (!Object.prototype.hasOwnProperty.call(raw, "value")) {
+		if (!Object.hasOwn(raw, "value")) {
 			throw new QgisSdkBridgeProtocolError(
 				`${callId}: a success reply must carry a value`,
 			);
@@ -168,7 +169,9 @@ export function parseInvokeReply(raw: unknown): InvokeReply {
 		);
 	}
 	if (!isNonEmptyString(raw.error.code)) {
-		throw new QgisSdkBridgeProtocolError(`${callId}: error.code must be a string`);
+		throw new QgisSdkBridgeProtocolError(
+			`${callId}: error.code must be a string`,
+		);
 	}
 	if (typeof raw.error.message !== "string") {
 		throw new QgisSdkBridgeProtocolError(
@@ -209,7 +212,10 @@ export class BridgeClient {
 	private unmatched: number = 0;
 	private lastProtocolError: Error | null = null;
 
-	public constructor(transport: WireTransport, options: BridgeClientOptions = {}) {
+	public constructor(
+		transport: WireTransport,
+		options: BridgeClientOptions = {},
+	) {
 		this.transport = transport;
 		this.timeoutMs = options.timeoutMs ?? 30_000;
 		this.unsubscribe = transport.subscribe((message) => {
@@ -269,7 +275,9 @@ export class BridgeClient {
 								return;
 							}
 							this.settle(callId);
-							pending.reject(new QgisSdkBridgeTimeoutError(callId, this.timeoutMs));
+							pending.reject(
+								new QgisSdkBridgeTimeoutError(callId, this.timeoutMs),
+							);
 						}, this.timeoutMs)
 					: null;
 
