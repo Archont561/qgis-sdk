@@ -64,24 +64,23 @@ def test_headless_environment_keeps_an_existing_python_path() -> None:
 
 
 def test_desktop_command_starts_the_app_with_no_plugins_and_the_probe_last() -> None:
-    command = desktop_command(
-        Path("/opt/qgis/bin/qgis"), Path("/tmp/run"), Path("/tmp/run/probe.py")
-    )
+    workspace = Path("/tmp/run")
+    probe = Path("/tmp/run/probe.py")
+    command = desktop_command(Path("/opt/qgis/bin/qgis"), workspace, probe)
 
     assert "--noplugins" in command
     assert command[command.index("--profile") + 1] == "sdk-qualification"
-    assert command[-2:] == ["--code", "/tmp/run/probe.py"]
-    assert "/tmp/run/profiles" in command
+    assert command[-2:] == ["--code", str(probe)]
+    assert str(workspace / "profiles") in command
 
 
 def test_request_document_names_every_input_the_probe_reads() -> None:
-    document = json.loads(
-        request_document(Path("/tmp/run/plugins"), "demo_tools", "Demo Tools")
-    )
+    plugins_root = Path("/tmp/run/plugins")
+    document = json.loads(request_document(plugins_root, "demo_tools", "Demo Tools"))
 
     assert document == {
         "plugin": "demo_tools",
-        "plugins_root": "/tmp/run/plugins",
+        "plugins_root": str(plugins_root),
         "metadata_keys": ["name", "qgisMinimumVersion"],
         "expected_metadata": {"name": "Demo Tools", "qgisMinimumVersion": "4.0"},
         "ping_value": 7,

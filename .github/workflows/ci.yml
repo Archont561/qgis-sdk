@@ -56,13 +56,14 @@ jobs:
       - name: Install JavaScript dependencies
         run: pixi run -e bun install-js
 
-      - name: Check commit messages
+      - name: Compute commit range
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: |
-          python scripts/compute_commit_base.py
-          pixi run -e default check-commits
+        run: python scripts/compute_commit_base.py
+
+      - name: Check commit messages
+        run: pixi run -e default check-commits
 
       - name: Lint Python
         run: pixi run -e default lint-python

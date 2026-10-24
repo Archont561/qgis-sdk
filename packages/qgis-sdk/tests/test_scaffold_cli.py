@@ -1,5 +1,6 @@
 """The ``qgis-sdk`` command: the same plan, reachable from a shell or ``-m``."""
 
+import os
 import runpy
 import subprocess
 import sys
@@ -16,7 +17,11 @@ runner = CliRunner()
 
 
 def run_cli(*arguments: str) -> tuple[int, str]:
-    result = runner.invoke(app, list(arguments))
+    result = runner.invoke(
+        app,
+        list(arguments),
+        env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "120"},
+    )
     return result.exit_code, result.output
 
 
@@ -179,10 +184,17 @@ def test_the_generated_starter_tests_pass_inside_the_generated_project(
     project = tmp_path / "field_tools"
     write_scaffold(ScaffoldOptions.resolve("field_tools"), project)
 
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("PYTEST_", "QGIS"))
+    }
+    env["PYTHONPATH"] = os.pathsep.join((str(project), str(SDK_SOURCE)))
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q"],
         cwd=project,
-        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": f"{project}:{SDK_SOURCE}"},
+        env=env,
         capture_output=True,
         text=True,
         check=False,
