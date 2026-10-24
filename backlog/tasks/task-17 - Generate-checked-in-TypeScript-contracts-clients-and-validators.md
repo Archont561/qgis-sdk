@@ -4,7 +4,7 @@ title: Generate checked in TypeScript contracts clients and validators
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:56'
+updated_date: '2026-10-24 15:22'
 labels: []
 milestone: m-2
 dependencies:
@@ -45,5 +45,11 @@ Generate checked in TypeScript contracts clients and validators. Implement only 
 created: 2026-10-21 21:56
 ---
 blocked-by-actions (doc-8): AC3 ('CI drift checks protect generated-file ownership') cannot be satisfied while every job fails to start. The local stand-in is `bun run sdk:generate` followed by `git status --porcelain`: it proves no drift for one change, which is not the protection AC3 asks for. Keep AC3 unchecked and wire it when runners return.
+---
+
+author: qgis-sdk agent
+created: 2026-10-24 15:22
+---
+From the TASK-25 closeout (native services, m-1): the two new bridge-eligible payload types - qgis_sdk.models.VectorLayerInfo (field_names: tuple[str, ...]) and StyleSpec (required_fields: tuple[str, ...]) - are NOT expressible by the current contract generator. Probe: _schema(VectorLayerInfo, 'probe') raises QgisSdkDeclarationError: 'probe.field_names: unsupported annotation tuple[str, ...]; use JSON primitives, list, union, Literal or a dataclass'. No TS generation exists yet, so nothing is broken today, but this task will meet it: either extend the documented annotation subset to tuple[X, ...] (same JSON array as list), or change those fields to list[str] before the wire contract freezes. Deciding after the fake/native adapters and tests depend on the tuple spelling costs a multi-file change. Reference: doc-11 records the native service surface this would expose.
 ---
 <!-- COMMENTS:END -->

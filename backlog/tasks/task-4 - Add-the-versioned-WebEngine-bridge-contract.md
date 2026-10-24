@@ -4,7 +4,7 @@ title: Add the versioned WebEngine bridge contract
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
-updated_date: '2026-10-16 12:02'
+updated_date: '2026-10-24 15:22'
 labels: []
 milestone: m-2
 dependencies:
@@ -47,3 +47,13 @@ Integrate the versioned optional bridge with the dedicated code-generation, secu
 <!-- SECTION:NOTES:BEGIN -->
 Tauri source review (2026-10-16): follow proposed decision-23 and doc-2 section 10. Verify native caller binding/QWebChannel behavior separately from mock tests. Public API names, stream limits and cancellation wire details remain open; no implementation is complete.
 <!-- SECTION:NOTES:END -->
+
+## Comments
+
+<!-- COMMENTS:BEGIN -->
+author: qgis-sdk agent
+created: 2026-10-24 15:22
+---
+Scope note from the TASK-25 closeout: the m-1 native services (Layers, Project, Settings, Styles, Notifications) are now implemented on both backends and documented in doc-11, so the host capability surface this contract has to expose is no longer hypothetical - decision-18's named namespaces (layers, project, notifications, settings) exist as QGIS-free Protocols. Nothing here changed: this task still owns the versioned transport contract, allowlist and per-view authorization, and no TypeScript surface was written in m-1 by design (generated, not handwritten, per decision-18). Payload caveat is recorded on TASK-17.
+---
+<!-- COMMENTS:END -->
