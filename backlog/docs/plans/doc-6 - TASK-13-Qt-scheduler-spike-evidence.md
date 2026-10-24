@@ -78,7 +78,7 @@ Responsiveness is judged against a 40 ms gap budget. Criteria come from
 `decide_verdict`: any failing deciding criterion yields
 `review-scope-before-async-syntax` and names the criterion.
 
-### Results (three consecutive runs)
+### Results (four consecutive runs)
 
 Environment: Linux 6.1.158+ x86_64 (glibc 2.36), Python 3.14.8, QGIS
 4.2.3-Belém do Pará, Qt 6.11.2, `QT_QPA_PLATFORM=offscreen`, pool
@@ -89,6 +89,7 @@ Environment: Linux 6.1.158+ x86_64 (glibc 2.36), Python 3.14.8, QGIS
 | 1 | 61.300 ms | 2.673 ms | 31 (2.001 ms) | yes | yes | yes | adopt-scheduler-seam |
 | 2 | 61.407 ms | 2.596 ms | 31 (2.011 ms) | yes | yes | yes | adopt-scheduler-seam |
 | 3 | 61.343 ms | 2.517 ms | 30 (2.028 ms) | yes | yes | yes | adopt-scheduler-seam |
+| 4 | 61.397 ms | 2.640 ms | 31 (2.009 ms) | yes | yes | yes | adopt-scheduler-seam |
 
 Thread identity in all three runs: every delivery thread id equalled the GUI thread
 id, and both workers ran on a single pool thread id distinct from the GUI thread (the
