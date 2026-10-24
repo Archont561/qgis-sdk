@@ -263,6 +263,29 @@ reply = dispatcher.dispatch(binding, request)     # never raises
   in and out; `qgis_sdk.adapters.webchannel.create_channel_object` wraps it in
   the `QObject` a `QWebChannel` registers, importing Qt only when asked.
 
+### Generated TypeScript client (TASK-17)
+
+The declarations a plugin already writes are the only source of its client. One
+command renders the value types, the operation map, the runtime validators and
+`createOperations(client)` from them - no QGIS, no Qt, no handler ever runs:
+
+```console
+$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin --out web/src/bridge.ts
+wrote web/src/bridge.ts
+```
+
+- **Deterministic.** The same declarations produce the same bytes, so the file is
+  reviewed and committed like source, and CI regenerates it and fails on any
+  difference (`--check` reports the drift without writing).
+- **A description works too.** `--plugin` imports `module:Attribute` from the
+  working directory; `--description plugin-description.json` does the same from a
+  description a host already shipped, for a frontend with no Python at hand.
+- **Closed subset.** A schema outside the declaration subset (`$ref`, an object
+  inside a union) fails the build instead of emitting `any`.
+- **Strict in, lenient out.** A generated validator refuses unknown arguments and
+  accepts a response that gained a field, so a newer host does not break an older
+  view.
+
 ## 0.2.0 migration notes (TASK-28)
 
 `0.2.0` is the first release where the two packages carry different numbers: the

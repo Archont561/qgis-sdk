@@ -84,6 +84,37 @@ subscription.close();
 Protocol version 1 is unchanged by subscriptions: a client that never subscribes
 still sees nothing but the replies to its own calls.
 
+## Generated clients
+
+`client.invoke<T>(...)` is a transport, not a type guarantee: `T` is asserted by
+hand at the call site. For operations, generate the client from the plugin's own
+declarations instead:
+
+```console
+$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin --out web/src/bridge.ts
+```
+
+The module imports nothing from this package. It exports the declared value types,
+`OPERATIONS` and `OperationId`, one validator per type, and a nested operation map:
+
+```ts
+import { createOperations, type PluginOperations } from "./bridge";
+
+const operations: PluginOperations = createOperations(client);
+const summary = await operations.sites.summary({ layer_id: "sites" });
+```
+
+- **Compile time.** An operation the plugin did not declare is not a member of the
+  map, and a misspelled or mistyped argument is a type error - including an
+  unknown property inside a nested object.
+- **Runtime.** The same generated module validates what it sends (strict: unknown
+  arguments are refused before the transport is touched) and what comes back
+  (lenient: a field a newer host added is tolerated, a missing one is a
+  `ContractError` naming the operation).
+- **Owned by CI.** The file is generated source, never edited by hand: the plugin's
+  CI regenerates it and fails when the checked-in copy differs. `CONTRACT_FINGERPRINT`
+  identifies the wire contract the file was built from.
+
 ## License
 
 MIT
