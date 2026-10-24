@@ -98,7 +98,7 @@ jobs:
 
       - name: Build the TypeScript bridge
         if: steps.classify.outputs.typescript == 'true'
-        run: pixi run -e bun bun run --filter qgis-sdk-bridge build
+        run: pixi run -e bun bun run --filter '@archont561/qgis-sdk-bridge' build
 
       - name: Capture the tag annotation as release notes
         env:
@@ -123,6 +123,7 @@ jobs:
           name: bridge-package
           path: |
             packages/qgis-sdk-bridge/package.json
+            packages/qgis-sdk-bridge/README.md
             packages/qgis-sdk-bridge/dist
 
       - name: Upload release notes artifact

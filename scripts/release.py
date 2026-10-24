@@ -303,6 +303,7 @@ _SCOPE_ALIASES = {
     "ts": "typescript",
     "bridge": "typescript",
     "qgis-sdk-bridge": "typescript",
+    "@archont561/qgis-sdk-bridge": "typescript",
     "bun": "typescript",
 }
 _SCOPE_PREFIXES = {
