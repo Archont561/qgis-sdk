@@ -1,10 +1,10 @@
 ---
 id: TASK-17
 title: Generate checked in TypeScript contracts clients and validators
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 19:41'
+updated_date: '2026-10-24 20:05'
 labels: []
 milestone: m-2
 dependencies:
