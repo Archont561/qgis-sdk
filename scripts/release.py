@@ -34,6 +34,7 @@ from urllib.parse import quote
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PYPROJECT = _REPO_ROOT / "packages/qgis-sdk/pyproject.toml"
+_RECIPE = _REPO_ROOT / "packages/qgis-sdk/recipe.yaml"
 _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-bridge/package.json"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 
@@ -143,7 +144,20 @@ def create_tag(
 ) -> None:
     """Create an annotated tag and optionally push it to the remote."""
     run = runner or _default_runner
-    run(["git", "tag", "-a", tag, "-m", message])
+    run(
+        [
+            "git",
+            "-c",
+            "user.name=github-actions[bot]",
+            "-c",
+            "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+            "tag",
+            "-a",
+            tag,
+            "-m",
+            message,
+        ]
+    )
     if push:
         run(["git", "push", remote, f"refs/tags/{tag}"])
 
@@ -825,6 +839,7 @@ def write_checksums(out_path: Path, entries: Iterable[tuple[str, str]]) -> None:
 # ---------------------------------------------------------------------------
 
 _VERSION_LINE = re.compile(r'(?m)^version = "[^"]*"$')
+_RECIPE_VERSION_LINE = re.compile(r'(?m)^(\s*version:\s*)"[^"]*"$')
 
 
 def stamp_pyproject(text: str, version: Version) -> str:
@@ -834,6 +849,16 @@ def stamp_pyproject(text: str, version: Version) -> str:
     )
     if count == 0:
         raise QgisSdkReleaseError("no top-level version line found in pyproject.toml")
+    return stamped
+
+
+def stamp_recipe(text: str, version: Version) -> str:
+    """Rewrite the first quoted ``version:`` line in recipe.yaml with the PEP 440 form."""
+    stamped, count = _RECIPE_VERSION_LINE.subn(
+        rf'\g<1>"{version.to_pep440()}"', text, count=1
+    )
+    if count == 0:
+        raise QgisSdkReleaseError("no quoted version line found in recipe.yaml")
     return stamped
 
 
@@ -903,6 +928,42 @@ def create_release(
     }
     req = _request(f"https://api.github.com/repos/{slug}/releases", token, payload)
     return _read_json(open_it, req, "GitHub release creation")
+
+
+def get_release_by_tag(
+    slug: str,
+    token: str,
+    tag: str,
+    opener: Opener | None = None,
+) -> dict:
+    """Fetch an existing GitHub Release by tag name."""
+    open_it = opener or _default_opener
+    req = _request(
+        f"https://api.github.com/repos/{slug}/releases/tags/{quote(tag)}", token
+    )
+    return _read_json(open_it, req, f"GitHub release lookup for {tag}")
+
+
+def delete_release_asset(
+    slug: str,
+    token: str,
+    asset_id: int,
+    opener: Opener | None = None,
+) -> None:
+    """Delete an existing release asset before re-uploading."""
+    open_it = opener or _default_opener
+    req = _request(
+        f"https://api.github.com/repos/{slug}/releases/assets/{asset_id}", token
+    )
+    req.method = "DELETE"
+    try:
+        with open_it(req):  # type: ignore[attr-defined]
+            pass
+    except HTTPError as error:
+        detail = error.read().decode(errors="replace")[:400]
+        raise QgisSdkReleaseError(
+            f"asset deletion {asset_id} failed ({error.code}): {detail}"
+        ) from error
 
 
 def upload_asset(
@@ -1068,13 +1129,16 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
     version = Version.parse(args.version)
     pyproject_text = _PYPROJECT.read_text(encoding="utf-8")
     _PYPROJECT.write_text(stamp_pyproject(pyproject_text, version), encoding="utf-8")
+    if _RECIPE.is_file():
+        recipe_text = _RECIPE.read_text(encoding="utf-8")
+        _RECIPE.write_text(stamp_recipe(recipe_text, version), encoding="utf-8")
     package_text = _BRIDGE_PACKAGE.read_text(encoding="utf-8")
     _BRIDGE_PACKAGE.write_text(
         stamp_package_json(package_text, version), encoding="utf-8"
     )
     print(
-        f"stamped {version} into {_PYPROJECT} "
-        f"(PEP 440: {version.to_pep440()}) and {_BRIDGE_PACKAGE}"
+        f"stamped {version} into {_PYPROJECT}, {_RECIPE} "
+        f"(PEP 440: {version.to_pep440()}), and {_BRIDGE_PACKAGE}"
     )
     return 0
 
@@ -1120,15 +1184,29 @@ def _cmd_github_release(args: argparse.Namespace) -> int:
         if args.body_file
         else f"Release {args.tag}"
     )
-    release = create_release(
-        slug, token, args.tag, args.tag, body, version.is_prerelease
-    )
+    try:
+        release = create_release(
+            slug, token, args.tag, args.tag, body, version.is_prerelease
+        )
+    except QgisSdkReleaseError as exc:
+        if "already_exists" not in str(exc):
+            raise
+        release = get_release_by_tag(slug, token, args.tag)
     upload_url = release.get("upload_url")
     if not upload_url:
         raise QgisSdkReleaseError(f"release response lacked upload_url: {release}")
+    existing_assets = {
+        item.get("name"): item.get("id")
+        for item in release.get("assets", ())
+        if isinstance(item, dict) and item.get("name") and item.get("id")
+    }
     for asset in args.asset:
-        upload_asset(upload_url, token, Path(asset))
-        print(f"uploaded {Path(asset).name}")
+        asset_path = Path(asset)
+        existing_id = existing_assets.get(asset_path.name)
+        if existing_id is not None:
+            delete_release_asset(slug, token, int(existing_id))
+        upload_asset(upload_url, token, asset_path)
+        print(f"uploaded {asset_path.name}")
     html_url = release.get("html_url", "")
     print(f"release {args.tag}: {html_url}")
     _step_summary(

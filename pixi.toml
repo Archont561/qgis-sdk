@@ -55,6 +55,16 @@ cmd = "python scripts/release.py build-python"
 [feature.python.tasks.release-verify-python]
 cmd = "python scripts/release.py verify-python"
 
+[feature.python.tasks.package]
+cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk/recipe.yaml --output-dir dist/conda -c conda-forge"
+
+[feature.python.tasks.release-build-conda]
+cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk/recipe.yaml --output-dir dist/conda -c conda-forge"
+
+[feature.python.tasks.publish-conda]
+args = [{ arg = "files", default = "dist/conda/*.conda" }]
+cmd = "pixi upload prefix --channel 'archont561/archont561' --generate-attestation --skip-existing {{ files }}"
+
 [feature.python.tasks.release-checksums]
 cmd = "python scripts/release.py checksums"
 

@@ -10,12 +10,10 @@
 
 The goal is to help plugin authors build reusable, testable components and package them consistently across their QGIS projects. The TypeScript bridge connects the web frontend running inside QGIS's `QWebEngineView` to the plugin's Python/QGIS side. This repository is an early-stage scaffold: the Python package now includes experimental, QGIS-free context and service contracts alongside its smoke-test API; native plugin adapters and the bridge runtime are not implemented yet.
 
-The registry entries currently point to placeholders, not usable SDK releases:
+The `0.1.0` experimental packages are published across registries:
 
-- [`qgis-sdk` on PyPI](https://pypi.org/project/qgis-sdk/) lists version `0.0.0` with placeholder metadata and no project description. It is not a released plugin-development SDK.
-- [`@archont561/qgis-sdk-bridge` on npm](https://www.npmjs.com/package/@archont561/qgis-sdk-bridge) is version `0.0.0` and exists only to configure OIDC trusted publishing; its npm README states that it contains no executable code and should not be installed as a dependency.
-
-Use this repository's source packages for development. The package listings are not installation instructions; replace this note with consumer install guidance when functional releases are published.
+- [`qgis-sdk` on PyPI](https://pypi.org/project/qgis-sdk/) (`pip install qgis-sdk`) and on [`prefix.dev` (`archont561/archont561`)](https://prefix.dev/channels/archont561/packages/qgis-sdk) (`pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk`) provide the `0.1.0` Python declarations, contracts, lifecycle/scheduler runtime, Desktop/WebEngine adapters, and `qgis-sdk scaffold` CLI.
+- [`@archont561/qgis-sdk-bridge` on npm](https://www.npmjs.com/package/@archont561/qgis-sdk-bridge) and on [GitHub Packages (`npm.pkg.github.com`)](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk-bridge) provide the `0.1.0` TypeScript declaration parser, safe-integer wire bounds, and `QgisSdk*` error hierarchy.
 
 ## Quick start
 
