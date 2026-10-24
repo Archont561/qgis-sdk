@@ -121,6 +121,11 @@ class NetworkRequest:
     client refuses anything else before a transport sees it. ``auth_config`` is
     the id of a QGIS authentication configuration, never a credential. Each
     limit is explicit, so a transport never has to know a client's defaults.
+
+    ``allowed_origins`` is set by a network grant: the origins a redirect may
+    lead to, as ``scheme://host[:port]``. Every transport refuses a hop outside
+    them with :class:`QgisSdkRedirectError`; ``None`` leaves only the
+    transport's own redirect rules in force.
     """
 
     method: str
@@ -131,6 +136,7 @@ class NetworkRequest:
     max_redirects: int = DEFAULT_MAX_REDIRECTS
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES
     auth_config: str | None = None
+    allowed_origins: frozenset[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -52,6 +52,7 @@ try:
     from qgis_sdk.core import ResourceScope
     from qgis_sdk.core.scheduling import Job, JobState, StepScheduler
     from qgis_sdk.models import (
+        Headers,
         NetworkRequest,
         QgisSdkAuthenticationError,
         QgisSdkBlockingOnGuiThreadError,
@@ -62,7 +63,7 @@ try:
         QgisSdkTlsError,
         Response,
     )
-    from qgis_sdk.network import NetworkClient
+    from qgis_sdk.network import NetworkClient, NetworkGrant
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(
         f"native networking needs Qt and QGIS: {error}", allow_module_level=True
@@ -545,6 +546,49 @@ def test_a_cross_origin_redirect_drops_credentials_but_keeps_other_headers(
     assert "authorization" not in second
     assert "cookie" not in second
     assert second["x-trace"] == "keep"
+
+
+def test_a_redirect_out_of_the_granted_origins_is_refused_before_the_hop(
+    app, scope, origin_a, origin_b
+) -> None:
+    """A granted origin cannot hand a view's request to one that was not (TASK-20)."""
+    transport = NativeNetworkTransport(scope)
+    grant = NetworkGrant(origins=(origin_a.origin,))
+    before = len(origin_b.seen)
+    outcomes: list[object] = []
+
+    transport.send(
+        grant.constrain(
+            NetworkRequest(
+                method="GET",
+                url=origin_a.url("/to") + "?url=" + origin_b.url("/echo"),
+                headers=Headers({"Authorization": "Bearer s3cret"}),
+            )
+        ),
+        outcomes.append,
+    )
+    pump(app, lambda: bool(outcomes))
+
+    (outcome,) = outcomes
+    assert isinstance(outcome, QgisSdkRedirectError)
+    assert "leaves the granted origins" in str(outcome)
+    assert "s3cret" not in str(outcome)
+    assert len(origin_b.seen) == before
+
+    # The same hop inside the grant is just a redirect.
+    inside: list[object] = []
+    transport.send(
+        NetworkGrant(origins=(origin_a.origin, origin_b.origin)).constrain(
+            NetworkRequest(
+                method="GET",
+                url=origin_a.url("/to") + "?url=" + origin_b.url("/echo"),
+            )
+        ),
+        inside.append,
+    )
+    pump(app, lambda: bool(inside))
+    assert isinstance(inside[0], Response)
+    assert len(origin_b.seen) == before + 1
 
 
 def test_a_same_origin_redirect_keeps_credentials(

@@ -23,9 +23,11 @@ from qgis_sdk.models import (
     NetworkRequest,
     QgisSdkBlockingOnGuiThreadError,
     QgisSdkError,
+    QgisSdkRedirectError,
     QgisSdkRequestCancelledError,
     Response,
 )
+from qgis_sdk.network.grants import origin_of
 from qgis_sdk.services import Deliver
 
 __all__ = ["FakeNetworkTransport", "PendingRequest", "QgisSdkNetworkFakeError", "reply"]
@@ -118,7 +120,29 @@ class PendingRequest:
         if self.settled:
             raise QgisSdkNetworkFakeError("this request was already settled")
         self.settled = True
-        self._deliver(outcome)
+        self._deliver(_within_grant(self.request, outcome))
+
+
+def _within_grant(
+    request: NetworkRequest, outcome: Response | Exception
+) -> Response | Exception:
+    """Apply the one grant rule a transport owns: a redirect stays inside.
+
+    A scripted response whose final ``url`` sits on an origin the request's
+    grant did not list is what a real redirect out of the grant would look like,
+    so the fake refuses it exactly as the native transport does; a suite that
+    scripts such a hop then fails for the right reason.
+    """
+    if request.allowed_origins is None or not isinstance(outcome, Response):
+        return outcome
+    if origin_of(outcome.url) in request.allowed_origins:
+        return outcome
+    return QgisSdkRedirectError(
+        f"redirect to {origin_of(outcome.url) or outcome.url!r} leaves the "
+        "granted origins",
+        method=request.method,
+        url=outcome.url,
+    )
 
 
 class FakeNetworkTransport:
@@ -212,7 +236,7 @@ class FakeNetworkTransport:
             raise QgisSdkBlockingOnGuiThreadError(
                 method=request.method, url=request.url
             )
-        outcome = self._take(request).responder(request)
+        outcome = _within_grant(request, self._take(request).responder(request))
         if isinstance(outcome, Exception):
             raise outcome
         return outcome

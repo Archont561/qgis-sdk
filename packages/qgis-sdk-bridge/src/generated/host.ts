@@ -3,13 +3,16 @@
 // Regenerate with `qgis-sdk bridge generate --host`; CI fails on drift.
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:851a77387b6b37bebcb05da4151364e5d489b6d8ce0fca092eda6e368aed06a7";
+export const HOST_FINGERPRINT = "sha256:f96bdf1046434de3c5eae01efb34c8ad2bcd1cf241a3dc42f6c4b613dc7d7d6f";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
 export const HOST_OPERATIONS = [
+	"files.export",
 	"layers.get",
 	"layers.list",
+	"layers.open_vector",
+	"network.fetch",
 	"notifications.info",
 	"project.layer_ids",
 	"settings.get",
@@ -29,6 +32,35 @@ export interface HostClientLike {
 		payload?: Readonly<Record<string, unknown>>,
 		options?: HostInvokeOptions,
 	): Promise<unknown>;
+	subscribe(
+		operation: string,
+		payload?: Readonly<Record<string, unknown>>,
+		handlers?: HostStreamHandlers<{
+			readonly kind: "data" | "progress" | "state";
+			readonly payload: unknown;
+		}>,
+		options?: HostInvokeOptions,
+	): Promise<HostStreamHandle>;
+}
+
+/** How a stream ended; `dropped` is only present for a gap. */
+export interface HostStreamTerminal {
+	readonly kind: "complete" | "error" | "cancelled" | "gap" | "disposed";
+	readonly message?: string;
+	readonly dropped?: number;
+}
+
+/** What a stream reports: typed events, then exactly one end. */
+export interface HostStreamHandlers<E> {
+	readonly onEvent?: (event: E) => void;
+	readonly onTerminal?: (terminal: HostStreamTerminal) => void;
+}
+
+/** A live stream, as the caller holds it. */
+export interface HostStreamHandle {
+	readonly id: string;
+	readonly closed: boolean;
+	close(): void;
 }
 
 /** An argument or a response that does not match its declared schema. */
@@ -56,6 +88,37 @@ function isSafeInteger(value: unknown): value is number {
 	return typeof value === "number" && Number.isSafeInteger(value);
 }
 
+export interface ExportRequest {
+	readonly content: string;
+	readonly file: FileRef;
+}
+
+export interface ExportResult {
+	readonly bytes_written: number;
+	readonly name: string;
+}
+
+export interface FetchRequest {
+	readonly auth_config?: string;
+	readonly body?: string;
+	readonly headers?: readonly HttpHeader[];
+	readonly method?: "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
+	readonly timeout_seconds?: number;
+	readonly url: string;
+}
+
+export interface FileRef {
+	readonly id: string;
+	readonly kind: "file";
+	readonly name?: string;
+	readonly operations?: readonly ("read" | "write")[];
+}
+
+export interface HttpHeader {
+	readonly name: string;
+	readonly value: string;
+}
+
 export interface IdPage {
 	readonly items: readonly string[];
 	readonly next_cursor?: string;
@@ -72,8 +135,21 @@ export interface LayerRequest {
 	readonly layer_id: string;
 }
 
+export interface NetworkFetchData {
+	readonly base64: string | null;
+	readonly headers: readonly HttpHeader[];
+	readonly reason: string;
+	readonly status_code: number;
+	readonly text: string | null;
+	readonly url: string;
+}
+
 export interface NotificationsInfoRequest {
 	readonly message: string;
+}
+
+export interface OpenVectorRequest {
+	readonly file: FileRef;
 }
 
 export interface PageRequest {
@@ -97,6 +173,93 @@ export interface VectorLayerInfo {
 	readonly geometry_type: "point" | "line" | "polygon" | "none";
 	readonly id: string;
 	readonly name: string;
+}
+
+export function ExportRequest(value: unknown, strict = false): value is ExportRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (!("content" in value)) return false;
+	if (value["content"] !== undefined && !(typeof value["content"] === "string")) {
+		return false;
+	}
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["content", "file"])) return false;
+	return true;
+}
+
+export function ExportResult(value: unknown, strict = false): value is ExportResult {
+	if (!isRecord(value)) return false;
+	if (!("bytes_written" in value)) return false;
+	if (!("name" in value)) return false;
+	if (value["bytes_written"] !== undefined && !(isSafeInteger(value["bytes_written"]))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["bytes_written", "name"])) return false;
+	return true;
+}
+
+export function FetchRequest(value: unknown, strict = false): value is FetchRequest {
+	if (!isRecord(value)) return false;
+	if (!("url" in value)) return false;
+	if (value["auth_config"] !== undefined && !(typeof value["auth_config"] === "string")) {
+		return false;
+	}
+	if (value["body"] !== undefined && !(typeof value["body"] === "string")) {
+		return false;
+	}
+	if (value["headers"] !== undefined && !((Array.isArray(value["headers"]) && value["headers"].every((item) => HttpHeader(item, strict))))) {
+		return false;
+	}
+	if (value["method"] !== undefined && !((value["method"] === "GET" || value["method"] === "HEAD" || value["method"] === "POST" || value["method"] === "PUT" || value["method"] === "PATCH" || value["method"] === "DELETE" || value["method"] === "OPTIONS"))) {
+		return false;
+	}
+	if (value["timeout_seconds"] !== undefined && !((typeof value["timeout_seconds"] === "number" && Number.isFinite(value["timeout_seconds"]) && value["timeout_seconds"] >= 0.1 && value["timeout_seconds"] <= 300))) {
+		return false;
+	}
+	if (value["url"] !== undefined && !(typeof value["url"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["auth_config", "body", "headers", "method", "timeout_seconds", "url"])) return false;
+	return true;
+}
+
+export function FileRef(value: unknown, strict = false): value is FileRef {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (value["id"] !== undefined && !(typeof value["id"] === "string" && new RegExp("^(?:[a-f0-9]{16,64})$").test(value["id"]))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "file"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["operations"] !== undefined && !((Array.isArray(value["operations"]) && value["operations"].every((item) => (item === "read" || item === "write"))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["id", "kind", "name", "operations"])) return false;
+	return true;
+}
+
+export function HttpHeader(value: unknown, strict = false): value is HttpHeader {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("value" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["value"] !== undefined && !(typeof value["value"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name", "value"])) return false;
+	return true;
 }
 
 export function IdPage(value: unknown, strict = false): value is IdPage {
@@ -143,6 +306,36 @@ export function LayerRequest(value: unknown, strict = false): value is LayerRequ
 	return true;
 }
 
+export function NetworkFetchData(value: unknown, strict = false): value is NetworkFetchData {
+	if (!isRecord(value)) return false;
+	if (!("url" in value)) return false;
+	if (!("status_code" in value)) return false;
+	if (!("reason" in value)) return false;
+	if (!("headers" in value)) return false;
+	if (!("text" in value)) return false;
+	if (!("base64" in value)) return false;
+	if (value["base64"] !== undefined && !((typeof value["base64"] === "string" || value["base64"] === null))) {
+		return false;
+	}
+	if (value["headers"] !== undefined && !((Array.isArray(value["headers"]) && value["headers"].every((item) => HttpHeader(item, strict))))) {
+		return false;
+	}
+	if (value["reason"] !== undefined && !(typeof value["reason"] === "string")) {
+		return false;
+	}
+	if (value["status_code"] !== undefined && !(isSafeInteger(value["status_code"]))) {
+		return false;
+	}
+	if (value["text"] !== undefined && !((typeof value["text"] === "string" || value["text"] === null))) {
+		return false;
+	}
+	if (value["url"] !== undefined && !(typeof value["url"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["base64", "headers", "reason", "status_code", "text", "url"])) return false;
+	return true;
+}
+
 export function NotificationsInfoRequest(value: unknown, strict = false): value is NotificationsInfoRequest {
 	if (!isRecord(value)) return false;
 	if (!("message" in value)) return false;
@@ -150,6 +343,16 @@ export function NotificationsInfoRequest(value: unknown, strict = false): value 
 		return false;
 	}
 	if (strict && !hasOnly(value, ["message"])) return false;
+	return true;
+}
+
+export function OpenVectorRequest(value: unknown, strict = false): value is OpenVectorRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
 	return true;
 }
 
@@ -218,11 +421,28 @@ export function VectorLayerInfo(value: unknown, strict = false): value is Vector
 	return true;
 }
 
+/** One event of `network.fetch`, narrowed by its kind. */
+export type NetworkFetchEvent =
+	| { readonly kind: "data"; readonly payload: NetworkFetchData };
+
+export function NetworkFetchEvent(value: unknown, strict = false): value is NetworkFetchEvent {
+	if (!isRecord(value)) return false;
+	if (value.kind === "data") return NetworkFetchData(value.payload, strict);
+	return false;
+}
+
 /** Every operation this surface declares, as callable methods. */
 export interface HostOperations {
+	readonly files: {
+		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
+	};
 	readonly layers: {
 		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
 		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<LayerPage>;
+		readonly open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
+	};
+	readonly network: {
+		readonly fetch: (input: FetchRequest, handlers: HostStreamHandlers<NetworkFetchEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
 	};
 	readonly notifications: {
 		readonly info: (input: NotificationsInfoRequest, options?: HostInvokeOptions) => Promise<null>;
@@ -240,6 +460,14 @@ export interface HostOperations {
 
 export function createHost(client: HostClientLike): HostOperations {
 	return {
+		files: {
+			export: (input: ExportRequest, options?: HostInvokeOptions) =>
+				call<ExportResult>(
+					client, "files.export", input, options,
+					ExportRequest,
+					ExportResult,
+				),
+		},
 		layers: {
 			get: (input: LayerRequest, options?: HostInvokeOptions) =>
 				call<VectorLayerInfo>(
@@ -252,6 +480,20 @@ export function createHost(client: HostClientLike): HostOperations {
 					client, "layers.list", input, options,
 					PageRequest,
 					LayerPage,
+				),
+			open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) =>
+				call<VectorLayerInfo>(
+					client, "layers.open_vector", input, options,
+					OpenVectorRequest,
+					VectorLayerInfo,
+				),
+		},
+		network: {
+			fetch: (input: FetchRequest, handlers: HostStreamHandlers<NetworkFetchEvent>, options?: HostInvokeOptions) =>
+				open<NetworkFetchEvent>(
+					client, "network.fetch", input, handlers, options,
+					FetchRequest,
+					NetworkFetchEvent,
 				),
 		},
 		notifications: {
@@ -309,4 +551,60 @@ async function call<T>(
 		throw new HostContractError(operation, "the response does not match the declared result");
 	}
 	return value as T;
+}
+
+async function open<E extends { readonly kind: string }>(
+	client: HostClientLike,
+	operation: string,
+	input: unknown,
+	handlers: HostStreamHandlers<E>,
+	options: HostInvokeOptions | undefined,
+	acceptInput: (value: unknown, strict?: boolean) => boolean,
+	acceptEvent: (value: unknown) => value is E,
+): Promise<HostStreamHandle> {
+	if (!acceptInput(input, true)) {
+		throw new HostContractError(operation, "the arguments do not match the declared request");
+	}
+	// The typed stream ends exactly once, like the subscription under it: a
+	// contract violation ends it here, closes the subscription, and the
+	// `disposed` the client then reports is not delivered a second time.
+	let ended = false;
+	let violated = false;
+	let handle: HostStreamHandle | null = null;
+	const end = (terminal: HostStreamTerminal): void => {
+		if (ended) return;
+		ended = true;
+		handlers.onTerminal?.(terminal);
+	};
+	handle = await client.subscribe(
+		operation,
+		input as Readonly<Record<string, unknown>>,
+		{
+			onEvent: (event) => {
+				if (ended) return;
+				if (acceptEvent(event)) {
+					handlers.onEvent?.(event);
+					return;
+				}
+				end({
+					kind: "error",
+					message: new HostContractError(
+						operation,
+						"an event does not match the declared events",
+					).message,
+				});
+				if (handle === null) {
+					violated = true;
+				} else {
+					handle.close();
+				}
+			},
+			onTerminal: end,
+		},
+		options,
+	);
+	if (violated) {
+		handle.close();
+	}
+	return handle;
 }

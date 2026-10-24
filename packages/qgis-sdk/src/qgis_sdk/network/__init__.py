@@ -6,6 +6,7 @@ is importable and testable without Qt.
 """
 
 from .client import BlockingNetworkClient, NetworkClient, NetworkDefaults, build_request
+from .grants import NetworkGrant, origin_of
 from .ogc import CollectionInfo, FeaturesPage, OgcApiFeatures
 
 __all__ = [
@@ -14,6 +15,8 @@ __all__ = [
     "FeaturesPage",
     "NetworkClient",
     "NetworkDefaults",
+    "NetworkGrant",
     "OgcApiFeatures",
     "build_request",
+    "origin_of",
 ]

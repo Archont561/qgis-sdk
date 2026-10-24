@@ -1,6 +1,7 @@
 import { expect, test } from "@archont561/bun-test-utils";
 import {
 	createHost,
+	type FileRef,
 	HOST_FINGERPRINT,
 	HOST_ID,
 	HOST_OPERATIONS,
@@ -8,6 +9,9 @@ import {
 	type HostClientLike,
 	HostContractError,
 	type HostInvokeOptions,
+	type HostStreamHandle,
+	type HostStreamTerminal,
+	type NetworkFetchEvent,
 	PageRequest,
 	type VectorLayerInfo,
 } from "@/host";
@@ -18,10 +22,27 @@ type Sent = {
 	readonly options: HostInvokeOptions | undefined;
 };
 
-function scripted(reply: unknown): { client: HostClientLike; sent: Sent[] } {
+type Scripted = {
+	readonly client: HostClientLike;
+	readonly sent: Sent[];
+	readonly emit: (event: { kind: string; payload: unknown }) => void;
+	readonly end: (terminal: HostStreamTerminal) => void;
+	readonly closed: () => number;
+};
+
+function scripted(reply: unknown): Scripted {
 	const sent: Sent[] = [];
+	let handlers: Parameters<HostClientLike["subscribe"]>[2];
+	let closed = 0;
 	return {
 		sent,
+		closed: () => closed,
+		emit: (event) => {
+			handlers?.onEvent?.(event as never);
+		},
+		end: (terminal) => {
+			handlers?.onTerminal?.(terminal);
+		},
 		client: {
 			invoke: (
 				operation: string,
@@ -30,6 +51,21 @@ function scripted(reply: unknown): { client: HostClientLike; sent: Sent[] } {
 			) => {
 				sent.push({ operation, payload, options });
 				return Promise.resolve(reply);
+			},
+			subscribe: (operation, payload, given, options) => {
+				sent.push({ operation, payload, options });
+				handlers = given;
+				const handle: HostStreamHandle = {
+					id: "s1",
+					get closed() {
+						return closed > 0;
+					},
+					close: () => {
+						closed += 1;
+						given?.onTerminal?.({ kind: "disposed" });
+					},
+				};
+				return Promise.resolve(handle);
 			},
 		},
 	};
@@ -50,8 +86,11 @@ test("the host module names its surface and advertises its version", () => {
 	expect(HOST_SCHEMA_VERSION).toBe(1);
 	expect(HOST_FINGERPRINT.startsWith("sha256:")).toBe(true);
 	expect(HOST_OPERATIONS).toEqual([
+		"files.export",
 		"layers.get",
 		"layers.list",
+		"layers.open_vector",
+		"network.fetch",
 		"notifications.info",
 		"project.layer_ids",
 		"settings.get",
@@ -161,4 +200,127 @@ test("the generated PageRequest refuses a cursor the host did not issue", () => 
 	for (const cursor of ["abc", "-1", "1 ", "", "12a"]) {
 		expect(PageRequest({ cursor }, true)).toBe(false);
 	}
+});
+
+// -- scoped authority: file refs and the fetch stream (TASK-20) -------------
+
+const picked: FileRef = {
+	kind: "file",
+	id: "0123456789abcdef0123456789abcdef",
+	name: "sites.geojson",
+	operations: ["read"],
+};
+
+test("an open takes a host-minted file ref and never a path", async () => {
+	const { client, sent } = scripted(sites);
+	const opened = await createHost(client).layers.open_vector({ file: picked });
+	expect(opened.id).toBe("sites");
+	expect(sent[0]?.operation).toBe("layers.open_vector");
+	expect(sent[0]?.payload).toEqual({ file: picked });
+
+	const { client: pathClient, sent: pathSent } = scripted(sites);
+	const failing = createHost(pathClient).layers.open_vector({
+		file: "/home/me/sites.geojson",
+	} as never);
+	await expect(failing).rejects.toThrow(HostContractError);
+	const otherKind = createHost(pathClient).layers.open_vector({
+		file: { kind: "layer", id: picked.id },
+	} as never);
+	await expect(otherKind).rejects.toThrow(HostContractError);
+	const noId = createHost(pathClient).layers.open_vector({
+		file: { kind: "file", id: "not hex" },
+	} as never);
+	await expect(noId).rejects.toThrow(HostContractError);
+	expect(pathSent.length).toBe(0);
+});
+
+test("an export sends the ref and the text and reads back the size", async () => {
+	const { client, sent } = scripted({ bytes_written: 4, name: "out.csv" });
+	const result = await createHost(client).files.export({
+		file: { ...picked, name: "out.csv", operations: ["write"] },
+		content: "a,b\n",
+	});
+	expect(result.bytes_written).toBe(4);
+	expect(sent[0]?.operation).toBe("files.export");
+
+	const { client: wrong } = scripted({ bytes_written: "4" });
+	await expect(
+		createHost(wrong).files.export({ file: picked, content: "x" }),
+	).rejects.toThrow(HostContractError);
+});
+
+test("a fetch is a stream that delivers one typed response and ends", async () => {
+	const scripted_ = scripted(null);
+	const events: NetworkFetchEvent[] = [];
+	const ends: HostStreamTerminal[] = [];
+	const handle = await createHost(scripted_.client).network.fetch(
+		{
+			url: "https://api.example.org/collections",
+			headers: [{ name: "Accept", value: "application/json" }],
+		},
+		{
+			onEvent: (event) => {
+				events.push(event);
+			},
+			onTerminal: (terminal) => {
+				ends.push(terminal);
+			},
+		},
+	);
+	expect(scripted_.sent[0]?.operation).toBe("network.fetch");
+	const response = {
+		url: "https://api.example.org/collections",
+		status_code: 200,
+		reason: "OK",
+		headers: [{ name: "Content-Type", value: "application/json" }],
+		text: "{}",
+		base64: null,
+	};
+	scripted_.emit({ kind: "data", payload: response });
+	scripted_.end({ kind: "complete" });
+	expect(events).toEqual([{ kind: "data", payload: response }]);
+	expect(ends).toEqual([{ kind: "complete" }]);
+	expect(handle.closed).toBe(false);
+});
+
+test("a fetch request outside the declaration never reaches the host", async () => {
+	const scripted_ = scripted(null);
+	const host = createHost(scripted_.client);
+	await expect(
+		host.network.fetch(
+			{ url: "https://a.example.org", method: "FETCH" } as never,
+			{},
+		),
+	).rejects.toThrow(HostContractError);
+	await expect(
+		host.network.fetch(
+			{ url: "https://a.example.org", timeout_seconds: 0 },
+			{},
+		),
+	).rejects.toThrow(HostContractError);
+	await expect(
+		host.network.fetch(
+			{ url: "https://a.example.org", headers: ["Accept: x"] } as never,
+			{},
+		),
+	).rejects.toThrow(HostContractError);
+	expect(scripted_.sent.length).toBe(0);
+});
+
+test("a response the host should not have produced ends the fetch as an error", async () => {
+	const scripted_ = scripted(null);
+	const ends: HostStreamTerminal[] = [];
+	await createHost(scripted_.client).network.fetch(
+		{ url: "https://api.example.org/x" },
+		{
+			onTerminal: (terminal) => {
+				ends.push(terminal);
+			},
+		},
+	);
+	scripted_.emit({ kind: "data", payload: { status_code: "200" } });
+	expect(ends.length).toBe(1);
+	expect(ends[0]?.kind).toBe("error");
+	expect(ends[0]?.message).toContain("network.fetch");
+	expect(scripted_.closed()).toBe(1);
 });
