@@ -11,28 +11,30 @@ updated_date: '2026-10-16 12:03'
 
 ## Version policy
 
-Milestones use valid major.minor.patch targets. Experimental 0.x breaking changes get a documented minor release; patches are compatible fixes. Use prereleases such as 0.3.0-alpha.1/0.3.0-beta.1. Stable 1.0.0 requires a later explicit API-stability decision. The Python SDK and the TypeScript bridge share **one** package version: both manifests are stamped together and `release.py verify-versions` refuses a workspace where they disagree ([decision-24](../../decisions/decision-24%20-%20Release-the-Python-SDK-and-TypeScript-bridge-at-one-shared-version.md)). Within a milestone, feature and fix work bumps only the patch; the minor advances on a breaking change or when a milestone closes by an explicit `--bump minor`/`--version-override`. Wire protocol versions (`PluginDescription.schema_version`, the bridge contract) remain independent of package versions, and a scoped `python-v*`/`ts-v*` tag only narrows which registry is published. Existing unreleased 0.1.0 metadata is not proof of a published usable release. The 0.6.0 reservation is tentative deferred research and requires renewed approval, not a Rust-shipping commitment.
+Milestones use valid major.minor.patch targets. Experimental 0.x breaking changes get a documented minor release; patches are compatible fixes. Use prereleases such as 0.3.0-alpha.1/0.3.0-beta.1. Stable 1.0.0 requires a later explicit API-stability decision.
+
+`qgis-sdk` and `@archont561/qgis-sdk-bridge` **version independently** ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)). Each package derives its own version from the conventional commits that touch it, starting from its own last release tag; `python-v*` stamps `pyproject.toml` and `recipe.yaml`, `ts-v*` stamps the bridge `package.json`, and `v*` is a deliberate alignment release that stamps all three. What holds a pair together is the plugin-description **contract version** (`PLUGIN_DESCRIPTION_SCHEMA_VERSION`), declared once per language and checked by `release.py verify-versions` on every release; wire protocol versions stay independent of package versions. Within a milestone, feature and fix work bumps only the patch; the minor advances on a breaking change or when a milestone closes by an explicit `--bump minor`/`--version-override`, **per package**. Existing unreleased 0.1.0 metadata is not proof of a published usable release. The 0.6.0 reservation is tentative deferred research and requires renewed approval, not a Rust-shipping commitment.
 
 ## Milestones and release tasks
 
-| Version | Milestone | Python deliverable (`qgis-sdk`) | Bridge deliverable (`@archont561/qgis-sdk-bridge`) | Release gate |
-| --- | --- | --- | --- | --- |
-| 0.1.0 | [m-0](../../milestones/m-0%20-%200.1.0-%E2%80%94-architecture-and-qualification-spikes.md) | Contracts, declarations, scheduler spikes | Wire primitives: description parsing, safe integers, error hierarchy | [TASK-27](../../tasks/task-27%20-%20Prepare-and-qualify-0.1.0-release.md) |
-| 0.2.0 | [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md) | Native runtime, Processing algorithms, UI dispatch, HTTP, jobs | **None** — source unchanged since 0.1.1; alignment release | [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md) |
-| 0.3.0 | [m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-and-web-ui.md) | Transport host side, per-view authority, generated fixtures | **Source change**: transport contract, generated clients, React helpers, resource authority | [TASK-29](../../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md) |
-| 0.4.0 | [m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md) | Scaffolds, check/test/dev/build, ZIP packaging | **None** — new consumers (generated projects), not new surface | [TASK-30](../../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md) |
-| 0.5.0 | [m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) | Qualified reference workflow and compatibility gates | **Qualified as a pair**; source change only for defects found | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) |
-| 0.6.0 | [m-5](../../milestones/m-5%20-%200.6.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) | Tentative deferred research only | None planned; no release unless revived | [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md) |
+| Milestone | Python version (`qgis-sdk`) | Python deliverable | Bridge version (`@archont561/qgis-sdk-bridge`) | Bridge deliverable | Release gate |
+| --- | --- | --- | --- | --- | --- |
+| 0.1.0 [m-0](../../milestones/m-0%20-%200.1.0-%E2%80%94-architecture-and-qualification-spikes.md) | 0.1.0 → 0.1.1, published | Contracts, declarations, scheduler spikes | 0.1.0 → 0.1.1, published | Wire primitives: description parsing, safe integers, error hierarchy | [TASK-27](../../tasks/task-27%20-%20Prepare-and-qualify-0.1.0-release.md) |
+| 0.2.0 [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md) | **0.2.0** | Native runtime, Processing algorithms, UI dispatch, HTTP, jobs | **stays at 0.1.1 — not released** | No source change; no npm version consumed | [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md) |
+| 0.3.0 [m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-and-web-ui.md) | **0.3.0** | Transport host side, per-view authority, generated fixtures | **0.2.0** | Transport contract, generated clients, React helpers, resource authority | [TASK-29](../../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md) |
+| 0.4.0 [m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md) | **0.4.0** | Scaffolds, check/test/dev/build, ZIP packaging | **unchanged (0.2.x)** | New consumers (generated projects), not new surface | [TASK-30](../../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md) |
+| 0.5.0 [m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) | **0.5.0** | Qualified reference workflow and compatibility gates | **unchanged unless a defect is found** | Qualified as a pair through a real WebEngine view | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) |
+| 0.6.0 [m-5](../../milestones/m-5%20-%200.6.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) | tentative | Deferred research only | no release | None planned; nothing published unless revived | [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md) |
 
 ## Bridge across milestones
 
-Both artifacts are published at one shared version ([decision-24](../../decisions/decision-24%20-%20Release-the-Python-SDK-and-TypeScript-bridge-at-one-shared-version.md)), so every milestone releases the bridge whether or not it changes it. Each milestone file therefore states its bridge delta under a **Bridge track** heading, in one of three states:
+The two artifacts are published independently, so each milestone states a version for each one under its **Bridge track** heading. There are three states:
 
-- **Source change** — only 0.3.0 ([m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-and-web-ui.md)): TASK-4, TASK-17, TASK-18 and TASK-20 own the transport, generated clients, React helpers and resource authority.
-- **New consumers** — 0.4.0 ([m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md)): generated vanilla and React projects pin the published bridge, and the plugin ZIP ships its bundle; the surface itself should not move.
-- **Alignment release** — 0.2.0 ([m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)) and, absent defects, 0.5.0 ([m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md)): the package is stamped, built, packed and published unchanged.
+- **Released with its own version** — 0.3.0 ([m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-and-web-ui.md)) is the only milestone that changes bridge source, and it releases the bridge at **0.2.0** (a minor set explicitly at the close) while Python ships 0.3.0. The numbers differ because the histories differ, which is the point of [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md).
+- **Not released** — 0.2.0 ([m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)) touches no bridge source, so it publishes no bridge version at all and `package.json` keeps 0.1.1. No npm version is consumed.
+- **Released only for a fix** — 0.4.0 ([m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md)) adds consumers but not surface, and 0.5.0 ([m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md)) adds qualification. A bridge release in either one is a patch that exists because something broke.
 
-An alignment release is a release, not a skip: the gate still builds the bridge, verifies the shared version across `pyproject.toml`, `recipe.yaml` and `packages/qgis-sdk-bridge/package.json`, packs the tarball and checks licenses. The npm changelog entry for such a release says the surface is unchanged and names the last version that changed it. A bridge change that appears without a milestone claiming it is a planning defect, not a detail.
+What holds a pair together is the contract version, not a shared number. `release.py verify-versions` checks `PLUGIN_DESCRIPTION_SCHEMA_VERSION` across the Python declarations and the bridge index on every release, in every scope, and it refuses a workspace where the two disagree. A change to a serialized shape is therefore either additive (no contract bump) or bumps the contract in the change set that ships both packages. `v*` remains available as a deliberate alignment release when re-coupling the numbers is the clearest statement; it is not the default.
 
 ## Execution and evidence
 
@@ -53,7 +55,7 @@ Every implementation task includes focused tests; fixture integration is not per
 
 ### 0.2.0
 
-No task in this milestone changes `packages/qgis-sdk-bridge`; the release is an alignment release (see [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)).
+No task in this milestone changes `packages/qgis-sdk-bridge`, so the 0.2.0 release publishes only the Python package and the bridge stays at 0.1.1 (see [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)).
 
 - [TASK-1](../../tasks/task-1%20-%20Scaffold-a-QGIS-plugin-project-from-the-CLI.md): Scaffold a QGIS plugin project from the CLI
 - [TASK-3](../../tasks/task-3%20-%20Render-schema-driven-native-UI-and-dispatch-Python-handlers.md): Render schema-driven native UI and dispatch Python handlers
@@ -67,7 +69,7 @@ No task in this milestone changes `packages/qgis-sdk-bridge`; the release is an 
 
 ### 0.3.0
 
-The only milestone that changes bridge source. The remaining tasks are the Python-side contract and fixture work they depend on.
+The only milestone that changes bridge source, and the only one that releases the bridge on its own version (0.2.0). The remaining tasks are the Python-side contract and fixture work they depend on.
 
 - [TASK-4](../../tasks/task-4%20-%20Add-the-versioned-WebEngine-bridge-contract.md): Add the versioned WebEngine bridge contract — **bridge source**
 - [TASK-7](../../tasks/task-7%20-%20Add-layered-pytest-support-and-BDD-fixtures.md): Add layered pytest support and BDD fixtures
@@ -78,7 +80,7 @@ The only milestone that changes bridge source. The remaining tasks are the Pytho
 
 ### 0.4.0
 
-The bridge is consumed here (generated projects, packaged bundle) but should not change; a required change means an m-2 contract gap, and is recorded as such.
+The bridge is consumed here (generated projects, packaged bundle) but should not change; a required change is a patch release of the bridge at its own version, and means an m-2 contract gap.
 
 - [TASK-6](../../tasks/task-6%20-%20Implement-QGIS-Desktop-and-standalone-development-modes.md): Implement QGIS Desktop and standalone development modes
 - [TASK-8](../../tasks/task-8%20-%20Build-a-validated-QGIS-installable-plugin-ZIP.md): Build a validated QGIS-installable plugin ZIP

@@ -4,7 +4,7 @@ title: 'Epic: v2 (0.2.0) native runtime and Processing algorithms'
 status: To Do
 assignee: []
 created_date: '2026-10-24 14:14'
-updated_date: '2026-10-24 16:12'
+updated_date: '2026-10-24 16:30'
 labels: []
 milestone: m-1
 dependencies:
@@ -37,13 +37,13 @@ Sprint train (detail and rationale in doc-9):
 2. Sprint 2 - TASK-14 classified Processing algorithms with non-destructive outputs, plus TASK-3 schema-driven native UI, both consuming the TASK-25 contracts and both depending on TASK-25.
 3. Sprint 3 - whatever remains of TASK-5 and TASK-15, then the TASK-28 release gate, which depends on all five.
 
-Pairing: m-1 releases two artifacts at one shared version
-([decision-24](../decisions/decision-24%20-%20Release-the-Python-SDK-and-TypeScript-bridge-at-one-shared-version.md)).
-All five of this epic's features are Python-side, so 0.2.0 ships
-`@archont561/qgis-sdk-bridge` with unchanged source; the m-1 "Bridge track"
-section states that, and TASK-28 verifies the unchanged package instead of
-skipping it. The typed bridge surface belongs to m-2 (TASK-4, TASK-17,
-TASK-18, TASK-20).
+Pairing: 0.2.0 releases the Python package only. The bridge has no source
+change in m-1, so it is not published and stays at 0.1.1
+([decision-25](../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
+what the release still proves is that the plugin-description contract version
+agrees across both languages. The typed bridge surface belongs to m-2 (TASK-4,
+TASK-17, TASK-18, TASK-20), and that milestone releases the bridge at its own
+0.2.0.
 
 Evidence rule for every increment: pure tests plus a real QGIS 4.2.3 host test where the task criteria require native behaviour. The Linux sandbox is headless, so no increment in this epic may claim Desktop GUI, canvas or WebEngine rendering evidence; those targets stay with TASK-33.
 <!-- SECTION:DESCRIPTION:END -->
@@ -52,6 +52,6 @@ Evidence rule for every increment: pure tests plus a real QGIS 4.2.3 host test w
 <!-- AC:BEGIN -->
 - [ ] #1 Every remaining m-1 feature task (TASK-25, TASK-14, TASK-3, TASK-15, TASK-5) is closed with its own recorded evidence, including a real QGIS 4.2.3 host test wherever its criteria require native behaviour.
 - [ ] #2 TASK-25 lands before TASK-14 and TASK-3 are started, so neither dependency-blocked feature is opened against services that do not exist yet.
-- [ ] #3 The 0.2.0 release gate (TASK-28) is evaluated only after all five children are closed, and records actual artifacts, checks and explicit publishing approval — including the unchanged bridge artifact, built, packed and stamped at the shared version.
+- [ ] #3 The 0.2.0 release gate (TASK-28) is evaluated only after all five children are closed, and records actual artifacts, checks and explicit publishing approval — including the contract version agreeing across both languages, with no bridge version published.
 - [ ] #4 Unavailable targets stay explicit blockers rather than implied support: no Desktop GUI, Windows or macOS qualification is claimed from this epic (TASK-33 owns those).
 <!-- AC:END -->

@@ -5,6 +5,13 @@ name: release
 # scope (v*, <scope>-v*, <scope>/v*), publishes a GitHub Release with
 # SHA256SUMS, and hands the artifacts to the registries.
 #
+# The two packages version independently (decision-25): `python-v*` stamps only
+# pyproject.toml and the conda recipe, `ts-v*` stamps only the bridge
+# package.json, and `v*` is an alignment release that stamps both at one
+# version. What ties a pair together is the plugin-description contract version,
+# which `release-verify-versions` checks across the Python declarations and the
+# bridge index on every release.
+#
 # Registry publishing runs under the OIDC trusted-publishing bindings the
 # repository owner provisioned: PyPI project `qgis-sdk` accepts tokens from
 # this workflow file (release.yml) under GitHub environment `pypi`, and npm
@@ -87,13 +94,17 @@ jobs:
         if: steps.classify.outputs.typescript == 'true'
         run: pixi run -e bun install-js
 
-      - name: Stamp release versions
+      - name: Stamp the released package
         run: >-
           pixi run -e build release-stamp
           --version "${{ steps.classify.outputs.version }}"
+          --scope "${{ steps.classify.outputs.scope }}"
 
-      - name: Verify the manifests share one version
-        run: pixi run -e build release-verify-versions
+      - name: Verify the stamped manifests and the shared contract
+        run: >-
+          pixi run -e build release-verify-versions
+          --scope "${{ steps.classify.outputs.scope }}"
+          --version "${{ steps.classify.outputs.version }}"
 
       - name: Build and check the Python wheel
         if: steps.classify.outputs.python == 'true'

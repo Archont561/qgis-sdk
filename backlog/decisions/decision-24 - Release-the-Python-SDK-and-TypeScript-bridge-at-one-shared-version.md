@@ -75,3 +75,18 @@ and the changelog entry must say so.
   `.versionrc` and manifest agreement.
 - Reversing this later is a policy change, not a config tweak: it would need a
   new decision, because doc-4, TASK-28 and the release workflow all cite this one.
+
+## Superseded 2026-10-24
+
+This decision was replaced the same day it was implemented, before any release
+shipped under it. [decision-25](decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)
+keeps the bump policy - patches inside a milestone, an explicit minor at the
+close - and drops the shared number: each package versions independently, and a
+shared plugin-description contract version is what holds a pair together.
+
+The reason is the cost listed below: a shared number forced npm releases whose
+tarball was identical to the previous one, and made every release gate verify an
+artifact nobody had changed. decision-25's Context records the measurement.
+
+Read decision-25 for current policy. This file stays as the record of how the
+workspace arrived there, including the costs that motivated the switch.

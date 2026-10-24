@@ -36,6 +36,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PYPROJECT = _REPO_ROOT / "packages/qgis-sdk/pyproject.toml"
 _RECIPE = _REPO_ROOT / "packages/qgis-sdk/recipe.yaml"
 _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-bridge/package.json"
+_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk/src/qgis_sdk/declarations.py"
+_TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-bridge/src/index.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 
 __all__ = [
@@ -124,12 +126,27 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
 
 
 LOG_FORMAT = "%H%x1f%s%x1f%b%x1e"
+# Same record shape, but each commit is followed by its changed paths. ``\x1d``
+# terminates the metadata so a multi-line body cannot be confused with the file
+# list that ``--name-only`` appends.
+FILES_LOG_FORMAT = "%x1e%H%x1f%s%x1f%b%x1d"
 
 
 def log_commits(revision_range: str | None = None, runner: Runner | None = None) -> str:
     """Return raw ``git log`` output in the tool's record format."""
     run = runner or _default_runner
     command = ["git", "log", f"--format={LOG_FORMAT}", "--reverse"]
+    if revision_range:
+        command.append(revision_range)
+    return run(command)
+
+
+def log_commits_with_files(
+    revision_range: str | None = None, runner: Runner | None = None
+) -> str:
+    """Return ``git log`` output that also lists each commit's changed paths."""
+    run = runner or _default_runner
+    command = ["git", "log", f"--format={FILES_LOG_FORMAT}", "--name-only", "--reverse"]
     if revision_range:
         command.append(revision_range)
     return run(command)
@@ -177,11 +194,17 @@ LOG_FIELD_COUNT = 3
 
 @dataclass(frozen=True)
 class Commit:
-    """One parsed commit from the release range."""
+    """One parsed commit from the release range.
+
+    ``files`` is empty when the log was read without ``--name-only``; an unknown
+    file list is treated as "affects every scope" rather than as "affects none",
+    so a caller cannot silently lose a commit by omitting it.
+    """
 
     sha: str
     subject: str
     body: str
+    files: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -206,6 +229,67 @@ def parse_log(raw: str) -> tuple[Commit, ...]:
             raise QgisSdkReleaseError(f"malformed git log record: {record!r}")
         commits.append(Commit(sha=parts[0].strip(), subject=parts[1], body=parts[2]))
     return tuple(commits)
+
+
+def parse_log_with_files(raw: str) -> tuple[Commit, ...]:
+    """Parse ``git log --format=$FILES_LOG_FORMAT --name-only`` output."""
+    commits: list[Commit] = []
+    for chunk in raw.split("\x1e"):
+        record = chunk.strip("\n")
+        if not record.strip():
+            continue
+        meta, separator, file_block = record.partition("\x1d")
+        parts = meta.split("\x1f")
+        if not separator or len(parts) != LOG_FIELD_COUNT:
+            raise QgisSdkReleaseError(f"malformed git log record: {record!r}")
+        files = tuple(line.strip() for line in file_block.splitlines() if line.strip())
+        commits.append(
+            Commit(
+                sha=parts[0].strip(),
+                subject=parts[1],
+                body=parts[2].rstrip("\n"),
+                files=files,
+            )
+        )
+    return tuple(commits)
+
+
+_PYTHON_PREFIX = "packages/qgis-sdk/"
+_TYPESCRIPT_PREFIX = "packages/qgis-sdk-bridge/"
+
+
+def commit_packages(commit: Commit) -> tuple[bool, bool]:
+    """Return ``(touches_python, touches_typescript)`` for one commit.
+
+    Only the package directories count. Repository-wide files (CI, pixi.toml,
+    the release tool, docs) change how a package is built or released but not
+    what the package contains, so they must not be able to trigger a release on
+    their own - that is what made a `feat!` in the release tool look like an npm
+    minor.
+    """
+    if not commit.files:
+        return True, True
+    return (
+        any(path.startswith(_PYTHON_PREFIX) for path in commit.files),
+        any(path.startswith(_TYPESCRIPT_PREFIX) for path in commit.files),
+    )
+
+
+def commits_for_scope(commits: Iterable[Commit], scope: str) -> tuple[Commit, ...]:
+    """Keep the commits that can move the given scope's version."""
+    wanted = normalize_scope(scope)
+    kept: list[Commit] = []
+    for commit in commits:
+        python, typescript = commit_packages(commit)
+        if wanted == "all":
+            relevant = python or typescript
+        elif wanted == "python":
+            relevant = python
+        else:
+            relevant = typescript
+        if relevant:
+            kept.append(commit)
+    return tuple(kept)
 
 
 def classify(commit: Commit, config: VersionConfig) -> Classification:
@@ -588,14 +672,23 @@ def render_changelog(
 _RANK = {"patch": 0, "minor": 1, "major": 2}
 
 
-def sort_tags(tags: Iterable[str]) -> tuple[str, ...]:
-    """Sort v-prefixed SemVer tags newest first; unknown tags are ignored."""
+def sort_tags(tags: Iterable[str], scope: str = "all") -> tuple[str, ...]:
+    """Sort release tags newest first, optionally for one scope only.
+
+    A scoped sort keeps every tag that shipped the requested package: an
+    unscoped ``v*`` tag releases both, while ``python-v*``/``ts-v*`` release one
+    side. That is what makes each package's base tag its own.
+    """
+    wanted = normalize_scope(scope)
     known: list[tuple[tuple, str]] = []
     for tag in tags:
         try:
-            known.append((version_from_tag(tag).sort_key(), tag))
+            tag_scope, version = parse_release_tag(tag)
         except QgisSdkReleaseVersionError:
             continue
+        if wanted != "all" and tag_scope not in ("all", wanted):
+            continue
+        known.append((version.sort_key(), tag))
     known.sort(key=lambda item: item[0], reverse=True)
     return tuple(tag for _, tag in known)
 
@@ -672,7 +765,13 @@ def compute_plan(
     milestone_info = parse_milestone_tag(milestone_tag) if milestone_tag else None
     if milestone_tag and milestone_info is None:
         raise QgisSdkReleaseVersionError(f"not a milestone tag: {milestone_tag!r}")
-    ordered = sort_tags(tags)
+    if scope.strip() and scope.strip().lower() not in ("all", "none"):
+        resolved_scope = normalize_scope(scope)
+    elif milestone_info is not None:
+        resolved_scope = milestone_info[0]
+    else:
+        resolved_scope = "all"
+    ordered = sort_tags(tags, resolved_scope)
     base_tag = ordered[0] if ordered else None
     first = base_tag is None
     stable_exists = any(not version_from_tag(tag).is_prerelease for tag in ordered)
@@ -689,12 +788,10 @@ def compute_plan(
             "",
             scope="none",
         )
-    if scope.strip() and scope.strip().lower() != "all":
-        resolved_scope = normalize_scope(scope)
-    elif milestone_info is not None:
-        resolved_scope = milestone_info[0]
-    else:
-        resolved_scope = "all"
+    # Each package only owes a version for the commits that touch it (or the
+    # repository-wide files both depend on). Decisions are per package, so a
+    # bridge-only change cannot move the Python minor and vice versa.
+    scoped_commits = commits_for_scope(commits, resolved_scope)
 
     if version_override:
         version = Version.parse(version_override)
@@ -706,7 +803,7 @@ def compute_plan(
         version = config.initial_bump_version
     else:
         base = version_from_tag(base_tag)
-        version = _bump_from(base, commits, config)
+        version = _bump_from(base, scoped_commits, config)
         if version is None:
             return Plan(
                 trigger,
@@ -760,7 +857,7 @@ def compute_plan(
     else:
         reason = f"release-worthy commits since {base_tag}"
     changelog = render_changelog(
-        version, commits, config, base_tag, repo_slug, scope=resolved_scope
+        version, scoped_commits, config, base_tag, repo_slug, scope=resolved_scope
     )
     return Plan(
         trigger,
@@ -927,19 +1024,13 @@ class ManifestVersions:
         return tuple(found)
 
     def agreed(self) -> Version:
-        """Return the shared version, or raise naming every disagreement.
+        """Return the version every manifest carries, or name the disagreement.
 
-        One version across the Python package, the conda recipe and the TypeScript
-        bridge is a release policy, not an accident of stamping: a consumer may
-        pair them, so a silent divergence is exactly what this refuses.
+        Manifests only have to agree *within* a release scope: ``pyproject.toml``
+        and ``recipe.yaml`` ship the Python package, ``package.json`` ships the
+        bridge, and the two packages version independently.
         """
-        versions = {version for _, version in self.items()}
-        if len(versions) > 1:
-            listed = ", ".join(f"{name}={version}" for name, version in self.items())
-            raise QgisSdkReleaseVersionError(
-                f"released manifests disagree: {listed}; one version is required"
-            )
-        return self.items()[0][1]
+        return require_one_version(self.items())
 
     def to_json(self) -> dict:
         """Serialize the versions for diagnostics."""
@@ -954,6 +1045,102 @@ def manifest_versions(
         pyproject=read_pyproject_version(pyproject_text),
         package_json=read_package_json_version(package_text),
         recipe=read_recipe_version(recipe_text) if recipe_text is not None else None,
+    )
+
+
+_PYTHON_MANIFESTS = ("pyproject.toml", "recipe.yaml")
+_TYPESCRIPT_MANIFESTS = ("package.json",)
+
+
+def scoped_manifest_versions(
+    versions: ManifestVersions, scope: str
+) -> tuple[tuple[str, Version], ...]:
+    """Return only the manifests a release scope is allowed to stamp.
+
+    The Python package owns ``pyproject.toml`` and the conda ``recipe.yaml``;
+    the bridge owns ``package.json``. An unscoped ``v*`` release owns all three,
+    which is what an alignment release is.
+    """
+    wanted = normalize_scope(scope)
+    if wanted == "all":
+        return versions.items()
+    allowed = _PYTHON_MANIFESTS if wanted == "python" else _TYPESCRIPT_MANIFESTS
+    return tuple(
+        (name, version) for name, version in versions.items() if name in allowed
+    )
+
+
+def require_one_version(items: Sequence[tuple[str, Version]]) -> Version:
+    """Return the one version ``items`` carries, or name every disagreement."""
+    if not items:
+        raise QgisSdkReleaseVersionError("no released manifest belongs to this scope")
+    versions = {version for _, version in items}
+    if len(versions) > 1:
+        listed = ", ".join(f"{name}={version}" for name, version in items)
+        raise QgisSdkReleaseVersionError(
+            f"released manifests disagree: {listed}; one version is required per scope"
+        )
+    return items[0][1]
+
+
+@dataclass(frozen=True)
+class ContractVersions:
+    """The plugin-description contract version each language declares.
+
+    Package versions are independent, so the pair is held together by this
+    number instead: the bridge mirrors the Python wire contract, and a release
+    that moves one side without the other must at least agree on what crosses
+    the boundary.
+    """
+
+    python: int
+    typescript: int
+
+    def agreed(self) -> int:
+        """Return the shared contract version, or refuse the pair."""
+        if self.python != self.typescript:
+            raise QgisSdkReleaseVersionError(
+                "plugin description contract versions disagree: "
+                f"python={self.python}, typescript={self.typescript}"
+            )
+        return self.python
+
+    def to_json(self) -> dict:
+        """Serialize the contract versions for diagnostics."""
+        return {"python": self.python, "typescript": self.typescript}
+
+
+_PY_CONTRACT_VERSION = re.compile(
+    r"(?m)^PLUGIN_DESCRIPTION_SCHEMA_VERSION\s*=\s*(\d+)\s*$"
+)
+_TS_CONTRACT_VERSION = re.compile(r"PLUGIN_DESCRIPTION_SCHEMA_VERSION[^=\n]*=\s*(\d+)")
+
+
+def read_python_contract_version(text: str) -> int:
+    """Read ``PLUGIN_DESCRIPTION_SCHEMA_VERSION`` from the Python declarations."""
+    match = _PY_CONTRACT_VERSION.search(text)
+    if match is None:
+        raise QgisSdkReleaseError(
+            "no PLUGIN_DESCRIPTION_SCHEMA_VERSION in the Python declarations"
+        )
+    return int(match.group(1))
+
+
+def read_typescript_contract_version(text: str) -> int:
+    """Read ``PLUGIN_DESCRIPTION_SCHEMA_VERSION`` from the bridge index."""
+    match = _TS_CONTRACT_VERSION.search(text)
+    if match is None:
+        raise QgisSdkReleaseError(
+            "no PLUGIN_DESCRIPTION_SCHEMA_VERSION in the bridge index"
+        )
+    return int(match.group(1))
+
+
+def contract_versions(python_text: str, typescript_text: str) -> ContractVersions:
+    """Read both declarations of the plugin description contract version."""
+    return ContractVersions(
+        python=read_python_contract_version(python_text),
+        typescript=read_typescript_contract_version(typescript_text),
     )
 
 
@@ -1105,24 +1292,34 @@ def _step_summary(line: str) -> None:
 def _cmd_plan(args: argparse.Namespace) -> int:
     config = parse_versionrc(Path(args.config).read_text(encoding="utf-8"))
     tags = list_tags()
-    ordered = sort_tags(tags)
+    requested_scope = (getattr(args, "scope", "") or "").strip()
+    milestone_tag = getattr(args, "milestone_tag", "") or ""
+    if requested_scope.lower() == "auto":
+        newest = sort_tags(tags)
+        auto_range = f"{newest[0]}..HEAD" if newest else None
+        requested_scope = detect_scope_from_files(list_changed_files(auto_range))
+    if requested_scope and requested_scope.lower() not in ("all", "none"):
+        plan_scope = normalize_scope(requested_scope)
+    elif milestone_tag:
+        milestone_info = parse_milestone_tag(milestone_tag)
+        plan_scope = milestone_info[0] if milestone_info is not None else "all"
+    else:
+        plan_scope = "all"
+    ordered = sort_tags(tags, plan_scope)
     base_tag = ordered[0] if ordered else None
     revision_range = f"{base_tag}..HEAD" if base_tag else None
-    raw = log_commits(revision_range)
-    requested_scope = getattr(args, "scope", "") or ""
-    if requested_scope.strip().lower() == "auto":
-        requested_scope = detect_scope_from_files(list_changed_files(revision_range))
+    commits = parse_log_with_files(log_commits_with_files(revision_range))
     dry_run_raw = str(getattr(args, "dry_run", "false")).strip().lower()
     dry_run = dry_run_raw in ("true", "1", "yes")
     plan = compute_plan(
         trigger=args.trigger,
         tags=tags,
-        commits=parse_log(raw),
+        commits=commits,
         config=config,
         suffix=args.suffix,
         version_override=args.version_override or None,
         repo_slug=os.environ.get("GITHUB_REPOSITORY"),
-        milestone_tag=getattr(args, "milestone_tag", "") or None,
+        milestone_tag=milestone_tag or None,
         scope=requested_scope or "all",
         bump=getattr(args, "bump", "") or "",
     )
@@ -1215,39 +1412,85 @@ def _cmd_tag(args: argparse.Namespace) -> int:
 
 def _cmd_stamp(args: argparse.Namespace) -> int:
     version = Version.parse(args.version)
-    pyproject_text = _PYPROJECT.read_text(encoding="utf-8")
-    _PYPROJECT.write_text(stamp_pyproject(pyproject_text, version), encoding="utf-8")
-    if _RECIPE.is_file():
-        recipe_text = _RECIPE.read_text(encoding="utf-8")
-        _RECIPE.write_text(stamp_recipe(recipe_text, version), encoding="utf-8")
-    package_text = _BRIDGE_PACKAGE.read_text(encoding="utf-8")
-    _BRIDGE_PACKAGE.write_text(
-        stamp_package_json(package_text, version), encoding="utf-8"
-    )
-    print(
-        f"stamped {version} into {_PYPROJECT}, {_RECIPE} "
-        f"(PEP 440: {version.to_pep440()}), and {_BRIDGE_PACKAGE}"
-    )
+    scope = normalize_scope(getattr(args, "scope", "all") or "all")
+    stamped: list[str] = []
+    if scope in ("all", "python"):
+        pyproject_text = _PYPROJECT.read_text(encoding="utf-8")
+        _PYPROJECT.write_text(
+            stamp_pyproject(pyproject_text, version), encoding="utf-8"
+        )
+        stamped.append(f"{_PYPROJECT} (PEP 440: {version.to_pep440()})")
+        if _RECIPE.is_file():
+            recipe_text = _RECIPE.read_text(encoding="utf-8")
+            _RECIPE.write_text(stamp_recipe(recipe_text, version), encoding="utf-8")
+            stamped.append(str(_RECIPE))
+    if scope in ("all", "typescript"):
+        package_text = _BRIDGE_PACKAGE.read_text(encoding="utf-8")
+        _BRIDGE_PACKAGE.write_text(
+            stamp_package_json(package_text, version), encoding="utf-8"
+        )
+        stamped.append(str(_BRIDGE_PACKAGE))
+    print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
     return 0
 
 
 def _cmd_verify_versions(args: argparse.Namespace) -> int:
+    scope_raw = (getattr(args, "scope", "") or "").strip()
+    expected_raw = (getattr(args, "version", "") or "").strip()
     recipe_text = _RECIPE.read_text(encoding="utf-8") if _RECIPE.is_file() else None
     versions = manifest_versions(
         _PYPROJECT.read_text(encoding="utf-8"),
         _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
         recipe_text,
     )
-    shared = versions.agreed()
+    contract = contract_versions(
+        _PY_DECLARATIONS.read_text(encoding="utf-8"),
+        _TS_INDEX.read_text(encoding="utf-8"),
+    )
+    shared_contract = contract.agreed()
+    wanted_scopes = (
+        (normalize_scope(scope_raw),) if scope_raw else ("python", "typescript")
+    )
+    expected = Version.parse(expected_raw) if expected_raw else None
+    if expected is not None and len(wanted_scopes) > 1:
+        raise QgisSdkReleaseVersionError(
+            "--version needs --scope: one release targets one package"
+        )
+    reported: dict[str, dict[str, object]] = {}
+    for scope in wanted_scopes:
+        scoped = scoped_manifest_versions(versions, scope)
+        version = require_one_version(scoped)
+        if expected is not None and version != expected:
+            listed = ", ".join(f"{name}={value}" for name, value in scoped)
+            raise QgisSdkReleaseVersionError(
+                f"scope {scope} is releasing {expected}, but its manifests carry "
+                f"{listed}; run stamp --scope {scope} --version {expected} first"
+            )
+        reported[scope] = {
+            "version": str(version),
+            "manifests": {name: str(value) for name, value in scoped},
+        }
     if getattr(args, "json", False):
         print(
             json.dumps(
-                {"version": str(shared), "manifests": versions.to_json()}, indent=2
+                {
+                    "scopes": reported,
+                    "contract": contract.to_json(),
+                },
+                indent=2,
             )
         )
         return 0
-    listed = ", ".join(name for name, _ in versions.items())
-    print(f"released manifests agree on {shared}: {listed}")
+    for scope in wanted_scopes:
+        entry = reported[scope]
+        listed = ", ".join(entry["manifests"])
+        print(
+            f"released manifests for scope {scope} agree on {entry['version']}: {listed}"
+        )
+    print(
+        f"plugin description contract version {shared_contract} agrees across "
+        "the Python declarations and the TypeScript bridge"
+    )
     return 0
 
 
@@ -1358,10 +1601,29 @@ def _build_parser() -> argparse.ArgumentParser:
 
     stamp = sub.add_parser("stamp", help="stamp versions into manifests")
     stamp.add_argument("--version", required=True)
+    stamp.add_argument(
+        "--scope",
+        default="all",
+        help="which package to stamp: all, python, or typescript",
+    )
     stamp.set_defaults(handler=_cmd_stamp)
 
     versions = sub.add_parser(
-        "verify-versions", help="require one version across released manifests"
+        "verify-versions",
+        help="require one version per released scope and one shared contract version",
+    )
+    versions.add_argument(
+        "--scope",
+        default="",
+        help=(
+            "which package is being released: all, python, or typescript; "
+            "omit to check every scope on its own"
+        ),
+    )
+    versions.add_argument(
+        "--version",
+        default="",
+        help="version this scope is releasing; the scoped manifests must carry it",
     )
     versions.add_argument("--json", action="store_true", help="machine-readable output")
     versions.set_defaults(handler=_cmd_verify_versions)

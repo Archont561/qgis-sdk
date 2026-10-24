@@ -21,6 +21,11 @@ from .models import MAX_SAFE_INTEGER, QgisSdkError
 
 T = TypeVar("T")
 
+#: Version of the plugin-description wire contract. It is deliberately not the
+#: package version: the bridge mirrors this number, and a release that changes a
+#: serialized shape has to move it for both sides at once.
+PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1
+
 
 class QgisSdkDeclarationError(QgisSdkError):
     """A declaration cannot be represented in the versioned contract."""
@@ -96,7 +101,7 @@ class PluginDescription:
     id: str
     title: str
     actions: tuple[ActionDescription, ...]
-    schema_version: int = 1
+    schema_version: int = PLUGIN_DESCRIPTION_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         """Return the transport representation."""

@@ -649,14 +649,17 @@ loaded and functional.
   stability promise is made. Breaking changes during `0.x` require a documented minor
   version bump (`0.Y.0`) with migration notes; compatible bug fixes and additive
   changes use patch releases (`0.Y.Z`).
-- **Scoped manifest updates:** `scripts/release.py` (`pixi run release-stamp`) updates
-  only the manifests in the selected release scope (`python` for `packages/qgis-sdk`,
-  `typescript` for `packages/qgis-sdk-bridge`, or `all`). Both `qgis-sdk` (`0.1.0`)
-  and `@archont561/qgis-sdk-bridge` (`0.1.0`) ship matching version 1 declaration,
-  safe-integer wire-bound, and `QgisSdk*` error contracts.
-- **Independent protocol versions:** `PluginDescription.schema_version = 1` in
-  `qgis_sdk.declarations` and future WebEngine IPC protocol versions are versioned
-  independently of the `qgis-sdk` and `qgis-sdk-bridge` package versions.
+- **Scoped manifests, independent versions:** `scripts/release.py`
+  (`pixi run release-stamp --scope python|typescript|all`) updates only the manifests
+  in the selected scope. `qgis-sdk` and `@archont561/qgis-sdk-bridge` both shipped
+  `0.1.0`/`0.1.1` because they were built together; they version independently from
+  0.2.0 onward, so the 0.2.0 Python release leaves the bridge at `0.1.1`.
+- **Independent protocol versions:** `PluginDescription.schema_version = 1`
+  (`PLUGIN_DESCRIPTION_SCHEMA_VERSION` in `qgis_sdk.declarations`) and future
+  WebEngine IPC protocol versions are versioned independently of the package
+  versions. The bridge declares the same
+  `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, and `scripts/release.py verify-versions`
+  refuses a workspace where the two declarations disagree.
 - **0.1.0 surface & migration note:** The placeholder `qgis_sdk.hello()` and bridge
   `hello()` smoke functions were removed prior to the first release (PR #23); the
   public root surface of `qgis_sdk` is `qgis_sdk.__all__` (`ActionDescription`,
