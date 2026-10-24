@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from types import UnionType
 from typing import (
+    Annotated,
     Any,
     Literal,
     TypeVar,
@@ -145,6 +146,11 @@ def _schema(
     annotation: Any, path: str, *, result: bool, stack: tuple = ()
 ) -> dict[str, Any]:
     """Describe one annotation using the JSON Schema subset the contract allows."""
+    if get_origin(annotation) is Annotated:
+        # `Annotated[T, ...]` stores a T: the extras are host hints (which widget
+        # a field deserves), not part of the wire shape. Describing the underlying
+        # type keeps one subset instead of a second schema dialect.
+        return _schema(get_args(annotation)[0], path, result=result, stack=stack)
     primitive = next(
         (name for cls, name in _PRIMITIVE_JSON_TYPES.items() if annotation is cls),
         None,

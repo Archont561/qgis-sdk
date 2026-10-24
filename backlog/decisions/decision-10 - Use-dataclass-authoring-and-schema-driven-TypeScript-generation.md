@@ -234,3 +234,26 @@ fixtures regenerate byte-identically, so no existing wire form moved.
 **Status unchanged: this decision stays `proposed`.** Accepting it still waits on
 TASK-17 producing real generated TypeScript, exactly as the closeout above states;
 widening the subset does not substitute for that.
+
+## Amendment (2026-10-24, part 2): `Annotated` is metadata, not a stored type
+
+TASK-39 needed a way to say "this `str` is a vector layer, that `float` is a
+distance in metres" without changing what the wire carries. `Annotated[T, ...]`
+is exactly that: the field still stores a `T`.
+
+`_schema` now unwraps it and describes the underlying type, so
+`Annotated[str, LayerInput()]` still generates `{"type": "string"}` and the
+documented subset grows by *one* nuance rather than a second schema dialect. The
+markers themselves live in `qgis_sdk.models.parameters` and are plain frozen
+values, so a pure test can assert which marker a field carries.
+
+This knowingly reverses an earlier expectation: `tests/test_declarations.py` used
+to assert that `Annotated[int, {"minimum": 0}]` was *refused* as unhashable
+annotation metadata. That refusal was correct while `Annotated` was outside the
+subset and is wrong now - the extras are host hints and never hashed by the
+generator, so the test's expectation was updated rather than the feature being
+worked around. A bare generic (`List`) is still refused, because it has no element
+type to describe.
+
+Status unchanged: this decision stays `proposed`, pending TASK-17's real generated
+TypeScript.

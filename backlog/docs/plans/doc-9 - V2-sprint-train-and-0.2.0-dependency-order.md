@@ -222,3 +222,11 @@ implemented, but provider/catalog registration, `QgsProcessingAlgorithm`/
 `createInstance`, mid-flight cancellation and thread-affinity proofs are not.
 
 m-1 is now 9/14. Remaining: TASK-3, TASK-5, TASK-15, and TASK-28 as the gate.
+
+Follow-on: **TASK-39** (provider registration) was opened and completed the same
+day, after TASK-14 made algorithms inspectable. A `Provider` now registers
+algorithms that appear in the QGIS Processing toolbox and run through
+`processing.run`, which is the registration object decision-11 described as
+illustrative. TASK-39 joined m-1 (it *is* the "Processing algorithms" half of
+that milestone's title), so the milestone is now fifteen tasks and stands at
+10/15; the remaining four are TASK-3, TASK-5, TASK-15 and the TASK-28 gate.

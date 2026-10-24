@@ -19,6 +19,7 @@ from .errors import (
 )
 from .layers import GeometryType, VectorLayerInfo
 from .limits import MAX_SAFE_INTEGER
+from .parameters import CrsInput, LayerInput, Metres
 from .styles import StyleSpec
 
 __all__ = [
@@ -26,7 +27,10 @@ __all__ = [
     "AlgorithmRequest",
     "BufferRequest",
     "CentroidRequest",
+    "CrsInput",
     "GeometryType",
+    "LayerInput",
+    "Metres",
     "QgisSdkAlgorithmCancelledError",
     "QgisSdkAlgorithmRejectedError",
     "QgisSdkContractValidationError",

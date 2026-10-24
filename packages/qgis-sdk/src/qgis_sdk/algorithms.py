@@ -180,14 +180,20 @@ def invoke(
     scope: ResourceScope,
     progress: Progress | None = None,
     cancellation: Cancellation | None = None,
+    add_to_project: bool = True,
 ) -> AlgorithmResult:
-    """Run one algorithm once and add its output to the project on success.
+    """Run one algorithm once, adding its output to the project on success.
 
     Each call constructs a *new* author instance and a *new* ``AlgorithmContext``
     over a child scope of ``scope``, then closes that child scope again. Nothing
     an invocation registers on its scope outlives it, so a second run cannot see
     the first run's context - the property TASK-14 asks to be observed, not
     assumed.
+
+    ``add_to_project=False`` is for a host that owns the destination itself: the
+    QGIS Processing bridge hands the produced layer to a feature sink, so adding
+    it to the project as well would duplicate it. ``project`` stays required -
+    the caller has one, and passing it always keeps the ownership check honest.
 
     Ordering is the whole safety story (decision-19). The request is checked
     against the declared inputs type, cancellation is read before anything runs,
@@ -224,7 +230,8 @@ def invoke(
             )
         if cancellation.is_cancelled():
             raise QgisSdkAlgorithmCancelledError(description.id)
-        project.add_layer(result.output.id)
+        if add_to_project:
+            project.add_layer(result.output.id)
     finally:
         invocation_scope.close()
     return AlgorithmResult(output=result.output)

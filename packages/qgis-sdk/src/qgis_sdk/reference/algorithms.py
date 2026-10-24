@@ -17,11 +17,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from qgis_sdk.algorithms import algorithm
 from qgis_sdk.core import AlgorithmContext
 from qgis_sdk.models import BufferRequest, CentroidRequest, VectorLayerInfo
+from qgis_sdk.providers import Provider
 
-__all__ = ["BufferLayer", "BufferResult", "CentroidLayer", "CentroidResult"]
+__all__ = [
+    "BufferLayer",
+    "BufferResult",
+    "CentroidLayer",
+    "CentroidResult",
+    "reference_provider",
+]
+
+# One provider owns the workflow's operations, the way one app owns its routes.
+reference_provider = Provider(id="reference", title="Reference plugin")
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +47,9 @@ class CentroidResult:
     output: VectorLayerInfo
 
 
-@algorithm(id="reference.buffer", title="Buffer a layer in an explicit working CRS")
+@reference_provider.algorithm(
+    id="buffer", title="Buffer a layer in an explicit working CRS", group="Geometry"
+)
 class BufferLayer:
     """Turn one ``BufferRequest`` into its buffered output layer."""
 
@@ -50,7 +61,9 @@ class BufferLayer:
         return BufferResult(output=self.ctx.algorithms.execute(inputs))
 
 
-@algorithm(id="reference.centroid", title="Replace geometries with centroids")
+@reference_provider.algorithm(
+    id="centroid", title="Replace geometries with centroids", group="Geometry"
+)
 class CentroidLayer:
     """Turn one ``CentroidRequest`` into its centroid output layer."""
 

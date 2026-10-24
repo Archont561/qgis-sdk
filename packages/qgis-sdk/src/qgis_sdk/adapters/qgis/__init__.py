@@ -12,6 +12,7 @@ against one set of tests.
 from .algorithms import NativeAlgorithms
 from .layers import NativeLayers
 from .notifications import NativeNotifications
+from .processing import NativeProcessingProvider, register_provider
 from .project import NativeProject
 from .settings import NativeSettings
 from .styles import NativeStyles
@@ -20,7 +21,9 @@ __all__ = [
     "NativeAlgorithms",
     "NativeLayers",
     "NativeNotifications",
+    "NativeProcessingProvider",
     "NativeProject",
     "NativeSettings",
     "NativeStyles",
+    "register_provider",
 ]

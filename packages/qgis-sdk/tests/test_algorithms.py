@@ -125,7 +125,7 @@ def test_a_description_can_be_json_encoded() -> None:
 
     encoded = json.dumps(describe_algorithm(CentroidLayer).to_dict())
 
-    assert '"reference.centroid"' in encoded
+    assert '"centroid"' in encoded
 
 
 @pytest.mark.parametrize(
@@ -308,7 +308,7 @@ def test_inputs_of_the_wrong_type_are_refused_before_anything_runs() -> None:
             scope=scope,
         )
 
-    assert error.value.request == "reference.buffer"
+    assert error.value.request == "buffer"
     assert "BufferRequest" in error.value.reasons[0]
     assert (algorithms.requests, project.layer_ids()) == ([], ())
 
@@ -328,7 +328,7 @@ def test_cancellation_before_the_operation_starts_runs_nothing() -> None:
             cancellation=Clock(cancelled=True),
         )
 
-    assert error.value.algorithm_id == "reference.buffer"
+    assert error.value.algorithm_id == "buffer"
     assert (algorithms.requests, project.layer_ids()) == ([], ())
 
 
@@ -456,9 +456,17 @@ def test_a_reference_algorithm_only_binds_request_to_result() -> None:
     assert algorithms.requests == [CentroidRequest(layer_id="layer-1")]
 
 
-def test_the_reference_classes_are_declared_against_the_documented_ids() -> None:
-    assert describe_algorithm(BufferLayer).id == "reference.buffer"
-    assert describe_algorithm(CentroidLayer).id == "reference.centroid"
+def test_the_reference_classes_carry_their_provider_scoped_ids() -> None:
+    from qgis_sdk.reference import reference_provider
+
+    assert describe_algorithm(BufferLayer).id == "buffer"
+    assert describe_algorithm(CentroidLayer).id == "centroid"
+    # The id a host registers is the provider's, not the class's own.
+    qualified = [
+        algorithm["qualified_id"]
+        for algorithm in reference_provider.describe().to_dict()["algorithms"]
+    ]
+    assert qualified == ["reference:buffer", "reference:centroid"]
     assert describe_algorithm(CentroidLayer).result_type is CentroidResult
 
 

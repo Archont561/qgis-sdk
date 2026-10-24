@@ -32,6 +32,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, and `Algorithms` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `@algorithm`, `describe_algorithm`, `invoke`, and `AlgorithmResult`; request and result schemas come from the same generator the plugin declarations use (TASK-14) |
+| `providers` | `Provider` and `@provider.algorithm` registration, plus `parameter_kinds` - which host parameter each request field deserves (TASK-39) |
 | `reference` | `BufferLayer` and `CentroidLayer`, the two operations the reference workflow runs (decision-19) |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
@@ -109,7 +110,59 @@ The request schemas come from the same `qgis_sdk.declarations` generator that de
 
 **Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
 
-Two honest limits of this slice: cancellation is observed at phase boundaries (before the operation, and after it before the project is touched), not by aborting a native operation mid-flight; and algorithm grouping through an explicit provider catalog is deferred, so today each class is described and invoked directly.
+Two honest limits of this slice: cancellation is observed at phase boundaries (before the operation, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm class on its own is described and invoked directly - grouping comes from a provider, below.
+
+## Providers: algorithms in the QGIS Processing toolbox (experimental, TASK-39)
+
+An algorithm class is useful on its own; a provider is what makes it *visible*. Declare one object, register algorithms on it the way a route is registered on an app, and give it to the QGIS adapter:
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+
+from qgis_sdk.models import LayerInput, Metres, VectorLayerInfo
+from qgis_sdk.providers import Provider
+
+mine = Provider(id="my.plugin", title="My plugin")
+
+
+@dataclass(frozen=True, slots=True)
+class SmoothRequest:
+    layer_id: Annotated[str, LayerInput()]      # a layer picker in the dialog
+    tolerance: Annotated[float, Metres()]       # a spin box labelled in metres
+
+
+@dataclass(frozen=True, slots=True)
+class SmoothResult:
+    output: VectorLayerInfo
+
+
+@mine.algorithm(id="smooth", title="Smooth geometries", group="Geometry")
+class Smooth:
+    def __init__(self, ctx):  # AlgorithmContext, fresh per invocation
+        self.ctx = ctx
+
+    def run(self, inputs: SmoothRequest) -> SmoothResult:
+        ...
+```
+
+```python
+from qgis_sdk.adapters.qgis import register_provider
+
+bridge = register_provider(
+    mine, layers=layers, algorithms=algorithms, project=project, scope=scope
+)
+# "my.plugin:smooth" is now in the toolbox, the modeler and `processing.run`
+bridge.unregister()  # ...if the plugin unloads
+```
+
+Registration is validated **when it happens**: the class must describe, every request field must map to a host parameter, and the id must be unique inside the provider. A mistake fails at import time, not on the first run.
+
+`Annotated` markers say what a field *means* to the host while the wire schema keeps describing the stored value: `LayerInput()` makes a field a vector-layer picker (the picked layer is opened through the same `Layers` service, so it arrives as an owned layer id), `CrsInput()` makes it a CRS chooser, and `Metres()` gives a distance a metre-labelled, non-negative spin box. Plain `str`/`int`/`float`/`bool` fields become text, integer, double and boolean parameters. Anything else - a nested dataclass, a list, a `Literal` - is refused at registration with the field name and the supported kinds.
+
+The bridge copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
+
+`providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge is only importable where PyQGIS exists.
 
 ## Development
 

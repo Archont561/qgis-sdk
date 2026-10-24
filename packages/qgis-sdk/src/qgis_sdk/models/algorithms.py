@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Annotated
 
 from .errors import QgisSdkAlgorithmRejectedError
+from .parameters import CrsInput, LayerInput, Metres
 
 
 def _refuse(request: str, reasons: list[str]) -> None:
@@ -32,9 +34,9 @@ class BufferRequest:
     which is the silent-degrees failure decision-19 rejects.
     """
 
-    layer_id: str
-    distance_metres: float
-    working_crs: str
+    layer_id: Annotated[str, LayerInput()]
+    distance_metres: Annotated[float, Metres()]
+    working_crs: Annotated[str, CrsInput()]
 
     def __post_init__(self) -> None:
         reasons: list[str] = []
@@ -53,7 +55,7 @@ class BufferRequest:
 class CentroidRequest:
     """Replace each geometry with its centroid; no distance, so no working CRS."""
 
-    layer_id: str
+    layer_id: Annotated[str, LayerInput()]
 
     def __post_init__(self) -> None:
         _refuse("centroid", [] if self.layer_id.strip() else ["layer_id is required"])

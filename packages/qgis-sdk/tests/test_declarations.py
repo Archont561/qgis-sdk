@@ -321,9 +321,13 @@ def test_action_hidden_inside_property_is_rejected_not_silently_dropped():
 
 
 def test_bare_generic_and_unhashable_annotation_metadata_fail_actionably():
-    from typing import Annotated, List  # noqa: UP035 -- exercise rejected legacy bare generic
+    from typing import List  # noqa: UP035 -- exercise rejected legacy bare generic
 
-    for annotation in (List, Annotated[int, {"minimum": 0}]):  # noqa: UP006
+    # A bare generic still has no element type to describe. `Annotated` used to
+    # be refused here as well; TASK-39 made it part of the subset (the extras are
+    # host hints, the stored type is what the schema describes), so it is no
+    # longer in this list.
+    for annotation in (List,):  # noqa: UP006
 
         def handler(self, value) -> None:
             pass
