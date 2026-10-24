@@ -105,7 +105,10 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
   `{items, truncated, next_cursor?}`. `limit` is capped at 200, and the generated
-  validator refuses a larger one before the call leaves the page.
+  validator refuses a larger one before the call leaves the page. A cursor is
+  only ever the value the host handed back in `next_cursor`: anything else is
+  refused as `invalid_payload` instead of being read as "start over", and the
+  generated validator refuses it before the call leaves the page.
 - **Typed results.** `host.layers.get` returns `VectorLayerInfo`, not a record:
   `geometry_type` is one of the declared literals and `crs` is `string | null`.
 - **The same asymmetry as plugin operations.** Arguments are closed (an unknown

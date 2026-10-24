@@ -8,7 +8,9 @@
  *
  * `generated/host.ts` is generated, never edited: `qgis-sdk bridge generate
  * --host` writes it and CI fails when the checked-in copy differs. This file
- * exists so the hand-written entry point stays reviewable.
+ * exists so the hand-written entry point stays reviewable - and it re-exports
+ * the runtime validators too, not just their interfaces, because a page that can
+ * only assert a type at compile time has nothing to check a reply with.
  */
 
 export {
@@ -22,12 +24,12 @@ export {
 	type HostInvokeOptions,
 	type HostOperationId,
 	type HostOperations,
-	type IdPage,
-	type LayerPage,
-	type LayerRequest,
-	type NotificationsInfoRequest,
-	type PageRequest,
-	type SettingsGetRequest,
-	type StylesApplyRequest,
-	type VectorLayerInfo,
+	IdPage,
+	LayerPage,
+	LayerRequest,
+	NotificationsInfoRequest,
+	PageRequest,
+	SettingsGetRequest,
+	StylesApplyRequest,
+	VectorLayerInfo,
 } from "./generated/host";

@@ -107,10 +107,13 @@ for anything added to it. Where this document was open, the implementation chose
   `DEFERRED_HOST_METHODS` with the reason and the owning task, and a test
   reflects the Protocols so a new method cannot appear unaccounted for.
 - **Paging is one shape for every list.** `{limit?, cursor?}` in,
-  `{items, truncated, next_cursor?}` out. The cursor is an offset encoded as an
-  opaque string; `limit` defaults to 50 and is capped at 200, and the cap is
-  enforced on both sides - the request schema refuses it and the generated
-  client refuses it before the transport.
+  `{items, truncated, next_cursor?}` out. The cursor is an offset encoded as a
+  decimal string with a declared `pattern` (`[0-9]+`), so "the host issued it" is
+  a check rather than a promise: a malformed cursor is refused as
+  `invalid_payload` instead of being read as the first page. `limit` defaults to
+  50 and is capped at 200, and both the pattern and the cap are enforced on both
+  sides - the request schema refuses them and the generated client refuses them
+  before the transport.
 - **Public types are named by the manifest.** `layers.get` declares
   `VectorLayerInfo` and `layers.list` reuses the same schema object, so a page
   gets one interface rather than a structural copy per operation.

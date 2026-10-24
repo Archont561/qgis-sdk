@@ -4,7 +4,7 @@ title: Generate checked in TypeScript contracts clients and validators
 status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 20:05'
+updated_date: '2026-10-24 20:27'
 labels: []
 milestone: m-2
 dependencies:
@@ -38,6 +38,12 @@ Generate checked in TypeScript contracts clients and validators. Implement only 
 - [x] #2 Compile-time tests reject invalid names/arguments; runtime tests reject malformed responses with asymmetric additive compatibility.
 - [x] #3 Unsupported annotations fail rather than emit any; CI drift checks protect generated-file ownership.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24: the curated host surface landed (decision-27 accepted); the slice detail is in the comments below. AC #1 keeps its one open half: generated **event/stream** types. Stream frames are still hand-written on the client side, so this task stays In Progress and the host module is described as a surface, not as events.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

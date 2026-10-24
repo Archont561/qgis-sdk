@@ -317,7 +317,8 @@ register_host_operations(
   reflects the Protocols so a new method cannot appear unaccounted for.
 - **Nothing unbounded, nothing by path.** Every list is paged
   (`{limit?, cursor?}` in, `{items, truncated, next_cursor?}` out; 50 by default,
-  200 at most), and no operation takes a filesystem path.
+  200 at most), a cursor the host never issued is refused rather than silently
+  read as the first page, and no operation takes a filesystem path.
 - **Versioned with the client.** The handshake advertises `host_schema_version`
   and the registered ids, and the TypeScript side ships generated inside the npm
   package as `@archont561/qgis-sdk-bridge/host`.

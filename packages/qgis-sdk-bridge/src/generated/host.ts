@@ -3,7 +3,7 @@
 // Regenerate with `qgis-sdk bridge generate --host`; CI fails on drift.
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:47b4b0f5ab40c173165d15e7dba5adf99a404f140f82ca4d4123a02a6d7d666d";
+export const HOST_FINGERPRINT = "sha256:851a77387b6b37bebcb05da4151364e5d489b6d8ce0fca092eda6e368aed06a7";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -155,7 +155,7 @@ export function NotificationsInfoRequest(value: unknown, strict = false): value 
 
 export function PageRequest(value: unknown, strict = false): value is PageRequest {
 	if (!isRecord(value)) return false;
-	if (value["cursor"] !== undefined && !(typeof value["cursor"] === "string")) {
+	if (value["cursor"] !== undefined && !(typeof value["cursor"] === "string" && new RegExp("^(?:[0-9]+)$").test(value["cursor"]))) {
 		return false;
 	}
 	if (value["limit"] !== undefined && !((isSafeInteger(value["limit"]) && value["limit"] >= 1 && value["limit"] <= 200))) {

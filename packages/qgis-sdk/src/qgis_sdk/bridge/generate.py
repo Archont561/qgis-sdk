@@ -57,12 +57,87 @@ _KNOWN_KEYWORDS = frozenset(
         "enum",
         "minimum",
         "maximum",
+        "pattern",
         "title",
         "description",
     }
 )
 _IDENTIFIER_SAFE = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$"
+)
+
+#: Functions every emitted module defines for its own validators.
+_EMITTER_HELPERS = frozenset({"isRecord", "hasOnly", "isSafeInteger", "call"})
+#: Words TypeScript refuses as a type name, so a declared one cannot be emitted.
+_TS_KEYWORDS = frozenset(
+    {
+        "any",
+        "as",
+        "async",
+        "await",
+        "boolean",
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "declare",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "from",
+        "function",
+        "if",
+        "implements",
+        "import",
+        "in",
+        "instanceof",
+        "interface",
+        "keyof",
+        "let",
+        "module",
+        "namespace",
+        "never",
+        "new",
+        "null",
+        "number",
+        "object",
+        "of",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "readonly",
+        "return",
+        "static",
+        "string",
+        "super",
+        "switch",
+        "symbol",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "type",
+        "typeof",
+        "undefined",
+        "unique",
+        "unknown",
+        "var",
+        "void",
+        "while",
+        "with",
+        "yield",
+    }
 )
 
 
@@ -243,11 +318,68 @@ def write_generated(
     return True
 
 
-def _declared_name(preferred: Any, fallback: str) -> str:
-    """Use the manifest's name when it gave one, so a public type can be named."""
-    if isinstance(preferred, str) and preferred.isidentifier():
-        return preferred
-    return fallback
+def _declared_name(preferred: Any, fallback: str, *, kind: str, action: str) -> str:
+    """Use the manifest's name, refusing one the emitter cannot declare.
+
+    A declared name becomes an exported type, so it has to be an identifier this
+    module does not already use. Refusing here keeps the promise the rest of the
+    emitter makes: what cannot be rendered fails at generation with the manifest
+    entry to blame, not later in the consumer's build with a TypeScript error
+    pointing at a validator body.
+    """
+    if preferred is None:
+        return fallback
+    if not isinstance(preferred, str):
+        raise QgisSdkBridgeError(
+            f"{action}: {kind}_name must be a string, got {preferred!r}"
+        )
+    if not _is_identifier(preferred):
+        raise QgisSdkBridgeError(
+            f"{action}: {kind}_name {preferred!r} is not a TypeScript identifier"
+        )
+    if preferred in _TS_KEYWORDS:
+        raise QgisSdkBridgeError(
+            f"{action}: {kind}_name {preferred!r} is a TypeScript keyword"
+        )
+    if preferred in _RESERVED_NAMES:
+        raise QgisSdkBridgeError(
+            f"{action}: {kind}_name {preferred!r} collides with a name the "
+            "generated module already declares"
+        )
+    return preferred
+
+
+def _is_identifier(value: str) -> bool:
+    """Say whether ``value`` can name a type in the emitted module."""
+    if not value or not value[0].isascii():
+        return False
+    if not (value[0].isalpha() or value[0] in "_$"):
+        return False
+    return all(char.isascii() and (char.isalnum() or char in "_$") for char in value)
+
+
+def _reserved_names() -> frozenset[str]:
+    """Return every identifier the emitted module declares for itself."""
+    names = set(_EMITTER_HELPERS) | _TS_KEYWORDS
+    for surface in (PLUGIN_SURFACE, HOST_SURFACE):
+        names.update(
+            {
+                surface.operations_type,
+                surface.factory,
+                surface.id_const,
+                surface.fingerprint_const,
+                surface.version_const,
+                surface.operations_const,
+                surface.operation_id_type,
+                surface.options_type,
+                surface.client_type,
+                surface.error_type,
+            }
+        )
+    return frozenset(names)
+
+
+_RESERVED_NAMES = _reserved_names()
 
 
 def _as_mapping(description: Any) -> dict[str, Any]:
@@ -326,8 +458,18 @@ class _Generator:
                     result_name=result_name if isinstance(result_name, str) else None,
                 )
             )
-            self._declare(request, _declared_name(request_name, f"{base}Request"))
-            self._declare(result, _declared_name(result_name, f"{base}Result"))
+            self._declare(
+                request,
+                _declared_name(
+                    request_name, f"{base}Request", kind="request", action=action_id
+                ),
+            )
+            self._declare(
+                result,
+                _declared_name(
+                    result_name, f"{base}Result", kind="result", action=action_id
+                ),
+            )
         return tuple(actions)
 
     def _declare(self, schema: Mapping[str, Any], name: str) -> str:
@@ -714,7 +856,11 @@ def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
             f"{_inline_validator(schema['items'], 'item')}))"
         )
     if declared == "string":
-        return f'typeof {expression} === "string"'
+        test = f'typeof {expression} === "string"'
+        pattern = schema.get("pattern")
+        if pattern is not None:
+            test += f" && {_pattern_test(pattern, expression)}"
+        return test
     if declared == "boolean":
         return f'typeof {expression} === "boolean"'
     if declared == "number":
@@ -736,6 +882,17 @@ def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
     if declared == "object":
         return f"isRecord({expression})"
     raise QgisSdkBridgeError(f"cannot validate {declared!r}")
+
+
+def _pattern_test(pattern: Any, expression: str) -> str:
+    """Test a whole string against a declared pattern, the way the host does.
+
+    ``re.fullmatch`` on the host side and ``^(?:...)$`` here mean the same
+    thing, so a manifest pattern never has to carry its own anchors.
+    """
+    if not isinstance(pattern, str):
+        raise QgisSdkBridgeError("a string pattern must be a string")
+    return f"new RegExp({json.dumps(f'^(?:{pattern})$')}).test({expression})"
 
 
 def _check_supported(schema: Any, *, path: str) -> None:

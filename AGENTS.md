@@ -13,6 +13,8 @@
 - For behavior changes and bug fixes, follow [TDD](.agents/skills/tdd/SKILL.md). For behavior-preserving structural changes, follow [refactor](.agents/skills/refactor/SKILL.md); consult [clean-code principles](.agents/skills/clean-code-principles/SKILL.md) for design decisions.
 - Use [the Backlog.md skill](.agents/skills/backlog/SKILL.md) for backlog operations; prefer the CLI over editing task metadata directly.
 - For Python QGIS SDK and TypeScript bridge work, consult the [workspace skill](.agents/skills/qgis-sdk/SKILL.md).
+- For a read-only code-quality audit of source, a diff or a package - evidence, severity, and one backlog task per validated follow-up - follow the [audit skill](.agents/skills/audit/SKILL.md).
+- When working from an Arena sandbox where Pixi, Bun or the network are unavailable, follow the [arena skill](.agents/skills/arena/SKILL.md) for the fallback checks, branch discipline and GitHub mechanics.
 - Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` (for example, `QgisSdkError` and `QgisSdkScopeClosedError`), including internal subclasses. Export only prefixed exception names; do not keep unprefixed aliases. Structured error `code` values are independent of class names.
 - When creating or revising agent skills, follow [Skill Creator](.agents/skills/skill-creator/SKILL.md) and add realistic evaluation prompts.
 - Root commands run through Pixi: `pixi run -e bun bun run test` for local tests, `pixi run -e bun bun run coverage` for CI/pre-push coverage gates, and `pixi run -e bun bun run build` for builds. Do not conflate the local test task with the separate 90% coverage checks.

@@ -21,6 +21,7 @@ Two asymmetries are deliberate (decision-22, decision-26):
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -38,6 +39,7 @@ _KNOWN_KEYWORDS = frozenset(
         "enum",
         "minimum",
         "maximum",
+        "pattern",
         "title",
         "description",
     }
@@ -96,6 +98,19 @@ def _check_string(
 ) -> None:
     if not isinstance(value, str):
         raise QgisSdkBridgeError(f"{path}: expected a string, got {_name(value)}")
+    pattern = schema.get("pattern")
+    if pattern is None:
+        return
+    if not isinstance(pattern, str):
+        raise QgisSdkBridgeError(f"{path}: pattern must be a string")
+    try:
+        matched = re.fullmatch(pattern, value)
+    except re.error as error:
+        raise QgisSdkBridgeError(f"{path}: pattern {pattern!r} is unusable: {error}")
+    if matched is None:
+        raise QgisSdkBridgeError(
+            f"{path}: {value!r} does not match the declared pattern {pattern!r}"
+        )
 
 
 def _check_boolean(

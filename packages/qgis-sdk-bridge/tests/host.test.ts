@@ -8,6 +8,7 @@ import {
 	type HostClientLike,
 	HostContractError,
 	type HostInvokeOptions,
+	PageRequest,
 	type VectorLayerInfo,
 } from "@/host";
 
@@ -152,4 +153,12 @@ test("the error names the host operation it failed on", async () => {
 		return;
 	}
 	throw new Error("expected the page validator to reject the reply");
+});
+
+test("the generated PageRequest refuses a cursor the host did not issue", () => {
+	expect(PageRequest({ cursor: "12" }, true)).toBe(true);
+	expect(PageRequest({ limit: 5 }, true)).toBe(true);
+	for (const cursor of ["abc", "-1", "1 ", "", "12a"]) {
+		expect(PageRequest({ cursor }, true)).toBe(false);
+	}
 });
