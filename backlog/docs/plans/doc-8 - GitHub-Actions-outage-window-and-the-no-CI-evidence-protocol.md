@@ -105,7 +105,11 @@ deliberate dispatch. No release is silently skipped, and no version decision exp
    workflows are SHA-pinned). Compare against a `main` run before editing code.
 4. Backfill the deferred ACs in the table, then resume the release chores in order: TASK-27,
    the deliberate 0.1.0 dispatch, TASK-28 onward.
-5. Optional and unverified: a self-hosted runner on real Windows/macOS hardware could satisfy
-   TASK-33 `#1`/`#2` and TASK-13 `#1` at zero Actions cost. Whether a failed payment disables
-   Actions for the account outright or only GitHub-hosted minutes has not been tested here;
-   try one trivial workflow before planning around it.
+## Resolution and backfill status (2026-10-24)
+
+GitHub Actions runner execution returned on **2026-10-24**:
+
+- **Sandbox bundle upgraded and verified (`pixi-sandbox 0.8.0`):** PR #37 (`d4d87c1`) aligned `publish-sandbox.yml`, `relock.yml`, `scripts/restore.sh`, and `pixi-sandbox.toml` with `Archont561/pixi-sandbox-starter` (`0.8.0`). Post-merge `publish-sandbox.yml` (`plan` `120839883187` and `publish` `120839914192`) succeeded on `main`, and `scripts/restore.sh` now restores `build`, `bun`, and `default` with **0 manifest integrity failures** (resolving the earlier nine `RECORD` mismatches).
+- **CI matrix green on Ubuntu, macOS, and Windows:** PR #38 (`a023948`) fixed `CONVCO_REV` step propagation and cross-platform pytest portability. All three `ci.yml` jobs passed on PR #38: `checks` (`120842898163`), `cross-platform (macos-latest)` (`120842898256`: `pytest: 391 collected, 0 failed, 5 skipped`, `bun test: 90 pass`), and `cross-platform (windows-latest)` (`120842898251`: `pytest: 391 collected, 0 failed, 6 skipped`, `bun test: 90 pass`). On `main` (`a023948`), `checks` (`120843196144`) and `autorelease.yml` `plan-and-tag` (`120843196402`) both completed with `success` (`action=skip`, first-stable guard intact).
+- **TASK-33 AC #3 and AC #4 completed (2026-10-24):** `packages/qgis-sdk/scripts/plugin_coexistence_smoke.py` and `packages/qgis-sdk/tests/scripts/test_qualification_coexistence.py` (`QGIS_SDK_PLUGIN_COEXISTENCE=1`) prove two-plugin coexistence over `pydantic==2.14.1` (`pydantic_core 2.50.1`) inside the real QGIS `4.2.3-Belém do Pará` Desktop plugin manager on Linux (`passed: true`), and `packages/qgis-sdk/README.md` publishes the updated qualification and blocker matrix.
+- **Remaining non-CI blockers:** TASK-33 `#1` (a clean supported Windows/macOS *QGIS 4* installation, since `pixi.toml` locks `linux-64` only and `cross-platform` tests the `pip`-installed QGIS-free SDK + `pydantic-core` + bridge) and TASK-33 `#2` (visible Desktop GUI + in-Desktop `QWebEngineView` rendering on a display server, since the Linux sandbox and headless CI runners use `QT_QPA_PLATFORM=offscreen` with no display or `Xvfb`) remain explicit target blockers. TASK-27 `#1`, `#2`, and `#3` are verified; TASK-27 `#4` awaits explicit user release approval before dispatching `v0.1.0`.
