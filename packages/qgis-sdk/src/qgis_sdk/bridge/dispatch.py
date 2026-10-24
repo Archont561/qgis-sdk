@@ -3,7 +3,9 @@
 One dispatcher owns one view's traffic. It decides, in this order, whether a
 call is allowed to exist at all: protocol, session generation, authorization,
 allowlist, payload, handler, and finally a reply that is itself JSON-safe
-(decision-9, decision-18).
+(decision-9, decision-18). Subscriptions are decided in the same order and stop
+at the same place: opening one is a call, and the frames that follow belong to
+the view and generation that opened it.
 
 Two choices are deliberate.
 
@@ -19,6 +21,11 @@ never arrives. Messages from :class:`QgisSdkError` are forwarded - they are
 written for users and name no host objects - while anything else is replaced by
 a fixed message, since an unexpected exception can carry paths, handles or
 native repr into a web view.
+
+The dispatcher is driven, never threaded. :meth:`pump` is what the Qt adapter
+calls on a timer to collect the frames waiting for a view, so ordering and
+bounded buffering are decided by ordinary code that a test can run in a loop,
+not by whatever the transport happens to do with a callback.
 """
 
 from __future__ import annotations
@@ -36,6 +43,16 @@ from qgis_sdk.bridge.protocol import (
     peek_call_id,
     success,
     to_wire,
+)
+from qgis_sdk.bridge.resources import Handle, HandleKind, ReleaseLedger
+from qgis_sdk.bridge.streams import (
+    MAX_FRAMES_PER_PUMP,
+    MAX_SUBSCRIPTIONS_PER_VIEW,
+    DisposalRequest,
+    StreamEventType,
+    StreamSource,
+    Subscription,
+    SubscriptionRequest,
 )
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
@@ -69,11 +86,17 @@ class Dispatcher:
         *,
         description: Mapping[str, Any] | None = None,
         authorize: Authorizer | None = None,
+        ledger: ReleaseLedger | None = None,
     ) -> None:
         self._description = None if description is None else to_wire(description)
         self._authorize = authorize
+        self._ledger = ledger if ledger is not None else ReleaseLedger()
+        self._ledger.dispose_subscription = self._dispose_subscription
         self._handlers: dict[str, Handler] = {}
+        self._streams: dict[str, StreamSource] = {}
         self._operations: dict[str, BridgeOperation] = {}
+        self._subscriptions: dict[str, Subscription] = {}
+        self._counter = 0
         self._generation = 0
 
     @property
@@ -83,16 +106,41 @@ class Dispatcher:
 
     def register(self, operation: BridgeOperation, handler: Handler) -> None:
         """Allowlist one operation and bind it to its handler."""
-        if operation.id in self._handlers:
+        if operation.id in self._handlers or operation.id in self._streams:
             raise QgisSdkBridgeError(f"duplicate operation id {operation.id!r}")
         if not callable(handler):
             raise QgisSdkBridgeError(f"{operation.id}: handler must be callable")
         self._operations[operation.id] = operation
         self._handlers[operation.id] = handler
 
+    def register_stream(
+        self, operation: BridgeOperation, factory: StreamSource
+    ) -> None:
+        """Allowlist one streaming operation and its source factory.
+
+        The factory is called once per subscription with the already-checked
+        payload and returns an iterator of events. Nothing about it is reachable
+        from the wire: the view names an operation id, never a callable.
+
+        A factory may return ``None`` instead, for a stream a host pushes into
+        with :meth:`emit` rather than allows to be pulled - a Qt task reporting
+        progress, for instance. Such a subscription ends when it is disposed or
+        when its buffer overruns, never by itself.
+        """
+        if operation.id in self._handlers or operation.id in self._streams:
+            raise QgisSdkBridgeError(f"duplicate operation id {operation.id!r}")
+        if not callable(factory):
+            raise QgisSdkBridgeError(f"{operation.id}: factory must be callable")
+        self._operations[operation.id] = operation
+        self._streams[operation.id] = factory
+
     def operations(self) -> tuple[BridgeOperation, ...]:
         """Return the allowlisted operations in id order."""
         return tuple(self._operations[key] for key in sorted(self._operations))
+
+    def subscriptions(self) -> tuple[Subscription, ...]:
+        """Return the live subscriptions in id order, for tests and teardown."""
+        return tuple(self._subscriptions[key] for key in sorted(self._subscriptions))
 
     def bind(self, *, view_id: str, origin: str) -> ViewBinding:
         """Mint the binding for a view that just connected."""
@@ -108,8 +156,11 @@ class Dispatcher:
         Called when the plugin runtime is replaced. A view that reconnects gets a
         fresh binding; a view that keeps using the old one is refused with
         ``stale_generation`` rather than served state from a runtime that no
-        longer exists.
+        longer exists. Subscriptions die with the generation: their sources are
+        closed, so a generator's ``finally`` block still runs, and no frame is
+        delivered to a view that can no longer be trusted to interpret it.
         """
+        self._dispose_all()
         self._generation += 1
         return self._generation
 
@@ -137,26 +188,36 @@ class Dispatcher:
         *,
         cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
-        """Answer one invocation with a reply, never with an exception."""
+        """Answer one call with a reply, never with an exception.
+
+        ``kind`` selects the call: an invocation by default, a subscription or
+        its disposal otherwise. The three share the same refusals, so a
+        subscription can never be opened through a path an invocation cannot
+        take.
+        """
         call_id = peek_call_id(raw) or ""
+        kind = raw.get("kind", "invoke") if isinstance(raw, Mapping) else "invoke"
+        if kind == "subscribe":
+            return self._subscribe(binding, raw, cancelled=cancelled)
+        if kind == "unsubscribe":
+            return self._unsubscribe(binding, raw)
+        if kind == "release":
+            return self._release(binding, raw)
+        if kind != "invoke":
+            return failure(
+                call_id,
+                BridgeErrorCode.INVALID_MESSAGE,
+                f"Unknown call kind {kind!r}",
+            )
         try:
             envelope = InvokeEnvelope.parse(raw)
         except QgisSdkBridgeProtocolError as error:
             return failure(call_id, BridgeErrorCode.INVALID_MESSAGE, str(error))
         call_id = envelope.call_id
 
-        if binding.generation != self._generation:
-            return failure(
-                call_id,
-                BridgeErrorCode.STALE_GENERATION,
-                "This view belongs to a runtime generation that no longer exists",
-            )
-        if not self._is_authorized(binding, envelope.operation):
-            return failure(
-                call_id,
-                BridgeErrorCode.NOT_AUTHORIZED,
-                "This view is not authorized for that operation",
-            )
+        refusal = self._refuse(binding, envelope.operation)
+        if refusal is not None:
+            return refusal(call_id)
         handler = self._handlers.get(envelope.operation)
         if handler is None:
             return failure(
@@ -187,6 +248,274 @@ class Dispatcher:
             return success(call_id, value)
         except QgisSdkBridgeError as error:
             return failure(call_id, BridgeErrorCode.NOT_SERIALIZABLE, str(error))
+
+    def pump(
+        self, binding: ViewBinding, *, limit: int = MAX_FRAMES_PER_PUMP
+    ) -> list[dict[str, Any]]:
+        """Collect the frames waiting for ``binding``'s view, oldest first.
+
+        Only the view and generation that opened a subscription can collect its
+        frames. A stale binding gets nothing at all - not even a terminal frame -
+        because delivering state to a runtime that no longer exists is exactly
+        what the generation check is for.
+        """
+        frames: list[dict[str, Any]] = []
+        for subscription in self.subscriptions():
+            if (
+                subscription.view_id != binding.view_id
+                or subscription.generation != binding.generation
+            ):
+                continue
+            subscription.pull(limit)
+            frames.extend(subscription.drain(limit))
+        self._forget_drained()
+        return frames
+
+    def emit(
+        self,
+        subscription_id: str,
+        payload: Any,
+        *,
+        kind: StreamEventType = StreamEventType.DATA,
+    ) -> bool:
+        """Push one event into an open subscription.
+
+        This is the adapter's entry point for events that are not produced by
+        pulling - a Qt task's progress signal, for instance. A full queue is
+        reported to the client as a ``gap`` instead of being absorbed silently.
+        """
+        subscription = self._subscriptions.get(subscription_id)
+        if subscription is None:
+            return False
+        return subscription.emit(payload, kind=kind)
+
+    def dispose(self, binding: ViewBinding) -> int:
+        """Close every subscription belonging to ``binding``'s view."""
+        disposal = [
+            subscription
+            for subscription in self._subscriptions.values()
+            if subscription.view_id == binding.view_id
+        ]
+        for subscription in disposal:
+            subscription.close_source()
+            self._subscriptions.pop(subscription.id, None)
+        return len(disposal)
+
+    def _subscribe(
+        self,
+        binding: ViewBinding,
+        raw: Mapping[str, Any],
+        *,
+        cancelled: Callable[[], bool] | None,
+    ) -> dict[str, Any]:
+        call_id = peek_call_id(raw) or ""
+        try:
+            request = SubscriptionRequest.parse(raw)
+        except QgisSdkBridgeProtocolError as error:
+            return failure(call_id, BridgeErrorCode.INVALID_MESSAGE, str(error))
+        call_id = request.call_id
+
+        refusal = self._refuse(binding, request.operation)
+        if refusal is not None:
+            return refusal(call_id)
+        factory = self._streams.get(request.operation)
+        if factory is None:
+            return failure(
+                call_id,
+                BridgeErrorCode.UNKNOWN_OPERATION,
+                f"No streaming operation {request.operation!r} is exposed",
+            )
+        if cancelled is not None and cancelled():
+            return failure(
+                call_id, BridgeErrorCode.CANCELLED, "The subscription was cancelled"
+            )
+        if self._subscriptions_for(binding) >= MAX_SUBSCRIPTIONS_PER_VIEW:
+            return failure(
+                call_id,
+                BridgeErrorCode.LIMIT_EXCEEDED,
+                f"This view already holds {MAX_SUBSCRIPTIONS_PER_VIEW} subscriptions",
+            )
+        try:
+            payload = to_wire(request.payload)
+        except QgisSdkBridgeError as error:
+            return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, str(error))
+
+        try:
+            source = factory(payload)
+        except QgisSdkError as error:
+            return failure(call_id, BridgeErrorCode.OPERATION_FAILED, str(error))
+        except Exception:  # noqa: BLE001 - a reply must always be produced
+            return failure(
+                call_id,
+                BridgeErrorCode.OPERATION_FAILED,
+                "The subscription failed; the host recorded the details",
+            )
+        if source is not None and not hasattr(source, "__next__"):
+            return failure(
+                call_id,
+                BridgeErrorCode.OPERATION_FAILED,
+                "The stream did not produce an iterator of events",
+            )
+
+        self._counter += 1
+        subscription = Subscription(
+            id=f"s{self._counter}",
+            view_id=binding.view_id,
+            generation=binding.generation,
+            operation=request.operation,
+        )
+        subscription.attach(source)
+        self._subscriptions[subscription.id] = subscription
+        self._ledger.track(
+            binding.view_id, Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id)
+        )
+        return success(
+            call_id,
+            {"subscription_id": subscription.id, "capacity": subscription.capacity},
+        )
+
+    def _unsubscribe(
+        self, binding: ViewBinding, raw: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Dispose one subscription, idempotently.
+
+        A second disposal of the same id - or one that arrives for a
+        subscription that already ended - is answered with ``disposed: false``
+        rather than an error: closing twice is what a closing UI does, and a
+        refusal would turn a harmless race into a failed call.
+        """
+        call_id = peek_call_id(raw) or ""
+        try:
+            request = DisposalRequest.parse(raw)
+        except QgisSdkBridgeProtocolError as error:
+            return failure(call_id, BridgeErrorCode.INVALID_MESSAGE, str(error))
+        call_id = request.call_id
+        if binding.generation != self._generation:
+            return failure(
+                call_id,
+                BridgeErrorCode.STALE_GENERATION,
+                "This view belongs to a runtime generation that no longer exists",
+            )
+        subscription = self._subscriptions.get(request.subscription_id)
+        if subscription is None:
+            return success(
+                call_id, {"subscription_id": request.subscription_id, "disposed": False}
+            )
+        if subscription.view_id != binding.view_id:
+            return failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This subscription belongs to a different view",
+            )
+        if not self._is_authorized(binding, subscription.operation):
+            return failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This view is not authorized for that operation",
+            )
+        subscription.close_source()
+        self._subscriptions.pop(subscription.id, None)
+        self._ledger.forget(
+            binding.view_id,
+            Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
+        )
+        return success(call_id, {"subscription_id": subscription.id, "disposed": True})
+
+    def track(self, binding: ViewBinding, kind: HandleKind, handle_id: str) -> Handle:
+        """Record a handle the view now holds, so it can be released later."""
+        handle = Handle(kind=kind, id=handle_id)
+        self._ledger.track(binding.view_id, handle)
+        return handle
+
+    def _release(self, binding: ViewBinding, raw: Mapping[str, Any]) -> dict[str, Any]:
+        """Release handles the view names, one outcome per handle.
+
+        The view names kinds and ids, never a callable: releasing a borrowed
+        handle is a no-op by construction, so a compromised view cannot turn one
+        into a delete of the project's layer.
+        """
+        call_id = peek_call_id(raw) or ""
+        if binding.generation != self._generation:
+            return failure(
+                call_id,
+                BridgeErrorCode.STALE_GENERATION,
+                "This view belongs to a runtime generation that no longer exists",
+            )
+        if not self._is_authorized(binding, "bridge.release"):
+            return failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This view is not authorized to release resources",
+            )
+        payload = raw.get("payload", {})
+        if not isinstance(payload, Mapping):
+            return failure(
+                call_id, BridgeErrorCode.INVALID_PAYLOAD, "payload must be an object"
+            )
+        requested = payload.get("handles", [])
+        if not isinstance(requested, list):
+            return failure(
+                call_id,
+                BridgeErrorCode.INVALID_PAYLOAD,
+                "handles must be a list of handles",
+            )
+        try:
+            handles = [Handle.parse(item) for item in requested]
+        except QgisSdkBridgeError as error:
+            return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, str(error))
+        return success(
+            call_id, {"released": self._ledger.release_all(binding.view_id, handles)}
+        )
+
+    def _dispose_subscription(self, subscription_id: str) -> bool:
+        """Dispose a subscription by id; ``False`` when it already ended."""
+        subscription = self._subscriptions.pop(subscription_id, None)
+        if subscription is None:
+            return False
+        subscription.close_source()
+        return True
+
+    def _refuse(
+        self, binding: ViewBinding, operation: str
+    ) -> Callable[[str], dict[str, Any]] | None:
+        """Return the refusal for a call, or ``None`` when it may proceed."""
+        if binding.generation != self._generation:
+            return lambda call_id: failure(
+                call_id,
+                BridgeErrorCode.STALE_GENERATION,
+                "This view belongs to a runtime generation that no longer exists",
+            )
+        if not self._is_authorized(binding, operation):
+            return lambda call_id: failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This view is not authorized for that operation",
+            )
+        return None
+
+    def _subscriptions_for(self, binding: ViewBinding) -> int:
+        return sum(
+            1
+            for subscription in self._subscriptions.values()
+            if subscription.view_id == binding.view_id
+        )
+
+    def _forget_drained(self) -> None:
+        for key in [
+            key
+            for key, subscription in self._subscriptions.items()
+            if not subscription.open and subscription.queued == 0
+        ]:
+            self._subscriptions.pop(key, None)
+
+    def _dispose_all(self) -> None:
+        for subscription in self._subscriptions.values():
+            subscription.close_source()
+            self._ledger.forget(
+                subscription.view_id,
+                Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
+            )
+        self._subscriptions.clear()
 
     def _is_authorized(self, binding: ViewBinding, operation: str) -> bool:
         if self._authorize is None:

@@ -41,6 +41,49 @@ export type InvokeReply =
 			readonly error: BridgeFailure;
 	  };
 
+/** The kinds of event a stream may carry; only `progress` may be coalesced. */
+export type StreamEventKind = "data" | "progress" | "state";
+
+/** Why a subscription stopped. */
+export type StreamTerminalKind =
+	| "complete"
+	| "error"
+	| "cancelled"
+	| "gap"
+	| "disposed";
+
+/** One event on a subscription. */
+export interface BridgeStreamEvent {
+	readonly kind: StreamEventKind;
+	readonly payload: unknown;
+}
+
+/** The end of a subscription, as the host described it. */
+export interface BridgeStreamTerminal {
+	readonly kind: StreamTerminalKind;
+	readonly message?: string;
+	readonly dropped?: number;
+}
+
+/** A frame carrying one event. */
+export interface BridgeEventFrame {
+	readonly protocol: 1;
+	readonly subscription_id: string;
+	readonly seq: number;
+	readonly event: BridgeStreamEvent;
+}
+
+/** The frame that ends a subscription. */
+export interface BridgeTerminalFrame {
+	readonly protocol: 1;
+	readonly subscription_id: string;
+	readonly seq: number;
+	readonly terminal: BridgeStreamTerminal;
+}
+
+/** Anything the host may send for a subscription. */
+export type BridgeStreamFrame = BridgeEventFrame | BridgeTerminalFrame;
+
 /** The transport a client speaks through; a QWebChannel adapter or a script. */
 export interface WireTransport {
 	send(message: unknown): void;
@@ -101,6 +144,50 @@ export class QgisSdkBridgeAbortedError extends QgisSdkError {
 export class QgisSdkBridgeClosedError extends QgisSdkError {
 	public constructor() {
 		super("This bridge client is closed", "closed");
+	}
+}
+
+/**
+ * A subscription's frames were not the sequence the host promised.
+ *
+ * The client does not try to reassemble: a missed frame is a fact about the
+ * subscription, not something to paper over.
+ */
+export class QgisSdkBridgeSequenceError extends QgisSdkError {
+	public readonly subscriptionId: string;
+	public readonly expected: number;
+	public readonly received: number;
+
+	public constructor(
+		subscriptionId: string,
+		expected: number,
+		received: number,
+	) {
+		super(
+			`Subscription ${JSON.stringify(subscriptionId)} expected frame ${expected} but received ${received}`,
+			"stream_gap",
+		);
+		this.subscriptionId = subscriptionId;
+		this.expected = expected;
+		this.received = received;
+	}
+}
+
+/**
+ * The subscription ended with a terminal frame the caller may want to inspect.
+ */
+export class QgisSdkBridgeStreamEndedError extends QgisSdkError {
+	public readonly subscriptionId: string;
+	public readonly terminal: BridgeStreamTerminal;
+
+	public constructor(subscriptionId: string, terminal: BridgeStreamTerminal) {
+		super(
+			terminal.message ??
+				`Subscription ${JSON.stringify(subscriptionId)} ended: ${terminal.kind}`,
+			terminal.kind,
+		);
+		this.subscriptionId = subscriptionId;
+		this.terminal = terminal;
 	}
 }
 
@@ -189,6 +276,135 @@ export function parseInvokeReply(raw: unknown): InvokeReply {
 	});
 }
 
+function isIndex(value: unknown): value is number {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+const EVENT_KINDS: readonly StreamEventKind[] = ["data", "progress", "state"];
+const TERMINAL_KINDS: readonly StreamTerminalKind[] = [
+	"cancelled",
+	"complete",
+	"disposed",
+	"error",
+	"gap",
+];
+
+/**
+ * Parse one stream frame, refusing anything the host could not legitimately
+ * have sent.
+ *
+ * Exactly one of `event` and `terminal` has to be present: a frame that carries
+ * both leaves the client guessing which one wins, and a client that guesses is
+ * a client that will eventually deliver an event after the end of a stream.
+ */
+export function parseStreamFrame(raw: unknown): BridgeStreamFrame {
+	if (!isPlainRecord(raw)) {
+		throw new QgisSdkBridgeProtocolError("A stream frame must be an object");
+	}
+	if (raw.protocol !== BRIDGE_PROTOCOL_VERSION) {
+		throw new QgisSdkBridgeProtocolError(
+			`Unsupported bridge protocol: ${String(raw.protocol)}; this client speaks ${BRIDGE_PROTOCOL_VERSION}`,
+		);
+	}
+	if (!isNonEmptyString(raw.subscription_id)) {
+		throw new QgisSdkBridgeProtocolError(
+			"A stream frame must name its subscription",
+		);
+	}
+	if (!isIndex(raw.seq)) {
+		throw new QgisSdkBridgeProtocolError(
+			`${raw.subscription_id}: seq must be a non-negative integer`,
+		);
+	}
+	const hasEvent = Object.hasOwn(raw, "event");
+	const hasTerminal = Object.hasOwn(raw, "terminal");
+	if (hasEvent === hasTerminal) {
+		throw new QgisSdkBridgeProtocolError(
+			`${raw.subscription_id}: a stream frame carries an event or a terminal, not both`,
+		);
+	}
+	if (hasEvent) {
+		if (!isPlainRecord(raw.event)) {
+			throw new QgisSdkBridgeProtocolError(
+				`${raw.subscription_id}: event must be an object`,
+			);
+		}
+		const kind = raw.event.kind;
+		if (!EVENT_KINDS.includes(kind as StreamEventKind)) {
+			throw new QgisSdkBridgeProtocolError(
+				`${raw.subscription_id}: ${String(kind)} is not an event kind`,
+			);
+		}
+		return Object.freeze({
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			subscription_id: raw.subscription_id,
+			seq: raw.seq,
+			event: Object.freeze({
+				kind: kind as StreamEventKind,
+				payload: raw.event.payload,
+			}),
+		});
+	}
+	if (!isPlainRecord(raw.terminal)) {
+		throw new QgisSdkBridgeProtocolError(
+			`${raw.subscription_id}: terminal must be an object`,
+		);
+	}
+	const kind = raw.terminal.kind;
+	if (!TERMINAL_KINDS.includes(kind as StreamTerminalKind)) {
+		throw new QgisSdkBridgeProtocolError(
+			`${raw.subscription_id}: ${String(kind)} is not a terminal kind`,
+		);
+	}
+	if (
+		raw.terminal.message !== undefined &&
+		typeof raw.terminal.message !== "string"
+	) {
+		throw new QgisSdkBridgeProtocolError(
+			`${raw.subscription_id}: terminal.message must be a string`,
+		);
+	}
+	if (raw.terminal.dropped !== undefined && !isIndex(raw.terminal.dropped)) {
+		throw new QgisSdkBridgeProtocolError(
+			`${raw.subscription_id}: terminal.dropped must be a non-negative integer`,
+		);
+	}
+	return Object.freeze({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		subscription_id: raw.subscription_id,
+		seq: raw.seq,
+		terminal: Object.freeze({
+			kind: kind as StreamTerminalKind,
+			...(typeof raw.terminal.message === "string"
+				? { message: raw.terminal.message }
+				: {}),
+			...(isIndex(raw.terminal.dropped)
+				? { dropped: raw.terminal.dropped }
+				: {}),
+		}),
+	});
+}
+
+/** Callbacks a subscription reports through. */
+export interface SubscriptionHandlers {
+	readonly onEvent?: (event: BridgeStreamEvent) => void;
+	readonly onTerminal?: (terminal: BridgeStreamTerminal) => void;
+}
+
+/** A live subscription, as the caller holds it. */
+export interface BridgeSubscription {
+	readonly id: string;
+	readonly closed: boolean;
+	close(): void;
+}
+
+interface OpenSubscription {
+	readonly id: string;
+	readonly handlers: SubscriptionHandlers;
+	expectedSeq: number;
+	closed: boolean;
+}
+
 interface PendingCall {
 	readonly resolve: (value: unknown) => void;
 	readonly reject: (error: Error) => void;
@@ -206,10 +422,13 @@ export class BridgeClient {
 	private readonly transport: WireTransport;
 	private readonly timeoutMs: number;
 	private readonly pending: Map<string, PendingCall> = new Map();
+	private readonly subscriptions: Map<string, OpenSubscription> = new Map();
+	private readonly disposals: Set<string> = new Set();
 	private readonly unsubscribe: () => void;
 	private counter: number = 0;
 	private closed: boolean = false;
 	private unmatched: number = 0;
+	private breaks: number = 0;
 	private lastProtocolError: Error | null = null;
 
 	public constructor(
@@ -241,13 +460,77 @@ export class BridgeClient {
 		payload: Readonly<Record<string, unknown>> = {},
 		options: InvokeOptions = {},
 	): Promise<unknown> {
-		if (this.closed) {
-			return Promise.reject(new QgisSdkBridgeClosedError());
-		}
 		if (!isNonEmptyString(operation)) {
 			return Promise.reject(
 				new QgisSdkBridgeProtocolError("operation must be a nonempty string"),
 			);
+		}
+		return this.send({ kind: "invoke", operation, payload }, options);
+	}
+
+	/**
+	 * Open a subscription and resolve once the host has acknowledged it.
+	 *
+	 * Frames are matched to the subscription by id and by sequence; a frame that
+	 * does not continue the sequence ends the subscription instead of being
+	 * delivered out of order.
+	 */
+	public subscribe(
+		operation: string,
+		payload: Readonly<Record<string, unknown>> = {},
+		handlers: SubscriptionHandlers = {},
+		options: InvokeOptions = {},
+	): Promise<BridgeSubscription> {
+		if (!isNonEmptyString(operation)) {
+			return Promise.reject(
+				new QgisSdkBridgeProtocolError("operation must be a nonempty string"),
+			);
+		}
+		return this.send({ kind: "subscribe", operation, payload }, options).then(
+			(value) => {
+				const id = isPlainRecord(value) ? value.subscription_id : undefined;
+				if (!isNonEmptyString(id)) {
+					throw new QgisSdkBridgeProtocolError(
+						"A subscription acknowledgement must carry a subscription_id",
+					);
+				}
+				const open: OpenSubscription = {
+					id,
+					handlers,
+					expectedSeq: 0,
+					closed: false,
+				};
+				this.subscriptions.set(id, open);
+				const handle: BridgeSubscription = {
+					id,
+					get closed(): boolean {
+						return open.closed;
+					},
+					close: (): void => {
+						this.endSubscription(id, { kind: "disposed" }, true);
+					},
+				};
+				return handle;
+			},
+		);
+	}
+
+	/** Subscriptions still open; a leak check for callers and tests. */
+	public get activeSubscriptions(): readonly string[] {
+		return [...this.subscriptions.keys()];
+	}
+
+	/** Frames that did not continue their subscription's sequence. */
+	public get sequenceBreaks(): number {
+		return this.breaks;
+	}
+
+	private send(
+		body: Readonly<Record<string, unknown>>,
+		options: InvokeOptions,
+	): Promise<unknown> {
+		if (this.closed) {
+			return Promise.reject(new QgisSdkBridgeClosedError());
 		}
 		this.counter += 1;
 		const callId = `c${this.counter}`;
@@ -292,8 +575,7 @@ export class BridgeClient {
 			this.transport.send({
 				protocol: BRIDGE_PROTOCOL_VERSION,
 				call_id: callId,
-				operation,
-				payload,
+				...body,
 			});
 		});
 
@@ -309,6 +591,9 @@ export class BridgeClient {
 		}
 		this.closed = true;
 		this.unsubscribe();
+		for (const id of [...this.subscriptions.keys()]) {
+			this.endSubscription(id, { kind: "disposed" }, false);
+		}
 		for (const callId of [...this.pending.keys()]) {
 			const pending = this.pending.get(callId);
 			if (pending === undefined) {
@@ -333,6 +618,10 @@ export class BridgeClient {
 	}
 
 	private handle(message: unknown): void {
+		if (isPlainRecord(message) && Object.hasOwn(message, "subscription_id")) {
+			this.handleFrame(message);
+			return;
+		}
 		let reply: InvokeReply;
 		try {
 			reply = parseInvokeReply(message);
@@ -346,6 +635,9 @@ export class BridgeClient {
 			}
 			return;
 		}
+		if (this.disposals.delete(reply.call_id)) {
+			return;
+		}
 		const pending = this.settle(reply.call_id);
 		if (pending === undefined) {
 			this.unmatched += 1;
@@ -356,6 +648,78 @@ export class BridgeClient {
 			return;
 		}
 		pending.reject(new QgisSdkBridgeRemoteError(reply.call_id, reply.error));
+	}
+
+	private handleFrame(raw: unknown): void {
+		let frame: BridgeStreamFrame;
+		try {
+			frame = parseStreamFrame(raw);
+		} catch (error) {
+			// A frame that cannot be parsed cannot be attributed either, so it is
+			// counted rather than delivered to whatever subscription looks closest.
+			this.unmatched += 1;
+			if (error instanceof Error) {
+				this.lastProtocolError = error;
+			}
+			return;
+		}
+		const open = this.subscriptions.get(frame.subscription_id);
+		if (open === undefined) {
+			this.unmatched += 1;
+			return;
+		}
+		if (frame.seq !== open.expectedSeq) {
+			this.breaks += 1;
+			const expected = open.expectedSeq;
+			this.endSubscription(
+				frame.subscription_id,
+				{
+					kind: "gap",
+					message: `Expected frame ${expected} but received ${frame.seq}`,
+					dropped: Math.max(0, frame.seq - expected),
+				},
+				true,
+			);
+			return;
+		}
+		open.expectedSeq += 1;
+		if ("terminal" in frame) {
+			this.endSubscription(frame.subscription_id, frame.terminal, false);
+			return;
+		}
+		open.handlers.onEvent?.(frame.event);
+	}
+
+	private endSubscription(
+		id: string,
+		terminal: BridgeStreamTerminal,
+		notifyHost: boolean,
+	): void {
+		const open = this.subscriptions.get(id);
+		if (open === undefined || open.closed) {
+			return;
+		}
+		open.closed = true;
+		this.subscriptions.delete(id);
+		if (notifyHost) {
+			this.disposeSubscription(id);
+		}
+		open.handlers.onTerminal?.(terminal);
+	}
+
+	private disposeSubscription(id: string): void {
+		if (this.closed) {
+			return;
+		}
+		this.counter += 1;
+		const callId = `c${this.counter}`;
+		this.disposals.add(callId);
+		this.transport.send({
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			call_id: callId,
+			kind: "unsubscribe",
+			subscription_id: id,
+		});
 	}
 
 	/** The last malformed message this client refused, if any. */

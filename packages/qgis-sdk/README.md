@@ -208,6 +208,47 @@ The bridge copies the produced layer's features into the destination the user ch
 
 `providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge is only importable where PyQGIS exists.
 
+## WebEngine bridge host side (experimental, TASK-4)
+
+`qgis_sdk.bridge` is the QGIS-free host half of the transport a web view speaks.
+Nothing in it imports Qt or QGIS, and nothing in it takes a callable from the
+wire: a view names an operation id, and the host decides whether that view may
+have it.
+
+```python
+from qgis_sdk.bridge import BridgeOperation, Dispatcher
+
+dispatcher = Dispatcher(
+    description=describe_plugin(MyPlugin).to_dict(),
+    authorize=lambda binding, operation: binding.origin == "qgis://desktop",
+)
+dispatcher.register(BridgeOperation("layers.info", "Read one layer"), read_layer)
+
+binding, handshake = dispatcher.handshake(view_id="view-1", origin="qgis://desktop")
+reply = dispatcher.dispatch(binding, request)     # never raises
+```
+
+- **One narrow entry point.** Protocol, generation, authorization, allowlist,
+  payload and serialization are decided in that order. Authorization runs before
+  the allowlist lookup, so a refused view cannot enumerate operations by
+  watching which refusals differ.
+- **Trusted identity only.** `ViewBinding` is minted by the host; a forged
+  `view_id` or `generation` inside the payload is ignored, and
+  `advance_generation()` retires every live binding with `stale_generation`.
+- **Subscriptions.** `register_stream(operation, factory)` declares a stream, and
+  `dispatch` accepts `{"kind": "subscribe"}`. Frames carry a per-subscription
+  `seq`, the queue is bounded (`MAX_QUEUED_EVENTS`), a pushed stream that
+  overruns it ends with a `gap` terminal carrying the dropped count, progress may
+  be coalesced while it is still queued and data never is, and `pump(binding)`
+  hands the frames to whatever transport owns the view.
+- **Release by kind.** `{"kind": "release"}` disposes handles the way their kind
+  requires: a borrowed layer is never deleted, an owned temporary output is
+  deleted once, and a subscription that already ended reports
+  `already_released` instead of failing.
+- **Transport.** `qgis_sdk.bridge.transport.ChannelTransport` moves JSON strings
+  in and out; `qgis_sdk.adapters.webchannel.create_channel_object` wraps it in
+  the `QObject` a `QWebChannel` registers, importing Qt only when asked.
+
 ## 0.2.0 migration notes (TASK-28)
 
 `0.2.0` is the first release where the two packages carry different numbers: the
