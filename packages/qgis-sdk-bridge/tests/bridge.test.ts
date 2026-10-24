@@ -86,7 +86,7 @@ function replyFor(
 
 test("both languages agree on the checked-in bridge cases", () => {
 	expect(fixture.protocol).toBe(BRIDGE_PROTOCOL_VERSION);
-	expect(fixture.cases.length).toBe(9);
+	expect(fixture.cases.length).toBe(10);
 
 	for (const item of fixture.cases) {
 		const reply = parseInvokeReply(item.reply);

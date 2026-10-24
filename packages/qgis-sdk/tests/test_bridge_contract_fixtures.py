@@ -59,6 +59,7 @@ def test_every_case_names_a_unique_refusal_or_value() -> None:
         "invalid-payload",
         "not-serializable",
         "operation-failed",
+        "invalid-result",
         "cancelled",
     }
 

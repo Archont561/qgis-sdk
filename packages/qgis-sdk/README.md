@@ -216,17 +216,31 @@ wire: a view names an operation id, and the host decides whether that view may
 have it.
 
 ```python
-from qgis_sdk.bridge import BridgeOperation, Dispatcher
+from qgis_sdk.bridge import Dispatcher
 
-dispatcher = Dispatcher(
-    description=describe_plugin(MyPlugin).to_dict(),
+runtime = PluginRuntime(MyPlugin, context).start()
+dispatcher = Dispatcher.from_runtime(
+    runtime,
     authorize=lambda binding, operation: binding.origin == "qgis://desktop",
 )
-dispatcher.register(BridgeOperation("layers.info", "Read one layer"), read_layer)
 
 binding, handshake = dispatcher.handshake(view_id="view-1", origin="qgis://desktop")
 reply = dispatcher.dispatch(binding, request)     # never raises
 ```
+
+- **One manifest, three views.** `from_description`/`from_runtime` project the
+  allowlist from the plugin's own declarations, so the operations a view may
+  call, the operations the handshake advertises and the schemas a generated
+  client will be built from are the same object (decision-26). A declared action
+  without a handler is refused when the dispatcher is wired, not when a view
+  calls it.
+- **Strict inputs, lenient results.** A declared request schema is validated
+  before the handler runs - unknown properties, missing required ones, mistyped
+  values and integers outside the safe range are refused as `invalid_payload`
+  with the field path - and the payload is bound as keyword arguments. A
+  declared result schema is checked afterwards: extra properties are tolerated,
+  a missing or mistyped one is `invalid_result` naming the field, never the
+  value.
 
 - **One narrow entry point.** Protocol, generation, authorization, allowlist,
   payload and serialization are decided in that order. Authorization runs before

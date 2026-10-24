@@ -267,6 +267,28 @@
 		},
 		{
 			"expect": {
+				"code": "invalid_result",
+				"ok": false
+			},
+			"name": "invalid-result",
+			"reply": {
+				"call_id": "case-invalid-result",
+				"error": {
+					"code": "invalid_result",
+					"message": "result.total: expected an integer, got string"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-invalid-result",
+				"operation": "demo.malformed",
+				"payload": {},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
 				"code": "cancelled",
 				"ok": false
 			},

@@ -4,7 +4,7 @@ title: Generate checked in TypeScript contracts clients and validators
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 15:27'
+updated_date: '2026-10-24 21:45'
 labels: []
 milestone: m-2
 dependencies:
@@ -57,5 +57,14 @@ author: qgis-sdk agent
 created: 2026-10-24 15:27
 ---
 Resolved on 2026-10-24 (option A, user-chosen): the generator now accepts tuple[X, ...] and emits the same schema as list[X], while fixed-length and bare tuples are refused with a specific message. Commit landed with 9 declaration tests plus a guard that VectorLayerInfo and StyleSpec stay generatable, and the checked-in contract fixtures regenerate byte-identically. decision-10 carries a dated amendment and stays proposed until this task produces real generated TypeScript. Nothing about this task's scope changed - the payload blocker recorded in the earlier comment is cleared.
+---
+author: qgis-sdk agent
+created: 2026-10-24 21:45
+---
+Input contract settled by [decision-26](../decisions/decision-26%20-%20Derive-the-bridge-allowlist-and-the-generated-client-from-one-declared-manifest.md) and implemented on the host side: `BridgeOperation` carries the declared request/result schemas, `Dispatcher.from_description`/`from_runtime` project the allowlist from the same `PluginDescription` the handshake advertises, and both directions are validated (`invalid_payload` with the field path in, `invalid_result` out).
+
+What that means for this task: the generator reads one manifest - the plugin description - and the dispatcher the frontend will actually talk to reads the same object, so a generated client cannot name an operation the host does not expose without the declaration itself changing. The remaining work here is emission and drift control: DTOs, operation map, callable client, validators, a `contract_fingerprint`, and the `--check` mode CI runs.
+
+Not decided here: the tuple/`Literal`/`anyOf` subset the emitter must refuse loudly (it mirrors `qgis_sdk.declarations`, which already refuses what it cannot describe), and whether a strict `tryX` result union ships alongside the throwing form. [decision-27](../decisions/decision-27%20-%20Expose-curated-host-services-to-web-views-as-generated-namespaces.md) adds the second surface (curated host namespaces) as a proposal, not as scope for this task.
 ---
 <!-- COMMENTS:END -->

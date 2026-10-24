@@ -53,6 +53,7 @@ class BridgeErrorCode(str, Enum):
     OPERATION_FAILED = "operation_failed"
     CANCELLED = "cancelled"
     LIMIT_EXCEEDED = "limit_exceeded"
+    INVALID_RESULT = "invalid_result"
 
 
 def to_wire(value: Any, *, depth: int = 0) -> Any:
@@ -91,10 +92,19 @@ class BridgeOperation:
     The id is the allowlist entry: there is no ``getattr`` path, no dotted
     attribute walk and no way to reach a Python callable that was not declared
     here with a handler.
+
+    ``request`` and ``result`` are the schemas the declaration already produced.
+    They are carried here so the allowlist, the handshake and the generated
+    client all read one object (decision-26): a host that validates inputs
+    against a different shape than the one it advertises has a contract that
+    only looks like a contract. An operation registered by hand may leave both
+    out, and is then described by its id and title alone.
     """
 
     id: str
     title: str
+    request: Mapping[str, Any] | None = None
+    result: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not _OPERATION_ID.fullmatch(self.id):
@@ -104,10 +114,21 @@ class BridgeOperation:
             )
         if not isinstance(self.title, str) or not self.title.strip():
             raise QgisSdkBridgeError(f"{self.id}: title must be a nonempty string")
+        for name in ("request", "result"):
+            schema = getattr(self, name)
+            if schema is not None and not isinstance(schema, Mapping):
+                raise QgisSdkBridgeError(
+                    f"{self.id}: {name} must be a schema object or None"
+                )
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         """Return the advertised description of this operation."""
-        return {"id": self.id, "title": self.title}
+        described: dict[str, Any] = {"id": self.id, "title": self.title}
+        if self.request is not None:
+            described["request"] = to_wire(self.request)
+        if self.result is not None:
+            described["result"] = to_wire(self.result)
+        return described
 
 
 @dataclass(frozen=True, slots=True)
