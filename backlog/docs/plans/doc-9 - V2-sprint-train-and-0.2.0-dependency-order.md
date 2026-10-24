@@ -183,8 +183,9 @@ Why:
   slices, TASK-14, TASK-39 - is implemented and evidenced.
 - Both were waiting on design, not just code: TASK-5 says it must resolve
   decision-4's networking transport, and TASK-15 builds on decision-13's job
-  transport. Both decisions are still `proposed`. Rushing them into a release
-  gate would have meant deciding the transport under deadline.
+  transport. Both were `proposed` at the time and have since been **accepted**
+  (2026-10-24), which is why they can now be implemented without a design
+  deadline hanging over a release gate.
 
 Consequences recorded on the board: TASK-5 and TASK-15 are `m-2`; TASK-28 no
 longer depends on them; TASK-29 (the 0.3.0 gate) now does; the TASK-38 epic

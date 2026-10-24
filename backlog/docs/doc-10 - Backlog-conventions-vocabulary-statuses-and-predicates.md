@@ -114,7 +114,7 @@ conditions are already a backlog task:
 
 | Decision | Subject | Unmet condition / blocking task |
 | --- | --- | --- |
-| decision-4 | async-first networking transport | TASK-5 (m-1) |
+| ~~decision-4~~ | async-first networking transport | **accepted 2026-10-24** — API and ownership settled; TASK-5 (m-2) implements it |
 | ~~decision-6~~ | models/services/core/adapters separation | **accepted 2026-10-24** — `testing` and `adapters/qgis` landed |
 | decision-7 | layered pytest fixtures, properties, BDD | TASK-7 (m-2) |
 | decision-8 | separate check/test/dev/build workflows | TASK-16 (check), TASK-26 (test/dev) |
@@ -122,11 +122,26 @@ conditions are already a backlog task:
 | decision-10 | dataclass authoring + schema-driven TS generation | TASK-17; its own closeout says so |
 | decision-11 | one context-injected class per algorithm | class-per-algorithm and provider registration landed (TASK-14, TASK-39); open on `QgsProcessingAlgorithm`/`createInstance` phases, mid-flight cancellation and a thread-affinity proof |
 | decision-12 | one context-injected controller per surface | TASK-3 (m-1) |
-| decision-13 | runtime-bound local jobs | TASK-15 (m-1) |
+| ~~decision-13~~ | runtime-bound local jobs | **accepted 2026-10-24** — `bind`-based submission and late-subscriber replay settled; TASK-15 (m-2) implements it |
 | decision-14 | QGIS-free import rules in `check` | TASK-16 (m-3); `QGIS001`/`ARCH001` do not exist |
 | decision-15 | refresh through owned runtime generations | TASK-21 (m-3) |
 | decision-16 | reusable layer styles vs UI themes | layer-style half landed (TASK-25.4); open on the `ctx.styles`/`ctx.ui.theme` surface it defers |
 | decision-23 | Tauri-inspired QWebChannel patterns | TASK-4 (m-2) |
+
+### Promotion follow-up (2026-10-24, later the same day)
+
+Two further decisions were promoted after the audit above, and the grounds are
+worth stating because they are **not** the grounds the audit expected:
+`decision-4` and `decision-13` were accepted on *design settlement*. The
+questions that kept them open - the public networking API and ownership model,
+and the job submission form plus late-subscriber delivery - were answered in a
+dated `## Status review` on each record; their implementation tasks (TASK-5 and
+TASK-15) had meanwhile moved to m-2 in the same re-scope.
+
+That is the rule in section 3 applied literally: acceptance tracks the decision,
+not the delivery. Their rows above are struck but left in place, because the
+audit is a snapshot and rewriting it would erase what was true at the time. Ten
+decisions remain proposed.
 
 Two decisions have no inbound reference anywhere: `decision-5` (Rust algorithms
 post-v1) and `decision-9` (typed bridge endpoints). That is acceptable for

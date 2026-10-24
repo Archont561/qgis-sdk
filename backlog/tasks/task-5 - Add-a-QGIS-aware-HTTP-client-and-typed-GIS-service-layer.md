@@ -4,7 +4,7 @@ title: Add a QGIS-aware HTTP client and typed GIS-service layer
 status: To Do
 assignee: []
 created_date: '2026-10-15 23:06'
-updated_date: '2026-10-24 16:54'
+updated_date: '2026-10-24 17:02'
 labels: []
 milestone: m-2
 dependencies:
@@ -35,5 +35,11 @@ author: qgis-sdk agent
 created: 2026-10-24 16:54
 ---
 Moved from m-1 to m-2 on 2026-10-24 during the 0.2.0 re-scope. 0.2.0 closes on TASK-3 + TASK-28: this task blocked nothing inside m-1, sits outside the 'native runtime and Processing' surface the milestone is named for, and its networking transport still needs decision-4 resolved, which is only proposed. TASK-29 does not close until this lands, so it cannot slip silently.
+---
+
+author: qgis-sdk agent
+created: 2026-10-24 17:02
+---
+decision-4 is now accepted (2026-10-24), so this task implements a settled design rather than resolving one. The API is fixed in the decision: one injected ctx.network client with get/post/request, immutable derived clients, a fully buffered Response, coroutine methods as the UI-facing form, and a blocking form that refuses GUI-thread use. Two numbers stay task-level and must come from measurement here, not from the decision: the redirect limit and the buffered body-size ceiling.
 ---
 <!-- COMMENTS:END -->
