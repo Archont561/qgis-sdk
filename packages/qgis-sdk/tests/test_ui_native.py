@@ -6,6 +6,11 @@ suite, and this file only proves the mechanical half - a spec becomes a concrete
 widget, a submitted value is read back, and the declared handler runs with
 coerced arguments.
 
+The imports are guarded rather than left to ``importorskip`` because a *broken*
+Qt install raises ``ImportError`` from inside the module (a missing ``libGL`` is
+the usual one, and it says so), and a collection error there would take the whole
+run down instead of reporting what this machine lacks.
+
 The runtime here is a stub rather than ``PluginRuntime``. The adapter reads
 exactly three attributes from it (``description``, ``actions``, ``instance``), so
 a stub states that contract instead of hiding it behind a full plugin setup.
@@ -19,27 +24,24 @@ from typing import Annotated, Literal
 
 import pytest
 
-pytest.importorskip("PyQt6.QtWidgets", reason="native forms need Qt")
-pytest.importorskip("qgis.gui", reason="native forms need the QGIS gui bindings")
+try:
+    from PyQt6.QtWidgets import (
+        QApplication,
+        QCheckBox,
+        QComboBox,
+        QDialog,
+        QDoubleSpinBox,
+        QLineEdit,
+        QSpinBox,
+    )
+    from qgis.gui import QgsMapLayerComboBox, QgsProjectionSelectionWidget
+    from qgis_sdk.adapters.qgis import ui as native_ui
+    from qgis_sdk.declarations import action, describe_plugin, plugin
+    from qgis_sdk.models import CrsInput, LayerInput, Metres, QgisSdkFormError
+except ImportError as error:  # pragma: no cover - depends on the host
+    pytest.skip(f"native forms need Qt and QGIS: {error}", allow_module_level=True)
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
-from PyQt6.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QComboBox,
-    QDialog,
-    QDoubleSpinBox,
-    QLineEdit,
-    QSpinBox,
-)
-from qgis.gui import (
-    QgsMapLayerComboBox,
-    QgsProjectionSelectionWidget,
-)
-from qgis_sdk.adapters.qgis import ui as native_ui
-from qgis_sdk.declarations import action, describe_plugin, plugin
-from qgis_sdk.models import CrsInput, LayerInput, Metres, QgisSdkFormError
 
 
 @plugin(id="demo:forms", title="Form demo")
