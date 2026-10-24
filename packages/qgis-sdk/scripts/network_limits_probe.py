@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import json
 import os
-import resource
 import statistics
 import sys
 import threading
@@ -39,6 +38,21 @@ from typing import ClassVar
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 GUI_STALL_BUDGET_MS = 40.0
+
+
+def _resident_kib() -> int:
+    """Peak resident set in KiB; zero where the Unix ``resource`` module is absent.
+
+    The probe only runs where QGIS is, but the QGIS-free tests import this module
+    on Windows as well, so the import must not be a hard one.
+    """
+    try:
+        import resource
+    except ImportError:  # pragma: no cover - Windows
+        return 0
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+
 """The event-loop gap budget doc-6 held the scheduler to; the same bar applies here."""
 
 BODY_SIZES_MIB = (1, 4, 8, 16, 32, 64, 128)
@@ -308,7 +322,7 @@ def _run(prefix: Path) -> ProbeReport:
         for size_mib in BODY_SIZES_MIB:
             stalls: list[float] = []
             transfers: list[float] = []
-            before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            before = _resident_kib()
             for _ in range(BODY_SAMPLES):
                 payload, transfer, stall, _location = fetch(
                     f"{base}/bytes/{size_mib << 20}"
@@ -317,7 +331,7 @@ def _run(prefix: Path) -> ProbeReport:
                 del payload
                 stalls.append(stall * 1000)
                 transfers.append(transfer * 1000)
-            after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            after = _resident_kib()
             bodies.append(
                 BodyFinding(
                     size_mib=size_mib,
