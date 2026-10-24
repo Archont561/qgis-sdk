@@ -91,7 +91,18 @@ jobs:
 
       - name: Check coverage for all packages
         id: coverage
-        run: pixi run -e bun bun run coverage
+        run: |
+          set -o pipefail
+          pixi run -e bun bun run coverage 2>&1 | tee coverage-output.log
+
+      - name: Annotate the coverage failure
+        if: failure() && steps.coverage.outcome == 'failure'
+        run: |
+          # The job log is not always retrievable, but annotations are: surface
+          # the failing lines so a red coverage step says what broke.
+          grep -nE 'FAILED|ERROR|Error|error:|Coverage|TOTAL|no tests ran' coverage-output.log \
+            | tail -40 | cut -c1-900 \
+            | while IFS= read -r line; do echo "::error::$line"; done
 
       - name: Upload Python coverage
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
