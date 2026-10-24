@@ -21,3 +21,20 @@ Runtime composition selects QGIS adapters; pure tests select fakes. Native UI us
 - Diagnostics identify path/line, rule and actionable remediation; native exemption scope must be narrow/configured.
 - Importing a declaration in a subprocess is not a security sandbox.
 - Rules and runtime-detection APIs are proposed, not implemented checks.
+
+## Status review (2026-10-24): stays `proposed`
+
+What exists is the *test-level* boundary, contributed by TASK-11: an AST walk over
+the pure layers and a subprocess import that blocks `qgis`, PyQt and pydantic while
+exercising declarations. What the decision names, and what does not exist, is the
+reported check: the `QGIS001` and `ARCH001` diagnostics have no implementation
+anywhere in the tree, there is no `check` command to emit them, and
+[TASK-16](../tasks/task-16%20-%20Implement-non-mutating-check-and-QGIS-import-diagnostics.md)
+(which owns the check command and the diagnostics) is still `To Do` in milestone
+m-3. The Consequences section's "Rules and runtime-detection APIs are proposed, not
+implemented checks" therefore remains literally true.
+
+**Promotion condition:** promote when TASK-16 emits path/line/rule/remediation
+diagnostics for the same boundaries the tests already guard, in the build as well
+as the check command. Until then the guard is real but the decision's contract is
+not delivered.

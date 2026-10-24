@@ -89,6 +89,12 @@ contracts), and TASK-28.
 
 ### Suggested slices inside TASK-25
 
+These five slices are now tracked on the board as sub-tasks of TASK-25
+(`TASK-25.1`–`TASK-25.5`), because the parent's three criteria span contracts, a
+native adapter, settings, styling and qualification — more than one change set can
+prove. Their dependency shape: `25.1` first, `25.2` and `25.3` in parallel on it,
+`25.4` on `25.2`, and `25.5` on `25.2`+`25.3`+`25.4`.
+
 Each slice should be independently reviewable and should keep the suite green:
 
 1. **Contracts and fakes.** Add only the layer, project, settings and style
@@ -177,4 +183,5 @@ QGIS-free tests for them live in `packages/qgis-sdk/tests/scripts/`.
 - [TASK-38](../../tasks/task-38%20-%20Epic-v2-0.2.0-native-runtime-and-Processing-algorithms.md) — the epic this plan serves.
 - [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md) — 0.2.0 milestone.
 - [doc-4](doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md) — version policy and task inventory.
+- [doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md) — the vocabulary, predicate and slicing rules this plan follows.
 - [decision-6](../../decisions/decision-6%20-%20Separate-models-services-core-and-runtime-adapters.md), [decision-16](../../decisions/decision-16%20-%20Separate-reusable-layer-styles-from-UI-themes.md), [decision-19](../../decisions/decision-19%20-%20Prove-a-non-destructive-local-GIS-reference-workflow.md).

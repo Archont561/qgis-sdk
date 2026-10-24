@@ -4,6 +4,7 @@ title: 'Epic: v2 (0.2.0) native runtime and Processing algorithms'
 status: To Do
 assignee: []
 created_date: '2026-10-24 14:14'
+updated_date: '2026-10-24 14:29'
 labels: []
 milestone: m-1
 dependencies:
@@ -16,6 +17,9 @@ references:
   - backlog/docs/plans/doc-9 - V2-sprint-train-and-0.2.0-dependency-order.md
   - backlog/docs/plans/doc-4 - SemVer-delivery-roadmap-and-task-dependencies.md
   - backlog/milestones/m-1 - 0.2.0-—-native-runtime-and-processing-algorithms.md
+  - >-
+    backlog/docs/doc-10 -
+    Backlog-conventions-vocabulary-statuses-and-predicates.md
 priority: high
 type: feature
 ordinal: 38000
