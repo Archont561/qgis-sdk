@@ -5,11 +5,19 @@ name: relock
 # Refresh lockfiles for a manifest edit that was made where the network is not.
 #
 # The guard job reports on every pull request; the relock job runs only when the guard found
-# drift, which is why this workflow carries no `paths:` filter — a stale lock arriving by any
-# route (a transitive manifest, a hand-edited lock, a deleted one) is caught the same way.
+# drift. When `[workflow]` is present, `on.pull_request.paths:` limits the guard to manifest
+# and lock changes (TASK-121) — the safe default includes lockfiles so a hand-edited or
+# deleted lock is still caught. Without `[workflow]`, no filter (pre-TASK-121 behavior).
 
 on:
   pull_request:
+    paths:
+      - "bun.lock"
+      - "package.json"
+      - "pixi-sandbox.toml"
+      - "pixi.lock"
+      - "pixi.toml"
+
   workflow_dispatch:
     inputs:
       repaired_sha:
@@ -30,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           pixi-version: v0.81.0
           run-install: false
@@ -63,7 +71,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           persist-credentials: true
-      - uses: prefix-dev/setup-pixi@9dabb60412d3d2d967a8d682f7ce01317af40514 # v0.11.0
+      - uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           pixi-version: v0.81.0
           run-install: false

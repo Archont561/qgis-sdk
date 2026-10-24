@@ -20,7 +20,10 @@ from release import (
     classify,
     compute_plan,
     create_release,
+    detect_scope_from_files,
     parse_log,
+    parse_milestone_tag,
+    parse_release_tag,
     parse_versionrc,
     render_changelog,
     sort_tags,
@@ -119,6 +122,94 @@ def test_tag_helpers_roundtrip():
     assert version_from_tag(tag) == version
     with pytest.raises(QgisSdkReleaseVersionError):
         version_from_tag("0.2.0")
+
+
+@pytest.mark.parametrize(
+    ("raw_tag", "expected_scope", "expected_version"),
+    [
+        ("milestone-v0.1.0", "all", "0.1.0"),
+        ("milestone/v0.2.0", "all", "0.2.0"),
+        ("milestone/0.2.0", "all", "0.2.0"),
+        ("m-v0.3.0", "all", "0.3.0"),
+        ("milestone-v0.1.0-rc.1", "all", "0.1.0-rc.1"),
+        ("milestone/python-v0.2.0", "python", "0.2.0"),
+        ("milestone/ts-v0.2.0", "typescript", "0.2.0"),
+    ],
+)
+def test_parse_milestone_tag_accepts_supported_patterns(
+    raw_tag, expected_scope, expected_version
+):
+    parsed = parse_milestone_tag(raw_tag)
+    assert parsed is not None
+    scope, version = parsed
+    assert scope == expected_scope
+    assert str(version) == expected_version
+
+
+def test_parse_milestone_tag_returns_none_for_regular_tags_and_rejects_malformed():
+    assert parse_milestone_tag("v0.1.0") is None
+    assert parse_milestone_tag("python-v0.1.0") is None
+    with pytest.raises(QgisSdkReleaseVersionError):
+        parse_milestone_tag("milestone-vnot-a-semver")
+
+
+@pytest.mark.parametrize(
+    ("raw_tag", "expected_scope", "expected_version"),
+    [
+        ("v0.1.0", "all", "0.1.0"),
+        ("v0.1.0-rc.1", "all", "0.1.0-rc.1"),
+        ("python-v0.1.0", "python", "0.1.0"),
+        ("python/v0.1.0", "python", "0.1.0"),
+        ("py-v0.2.0", "python", "0.2.0"),
+        ("qgis-sdk-v0.2.0", "python", "0.2.0"),
+        ("ts-v0.1.0", "typescript", "0.1.0"),
+        ("typescript-v0.1.0", "typescript", "0.1.0"),
+        ("typescript/v0.1.0", "typescript", "0.1.0"),
+        ("bridge-v0.1.0", "typescript", "0.1.0"),
+        ("bridge/v0.1.0-rc.1", "typescript", "0.1.0-rc.1"),
+        ("qgis-sdk-bridge-v0.1.0", "typescript", "0.1.0"),
+    ],
+)
+def test_parse_release_tag_accepts_general_and_scoped_tags(
+    raw_tag, expected_scope, expected_version
+):
+    scope, version = parse_release_tag(raw_tag)
+    assert scope == expected_scope
+    assert str(version) == expected_version
+    assert version_from_tag(raw_tag) == version
+
+
+@pytest.mark.parametrize(
+    "bad_tag",
+    [
+        "0.1.0",
+        "milestone-v0.1.0",
+        "milestone/v0.1.0",
+        "m-v0.1.0",
+        "unknown-v0.1.0",
+        "not-a-tag",
+    ],
+)
+def test_parse_release_tag_rejects_non_release_tags(bad_tag):
+    with pytest.raises(QgisSdkReleaseVersionError):
+        parse_release_tag(bad_tag)
+
+
+def test_milestone_trigger_cuts_release_tag_and_ignores_milestone_tag_in_base(
+    sample_config,
+):
+    plan = compute_plan(
+        "milestone",
+        ("milestone-v0.1.0", "v0.1.0-rc.1"),
+        _log("feat: milestone slice"),
+        sample_config,
+        milestone_tag="milestone-v0.1.0",
+    )
+    assert plan.action == "tag"
+    assert plan.tag == "v0.1.0"
+    assert str(plan.version) == "0.1.0"
+    assert plan.base_tag == "v0.1.0-rc.1"
+    assert "## v0.1.0" in plan.changelog
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +503,69 @@ def test_version_override_wins(sample_config):
     assert plan.action == "tag" and plan.tag == "v1.2.3"
 
 
+@pytest.mark.parametrize(
+    ("changed_files", "expected_scope"),
+    [
+        (
+            ["backlog/tasks/task-1.md", "README.md", ".agents/skills/tdd/SKILL.md"],
+            "none",
+        ),
+        (["packages/qgis-sdk/src/qgis_sdk/declarations.py"], "python"),
+        (["packages/qgis-sdk-bridge/src/index.ts"], "typescript"),
+        (
+            [
+                "packages/qgis-sdk/src/qgis_sdk/declarations.py",
+                "packages/qgis-sdk-bridge/src/index.ts",
+            ],
+            "all",
+        ),
+        (["pixi.toml", "packages/qgis-sdk/src/qgis_sdk/declarations.py"], "all"),
+    ],
+)
+def test_detect_scope_from_files_categorizes_monorepo_paths(
+    changed_files, expected_scope
+):
+    assert detect_scope_from_files(changed_files) == expected_scope
+
+
+def test_compute_plan_supports_scoped_tags_and_forced_bumps(sample_config):
+    py_plan = compute_plan(
+        "dispatch",
+        ("v0.1.0",),
+        _log("chore: internal"),
+        sample_config,
+        scope="python",
+        bump="minor",
+    )
+    assert py_plan.action == "tag"
+    assert py_plan.scope == "python"
+    assert py_plan.tag == "python-v0.2.0"
+    assert str(py_plan.version) == "0.2.0"
+
+    ts_plan = compute_plan(
+        "dispatch",
+        ("v0.1.0",),
+        _log("chore: internal"),
+        sample_config,
+        scope="typescript",
+        bump="0.3.0",
+    )
+    assert ts_plan.action == "tag"
+    assert ts_plan.scope == "typescript"
+    assert ts_plan.tag == "ts-v0.3.0"
+
+
+def test_compute_plan_skips_when_scope_is_none(sample_config):
+    plan = compute_plan(
+        "push",
+        ("v0.1.0",),
+        _log("feat: something"),
+        sample_config,
+        scope="none",
+    )
+    assert plan.action == "skip"
+
+
 def test_unknown_trigger_rejected(sample_config):
     with pytest.raises(QgisSdkReleaseVersionError):
         compute_plan("schedule", (), (), sample_config)
@@ -669,6 +823,48 @@ def test_plan_push_without_tags_skips(tmp_path, monkeypatch):
     assert main(["plan", "--config", str(config)]) == 0
 
 
+def test_plan_cli_supports_milestone_scope_bump_and_dry_run(tmp_path, monkeypatch):
+    config = _versionrc(tmp_path)
+    out_file = tmp_path / "gh_output"
+    out_file.touch()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _fake_git(
+        monkeypatch,
+        tags=("v0.1.0", "milestone-v0.2.0"),
+        log="a" * 40 + "\x1f" + "feat: milestone work" + "\x1f" + "\x1e\n",
+    )
+    from release import main
+
+    assert (
+        main(
+            [
+                "plan",
+                "--trigger",
+                "milestone",
+                "--milestone-tag",
+                "milestone-v0.2.0",
+                "--config",
+                str(config),
+                "--dry-run",
+                "true",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    outputs = dict(
+        line.split("=", 1) for line in out_file.read_text().splitlines() if line
+    )
+    assert outputs["action"] == "tag"
+    assert outputs["tag"] == "v0.2.0"
+    assert outputs["scope"] == "all"
+    assert outputs["python"] == "true"
+    assert outputs["typescript"] == "true"
+    assert outputs["dry_run"] == "true"
+
+
 def test_classify_reports_prerelease(tmp_path, monkeypatch):
     out_file = tmp_path / "gh_output"
     out_file.touch()
@@ -690,6 +886,42 @@ def test_classify_rejects_bad_tag():
     from release import main
 
     assert main(["classify", "--tag", "0.1.0"]) == 1
+
+
+def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
+    out_file = tmp_path / "gh_output"
+    out_file.touch()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    from release import main
+
+    assert main(["classify", "--tag", "python-v0.2.0", "--scoped"]) == 0
+    outputs = dict(
+        line.split("=", 1) for line in out_file.read_text().splitlines() if line
+    )
+    assert outputs == {
+        "version": "0.2.0",
+        "pep440": "0.2.0",
+        "prerelease": "false",
+        "scope": "python",
+        "python": "true",
+        "typescript": "false",
+        "tag_name": "python-v0.2.0",
+    }
+
+    out_file.write_text("", encoding="utf-8")
+    assert main(["classify", "--tag", "ts/v0.2.0-rc.1", "--scoped"]) == 0
+    ts_outputs = dict(
+        line.split("=", 1) for line in out_file.read_text().splitlines() if line
+    )
+    assert ts_outputs == {
+        "version": "0.2.0-rc.1",
+        "pep440": "0.2.0rc1",
+        "prerelease": "true",
+        "scope": "typescript",
+        "python": "false",
+        "typescript": "true",
+        "tag_name": "ts/v0.2.0-rc.1",
+    }
 
 
 def test_tag_creates_and_pushes_with_message_file(tmp_path, monkeypatch):
@@ -795,3 +1027,36 @@ def test_github_release_needs_repo_and_token(tmp_path, monkeypatch):
     from release import main
 
     assert main(["github-release", "--tag", "v0.1.0"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Workflow contracts (TASK-37)
+# ---------------------------------------------------------------------------
+
+
+def test_autorelease_workflow_has_milestone_triggers_paths_ignore_and_dispatch_inputs():
+    repo_root = Path(__file__).resolve().parents[2]
+    text = (repo_root / ".github/workflows/autorelease.yml").read_text(encoding="utf-8")
+    for pattern in ('"milestone-v*"', '"milestone/*"', '"m-v*"'):
+        assert pattern in text
+    for ignored in ('"backlog/**"', '".agents/**"', '".devcontainer/**"', '"*.md"'):
+        assert ignored in text
+    assert "cancel-in-progress: false" in text
+    for dispatch_input in ("scope:", "bump:", "dry-run:"):
+        assert dispatch_input in text
+
+
+def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
+    repo_root = Path(__file__).resolve().parents[2]
+    release_text = (repo_root / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+    assert '"*-v*"' in release_text
+    assert '"*/*v*"' in release_text
+    assert "id-token: write" in release_text
+
+    publish_text = (repo_root / ".github/workflows/publish-sandbox.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "SHA256SUMS" in publish_text
+    assert "pixi global install" not in publish_text
