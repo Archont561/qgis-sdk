@@ -7,12 +7,20 @@ from qgis_sdk.services import (
     Algorithms,
     Cancellation,
     DesktopAccess,
+    Network,
     Notifications,
     Progress,
     ViewControl,
 )
 
 from .scope import ResourceScope
+
+
+def _require_network(scope: ResourceScope, network: Network | None) -> Network:
+    scope.ensure_open()
+    if network is None:
+        raise QgisSdkUnsupportedCapabilityError("network")
+    return network
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +30,7 @@ class PluginContext:
     notifications: Notifications
     scope: ResourceScope
     desktop: DesktopAccess | None = None
+    network: Network | None = None
 
     def require_native(self) -> DesktopAccess:
         """Request Desktop access; pure/standalone runtimes fail explicitly."""
@@ -29,6 +38,10 @@ class PluginContext:
         if self.desktop is None:
             raise QgisSdkUnsupportedCapabilityError("desktop")
         return self.desktop
+
+    def require_network(self) -> Network:
+        """Request the network client; a host without one fails explicitly."""
+        return _require_network(self.scope, self.network)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +51,11 @@ class UiContext:
     notifications: Notifications
     view: ViewControl
     scope: ResourceScope
+    network: Network | None = None
+
+    def require_network(self) -> Network:
+        """Request the network client; a host without one fails explicitly."""
+        return _require_network(self.scope, self.network)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +72,11 @@ class AlgorithmContext:
     cancellation: Cancellation
     scope: ResourceScope
     algorithms: Algorithms
+    network: Network | None = None
+
+    def require_network(self) -> Network:
+        """Request the network client; a host without one fails explicitly."""
+        return _require_network(self.scope, self.network)
 
 
 @dataclass(frozen=True, slots=True)

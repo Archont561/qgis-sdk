@@ -1,10 +1,10 @@
 ---
 id: TASK-5
 title: Add a QGIS-aware HTTP client and typed GIS-service layer
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-15 23:06'
-updated_date: '2026-10-24 17:02'
+updated_date: '2026-10-24 22:33'
 labels: []
 milestone: m-2
 dependencies:
@@ -23,10 +23,18 @@ Resolve the proposed networking ADR into one injectable transport respecting QGI
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 UI-facing requests are non-blocking by default, with explicit timeout, cancellation, and error semantics.
-- [ ] #2 A response abstraction provides status, headers, bytes/text/JSON helpers, and explicit status error handling.
-- [ ] #3 Unit tests use an injected fake transport; QGIS configuration behavior has integration coverage.
+- [x] #1 UI-facing requests are non-blocking by default, with explicit timeout, cancellation, and error semantics.
+- [x] #2 A response abstraction provides status, headers, bytes/text/JSON helpers, and explicit status error handling.
+- [x] #3 Unit tests use an injected fake transport; QGIS configuration behavior has integration coverage.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented on the decision-4 shape. Models: Headers (case-insensitive, redacting repr), NetworkRequest, buffered Response (status_code/reason/headers/content/text/json()/ok/raise_for_status()), DEFAULT_TIMEOUT_SECONDS=30, DEFAULT_MAX_REDIRECTS=20, DEFAULT_MAX_BODY_BYTES=16 MiB; QgisSdkNetworkError family classified by code (request_rejected, request_cancelled, connection_failed, request_timeout, tls_failed, authentication_failed, redirect_refused, response_too_large, http_status, decode_failed, blocking_on_gui_thread, service_response_invalid). Services: NetworkTransport(send/send_blocking), Network, BlockingNetwork; PluginContext/UiContext.network + require_network(). Client: qgis_sdk.network.NetworkClient (coroutine get/post/request awaiting a scheduling Handoff; configure() derives immutable clients; .blocking refuses the GUI thread; scope close cancels in flight) and OgcApiFeatures as the first typed service. Scheduling: Handoff(on_cancel=) so Job.cancel() reaches the transport while the job is suspended. Adapter: adapters.qgis.NativeNetworkTransport over QgsNetworkAccessManager with ManualRedirectPolicy and its own redirect loop (credentials and auth_config dropped on origin change, https->http refused, 303/POST->GET), per-request QTimer timeout, downloadProgress body-ceiling abort, authManager().updateNetworkRequest for auth_config, cross-thread cancel via queued signal, blocking form under a local QEventLoop. Testing: qgis_sdk.testing.FakeNetworkTransport (scripted, fails unexpected requests, hold/deliver, never opens a socket) + reply().
+
+Measured numbers (doc-15, scripts/network_limits_probe.py, QGIS 4.2.3/Qt 6.11.2 offscreen, 4 runs): the manager follows 50 redirects unaided under NoLessSafeRedirectPolicy and forwards Authorization and Cookie to another origin, so the transport follows redirects itself; a transport hop costs 0.66-1.18 ms, so the browser limit of 20 stands. Finish stall of a buffered body: 16 MiB 13-15 ms, 32 MiB 40-44 ms (straddles the 40 ms GUI budget from doc-6), 64 MiB 78-83 ms; ceiling set to 16 MiB. Coverage: QGIS-free tests test_network_{models,client,ogc,fake}.py + scheduling cancellation tests + tests/scripts/test_network_limits_probe.py; native tests/test_network_native.py (25, loopback servers: coroutine/blocking forms, timeout vs cancel, scope close, body ceiling, redirect rules, QGIS proxy setting, Basic auth configuration from a throwaway auth DB, untrusted vs QGIS-trusted self-signed TLS). CI step s11 now also runs the native network file. Not done here: wiring ctx.network into the scaffold's build_context (host composition; the guide shows the two lines), and bridge networking (TASK-20, deny-by-default).
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
