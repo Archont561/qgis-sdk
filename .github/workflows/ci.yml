@@ -108,7 +108,7 @@ jobs:
           # pytest 9 exits 5 when a module skips itself during import, which is
           # the honest outcome on a host without usable Qt and QGIS bindings, so
           # that case is a warning carrying the reason rather than a red build.
-          reason=$(grep -o "native forms need.*" "$log" | head -1)
+          reason=$(grep -o "native forms need.*" "$log" | head -1 || true)
           if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
             echo "::warning::native forms did not run: $reason"
             exit 0
@@ -123,8 +123,11 @@ jobs:
             body="${body//$'\n'/'%0A'}"
             printf '::error title=%s::%s\n' "$title" "$body"
           }
-          annotate "native forms: environment" "$(pixi run -e default python -c 'import sys; print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20)"
-          annotate "native forms: pytest" "$(tail -60 "$log")"
+          # `run:` uses bash -e, so a failing substitution would abort before the
+          # annotation is printed; every capture here is allowed to fail.
+          environment=$(pixi run -e default python -c 'import sys; print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20 || true)
+          annotate "native forms: environment" "$environment"
+          annotate "native forms: pytest" "$(tail -60 "$log" || true)"
           exit "$status"
 
       - name: Lint and format TypeScript
