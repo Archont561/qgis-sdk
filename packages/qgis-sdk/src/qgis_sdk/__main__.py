@@ -14,6 +14,7 @@ so callers that do not want a shell reach the same API directly.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -22,10 +23,12 @@ import typer
 from qgis_sdk.bridge.generate import (
     check_generated,
     describe_plugin_spec,
+    generate_host_typescript,
     generate_typescript,
     load_description,
     write_generated,
 )
+from qgis_sdk.bridge.host import host_description
 from qgis_sdk.models import QgisSdkBridgeError
 from qgis_sdk.scaffold import (
     QgisSdkScaffoldError,
@@ -104,6 +107,12 @@ def bridge_generate(
         Path | None,
         typer.Option(help="Plugin description JSON a host already produced."),
     ] = None,
+    host: Annotated[
+        bool,
+        typer.Option(
+            "--host", help="Render the curated host surface instead of a plugin."
+        ),
+    ] = False,
     out: Annotated[
         Path | None, typer.Option(help="TypeScript module to write or check.")
     ] = None,
@@ -116,32 +125,40 @@ def bridge_generate(
 ) -> None:
     """Turn one plugin description into a typed TypeScript client."""
     try:
-        described = _describe(plugin, description)
+        described, generator = _describe(plugin, description, host)
         if show:
-            typer.echo(generate_typescript(described), nl=False)
+            typer.echo(generator(described), nl=False)
         elif out is None:
             raise QgisSdkBridgeError("give --out, --check or --print")
         elif check:
-            message = check_generated(out, described)
+            message = check_generated(out, described, generate=generator)
             if message is not None:
                 typer.echo(message, err=True)
                 raise typer.Exit(code=1)
             typer.echo(f"{out} is up to date")
         else:
-            changed = write_generated(out, described)
+            changed = write_generated(out, described, generate=generator)
             typer.echo(f"{'wrote' if changed else 'unchanged'} {out}")
     except (QgisSdkBridgeError, QgisSdkScaffoldError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
 
 
-def _describe(plugin: str | None, description: Path | None) -> dict:
-    """Return the description named by exactly one of the two sources."""
+def _describe(
+    plugin: str | None, description: Path | None, host: bool
+) -> tuple[dict, Callable[[dict], str]]:
+    """Return the description and the renderer named by exactly one source."""
+    if host:
+        if plugin is not None or description is not None:
+            raise QgisSdkBridgeError(
+                "--host renders the curated host surface; give no --plugin or --description"
+            )
+        return host_description(), generate_host_typescript
     if (plugin is None) == (description is None):
         raise QgisSdkBridgeError("give exactly one of --plugin or --description")
     if plugin is not None:
-        return describe_plugin_spec(plugin)
-    return load_description(description)
+        return describe_plugin_spec(plugin), generate_typescript
+    return load_description(description), generate_typescript
 
 
 @app.callback()

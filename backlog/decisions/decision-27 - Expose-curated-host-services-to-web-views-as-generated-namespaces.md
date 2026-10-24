@@ -2,7 +2,7 @@
 id: decision-27
 title: Expose curated host services to web views as generated namespaces
 date: '2026-10-24 21:20'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -94,3 +94,38 @@ and unpaged selections.
 - Deferring `algorithms.execute` means the first host surface cannot start work
   of its own; a frontend that needs that uses a plugin-declared action until the
   job surface lands.
+
+## Amendment: what the first slice settled (2026-10-24)
+
+The read-only surface above is implemented and is now the acceptance criterion
+for anything added to it. Where this document was open, the implementation chose:
+
+- **The manifest is code, next to the Protocols.** `qgis_sdk.bridge.host` carries
+  `HOST_OPERATIONS` - six entries for the first slice - each with a canonical
+  grant, a `gui` affinity and the Protocol method it wraps. Every method of the
+  five curated Protocols *and* `Algorithms` is either an entry or lives in
+  `DEFERRED_HOST_METHODS` with the reason and the owning task, and a test
+  reflects the Protocols so a new method cannot appear unaccounted for.
+- **Paging is one shape for every list.** `{limit?, cursor?}` in,
+  `{items, truncated, next_cursor?}` out. The cursor is an offset encoded as an
+  opaque string; `limit` defaults to 50 and is capped at 200, and the cap is
+  enforced on both sides - the request schema refuses it and the generated
+  client refuses it before the transport.
+- **Public types are named by the manifest.** `layers.get` declares
+  `VectorLayerInfo` and `layers.list` reuses the same schema object, so a page
+  gets one interface rather than a structural copy per operation.
+- **Two surfaces, two sets of identifiers.** The host module exports
+  `createHost`, `HostOperations`, `HostContractError`, `HOST_OPERATIONS`,
+  `HOST_FINGERPRINT`, `HOST_SCHEMA_VERSION`; a plugin module keeps
+  `createOperations`, `PluginOperations`, `ContractError`, `OPERATIONS`. They
+  share the renderer and no names, so one page can import both.
+- **Version and advertisement.** `HOST_SCHEMA_VERSION = 1` is exported by the
+  generated module and sent in the handshake next to the registered operation
+  ids; `BRIDGE_PROTOCOL_VERSION` is untouched because the envelope did not
+  change.
+
+Still deferred from the rules above, and not claimed by the slice: generated
+`tryX` result unions (the throwing form ships first), branded `FileRef` /
+`StyleRef` handles (they arrive with TASK-20), the `createBridgeClient`
+composition, client-side serialisation of GUI-affine calls, and advertising
+*grants* rather than ids in the handshake.

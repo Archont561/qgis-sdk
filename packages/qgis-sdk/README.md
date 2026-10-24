@@ -286,6 +286,42 @@ wrote web/src/bridge.ts
   accepts a response that gained a field, so a newer host does not break an older
   view.
 
+### Host surface (decision-27)
+
+A view can reach the curated services the plugin already implements - and nothing
+else of the QGIS API. The inventory is a declaration, not a convention:
+
+```python
+from qgis_sdk.bridge import Dispatcher
+from qgis_sdk.bridge.host import HostServices, host_grants, register_host_operations
+
+dispatcher = Dispatcher(
+    description=runtime.description,
+    authorize=lambda binding, operation: host_grants()[operation] in grants_for(binding),
+)
+register_host_operations(
+    dispatcher,
+    HostServices(layers=layers, project=project, settings=settings,
+                 styles=styles, notifications=notifications),
+)
+```
+
+- **Six operations, each with a canonical grant.** `layers.list`, `layers.get`,
+  `project.layer_ids`, `settings.get`, `notifications.info`, `styles.apply`.
+  Grants are per operation (`layers.read`, `project.read`, ...), never per
+  namespace, so a method added later is not automatically allowed.
+- **Everything is declared.** Each entry names the Protocol method it wraps, its
+  `gui` affinity and its request/result schema. Every other method of the curated
+  Protocols - `open_vector`, `selection`, `add_layer`, `set`, `execute` - is
+  listed in `DEFERRED_HOST_METHODS` with the task that owns it, and a test
+  reflects the Protocols so a new method cannot appear unaccounted for.
+- **Nothing unbounded, nothing by path.** Every list is paged
+  (`{limit?, cursor?}` in, `{items, truncated, next_cursor?}` out; 50 by default,
+  200 at most), and no operation takes a filesystem path.
+- **Versioned with the client.** The handshake advertises `host_schema_version`
+  and the registered ids, and the TypeScript side ships generated inside the npm
+  package as `@archont561/qgis-sdk-bridge/host`.
+
 ## 0.2.0 migration notes (TASK-28)
 
 `0.2.0` is the first release where the two packages carry different numbers: the

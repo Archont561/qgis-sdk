@@ -36,6 +36,7 @@ from typing import Any
 
 from qgis_sdk.bridge.protocol import (
     BRIDGE_PROTOCOL_VERSION,
+    HOST_SCHEMA_VERSION,
     BridgeErrorCode,
     BridgeOperation,
     InvokeEnvelope,
@@ -240,6 +241,7 @@ class Dispatcher:
             "protocol": BRIDGE_PROTOCOL_VERSION,
             "generation": binding.generation,
             "plugin": self._description,
+            "host_schema_version": HOST_SCHEMA_VERSION,
             "operations": [operation.to_dict() for operation in self.operations()],
         }
         return binding, to_wire(reply)

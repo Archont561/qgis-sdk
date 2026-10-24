@@ -216,7 +216,7 @@ export function SitesSummaryResult(value: unknown, strict = false): value is Sit
 	return true;
 }
 
-/** Every operation this plugin declares, as callable methods. */
+/** Every operation this surface declares, as callable methods. */
 export interface PluginOperations {
 	readonly sites: {
 		readonly details: (input: SitesDetailsRequest, options?: InvokeOptions) => Promise<SitesDetailsResult>;

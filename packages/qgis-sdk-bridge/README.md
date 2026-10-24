@@ -84,6 +84,37 @@ subscription.close();
 Protocol version 1 is unchanged by subscriptions: a client that never subscribes
 still sees nothing but the replies to its own calls.
 
+## Host namespaces
+
+`./host` is the curated host surface a page may call (decision-27). It is
+generated from `qgis_sdk.bridge.host`, ships inside this package, and is versioned
+with it, so it cannot drift from the Python it talks to.
+
+```ts
+import { createHost } from "@archont561/qgis-sdk-bridge/host";
+
+const host = createHost(client);
+const page = await host.layers.list({ limit: 20 });
+const layer = await host.layers.get({ layer_id: page.items[0]!.id });
+const theme = await host.settings.get({ key: "theme", default: "light" });
+```
+
+- **The declared inventory:** `layers.list`, `layers.get`, `project.layer_ids`,
+  `settings.get`, `notifications.info`, `styles.apply`. Anything else of the QGIS
+  API is not reachable from a page; the operations it would need wait for their
+  owning task, and the Python manifest records which.
+- **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
+  `{items, truncated, next_cursor?}`. `limit` is capped at 200, and the generated
+  validator refuses a larger one before the call leaves the page.
+- **Typed results.** `host.layers.get` returns `VectorLayerInfo`, not a record:
+  `geometry_type` is one of the declared literals and `crs` is `string | null`.
+- **The same asymmetry as plugin operations.** Arguments are closed (an unknown
+  one is a `HostContractError` before the transport), responses are additive (a
+  field a newer host added is tolerated, a missing one is refused).
+- **Versioned.** `HOST_SCHEMA_VERSION` and `HOST_OPERATIONS` are exported, and the
+  handshake advertises the same version, so a page can tell what it is talking to
+  before its first call.
+
 ## Generated clients
 
 `client.invoke<T>(...)` is a transport, not a type guarantee: `T` is asserted by

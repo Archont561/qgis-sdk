@@ -25,10 +25,12 @@ from qgis_sdk.bridge.generate import (
     check_generated,
     contract_fingerprint,
     describe_plugin_spec,
+    generate_host_typescript,
     generate_typescript,
     load_description,
     write_generated,
 )
+from qgis_sdk.bridge.host import host_description
 from qgis_sdk.declarations import describe_plugin
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from typer.testing import CliRunner
@@ -36,7 +38,7 @@ from typer.testing import CliRunner
 runner = CliRunner()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-GENERATOR = PROJECT_ROOT / "scripts" / "generate_bridge_client.py"
+GENERATOR = PROJECT_ROOT / "scripts" / "generate_bridge_clients.py"
 
 SAMPLE = describe_plugin(SitesPlugin).to_dict()
 
@@ -386,7 +388,117 @@ def test_the_checked_in_client_is_current() -> None:
     than leaving the reader to work out which script writes this file.
     """
     script = _generator()
-    message = check_generated(script.CLIENT_PATH, SAMPLE)
+    message = check_generated(script.PLUGIN_CLIENT_PATH, SAMPLE)
     assert message is None, (
-        f"{message}; run `python packages/qgis-sdk/scripts/generate_bridge_client.py`"
+        f"{message}; run `python packages/qgis-sdk/scripts/generate_bridge_clients.py`"
     )
+
+
+# -- the host surface shares the renderer, not the identifiers --------------
+
+
+def test_the_host_module_is_deterministic_and_names_its_own_surface() -> None:
+    first = generate_host_typescript()
+    assert first == generate_host_typescript(host_description())
+    assert first.startswith(GENERATED_MARKER)
+    assert 'export const HOST_ID = "qgis.host";' in first
+    assert "export const HOST_SCHEMA_VERSION = 1;" in first
+    assert "export const HOST_OPERATIONS = [" in first
+    assert "export type HostOperationId =" in first
+    assert "export interface HostOperations {" in first
+    assert "export function createHost(" in first
+    assert "export class HostContractError extends Error {" in first
+
+
+def test_the_host_module_names_the_public_types_the_manifest_declared() -> None:
+    generated = generate_host_typescript()
+    assert "export interface VectorLayerInfo {" in generated
+    assert "export interface LayerPage {" in generated
+    assert "readonly items: readonly VectorLayerInfo[];" in generated
+    assert "VectorLayerInfo(item, strict)" in generated
+    # A tighter bound than the safe-integer range is enforced client-side too.
+    assert 'value["limit"] >= 1 && value["limit"] <= 200' in generated
+
+
+def test_the_two_surfaces_do_not_export_the_same_names() -> None:
+    """A page imports both modules in one file, so the identifiers must differ."""
+    plugin = generate_typescript(SAMPLE)
+    host = generate_host_typescript()
+    for name in (
+        "PluginOperations",
+        "createOperations",
+        "ContractError",
+        "BridgeClientLike",
+        "OPERATIONS",
+    ):
+        assert (
+            f"export interface {name}" in plugin
+            or f"export class {name}" in plugin
+            or (f"export const {name}" in plugin or f"export function {name}" in plugin)
+        )
+        assert f"export interface {name}" not in host
+        assert f"export class {name}" not in host
+        assert f"export const {name}" not in host
+        assert f"export function {name}" not in host
+
+
+def test_a_declared_name_wins_over_the_generated_one() -> None:
+    described = _single(
+        "sites.read",
+        request={
+            "type": "object",
+            "properties": {"layer_id": {"type": "string"}},
+            "required": ["layer_id"],
+            "additionalProperties": False,
+        },
+        result={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+    described["actions"][0]["result_name"] = "ReadingResult"
+    described["actions"][0]["request_name"] = "ReadingRequest"
+    generated = generate_typescript(described)
+    assert "export interface ReadingResult {" in generated
+    assert "export interface ReadingRequest {" in generated
+    assert "Promise<ReadingResult>" in generated
+
+
+def test_a_non_object_result_is_validated_by_an_inline_predicate() -> None:
+    """`call` takes a function, so a bare schema has to arrive as one."""
+    described = _single(
+        "sites.ping",
+        request={"type": "object", "properties": {}, "additionalProperties": False},
+        result={"type": "null"},
+    )
+    generated = generate_typescript(described)
+    assert "Promise<null>" in generated
+    assert "(candidate: unknown) => candidate === null" in generated
+
+
+def test_the_checked_in_host_client_is_current() -> None:
+    script = _generator()
+    message = check_generated(
+        script.HOST_CLIENT_PATH, host_description(), generate=generate_host_typescript
+    )
+    assert message is None, (
+        f"{message}; run `python packages/qgis-sdk/scripts/generate_bridge_clients.py`"
+    )
+
+
+def test_the_cli_renders_the_host_surface(tmp_path: Path) -> None:
+    target = tmp_path / "host.ts"
+    wrote = runner.invoke(app, ["bridge", "generate", "--host", "--out", str(target)])
+    assert wrote.exit_code == 0, wrote.output
+    assert target.read_text(encoding="utf-8") == generate_host_typescript()
+
+    fresh = runner.invoke(
+        app, ["bridge", "generate", "--host", "--check", "--out", str(target)]
+    )
+    assert fresh.exit_code == 0, fresh.output
+    assert "is up to date" in fresh.output
+
+
+def test_the_cli_refuses_to_mix_the_host_surface_with_a_plugin() -> None:
+    result = runner.invoke(
+        app, ["bridge", "generate", "--host", "--plugin", "x:Y", "--print"]
+    )
+    assert result.exit_code == 1
+    assert "give no --plugin or --description" in result.output

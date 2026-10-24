@@ -29,6 +29,14 @@ from typing import Any
 from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkBridgeProtocolError
 
 BRIDGE_PROTOCOL_VERSION = 1
+
+#: Version of the curated host surface (:mod:`qgis_sdk.bridge.host`). It is
+#: advertised in the handshake and carried by the generated TypeScript module, so
+#: a page can tell which host surface it is talking to before its first call.
+#: Additive changes only: a breaking rename is a new version, and the protocol
+#: version is untouched by it because the envelope did not change.
+HOST_SCHEMA_VERSION = 1
+
 MAX_CALL_ID_LENGTH = 128
 MAX_WIRE_DEPTH = 32
 
