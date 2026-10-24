@@ -181,6 +181,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/pypi
+          skip-existing: true
 
   npm:
     needs: build
@@ -214,7 +215,9 @@ jobs:
 
       - name: Pack the bridge tarball
         working-directory: bridge
-        run: npm pack
+        run: |
+          npm pkg delete devDependencies
+          npm pack
 
       - name: Upload tarball artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -237,7 +240,7 @@ jobs:
         working-directory: bridge
         run: |
           set -o pipefail
-          npm publish --access public ./*.tgz 2>&1 | tee ../npm-publish.log
+          npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee ../npm-publish.log
 
       # Job log blobs are served from a host some networks cannot read, so a
       # failing publish reports its npm output as annotations (the ci.yml
@@ -246,7 +249,7 @@ jobs:
         if: failure()
         run: |
           if [ -f npm-publish.log ]; then
-            tail -n 10 npm-publish.log | while IFS= read -r line; do
+            grep -iE 'oidc|ENEEDAUTH|E40|error' npm-publish.log | tail -n 15 | while IFS= read -r line; do
               echo "::error::npm publish: $line"
             done
           fi

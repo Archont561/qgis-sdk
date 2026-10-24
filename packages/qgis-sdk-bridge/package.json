@@ -19,7 +19,8 @@
 	],
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Archont561/qgis-sdk.git"
+		"url": "git+https://github.com/Archont561/qgis-sdk.git",
+		"directory": "packages/qgis-sdk-bridge"
 	},
 	"publishConfig": {
 		"access": "public"
