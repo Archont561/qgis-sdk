@@ -2,7 +2,7 @@
 id: decision-6
 title: Separate models services core and runtime adapters
 date: '2026-10-16 07:43'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -89,3 +89,31 @@ relocated, so accepting the decision would ratify them silently:
 TASK-25.1 and TASK-25.2 land. Until then the decision is the agreed direction, not
 a realized one, and the mismatch is recorded here instead of being papered over by
 a status flip.
+
+**Update (2026-10-24, TASK-25.1 landed in `541c867`):** the `testing`
+boundary now exists — `qgis_sdk.testing` holds the in-memory service doubles for
+the curated contracts, `tests/test_pure_imports.py` ranks it outermost and fails
+if any shipping module imports it. That is one of the two conditions below.
+Still `proposed`: `adapters/qgis` (TASK-25.2) has not landed, so the native half
+of the same contracts is still unbuilt.
+
+## Promoted to `accepted` (2026-10-24)
+
+The promotion condition recorded above is met. Both missing boundaries now exist
+with the contracts they serve:
+
+- **`testing`** — `qgis_sdk.testing` holds the in-memory service doubles, ranked
+  outermost in `tests/test_pure_imports.py` so no shipping module may import them
+  (TASK-25.1, `541c867`).
+- **`adapters/qgis`** — `qgis_sdk.adapters.qgis` implements the curated layer and
+  project contracts on PyQGIS, refuses work after its scope closes, and is held to
+  the same 26 contract tests as the fakes (TASK-25.2).
+- **`bridge`** — not in this package and deliberately so: decision-18 moved endpoint
+  declarations into the TypeScript bridge, so the boundary exists, in its chosen
+  place.
+
+What this accepts is the *layering and dependency direction* the Decision section
+describes, which `tests/test_pure_imports.py` enforces by AST and by a subprocess
+import with qgis/PyQt/pydantic blocked. It does not claim that every capability
+listed there is implemented: settings and styles are still pure-side only
+(TASK-25.3, TASK-25.4), and algorithms, jobs and bridge routing are later tasks.

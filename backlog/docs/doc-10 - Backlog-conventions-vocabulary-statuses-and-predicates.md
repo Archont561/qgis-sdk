@@ -104,13 +104,15 @@ carries the nuance honestly.
 
 ### Promotion audit (2026-10-24)
 
-All 13 proposed decisions were checked. None is promotable today; each has an
-unmet condition, and most of those conditions are already a backlog task:
+All 13 proposed decisions were checked. One is promotable and was promoted
+(`decision-6`, once `TASK-25.1` and `TASK-25.2` supplied its two missing
+boundaries); the other twelve each have an unmet condition, and most of those
+conditions are already a backlog task:
 
 | Decision | Subject | Unmet condition / blocking task |
 | --- | --- | --- |
 | decision-4 | async-first networking transport | TASK-5 (m-1) |
-| decision-6 | models/services/core/adapters separation | `testing` fakes and `adapters/qgis` → TASK-25.1, TASK-25.2 |
+| ~~decision-6~~ | models/services/core/adapters separation | **accepted 2026-10-24** — `testing` and `adapters/qgis` landed |
 | decision-7 | layered pytest fixtures, properties, BDD | TASK-7 (m-2) |
 | decision-8 | separate check/test/dev/build workflows | TASK-16 (check), TASK-26 (test/dev) |
 | decision-9 | allowlisted typed bridge endpoints | TASK-4 (m-2) |
