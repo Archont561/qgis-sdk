@@ -194,6 +194,7 @@ The harness resolves everything it needs from the active prefix, so the same com
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
 | Two-plugin `pydantic` / `pydantic_core` coexistence in QGIS Desktop | Qualified on Linux (`plugin_coexistence_smoke.py`, TASK-33 AC #3) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
+| QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`, doc-15) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Display-server Desktop GUI + in-Desktop `QWebEngineView` rendering | Blocker: no display server or `Xvfb` in sandbox/CI (`offscreen` renders no widgets, TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) |
 | Chromium sandbox | Disabled by headless flags above | N/A | N/A |
 
@@ -319,6 +320,41 @@ opt-in test with:
 ```sh
 QGIS_SDK_QT_SCHEDULER=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_scheduler.py
 ```
+
+The network limits probe measures what
+[decision-4](../../decisions/decision-4%20-%20QGIS-aware-networking-uses-an-async-first-transport.md)
+left to TASK-5: how `QgsNetworkAccessManager` handles redirects on its own
+(policy, hop count, which headers it forwards to another origin), what a
+transport-followed hop costs, and how long the GUI thread stalls when a 1 to
+128 MiB body is handed over in one piece. It prints one JSON report with a
+`recommended` block:
+
+```sh
+pixi run -e default python packages/qgis-sdk/scripts/network_limits_probe.py
+```
+
+The shipped defaults (20 redirects, 16 MiB buffered body) and the finding that
+made the transport follow redirects itself are recorded in
+[doc-15](../plans/doc-15%20-%20TASK-5-network-limits-measurement-evidence.md).
+`tests/scripts/test_network_limits_probe.py` pins the recommendation rule in the
+QGIS-free suite; the measurement itself is opt-in:
+
+```sh
+QGIS_SDK_NETWORK_PROBE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_network_limits_probe.py
+```
+
+The transport's own integration coverage is `tests/test_network_native.py`:
+loopback `http.server` origins only, run offscreen by the CI step "Test native
+forms and networking offscreen" and by the coverage run in the `default`
+environment. It covers the coroutine and blocking forms, timeout versus
+cancellation, scope close aborting replies, the body ceiling aborting a
+download, cross-origin redirects dropping `Authorization`/`Cookie`/auth
+configuration, `https` → `http` refusal, the QGIS proxy setting (`proxy/proxy-*`
+settings entries routed to a loopback proxy), a Basic authentication
+configuration applied by `QgsAuthManager` from a throwaway auth database
+(`QGIS_AUTH_DB_DIR_PATH`), an untrusted self-signed certificate as
+`QgisSdkTlsError`, and the same certificate accepted once stored as a QGIS
+certificate authority.
 
 ### Optional native-runtime plugin coexistence (TASK-33 AC #3)
 

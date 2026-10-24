@@ -15,7 +15,8 @@ the records that landed each surface are TASK-2 (declarations), TASK-11 (pure
 contract layer), TASK-24 (runtime and Desktop adapter), TASK-3 (native forms),
 TASK-14 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
 (bridge host side, generated client, host surface), TASK-17 and decision-28
-(generated client and streams), TASK-1 (scaffold), TASK-27 and TASK-28 (release
+(generated client and streams), TASK-5 and decision-4 (networking), TASK-1
+(scaffold), TASK-27 and TASK-28 (release
 policy and migration notes). Status at the time of writing: Python `0.2.0`
 published, `0.3.0` in progress.
 
@@ -502,6 +503,96 @@ register_host_operations(
 - **Versioned with the client.** The handshake advertises `host_schema_version`
   and the registered ids, and the TypeScript side ships generated inside the npm
   package as `@archont561/qgis-sdk-bridge/host`.
+
+## Networking
+
+`ctx.network` is one injected HTTP client over one injected transport, the shape
+[decision-4](../../decisions/decision-4%20-%20QGIS-aware-networking-uses-an-async-first-transport.md)
+fixed: coroutine methods are the UI-facing form, a blocking form exists for
+worker threads only, every response is fully buffered, and the live
+`QNetworkReply` never leaves the adapter. The host composes it; plugin code
+only ever sees `Network`.
+
+```python
+from qgis_sdk.adapters.qgis import NativeNetworkTransport
+from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.network import NetworkClient
+
+scope = ResourceScope()
+context = PluginContext(
+    notifications=notifications,
+    scope=scope,
+    network=NetworkClient(NativeNetworkTransport(scope), scope),
+)
+```
+
+```python
+async def load(self, ctx):
+    api = ctx.require_network().configure(
+        base_url="https://example.org/api/",
+        headers={"Accept": "application/json"},
+        timeout=10,
+        auth_config="abc1234",          # a QGIS authentication configuration id
+    )
+    response = await api.get("collections", params={"limit": 20})
+    return response.raise_for_status().json()
+```
+
+- **Coroutines, scheduled by the host.** `get`/`post`/`request` are
+  `async def` and suspend on a `Handoff` from `qgis_sdk.core.scheduling`: the
+  job waits, the GUI thread does not. Cancelling the job aborts the reply;
+  closing the owning scope aborts everything the client still has in flight, so
+  a disposed plugin never gets a callback.
+- **Blocking is explicit and off the GUI thread.** `ctx.network.blocking.get(...)`
+  runs the same exchange on the calling thread under a local event loop and
+  raises `QgisSdkBlockingOnGuiThreadError` on the GUI thread instead of nesting
+  an event loop into the host's. Use it from `QThreadPool`, `QgsTask` or a
+  plain thread.
+- **Derived, immutable clients.** `configure(base_url, headers, timeout,
+  auth_config, max_redirects, max_body_bytes)` returns a new client; nothing
+  mutates a shared default, so a typed service client carries its own base URL
+  without touching the plugin's.
+- **One `Response`.** `status_code`, `reason`, `headers` (case-insensitive,
+  credentials redacted in `repr`), `content`, `text`, `json()`, `ok` and
+  `raise_for_status()`. A `404` is a response; only `raise_for_status()` turns
+  it into `QgisSdkHttpStatusError`.
+- **Errors you can tell apart by `code`.** `QgisSdkRequestRejectedError`
+  (bad URL, user-info in the URL, unsupported method),
+  `QgisSdkRequestCancelledError`, `QgisSdkConnectionError`,
+  `QgisSdkRequestTimeoutError`, `QgisSdkTlsError`,
+  `QgisSdkAuthenticationError`, `QgisSdkRedirectError`,
+  `QgisSdkResponseTooLargeError`, `QgisSdkHttpStatusError`,
+  `QgisSdkDecodeError`, all under `QgisSdkNetworkError` with the method and the
+  URL in the message.
+- **Defaults from measurement.** 30 s timeout, 20 redirects, 16 MiB buffered
+  body; the last two come from
+  [doc-15](../plans/doc-15%20-%20TASK-5-network-limits-measurement-evidence.md).
+  A body over the ceiling is aborted while downloading, not buffered and then
+  refused.
+- **QGIS owns the configuration.** The native transport goes through
+  `QgsNetworkAccessManager`, so the proxy, the certificate trust and the
+  authentication database a user set in QGIS apply; `auth_config` is handed to
+  `QgsAuthManager.updateNetworkRequest`, and no credential passes through the
+  SDK. Trust changes made at runtime need `rebuildTrustedCaCertsCache()` and,
+  for a host Qt already talked to, `clearConnectionCache()`; both are QGIS
+  calls, not SDK ones.
+- **Redirects are followed by the transport, not by Qt.** The manager was
+  measured forwarding `Authorization` and `Cookie` to another origin, so the
+  transport follows hops itself and drops `Authorization`, `Cookie`,
+  `Proxy-Authorization` and the auth configuration when scheme, host or port
+  changes; `https` → `http` is refused.
+- **Typed services compose over it.** `qgis_sdk.network.OgcApiFeatures(network,
+  base_url)` is the first: `collections()`, `items(collection_id, limit, bbox)`
+  and `next_page(page)` return dataclasses, and a malformed document is a
+  `QgisSdkServiceResponseError`. WMS/WFS layers stay on QGIS providers.
+- **Tests inject a fake.** `qgis_sdk.testing.FakeNetworkTransport` is scripted
+  with `expect(method, url, response | exception | responder, hold=False)`;
+  an unexpected request fails the test with `QgisSdkNetworkFakeError`, a held
+  request is released from the test with `pending[0].deliver()`, and
+  `assert_satisfied()` reports unmet expectations. It never opens a socket.
+  The native transport is covered by `tests/test_network_native.py` against
+  loopback servers, including the QGIS proxy setting, a Basic authentication
+  configuration, and a certificate trusted through the auth manager.
 
 ## Project scaffold
 

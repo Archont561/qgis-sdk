@@ -110,9 +110,11 @@ jobs:
           fi
 
       # The default environment carries the QGIS feature, so this is the only
-      # place the native form path actually executes: a developer machine needs a
-      # display setup and this sandbox has no Qt at all.
-      - name: Test native forms offscreen
+      # place the native form path and the QGIS network transport actually
+      # execute against real Qt: a developer machine needs a display setup and
+      # this sandbox has no Qt at all. The network file talks to loopback
+      # servers only (TASK-5 AC 3).
+      - name: Test native forms and networking offscreen
         id: s11
         env:
           QT_QPA_PLATFORM: offscreen
@@ -120,14 +122,14 @@ jobs:
           set -o pipefail
           log=native-forms.log
           status=0
-          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py -q -rs 2>&1 | tee "$log" || status=$?
+          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py packages/qgis-sdk/tests/test_network_native.py -q -rs 2>&1 | tee "$log" || status=$?
           if [ "$status" -eq 0 ]; then
             exit 0
           fi
           # pytest 9 exits 5 when a module skips itself during import, which is
           # the honest outcome on a host without usable Qt and QGIS bindings, so
           # that case is a warning carrying the reason rather than a red build.
-          reason=$(grep -o "native forms need.*" "$log" | head -1 || true)
+          reason=$(grep -o "native \(forms\|networking\) need.*" "$log" | head -1 || true)
           if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
             echo "::warning::native forms did not run: $reason"
             exit 0

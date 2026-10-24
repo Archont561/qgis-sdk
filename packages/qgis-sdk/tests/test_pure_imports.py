@@ -22,6 +22,7 @@ LAYER_ORDER = {
     "core": 2,
     "algorithms": 2,
     "providers": 2,
+    "network": 2,
     "reference": 3,
     "testing": 3,
 }
@@ -32,6 +33,7 @@ LAYER_PATHS = {
     "scaffold": SOURCE_ROOT / "scaffold",
     "declarations": SOURCE_ROOT / "declarations.py",
     "models": SOURCE_ROOT / "models",
+    "network": SOURCE_ROOT / "network",
     "providers": SOURCE_ROOT / "providers.py",
     "services": SOURCE_ROOT / "services",
     "resources": SOURCE_ROOT / "resources",

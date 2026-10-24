@@ -21,7 +21,7 @@ syntax stays a separate decision.
 
 from __future__ import annotations
 
-from collections.abc import Coroutine, Generator, Iterable
+from collections.abc import Callable, Coroutine, Generator, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from queue import Empty, SimpleQueue
@@ -96,14 +96,21 @@ class Handoff:
     :meth:`resolve` and :meth:`fail` are safe to call from any thread: they only
     enqueue a value. The awaiting job resumes at its next step, never inside the
     call, which is what keeps a worker from running GUI-affine code.
+
+    ``on_cancel`` lets a worker that *can* stop early - a network request, a
+    cancellable native task - hear that its job was cancelled while suspended on
+    this handoff. It runs at most once, on the thread that called
+    :meth:`Job.cancel`, and the job still resumes only when the worker reports:
+    the hook is a request, not proof that the worker stopped.
     """
 
-    __slots__ = ("_box", "_dropped", "_owner")
+    __slots__ = ("_box", "_dropped", "_on_cancel", "_owner")
 
-    def __init__(self) -> None:
+    def __init__(self, *, on_cancel: Callable[[], None] | None = None) -> None:
         self._box: SimpleQueue[_Report] = SimpleQueue()
         self._owner: Job | _Discarded | None = None
         self._dropped = 0
+        self._on_cancel = on_cancel
 
     @property
     def owner(self) -> Job | None:
@@ -143,6 +150,13 @@ class Handoff:
     def __await__(self) -> Generator[Handoff, object, object]:
         """Yield this handoff itself, so the scheduler sees what the job waits on."""
         return (yield self)
+
+    def _request_cancel(self) -> None:
+        """Tell the worker once that the suspended job no longer wants the result."""
+        hook = self._on_cancel
+        self._on_cancel = None
+        if hook is not None:
+            hook()
 
     def _attach(self, job: Job) -> None:
         """Claim this handoff for the job suspending on it.
@@ -288,8 +302,16 @@ class Job:
         return self._state.settled
 
     def cancel(self) -> bool:
-        """Request cancellation; return whether the job was still active."""
-        return self._cancellation._request(self._state.settled)
+        """Request cancellation; return whether the job was still active.
+
+        A job suspended on a handoff cannot be resumed until its worker reports,
+        so the handoff is told as well; a worker with a cancel hook can then
+        report early instead of leaving the job as a replacement blocker.
+        """
+        active = self._cancellation._request(self._state.settled)
+        if active and self._awaiting is not None:
+            self._awaiting._request_cancel()
+        return active
 
     @property
     def _ready(self) -> bool:

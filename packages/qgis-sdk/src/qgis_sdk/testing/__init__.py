@@ -13,12 +13,22 @@ from .fakes import (
     FakeStyles,
     RecordingNotifications,
 )
+from .network import (
+    FakeNetworkTransport,
+    PendingRequest,
+    QgisSdkNetworkFakeError,
+    reply,
+)
 
 __all__ = [
     "FakeAlgorithms",
     "FakeLayers",
+    "FakeNetworkTransport",
     "FakeProject",
     "FakeSettings",
     "FakeStyles",
+    "PendingRequest",
+    "QgisSdkNetworkFakeError",
     "RecordingNotifications",
+    "reply",
 ]
