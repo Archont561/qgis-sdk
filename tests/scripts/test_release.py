@@ -43,6 +43,7 @@ from release import (
     tag_for_version,
     twine_check,
     upload_asset,
+    version_from_pep440,
     version_from_tag,
     write_checksums,
 )
@@ -1224,6 +1225,18 @@ def test_a_disagreeing_manifest_is_named_with_every_value():
     assert "disagree" in message
     assert "pyproject.toml=0.1.0" in message
     assert "package.json=0.1.1" in message
+
+
+def test_pep440_prereleases_round_trip_to_the_tag_they_came_from():
+    for semver, pep440 in (
+        ("0.2.0-alpha.1", "0.2.0a1"),
+        ("0.2.0-beta.2", "0.2.0b2"),
+        ("0.2.0-rc.1", "0.2.0rc1"),
+    ):
+        version = Version.parse(semver)
+
+        assert version.to_pep440() == pep440
+        assert str(version_from_pep440(pep440)) == semver
 
 
 def test_a_missing_version_line_is_refused():

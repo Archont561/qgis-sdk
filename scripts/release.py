@@ -967,6 +967,10 @@ def stamp_package_json(text: str, version: Version) -> str:
 
 
 _PEP440 = re.compile(r"^(?P<core>\d+\.\d+\.\d+)(?:(?P<pre>a|b|rc)(?P<num>\d+))?$")
+# ``to_pep440`` shortens these; the inverse has to expand them back, or
+# ``0.2.0-rc.1`` and ``0.2.0-alpha.1`` read back as ``rc.1``/``a.1`` and stop
+# comparing equal to the tag that produced them.
+_PEP440_PRE = {"a": "alpha", "b": "beta", "rc": "rc"}
 
 
 def version_from_pep440(text: str) -> Version:
@@ -981,7 +985,8 @@ def version_from_pep440(text: str) -> Version:
     pre = match.group("pre")
     if pre is None:
         return Version.parse(match.group("core"))
-    return Version.parse(f"{match.group('core')}-{pre}.{match.group('num')}")
+    long_form = _PEP440_PRE.get(pre, pre)
+    return Version.parse(f"{match.group('core')}-{long_form}.{match.group('num')}")
 
 
 def read_pyproject_version(text: str) -> Version:
