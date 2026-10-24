@@ -49,6 +49,9 @@ cmd = "python scripts/release.py tag"
 [feature.python.tasks.release-stamp]
 cmd = "python scripts/release.py stamp"
 
+[feature.python.tasks.release-verify-versions]
+cmd = "python scripts/release.py verify-versions"
+
 [feature.python.tasks.release-build-python]
 cmd = "python scripts/release.py build-python"
 

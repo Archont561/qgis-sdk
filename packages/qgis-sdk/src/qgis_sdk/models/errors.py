@@ -43,6 +43,69 @@ class QgisSdkOptionalDependencyError(QgisSdkError):
         )
 
 
+class QgisSdkLayerNotFoundError(QgisSdkError):
+    """No layer or dataset with this identifier exists in the runtime.
+
+    The identifier is either a layer id or a dataset location, whichever the
+    caller used, so the message never claims to know which kind was meant.
+    """
+
+    code = "layer_not_found"
+
+    def __init__(self, identifier: str) -> None:
+        self.identifier = identifier
+        super().__init__(f"No layer {identifier!r} is available in this runtime")
+
+
+class QgisSdkStyleIncompatibleError(QgisSdkError):
+    """A packaged style cannot be applied to the target layer.
+
+    Reasons are short, user-readable statements about the mismatch that was
+    detected, never the rejected layer object.
+    """
+
+    code = "style_incompatible"
+
+    def __init__(
+        self,
+        layer_id: str,
+        style: str,
+        reasons: Iterable[str],
+    ) -> None:
+        self.layer_id = layer_id
+        self.style = style
+        self.reasons = tuple(reasons)
+        listed = "; ".join(self.reasons)
+        super().__init__(
+            f"Style {style!r} is incompatible with layer {layer_id!r}: {listed}"
+        )
+
+
+class QgisSdkStyleNotFoundError(QgisSdkError):
+    """No reviewed style with this identifier is packaged with the SDK."""
+
+    code = "style_not_found"
+
+    def __init__(self, style: str) -> None:
+        self.style = style
+        super().__init__(f"No packaged style {style!r} is available")
+
+
+class QgisSdkPackagedResourceError(QgisSdkError):
+    """A resource the package must ship is missing or unusable.
+
+    This is a packaging defect, not a caller mistake: the style was requested by
+    a known identifier and the layer was already found compatible.
+    """
+
+    code = "packaged_resource_unavailable"
+
+    def __init__(self, style: str, detail: str) -> None:
+        self.style = style
+        self.detail = detail
+        super().__init__(f"Packaged style {style!r} could not be used: {detail}")
+
+
 @dataclass(frozen=True, slots=True)
 class QgisSdkValidationIssue:
     """Safe, structured location and category for a rejected contract value."""
@@ -106,3 +169,35 @@ class QgisSdkSchedulingBlockedError(QgisSdkError):
         self.blockers = tuple(blockers)
         listed = "; ".join(self.blockers)
         super().__init__(f"Scheduling is blocked: {listed}")
+
+
+class QgisSdkAlgorithmRejectedError(QgisSdkError):
+    """An algorithm request was refused before it could touch any data.
+
+    ``reasons`` are short statements about what made the request unsafe or
+    ambiguous - an unspecified or geographic working CRS, units that are not
+    metres, a distance that is not positive. They never include the rejected
+    values themselves, so the error can be logged as-is.
+    """
+
+    code = "algorithm_rejected"
+
+    def __init__(self, request: str, reasons: Iterable[str]) -> None:
+        self.request = request
+        self.reasons = tuple(reasons)
+        listed = "; ".join(self.reasons)
+        super().__init__(f"Algorithm request {request!r} was refused: {listed}")
+
+
+class QgisSdkAlgorithmCancelledError(QgisSdkError):
+    """Cancellation was observed at an algorithm phase boundary.
+
+    Cancellation is cooperative: this says the request was not run (or its
+    result was not accepted), never that a native operation stopped mid-flight.
+    """
+
+    code = "algorithm_cancelled"
+
+    def __init__(self, algorithm_id: str) -> None:
+        self.algorithm_id = algorithm_id
+        super().__init__(f"Algorithm {algorithm_id!r} was cancelled")

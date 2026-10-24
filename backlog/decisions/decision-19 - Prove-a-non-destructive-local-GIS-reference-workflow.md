@@ -21,3 +21,36 @@ For distance-based operations require an explicit projected working CRS and unit
 - Native/web equivalence concerns behavior and validated inputs/results, not identical widget appearance.
 - Real QGIS tests must prove output ownership, project addition, cancellation/failure cleanup, CRS handling and source preservation.
 - Exact operation, dataset/license, transformation UI and style resources remain to be chosen and qualified.
+
+## Evidence added (2026-10-24): the algorithm half of the reference workflow
+
+TASK-14 implemented the "run one Processing operation, add its output to the
+project after success" step of this workflow, and the tests now prove the parts of
+this decision that are observable headlessly:
+
+- **Source preserved.** A buffer run leaves the fixture dataset byte-identical
+  (`sha256` before and after), and the source layer description is unchanged. No
+  step writes to the input: every output is a new file under the execution's
+  working directory.
+- **New output, never in-place.** `Algorithms.execute` returns a *different*
+  layer that the runtime owns; `invoke` adds it to the project only after the
+  operation succeeded, the result matched its declared type, and cancellation was
+  not requested after the operation.
+- **Cleanup.** A run that fails removes its own working directory before
+  re-raising, so no partial output survives; the intermediate reprojection a
+  buffer needs is deleted on success as well, and only the output file remains.
+- **Explicit projected working CRS and units.** `EPSG:4326` is refused as a
+  working CRS ("a distance there would be degrees"), `EPSG:2227` is refused
+  because its units are US survey feet, and an unknown code is refused. The
+  metres interpretation is proven positively: buffers 500 m and 1500 m apart in
+  distance differ in extent width by 2000 m, which cannot happen if the distance
+  were applied in degrees.
+- **Not every operation needs a projected CRS.** The centroid operation runs
+  without any working CRS, which is the "where the operation has a distance" part
+  of this decision rather than a blanket rule.
+
+Still open from this decision: the style step's placement in the same observable
+workflow (the styling half shipped in TASK-25.4 but the reference *plugin* that
+chains load -> operate -> style -> present does not exist yet), native/web
+equivalence, and the transformation-choice UI. In-place editing remains out of
+scope.

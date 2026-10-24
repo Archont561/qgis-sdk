@@ -4,6 +4,7 @@ import json
 
 import pytest
 from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin
+from qgis_sdk.declarations import _schema
 
 
 def test_plain_plugin_is_inspected_without_constructing_or_running_it():
@@ -320,9 +321,13 @@ def test_action_hidden_inside_property_is_rejected_not_silently_dropped():
 
 
 def test_bare_generic_and_unhashable_annotation_metadata_fail_actionably():
-    from typing import Annotated, List  # noqa: UP035 -- exercise rejected legacy bare generic
+    from typing import List  # noqa: UP035 -- exercise rejected legacy bare generic
 
-    for annotation in (List, Annotated[int, {"minimum": 0}]):  # noqa: UP006
+    # A bare generic still has no element type to describe. `Annotated` used to
+    # be refused here as well; TASK-39 made it part of the subset (the extras are
+    # host hints, the stored type is what the schema describes), so it is no
+    # longer in this list.
+    for annotation in (List,):  # noqa: UP006
 
         def handler(self, value) -> None:
             pass
@@ -335,3 +340,127 @@ def test_bare_generic_and_unhashable_annotation_metadata_fail_actionably():
             QgisSdkDeclarationError, match="action run.*unsupported annotation"
         ):
             describe_plugin(cls)
+
+
+def test_variadic_tuple_generates_the_same_json_array_as_a_list():
+    """A tuple is the wire's one array type, so it must not need a second spelling.
+
+    Immutable value DTOs (VectorLayerInfo, StyleSpec and later result handles)
+    describe their collections as tuples. Refusing them would force mutable fields
+    into frozen dataclasses purely to satisfy the generator.
+    """
+
+    @plugin(id="p", title="P")
+    class Plugin:
+        @action(id="run", title="Run")
+        def run(self, tags: tuple[str, ...]) -> tuple[int, ...]:
+            return ()
+
+    description = describe_plugin(Plugin).actions[0]
+
+    assert description.request["properties"]["tags"] == {
+        "type": "array",
+        "items": {"type": "string"},
+    }
+    # Spelled out, not imported from the constant that produced it.
+    assert description.result == {
+        "type": "array",
+        "items": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+        },
+    }
+
+
+def test_variadic_tuple_of_a_dataclass_describes_the_object_items():
+    from dataclasses import dataclass
+
+    @dataclass
+    class Item:
+        name: str
+
+    @plugin(id="p", title="P")
+    class Plugin:
+        @action(id="run", title="Run")
+        def run(self, items: tuple[Item, ...]) -> None: ...
+
+    request = describe_plugin(Plugin).actions[0].request
+
+    assert request["properties"]["items"]["items"]["properties"] == {
+        "name": {"type": "string"}
+    }
+
+
+@pytest.mark.parametrize(
+    ("annotation", "message"),
+    [
+        # Bare `tuple` carries no element type at all: the generic refusal.
+        (tuple, "unsupported annotation"),
+        # A typed but non-variadic tuple gets the specific refusal.
+        (tuple[str], "variadic"),
+        (tuple[str, int], "variadic"),
+    ],
+)
+def test_a_tuple_without_one_ellipsis_element_is_rejected(annotation, message):
+    """Fixed-length and bare tuples have no JSON Schema counterpart here.
+
+    Accepting them would either lose the length or silently pick a branch, so the
+    generator refuses instead of emitting a looser schema than the annotation.
+    """
+    handler = action(id="run", title="Run")(_handler_annotated(annotation))
+    Plugin = plugin(id="p", title="P")(type("Plugin", (), {"run": handler}))
+
+    with pytest.raises(QgisSdkDeclarationError, match=message):
+        describe_plugin(Plugin)
+
+
+def test_a_union_of_variadic_tuples_is_expressible_as_a_branch():
+    """Each arm is a legal array, so the union is legal too - no over-refusal."""
+
+    handler = action(id="run", title="Run")(
+        _handler_annotated(tuple[str, ...] | tuple[int, ...])
+    )
+    Plugin = plugin(id="p", title="P")(type("Plugin", (), {"run": handler}))
+
+    request = describe_plugin(Plugin).actions[0].request
+
+    assert [
+        branch["items"]["type"] for branch in request["properties"]["value"]["anyOf"]
+    ] == [
+        "string",
+        "integer",
+    ]
+
+
+def _handler_annotated(annotation):
+    """Return a plain instance method declaring ``value: annotation``."""
+
+    def handler(self, value): ...
+
+    handler.__annotations__.update({"value": annotation, "return": type(None)})
+    return handler
+
+
+@pytest.mark.parametrize("dto", ["VectorLayerInfo", "StyleSpec"])
+def test_bridge_eligible_service_payloads_stay_generatable(dto):
+    """The service DTOs are bridge-eligible, so the generator must accept them.
+
+    TASK-17 generates TypeScript from these payloads. Until this rule existed the
+    instruction to "use primitives, list, union, Literal or a dataclass" rejected
+    their `tuple[str, ...]` fields, so an unsupported annotation could have sat
+    unnoticed in an already-qualified service contract.
+    """
+    from qgis_sdk import models
+
+    schema = _schema(getattr(models, dto), dto, result=False)
+
+    array_properties = {
+        name: value
+        for name, value in schema["properties"].items()
+        if value.get("type") == "array"
+    }
+    assert array_properties, f"{dto} is expected to expose a collection field"
+    assert all(
+        value["items"] == {"type": "string"} for value in array_properties.values()
+    )

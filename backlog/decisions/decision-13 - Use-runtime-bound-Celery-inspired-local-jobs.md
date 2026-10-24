@@ -2,7 +2,7 @@
 id: decision-13
 title: Use runtime bound Celery inspired local jobs
 date: '2026-10-16 08:05'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -25,3 +25,43 @@ States include queued/running/succeeded/failed/cancelled; cancellation is a requ
 ## Confirmed second-interview refinement (2026-10-16)
 
 The second interview narrows initial scope: [decision-21](decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md) accepts view-owned jobs by default, immediate callback detachment on disposal, explicit plugin-lifetime work and no automatic retries initially. Earlier retry/backoff discussion is future design, not an initial implementation requirement.
+
+## Status review (2026-10-24)
+
+**Promoted to `accepted`.** The two things that kept it a proposal were the
+undecided submission form and the undefined late-subscriber rule. Both are now
+decided; the execution model itself was already pinned by
+[decision-21](decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md).
+
+- **Submission is bound, not looked up.** Of the illustrative pair, the surviving
+  form is `ctx.jobs.bind(JobClass).delay(inputs)`;
+  `ctx.jobs.delay(JobClass, inputs)` is dropped. Rationale: ownership is the
+  thing every job needs and the thing a caller must not be able to forget, so it
+  is captured once by `bind` from the owning scope instead of being inferred per
+  call from ambient state - which is precisely the global current-app registry
+  this decision forbids. `bind` is also the single place a future policy (for
+  example a group or a bounded concurrency budget) attaches.
+- **Late subscribers replay state.** Subscribing after submission delivers the
+  current state immediately as one synthetic transition, then subsequent ones;
+  for a terminal state the replay is the terminal transition and the subscription
+  completes. Detaching on disposal wins over replay: a disposed owner gets no
+  callback at all, including a replay
+  ([decision-21](decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md)).
+- **Handles are typed.** `bind(...).delay(inputs)` returns a handle carrying the
+  logical id, the state, `cancel()`, the typed result/failure, and the
+  subscriptions above; `get()` on the GUI thread is refused, not emulated with a
+  nested event loop.
+- **Scope stays as decision-21 narrowed it:** no automatic retries, view-owned by
+  default, explicit plugin-lifetime work, cancellation is a request until
+  acknowledged. Groups, chains, schedules and brokers remain future capabilities.
+
+What this does **not** claim: no job runtime exists yet. TASK-15 (now m-2)
+implements this decision; its criteria carry the execution evidence.
+
+## Status review follow-up (2026-10-24)
+
+Promoted after the 0.2.0 re-scope moved TASK-15 to m-2. The design question and
+the delivery question were separated on purpose: this record answers *what the
+job API is*, while TASK-15 answers *whether it works*. Keeping the decision
+`proposed` until the task closed would have meant m-2 starting against an
+unsettled API - the exact failure the re-scope was meant to stop repeating.

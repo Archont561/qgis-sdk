@@ -13,18 +13,28 @@ from pathlib import Path
 import pytest
 from conftest import SAMPLE_VERSIONRC
 from release import (
+    Commit,
     QgisSdkReleaseError,
     QgisSdkReleaseVersionError,
     Version,
     checksums,
     classify,
+    commits_for_scope,
     compute_plan,
+    contract_versions,
     create_release,
     detect_scope_from_files,
+    main,
+    manifest_versions,
     parse_log,
+    parse_log_with_files,
     parse_milestone_tag,
     parse_release_tag,
     parse_versionrc,
+    read_pyproject_version,
+    read_python_contract_version,
+    read_recipe_version,
+    read_typescript_contract_version,
     render_changelog,
     sort_tags,
     stamp_package_json,
@@ -33,6 +43,7 @@ from release import (
     tag_for_version,
     twine_check,
     upload_asset,
+    version_from_pep440,
     version_from_tag,
     write_checksums,
 )
@@ -809,9 +820,18 @@ def _versionrc(tmp_path):
     return path
 
 
+def _with_files(raw):
+    """Rewrite a plain log record stream into the ``--name-only`` stream."""
+    records = [chunk.strip("\n") for chunk in raw.split("\x1e") if chunk.strip()]
+    return "".join(f"\x1e{record}\x1d\n" for record in records)
+
+
 def _fake_git(monkeypatch, tags=(), log=""):
     monkeypatch.setattr("release.list_tags", lambda runner=None: tuple(tags))
     monkeypatch.setattr("release.log_commits", lambda rng=None, runner=None: log)
+    monkeypatch.setattr(
+        "release.log_commits_with_files", lambda rng=None, runner=None: _with_files(log)
+    )
 
 
 def test_plan_dispatch_writes_outputs_and_changelog(tmp_path, monkeypatch):
@@ -1146,6 +1166,31 @@ def test_autorelease_workflow_has_milestone_triggers_paths_ignore_and_dispatch_i
     assert "cancel-in-progress: false" in text
     for dispatch_input in ("scope:", "bump:", "dry-run:"):
         assert dispatch_input in text
+    # decision-25: the scope decides which package a release belongs to, so a
+    # plain push must derive it instead of defaulting to an alignment release.
+    assert 'default: "auto"' in text
+    assert "RELEASE_SCOPE" in text
+
+
+def test_the_coverage_config_is_tracked_so_ci_measures_the_same_code():
+    """The QGIS adapter omit lives in `.coveragerc`, which CI must receive.
+
+    `.gitignore` once swallowed it through a `/.coverage*` glob, so CI measured
+    the host-only adapters as uncovered (81%) while a local checkout reported
+    100% - the same command, two different denominators.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config = repo_root / ".coveragerc"
+
+    assert config.is_file()
+    assert "adapters/qgis/*" in config.read_text(encoding="utf-8")
+
+
+def test_ci_verifies_the_scoped_versions_and_the_contract_on_every_push():
+    repo_root = Path(__file__).resolve().parents[2]
+    text = (repo_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "release-verify-versions" in text
 
 
 def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
@@ -1166,3 +1211,367 @@ def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
     )
     assert "SHA256SUMS" in publish_text
     assert "pixi global install" not in publish_text
+
+
+# ---------------------------------------------------------------------------
+# One version across the released manifests (decision-24)
+# ---------------------------------------------------------------------------
+
+
+def test_three_agreeing_manifests_report_their_shared_version():
+    versions = manifest_versions(PYPROJECT, PACKAGE_JSON, RECIPE_YAML)
+
+    assert str(versions.agreed()) == "0.1.0"
+    assert versions.to_json() == {
+        "pyproject.toml": "0.1.0",
+        "package.json": "0.1.0",
+        "recipe.yaml": "0.1.0",
+    }
+
+
+def test_a_pep440_prerelease_and_its_semver_spelling_agree():
+    """stamp writes 0.2.0-rc.1 to package.json as 0.2.0rc1 for hatchling."""
+    pyproject = PYPROJECT.replace('version = "0.1.0"', 'version = "0.2.0rc1"')
+    package = PACKAGE_JSON.replace('"version": "0.1.0"', '"version": "0.2.0-rc.1"')
+    recipe = RECIPE_YAML.replace('version: "0.1.0"', 'version: "0.2.0rc1"')
+
+    versions = manifest_versions(pyproject, package, recipe)
+
+    assert str(versions.agreed()) == "0.2.0-rc.1"
+
+
+def test_a_disagreeing_manifest_is_named_with_every_value():
+    package = PACKAGE_JSON.replace('"version": "0.1.0"', '"version": "0.1.1"')
+
+    with pytest.raises(QgisSdkReleaseVersionError) as error:
+        manifest_versions(PYPROJECT, package, RECIPE_YAML).agreed()
+
+    message = str(error.value)
+    assert "disagree" in message
+    assert "pyproject.toml=0.1.0" in message
+    assert "package.json=0.1.1" in message
+
+
+def test_pep440_prereleases_round_trip_to_the_tag_they_came_from():
+    for semver, pep440 in (
+        ("0.2.0-alpha.1", "0.2.0a1"),
+        ("0.2.0-beta.2", "0.2.0b2"),
+        ("0.2.0-rc.1", "0.2.0rc1"),
+    ):
+        version = Version.parse(semver)
+
+        assert version.to_pep440() == pep440
+        assert str(version_from_pep440(pep440)) == semver
+
+
+def test_a_missing_version_line_is_refused():
+    with pytest.raises(QgisSdkReleaseError, match="no top-level version"):
+        read_pyproject_version('[project]\nname = "qgis-sdk"\n')
+    with pytest.raises(QgisSdkReleaseError, match="no quoted version"):
+        read_recipe_version("schema_version: 1\n")
+
+
+def test_the_recipe_is_optional_because_a_workspace_may_not_build_conda():
+    versions = manifest_versions(PYPROJECT, PACKAGE_JSON)
+
+    assert versions.recipe is None
+    assert [name for name, _ in versions.items()] == ["pyproject.toml", "package.json"]
+
+
+def test_the_verify_versions_command_checks_every_scope_on_its_own(capsys):
+    assert main(["verify-versions"]) == 0
+
+    out = capsys.readouterr().out
+    assert "released manifests for scope python agree on" in out
+    assert "released manifests for scope typescript agree on" in out
+    assert "contract version 1 agrees" in out
+
+
+def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
+    assert main(["verify-versions", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["scopes"]["python"]["version"] == "0.1.1"
+    assert payload["contract"] == {"python": 1, "typescript": 1}
+
+
+def test_the_repository_contract_versions_agree():
+    """The pairing substitute for one shared number (decision-25)."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    contract = contract_versions(
+        (repo_root / "packages/qgis-sdk/src/qgis_sdk/declarations.py").read_text(
+            encoding="utf-8"
+        ),
+        (repo_root / "packages/qgis-sdk-bridge/src/index.ts").read_text(
+            encoding="utf-8"
+        ),
+    )
+
+    assert contract.agreed() == 1
+
+
+def test_a_contract_version_that_drifted_is_refused():
+    script = "/**\n * Public contract\n */\nPLUGIN_DESCRIPTION_SCHEMA_VERSION = 2\n"
+    bridge = "export const PLUGIN_DESCRIPTION_SCHEMA_VERSION: 1 = 1;\n"
+
+    with pytest.raises(QgisSdkReleaseVersionError, match="contract versions disagree"):
+        contract_versions(script, bridge).agreed()
+
+
+def test_a_missing_contract_version_is_named_by_language():
+    with pytest.raises(QgisSdkReleaseError, match="Python declarations"):
+        read_python_contract_version("schema_version: 1\n")
+    with pytest.raises(QgisSdkReleaseError, match="bridge index"):
+        read_typescript_contract_version("export const OTHER = 1;\n")
+
+
+# ---------------------------------------------------------------------------
+# Independent package versions and the shared contract (decision-25)
+# ---------------------------------------------------------------------------
+
+
+def _commit(subject, *files, body=""):
+    return Commit(sha="a" * 40, subject=subject, body=body, files=tuple(files))
+
+
+def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
+    raw = (
+        "\x1e" + "a" * 40 + "\x1ffeat(sdk): x\x1fbody line\n\nsecond para\x1d\n"
+        "packages/qgis-sdk/src/qgis_sdk/declarations.py\n"
+        "pixi.toml\n"
+        "\x1e" + "b" * 40 + "\x1fdocs: y\x1f\x1d\n"
+        "backlog/tasks/task-1.md\n"
+    )
+
+    commits = parse_log_with_files(raw)
+
+    assert commits[0].files == (
+        "packages/qgis-sdk/src/qgis_sdk/declarations.py",
+        "pixi.toml",
+    )
+    assert "second para" in commits[0].body
+    assert commits[1].files == ("backlog/tasks/task-1.md",)
+
+
+def test_a_record_without_a_path_block_is_refused():
+    with pytest.raises(QgisSdkReleaseError, match="malformed git log record"):
+        parse_log_with_files("a" * 40 + "\x1ffeat: x\x1f")
+
+
+def test_a_commit_without_file_information_affects_every_scope():
+    """Omitting ``--name-only`` must not silently drop a commit."""
+    assert commits_for_scope((_commit("feat: x"),), "python") == (_commit("feat: x"),)
+
+
+def test_a_scoped_tag_sort_keeps_that_package_history_only():
+    tags = ("v0.1.0", "python-v0.2.0", "ts-v0.3.0")
+
+    assert sort_tags(tags, scope="python") == ("python-v0.2.0", "v0.1.0")
+    assert sort_tags(tags, scope="typescript") == ("ts-v0.3.0", "v0.1.0")
+    assert sort_tags(tags) == ("ts-v0.3.0", "python-v0.2.0", "v0.1.0")
+
+
+def test_commits_are_kept_for_the_packages_they_touch():
+    commits = (
+        _commit("feat(sdk): python only", "packages/qgis-sdk/src/qgis_sdk/core.py"),
+        _commit("feat(bridge): bridge only", "packages/qgis-sdk-bridge/src/index.ts"),
+        _commit(
+            "feat(both): spans packages",
+            "packages/qgis-sdk/src/qgis_sdk/core.py",
+            "packages/qgis-sdk-bridge/src/index.ts",
+        ),
+        _commit("docs: backlog", "backlog/tasks/task-1.md"),
+    )
+
+    python = [commit.subject for commit in commits_for_scope(commits, "python")]
+    bridge = [commit.subject for commit in commits_for_scope(commits, "typescript")]
+    both = [commit.subject for commit in commits_for_scope(commits, "all")]
+
+    assert python == ["feat(sdk): python only", "feat(both): spans packages"]
+    assert bridge == ["feat(bridge): bridge only", "feat(both): spans packages"]
+    assert both == [
+        "feat(sdk): python only",
+        "feat(bridge): bridge only",
+        "feat(both): spans packages",
+    ]
+
+
+def test_a_repository_wide_change_cannot_trigger_a_package_release():
+    """CI, pixi.toml and the release tool do not change package contents."""
+    commits = (
+        _commit("feat!: rewrite the release tool", "scripts/release.py", "pixi.toml"),
+    )
+
+    assert commits_for_scope(commits, "python") == ()
+    assert commits_for_scope(commits, "typescript") == ()
+    assert commits_for_scope(commits, "all") == ()
+
+
+def test_a_bridge_feature_does_not_move_the_python_version(sample_config):
+    commits = (
+        _commit("feat(bridge): transport", "packages/qgis-sdk-bridge/src/index.ts"),
+    )
+
+    python_plan = compute_plan(
+        "dispatch", ("v0.1.0",), commits, sample_config, scope="python"
+    )
+    bridge_plan = compute_plan(
+        "dispatch", ("v0.1.0",), commits, sample_config, scope="typescript"
+    )
+
+    assert python_plan.action == "skip"
+    assert python_plan.version is None
+    assert bridge_plan.tag == "ts-v0.2.0"
+
+
+def test_each_scope_bumps_from_its_own_last_release(sample_config):
+    commits = (
+        _commit("fix(bridge): parsing", "packages/qgis-sdk-bridge/src/index.ts"),
+    )
+    tags = ("v0.1.0", "python-v0.3.0")
+
+    bridge_plan = compute_plan(
+        "dispatch", tags, commits, sample_config, scope="typescript"
+    )
+    python_plan = compute_plan("dispatch", tags, commits, sample_config, scope="python")
+
+    assert bridge_plan.tag == "ts-v0.1.1"
+    assert python_plan.action == "skip"
+    assert "python-v0.3.0" in python_plan.reason
+
+
+def test_stamp_scope_python_leaves_the_bridge_manifest_alone(tmp_path, monkeypatch):
+    pyproject = tmp_path / "pyproject.toml"
+    recipe = tmp_path / "recipe.yaml"
+    package = tmp_path / "package.json"
+    pyproject.write_text(PYPROJECT, encoding="utf-8")
+    recipe.write_text(RECIPE_YAML, encoding="utf-8")
+    package.write_text(PACKAGE_JSON, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RECIPE", recipe)
+    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "python"]) == 0
+
+    assert 'version = "0.2.0"' in pyproject.read_text()
+    assert '  version: "0.2.0"' in recipe.read_text()
+    assert '"version": "0.1.0"' in package.read_text()
+
+
+def test_stamp_scope_typescript_leaves_the_python_manifests_alone(
+    tmp_path, monkeypatch
+):
+    pyproject = tmp_path / "pyproject.toml"
+    recipe = tmp_path / "recipe.yaml"
+    package = tmp_path / "package.json"
+    pyproject.write_text(PYPROJECT, encoding="utf-8")
+    recipe.write_text(RECIPE_YAML, encoding="utf-8")
+    package.write_text(PACKAGE_JSON, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RECIPE", recipe)
+    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "typescript"]) == 0
+
+    assert '"version": "0.2.0"' in package.read_text()
+    assert 'version = "0.1.0"' in pyproject.read_text()
+    assert '  version: "0.1.0"' in recipe.read_text()
+
+
+def _diverged_manifests(tmp_path, monkeypatch, python_version, bridge_version):
+    pyproject = tmp_path / "pyproject.toml"
+    recipe = tmp_path / "recipe.yaml"
+    package = tmp_path / "package.json"
+    pyproject.write_text(
+        PYPROJECT.replace('version = "0.1.0"', f'version = "{python_version}"'),
+        encoding="utf-8",
+    )
+    recipe.write_text(
+        RECIPE_YAML.replace('version: "0.1.0"', f'version: "{python_version}"'),
+        encoding="utf-8",
+    )
+    package.write_text(
+        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
+        encoding="utf-8",
+    )
+    import release
+
+    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RECIPE", recipe)
+    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+
+
+def test_diverged_packages_pass_when_each_scope_agrees(tmp_path, monkeypatch):
+    _diverged_manifests(tmp_path, monkeypatch, "0.2.0", "0.1.1")
+
+    assert main(["verify-versions"]) == 0
+    assert main(["verify-versions", "--scope", "python", "--version", "0.2.0"]) == 0
+    assert main(["verify-versions", "--scope", "typescript", "--version", "0.1.1"]) == 0
+
+
+def test_a_scope_that_lost_its_release_version_is_refused(
+    tmp_path, monkeypatch, capsys
+):
+    _diverged_manifests(tmp_path, monkeypatch, "0.2.0", "0.1.1")
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.3.0"]) == 1
+    assert "run stamp --scope python --version 0.3.0 first" in capsys.readouterr().out
+
+
+def test_one_version_needs_one_scope(tmp_path, monkeypatch):
+    _diverged_manifests(tmp_path, monkeypatch, "0.2.0", "0.1.1")
+
+    assert main(["verify-versions", "--version", "0.2.0"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# The release policy itself, pinned against the real .versionrc
+# ---------------------------------------------------------------------------
+
+
+def _repository_config():
+    repo_root = Path(__file__).resolve().parents[2]
+    return parse_versionrc((repo_root / ".versionrc").read_text(encoding="utf-8"))
+
+
+def test_feature_work_inside_a_milestone_is_a_patch_bump():
+    """decision-24: minor is the milestone (breaking) axis, not the feature axis."""
+    config = _repository_config()
+
+    plan = compute_plan("dispatch", ("v0.2.0",), _log("feat: another slice"), config)
+
+    assert str(plan.version) == "0.2.1"
+
+
+def test_a_breaking_change_is_what_moves_the_minor():
+    config = _repository_config()
+
+    plan = compute_plan(
+        "dispatch", ("v0.2.0",), _log("feat!: drop the old contract"), config
+    )
+
+    assert str(plan.version) == "0.3.0"
+
+
+def test_a_milestone_release_sets_the_minor_explicitly():
+    """The one place a minor moves on purpose: the milestone close."""
+    config = _repository_config()
+
+    plan = compute_plan(
+        "dispatch", ("v0.1.1",), _log("chore: milestone close"), config, bump="minor"
+    )
+
+    assert (plan.action, str(plan.version), plan.tag) == ("tag", "0.2.0", "v0.2.0")
+
+
+def test_the_repository_config_still_keeps_features_visible_in_the_changelog():
+    config = _repository_config()
+
+    rule = config.rule_for("feat")
+
+    assert (rule.increment, rule.section, rule.hidden) == ("Patch", "Features", False)

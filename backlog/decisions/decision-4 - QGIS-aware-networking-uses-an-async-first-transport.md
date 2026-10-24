@@ -2,7 +2,7 @@
 id: decision-4
 title: QGIS-aware networking uses an async-first transport
 date: '2026-10-15 23:05'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -33,3 +33,45 @@ UI-originated operations are non-blocking, but await examples remain illustrativ
 ## Confirmed constraints and open scheduler work (2026-10-16)
 
 The user chose synchronous GUI-safe handlers plus coroutine/non-blocking operations subject to a Qt-compatible scheduler spike, not unrestricted worker-thread execution. Validate cancellation, disposal and GUI-thread handoff on the target Windows/Linux matrix before finalizing async syntax. The broad web host surface includes networking, with host-enforced per-view authorization. Scheduler implementation, request limits and destination-grant syntax remain open. Packaging follows ADR-3; Rust remains deferred by ADR-5.
+
+## Status review (2026-10-24)
+
+**Promoted to `accepted`.** The condition the decision set for itself - "remains
+proposed until the public async API and ownership/lifecycle model are agreed" -
+is now met, and the Decisions above are the specification rather than a sketch.
+
+What settled it:
+
+- **The scheduler clause is closed.** The `await` examples were called
+  illustrative "until Qt-compatible scheduling is specified". It is specified:
+  the StepScheduler spike landed with its qualification evidence
+  ([doc-6](../docs/plans/doc-6%20-%20TASK-13-Qt-scheduler-spike-evidence.md)), and
+  `qgis_sdk.core.scheduling` is the implementation TASK-5 composes with. Nothing
+  in the networking surface depends on an unspecified handoff any more.
+- **The ownership model exists.** Requests are owned by the scope that started
+  them ([decision-21](decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md))
+  and released through `ResourceScope`, which is already implemented; the
+  "prevent callbacks into disposed owners" requirement is therefore a rule over
+  an existing mechanism, not a promise.
+- **The shape is no longer ambiguous.** One injected `ctx.network` client, not a
+  `Session`/`NetworkManager` pair: `get`/`post`/`request` with
+  `params`/`json`/`data`/`headers`/`timeout`, immutable derived clients instead
+  of mutated global defaults, a fully buffered `Response` exposing `status_code`,
+  `headers`, `content`, `text`, `json()` and `raise_for_status()`. Coroutine
+  methods are the UI-facing form; a blocking call is explicit, allowed only off
+  the GUI thread, and refuses GUI-thread use rather than nesting an event loop.
+  Live `QNetworkReply` objects are never exposed.
+- **Errors are classified** - cancellation, connection, timeout, TLS,
+  authentication, status and decode - as `QgisSdk*` codes, so a caller can tell a
+  retryable failure from a terminal one without parsing strings
+  ([decision-22](decision-22%20-%20Use-strict-inputs-extensible-results-and-experimental-contracts.md)).
+- **Bridge access stays denied by default** and returns serializable DTOs only
+  ([decision-9](decision-9%20-%20Declare-allowlisted-typed-bridge-endpoints-with-runtime-owned-routers.md),
+  [decision-20](decision-20%20-%20Enforce-scoped-host-authority-and-stale-reference-failures.md)).
+
+What this does **not** claim: no networking code exists yet. TASK-5 (now m-2)
+implements this decision, and its acceptance criteria - not this record - are
+where execution gets proven. Two implementation details remain task-level and
+deliberately unnumbered here: the concrete redirect limit and the buffered
+body-size ceiling, both of which TASK-5 must set from measurement rather than
+guess.

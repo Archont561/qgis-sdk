@@ -26,11 +26,14 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata |
+| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError` |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
-| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, and `DesktopAccess` protocols; implementations are supplied by the host or by tests |
+| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, and `Algorithms` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
+| `algorithms` | `@algorithm`, `describe_algorithm`, `invoke`, and `AlgorithmResult`; request and result schemas come from the same generator the plugin declarations use (TASK-14) |
+| `providers` | `Provider` and `@provider.algorithm` registration, plus `parameter_kinds` - which host parameter each request field deserves (TASK-39) |
+| `reference` | `BufferLayer` and `CentroidLayer`, the two operations the reference workflow runs (decision-19) |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -74,6 +77,92 @@ print(qgis_sdk.__all__)
 ```
 
 Importing the package with native modules forbidden is the real wiring check, so a placeholder API is no longer needed to prove it.
+
+## Processing algorithms and safe outputs (experimental, TASK-14)
+
+`qgis_sdk.algorithms` is the authoring surface decision-11 settled on: one decorated plain class per algorithm, one typed `run(inputs) -> Result` entry point, and a constructor-injected `AlgorithmContext`. Describing an algorithm never constructs it, and every invocation constructs a **fresh** author instance and a **fresh** context over a child scope that is closed again when the invocation ends:
+
+```python
+from pathlib import Path
+
+from qgis_sdk.algorithms import describe_algorithm, invoke
+from qgis_sdk.core import ResourceScope
+from qgis_sdk.models import BufferRequest
+from qgis_sdk.reference import BufferLayer
+
+print(describe_algorithm(BufferLayer).to_dict()["inputs"]["schema"]["required"])
+# ['layer_id', 'distance_metres', 'working_crs']
+
+scope = ResourceScope()
+result = invoke(
+    BufferLayer,
+    BufferRequest(layer_id=source_id, distance_metres=500.0, working_crs="EPSG:3857"),
+    algorithms=algorithms,  # qgis_sdk.services.Algorithms
+    project=project,        # qgis_sdk.services.Project
+    scope=scope,
+)
+# invoke already added result.output to the project - after success only.
+```
+
+The request schemas come from the same `qgis_sdk.declarations` generator that describes plugin actions, so an algorithm's inputs are held to one documented typing subset and are bridge-eligible for TASK-17.
+
+**Non-destructive by construction (decision-19).** `Algorithms.execute` writes a *new* output and opens it as a layer the runtime owns; no method edits the source dataset. A run that fails deletes its own temporary directory before re-raising, so no partial output survives a failure, and the intermediate reprojection a buffer needs is scaffolding that never outlives the run either. `invoke` adds the output to the project only after the operation succeeded, the result matched its declared type *and* cancellation was not requested in between; a failure or cancellation at any point leaves the project as it was.
+
+**Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
+
+Two honest limits of this slice: cancellation is observed at phase boundaries (before the operation, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm class on its own is described and invoked directly - grouping comes from a provider, below.
+
+## Providers: algorithms in the QGIS Processing toolbox (experimental, TASK-39)
+
+An algorithm class is useful on its own; a provider is what makes it *visible*. Declare one object, register algorithms on it the way a route is registered on an app, and give it to the QGIS adapter:
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+
+from qgis_sdk.models import LayerInput, Metres, VectorLayerInfo
+from qgis_sdk.providers import Provider
+
+mine = Provider(id="my.plugin", title="My plugin")
+
+
+@dataclass(frozen=True, slots=True)
+class SmoothRequest:
+    layer_id: Annotated[str, LayerInput()]      # a layer picker in the dialog
+    tolerance: Annotated[float, Metres()]       # a spin box labelled in metres
+
+
+@dataclass(frozen=True, slots=True)
+class SmoothResult:
+    output: VectorLayerInfo
+
+
+@mine.algorithm(id="smooth", title="Smooth geometries", group="Geometry")
+class Smooth:
+    def __init__(self, ctx):  # AlgorithmContext, fresh per invocation
+        self.ctx = ctx
+
+    def run(self, inputs: SmoothRequest) -> SmoothResult:
+        ...
+```
+
+```python
+from qgis_sdk.adapters.qgis import register_provider
+
+bridge = register_provider(
+    mine, layers=layers, algorithms=algorithms, project=project, scope=scope
+)
+# "my.plugin:smooth" is now in the toolbox, the modeler and `processing.run`
+bridge.unregister()  # ...if the plugin unloads
+```
+
+Registration is validated **when it happens**: the class must describe, every request field must map to a host parameter, and the id must be unique inside the provider. A mistake fails at import time, not on the first run.
+
+`Annotated` markers say what a field *means* to the host while the wire schema keeps describing the stored value: `LayerInput()` makes a field a vector-layer picker (the picked layer is opened through the same `Layers` service, so it arrives as an owned layer id), `CrsInput()` makes it a CRS chooser, and `Metres()` gives a distance a metre-labelled, non-negative spin box. Plain `str`/`int`/`float`/`bool` fields become text, integer, double and boolean parameters. Anything else - a nested dataclass, a list, a `Literal` - is refused at registration with the field name and the supported kinds.
+
+The bridge copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
+
+`providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge is only importable where PyQGIS exists.
 
 ## Development
 
@@ -560,14 +649,17 @@ loaded and functional.
   stability promise is made. Breaking changes during `0.x` require a documented minor
   version bump (`0.Y.0`) with migration notes; compatible bug fixes and additive
   changes use patch releases (`0.Y.Z`).
-- **Scoped manifest updates:** `scripts/release.py` (`pixi run release-stamp`) updates
-  only the manifests in the selected release scope (`python` for `packages/qgis-sdk`,
-  `typescript` for `packages/qgis-sdk-bridge`, or `all`). Both `qgis-sdk` (`0.1.0`)
-  and `@archont561/qgis-sdk-bridge` (`0.1.0`) ship matching version 1 declaration,
-  safe-integer wire-bound, and `QgisSdk*` error contracts.
-- **Independent protocol versions:** `PluginDescription.schema_version = 1` in
-  `qgis_sdk.declarations` and future WebEngine IPC protocol versions are versioned
-  independently of the `qgis-sdk` and `qgis-sdk-bridge` package versions.
+- **Scoped manifests, independent versions:** `scripts/release.py`
+  (`pixi run release-stamp --scope python|typescript|all`) updates only the manifests
+  in the selected scope. `qgis-sdk` and `@archont561/qgis-sdk-bridge` both shipped
+  `0.1.0`/`0.1.1` because they were built together; they version independently from
+  0.2.0 onward, so the 0.2.0 Python release leaves the bridge at `0.1.1`.
+- **Independent protocol versions:** `PluginDescription.schema_version = 1`
+  (`PLUGIN_DESCRIPTION_SCHEMA_VERSION` in `qgis_sdk.declarations`) and future
+  WebEngine IPC protocol versions are versioned independently of the package
+  versions. The bridge declares the same
+  `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, and `scripts/release.py verify-versions`
+  refuses a workspace where the two declarations disagree.
 - **0.1.0 surface & migration note:** The placeholder `qgis_sdk.hello()` and bridge
   `hello()` smoke functions were removed prior to the first release (PR #23); the
   public root surface of `qgis_sdk` is `qgis_sdk.__all__` (`ActionDescription`,

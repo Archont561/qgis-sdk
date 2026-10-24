@@ -197,3 +197,63 @@ closeout draws.
 
 **Promotion condition:** unchanged from the closeout — promotion follows TASK-17,
 not TASK-12.
+
+## Amendment (2026-10-24): the documented annotation subset gains `tuple[X, ...]`
+
+The Decision section says the authoring surface is "a documented Python typing
+subset" and the generator refused anything outside primitives, `list`, union,
+`Literal` and dataclasses. TASK-25's service payloads use `tuple[str, ...]`
+(`VectorLayerInfo.field_names`, `StyleSpec.required_fields`) because they are
+frozen value DTOs and an immutable collection is the honest spelling there. A
+probe against the generator rejected them:
+
+```
+QgisSdkDeclarationError: probe.field_names: unsupported annotation tuple[str, ...];
+  use JSON primitives, list, union, Literal or a dataclass
+```
+
+Nothing was broken yet - no TypeScript is generated in m-1 - but TASK-17 would
+have met the refusal after the DTOs were already depended on by both service
+backends. The user chose to extend the subset now (option A) rather than change
+the fields to mutable lists.
+
+**What changed.** `tuple[X, ...]` is now part of the documented subset and
+produces exactly the schema `list[X]` produces - JSON has one array type, so the
+wire form is identical and the difference is a Python-side immutability choice.
+Beyond the subset, also refused and now stated explicitly: a **fixed-length**
+tuple (`tuple[str, int]`, `tuple[str]`) and a bare `tuple`. They have no JSON
+counterpart - accepting them would either drop the length or invent a branch - so
+the generator raises rather than emitting a looser schema than the annotation. A
+union of variadic tuples is accepted, because each arm is a legal array.
+
+**Evidence.** Nine new declaration tests (`tuple[str, ...]` equals `list[str]`,
+tuple-of-dataclass items, three refusals, the union case, and a guard that
+`VectorLayerInfo` and `StyleSpec` stay generatable). The checked-in contract
+fixtures regenerate byte-identically, so no existing wire form moved.
+
+**Status unchanged: this decision stays `proposed`.** Accepting it still waits on
+TASK-17 producing real generated TypeScript, exactly as the closeout above states;
+widening the subset does not substitute for that.
+
+## Amendment (2026-10-24, part 2): `Annotated` is metadata, not a stored type
+
+TASK-39 needed a way to say "this `str` is a vector layer, that `float` is a
+distance in metres" without changing what the wire carries. `Annotated[T, ...]`
+is exactly that: the field still stores a `T`.
+
+`_schema` now unwraps it and describes the underlying type, so
+`Annotated[str, LayerInput()]` still generates `{"type": "string"}` and the
+documented subset grows by *one* nuance rather than a second schema dialect. The
+markers themselves live in `qgis_sdk.models.parameters` and are plain frozen
+values, so a pure test can assert which marker a field carries.
+
+This knowingly reverses an earlier expectation: `tests/test_declarations.py` used
+to assert that `Annotated[int, {"minimum": 0}]` was *refused* as unhashable
+annotation metadata. That refusal was correct while `Annotated` was outside the
+subset and is wrong now - the extras are host hints and never hashed by the
+generator, so the test's expectation was updated rather than the feature being
+worked around. A bare generic (`List`) is still refused, because it has no element
+type to describe.
+
+Status unchanged: this decision stays `proposed`, pending TASK-17's real generated
+TypeScript.

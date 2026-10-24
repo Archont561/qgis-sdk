@@ -38,6 +38,13 @@ from this and not from the architecture it intends to become:
 There is no Processing module and no HTTP client yet, so TASK-14 and TASK-5 are
 greenfield work rather than extensions.
 
+The TypeScript side is not part of this train. 0.2.0 publishes no bridge version
+at all: no m-1 task changes `packages/qgis-sdk-bridge`, so it stays at 0.1.1 and
+nothing is consumed from npm. The release still checks the shared
+plugin-description contract version, and the typed surface is m-2's work. See the
+"Bridge track" section of
+[m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md).
+
 ## 2. Dependency read of the remaining 0.2.0 tasks
 
 Every row is read from the task files, not inferred:
@@ -127,6 +134,27 @@ Each slice should be independently reviewable and should keep the suite green:
 - TASK-14 and TASK-3 are unblocked on the board: no dependency on TASK-25
   remains, and the contracts they need are importable and documented.
 
+## 3a. Sprint 1 outcome (2026-10-24)
+
+TASK-25 and all five slices are `Done`. Evidence:
+[doc-11](doc-11%20-%20TASK-25-native-services-qualification-evidence.md).
+
+| Slice | Result |
+| --- | --- |
+| TASK-25.1 | Layers/Project/Settings/Styles contracts + in-memory fakes, `qgis_sdk.testing` |
+| TASK-25.2 | `NativeLayers`/`NativeProject` on PyQGIS, post-close refusal as contract |
+| TASK-25.3 | `NativeSettings` (prefixed `QgsSettings`), `NativeNotifications` (unwidened Protocol) |
+| TASK-25.4 | reviewed packaged QML catalog, shared compatibility rule, theme proven unchanged |
+| TASK-25.5 | headless qualification on QGIS 4.2.3, six explicit non-claims |
+
+Both of sprint 1's exit conditions are met: TASK-25's criteria are checked with
+recorded evidence, and **TASK-14 and TASK-3 are unblocked** — their TASK-25
+dependency is the only one that was missing.
+
+What sprint 1 did **not** change: TASK-5 and TASK-15 are still open and still feed
+only the release gate, and TASK-33's AC #1/#2 (Windows, Desktop GUI) remain the
+only display-dependent blockers.
+
 ## 4. Sprint 2 and sprint 3 sketch
 
 - **Sprint 2 — TASK-14 + TASK-3.** Both consume the TASK-25 contracts. TASK-14
@@ -137,7 +165,32 @@ Each slice should be independently reviewable and should keep the suite green:
 - **Sprint 3 — TASK-5 and TASK-15 remainder, then TASK-28.** Close the
   networking and job streams, then run the release gate. TASK-28 is a gate, not
   permission: it needs verified outcomes plus explicit publishing approval and
-  must not claim checks that did not run.
+  must not claim checks that did not run. *Superseded on 2026-10-24 — see 4a:
+  both tasks moved to m-2 and Sprint 3 is now only the gate.*
+
+## 4a. 0.2.0 re-scope (2026-10-24)
+
+Sprint 3 as written above was "whatever remains of TASK-5 and TASK-15, then
+TASK-28". Both moved to m-2 instead, so 0.2.0 now closes on **TASK-3 + TASK-28**.
+
+Why:
+
+- Neither task is on the critical path. TASK-5 and TASK-15 depend only on work
+  that landed (TASK-13, TASK-24) and unblock nothing inside m-1, so keeping them
+  added tail latency to a release that is otherwise finished.
+- Neither belongs to the milestone's name. 0.2.0 is "native runtime and
+  Processing algorithms", and that surface - TASK-24, TASK-25 with its five
+  slices, TASK-14, TASK-39 - is implemented and evidenced.
+- Both were waiting on design, not just code: TASK-5 says it must resolve
+  decision-4's networking transport, and TASK-15 builds on decision-13's job
+  transport. Both were `proposed` at the time and have since been **accepted**
+  (2026-10-24), which is why they can now be implemented without a design
+  deadline hanging over a release gate.
+
+Consequences recorded on the board: TASK-5 and TASK-15 are `m-2`; TASK-28 no
+longer depends on them; TASK-29 (the 0.3.0 gate) now does; the TASK-38 epic
+tracks one open feature instead of five. TASK-3 is the last thing between this
+milestone and its release gate.
 
 ## 5. Verification commands
 
@@ -185,3 +238,27 @@ QGIS-free tests for them live in `packages/qgis-sdk/tests/scripts/`.
 - [doc-4](doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md) — version policy and task inventory.
 - [doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md) — the vocabulary, predicate and slicing rules this plan follows.
 - [decision-6](../../decisions/decision-6%20-%20Separate-models-services-core-and-runtime-adapters.md), [decision-16](../../decisions/decision-16%20-%20Separate-reusable-layer-styles-from-UI-themes.md), [decision-19](../../decisions/decision-19%20-%20Prove-a-non-destructive-local-GIS-reference-workflow.md).
+
+## 3b. TASK-14 outcome (2026-10-24)
+
+TASK-14 is `Done`: one decorated plain class per algorithm, `describe_algorithm`
+without construction, a fresh instance and `AlgorithmContext` per invocation, and
+an `Algorithms` service whose native backend writes a new output, refuses a
+geographic or non-metre working CRS, cleans up on failure and hands nothing to the
+project before success. Evidence is in the task notes (pure `497`, native `553`,
+`tests/services` `100`, coverage `100%`), not in a separate document, because the
+claims are the tests themselves.
+
+decision-11 stays `proposed`: class-per-algorithm and fresh-per-invocation are
+implemented, but provider/catalog registration, `QgsProcessingAlgorithm`/
+`createInstance`, mid-flight cancellation and thread-affinity proofs are not.
+
+m-1 is now 9/14. Remaining: TASK-3, TASK-5, TASK-15, and TASK-28 as the gate.
+
+Follow-on: **TASK-39** (provider registration) was opened and completed the same
+day, after TASK-14 made algorithms inspectable. A `Provider` now registers
+algorithms that appear in the QGIS Processing toolbox and run through
+`processing.run`, which is the registration object decision-11 described as
+illustrative. TASK-39 joined m-1 (it *is* the "Processing algorithms" half of
+that milestone's title), so the milestone is now fifteen tasks and stands at
+10/15; the remaining four are TASK-3, TASK-5, TASK-15 and the TASK-28 gate.

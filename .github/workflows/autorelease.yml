@@ -29,10 +29,10 @@ on:
     inputs:
       scope:
         description: >-
-          Force target scope (leave blank for all, or set auto, python,
-          typescript).
+          Target scope: auto (default) derives it from the changed paths;
+          set python, typescript or all to force one.
         required: false
-        default: ""
+        default: "auto"
         type: string
       bump:
         description: >-
@@ -88,11 +88,16 @@ jobs:
 
       - name: Plan the next release
         id: plan
+        env:
+          # A milestone tag carries its own scope; every other trigger derives
+          # the scope from the changed paths, so a Python-only push plans a
+          # python-v* release instead of an alignment one.
+          RELEASE_SCOPE: ${{ github.ref_type == 'tag' && '' || inputs.scope || 'auto' }}
         run: >-
           python3 scripts/release.py plan
           --trigger "${{ github.event_name == 'workflow_dispatch' && 'dispatch' || (github.ref_type == 'tag' && 'milestone' || 'push') }}"
           --milestone-tag "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
-          --scope "${{ inputs.scope || '' }}"
+          --scope "$RELEASE_SCOPE"
           --bump "${{ inputs.bump || '' }}"
           --version-override "${{ inputs.version || '' }}"
           --suffix "${{ inputs.suffix || '' }}"

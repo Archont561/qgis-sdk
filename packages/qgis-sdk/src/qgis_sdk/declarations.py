@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from types import UnionType
 from typing import (
+    Annotated,
     Any,
     Literal,
     TypeVar,
@@ -19,6 +20,11 @@ from typing import (
 from .models import MAX_SAFE_INTEGER, QgisSdkError
 
 T = TypeVar("T")
+
+#: Version of the plugin-description wire contract. It is deliberately not the
+#: package version: the bridge mirrors this number, and a release that changes a
+#: serialized shape has to move it for both sides at once.
+PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1
 
 
 class QgisSdkDeclarationError(QgisSdkError):
@@ -95,7 +101,7 @@ class PluginDescription:
     id: str
     title: str
     actions: tuple[ActionDescription, ...]
-    schema_version: int = 1
+    schema_version: int = PLUGIN_DESCRIPTION_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         """Return the transport representation."""
@@ -145,6 +151,11 @@ def _schema(
     annotation: Any, path: str, *, result: bool, stack: tuple = ()
 ) -> dict[str, Any]:
     """Describe one annotation using the JSON Schema subset the contract allows."""
+    if get_origin(annotation) is Annotated:
+        # `Annotated[T, ...]` stores a T: the extras are host hints (which widget
+        # a field deserves), not part of the wire shape. Describing the underlying
+        # type keeps one subset instead of a second schema dialect.
+        return _schema(get_args(annotation)[0], path, result=result, stack=stack)
     primitive = next(
         (name for cls, name in _PRIMITIVE_JSON_TYPES.items() if annotation is cls),
         None,
@@ -161,13 +172,41 @@ def _schema(
             "type": "array",
             "items": _schema(args[0], path + "[]", result=result, stack=stack),
         }
+    if origin is tuple:
+        # Deliberately not folded into the list case above: `tuple[str]` would
+        # otherwise match it and describe a fixed-length one-element tuple as an
+        # unrestricted string array.
+        return _tuple_schema(args, path, result=result, stack=stack)
     if origin is Literal:
         return _literal_schema(args, path)
     if inspect.isclass(annotation) and is_dataclass(annotation):
         return _dataclass_schema(annotation, path, result=result, stack=stack)
     raise QgisSdkDeclarationError(
-        f"{path}: unsupported annotation {annotation!r}; use JSON primitives, list, union, Literal or a dataclass"
+        f"{path}: unsupported annotation {annotation!r}; use JSON primitives, "
+        "list, tuple[X, ...], union, Literal or a dataclass"
     )
+
+
+def _tuple_schema(
+    args: tuple, path: str, *, result: bool, stack: tuple
+) -> dict[str, Any]:
+    """Describe the variadic tuple form, which maps onto the wire's array.
+
+    A tuple is immutable, so it is the honest spelling for a collection inside a
+    frozen value DTO. JSON has one array type, so ``tuple[X, ...]`` and ``list[X]``
+    produce identical schemas. The fixed-length form has no counterpart: the wire
+    cannot carry "exactly two elements of different types" without either dropping
+    the length or inventing a branch, so it is refused rather than loosened.
+    """
+    if len(args) != 2 or args[1] is not Ellipsis:
+        raise QgisSdkDeclarationError(
+            f"{path}: only the variadic tuple[X, ...] is supported; "
+            "a fixed-length tuple has no JSON array equivalent"
+        )
+    return {
+        "type": "array",
+        "items": _schema(args[0], path + "[]", result=result, stack=stack),
+    }
 
 
 def _primitive_schema(annotation: Any, json_type: str) -> dict[str, Any]:

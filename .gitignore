@@ -18,6 +18,9 @@ dist/
 build/
 coverage/
 /.coverage*
+# ...but the coverage *configuration* is source, and CI needs it: without it
+# the QGIS adapter omit does not apply and the gate measures host-only code.
+!/.coveragerc
 *.egg-info/
 .turbo/
 .ruff_cache/
