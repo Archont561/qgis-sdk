@@ -181,3 +181,19 @@ Desktop/WebEngine lifecycle ([TASK-4](../tasks/task-4%20-%20Add-the-versioned-We
 and Conda/ZIP delivery ([TASK-8](../tasks/task-8%20-%20Build-a-validated-QGIS-installable-plugin-ZIP.md))
 — must be proven before any native validator becomes mandatory, followed by an
 explicit ADR-3 deployment-scope review.
+
+## Status review (2026-10-24): stays `proposed`
+
+Re-checked at the v2 sprint-1 planning because TASK-12 is closed and cites this
+decision. The status is deliberately unchanged: the "Validation-backend spike
+closeout (2026-10-17)" section above already states the condition, and it is not
+met. TASK-2 landed the production description, but
+[TASK-17](../tasks/task-17%20-%20Generate-checked-in-TypeScript-contracts-clients-and-validators.md)
+(the checked-in generated TypeScript contracts, clients and validators) is still
+`To Do` in milestone m-2, so the authoring/generation direction has no production
+generator to accept. The generated schemas that exist today are test fixtures
+under `qgis-sdk-bridge/tests/contracts/`, which is exactly the distinction the
+closeout draws.
+
+**Promotion condition:** unchanged from the closeout — promotion follows TASK-17,
+not TASK-12.

@@ -19,3 +19,19 @@ UiContext combines shared services with view-owned subscriptions/tasks and expli
 - Pure tests inspect declarations and record UI requests; Qt tests construct content and verify ownership; real Desktop tests verify docks/menus/iface.
 - Custom widgets remain ordinary composed components; trivial message boxes need not become classes.
 - Exact decorators, open APIs, lifecycle hooks and native/web content specification remain proposed.
+
+## Status review (2026-10-24): stays `proposed`
+
+TASK-24 landed the *context* half: `UiContext` exists as a frozen dataclass
+carrying `notifications`, `view: ViewControl` and its own `ResourceScope`, and
+disposal follows the plugin's scope rather than a global registry. The controller
+half — a decorated class per dialog/dock, a lazy `build()` content factory,
+registered surface classes opened by a plugin UI service, fresh view
+contexts/controllers per opening — has no implementation, because TASK-3 is still
+`To Do` in this same milestone.
+
+**Promotion condition:** promote when TASK-3 lands a controller and surface
+opening, or when this decision is narrowed by amendment to cover only the context
+seam that already exists. Do not promote it on the strength of `UiContext` alone:
+the Consequences section's Qt and real-Desktop test obligations are unmet, and
+TASK-33 still owns the display-dependent qualification.

@@ -59,3 +59,33 @@ this adapter inside a real `QgsApplication` and proves construction, action
 binding and disposal. It passes no real Desktop `iface`, renders no UI and is
 not a Desktop startup/unload qualification. Real Desktop evidence remains open
 and is tracked by TASK-33.
+
+## Status review (2026-10-24): stays `proposed`
+
+Checked because TASK-11 and TASK-24 both cite this decision and are closed, which
+reads like a stale status. It is not, and the status is left unchanged. What has
+actually landed is the *layering and its guard*: `qgis_sdk.models`,
+`qgis_sdk.services`, `qgis_sdk.core` and `qgis_sdk.adapters` exist,
+`tests/test_pure_imports.py` enforces the `models <- services <- core` direction
+by AST and by a subprocess import that blocks `qgis`, PyQt and pydantic, the
+contexts are typed frozen dataclasses rather than a string-keyed service locator,
+and the native escape hatch fails closed through
+`QgisSdkUnsupportedCapabilityError` when no Desktop adapter is present.
+
+Three responsibility boundaries named in the Decision section are still absent or
+relocated, so accepting the decision would ratify them silently:
+
+- `testing` — the in-memory service fakes and opt-in pytest plugins do not exist;
+  `qgis_sdk.services` holds five Protocols and no implementations. This is what
+  TASK-25.1 delivers.
+- `bridge` — endpoint/router declarations live in the separate TypeScript
+  package, not in `qgis_sdk`; decision-18 chose that split deliberately, but this
+  decision's text still describes an in-package `bridge` boundary.
+- `adapters/qgis` — the existing adapters are `desktop`, `webengine` and
+  `pydantic`; no PyQGIS service adapter exists yet. TASK-25.2 owns it.
+
+**Promotion condition:** promote to `accepted` when the `testing` and
+`adapters/qgis` boundaries exist with the contracts they serve, i.e. after
+TASK-25.1 and TASK-25.2 land. Until then the decision is the agreed direction, not
+a realized one, and the mismatch is recorded here instead of being papered over by
+a status flip.
