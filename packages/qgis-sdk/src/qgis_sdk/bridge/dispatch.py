@@ -31,11 +31,12 @@ not by whatever the transport happens to do with a callback.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
 
 from qgis_sdk.bridge.protocol import (
     BRIDGE_PROTOCOL_VERSION,
+    HOST_SCHEMA_VERSION,
     BridgeErrorCode,
     BridgeOperation,
     InvokeEnvelope,
@@ -45,6 +46,7 @@ from qgis_sdk.bridge.protocol import (
     to_wire,
 )
 from qgis_sdk.bridge.resources import Handle, HandleKind, ReleaseLedger
+from qgis_sdk.bridge.schema import validate
 from qgis_sdk.bridge.streams import (
     MAX_FRAMES_PER_PUMP,
     MAX_SUBSCRIPTIONS_PER_VIEW,
@@ -98,6 +100,68 @@ class Dispatcher:
         self._subscriptions: dict[str, Subscription] = {}
         self._counter = 0
         self._generation = 0
+
+    @classmethod
+    def from_description(
+        cls,
+        description: Any,
+        handlers: Mapping[str, Handler],
+        *,
+        authorize: Authorizer | None = None,
+        ledger: ReleaseLedger | None = None,
+    ) -> Dispatcher:
+        """Build a dispatcher whose allowlist *is* the plugin description.
+
+        This is the only wiring a plugin needs (decision-26): every declared
+        action becomes one allowlisted operation carrying the schemas the
+        declaration already produced, its handler is bound by action id, and the
+        handshake advertises the same set the description names. A declared
+        action without a handler is refused here rather than discovered as a
+        missing operation by a view.
+        """
+        advertised, actions = _description_parts(description)
+        dispatcher = cls(description=advertised, authorize=authorize, ledger=ledger)
+        for action in actions:
+            operation_id = action["id"]
+            handler = handlers.get(operation_id)
+            if handler is None:
+                raise QgisSdkBridgeError(
+                    f"action {operation_id!r} is declared but has no handler"
+                )
+            if not callable(handler):
+                raise QgisSdkBridgeError(
+                    f"action {operation_id!r}: handler must be callable"
+                )
+            dispatcher.register(
+                BridgeOperation(
+                    id=operation_id,
+                    title=action["title"],
+                    request=action.get("request"),
+                    result=action.get("result"),
+                ),
+                _keyword_handler(handler, action.get("request"), operation_id),
+            )
+        return dispatcher
+
+    @classmethod
+    def from_runtime(
+        cls,
+        runtime: Any,
+        *,
+        authorize: Authorizer | None = None,
+        ledger: ReleaseLedger | None = None,
+    ) -> Dispatcher:
+        """Build from a started runtime: its description and its bound handlers.
+
+        ``PluginRuntime.actions`` is already keyed by action id and already bound
+        to the instance, so nothing here needs to know a method name.
+        """
+        return cls.from_description(
+            runtime.description,
+            runtime.actions,
+            authorize=authorize,
+            ledger=ledger,
+        )
 
     @property
     def generation(self) -> int:
@@ -177,6 +241,7 @@ class Dispatcher:
             "protocol": BRIDGE_PROTOCOL_VERSION,
             "generation": binding.generation,
             "plugin": self._description,
+            "host_schema_version": HOST_SCHEMA_VERSION,
             "operations": [operation.to_dict() for operation in self.operations()],
         }
         return binding, to_wire(reply)
@@ -233,6 +298,10 @@ class Dispatcher:
             payload = to_wire(envelope.payload)
         except QgisSdkBridgeError as error:
             return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, str(error))
+        operation = self._operations[envelope.operation]
+        refusal = _input_refusal(operation, payload)
+        if refusal is not None:
+            return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, refusal)
 
         try:
             value = handler(payload)
@@ -245,9 +314,13 @@ class Dispatcher:
                 "The operation failed; the host recorded the details",
             )
         try:
-            return success(call_id, value)
+            wire_value = to_wire(value)
         except QgisSdkBridgeError as error:
             return failure(call_id, BridgeErrorCode.NOT_SERIALIZABLE, str(error))
+        refusal = _output_refusal(operation, wire_value)
+        if refusal is not None:
+            return failure(call_id, BridgeErrorCode.INVALID_RESULT, refusal)
+        return success(call_id, wire_value)
 
     def pump(
         self, binding: ViewBinding, *, limit: int = MAX_FRAMES_PER_PUMP
@@ -339,6 +412,9 @@ class Dispatcher:
             payload = to_wire(request.payload)
         except QgisSdkBridgeError as error:
             return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, str(error))
+        refusal = _input_refusal(self._operations[request.operation], payload)
+        if refusal is not None:
+            return failure(call_id, BridgeErrorCode.INVALID_PAYLOAD, refusal)
 
         try:
             source = factory(payload)
@@ -521,3 +597,101 @@ class Dispatcher:
         if self._authorize is None:
             return False
         return bool(self._authorize(binding, operation))
+
+
+def _description_parts(description: Any) -> tuple[Any, list[dict[str, Any]]]:
+    """Return the advertised description and its actions as plain records."""
+    if hasattr(description, "to_dict") and hasattr(description, "actions"):
+        actions = [
+            {
+                "id": action.id,
+                "title": action.title,
+                "request": action.request,
+                "result": action.result,
+            }
+            for action in description.actions
+        ]
+        return description.to_dict(), actions
+    if isinstance(description, Mapping):
+        declared = description.get("actions", [])
+        if not isinstance(declared, list):
+            raise QgisSdkBridgeError("description.actions must be a list")
+        records: list[dict[str, Any]] = []
+        for action in declared:
+            if not isinstance(action, Mapping):
+                raise QgisSdkBridgeError(
+                    "every action in a description must be an object"
+                )
+            for key in ("id", "title"):
+                if not isinstance(action.get(key), str) or not action[key]:
+                    raise QgisSdkBridgeError(f"action {key} must be a nonempty string")
+            records.append(dict(action))
+        return description, records
+    raise QgisSdkBridgeError(
+        "description must be a PluginDescription or a mapping with actions"
+    )
+
+
+def _keyword_handler(
+    handler: Callable[..., Any], request: Any, operation_id: str
+) -> Handler:
+    """Bind a declared action's named-argument payload to the callable.
+
+    A declaration describes the inputs as an object, and the payload is
+    validated against that object before this runs, so the only thing left to do
+    is spell it as keyword arguments.
+    """
+    properties: Any = {}
+    if isinstance(request, Mapping):
+        properties = request.get("properties", {})
+    if isinstance(properties, Mapping):
+        for name in properties:
+            if not isinstance(name, str) or not name.isidentifier():
+                raise QgisSdkBridgeError(
+                    f"{operation_id}: input {name!r} is not a Python parameter name"
+                )
+
+    def invoke(payload: Mapping[str, Any]) -> Any:
+        return _wire_result(handler(**payload))
+
+    return invoke
+
+
+def _wire_result(value: Any) -> Any:
+    """Turn declared value objects into plain JSON before the boundary check.
+
+    A declared action returns the dataclass its annotation names, and the
+    declaration already described that dataclass as an object schema. Converting
+    here keeps :func:`~qgis_sdk.bridge.protocol.to_wire` strict for everything
+    else: a Qt or QGIS object is still refused, because only dataclasses, lists
+    and mappings are unwrapped.
+    """
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
+    if isinstance(value, (list, tuple)):
+        return [_wire_result(item) for item in value]
+    if isinstance(value, Mapping):
+        return {key: _wire_result(item) for key, item in value.items()}
+    return value
+
+
+def _input_refusal(operation: BridgeOperation, payload: Any) -> str | None:
+    """Return the refusal for a payload, or ``None`` when it may proceed."""
+    if operation.request is None:
+        return None
+    try:
+        validate(payload, operation.request, path="payload")
+    except QgisSdkBridgeError as error:
+        return str(error)
+    return None
+
+
+def _output_refusal(operation: BridgeOperation, value: Any) -> str | None:
+    """Validate a result leniently: required fields yes, extra fields no."""
+    if operation.result is None:
+        return None
+    try:
+        validate(value, operation.result, path="result", allow_unknown=True)
+    except QgisSdkBridgeError as error:
+        return str(error)
+    return None

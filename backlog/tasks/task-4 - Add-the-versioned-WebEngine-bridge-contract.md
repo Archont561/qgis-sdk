@@ -1,10 +1,10 @@
 ---
 id: TASK-4
 title: Add the versioned WebEngine bridge contract
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-15 23:06'
-updated_date: '2026-10-24 20:40'
+updated_date: '2026-10-24 19:41'
 labels: []
 milestone: m-2
 dependencies:
@@ -32,11 +32,11 @@ Integrate the versioned optional bridge with the dedicated code-generation, secu
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Python and TypeScript validate the same contract fixtures.
-- [ ] #2 Bridge surface is allowlisted and serializable; raw Qt/QGIS objects and arbitrary Python invocation are not exposed.
-- [ ] #3 Bridge behavior can be tested without relying on live external services.
-- [ ] #4 Generated operation-specific clients reject unknown operations and invalid inputs at compile time and validate responses at runtime; a manually asserted invoke<T> is not the public type-safety guarantee.
-- [ ] #5 All calls pass through a narrow dispatcher with trusted host-bound view/origin/generation; forged payload caller IDs and direct-object paths cannot bypass per-view/resource authorization.
+- [x] #1 Python and TypeScript validate the same contract fixtures.
+- [x] #2 Bridge surface is allowlisted and serializable; raw Qt/QGIS objects and arbitrary Python invocation are not exposed.
+- [x] #3 Bridge behavior can be tested without relying on live external services.
+- [x] #4 Generated operation-specific clients reject unknown operations and invalid inputs at compile time and validate responses at runtime; a manually asserted invoke<T> is not the public type-safety guarantee.
+- [x] #5 All calls pass through a narrow dispatcher with trusted host-bound view/origin/generation; forged payload caller IDs and direct-object paths cannot bypass per-view/resource authorization.
 - [x] #6 Invocation replies, subscriptions and operation streams have tested ordering, terminal/disposal/reconnect semantics and documented bounded buffering, gap/overflow policy and progress coalescing where applicable.
 - [x] #7 Resource release distinguishes borrowed layer handles from subscriptions and owned temporary outputs; releasing a borrowed handle never deletes the project layer, and repeated/in-flight close behavior is tested.
 - [x] #8 Client-local injected transports support typed scripted handlers, faults/events, isolated clients and leak checks; local abort/timeout is distinct from acknowledged host cancellation and never causes automatic unknown-outcome retries.
@@ -66,6 +66,24 @@ Tauri source review (2026-10-16): follow proposed decision-23 and doc-2 section 
 - Protocol version stays 1. A subscription is a call a client chooses to make and the host only sends frames for a subscription that client opened, so a client that never subscribes sees exactly the traffic it saw before. The nine reply cases are unchanged; `cases.json` now also carries three stream cases produced by the real dispatcher.
 - Still open, and not claimed: AC #4, which is TASK-17's generated operation-specific clients. That is also why TASK-4 itself stays `In Progress` - its own dependency list names TASK-17, so the criterion cannot be met from here without duplicating that task's generator.
 - Verification: `test_bridge_streams.py` 20, `test_bridge_resources.py` 11, `test_bridge_transport.py` 8, `test_adapters_webchannel.py` 2, plus the existing 21 dispatcher and 4 fixture tests; package suite 612 passed / 33 skipped (the one local `test_pure_imports` failure is the known sandbox-only typer case); TypeScript 111 pass under bun, `tsc --noEmit` clean under `strict` + `isolatedDeclarations`.
+2026-10-24 (third slice: one manifest, validated both ways):
+- `BridgeOperation` now carries the `request` and `result` schemas the declaration already produced, and advertises them in the handshake. `Dispatcher.from_description(description, handlers)` and `Dispatcher.from_runtime(runtime)` project the allowlist from a `PluginDescription` (or its JSON form) and `PluginRuntime.actions`, so the three inventories that could drift - what the description names, what the allowlist authorizes and what a generated client will be built from - are one object (decision-26).
+- Strict inputs: a declared request schema is validated before the handler runs, with the field path in the refusal (`payload.options.limit: expected an integer, got boolean`). Unknown properties are refused because the declaration generator emits `additionalProperties: false`; missing required ones are refused; integers are held to the safe range; `true` is not `1`. Payload keys are bound as keyword arguments, so an undeclared argument cannot reach Python.
+- Lenient results: a declared result schema is checked after the handler returns. Extra properties are tolerated (additive host changes do not break an older client), a missing or mistyped required one is `invalid_result` naming the path and never the value.
+- The validator is a small module over the exact subset `qgis_sdk.declarations` emits; a construct outside it (`$ref` and friends) is refused loudly rather than skipped. It is deliberately not `jsonschema`: `typer` is the only runtime dependency and a QGIS plugin should not gain a validator to speak its own contract.
+- Dataclass results are unwrapped with `asdict` before the boundary check, so an action may return the value object its annotation names while `to_wire` stays strict for everything else.
+- Both languages still validate the same fixtures: `cases.json` gained an `invalid-result` case produced by the real dispatcher, and the TypeScript test now reads ten cases.
+- Verification: `test_bridge_manifest.py` 21, bridge suite 85, package suite 633 passed / 33 skipped (the local `test_pure_imports` failure remains the sandbox-only typer case), scripts suite 163, TypeScript 111 pass, `tsc --noEmit` clean, ruff check/format clean.
+- Still not claimed: AC #4 - generated operation-specific clients are TASK-17's, and they now have the manifest they will be generated from.
+2026-10-24 (fourth slice: the generated client, which closes AC #4):
+- `qgis_sdk.bridge.generate` renders one TypeScript module from `describe_plugin(...).to_dict()`: the value interfaces, `OPERATIONS` and `OperationId`, one runtime validator per type, the nested `PluginOperations` map and `createOperations(client)`. `contract_fingerprint` hashes only what crosses the wire - description version, plugin id, and each action's id, request and result - so renaming a Python handler or rewording a title does not invalidate a generated client.
+- AC #4 is met, and it is met where the criterion points: the generated map is the public surface. `call<T>` stays private to the emitted module, a runtime test asserts `createOperations()` exposes no `invoke`, and `tests/generated.types.ts` carries `@ts-expect-error` cases for an unknown `OperationId`, a misspelled member, a dropped required argument, an unknown argument, a mistyped one, a bad literal and the generic `invoke` escape hatch, so `tsc --noEmit` fails if any of them stops being an error. The runtime half is 12 bun tests over the same module: strict request validation before the transport is touched, lenient response validation after it, nested objects included.
+- Generation is deterministic (actions sorted, no timestamps, no environment) and refuses what it cannot render instead of emitting `any`: `$ref` or any unknown keyword, an object inside a union, duplicate ids, a prefix that is both an operation and a namespace, an action without declared schemas, and two declarations that would collide on one type name.
+- The command is `qgis-sdk bridge generate` with `--plugin module:Attribute` (imported from the working directory, no install), `--description FILE.json` (a description a host already shipped), `--out`, `--print` and `--check`. `--check` is the drift mode: it compares bytes and prints the fix, and CI runs the generator itself in `Check the generated bridge client is current` and fails when `git status` is not clean, so the file cannot go stale unnoticed. `bun run sdk:generate` regenerates it with the other generated artifacts.
+- The checked-in sample is `packages/qgis-sdk-bridge/tests/contracts/generated/clients/sites.ts`, written from `tests/contract_sample/bridge_plugin.py` by `packages/qgis-sdk/scripts/generate_bridge_clients.py`. The fixture plugin is QGIS-free on purpose: generating a client must not need a QGIS installation, which is the same rule a plugin's declaration module follows.
+- AC #1, #2, #3 and #5 were already met by the first three slices and are checked now rather than left as prose: the fixtures (ten replies and three stream cases) are produced by the real dispatcher and read by both languages, the surface is declared ids with no attribute paths, the dispatcher takes dictionaries and returns dictionaries, and the binding is host-minted with authorization before the allowlist.
+- Verification: package suite 657 passed / 33 skipped (the local `test_pure_imports` failure is the sandbox-only typer case), `test_bridge_generate.py` 24, scripts 163, TypeScript 123 pass under bun, `tsc --noEmit` clean under `strict` + `isolatedDeclarations`, ruff check and format clean, `cases.json` still 10 cases.
+- Not claimed here: generated event/stream types and the host namespaces are still TASK-17's, whose AC #1 keeps the events half open, and the Qt half of the adapter is exercised only in CI.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

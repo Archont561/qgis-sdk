@@ -49,6 +49,17 @@ TICKS = BridgeOperation(id="demo.ticks", title="A pulled stream of ticks")
 PUSHED = BridgeOperation(id="demo.pushed", title="A stream the host pushes into")
 FAILS = BridgeOperation(id="demo.fails", title="Fail with an SDK error")
 NATIVE = BridgeOperation(id="demo.native", title="Return a value that cannot cross")
+MALFORMED = BridgeOperation(
+    id="demo.malformed",
+    title="Break its declared result",
+    request={"type": "object", "properties": {}, "additionalProperties": False},
+    result={
+        "type": "object",
+        "properties": {"total": {"type": "integer"}},
+        "required": ["total"],
+        "additionalProperties": False,
+    },
+)
 
 
 def _request(operation: str, payload: Any = None, call_id: str = "case") -> dict:
@@ -95,6 +106,7 @@ def _host(*, allow: bool = True) -> Dispatcher:
     dispatcher.register(ECHO, lambda payload: {"echo": payload})
     dispatcher.register(FAILS, _raise_sdk_error)
     dispatcher.register(NATIVE, lambda payload: object())
+    dispatcher.register(MALFORMED, lambda payload: {"total": "many"})
     return dispatcher
 
 
@@ -160,6 +172,11 @@ def build_cases() -> dict[str, Any]:
     )
     record("not-serializable", _host(), _request("demo.native", None, "case-native"))
     record("operation-failed", _host(), _request("demo.fails", None, "case-failed"))
+    record(
+        "invalid-result",
+        _host(),
+        _request("demo.malformed", None, "case-invalid-result"),
+    )
 
     cancelled = _host()
     binding = cancelled.bind(view_id="view-1", origin="qgis://desktop")

@@ -8,17 +8,28 @@ reason: unlike the automation tools in ``packages/qgis-sdk/scripts``, which are
 development-only and are not part of either distribution, generating a project is a
 library operation with no display, no QGIS and no Qt, so shipping it is the point.
 
-All behaviour lives in :mod:`qgis_sdk.scaffold`, so callers that do not want a shell
-reach the same API directly.
+All behaviour lives in :mod:`qgis_sdk.scaffold` and :mod:`qgis_sdk.bridge.generate`,
+so callers that do not want a shell reach the same API directly.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from qgis_sdk.bridge.generate import (
+    check_generated,
+    describe_plugin_spec,
+    generate_host_typescript,
+    generate_typescript,
+    load_description,
+    write_generated,
+)
+from qgis_sdk.bridge.host import host_description
+from qgis_sdk.models import QgisSdkBridgeError
 from qgis_sdk.scaffold import (
     QgisSdkScaffoldError,
     ScaffoldOptions,
@@ -30,6 +41,11 @@ app = typer.Typer(
     add_completion=False,
     help="Generate and inspect qgis-sdk plugin projects.",
 )
+bridge_app = typer.Typer(
+    add_completion=False,
+    help="Generate the TypeScript side of a plugin's bridge contract.",
+)
+app.add_typer(bridge_app, name="bridge")
 
 
 @app.command()
@@ -79,6 +95,70 @@ def scaffold(
     except QgisSdkScaffoldError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
+
+
+@bridge_app.command("generate")
+def bridge_generate(
+    plugin: Annotated[
+        str | None,
+        typer.Option(help="Plugin class as module:Attribute, described without QGIS."),
+    ] = None,
+    description: Annotated[
+        Path | None,
+        typer.Option(help="Plugin description JSON a host already produced."),
+    ] = None,
+    host: Annotated[
+        bool,
+        typer.Option(
+            "--host", help="Render the curated host surface instead of a plugin."
+        ),
+    ] = False,
+    out: Annotated[
+        Path | None, typer.Option(help="TypeScript module to write or check.")
+    ] = None,
+    check: Annotated[
+        bool, typer.Option(help="Fail when OUT differs from a fresh generation.")
+    ] = False,
+    show: Annotated[
+        bool, typer.Option("--print", help="Write the module to stdout instead.")
+    ] = False,
+) -> None:
+    """Turn one plugin description into a typed TypeScript client."""
+    try:
+        described, generator = _describe(plugin, description, host)
+        if show:
+            typer.echo(generator(described), nl=False)
+        elif out is None:
+            raise QgisSdkBridgeError("give --out, --check or --print")
+        elif check:
+            message = check_generated(out, described, generate=generator)
+            if message is not None:
+                typer.echo(message, err=True)
+                raise typer.Exit(code=1)
+            typer.echo(f"{out} is up to date")
+        else:
+            changed = write_generated(out, described, generate=generator)
+            typer.echo(f"{'wrote' if changed else 'unchanged'} {out}")
+    except (QgisSdkBridgeError, QgisSdkScaffoldError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+
+
+def _describe(
+    plugin: str | None, description: Path | None, host: bool
+) -> tuple[dict, Callable[[dict], str]]:
+    """Return the description and the renderer named by exactly one source."""
+    if host:
+        if plugin is not None or description is not None:
+            raise QgisSdkBridgeError(
+                "--host renders the curated host surface; give no --plugin or --description"
+            )
+        return host_description(), generate_host_typescript
+    if (plugin is None) == (description is None):
+        raise QgisSdkBridgeError("give exactly one of --plugin or --description")
+    if plugin is not None:
+        return describe_plugin_spec(plugin), generate_typescript
+    return load_description(description), generate_typescript
 
 
 @app.callback()

@@ -216,17 +216,31 @@ wire: a view names an operation id, and the host decides whether that view may
 have it.
 
 ```python
-from qgis_sdk.bridge import BridgeOperation, Dispatcher
+from qgis_sdk.bridge import Dispatcher
 
-dispatcher = Dispatcher(
-    description=describe_plugin(MyPlugin).to_dict(),
+runtime = PluginRuntime(MyPlugin, context).start()
+dispatcher = Dispatcher.from_runtime(
+    runtime,
     authorize=lambda binding, operation: binding.origin == "qgis://desktop",
 )
-dispatcher.register(BridgeOperation("layers.info", "Read one layer"), read_layer)
 
 binding, handshake = dispatcher.handshake(view_id="view-1", origin="qgis://desktop")
 reply = dispatcher.dispatch(binding, request)     # never raises
 ```
+
+- **One manifest, three views.** `from_description`/`from_runtime` project the
+  allowlist from the plugin's own declarations, so the operations a view may
+  call, the operations the handshake advertises and the schemas a generated
+  client will be built from are the same object (decision-26). A declared action
+  without a handler is refused when the dispatcher is wired, not when a view
+  calls it.
+- **Strict inputs, lenient results.** A declared request schema is validated
+  before the handler runs - unknown properties, missing required ones, mistyped
+  values and integers outside the safe range are refused as `invalid_payload`
+  with the field path - and the payload is bound as keyword arguments. A
+  declared result schema is checked afterwards: extra properties are tolerated,
+  a missing or mistyped one is `invalid_result` naming the field, never the
+  value.
 
 - **One narrow entry point.** Protocol, generation, authorization, allowlist,
   payload and serialization are decided in that order. Authorization runs before
@@ -248,6 +262,65 @@ reply = dispatcher.dispatch(binding, request)     # never raises
 - **Transport.** `qgis_sdk.bridge.transport.ChannelTransport` moves JSON strings
   in and out; `qgis_sdk.adapters.webchannel.create_channel_object` wraps it in
   the `QObject` a `QWebChannel` registers, importing Qt only when asked.
+
+### Generated TypeScript client (TASK-17)
+
+The declarations a plugin already writes are the only source of its client. One
+command renders the value types, the operation map, the runtime validators and
+`createOperations(client)` from them - no QGIS, no Qt, no handler ever runs:
+
+```console
+$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin --out web/src/bridge.ts
+wrote web/src/bridge.ts
+```
+
+- **Deterministic.** The same declarations produce the same bytes, so the file is
+  reviewed and committed like source, and CI regenerates it and fails on any
+  difference (`--check` reports the drift without writing).
+- **A description works too.** `--plugin` imports `module:Attribute` from the
+  working directory; `--description plugin-description.json` does the same from a
+  description a host already shipped, for a frontend with no Python at hand.
+- **Closed subset.** A schema outside the declaration subset (`$ref`, an object
+  inside a union) fails the build instead of emitting `any`.
+- **Strict in, lenient out.** A generated validator refuses unknown arguments and
+  accepts a response that gained a field, so a newer host does not break an older
+  view.
+
+### Host surface (decision-27)
+
+A view can reach the curated services the plugin already implements - and nothing
+else of the QGIS API. The inventory is a declaration, not a convention:
+
+```python
+from qgis_sdk.bridge import Dispatcher
+from qgis_sdk.bridge.host import HostServices, host_grants, register_host_operations
+
+dispatcher = Dispatcher(
+    description=runtime.description,
+    authorize=lambda binding, operation: host_grants()[operation] in grants_for(binding),
+)
+register_host_operations(
+    dispatcher,
+    HostServices(layers=layers, project=project, settings=settings,
+                 styles=styles, notifications=notifications),
+)
+```
+
+- **Six operations, each with a canonical grant.** `layers.list`, `layers.get`,
+  `project.layer_ids`, `settings.get`, `notifications.info`, `styles.apply`.
+  Grants are per operation (`layers.read`, `project.read`, ...), never per
+  namespace, so a method added later is not automatically allowed.
+- **Everything is declared.** Each entry names the Protocol method it wraps, its
+  `gui` affinity and its request/result schema. Every other method of the curated
+  Protocols - `open_vector`, `selection`, `add_layer`, `set`, `execute` - is
+  listed in `DEFERRED_HOST_METHODS` with the task that owns it, and a test
+  reflects the Protocols so a new method cannot appear unaccounted for.
+- **Nothing unbounded, nothing by path.** Every list is paged
+  (`{limit?, cursor?}` in, `{items, truncated, next_cursor?}` out; 50 by default,
+  200 at most), and no operation takes a filesystem path.
+- **Versioned with the client.** The handshake advertises `host_schema_version`
+  and the registered ids, and the TypeScript side ships generated inside the npm
+  package as `@archont561/qgis-sdk-bridge/host`.
 
 ## 0.2.0 migration notes (TASK-28)
 

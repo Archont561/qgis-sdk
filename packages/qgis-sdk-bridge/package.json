@@ -16,6 +16,11 @@
 			"types": "./dist/bridge.d.ts",
 			"import": "./dist/bridge.js",
 			"default": "./dist/bridge.js"
+		},
+		"./host": {
+			"types": "./dist/host.d.ts",
+			"import": "./dist/host.js",
+			"default": "./dist/host.js"
 		}
 	},
 	"files": [
