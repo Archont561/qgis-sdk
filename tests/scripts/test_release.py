@@ -1384,7 +1384,17 @@ def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
     assert main(["verify-versions", "--json"]) == 0
 
     payload = json.loads(capsys.readouterr().out)
-    assert payload["scopes"]["python"]["version"] == "0.1.1"
+    python_scope = payload["scopes"]["python"]
+    typescript_scope = payload["scopes"]["typescript"]
+
+    # A release stamps these manifests, so the assertion is about the serialized
+    # agreement - every manifest of a scope carrying the scope's one version -
+    # rather than about the number the workspace happens to carry today.
+    assert set(python_scope["manifests"]) == {"pyproject.toml", "recipe.yaml"}
+    assert set(python_scope["manifests"].values()) == {python_scope["version"]}
+    assert typescript_scope["manifests"] == {
+        "package.json": typescript_scope["version"]
+    }
     assert payload["contract"] == {"python": 1, "typescript": 1}
 
 

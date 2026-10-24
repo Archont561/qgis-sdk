@@ -214,3 +214,20 @@ class QgisSdkFormError(QgisSdkError):
     """
 
     code = "invalid_form_values"
+
+
+class QgisSdkBridgeError(QgisSdkError):
+    """A bridge call was refused, or its value cannot cross the transport.
+
+    The dispatcher turns this into an error reply rather than an exception, so a
+    view always receives a call id it can match: a raise here would lose the
+    correlation and leave the frontend waiting for a reply that never comes.
+    """
+
+    code = "bridge_error"
+
+
+class QgisSdkBridgeProtocolError(QgisSdkBridgeError):
+    """An envelope does not match the versioned bridge protocol."""
+
+    code = "invalid_bridge_message"
