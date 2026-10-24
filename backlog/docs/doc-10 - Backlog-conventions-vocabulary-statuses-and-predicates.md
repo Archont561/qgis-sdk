@@ -22,7 +22,7 @@ Counts and states here were read on **2026-10-24** at `1d956a8` (after `v0.1.1`)
 | --- | --- | --- | --- |
 | Task | `TASK-N`, `TASK-N.M` | `backlog/tasks/` | `status`: To Do / In Progress / Done |
 | Milestone | `m-N` | `backlog/milestones/` | none — closed by its release task |
-| Document | `doc-N` | `backlog/docs/{plans,specifications}/` or `backlog/docs/` | none |
+| Document | `doc-N` | `backlog/docs/{plans,specifications,guides}/` or `backlog/docs/` | none |
 | Decision | `decision-N` | `backlog/decisions/` | `status`: proposed / accepted |
 | Draft | created with `--draft` | `backlog/drafts/` | promoted into a task |
 
@@ -46,9 +46,10 @@ field does, so a "task that ratified this decision" is always an *inbound*
   `TASK-25.1`).
 - **Decision titles are prose and are not kebab-derived.** `decision list` prints
   the title, so the CLI and the file name drift harmlessly.
-- **Documents number in creation order across both folders.** `doc-10` sits at the
-  docs root while `doc-9` is under `plans/`; the ID is global, the folder is
-  taxonomy.
+- **Documents number in creation order across all folders.** `doc-10` sits at the
+  docs root while `doc-9` is under `plans/` and `doc-12` under `guides/`; the ID
+  is global, the folder is taxonomy (`guides/` holds documentation rather than
+  plans or specifications, per decision-29).
 
 ## 2. Predicates: the one edge, and the two meanings it must not carry
 
