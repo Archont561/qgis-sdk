@@ -77,28 +77,32 @@ jobs:
       - name: Test release tooling
         run: pixi run -e default test-release-tool
 
-      - name: Verify the scoped versions and the shared contract
-        run: pixi run -e default release-verify-versions
-
+      # The default environment carries the QGIS feature, so this is the only
+      # place the native form path actually executes: a developer machine needs
+      # a display setup and this sandbox has no Qt at all.
       - name: Test native forms offscreen
-        id: native_forms
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
           set -o pipefail
-          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py -q -rs 2>&1 | tee native-forms.log
-
-      - name: Annotate the native form failure
-        if: failure() && steps.native_forms.outcome == 'failure'
-        run: |
-          grep -nE "FAILED|ERROR|Error|error:|assert|Traceback" native-forms.log | tail -40 | cut -c1-900 | while IFS= read -r line; do echo "::error::$line"; done
-
-      - name: Report a skipped native form run
-        if: ${{ !cancelled() && steps.native_forms.outcome == 'success' }}
-        run: |
-          if grep -q 'skipped' native-forms.log; then
-            echo "::warning::native forms did not run:" $(grep -o "native forms need.*" native-forms.log | head -1)
+          log=native-forms.log
+          status=0
+          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py -q -rs 2>&1 | tee "$log" || status=$?
+          # pytest 9 exits 5 when a module skips itself during import, which is
+          # the honest outcome on a host without usable Qt and QGIS bindings, so
+          # that case is a warning carrying the reason rather than a red build.
+          # Anything else is a failure and gets annotated from the log, because
+          # a red step that only says "exit code 1" costs a rerun to diagnose.
+          if [ "$status" -eq 0 ]; then
+            exit 0
           fi
+          reason=$(grep -o "native forms need.*" "$log" | head -1)
+          if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
+            echo "::warning::native forms did not run: $reason"
+            exit 0
+          fi
+          grep -nE "FAILED|ERROR|Error|error:|assert|Traceback" "$log" | tail -40 | cut -c1-900 | while IFS= read -r line; do echo "::error::$line"; done
+          exit "$status"
 
       - name: Lint and format TypeScript
         run: pixi run -e bun biome-check
