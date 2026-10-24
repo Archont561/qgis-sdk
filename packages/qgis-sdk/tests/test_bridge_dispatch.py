@@ -19,6 +19,7 @@ from qgis_sdk.bridge import (
     Dispatcher,
     to_wire,
 )
+from qgis_sdk.bridge.schema import validate
 from qgis_sdk.models import (
     QgisSdkBridgeError,
     QgisSdkError,
@@ -276,3 +277,23 @@ def test_a_generic_sdk_error_is_forwarded_by_its_code() -> None:
         "code": BridgeErrorCode.OPERATION_FAILED.value,
         "message": "the host said no",
     }
+
+
+def test_a_declared_string_pattern_matches_the_whole_value() -> None:
+    """`pattern` is part of the subset, and it means fullmatch, not search."""
+    schema = {
+        "type": "object",
+        "properties": {"cursor": {"type": "string", "pattern": "[0-9]+"}},
+        "additionalProperties": False,
+    }
+    validate({"cursor": "12"}, schema, path="payload")
+    validate({}, schema, path="payload")
+    for bad in ("abc", "-1", "1 ", "", "12a"):
+        with pytest.raises(QgisSdkBridgeError, match="pattern"):
+            validate({"cursor": bad}, schema, path="payload")
+
+
+def test_a_pattern_that_is_not_a_string_is_refused() -> None:
+    schema = {"type": "string", "pattern": 7}
+    with pytest.raises(QgisSdkBridgeError, match="pattern must be a string"):
+        validate("12", schema, path="payload")

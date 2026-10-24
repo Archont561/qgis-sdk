@@ -9,7 +9,6 @@ Qt, QGIS or a browser anywhere in the picture.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -140,24 +139,23 @@ def _services(count: int = 5) -> HostServices:
     )
 
 
-def _dispatcher(
-    services: HostServices, *, only: list[str] | None = None, allow: bool = True
-) -> Dispatcher:
-    dispatcher = Dispatcher(
+def _empty(*, allow: bool = True) -> Dispatcher:
+    """Return a dispatcher with nothing registered yet."""
+    return Dispatcher(
         description={"schema_version": 1, "id": "demo.plugin", "title": "Demo"},
         authorize=(lambda binding, operation: True) if allow else None,
     )
+
+
+def _dispatcher(
+    services: HostServices, *, only: list[str] | None = None, allow: bool = True
+) -> Dispatcher:
+    dispatcher = _empty(allow=allow)
     register_host_operations(dispatcher, services, only=only)
     return dispatcher
 
 
-def _call(
-    dispatcher: Dispatcher,
-    operation: str,
-    payload: Any = None,
-    *,
-    authorize_with: Callable[[Any, str], bool] | None = None,
-) -> dict:
+def _call(dispatcher: Dispatcher, operation: str, payload: Any = None) -> dict:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     request = {
         "protocol": BRIDGE_PROTOCOL_VERSION,
@@ -399,3 +397,60 @@ def test_a_second_registration_is_refused_rather_than_overwriting() -> None:
     dispatcher = _dispatcher(_services(1))
     with pytest.raises(QgisSdkBridgeError, match="duplicate operation id"):
         register_host_operations(dispatcher, _services(1))
+
+
+@pytest.mark.parametrize("operation", ["layers.list", "project.layer_ids"])
+@pytest.mark.parametrize("cursor", ["abc", "-3", "2.7", " 2", "", "\u0663"])
+def test_a_cursor_this_host_did_not_issue_is_refused(
+    operation: str, cursor: str
+) -> None:
+    """A malformed cursor must not be read as "start over"."""
+    dispatcher = _dispatcher(_services(5))
+    reply = _call(dispatcher, operation, {"cursor": cursor})
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
+    assert "cursor" in reply["error"]["message"]
+
+
+def test_a_refused_cursor_never_reaches_the_wrapped_method() -> None:
+    services = _services(5)
+    seen: list[str] = []
+    original = services.layers.list_layers
+
+    def record() -> tuple[VectorLayerInfo, ...]:
+        seen.append("list_layers")
+        return original()
+
+    services.layers.list_layers = record  # type: ignore[method-assign]
+    dispatcher = _dispatcher(services)
+    refused = _call(dispatcher, "layers.list", {"cursor": "nope"})
+    assert refused["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
+    assert seen == []
+    assert _call(dispatcher, "layers.list")["ok"] is True
+    assert seen == ["list_layers"]
+
+
+def test_an_only_id_that_is_not_declared_is_refused_and_registers_nothing() -> None:
+    dispatcher = _empty()
+    with pytest.raises(QgisSdkBridgeError, match="layers.lst"):
+        register_host_operations(
+            dispatcher, _services(1), only=["layers.get", "layers.lst"]
+        )
+    assert dispatcher.operations() == ()
+
+
+def test_a_conflicting_registration_leaves_the_dispatcher_untouched() -> None:
+    dispatcher = _empty()
+    register_host_operations(dispatcher, _services(1), only=["styles.apply"])
+    before = dispatcher.operations()
+    with pytest.raises(QgisSdkBridgeError, match="duplicate operation id"):
+        register_host_operations(dispatcher, _services(1))
+    assert dispatcher.operations() == before
+    refused = _call(dispatcher, "settings.get", {"key": "theme"})
+    assert refused["error"]["code"] == BridgeErrorCode.UNKNOWN_OPERATION.value
+    assert (
+        _call(dispatcher, "styles.apply", {"layer_id": "layer-0", "style": "sites"})[
+            "ok"
+        ]
+        is True
+    )

@@ -83,6 +83,9 @@ The only milestone that changes bridge source, and the only one that releases th
 - [TASK-18](../../tasks/task-18%20-%20Add-thin-React-bindings-and-isolated-frontend-test-harnesses.md): Add thin React bindings and isolated frontend test harnesses — **bridge source**
 - [TASK-20](../../tasks/task-20%20-%20Enforce-scoped-file-network-and-browser-resource-authority.md): Enforce scoped file network and browser resource authority — **bridge source**
 - [TASK-29](../../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md): Prepare and qualify 0.3.0 release
+- [TASK-40](../../tasks/task-40%20-%20Refuse-a-malformed-paging-cursor-instead-of-restarting-the-first-page.md): Refuse a malformed paging cursor instead of restarting the first page — from the 2026-10-24 host-surface audit
+- [TASK-41](../../tasks/task-41%20-%20Make-register_host_operations-atomic-and-reject-unknown-only-ids.md): Make register_host_operations atomic and reject unknown only ids — from the 2026-10-24 host-surface audit
+- [TASK-42](../../tasks/task-42%20-%20Refuse-generated-type-names-that-collide-with-the-emitters-own-identifiers.md): Refuse generated type names that collide with the emitter's own identifiers — from the 2026-10-24 host-surface audit
 
 ### 0.4.0
 

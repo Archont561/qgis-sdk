@@ -502,3 +502,78 @@ def test_the_cli_refuses_to_mix_the_host_surface_with_a_plugin() -> None:
     )
     assert result.exit_code == 1
     assert "give no --plugin or --description" in result.output
+
+
+def _with_name(field: str, name: Any) -> dict[str, Any]:
+    described = _single(
+        "sites.read",
+        request={
+            "type": "object",
+            "properties": {"layer_id": {"type": "string"}},
+            "required": ["layer_id"],
+            "additionalProperties": False,
+        },
+        result={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+    described["actions"][0][field] = name
+    return described
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "isRecord",
+        "hasOnly",
+        "isSafeInteger",
+        "call",
+        "BridgeClientLike",
+        "InvokeOptions",
+        "ContractError",
+        "PluginOperations",
+        "createOperations",
+        "OPERATIONS",
+        "OperationId",
+        "createHost",
+        "HOST_OPERATIONS",
+        "HostContractError",
+    ],
+)
+def test_a_declared_name_the_module_already_declares_is_refused(name: str) -> None:
+    """A collision would emit TypeScript that fails in the consumer's build."""
+    with pytest.raises(QgisSdkBridgeError, match=name):
+        generate_typescript(_with_name("result_name", name))
+
+
+@pytest.mark.parametrize("name", ["my type", "", "gęś", "1st", "sites.result"])
+def test_a_declared_name_that_is_not_an_identifier_is_refused(name: str) -> None:
+    with pytest.raises(QgisSdkBridgeError, match="not a TypeScript identifier"):
+        generate_typescript(_with_name("request_name", name))
+
+
+def test_a_typescript_keyword_is_refused_as_a_declared_name() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="TypeScript keyword"):
+        generate_typescript(_with_name("result_name", "class"))
+
+
+def test_a_declared_name_that_is_not_a_string_is_refused() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="must be a string"):
+        generate_typescript(_with_name("result_name", 7))
+
+
+def test_a_declared_string_pattern_is_emitted_as_a_whole_string_test() -> None:
+    described = _single(
+        "sites.page",
+        request={
+            "type": "object",
+            "properties": {"cursor": {"type": "string", "pattern": "[0-9]+"}},
+            "additionalProperties": False,
+        },
+        result={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+    generated = generate_typescript(described)
+    assert 'new RegExp("^(?:[0-9]+)$").test(value["cursor"])' in generated
+
+
+def test_the_host_pattern_survives_into_the_checked_in_host_module() -> None:
+    host = generate_host_typescript()
+    assert 'new RegExp("^(?:[0-9]+)$")' in host

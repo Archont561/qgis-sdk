@@ -31,6 +31,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any
 
+from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.layers import Layers
 from qgis_sdk.services.project import Project
@@ -92,11 +93,14 @@ VECTOR_LAYER_INFO = _object(
     required=("id", "name", "geometry_type", "field_names", "crs"),
 )
 
-#: The paging request, also shared: a page size and an opaque cursor.
+#: The paging request, also shared: a page size and a cursor. The cursor is the
+#: offset this module issued in ``next_cursor``, encoded as a decimal string, so
+#: the declared pattern refuses anything else before a handler runs - reading a
+#: malformed cursor as "start over" would restart the first page in silence.
 PAGE_REQUEST = _object(
     {
         "limit": {"type": "integer", "minimum": 1, "maximum": MAX_PAGE},
-        "cursor": {"type": "string"},
+        "cursor": {"type": "string", "pattern": "[0-9]+"},
     }
 )
 
@@ -281,19 +285,15 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def _page_of(items: Sequence[Any], payload: Mapping[str, Any]) -> dict:
-    """Slice a sequence by the cursor a page sent back.
+def _offset(cursor: Any) -> int:
+    """Return the offset a cursor encodes; the request schema refused the rest."""
+    return 0 if cursor is None else int(cursor)
 
-    The cursor is an offset encoded as a string: opaque to the page, and cheap to
-    validate because the request schema already says it is a string and the limit
-    is bounded.
-    """
+
+def _page_of(items: Sequence[Any], payload: Mapping[str, Any]) -> dict:
+    """Slice a sequence by the cursor a page sent back."""
     limit = payload.get("limit", DEFAULT_PAGE)
-    try:
-        start = int(payload.get("cursor", "0"))
-    except (TypeError, ValueError):
-        start = 0
-    start = max(start, 0)
+    start = _offset(payload.get("cursor"))
     window = list(items[start : start + limit])
     truncated = start + limit < len(items)
     return _page(
@@ -346,20 +346,48 @@ def register_host_operations(
     grant model hides what a view may not use instead of refusing it later. The
     ids that were registered are also the ids the handshake advertises, because
     the handshake reads the allowlist.
+
+    Both failures happen before anything is registered. ``only`` is an
+    authority-bearing argument, so an id it names that this module does not
+    declare is a typo that would otherwise narrow the surface in silence; and a
+    conflict with what the dispatcher already carries would otherwise leave the
+    operations registered before it in place, on a call whose caller was told it
+    failed.
     """
     handlers = _handlers(services)
-    registered: list[str] = []
-    for operation in HOST_OPERATIONS:
-        if only is not None and operation.id not in only:
-            continue
-        dispatcher.register(
-            BridgeOperation(
-                id=operation.id,
-                title=operation.title,
-                request=operation.request,
-                result=operation.result,
-            ),
-            handlers[operation.id],
+    wanted = _selected(only)
+    operations = [
+        BridgeOperation(
+            id=operation.id,
+            title=operation.title,
+            request=operation.request,
+            result=operation.result,
         )
-        registered.append(operation.id)
-    return tuple(registered)
+        for operation in wanted
+    ]
+    taken = {operation.id for operation in dispatcher.operations()}
+    conflicts = [operation.id for operation in operations if operation.id in taken]
+    if conflicts:
+        raise QgisSdkBridgeError(
+            f"duplicate operation id {conflicts[0]!r}; nothing was registered"
+        )
+    for operation in operations:
+        dispatcher.register(operation, handlers[operation.id])
+    return tuple(operation.id for operation in operations)
+
+
+def _selected(only: Sequence[str] | None) -> tuple[HostOperation, ...]:
+    """Return the declared operations ``only`` names, refusing ids that are not declared."""
+    if only is None:
+        return HOST_OPERATIONS
+    requested = set(only)
+    declared = {operation.id for operation in HOST_OPERATIONS}
+    unknown = sorted(requested - declared)
+    if unknown:
+        raise QgisSdkBridgeError(
+            f"unknown host operation(s): {', '.join(unknown)}; "
+            f"declared ids are {', '.join(sorted(declared))}"
+        )
+    return tuple(
+        operation for operation in HOST_OPERATIONS if operation.id in requested
+    )
