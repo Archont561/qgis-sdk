@@ -148,6 +148,28 @@ const summary = await operations.sites.summary({ layer_id: "sites" });
 - **Owned by CI.** The file is generated source, never edited by hand: the plugin's
   CI regenerates it and fails when the checked-in copy differs. `CONTRACT_FINGERPRINT`
   identifies the wire contract the file was built from.
+- **Streams are operations too (decision-28).** A method the plugin marked with
+  `@stream(id="sites.watch", events={"data": SiteChange, "progress": ScanProgress})`
+  becomes a member that takes the request, the handlers and returns the same
+  `StreamHandle` as `client.subscribe`. The module generates one type per
+  declared event kind and a discriminated `SitesWatchEvent` union, so
+  `onEvent` narrows on `event.kind`; a frame whose payload does not match the
+  declared schema ends the subscription with an `error` terminal instead of
+  reaching the handler. The frame envelope - `seq`, `gap`, `close()` - stays in
+  this package's kernel, and a module with no declared stream renders no
+  stream support at all.
+
+```ts
+const handle = await operations.sites.watch(
+	{ layer_id: "sites" },
+	{
+		onEvent: (event) => {
+			if (event.kind === "data") render(event.payload.change);
+		},
+		onTerminal: (terminal) => console.info("stream ended:", terminal.kind),
+	},
+);
+```
 
 ## License
 

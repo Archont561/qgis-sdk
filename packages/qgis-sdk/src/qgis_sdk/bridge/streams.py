@@ -28,6 +28,12 @@ silently.
 *Every subscription ends exactly once.* Completion, an error, cancellation, a
 gap and disposal all produce one terminal frame or one acknowledgement, and a
 closed subscription accepts no further events.
+
+*A declared stream emits what it declared.* When the operation carries an
+``events`` map (decision-28), an event of a kind it did not declare, or whose
+payload fails that kind's schema, ends the subscription with ``error`` - the
+stream analogue of ``invalid_result``. The check is lenient about additive
+fields, exactly as a result's is.
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from qgis_sdk.bridge.protocol import (
     peek_call_id,
     to_wire,
 )
+from qgis_sdk.bridge.schema import validate
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
     QgisSdkBridgeProtocolError,
@@ -195,6 +202,7 @@ class Subscription:
     generation: int
     operation: str
     capacity: int = MAX_QUEUED_EVENTS
+    events: Mapping[str, Mapping[str, Any]] | None = None
     seq: int = 0
     dropped: int = 0
     state: StreamState = StreamState.OPEN
@@ -222,9 +230,19 @@ class Subscription:
 
         Returns ``False`` when the subscription is no longer open. A full queue
         terminates the subscription with ``gap``: losing events silently is not
-        an option, and neither is an unbounded buffer.
+        an option, and neither is an unbounded buffer. An event the operation
+        did not declare terminates it with ``error`` for the same reason.
         """
         if not self.open:
+            return False
+        try:
+            payload = to_wire(payload)
+        except QgisSdkBridgeError as error:
+            self.terminate(StreamTerminal.ERROR, message=str(error))
+            return False
+        refusal = self._event_refusal(kind, payload)
+        if refusal is not None:
+            self.terminate(StreamTerminal.ERROR, message=refusal)
             return False
         if kind is StreamEventType.PROGRESS and self._queue:
             tail = self._queue[-1]
@@ -246,6 +264,22 @@ class Subscription:
         self._queue.append(event_frame(self.id, self.seq, kind=kind, payload=payload))
         self.seq += 1
         return True
+
+    def _event_refusal(self, kind: StreamEventType, payload: Any) -> str | None:
+        """Hold an event to the declaration, naming the path and never the value."""
+        if self.events is None:
+            return None
+        schema = self.events.get(kind.value)
+        if schema is None:
+            return (
+                f"{self.operation}: the stream emitted {kind.value!r}, "
+                "which it did not declare"
+            )
+        try:
+            validate(payload, schema, path="event", allow_unknown=True)
+        except QgisSdkBridgeError as error:
+            return f"{self.operation}: {error}"
+        return None
 
     def terminate(
         self,

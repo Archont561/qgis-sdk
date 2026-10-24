@@ -157,6 +157,68 @@ test("parsePluginDescription accepts valid version 1 descriptions from JSON or o
 		"alpha",
 		"zebra",
 	]);
+	// A description from a host that predates streams reads as having none.
+	expect(fromObject.streams).toEqual([]);
+});
+
+test("parsePluginDescription reads declared streams in the shared id namespace", () => {
+	const request = {
+		type: "object",
+		properties: {},
+		additionalProperties: false,
+	};
+	const parsed = parsePluginDescription({
+		schema_version: 1,
+		id: "example.watch",
+		title: "Watch",
+		actions: [
+			{ id: "b", title: "B", handler: "b", request, result: { type: "null" } },
+		],
+		streams: [
+			{
+				id: "a",
+				title: "A",
+				handler: "a",
+				request,
+				events: { progress: { type: "integer" }, data: { type: "string" } },
+			},
+		],
+	});
+	expect(parsed.streams.map((stream) => stream.id)).toEqual(["a"]);
+	expect(parsed.streams[0]?.events.data).toEqual({ type: "string" });
+	expect(parsed.streams[0]?.events.state).toBeUndefined();
+	expect(Object.isFrozen(parsed.streams[0]?.events)).toBe(true);
+
+	const base = { id: "a", title: "A", handler: "a", request };
+	const refused: Record<string, unknown>[] = [
+		{ streams: "nope" },
+		{ streams: [{ ...base, events: {} }] },
+		{ streams: [{ ...base, events: { ticks: { type: "integer" } } }] },
+		{ streams: [{ ...base, events: { data: "nope" } }] },
+		{ streams: [{ ...base, id: "b", events: { data: { type: "null" } } }] },
+		{
+			streams: [{ ...base, request: null, events: { data: { type: "null" } } }],
+		},
+	];
+	for (const overrides of refused) {
+		expect(() =>
+			parsePluginDescription({
+				schema_version: 1,
+				id: "example.watch",
+				title: "Watch",
+				actions: [
+					{
+						id: "b",
+						title: "B",
+						handler: "b",
+						request,
+						result: { type: "null" },
+					},
+				],
+				...overrides,
+			}),
+		).toThrow(QgisSdkDeclarationError);
+	}
 });
 
 test("parsePluginDescription rejects malformed or unsupported plugin descriptions", () => {

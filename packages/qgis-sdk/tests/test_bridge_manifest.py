@@ -8,12 +8,13 @@ schema is enough to check a call.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import pytest
 from qgis_sdk.bridge import BridgeOperation, Dispatcher
-from qgis_sdk.declarations import action, describe_plugin, plugin
+from qgis_sdk.declarations import action, describe_plugin, plugin, stream
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
 ORIGIN = "qgis://desktop"
@@ -453,3 +454,223 @@ def test_an_operation_advertises_its_schemas_only_when_it_has_them() -> None:
 
     assert described["request"]["additionalProperties"] is False
     assert described["result"]["properties"]["total"] == {"type": "integer"}
+
+
+# -- declared streams (decision-28) ---------------------------------------------
+
+
+@dataclass(frozen=True)
+class Change:
+    layer_id: str
+    count: int
+
+
+@dataclass(frozen=True)
+class Progress:
+    done: int
+
+
+@plugin(id="org.example.watch", title="Watch")
+class WatchPlugin:
+    """One action and one stream, declared side by side."""
+
+    def __init__(self, items: list[Any] | None = None) -> None:
+        self.items = items
+        self.requests: list[dict[str, Any]] = []
+
+    @action(id="sites.refresh", title="Refresh")
+    def refresh(self) -> Summary:
+        return Summary(total=0, largest="")
+
+    @stream(
+        id="sites.watch",
+        title="Watch one layer",
+        events={"data": Change, "progress": Progress},
+    )
+    def watch(self, layer_id: str, every: int = 1) -> Iterator[Any]:
+        self.requests.append({"layer_id": layer_id, "every": every})
+        if self.items is not None:
+            yield from self.items
+            return
+        yield {"kind": "progress", "payload": Progress(done=0)}
+        yield Change(layer_id=layer_id, count=every)
+
+
+def _watch_host(items: list[Any] | None = None) -> tuple[Dispatcher, WatchPlugin]:
+    instance = WatchPlugin(items)
+    description = describe_plugin(WatchPlugin)
+    dispatcher = Dispatcher.from_description(
+        description,
+        {"sites.refresh": instance.refresh},
+        streams={"sites.watch": instance.watch},
+        authorize=lambda binding, operation: True,
+    )
+    return dispatcher, instance
+
+
+def _subscribe(dispatcher: Dispatcher, binding: Any, payload: dict[str, Any]) -> dict:
+    return dispatcher.dispatch(
+        binding,
+        {
+            "protocol": 1,
+            "kind": "subscribe",
+            "call_id": "s1",
+            "operation": "sites.watch",
+            "payload": payload,
+        },
+    )
+
+
+def test_a_declared_stream_is_allowlisted_and_advertised_with_its_events() -> None:
+    dispatcher, _ = _watch_host()
+    _, reply = dispatcher.handshake(view_id="view-1", origin=ORIGIN)
+
+    advertised = {item["id"]: item for item in reply["operations"]}
+    assert sorted(advertised) == ["sites.refresh", "sites.watch"]
+    assert "result" not in advertised["sites.watch"]
+    assert sorted(advertised["sites.watch"]["events"]) == ["data", "progress"]
+    assert reply["plugin"]["streams"][0]["id"] == "sites.watch"
+
+
+def test_a_declared_stream_without_a_factory_is_refused_at_wiring_time() -> None:
+    instance = WatchPlugin()
+    with pytest.raises(QgisSdkBridgeError, match="sites.watch.*no stream factory"):
+        Dispatcher.from_description(
+            describe_plugin(WatchPlugin), {"sites.refresh": instance.refresh}
+        )
+
+
+def test_a_stream_request_arrives_as_keyword_arguments_and_events_are_framed() -> None:
+    dispatcher, instance = _watch_host()
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    reply = _subscribe(dispatcher, binding, {"layer_id": "roads", "every": 3})
+    frames = dispatcher.pump(binding)
+
+    assert reply["ok"] is True
+    assert instance.requests == [{"layer_id": "roads", "every": 3}]
+    assert [frame.get("event", frame.get("terminal")) for frame in frames] == [
+        {"kind": "progress", "payload": {"done": 0}},
+        {"kind": "data", "payload": {"layer_id": "roads", "count": 3}},
+        {"kind": "complete"},
+    ]
+
+
+def test_a_stream_request_is_strict_like_an_action_request() -> None:
+    dispatcher, instance = _watch_host()
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    refused = _subscribe(dispatcher, binding, {"layer_id": "roads", "guess": True})
+
+    assert refused["error"]["code"] == "invalid_payload"
+    assert "guess" in refused["error"]["message"]
+    assert instance.requests == []
+
+
+def test_an_event_of_an_undeclared_kind_ends_the_stream_with_an_error() -> None:
+    dispatcher, _ = _watch_host([{"kind": "state", "payload": {"done": 1}}])
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    _subscribe(dispatcher, binding, {"layer_id": "roads"})
+    frames = dispatcher.pump(binding)
+
+    assert [frame["terminal"]["kind"] for frame in frames] == ["error"]
+    assert "'state'" in frames[0]["terminal"]["message"]
+    assert "sites.watch" in frames[0]["terminal"]["message"]
+
+
+def test_an_event_that_breaks_its_declared_schema_ends_the_stream() -> None:
+    dispatcher, _ = _watch_host([Change(layer_id="roads", count="many")])  # type: ignore[arg-type]
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    _subscribe(dispatcher, binding, {"layer_id": "roads"})
+    frames = dispatcher.pump(binding)
+
+    assert frames[0]["terminal"]["kind"] == "error"
+    assert "event.count" in frames[0]["terminal"]["message"]
+    assert "many" not in frames[0]["terminal"]["message"]
+
+
+def test_an_event_may_carry_fields_the_schema_does_not_declare() -> None:
+    dispatcher, _ = _watch_host([{"layer_id": "roads", "count": 1, "extra": True}])
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    _subscribe(dispatcher, binding, {"layer_id": "roads"})
+    frames = dispatcher.pump(binding)
+
+    assert frames[0]["event"]["payload"]["extra"] is True
+    assert frames[1]["terminal"]["kind"] == "complete"
+
+
+def test_a_pushed_event_is_held_to_the_declaration_too() -> None:
+    dispatcher = Dispatcher(authorize=lambda binding, operation: True)
+    dispatcher.register_stream(
+        BridgeOperation(
+            "demo.push",
+            "Pushed",
+            request={"type": "object", "properties": {}, "additionalProperties": False},
+            events={
+                "progress": {
+                    "type": "object",
+                    "properties": {"done": {"type": "integer"}},
+                    "required": ["done"],
+                }
+            },
+        ),
+        lambda payload: None,
+    )
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    reply = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": 1,
+            "kind": "subscribe",
+            "call_id": "s1",
+            "operation": "demo.push",
+            "payload": {},
+        },
+    )
+    subscription_id = reply["value"]["subscription_id"]
+
+    from qgis_sdk.bridge import StreamEventType
+
+    assert dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.PROGRESS)
+    assert not dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.DATA)
+    frames = dispatcher.pump(binding)
+    assert [frame.get("event", frame.get("terminal"))["kind"] for frame in frames] == [
+        "progress",
+        "error",
+    ]
+
+
+def test_an_operation_cannot_both_answer_and_stream() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="result or events, not both"):
+        BridgeOperation(
+            "demo.both",
+            "Both",
+            result={"type": "null"},
+            events={"data": {"type": "null"}},
+        )
+    with pytest.raises(QgisSdkBridgeError, match="not a stream event kind"):
+        BridgeOperation("demo.odd", "Odd", events={"ticks": {"type": "null"}})
+    with pytest.raises(QgisSdkBridgeError, match="events must be a mapping"):
+        BridgeOperation("demo.odd", "Odd", events=[("data", {"type": "null"})])  # type: ignore[arg-type]
+
+
+def test_from_runtime_wires_the_bound_streams_as_well() -> None:
+    instance = WatchPlugin()
+    description = describe_plugin(WatchPlugin)
+
+    class Runtime:
+        def __init__(self) -> None:
+            self.description = description
+            self.actions = {"sites.refresh": instance.refresh}
+            self.streams = {"sites.watch": instance.watch}
+
+    dispatcher = Dispatcher.from_runtime(
+        Runtime(), authorize=lambda binding, operation: True
+    )
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    assert _subscribe(dispatcher, binding, {"layer_id": "a"})["ok"] is True
+    assert dispatcher.pump(binding)[-1]["terminal"] == {"kind": "complete"}

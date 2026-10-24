@@ -107,6 +107,7 @@ class Dispatcher:
         description: Any,
         handlers: Mapping[str, Handler],
         *,
+        streams: Mapping[str, Callable[..., Any]] | None = None,
         authorize: Authorizer | None = None,
         ledger: ReleaseLedger | None = None,
     ) -> Dispatcher:
@@ -118,8 +119,13 @@ class Dispatcher:
         handshake advertises the same set the description names. A declared
         action without a handler is refused here rather than discovered as a
         missing operation by a view.
+
+        Declared streams (decision-28) are wired the same way from ``streams``:
+        the factory is bound by stream id, receives the validated request as
+        keyword arguments and returns the iterator of events - or ``None`` for a
+        stream the host pushes into.
         """
-        advertised, actions = _description_parts(description)
+        advertised, actions, declared_streams = _description_parts(description)
         dispatcher = cls(description=advertised, authorize=authorize, ledger=ledger)
         for action in actions:
             operation_id = action["id"]
@@ -141,6 +147,27 @@ class Dispatcher:
                 ),
                 _keyword_handler(handler, action.get("request"), operation_id),
             )
+        factories = streams or {}
+        for declared in declared_streams:
+            operation_id = declared["id"]
+            factory = factories.get(operation_id)
+            if factory is None:
+                raise QgisSdkBridgeError(
+                    f"stream {operation_id!r} is declared but has no stream factory"
+                )
+            if not callable(factory):
+                raise QgisSdkBridgeError(
+                    f"stream {operation_id!r}: factory must be callable"
+                )
+            dispatcher.register_stream(
+                BridgeOperation(
+                    id=operation_id,
+                    title=declared["title"],
+                    request=declared.get("request"),
+                    events=declared.get("events"),
+                ),
+                _keyword_source(factory, declared.get("request"), operation_id),
+            )
         return dispatcher
 
     @classmethod
@@ -153,12 +180,14 @@ class Dispatcher:
     ) -> Dispatcher:
         """Build from a started runtime: its description and its bound handlers.
 
-        ``PluginRuntime.actions`` is already keyed by action id and already bound
-        to the instance, so nothing here needs to know a method name.
+        ``PluginRuntime.actions`` and ``PluginRuntime.streams`` are already keyed
+        by operation id and already bound to the instance, so nothing here needs
+        to know a method name.
         """
         return cls.from_description(
             runtime.description,
             runtime.actions,
+            streams=getattr(runtime, "streams", None),
             authorize=authorize,
             ledger=ledger,
         )
@@ -439,6 +468,7 @@ class Dispatcher:
             view_id=binding.view_id,
             generation=binding.generation,
             operation=request.operation,
+            events=self._operations[request.operation].events,
         )
         subscription.attach(source)
         self._subscriptions[subscription.id] = subscription
@@ -599,8 +629,10 @@ class Dispatcher:
         return bool(self._authorize(binding, operation))
 
 
-def _description_parts(description: Any) -> tuple[Any, list[dict[str, Any]]]:
-    """Return the advertised description and its actions as plain records."""
+def _description_parts(
+    description: Any,
+) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return the advertised description, its actions and its streams as records."""
     if hasattr(description, "to_dict") and hasattr(description, "actions"):
         actions = [
             {
@@ -611,25 +643,44 @@ def _description_parts(description: Any) -> tuple[Any, list[dict[str, Any]]]:
             }
             for action in description.actions
         ]
-        return description.to_dict(), actions
+        streams = [
+            {
+                "id": declared.id,
+                "title": declared.title,
+                "request": declared.request,
+                "events": declared.events,
+            }
+            for declared in getattr(description, "streams", ())
+        ]
+        return description.to_dict(), actions, streams
     if isinstance(description, Mapping):
-        declared = description.get("actions", [])
-        if not isinstance(declared, list):
-            raise QgisSdkBridgeError("description.actions must be a list")
-        records: list[dict[str, Any]] = []
-        for action in declared:
-            if not isinstance(action, Mapping):
-                raise QgisSdkBridgeError(
-                    "every action in a description must be an object"
-                )
-            for key in ("id", "title"):
-                if not isinstance(action.get(key), str) or not action[key]:
-                    raise QgisSdkBridgeError(f"action {key} must be a nonempty string")
-            records.append(dict(action))
-        return description, records
+        return (
+            description,
+            _declared_records(description, "actions"),
+            _declared_records(description, "streams"),
+        )
     raise QgisSdkBridgeError(
         "description must be a PluginDescription or a mapping with actions"
     )
+
+
+def _declared_records(description: Mapping[str, Any], key: str) -> list[dict]:
+    """Return ``description[key]`` as checked records; a missing list is empty."""
+    declared = description.get(key, [])
+    if not isinstance(declared, list):
+        raise QgisSdkBridgeError(f"description.{key} must be a list")
+    noun = key[:-1]
+    records: list[dict[str, Any]] = []
+    for item in declared:
+        if not isinstance(item, Mapping):
+            raise QgisSdkBridgeError(f"every {noun} in a description must be an object")
+        for field_name in ("id", "title"):
+            if not isinstance(item.get(field_name), str) or not item[field_name]:
+                raise QgisSdkBridgeError(
+                    f"{noun} {field_name} must be a nonempty string"
+                )
+        records.append(dict(item))
+    return records
 
 
 def _keyword_handler(
@@ -641,6 +692,35 @@ def _keyword_handler(
     validated against that object before this runs, so the only thing left to do
     is spell it as keyword arguments.
     """
+    _check_parameter_names(request, operation_id)
+
+    def invoke(payload: Mapping[str, Any]) -> Any:
+        return _wire_result(handler(**payload))
+
+    return invoke
+
+
+def _keyword_source(
+    factory: Callable[..., Any], request: Any, operation_id: str
+) -> StreamSource:
+    """Bind a declared stream's request to its factory, the way actions are bound.
+
+    What the factory yields is handed to the subscription as produced; the
+    dataclasses a declared event is spelled with are unwrapped there, so an
+    author yields ``Change(...)`` and the view receives the object it declared.
+    """
+    _check_parameter_names(request, operation_id)
+
+    def open_stream(payload: Mapping[str, Any]) -> Any:
+        source = factory(**payload)
+        if source is None:
+            return None
+        return (_wire_result(item) for item in source)
+
+    return open_stream
+
+
+def _check_parameter_names(request: Any, operation_id: str) -> None:
     properties: Any = {}
     if isinstance(request, Mapping):
         properties = request.get("properties", {})
@@ -650,11 +730,6 @@ def _keyword_handler(
                 raise QgisSdkBridgeError(
                     f"{operation_id}: input {name!r} is not a Python parameter name"
                 )
-
-    def invoke(payload: Mapping[str, Any]) -> Any:
-        return _wire_result(handler(**payload))
-
-    return invoke
 
 
 def _wire_result(value: Any) -> Any:

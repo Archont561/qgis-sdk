@@ -3,7 +3,7 @@
 // Regenerate with `qgis-sdk bridge generate`; CI fails when this file is stale.
 
 export const PLUGIN_ID = "org.example.sites";
-export const CONTRACT_FINGERPRINT = "sha256:e9f7777d4a309db2057092da4c0fe022153a28436d7179e6917581e2ed532d6a";
+export const CONTRACT_FINGERPRINT = "sha256:7e24395dffb115c741f3dede24e2e5b93d59e0d200a9ebcbaed9da09d77d6a25";
 export const PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -11,6 +11,7 @@ export const OPERATIONS = [
 	"sites.details",
 	"sites.refresh",
 	"sites.summary",
+	"sites.watch",
 ] as const;
 
 export type OperationId = (typeof OPERATIONS)[number];
@@ -26,6 +27,35 @@ export interface BridgeClientLike {
 		payload?: Readonly<Record<string, unknown>>,
 		options?: InvokeOptions,
 	): Promise<unknown>;
+	subscribe(
+		operation: string,
+		payload?: Readonly<Record<string, unknown>>,
+		handlers?: StreamHandlers<{
+			readonly kind: "data" | "progress" | "state";
+			readonly payload: unknown;
+		}>,
+		options?: InvokeOptions,
+	): Promise<StreamHandle>;
+}
+
+/** How a stream ended; `dropped` is only present for a gap. */
+export interface StreamTerminal {
+	readonly kind: "complete" | "error" | "cancelled" | "gap" | "disposed";
+	readonly message?: string;
+	readonly dropped?: number;
+}
+
+/** What a stream reports: typed events, then exactly one end. */
+export interface StreamHandlers<E> {
+	readonly onEvent?: (event: E) => void;
+	readonly onTerminal?: (terminal: StreamTerminal) => void;
+}
+
+/** A live stream, as the caller holds it. */
+export interface StreamHandle {
+	readonly id: string;
+	readonly closed: boolean;
+	close(): void;
 }
 
 /** An argument or a response that does not match its declared schema. */
@@ -95,6 +125,22 @@ export interface SitesSummaryResult {
 	readonly largest: string;
 	readonly mode: "fast" | "exact";
 	readonly total: number;
+}
+
+export interface SitesWatchData {
+	readonly change: "added" | "removed" | "modified";
+	readonly count: number;
+	readonly layer_id: string;
+}
+
+export interface SitesWatchProgress {
+	readonly done: number;
+	readonly total: number;
+}
+
+export interface SitesWatchRequest {
+	readonly every_ms?: number;
+	readonly layer_id: string;
 }
 
 export function SitesDetailsRequest(value: unknown, strict = false): value is SitesDetailsRequest {
@@ -216,12 +262,70 @@ export function SitesSummaryResult(value: unknown, strict = false): value is Sit
 	return true;
 }
 
+export function SitesWatchData(value: unknown, strict = false): value is SitesWatchData {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("change" in value)) return false;
+	if (!("count" in value)) return false;
+	if (value["change"] !== undefined && !((value["change"] === "added" || value["change"] === "removed" || value["change"] === "modified"))) {
+		return false;
+	}
+	if (value["count"] !== undefined && !(isSafeInteger(value["count"]))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["change", "count", "layer_id"])) return false;
+	return true;
+}
+
+export function SitesWatchProgress(value: unknown, strict = false): value is SitesWatchProgress {
+	if (!isRecord(value)) return false;
+	if (!("done" in value)) return false;
+	if (!("total" in value)) return false;
+	if (value["done"] !== undefined && !(isSafeInteger(value["done"]))) {
+		return false;
+	}
+	if (value["total"] !== undefined && !(isSafeInteger(value["total"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["done", "total"])) return false;
+	return true;
+}
+
+export function SitesWatchRequest(value: unknown, strict = false): value is SitesWatchRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["every_ms"] !== undefined && !(isSafeInteger(value["every_ms"]))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["every_ms", "layer_id"])) return false;
+	return true;
+}
+
+/** One event of `sites.watch`, narrowed by its kind. */
+export type SitesWatchEvent =
+	| { readonly kind: "data"; readonly payload: SitesWatchData }
+	| { readonly kind: "progress"; readonly payload: SitesWatchProgress };
+
+export function SitesWatchEvent(value: unknown, strict = false): value is SitesWatchEvent {
+	if (!isRecord(value)) return false;
+	if (value.kind === "data") return SitesWatchData(value.payload, strict);
+	if (value.kind === "progress") return SitesWatchProgress(value.payload, strict);
+	return false;
+}
+
 /** Every operation this surface declares, as callable methods. */
 export interface PluginOperations {
 	readonly sites: {
 		readonly details: (input: SitesDetailsRequest, options?: InvokeOptions) => Promise<SitesDetailsResult>;
 		readonly refresh: (input?: SitesRefreshRequest, options?: InvokeOptions) => Promise<SitesRefreshResult>;
 		readonly summary: (input: SitesSummaryRequest, options?: InvokeOptions) => Promise<SitesSummaryResult>;
+		readonly watch: (input: SitesWatchRequest, handlers: StreamHandlers<SitesWatchEvent>, options?: InvokeOptions) => Promise<StreamHandle>;
 	};
 }
 
@@ -245,6 +349,12 @@ export function createOperations(client: BridgeClientLike): PluginOperations {
 					client, "sites.summary", input, options,
 					SitesSummaryRequest,
 					SitesSummaryResult,
+				),
+			watch: (input: SitesWatchRequest, handlers: StreamHandlers<SitesWatchEvent>, options?: InvokeOptions) =>
+				open<SitesWatchEvent>(
+					client, "sites.watch", input, handlers, options,
+					SitesWatchRequest,
+					SitesWatchEvent,
 				),
 		},
 	};
@@ -270,4 +380,60 @@ async function call<T>(
 		throw new ContractError(operation, "the response does not match the declared result");
 	}
 	return value as T;
+}
+
+async function open<E extends { readonly kind: string }>(
+	client: BridgeClientLike,
+	operation: string,
+	input: unknown,
+	handlers: StreamHandlers<E>,
+	options: InvokeOptions | undefined,
+	acceptInput: (value: unknown, strict?: boolean) => boolean,
+	acceptEvent: (value: unknown) => value is E,
+): Promise<StreamHandle> {
+	if (!acceptInput(input, true)) {
+		throw new ContractError(operation, "the arguments do not match the declared request");
+	}
+	// The typed stream ends exactly once, like the subscription under it: a
+	// contract violation ends it here, closes the subscription, and the
+	// `disposed` the client then reports is not delivered a second time.
+	let ended = false;
+	let violated = false;
+	let handle: StreamHandle | null = null;
+	const end = (terminal: StreamTerminal): void => {
+		if (ended) return;
+		ended = true;
+		handlers.onTerminal?.(terminal);
+	};
+	handle = await client.subscribe(
+		operation,
+		input as Readonly<Record<string, unknown>>,
+		{
+			onEvent: (event) => {
+				if (ended) return;
+				if (acceptEvent(event)) {
+					handlers.onEvent?.(event);
+					return;
+				}
+				end({
+					kind: "error",
+					message: new ContractError(
+						operation,
+						"an event does not match the declared events",
+					).message,
+				});
+				if (handle === null) {
+					violated = true;
+				} else {
+					handle.close();
+				}
+			},
+			onTerminal: end,
+		},
+		options,
+	);
+	if (violated) {
+		handle.close();
+	}
+	return handle;
 }

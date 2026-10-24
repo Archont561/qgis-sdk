@@ -20,8 +20,16 @@ Three rules make the output trustworthy:
   a misspelled argument never reaches Python (decision-22).
 
 The generated module imports nothing from the SDK. A frontend passes its own
-``BridgeClient`` (anything with an ``invoke`` method), which keeps the artifact
-usable with a scripted transport in a test.
+``BridgeClient`` (anything with an ``invoke`` method, plus ``subscribe`` when
+the surface declares a stream), which keeps the artifact usable with a scripted
+transport in a test.
+
+Streams (decision-28) share the operations tree with actions. For each declared
+stream the module emits one interface and validator per declared event kind, a
+discriminated ``{kind, payload}`` union named after the stream, and a member
+that opens the stream through the client's ``subscribe``. The frame envelope -
+``protocol``, ``subscription_id``, ``seq`` and the ordering check - stays in the
+hand-written kernel; the generated module only ever types the payload.
 """
 
 from __future__ import annotations
@@ -29,12 +37,14 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import re
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from qgis_sdk.bridge.streams import StreamEventType, StreamTerminal
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.models.limits import MAX_SAFE_INTEGER
 
@@ -67,7 +77,11 @@ _IDENTIFIER_SAFE = frozenset(
 )
 
 #: Functions every emitted module defines for its own validators.
-_EMITTER_HELPERS = frozenset({"isRecord", "hasOnly", "isSafeInteger", "call"})
+_EMITTER_HELPERS = frozenset({"isRecord", "hasOnly", "isSafeInteger", "call", "open"})
+#: The event kinds a stream may declare, in the order the module renders them.
+_EVENT_KINDS = tuple(kind.value for kind in StreamEventType)
+#: How a stream may end, rendered into every surface that declares a stream.
+_TERMINAL_KINDS = tuple(kind.value for kind in StreamTerminal)
 #: Words TypeScript refuses as a type name, so a declared one cannot be emitted.
 _TS_KEYWORDS = frozenset(
     {
@@ -160,6 +174,9 @@ class _Surface:
     options_type: str
     client_type: str
     error_type: str
+    stream_handlers_type: str
+    stream_handle_type: str
+    stream_terminal_type: str
     header: tuple[str, ...]
 
 
@@ -174,6 +191,9 @@ PLUGIN_SURFACE = _Surface(
     options_type="InvokeOptions",
     client_type="BridgeClientLike",
     error_type="ContractError",
+    stream_handlers_type="StreamHandlers",
+    stream_handle_type="StreamHandle",
+    stream_terminal_type="StreamTerminal",
     header=(
         "// Source: the declarations of {id}.",
         "// Regenerate with `qgis-sdk bridge generate`; CI fails when this file is stale.",
@@ -191,6 +211,9 @@ HOST_SURFACE = _Surface(
     options_type="HostInvokeOptions",
     client_type="HostClientLike",
     error_type="HostContractError",
+    stream_handlers_type="HostStreamHandlers",
+    stream_handle_type="HostStreamHandle",
+    stream_terminal_type="HostStreamTerminal",
     header=(
         "// Source: the curated host manifest in qgis_sdk.bridge.host.",
         "// Regenerate with `qgis-sdk bridge generate --host`; CI fails on drift.",
@@ -201,10 +224,12 @@ HOST_SURFACE = _Surface(
 def contract_fingerprint(description: Any) -> str:
     """Return the digest a client can compare against the host's declaration.
 
-    Only what crosses the wire is hashed: the description version, the plugin id
-    and each action's id, request and result. Titles and the Python handler name
-    stay out, so renaming a method or rewording a label does not invalidate an
-    already-generated client, while any change a frontend could observe does.
+    Only what crosses the wire is hashed: the description version, the plugin id,
+    each action's id, request and result, and each stream's id, request and
+    events. Titles and the Python handler name stay out, so renaming a method or
+    rewording a label does not invalidate an already-generated client, while any
+    change a frontend could observe does. A surface without streams hashes
+    exactly as it did before streams existed: its wire did not change.
     """
     canonical = json.dumps(
         _contract_view(_as_mapping(description)),
@@ -220,11 +245,22 @@ def _contract_view(description: Mapping[str, Any]) -> dict[str, Any]:
         {"id": action["id"], "request": action["request"], "result": action["result"]}
         for action in sorted(description["actions"], key=lambda item: str(item["id"]))
     ]
-    return {
+    view: dict[str, Any] = {
         "schema_version": description.get("schema_version"),
         "id": description.get("id"),
         "actions": actions,
     }
+    streams = description.get("streams") or []
+    if streams:
+        view["streams"] = [
+            {
+                "id": item["id"],
+                "request": item.get("request"),
+                "events": item.get("events"),
+            }
+            for item in sorted(streams, key=lambda item: str(item["id"]))
+        ]
+    return view
 
 
 def describe_plugin_spec(spec: str) -> dict[str, Any]:
@@ -374,6 +410,9 @@ def _reserved_names() -> frozenset[str]:
                 surface.options_type,
                 surface.client_type,
                 surface.error_type,
+                surface.stream_handlers_type,
+                surface.stream_handle_type,
+                surface.stream_terminal_type,
             }
         )
     return frozenset(names)
@@ -396,6 +435,12 @@ def _as_mapping(description: Any) -> dict[str, Any]:
     for action in described["actions"]:
         if not isinstance(action, Mapping) or not isinstance(action.get("id"), str):
             raise QgisSdkBridgeError("every action needs an id")
+    streams = described.get("streams", [])
+    if not isinstance(streams, list):
+        raise QgisSdkBridgeError("description.streams must be a list")
+    for item in streams:
+        if not isinstance(item, Mapping) or not isinstance(item.get("id"), str):
+            raise QgisSdkBridgeError("every stream needs an id")
     return described
 
 
@@ -412,6 +457,22 @@ class _Action:
     result_name: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _Stream:
+    """One declared stream: a request in, one payload schema per event kind out."""
+
+    id: str
+    base: str
+    request: Mapping[str, Any]
+    events: tuple[tuple[str, Mapping[str, Any]], ...]
+    request_name: str | None = None
+
+    @property
+    def event_type(self) -> str:
+        """The name of the discriminated union and of its predicate."""
+        return f"{self.base}Event"
+
+
 class _Generator:
     """Collect the schema pieces, then render them in a fixed order."""
 
@@ -422,22 +483,32 @@ class _Generator:
         self._surface = surface
         self._objects: list[tuple[str, Mapping[str, Any]]] = []
         self._names: dict[int, str] = {}
+        self._ids: set[str] = set()
         self._actions = self._collect_actions()
+        self._streams = self._collect_streams()
 
     # -- collection ----------------------------------------------------
 
+    def _claim(self, operation_id: str) -> None:
+        """Hold actions and streams to one id namespace (decision-28)."""
+        if operation_id in self._ids:
+            raise QgisSdkBridgeError(f"duplicate operation id {operation_id!r}")
+        self._ids.add(operation_id)
+
     def _collect_actions(self) -> tuple[_Action, ...]:
         actions: list[_Action] = []
-        seen: set[str] = set()
         for raw in sorted(
             self._description["actions"], key=lambda item: str(item["id"])
         ):
             action_id = str(raw["id"])
-            if action_id in seen:
-                raise QgisSdkBridgeError(f"duplicate action id {action_id!r}")
-            seen.add(action_id)
+            self._claim(action_id)
             request = raw.get("request")
             result = raw.get("result")
+            if "events" in raw:
+                raise QgisSdkBridgeError(
+                    f"{action_id}: an action answers with a result; a stream "
+                    "declares events and belongs in description.streams"
+                )
             if not isinstance(request, Mapping) or not isinstance(result, Mapping):
                 raise QgisSdkBridgeError(
                     f"{action_id}: the generator needs declared request and result schemas"
@@ -471,6 +542,62 @@ class _Generator:
                 ),
             )
         return tuple(actions)
+
+    def _collect_streams(self) -> tuple[_Stream, ...]:
+        streams: list[_Stream] = []
+        for raw in sorted(
+            self._description.get("streams") or [], key=lambda item: str(item["id"])
+        ):
+            stream_id = str(raw["id"])
+            self._claim(stream_id)
+            request = raw.get("request")
+            events = raw.get("events")
+            if "result" in raw:
+                raise QgisSdkBridgeError(
+                    f"{stream_id}: a stream declares events, not a result"
+                )
+            if not isinstance(request, Mapping) or not isinstance(events, Mapping):
+                raise QgisSdkBridgeError(
+                    f"{stream_id}: the generator needs a declared request schema "
+                    "and an events map"
+                )
+            if not events:
+                raise QgisSdkBridgeError(
+                    f"{stream_id}: a stream declares at least one event kind"
+                )
+            unknown = sorted(str(kind) for kind in events if kind not in _EVENT_KINDS)
+            if unknown:
+                raise QgisSdkBridgeError(
+                    f"{stream_id}: {', '.join(unknown)} is not a stream event kind; "
+                    f"the frame carries {', '.join(_EVENT_KINDS)}"
+                )
+            base = _pascal(stream_id)
+            request_name = raw.get("request_name")
+            declared_events = tuple(
+                (kind, events[kind]) for kind in _EVENT_KINDS if kind in events
+            )
+            for kind, schema in declared_events:
+                if not isinstance(schema, Mapping):
+                    raise QgisSdkBridgeError(
+                        f"{stream_id}: events.{kind} must be a schema object"
+                    )
+            stream = _Stream(
+                id=stream_id,
+                base=base,
+                request=request,
+                events=declared_events,
+                request_name=request_name if isinstance(request_name, str) else None,
+            )
+            self._declare(
+                request,
+                _declared_name(
+                    request_name, f"{base}Request", kind="request", action=stream_id
+                ),
+            )
+            for kind, schema in declared_events:
+                self._declare(schema, f"{base}{_pascal(kind)}")
+            streams.append(stream)
+        return tuple(streams)
 
     def _declare(self, schema: Mapping[str, Any], name: str) -> str:
         """Name every object below ``schema`` before anything is rendered.
@@ -532,7 +659,7 @@ class _Generator:
             "",
             "/** Every declared operation id, so a name can be checked, not guessed. */",
             f"export const {surface.operations_const} = [",
-            *(f'\t"{action.id}",' for action in self._actions),
+            *(f'\t"{operation}",' for operation in sorted(self._ids)),
             "] as const;",
             "",
             (
@@ -551,8 +678,10 @@ class _Generator:
             "\t\tpayload?: Readonly<Record<string, unknown>>,",
             f"\t\toptions?: {surface.options_type},",
             "\t): Promise<unknown>;",
+            *self._subscribe_lines(),
             "}",
             "",
+            *self._stream_support_lines(),
             "/** An argument or a response that does not match its declared schema. */",
             f"export class {surface.error_type} extends Error {{",
             "\tpublic readonly operation: string;",
@@ -585,8 +714,86 @@ class _Generator:
         for name, schema in sorted(self._objects):
             lines.extend(_validator_lines(schema, name, self))
             lines.append("")
+        for stream in self._streams:
+            lines.extend(self._event_lines(stream))
+            lines.append("")
         lines.extend(self._render_operations())
         return "\n".join(lines).rstrip("\n") + "\n"
+
+    def _subscribe_lines(self) -> list[str]:
+        """Require ``subscribe`` of the client only when a stream needs it."""
+        if not self._streams:
+            return []
+        surface = self._surface
+        kinds = " | ".join(json.dumps(kind) for kind in _EVENT_KINDS)
+        return [
+            "\tsubscribe(",
+            "\t\toperation: string,",
+            "\t\tpayload?: Readonly<Record<string, unknown>>,",
+            f"\t\thandlers?: {surface.stream_handlers_type}<{{",
+            f"\t\t\treadonly kind: {kinds};",
+            "\t\t\treadonly payload: unknown;",
+            "\t\t}>,",
+            f"\t\toptions?: {surface.options_type},",
+            f"\t): Promise<{surface.stream_handle_type}>;",
+        ]
+
+    def _stream_support_lines(self) -> list[str]:
+        """The handler, handle and end types every stream member shares."""
+        if not self._streams:
+            return []
+        surface = self._surface
+        kinds = " | ".join(json.dumps(kind) for kind in _TERMINAL_KINDS)
+        return [
+            "/** How a stream ended; `dropped` is only present for a gap. */",
+            f"export interface {surface.stream_terminal_type} {{",
+            f"\treadonly kind: {kinds};",
+            "\treadonly message?: string;",
+            "\treadonly dropped?: number;",
+            "}",
+            "",
+            "/** What a stream reports: typed events, then exactly one end. */",
+            f"export interface {surface.stream_handlers_type}<E> {{",
+            "\treadonly onEvent?: (event: E) => void;",
+            f"\treadonly onTerminal?: (terminal: {surface.stream_terminal_type}) => void;",
+            "}",
+            "",
+            "/** A live stream, as the caller holds it. */",
+            f"export interface {surface.stream_handle_type} {{",
+            "\treadonly id: string;",
+            "\treadonly closed: boolean;",
+            "\tclose(): void;",
+            "}",
+            "",
+        ]
+
+    def _event_lines(self, stream: _Stream) -> list[str]:
+        """Render the event union of one stream and the predicate that narrows it."""
+        name = stream.event_type
+        lines = [
+            f"/** One event of `{stream.id}`, narrowed by its kind. */",
+            f"export type {name} =",
+        ]
+        for kind, schema in stream.events:
+            payload = self._type_name(schema, f"{stream.base}{_pascal(kind)}")
+            lines.append(
+                f"\t| {{ readonly kind: {json.dumps(kind)}; readonly payload: {payload} }}"
+            )
+        lines[-1] += ";"
+        lines.extend(
+            [
+                "",
+                f"export function {name}(value: unknown, strict = false): value is {name} {{",
+                "\tif (!isRecord(value)) return false;",
+            ]
+        )
+        for kind, schema in stream.events:
+            predicate = _member_validator("value.payload", schema, self)
+            lines.append(
+                f"\tif (value.kind === {json.dumps(kind)}) return {predicate};"
+            )
+        lines.extend(["\treturn false;", "}"])
+        return lines
 
     def _render_operations(self) -> list[str]:
         surface = self._surface
@@ -594,7 +801,8 @@ class _Generator:
             "/** Every operation this surface declares, as callable methods. */",
             f"export interface {surface.operations_type} {{",
         ]
-        lines.extend(_tree_lines(self._actions, self._member_type))
+        members = (*self._actions, *self._streams)
+        lines.extend(_tree_lines(members, self._member_type))
         lines.extend(["}", ""])
         lines.extend(
             [
@@ -605,13 +813,18 @@ class _Generator:
                 "\treturn {",
             ]
         )
-        lines.extend(_tree_body_lines(self._actions, self._member_body))
+        lines.extend(_tree_body_lines(members, self._member_body))
         lines.extend(["\t};", "}", ""])
         lines.append(_call_helper(surface).rstrip("\n"))
         lines.append("")
+        if self._streams:
+            lines.append(_open_helper(surface).rstrip("\n"))
+            lines.append("")
         return lines
 
-    def _member_type(self, action: _Action) -> str:
+    def _member_type(self, action: _Action | _Stream) -> str:
+        if isinstance(action, _Stream):
+            return self._stream_member_type(action)
         input_name = self._type_name(action.request, f"{action.base}Request")
         output_name = self._type_name(action.result, f"{action.base}Result")
         optional = "" if action.takes_input else "?"
@@ -621,7 +834,40 @@ class _Generator:
             f"options?: {self._surface.options_type}) => Promise<{output_name}>;"
         )
 
-    def _member_body(self, action: _Action) -> str:
+    def _stream_member_type(self, stream: _Stream) -> str:
+        """A stream member takes its request, the handlers and the options.
+
+        The request is never optional here: a required parameter cannot follow
+        an optional one, and the handlers are what a subscription is for.
+        """
+        surface = self._surface
+        input_name = self._type_name(stream.request, f"{stream.base}Request")
+        tail = _quote(stream.id.rsplit(".", 1)[-1])
+        return (
+            f"readonly {tail}: (input: {input_name}, "
+            f"handlers: {surface.stream_handlers_type}<{stream.event_type}>, "
+            f"options?: {surface.options_type}) => "
+            f"Promise<{surface.stream_handle_type}>;"
+        )
+
+    def _stream_member_body(self, stream: _Stream) -> str:
+        surface = self._surface
+        input_name = self._type_name(stream.request, f"{stream.base}Request")
+        tail = stream.id.rsplit(".", 1)[-1]
+        return (
+            f"{_quote(tail)}: (input: {input_name}, "
+            f"handlers: {surface.stream_handlers_type}<{stream.event_type}>, "
+            f"options?: {surface.options_type}) =>\n"
+            f"\t\t\t\topen<{stream.event_type}>(\n"
+            f'\t\t\t\t\tclient, "{stream.id}", input, handlers, options,\n'
+            f"\t\t\t\t\t{self._accepts(stream.request)},\n"
+            f"\t\t\t\t\t{stream.event_type},\n"
+            f"\t\t\t\t),"
+        )
+
+    def _member_body(self, action: _Action | _Stream) -> str:
+        if isinstance(action, _Stream):
+            return self._stream_member_body(action)
         input_name = self._type_name(action.request, f"{action.base}Request")
         output_name = self._type_name(action.result, f"{action.base}Result")
         tail = action.id.rsplit(".", 1)[-1]
@@ -679,32 +925,106 @@ _CALL_HELPER = """async function call<T>(
 """
 
 
+_OPEN_HELPER = """async function open<E extends { readonly kind: string }>(
+\tclient: BridgeClientLike,
+\toperation: string,
+\tinput: unknown,
+\thandlers: StreamHandlers<E>,
+\toptions: InvokeOptions | undefined,
+\tacceptInput: (value: unknown, strict?: boolean) => boolean,
+\tacceptEvent: (value: unknown) => value is E,
+): Promise<StreamHandle> {
+\tif (!acceptInput(input, true)) {
+\t\tthrow new ContractError(operation, "the arguments do not match the declared request");
+\t}
+\t// The typed stream ends exactly once, like the subscription under it: a
+\t// contract violation ends it here, closes the subscription, and the
+\t// `disposed` the client then reports is not delivered a second time.
+\tlet ended = false;
+\tlet violated = false;
+\tlet handle: StreamHandle | null = null;
+\tconst end = (terminal: StreamTerminal): void => {
+\t\tif (ended) return;
+\t\tended = true;
+\t\thandlers.onTerminal?.(terminal);
+\t};
+\thandle = await client.subscribe(
+\t\toperation,
+\t\tinput as Readonly<Record<string, unknown>>,
+\t\t{
+\t\t\tonEvent: (event) => {
+\t\t\t\tif (ended) return;
+\t\t\t\tif (acceptEvent(event)) {
+\t\t\t\t\thandlers.onEvent?.(event);
+\t\t\t\t\treturn;
+\t\t\t\t}
+\t\t\t\tend({
+\t\t\t\t\tkind: "error",
+\t\t\t\t\tmessage: new ContractError(
+\t\t\t\t\t\toperation,
+\t\t\t\t\t\t"an event does not match the declared events",
+\t\t\t\t\t).message,
+\t\t\t\t});
+\t\t\t\tif (handle === null) {
+\t\t\t\t\tviolated = true;
+\t\t\t\t} else {
+\t\t\t\t\thandle.close();
+\t\t\t\t}
+\t\t\t},
+\t\t\tonTerminal: end,
+\t\t},
+\t\toptions,
+\t);
+\tif (violated) {
+\t\thandle.close();
+\t}
+\treturn handle;
+}
+"""
+
+
 def _call_helper(surface: _Surface) -> str:
     """Render the call helper with this surface's identifiers."""
-    helper = _CALL_HELPER
+    return _with_surface_names(_CALL_HELPER, surface)
+
+
+def _open_helper(surface: _Surface) -> str:
+    """Render the stream helper with this surface's identifiers."""
+    return _with_surface_names(_OPEN_HELPER, surface)
+
+
+def _with_surface_names(template: str, surface: _Surface) -> str:
+    """Rename the plugin-surface identifiers a template is written with.
+
+    Whole identifiers only: ``StreamHandle`` must not be rewritten inside
+    ``StreamHandlers``, and a name already prefixed must not be prefixed again.
+    """
     for placeholder, name in (
         ("BridgeClientLike", surface.client_type),
         ("InvokeOptions", surface.options_type),
         ("ContractError", surface.error_type),
+        ("StreamHandlers", surface.stream_handlers_type),
+        ("StreamHandle", surface.stream_handle_type),
+        ("StreamTerminal", surface.stream_terminal_type),
     ):
-        helper = helper.replace(placeholder, name)
-    return helper
+        template = re.sub(rf"\b{placeholder}\b", name, template)
+    return template
 
 
-def _tree_lines(actions: tuple[_Action, ...], render: Any) -> list[str]:
+def _tree_lines(actions: tuple[_Action | _Stream, ...], render: Any) -> list[str]:
     """Render the nested interface, grouping ids by their leading segments."""
     tree = _group(actions)
     return _emit_tree(tree, render, depth=1)
 
 
-def _tree_body_lines(actions: tuple[_Action, ...], render: Any) -> list[str]:
+def _tree_body_lines(actions: tuple[_Action | _Stream, ...], render: Any) -> list[str]:
     tree = _group(actions)
     return _emit_tree_body(tree, render, depth=2)
 
 
-def _group(actions: tuple[_Action, ...]) -> dict[str, Any]:
+def _group(actions: tuple[_Action | _Stream, ...]) -> dict[str, Any]:
     root: dict[str, Any] = {}
-    for action in actions:
+    for action in sorted(actions, key=lambda item: item.id):
         segments = action.id.split(".")
         node = root
         for segment in segments[:-1]:

@@ -30,12 +30,38 @@ export interface ActionDescription {
 	readonly result: Readonly<Record<string, unknown>>;
 }
 
+/** The event kinds a stream may declare; the frame carries the same three. */
+export type StreamEventKind = "data" | "progress" | "state";
+
+/**
+ * A declared stream (decision-28): a request in, one payload schema per
+ * declared event kind out. There is no `result`: the reply to a subscription is
+ * the protocol's acknowledgement, not something an author declares.
+ */
+export interface StreamDescription {
+	readonly id: string;
+	readonly title: string;
+	readonly handler: string;
+	readonly request: Readonly<Record<string, unknown>>;
+	readonly events: Readonly<
+		Partial<Record<StreamEventKind, Readonly<Record<string, unknown>>>>
+	>;
+}
+
 export interface PluginDescription {
 	readonly schema_version: 1;
 	readonly id: string;
 	readonly title: string;
 	readonly actions: readonly ActionDescription[];
+	/** Declared streams; a description from a host that predates them is empty. */
+	readonly streams: readonly StreamDescription[];
 }
+
+const STREAM_EVENT_KINDS: readonly StreamEventKind[] = [
+	"data",
+	"progress",
+	"state",
+];
 
 /**
  * Return whether `value` is a finite integer within the JavaScript-safe wire range.
@@ -159,11 +185,22 @@ function validateNonBlankTitle(value: unknown, id: string): string {
 	return value;
 }
 
-function parseActionDescription(raw: unknown): ActionDescription {
+function parseOperationHead(
+	raw: unknown,
+	label: string,
+): {
+	readonly raw: Record<string, unknown>;
+	readonly id: string;
+	readonly title: string;
+	readonly handler: string;
+	readonly request: Readonly<Record<string, unknown>>;
+} {
 	if (!isPlainRecord(raw)) {
-		throw new QgisSdkDeclarationError("Action description must be an object");
+		throw new QgisSdkDeclarationError(
+			`${label[0]?.toUpperCase()}${label.slice(1)} description must be an object`,
+		);
 	}
-	const id = validateDeclarationId(raw.id, "action");
+	const id = validateDeclarationId(raw.id, label);
 	const title = validateNonBlankTitle(raw.title, id);
 	if (
 		typeof raw.handler !== "string" ||
@@ -178,15 +215,61 @@ function parseActionDescription(raw: unknown): ActionDescription {
 			`${id}: request schema must be an object`,
 		);
 	}
-	if (!isPlainRecord(raw.result)) {
-		throw new QgisSdkDeclarationError(`${id}: result schema must be an object`);
-	}
-	return Object.freeze({
+	return {
+		raw,
 		id,
 		title,
 		handler: raw.handler,
 		request: Object.freeze({ ...raw.request }),
-		result: Object.freeze({ ...raw.result }),
+	};
+}
+
+function parseActionDescription(raw: unknown): ActionDescription {
+	const head = parseOperationHead(raw, "action");
+	if (!isPlainRecord(head.raw.result)) {
+		throw new QgisSdkDeclarationError(
+			`${head.id}: result schema must be an object`,
+		);
+	}
+	return Object.freeze({
+		id: head.id,
+		title: head.title,
+		handler: head.handler,
+		request: head.request,
+		result: Object.freeze({ ...head.raw.result }),
+	});
+}
+
+function parseStreamDescription(raw: unknown): StreamDescription {
+	const head = parseOperationHead(raw, "stream");
+	const declared = head.raw.events;
+	if (!isPlainRecord(declared) || Object.keys(declared).length === 0) {
+		throw new QgisSdkDeclarationError(
+			`${head.id}: events must map at least one event kind to a schema`,
+		);
+	}
+	const events: Partial<
+		Record<StreamEventKind, Readonly<Record<string, unknown>>>
+	> = {};
+	for (const [kind, schema] of Object.entries(declared)) {
+		if (!STREAM_EVENT_KINDS.includes(kind as StreamEventKind)) {
+			throw new QgisSdkDeclarationError(
+				`${head.id}: ${kind} is not a stream event kind`,
+			);
+		}
+		if (!isPlainRecord(schema)) {
+			throw new QgisSdkDeclarationError(
+				`${head.id}: events.${kind} schema must be an object`,
+			);
+		}
+		events[kind as StreamEventKind] = Object.freeze({ ...schema });
+	}
+	return Object.freeze({
+		id: head.id,
+		title: head.title,
+		handler: head.handler,
+		request: head.request,
+		events: Object.freeze(events),
 	});
 }
 
@@ -217,23 +300,43 @@ export function parsePluginDescription(
 	if (!Array.isArray(parsed.actions)) {
 		throw new QgisSdkDeclarationError(`${id}: actions must be an array`);
 	}
+	const declaredStreams = parsed.streams ?? [];
+	if (!Array.isArray(declaredStreams)) {
+		throw new QgisSdkDeclarationError(`${id}: streams must be an array`);
+	}
+	// Actions and streams share one id namespace (decision-28).
 	const seenIds = new Set<string>();
+	const claim = (operationId: string, label: string): void => {
+		if (seenIds.has(operationId)) {
+			throw new QgisSdkDeclarationError(
+				`${id}: duplicate ${label} id ${operationId}`,
+			);
+		}
+		seenIds.add(operationId);
+	};
 	const actions: ActionDescription[] = [];
 	for (const item of parsed.actions) {
 		const action = parseActionDescription(item);
-		if (seenIds.has(action.id)) {
-			throw new QgisSdkDeclarationError(
-				`${id}: duplicate action id ${action.id}`,
-			);
-		}
-		seenIds.add(action.id);
+		claim(action.id, "action");
 		actions.push(action);
 	}
-	actions.sort((left, right) => (left.id < right.id ? -1 : 1));
+	const streams: StreamDescription[] = [];
+	for (const item of declaredStreams) {
+		const stream = parseStreamDescription(item);
+		claim(stream.id, "stream");
+		streams.push(stream);
+	}
+	const byId = (
+		left: { readonly id: string },
+		right: { readonly id: string },
+	): number => (left.id < right.id ? -1 : 1);
+	actions.sort(byId);
+	streams.sort(byId);
 	return Object.freeze({
 		schema_version: PLUGIN_DESCRIPTION_SCHEMA_VERSION,
 		id,
 		title,
 		actions: Object.freeze(actions),
+		streams: Object.freeze(streams),
 	});
 }

@@ -43,6 +43,11 @@ MAX_WIRE_DEPTH = 32
 
 _OPERATION_ID = re.compile(r"[a-zA-Z][a-zA-Z0-9_.-]*")
 
+#: The event kinds a stream may declare and a frame may carry. Spelled here so
+#: :class:`BridgeOperation` can refuse a declaration without importing the
+#: stream machinery; :mod:`qgis_sdk.bridge.streams` enumerates the same three.
+STREAM_EVENT_KINDS = ("data", "progress", "state")
+
 
 class BridgeErrorCode(str, Enum):
     """Codes a failure reply may carry.
@@ -107,12 +112,17 @@ class BridgeOperation:
     against a different shape than the one it advertises has a contract that
     only looks like a contract. An operation registered by hand may leave both
     out, and is then described by its id and title alone.
+
+    A stream declares ``events`` instead of ``result`` (decision-28): a map from
+    event kind to the schema of that kind's payload. An operation answers with a
+    result or streams events, never both.
     """
 
     id: str
     title: str
     request: Mapping[str, Any] | None = None
     result: Mapping[str, Any] | None = None
+    events: Mapping[str, Mapping[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.id, str) or not _OPERATION_ID.fullmatch(self.id):
@@ -128,6 +138,29 @@ class BridgeOperation:
                 raise QgisSdkBridgeError(
                     f"{self.id}: {name} must be a schema object or None"
                 )
+        if self.events is not None:
+            self._check_events(self.events)
+
+    def _check_events(self, events: Any) -> None:
+        if self.result is not None:
+            raise QgisSdkBridgeError(
+                f"{self.id}: an operation declares a result or events, not both"
+            )
+        if not isinstance(events, Mapping):
+            raise QgisSdkBridgeError(f"{self.id}: events must be a mapping")
+        if not events:
+            raise QgisSdkBridgeError(
+                f"{self.id}: a stream declares at least one event kind"
+            )
+        for kind, schema in events.items():
+            if kind not in STREAM_EVENT_KINDS:
+                raise QgisSdkBridgeError(
+                    f"{self.id}: {kind!r} is not a stream event kind"
+                )
+            if not isinstance(schema, Mapping):
+                raise QgisSdkBridgeError(
+                    f"{self.id}: events.{kind} must be a schema object"
+                )
 
     def to_dict(self) -> dict[str, Any]:
         """Return the advertised description of this operation."""
@@ -136,6 +169,8 @@ class BridgeOperation:
             described["request"] = to_wire(self.request)
         if self.result is not None:
             described["result"] = to_wire(self.result)
+        if self.events is not None:
+            described["events"] = to_wire(self.events)
         return described
 
 
