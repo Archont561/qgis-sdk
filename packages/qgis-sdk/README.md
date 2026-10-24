@@ -208,6 +208,34 @@ The bridge copies the produced layer's features into the destination the user ch
 
 `providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge is only importable where PyQGIS exists.
 
+## 0.2.0 migration notes (TASK-28)
+
+`0.2.0` is the first release where the two packages carry different numbers: the
+Python SDK moves to `0.2.0` and `@archont561/qgis-sdk-bridge` stays at `0.1.1`,
+because no task in this milestone changes the bridge's source. Nothing is
+published for the bridge, and no `ts-v*` tag exists.
+
+- **Breaking, and the only one:** `AlgorithmContext.algorithms` is now a required
+  field. Code that receives a context from the runtime is unaffected, because the
+  runtime always supplies it; code that builds an `AlgorithmContext` by hand has
+  to pass the algorithm service it wants the author class to use
+  (`FakeAlgorithms` in tests, the native backend on a QGIS host).
+- **`PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`.** The wire description is
+  unchanged, so a web view using bridge `0.1.1` reads a `0.2.0` plugin
+  description without any change. This is what
+  `scripts/release.py verify-versions` checks across the two languages.
+- **Additive:** curated native services with QGIS-free protocols and in-memory
+  fakes (`qgis_sdk.services`, `qgis_sdk.testing`), schema-driven native forms
+  (`qgis_sdk.ui`, `adapters.qgis.NativeForms`, `DeclaredFormDialog`,
+  `QgisSdkFormError`), class-based Processing algorithms with typed outputs
+  (`qgis_sdk.algorithms`, `qgis_sdk.reference.algorithms`) and their toolbox
+  registration (`qgis_sdk.providers`).
+- **Unchanged:** the package-root `__all__` still exports exactly six names, and
+  everything above is reachable through its documented submodule.
+- **Manifests:** `pyproject.toml` and `recipe.yaml` carry `0.2.0`; the bridge's
+  `package.json` carries `0.1.1`. Verify with
+  `python scripts/release.py verify-versions --scope python --version 0.2.0`.
+
 ## Development
 
 From the workspace root, install the Pixi environments and run the Python tests:
