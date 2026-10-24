@@ -125,7 +125,7 @@ jobs:
           }
           # `run:` uses bash -e, so a failing substitution would abort before the
           # annotation is printed; every capture here is allowed to fail.
-          environment=$(pixi run -e default python -c 'import sys; print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20 || true)
+          environment=$(pixi run -e default python -c 'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20 || true)
           annotate "native forms: environment" "$environment"
           annotate "native forms: pytest" "$(tail -60 "$log" || true)"
           exit "$status"

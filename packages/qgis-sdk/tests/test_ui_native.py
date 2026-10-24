@@ -53,14 +53,14 @@ except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native forms need Qt and QGIS: {error}", allow_module_level=True)
 
 
-@plugin(id="demo:forms", title="Form demo")
+@plugin(id="demo.forms", title="Form demo")
 class FormDemo:
     """One action per widget family, with the handler recording what it got."""
 
     def __init__(self, calls):
         self.calls = calls
 
-    @action(id="demo:plain", title="Plain fields")
+    @action(id="demo.plain", title="Plain fields")
     def plain(
         self,
         name: str,
@@ -80,7 +80,7 @@ class FormDemo:
         )
         return name
 
-    @action(id="demo:marked", title="Marked fields")
+    @action(id="demo.marked", title="Marked fields")
     def marked(
         self,
         layer_id: Annotated[str, LayerInput()],
@@ -147,7 +147,7 @@ def forms(app):
 def test_each_primitive_family_renders_as_its_own_widget(forms) -> None:
     native, _ = forms
 
-    dialog = native.render("demo:plain")
+    dialog = native.render("demo.plain")
 
     assert isinstance(dialog.widget("name"), QLineEdit)
     assert isinstance(dialog.widget("count"), QSpinBox)
@@ -159,7 +159,7 @@ def test_each_primitive_family_renders_as_its_own_widget(forms) -> None:
 def test_a_marker_renders_a_qgis_picker_and_a_metre_spin_box(forms) -> None:
     native, _ = forms
 
-    dialog = native.render("demo:marked")
+    dialog = native.render("demo.marked")
 
     assert isinstance(dialog.widget("layer_id"), QgsMapLayerComboBox)
     assert isinstance(dialog.widget("working_crs"), QgsProjectionSelectionWidget)
@@ -169,14 +169,14 @@ def test_a_marker_renders_a_qgis_picker_and_a_metre_spin_box(forms) -> None:
 
 def test_submitted_values_are_coerced_and_dispatched_to_the_handler(forms) -> None:
     native, calls = forms
-    dialog = native.render("demo:plain")
+    dialog = native.render("demo.plain")
     dialog.widget("name").setText("  buffer ")
     dialog.widget("count").setValue(3)
     dialog.widget("ratio").setValue(1.5)
     dialog.widget("enabled").setChecked(True)
     dialog.widget("mode").setCurrentIndex(1)
 
-    result = native.dispatch("demo:plain", dialog.values())
+    result = native.dispatch("demo.plain", dialog.values())
 
     assert result == "buffer"
     assert calls == [
@@ -186,7 +186,7 @@ def test_submitted_values_are_coerced_and_dispatched_to_the_handler(forms) -> No
 
 def test_run_dispatches_only_when_the_dialog_is_accepted(forms, monkeypatch) -> None:
     native, calls = forms
-    dialog = native.render("demo:plain")
+    dialog = native.render("demo.plain")
     dialog.widget("name").setText("kept")
     dialog.widget("mode").setCurrentIndex(1)
     monkeypatch.setattr(native, "render", lambda action_id: dialog)
@@ -194,14 +194,14 @@ def test_run_dispatches_only_when_the_dialog_is_accepted(forms, monkeypatch) -> 
         native_ui.DeclaredFormDialog, "exec", lambda self: QDialog.DialogCode.Rejected
     )
 
-    assert native.run("demo:plain") is None
+    assert native.run("demo.plain") is None
     assert calls == []
 
     monkeypatch.setattr(
         native_ui.DeclaredFormDialog, "exec", lambda self: QDialog.DialogCode.Accepted
     )
 
-    assert native.run("demo:plain") == "kept"
+    assert native.run("demo.plain") == "kept"
     assert calls[-1]["name"] == "kept"
 
 
@@ -209,7 +209,7 @@ def test_an_unknown_action_is_refused(forms) -> None:
     native, _ = forms
 
     with pytest.raises(QgisSdkFormError, match="declares no action"):
-        native.render("demo:missing")
+        native.render("demo.missing")
 
 
 def test_markers_need_a_running_plugin(forms) -> None:
@@ -217,4 +217,4 @@ def test_markers_need_a_running_plugin(forms) -> None:
     native._runtime.instance = None
 
     with pytest.raises(QgisSdkFormError, match="running plugin"):
-        native.fields("demo:marked")
+        native.fields("demo.marked")
