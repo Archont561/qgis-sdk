@@ -40,11 +40,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
+        id: s01
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Set up Pixi
+        id: s02
         uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
         with:
           environments: >-
@@ -54,39 +56,90 @@ jobs:
           locked: true
 
       - name: Install JavaScript dependencies
+        id: s03
         run: pixi run -e bun install-js
 
       - name: Compute commit range
+        id: s04
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: python scripts/compute_commit_base.py
 
       - name: Check commit messages
+        id: s05
         run: pixi run -e default check-commits
 
       - name: Lint Python
+        id: s06
         run: pixi run -e default lint-python
 
       - name: Check Python formatting
+        id: s07
         run: pixi run -e default format-python-check
 
       - name: Test skill-creator tooling
+        id: s08
         run: pixi run -e default test-skill-creator
 
       - name: Test release tooling
+        id: s09
         run: pixi run -e default test-release-tool
 
       - name: Verify the scoped versions and the shared contract
+        id: s10
         run: pixi run -e default release-verify-versions
 
+      # The default environment carries the QGIS feature, so this is the only
+      # place the native form path actually executes: a developer machine needs a
+      # display setup and this sandbox has no Qt at all.
+      - name: Test native forms offscreen
+        id: s11
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -o pipefail
+          log=native-forms.log
+          status=0
+          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py -q -rs 2>&1 | tee "$log" || status=$?
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          # pytest 9 exits 5 when a module skips itself during import, which is
+          # the honest outcome on a host without usable Qt and QGIS bindings, so
+          # that case is a warning carrying the reason rather than a red build.
+          reason=$(grep -o "native forms need.*" "$log" | head -1 || true)
+          if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
+            echo "::warning::native forms did not run: $reason"
+            exit 0
+          fi
+          # Log archives are not reliably downloadable from every client, so the
+          # evidence goes into an annotation instead: one red step that says only
+          # "exit code 1" has already cost this project a rerun.
+          annotate() {
+            local title="$1" body="$2"
+            body="${body//'%'/'%25'}"
+            body="${body//$'\r'/}"
+            body="${body//$'\n'/'%0A'}"
+            printf '::error title=%s::%s\n' "$title" "$body"
+          }
+          # `run:` uses bash -e, so a failing substitution would abort before the
+          # annotation is printed; every capture here is allowed to fail.
+          environment=$(pixi run -e default python -c 'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20 || true)
+          annotate "native forms: environment" "$environment"
+          annotate "native forms: pytest" "$(tail -60 "$log" || true)"
+          exit "$status"
+
       - name: Lint and format TypeScript
+        id: s12
         run: pixi run -e bun biome-check
 
       - name: Lint GitHub Actions
+        id: s13
         run: pixi run -e default lint-github-actions
 
       - name: Typecheck TypeScript
+        id: s14
         run: pixi run -e bun typecheck
 
       - name: Check coverage for all packages
@@ -96,6 +149,7 @@ jobs:
           pixi run -e bun bun run coverage 2>&1 | tee coverage-output.log
 
       - name: Annotate the coverage failure
+        id: s15
         if: failure() && steps.coverage.outcome == 'failure'
         run: |
           # The job log is not always retrievable, but annotations are: surface
@@ -105,6 +159,7 @@ jobs:
             | while IFS= read -r line; do echo "::error::$line"; done
 
       - name: Upload Python coverage
+        id: s16
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         # v6+ is the first codecov major whose embedded github-script targets
         # node24; v5 makes fresh runs emit Node 20 deprecation warnings.
@@ -116,6 +171,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload TypeScript coverage
+        id: s17
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
@@ -128,6 +184,24 @@ jobs:
   # This is compatibility evidence only: it is not QGIS Desktop, WebEngine or
   # plugin-coexistence qualification (see TASK-33), and it does not repeat the
   # coverage gate or Codecov uploads owned by `checks`.
+
+
+      # A red job whose report is only "exit code 1" costs a rerun to diagnose,
+      # and the log archive is not reachable from every client. Every step above
+      # carries an id so this can name the one that actually failed.
+      - name: Report the failed step
+        id: s18
+        if: failure()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          steps = json.loads(os.environ["STEPS"])
+          for name, info in steps.items():
+              if info.get("conclusion") not in ("success", "skipped", None):
+                  print(f"::error title=failed step::{name}")
+          PY
   cross-platform:
     name: cross-platform (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
