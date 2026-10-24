@@ -22,8 +22,12 @@ from qgis_sdk.bridge import (
 from qgis_sdk.bridge.schema import validate
 from qgis_sdk.models import (
     QgisSdkBridgeError,
+    QgisSdkBridgeRefusalError,
     QgisSdkError,
+    QgisSdkGrantRefusedError,
     QgisSdkLayerNotFoundError,
+    QgisSdkStaleHandleError,
+    QgisSdkUnknownHandleError,
 )
 
 ECHO = BridgeOperation(id="demo.echo", title="Echo the payload")
@@ -297,3 +301,193 @@ def test_a_pattern_that_is_not_a_string_is_refused() -> None:
     schema = {"type": "string", "pattern": 7}
     with pytest.raises(QgisSdkBridgeError, match="pattern must be a string"):
         validate("12", schema, path="payload")
+
+
+# -- bound handlers and refusals the operation itself raises (TASK-20) --------
+
+
+BOUND = BridgeOperation(id="demo.whoami", title="Tell the caller who it is")
+
+
+def test_a_bound_handler_receives_the_host_minted_binding_not_a_claim() -> None:
+    """A handler that needs the caller gets the binding the host minted."""
+    host = Host()
+    host.dispatcher.register_bound(
+        BOUND, lambda binding, payload: {"view": binding.view_id, "got": payload}
+    )
+    binding = host.dispatcher.bind(view_id="view-7", origin="qgis://desktop")
+
+    reply = host.dispatcher.dispatch(
+        binding, _invoke("demo.whoami", {"view_id": "view-1", "x": 1})
+    )
+
+    assert reply["ok"] is True
+    assert reply["value"] == {"view": "view-7", "got": {"view_id": "view-1", "x": 1}}
+
+
+def test_register_bound_refuses_duplicates_and_non_callables() -> None:
+    host = Host()
+    with pytest.raises(QgisSdkBridgeError, match="duplicate"):
+        host.dispatcher.register_bound(ECHO, lambda binding, payload: None)
+    with pytest.raises(QgisSdkBridgeError, match="callable"):
+        host.dispatcher.register_bound(BOUND, None)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("error", "code"),
+    [
+        (
+            QgisSdkUnknownHandleError("file ref f-1 is not one of this view's"),
+            "unknown_handle",
+        ),
+        (QgisSdkStaleHandleError("file ref f-1 was revoked"), "stale_handle"),
+        (QgisSdkGrantRefusedError("write is not granted"), "grant_refused"),
+    ],
+)
+def test_a_refusal_an_operation_raises_keeps_its_own_code(
+    error: QgisSdkBridgeRefusalError, code: str
+) -> None:
+    """A handle or grant refusal is a contract code, not an opaque failure."""
+    host = Host()
+
+    def refuse(payload):
+        raise error
+
+    host.dispatcher.register(BOUND, refuse)
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+
+    reply = host.dispatcher.dispatch(binding, _invoke("demo.whoami"))
+
+    assert reply["ok"] is False
+    assert reply["error"] == {"code": code, "message": str(error)}
+    assert BridgeErrorCode(code).value == code
+
+
+def test_a_refusal_raised_by_a_stream_factory_keeps_its_code_too() -> None:
+    host = Host()
+
+    def refuse(payload):
+        raise QgisSdkGrantRefusedError("origin is not granted")
+
+    host.dispatcher.register_stream(BOUND, refuse)
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+
+    reply = host.dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "sub-1",
+            "operation": "demo.whoami",
+            "payload": {},
+        },
+    )
+
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == "grant_refused"
+
+
+# -- push sources: a stream the host feeds without knowing the id ------------
+
+
+class _Fetch:
+    """A source that starts work when attached and reports through the sink."""
+
+    def __init__(self) -> None:
+        self.sink = None
+        self.closed = False
+
+    def start(self, sink) -> None:
+        self.sink = sink
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _subscribe(dispatcher, binding, operation: str) -> dict[str, Any]:
+    return dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "sub-1",
+            "operation": operation,
+            "payload": {},
+        },
+    )
+
+
+def test_a_push_source_is_started_with_a_sink_and_wakes_the_view() -> None:
+    host = Host()
+    fetch = _Fetch()
+    host.dispatcher.register_bound_stream(BOUND, lambda binding, payload: fetch)
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+    woken: list[str] = []
+    host.dispatcher.watch(binding, lambda: woken.append(binding.view_id))
+
+    reply = _subscribe(host.dispatcher, binding, "demo.whoami")
+
+    assert reply["ok"] is True
+    assert fetch.sink is not None
+    assert woken == []
+    assert fetch.sink.emit({"status": 200}) is True
+    assert woken == ["view-1"]
+    fetch.sink.complete()
+    frames = host.dispatcher.pump(binding)
+    assert [frame.get("event", frame.get("terminal")) for frame in frames] == [
+        {"kind": "data", "payload": {"status": 200}},
+        {"kind": "complete"},
+    ]
+    assert woken == ["view-1", "view-1"]
+    # The sink is inert once the subscription ended: no exception, no frame.
+    assert fetch.sink.emit({"status": 500}) is False
+    assert fetch.closed is True
+
+
+def test_a_push_source_fails_its_stream_with_the_sdk_message() -> None:
+    host = Host()
+    fetch = _Fetch()
+    host.dispatcher.register_stream(BOUND, lambda payload: fetch)
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+    _subscribe(host.dispatcher, binding, "demo.whoami")
+
+    fetch.sink.fail(QgisSdkLayerNotFoundError("sites"))
+    (frame,) = host.dispatcher.pump(binding)
+
+    assert frame["terminal"]["kind"] == "error"
+    assert "sites" in frame["terminal"]["message"]
+
+
+def test_disposing_a_pushed_stream_closes_its_source() -> None:
+    host = Host()
+    fetch = _Fetch()
+    host.dispatcher.register_stream(BOUND, lambda payload: fetch)
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+    reply = _subscribe(host.dispatcher, binding, "demo.whoami")
+
+    host.dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "unsubscribe",
+            "call_id": "unsub",
+            "subscription_id": reply["value"]["subscription_id"],
+        },
+    )
+
+    assert fetch.closed is True
+    assert fetch.sink.emit({"late": True}) is False
+
+
+def test_unwatch_stops_the_wake_calls_and_a_wake_never_raises_into_the_host() -> None:
+    host = Host()
+    fetch = _Fetch()
+    host.dispatcher.register_stream(BOUND, lambda payload: fetch)
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+    woken: list[int] = []
+    host.dispatcher.watch(binding, lambda: woken.append(1))
+    _subscribe(host.dispatcher, binding, "demo.whoami")
+    host.dispatcher.unwatch(binding)
+
+    assert fetch.sink.emit({"n": 1}) is True
+    assert woken == []

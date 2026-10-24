@@ -67,6 +67,11 @@ class BridgeErrorCode(str, Enum):
     CANCELLED = "cancelled"
     LIMIT_EXCEEDED = "limit_exceeded"
     INVALID_RESULT = "invalid_result"
+    # Refusals an operation raises itself (TASK-20): the handle or grant a call
+    # named is not usable by this view, and the view can act on which.
+    UNKNOWN_HANDLE = "unknown_handle"
+    STALE_HANDLE = "stale_handle"
+    GRANT_REFUSED = "grant_refused"
 
 
 def to_wire(value: Any, *, depth: int = 0) -> Any:

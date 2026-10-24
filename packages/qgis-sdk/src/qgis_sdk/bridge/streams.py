@@ -42,7 +42,7 @@ from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from qgis_sdk.bridge.protocol import (
     BRIDGE_PROTOCOL_VERSION,
@@ -190,7 +190,23 @@ class DisposalRequest:
         return cls(call_id=call_id, subscription_id=subscription_id)
 
 
-StreamSource = Callable[[Mapping[str, Any]], Iterator[Mapping[str, Any]]]
+@runtime_checkable
+class PushSource(Protocol):
+    """A source the host feeds, for work that finishes on a later event loop turn.
+
+    A network reply, a Qt task's progress: nothing an iterator can wait for
+    without blocking the GUI thread. The dispatcher calls :meth:`start` once the
+    subscription exists, with a :class:`StreamSink` that knows the subscription
+    id so the source never has to. A ``close`` method, when present, runs when
+    the subscription ends for any reason - the place to cancel the request.
+    """
+
+    def start(self, sink: StreamSink) -> None: ...
+
+
+StreamSource = Callable[
+    [Mapping[str, Any]], Iterator[Mapping[str, Any]] | PushSource | None
+]
 
 
 @dataclass(slots=True)
@@ -207,7 +223,7 @@ class Subscription:
     dropped: int = 0
     state: StreamState = StreamState.OPEN
     _queue: deque[dict[str, Any]] = field(default_factory=deque)
-    _source: Iterator[Mapping[str, Any]] | None = None
+    _source: Iterator[Mapping[str, Any]] | PushSource | None = None
 
     @property
     def open(self) -> bool:
@@ -219,8 +235,12 @@ class Subscription:
         """How many frames are waiting for the transport."""
         return len(self._queue)
 
-    def attach(self, source: Iterator[Mapping[str, Any]] | None) -> None:
-        """Attach the generator a pull subscription is fed from."""
+    def attach(self, source: Iterator[Mapping[str, Any]] | PushSource | None) -> None:
+        """Attach the generator a pull subscription is fed from, or a push source.
+
+        A push source is only held so its ``close`` runs when the subscription
+        ends; :meth:`pull` never advances it.
+        """
         self._source = source
 
     def emit(
@@ -301,6 +321,16 @@ class Subscription:
         self.close_source()
         return True
 
+    def dispose(self) -> None:
+        """End the subscription without a frame: the view asked, or is gone.
+
+        Nothing queued is delivered and nothing further is accepted, so a push
+        source whose reply lands after disposal writes into a closed sink.
+        """
+        self.state = StreamState.DRAINED
+        self._queue.clear()
+        self.close_source()
+
     def close_source(self) -> None:
         """Close the generator, so its ``finally`` blocks run while they can."""
         source, self._source = self._source, None
@@ -328,7 +358,7 @@ class Subscription:
         is, with the SDK's own message when it has one.
         """
         source = self._source
-        if source is None or not self.open:
+        if source is None or not self.open or not hasattr(source, "__next__"):
             return
         produced = 0
         while produced < limit and self.open and len(self._queue) < self.capacity:
@@ -358,6 +388,59 @@ class Subscription:
             produced += 1
 
 
+@dataclass(slots=True)
+class StreamSink:
+    """What a :class:`PushSource` writes into: one subscription plus a wake-up.
+
+    ``wake`` tells the adapter that frames are waiting, so a channel can flush
+    them without polling. Once the subscription ended every call is inert and
+    returns ``False``: a late reply arriving after disposal is normal, not an
+    error path the host has to guard.
+    """
+
+    subscription: Subscription
+    wake: Callable[[], None] | None = None
+
+    @property
+    def open(self) -> bool:
+        return self.subscription.open
+
+    def emit(
+        self, payload: Any, *, kind: StreamEventType = StreamEventType.DATA
+    ) -> bool:
+        """Queue one event; ``False`` once the subscription is closed."""
+        if not self.subscription.open:
+            return False
+        accepted = self.subscription.emit(payload, kind=kind)
+        self._wake()
+        return accepted
+
+    def complete(self) -> bool:
+        """End the stream normally."""
+        ended = self.subscription.terminate(StreamTerminal.COMPLETE)
+        if ended:
+            self._wake()
+        return ended
+
+    def fail(self, error: BaseException | str) -> bool:
+        """End the stream with a failure, keeping an SDK error's own message."""
+        if isinstance(error, QgisSdkJobCancelledError):
+            terminal, message = StreamTerminal.CANCELLED, str(error)
+        elif isinstance(error, (QgisSdkError, str)):
+            terminal, message = StreamTerminal.ERROR, str(error)
+        else:
+            terminal = StreamTerminal.ERROR
+            message = "The stream failed; the host recorded the details"
+        ended = self.subscription.terminate(terminal, message=message)
+        if ended:
+            self._wake()
+        return ended
+
+    def _wake(self) -> None:
+        if self.wake is not None:
+            self.wake()
+
+
 def _split_event(item: Any) -> tuple[StreamEventType, Any]:
     """Split one produced item into its event kind and its payload.
 
@@ -383,7 +466,9 @@ __all__ = [
     "MAX_QUEUED_EVENTS",
     "MAX_SUBSCRIPTIONS_PER_VIEW",
     "DisposalRequest",
+    "PushSource",
     "StreamEventType",
+    "StreamSink",
     "StreamSource",
     "StreamState",
     "StreamTerminal",

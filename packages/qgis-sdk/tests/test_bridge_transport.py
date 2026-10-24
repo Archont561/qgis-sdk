@@ -204,3 +204,103 @@ def test_disposal_stops_the_frames_for_that_view() -> None:
 
     assert transport.flush() == 0
     assert sent == []
+
+
+class _Later:
+    """A push source whose reply arrives on a later turn, as a network reply does."""
+
+    def __init__(self) -> None:
+        self.sink = None
+
+    def start(self, sink) -> None:
+        self.sink = sink
+
+
+def test_a_push_source_reply_reaches_the_channel_without_a_flush_call() -> None:
+    """The transport is the view's waker: a pushed event flushes itself."""
+    transport, sent = _transport()
+    later = _Later()
+    transport.dispatcher.register_stream(
+        BridgeOperation(id="demo.later", title="Reply later"), lambda payload: later
+    )
+    transport.receive(
+        json.dumps(
+            {
+                "protocol": envelope_protocol(),
+                "kind": "subscribe",
+                "call_id": "sub-1",
+                "operation": "demo.later",
+                "payload": {},
+            }
+        )
+    )
+    assert len(sent) == 1
+
+    later.sink.emit({"status": 200})
+    later.sink.complete()
+
+    frames = _frames(sent[1:])
+    assert [frame.get("event", frame.get("terminal")) for frame in frames] == [
+        {"kind": "data", "payload": {"status": 200}},
+        {"kind": "complete"},
+    ]
+
+
+def test_a_disposed_transport_no_longer_flushes_late_replies() -> None:
+    transport, sent = _transport()
+    later = _Later()
+    transport.dispatcher.register_stream(
+        BridgeOperation(id="demo.later", title="Reply later"), lambda payload: later
+    )
+    transport.receive(
+        json.dumps(
+            {
+                "protocol": envelope_protocol(),
+                "kind": "subscribe",
+                "call_id": "sub-1",
+                "operation": "demo.later",
+                "payload": {},
+            }
+        )
+    )
+    transport.dispose()
+    before = len(sent)
+
+    assert later.sink.emit({"status": 200}) is False
+    assert len(sent) == before
+
+
+class _Immediate:
+    """A push source that answers inside ``start`` - a cached reply, say."""
+
+    def start(self, sink) -> None:
+        sink.emit({"cached": True})
+        sink.complete()
+
+
+def test_a_frame_pushed_during_the_call_still_follows_the_acknowledgement() -> None:
+    """The view must learn the subscription id before it sees the id's frames."""
+    transport, sent = _transport()
+    transport.dispatcher.register_stream(
+        BridgeOperation(id="demo.now", title="Reply now"), lambda payload: _Immediate()
+    )
+
+    transport.receive(
+        json.dumps(
+            {
+                "protocol": envelope_protocol(),
+                "kind": "subscribe",
+                "call_id": "sub-1",
+                "operation": "demo.now",
+                "payload": {},
+            }
+        )
+    )
+
+    messages = _frames(sent)
+    assert messages[0]["call_id"] == "sub-1"
+    assert messages[0]["ok"] is True
+    assert [frame.get("event", frame.get("terminal")) for frame in messages[1:]] == [
+        {"kind": "data", "payload": {"cached": True}},
+        {"kind": "complete"},
+    ]
