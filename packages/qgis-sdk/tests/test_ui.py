@@ -7,13 +7,15 @@ display, and the adapter is then only allowed to be mechanical.
 
 from __future__ import annotations
 
+import json
+
 import pytest
-from qgis_sdk.declarations import ActionDescription
+from qgis_sdk.declarations import ActionDescription, action, describe_plugin, plugin
 from qgis_sdk.models import QgisSdkFormError
 from qgis_sdk.ui import FieldSpec, _coerce, coerce_values, form_fields
 
 
-def _action(properties, required=(), action_id="demo:run"):
+def _action(properties, required=(), action_id="demo.run"):
     request = {
         "type": "object",
         "properties": properties,
@@ -244,3 +246,19 @@ def test_a_field_spec_serializes_for_a_host() -> None:
         "nullable": False,
         "choices": ["a"],
     }
+
+
+def test_the_description_names_the_handler_instead_of_serializing_it() -> None:
+    """A form dispatches by binding name, so no callable crosses the wire."""
+
+    @plugin(id="demo.forms", title="Form demo")
+    class Demo:
+        @action(id="demo.plain", title="Plain fields")
+        def plain(self, name: str) -> None:
+            self.seen = name
+
+    payload = describe_plugin(Demo).to_dict()
+
+    assert payload["actions"][0]["handler"] == "plain"
+    # A callable, a set or a non-finite float would break this round trip.
+    assert json.loads(json.dumps(payload)) == payload
