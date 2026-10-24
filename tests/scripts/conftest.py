@@ -1,7 +1,19 @@
-"""Shared fixtures for the qgis-sdk-release tests."""
+"""Shared fixtures for the release script tests.
+
+Adds ``scripts/`` to ``sys.path`` so tests can import the standalone
+``release`` script as a module, matching the pattern used by
+``packages/qgis-sdk/tests/conftest.py``.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
 
 import pytest
-from qgis_sdk_release.versionrc import parse_versionrc
+from release import parse_versionrc
 
 SAMPLE_VERSIONRC = """\
 header: "# Changelog\\n"

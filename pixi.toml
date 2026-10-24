@@ -30,44 +30,36 @@ PYTHONPATH = "packages/qgis-sdk/src"
 [feature.python.tasks.test-skill-creator]
 cmd = "pytest -q .agents/skills/skill-creator/tests"
 
-# Release train entrypoints (TASK-35): every autorelease.yml/release.yml step
-# reaches the stdlib-only tool through one of these tasks, and the identical
-# invocations work locally from a restored sandbox. The task-level PYTHONPATH
-# replaces the feature activation value; the tool never imports qgis_sdk.
+# Release train entrypoints (TASK-35): the stdlib-only release tool now lives
+# as scripts/release.py, resolved from __file__ so every pixi run task and
+# workflow step invokes identical, locally-testable commands with no
+# PYTHONPATH or locked dependency beyond the build environment.
 [feature.python.tasks.test-release-tool]
-cmd = "python -m pytest -c packages/qgis-sdk-release/pyproject.toml packages/qgis-sdk-release/tests -q"
+cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q"
 
 [feature.python.tasks.release-plan]
-cmd = "python -m qgis_sdk_release plan"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py plan"
 
 [feature.python.tasks.release-classify]
-cmd = "python -m qgis_sdk_release classify"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py classify"
 
 [feature.python.tasks.release-tag]
-cmd = "python -m qgis_sdk_release tag"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py tag"
 
 [feature.python.tasks.release-stamp]
-cmd = "python -m qgis_sdk_release stamp"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py stamp"
 
 [feature.python.tasks.release-build-python]
-cmd = "python -m qgis_sdk_release build-python"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py build-python"
 
 [feature.python.tasks.release-verify-python]
-cmd = "python -m qgis_sdk_release verify-python"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py verify-python"
 
 [feature.python.tasks.release-checksums]
-cmd = "python -m qgis_sdk_release checksums"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py checksums"
 
 [feature.python.tasks.release-github]
-cmd = "python -m qgis_sdk_release github-release"
-env = { PYTHONPATH = "packages/qgis-sdk-release/src" }
+cmd = "python scripts/release.py github-release"
 
 [feature.utils.dependencies]
 ruff = "==0.17.1"
