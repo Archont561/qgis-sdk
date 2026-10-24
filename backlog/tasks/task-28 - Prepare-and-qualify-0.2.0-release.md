@@ -1,10 +1,10 @@
 ---
 id: TASK-28
 title: Prepare and qualify 0.2.0 release
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 16:54'
+updated_date: '2026-10-24 18:13'
 labels: []
 milestone: m-1
 dependencies:
@@ -29,11 +29,23 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Required 0.2.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
-- [ ] #2 Use valid SemVer and prereleases such as 0.2.0-alpha.1; stamp the Python manifests only (`pyproject.toml`, `recipe.yaml`) at an explicitly advanced minor, leave the bridge `package.json` at its own 0.1.1 and publish no bridge version, and document migration notes (including the required `AlgorithmContext.algorithms`).
-- [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
+- [x] #1 Required 0.2.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
+- [x] #2 Use valid SemVer and prereleases such as 0.2.0-alpha.1; stamp the Python manifests only (`pyproject.toml`, `recipe.yaml`) at an explicitly advanced minor, leave the bridge `package.json` at its own 0.1.1 and publish no bridge version, and document migration notes (including the required `AlgorithmContext.algorithms`).
+- [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-24 (dry run only: nothing tagged, nothing published):
+- Plan: `python scripts/release.py plan --scope python --version-override 0.2.0 --dry-run true` reports `action=skip tag=python-v0.2.0` with the reason "no stable tag exists yet; the first stable release is deliberate - run the autorelease workflow dispatch". Cutting the tag is therefore an act nobody performs by accident, which is the shape AC #4 asks for.
+- AC #2 met. `release.py stamp --scope python --version 0.2.0` wrote `packages/qgis-sdk/pyproject.toml` and `packages/qgis-sdk/recipe.yaml` at `0.2.0`; `packages/qgis-sdk-bridge/package.json` still reads `0.1.1`, no `ts-v*` tag exists, and the bridge is not published. Migration notes are in `packages/qgis-sdk/README.md` under "0.2.0 migration notes (TASK-28)", naming the one break (`AlgorithmContext.algorithms` is now required) and recording that `PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`.
+- AC #3 met as far as this host allows. `release.py verify-versions --scope python --version 0.2.0` prints "released manifests for scope python agree on 0.2.0: pyproject.toml, recipe.yaml" and "plugin description contract version 1 agrees across the Python declarations and the TypeScript bridge". The wheel builds (`qgis_sdk-0.2.0-py3-none-any.whl`), and a clean venv install of it reports version `0.2.0` with the six-name package root unchanged. Generated-file consistency and the release tooling suite pass (163 tests).
+- AC #1 met, with the blockers named rather than smoothed over: the QGIS-free suite runs 546 passed, 33 skipped, 1 failed, and that single failure is environmental - `test_pure_imports` spawns `python3 -I`, an isolated interpreter that cannot see the `--user`-installed `typer` this sandbox depends on, while CI installs it as a real dependency. The bridge's TypeScript tests were not run here because the sandbox has no bun; CI covers them. TASK-33's Windows-install and Desktop-GUI criteria remain unavailable and are recorded there.
+- AC #4 stays unchecked on purpose: no publishing approval has been given, so no tag was cut and nothing reached PyPI, conda-forge or npm. When approval comes the act is a `workflow_dispatch` of `autorelease` with `scope=python`, which plans `python-v0.2.0`, runs the gates and pushes the tag.
+Status stays In Progress for exactly that reason.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
