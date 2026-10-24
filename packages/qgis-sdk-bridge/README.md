@@ -6,6 +6,16 @@
 
 > **Status (`0.1.0` experimental):** Exposes the version 1 plugin/action declaration parser (`parsePluginDescription`, `PluginDescription`, `ActionDescription`), JavaScript-safe integer wire bounds (`MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `isSafeJsonInteger`), and the `QgisSdk*`-prefixed error hierarchy (`QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkDeclarationError`, `QgisSdkContractValidationError`, `QgisSdkValidationIssue`). `QWebChannel` transport bindings, generated operation clients, and React hooks are scheduled for subsequent `0.x` milestones.
 
+## Installation
+
+Install from [npm](https://www.npmjs.com/package/@archont561/qgis-sdk-bridge) or [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk-bridge):
+
+```sh
+bun add @archont561/qgis-sdk-bridge
+# or with npm:
+npm install @archont561/qgis-sdk-bridge
+```
+
 ## Exports
 
 ```ts

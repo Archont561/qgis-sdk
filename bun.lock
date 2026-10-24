@@ -19,11 +19,11 @@
     },
     "packages/qgis-sdk": {
       "name": "qgis-sdk",
-      "version": "0.1.0",
+      "version": "0.1.1",
     },
     "packages/qgis-sdk-bridge": {
       "name": "@archont561/qgis-sdk-bridge",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "devDependencies": {
         "@archont561/bun-test-utils": "^0.1.0",
         "@types/node": "26.6.5",
