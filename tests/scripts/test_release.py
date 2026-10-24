@@ -1166,6 +1166,17 @@ def test_autorelease_workflow_has_milestone_triggers_paths_ignore_and_dispatch_i
     assert "cancel-in-progress: false" in text
     for dispatch_input in ("scope:", "bump:", "dry-run:"):
         assert dispatch_input in text
+    # decision-25: the scope decides which package a release belongs to, so a
+    # plain push must derive it instead of defaulting to an alignment release.
+    assert 'default: "auto"' in text
+    assert "RELEASE_SCOPE" in text
+
+
+def test_ci_verifies_the_scoped_versions_and_the_contract_on_every_push():
+    repo_root = Path(__file__).resolve().parents[2]
+    text = (repo_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "release-verify-versions" in text
 
 
 def test_release_and_publish_sandbox_workflows_match_task_37_contracts():

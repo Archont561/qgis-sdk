@@ -77,6 +77,9 @@ jobs:
       - name: Test release tooling
         run: pixi run -e default test-release-tool
 
+      - name: Verify the scoped versions and the shared contract
+        run: pixi run -e default release-verify-versions
+
       - name: Lint and format TypeScript
         run: pixi run -e bun biome-check
 
