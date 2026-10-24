@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib import request as urlrequest
 from urllib.error import HTTPError
@@ -96,27 +96,24 @@ def list_changed_files(
 
 
 def detect_scope_from_files(files: Iterable[str]) -> str:
-    """Classify changed paths into ``all``, ``python``, ``typescript``, or ``none``."""
+    """Classify changed paths into ``all``, ``python``, ``typescript``, or ``none``.
+
+    Only shipped package paths count. Tooling, CI, backlog and root files are
+    not artifacts of either package, so changing them must not manufacture a
+    release. Before 2026-10-24 any other path forced ``all``, which meant a
+    commit to ``scripts/release.py`` and the workflows planned an *alignment*
+    release of both packages at a package minor - an act decision-25 reserves
+    for a deliberate dispatch or milestone tag.
+    """
     py = False
     ts = False
-    core = False
     for raw in files:
         path = raw.strip()
-        if not path:
-            continue
-        if (
-            path.startswith(("backlog/", ".agents/", ".devcontainer/"))
-            or path.endswith(".md")
-            or path in ("codecov.yml", ".codecov.yml")
-        ):
-            continue
         if path.startswith("packages/qgis-sdk/"):
             py = True
         elif path.startswith("packages/qgis-sdk-bridge/"):
             ts = True
-        else:
-            core = True
-    if core or (py and ts):
+    if py and ts:
         return "all"
     if py:
         return "python"
@@ -1294,6 +1291,25 @@ def _step_summary(line: str) -> None:
             handle.write(line + "\n")
 
 
+def resolve_dry_run(trigger: str, requested: bool) -> tuple[bool, str]:
+    """Decide whether this plan may cut a tag, and say why when it may not.
+
+    A branch push never tags. The train still plans and gates the candidate on
+    every merge, but cutting the tag stays an explicit act - a dispatch or a
+    milestone tag - so a merge cannot consume a version, and a package minor
+    (which is what a ``feat!`` landing on ``packages/qgis-sdk`` derives) cannot
+    bypass its release gate. On 2026-10-24 a merge planned ``v0.2.0`` for both
+    packages this way and the only thing that stopped it was luck.
+    """
+    if trigger == "push" and not requested:
+        return (
+            True,
+            "dry run: a branch push never tags, cut the release with a dispatch "
+            + "or a milestone tag",
+        )
+    return requested, ""
+
+
 def _cmd_plan(args: argparse.Namespace) -> int:
     config = parse_versionrc(Path(args.config).read_text(encoding="utf-8"))
     tags = list_tags()
@@ -1315,7 +1331,9 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     revision_range = f"{base_tag}..HEAD" if base_tag else None
     commits = parse_log_with_files(log_commits_with_files(revision_range))
     dry_run_raw = str(getattr(args, "dry_run", "false")).strip().lower()
-    dry_run = dry_run_raw in ("true", "1", "yes")
+    dry_run, dry_run_note = resolve_dry_run(
+        args.trigger, dry_run_raw in ("true", "1", "yes")
+    )
     plan = compute_plan(
         trigger=args.trigger,
         tags=tags,
@@ -1328,6 +1346,8 @@ def _cmd_plan(args: argparse.Namespace) -> int:
         scope=requested_scope or "all",
         bump=getattr(args, "bump", "") or "",
     )
+    if dry_run_note:
+        plan = replace(plan, reason=f"{plan.reason} ({dry_run_note})")
     changelog_file = ""
     if plan.changelog:
         target = (

@@ -36,6 +36,7 @@ from release import (
     read_recipe_version,
     read_typescript_contract_version,
     render_changelog,
+    resolve_dry_run,
     sort_tags,
     stamp_package_json,
     stamp_pyproject,
@@ -532,13 +533,89 @@ def test_version_override_wins(sample_config):
             ],
             "all",
         ),
-        (["pixi.toml", "packages/qgis-sdk/src/qgis_sdk/declarations.py"], "all"),
+        (["pixi.toml", "packages/qgis-sdk/src/qgis_sdk/declarations.py"], "python"),
+        (
+            [
+                "scripts/release.py",
+                ".github/workflows/autorelease.yml",
+                "pixi.toml",
+                "bun.lock",
+            ],
+            "none",
+        ),
+        (["backlog/decisions/decision-25 - x.md", "packages"], "none"),
     ],
 )
 def test_detect_scope_from_files_categorizes_monorepo_paths(
     changed_files, expected_scope
 ):
     assert detect_scope_from_files(changed_files) == expected_scope
+
+
+def test_tooling_changes_alone_plan_no_release():
+    """A release-tool commit is not an artifact, so it cannot move a version.
+
+    Regression for 2026-10-24: `feat(release)!` touching scripts/ and the
+    workflows made detect_scope_from_files return "all", and the push planned an
+    alignment release of both packages.
+    """
+    assert detect_scope_from_files(["scripts/release.py", "pixi.toml"]) == "none"
+
+
+@pytest.mark.parametrize(
+    ("trigger", "requested"),
+    [("push", False), ("push", True), ("dispatch", False), ("milestone", False)],
+)
+def test_only_an_unrequested_branch_push_is_forced_into_a_dry_run(trigger, requested):
+    dry_run, note = resolve_dry_run(trigger, requested)
+    expected = requested or trigger == "push"
+    assert dry_run is expected
+    assert bool(note) is (trigger == "push" and not requested)
+
+
+def test_a_branch_push_plans_the_candidate_without_tagging(tmp_path, monkeypatch):
+    config = _versionrc(tmp_path)
+    out_file = tmp_path / "gh_output"
+    out_file.touch()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _fake_git(
+        monkeypatch,
+        tags=("v0.1.1",),
+        log="a" * 40 + "\x1f" + "feat(sdk): x" + "\x1f" + "\x1e\n",
+    )
+    from release import main
+
+    assert main(["plan", "--trigger", "push", "--config", str(config)]) == 0
+    outputs = dict(
+        line.split("=", 1) for line in out_file.read_text().splitlines() if line
+    )
+    assert outputs["action"] == "tag"
+    assert outputs["tag"] == "v0.2.0"
+    assert outputs["dry_run"] == "true"
+    assert "never tags" in outputs["reason"]
+
+
+def test_a_dispatch_is_not_forced_into_a_dry_run(tmp_path, monkeypatch):
+    config = _versionrc(tmp_path)
+    out_file = tmp_path / "gh_output"
+    out_file.touch()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    _fake_git(
+        monkeypatch,
+        tags=("v0.1.1",),
+        log="a" * 40 + "\x1f" + "feat(sdk): x" + "\x1f" + "\x1e\n",
+    )
+    from release import main
+
+    assert main(["plan", "--trigger", "dispatch", "--config", str(config)]) == 0
+    outputs = dict(
+        line.split("=", 1) for line in out_file.read_text().splitlines() if line
+    )
+    assert outputs["dry_run"] == "false"
 
 
 def test_compute_plan_supports_scoped_tags_and_forced_bumps(sample_config):
