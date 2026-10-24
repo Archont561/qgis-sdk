@@ -29,6 +29,7 @@ from release import (
     sort_tags,
     stamp_package_json,
     stamp_pyproject,
+    stamp_recipe,
     tag_for_version,
     twine_check,
     upload_asset,
@@ -37,6 +38,7 @@ from release import (
 )
 
 PYPROJECT = '[build-system]\nrequires = ["hatchling==1.32.4"]\n\n[project]\nname = "qgis-sdk"\nversion = "0.1.0"\ndescription = "Kept."\n'
+RECIPE_YAML = 'schema_version: 1\n\ncontext:\n  version: "0.1.0"\n\npackage:\n  name: qgis-sdk\n  version: ${{ version }}\n'
 PACKAGE_JSON = (
     '{\n\t"name": "qgis-sdk-bridge",\n\t"version": "0.1.0",\n\t"private": false\n}\n'
 )
@@ -639,6 +641,41 @@ def test_stamp_pyproject_requires_a_version_line():
         stamp_pyproject("[project]\nname = 'x'\n", Version.parse("0.2.0"))
 
 
+def test_stamp_recipe_replaces_context_version_with_pep440():
+    stamped = stamp_recipe(RECIPE_YAML, Version.parse("0.2.0-rc.1"))
+    assert '  version: "0.2.0rc1"' in stamped
+    assert "  version: ${{ version }}" in stamped
+    with pytest.raises(QgisSdkReleaseError):
+        stamp_recipe("package:\n  name: qgis-sdk\n", Version.parse("0.2.0"))
+
+
+def test_create_tag_sets_git_identity_and_pushes():
+    from release import create_tag
+
+    commands = []
+    create_tag(
+        "v0.1.0",
+        "# Changelog\n",
+        push=True,
+        runner=lambda cmd: commands.append(list(cmd)) or "",
+    )
+    assert commands == [
+        [
+            "git",
+            "-c",
+            "user.name=github-actions[bot]",
+            "-c",
+            "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+            "tag",
+            "-a",
+            "v0.1.0",
+            "-m",
+            "# Changelog\n",
+        ],
+        ["git", "push", "origin", "refs/tags/v0.1.0"],
+    ]
+
+
 def test_stamp_package_json_preserves_tabs_and_order():
     stamped = stamp_package_json(PACKAGE_JSON, Version.parse("0.2.0-rc.1"))
     assert stamped == (
@@ -957,17 +994,21 @@ def test_tag_needs_a_message():
 
 def test_stamp_rewrites_both_manifests(tmp_path, monkeypatch):
     pyproject = tmp_path / "pyproject.toml"
+    recipe = tmp_path / "recipe.yaml"
     package = tmp_path / "package.json"
     pyproject.write_text(PYPROJECT, encoding="utf-8")
+    recipe.write_text(RECIPE_YAML, encoding="utf-8")
     package.write_text(PACKAGE_JSON, encoding="utf-8")
     import release
 
     monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RECIPE", recipe)
     monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
     from release import main
 
     assert main(["stamp", "--version", "0.2.0-rc.1"]) == 0
     assert 'version = "0.2.0rc1"' in pyproject.read_text()
+    assert '  version: "0.2.0rc1"' in recipe.read_text()
     assert '"version": "0.2.0-rc.1"' in package.read_text()
 
 
@@ -1021,6 +1062,67 @@ def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
     assert "https://html" in summary.read_text()
 
 
+def test_github_release_updates_existing_release_when_already_exists(
+    tmp_path, monkeypatch
+):
+    body = tmp_path / "notes.md"
+    body.write_text("# Changelog\n", encoding="utf-8")
+    wheel = tmp_path / "qgis_sdk-0.1.0-py3-none-any.whl"
+    wheel.write_bytes(b"w")
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text("00  wheel\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    deleted = []
+    uploaded = []
+    import release
+
+    def raise_exists(*args, **kwargs):
+        raise QgisSdkReleaseError(
+            "GitHub release creation failed (422): already_exists"
+        )
+
+    monkeypatch.setattr(release, "create_release", raise_exists)
+    monkeypatch.setattr(
+        release,
+        "get_release_by_tag",
+        lambda slug, token, tag, opener=None: {
+            "upload_url": "https://u{?name}",
+            "html_url": "https://html/v0.1.0",
+            "assets": [{"name": "SHA256SUMS", "id": 99}],
+        },
+    )
+    monkeypatch.setattr(
+        release,
+        "delete_release_asset",
+        lambda slug, token, asset_id, opener=None: deleted.append(asset_id),
+    )
+    monkeypatch.setattr(
+        release,
+        "upload_asset",
+        lambda url, token, path, opener=None: uploaded.append(path),
+    )
+    from release import main
+
+    assert (
+        main(
+            [
+                "github-release",
+                "--tag",
+                "v0.1.0",
+                "--body-file",
+                str(body),
+                "--asset",
+                str(wheel),
+                str(sums),
+            ]
+        )
+        == 0
+    )
+    assert deleted == [99]
+    assert uploaded == [wheel, sums]
+
+
 def test_github_release_needs_repo_and_token(tmp_path, monkeypatch):
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
@@ -1054,6 +1156,10 @@ def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
     assert '"*-v*"' in release_text
     assert '"*/*v*"' in release_text
     assert "id-token: write" in release_text
+    assert "environment: prefix" in release_text
+    assert "publish-conda" in release_text
+    assert "github-packages:" in release_text
+    assert "https://npm.pkg.github.com" in release_text
 
     publish_text = (repo_root / ".github/workflows/publish-sandbox.yml").read_text(
         encoding="utf-8"

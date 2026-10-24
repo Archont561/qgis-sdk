@@ -96,6 +96,10 @@ jobs:
         if: steps.classify.outputs.python == 'true'
         run: pixi run -e build release-build-python
 
+      - name: Build the Conda package
+        if: steps.classify.outputs.python == 'true'
+        run: pixi run -e build release-build-conda
+
       - name: Build the TypeScript bridge
         if: steps.classify.outputs.typescript == 'true'
         run: pixi run -e bun bun run --filter '@archont561/qgis-sdk-bridge' build
@@ -116,6 +120,14 @@ jobs:
           name: python-dist
           path: dist/pypi
 
+      - name: Upload Conda package artifact
+        if: steps.classify.outputs.python == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conda-dist
+          path: dist/conda/noarch/*.conda
+          if-no-files-found: error
+
       - name: Upload bridge package artifact
         if: steps.classify.outputs.typescript == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -124,6 +136,7 @@ jobs:
           path: |
             packages/qgis-sdk-bridge/package.json
             packages/qgis-sdk-bridge/README.md
+            packages/qgis-sdk-bridge/LICENSE
             packages/qgis-sdk-bridge/dist
 
       - name: Upload release notes artifact
@@ -183,6 +196,50 @@ jobs:
           packages-dir: dist/pypi
           skip-existing: true
 
+  conda:
+    needs: build
+    if: needs.build.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Trusted-publishing binding: prefix.dev channel `archont561/archont561`
+    # accepts OIDC tokens from release.yml running under the `prefix`
+    # environment with `id-token: write`.
+    environment: prefix
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download Conda package artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: conda-dist
+          path: dist/conda
+
+      - name: Set up Pixi
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.81.0
+          environments: build
+          cache: true
+          locked: true
+
+      - name: Skip prefix.dev upload for prereleases
+        if: needs.build.outputs.prerelease == 'true'
+        run: |
+          echo "prefix.dev upload skipped: ${{ needs.build.outputs.version }} is a prerelease; registries only accept clean tags." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify GitHub OIDC permission
+        if: needs.build.outputs.prerelease == 'false'
+        shell: bash
+        run: ': "${ACTIONS_ID_TOKEN_REQUEST_URL:?missing GitHub OIDC request URL; grant permissions.id-token: write}" && : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?missing GitHub OIDC request token; grant permissions.id-token: write}"'
+
+      - name: Publish Conda package to prefix.dev
+        if: needs.build.outputs.prerelease == 'false'
+        run: pixi run -e build publish-conda
+
   npm:
     needs: build
     if: needs.build.outputs.typescript == 'true'
@@ -240,7 +297,11 @@ jobs:
         working-directory: bridge
         run: |
           set -o pipefail
-          npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee ../npm-publish.log
+          if npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "npm already has @archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}; skipping."
+          else
+            npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee ../npm-publish.log
+          fi
 
       # Job log blobs are served from a host some networks cannot read, so a
       # failing publish reports its npm output as annotations (the ci.yml
@@ -254,13 +315,71 @@ jobs:
             done
           fi
 
+  github-packages:
+    needs: build
+    if: needs.build.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download bridge package artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bridge-package
+          path: bridge
+
+      - name: Set up Node for GitHub Packages
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@archont561"
+
+      - name: Strip workspace devDependencies
+        working-directory: bridge
+        run: npm pkg delete devDependencies
+
+      - name: Dry-run GitHub Packages publish
+        if: needs.build.outputs.prerelease == 'true'
+        working-directory: bridge
+        run: |
+          set -o pipefail
+          npm publish --dry-run --registry=https://npm.pkg.github.com --tag next 2>&1 | tee ../gh-pkg-publish.log
+          echo "GitHub Packages publish skipped: ${{ needs.build.outputs.version }} is a prerelease (dry-run only, dist-tag next)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to GitHub Packages
+        if: needs.build.outputs.prerelease == 'false'
+        working-directory: bridge
+        run: |
+          set -o pipefail
+          if npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "GitHub Packages already has @archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}; skipping."
+          else
+            npm publish --registry=https://npm.pkg.github.com 2>&1 | tee ../gh-pkg-publish.log
+          fi
+
+      - name: Report GitHub Packages publish output on failure
+        if: failure()
+        run: |
+          if [ -f gh-pkg-publish.log ]; then
+            grep -iE 'ENEEDAUTH|E40|error' gh-pkg-publish.log | tail -n 15 | while IFS= read -r line; do
+              echo "::error::github-packages publish: $line"
+            done
+          fi
+
   github-release:
-    needs: [build, pypi, npm]
+    needs: [build, pypi, conda, npm, github-packages]
     if: >-
       always() &&
       needs.build.result == 'success' &&
       (needs.pypi.result == 'success' || needs.pypi.result == 'skipped') &&
-      (needs.npm.result == 'success' || needs.npm.result == 'skipped')
+      (needs.conda.result == 'success' || needs.conda.result == 'skipped') &&
+      (needs.npm.result == 'success' || needs.npm.result == 'skipped') &&
+      (needs.github-packages.result == 'success' || needs.github-packages.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -284,6 +403,13 @@ jobs:
           name: python-dist
           path: dist/pypi
 
+      - name: Download Conda package artifact
+        if: needs.build.outputs.python == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: conda-dist
+          path: dist/conda
+
       - name: Download tarball artifact
         if: needs.build.outputs.typescript == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -303,7 +429,7 @@ jobs:
           RELEASE_TAG: ${{ needs.build.outputs.tag_name }}
         run: |
           shopt -s nullglob
-          assets=(dist/pypi/*.whl npm/*.tgz)
+          assets=(dist/pypi/*.whl dist/conda/*.conda npm/*.tgz)
           pixi run -e build release-checksums --out dist/SHA256SUMS "${assets[@]}"
           pixi run -e build release-github \
             --tag "$RELEASE_TAG" \

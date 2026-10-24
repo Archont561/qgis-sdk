@@ -152,6 +152,7 @@ jobs:
         run: |
           if [ "${{ steps.plan.outputs.python }}" = "true" ]; then
             pixi run -e build release-build-python
+            pixi run -e build release-build-conda
           fi
           if [ "${{ steps.plan.outputs.typescript }}" = "true" ]; then
             pixi run -e bun bun run --filter '@archont561/qgis-sdk-bridge' build

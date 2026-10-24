@@ -1,3 +1,5 @@
+schema_version: 1
+
 context:
   version: "0.1.0"
 
@@ -9,9 +11,13 @@ source:
   path: .
 
 build:
+  number: 0
   noarch: python
   script:
     - python -m pip install . --no-deps --no-build-isolation -vv
+  python:
+    entry_points:
+      - qgis-sdk = qgis_sdk.__main__:main
 
 requirements:
   host:
@@ -29,7 +35,12 @@ tests:
       imports:
         - qgis_sdk
       pip_check: true
+  - script:
+      - qgis-sdk --help
 
 about:
   summary: Python SDK foundations for QGIS plugin development
   license: MIT
+  license_file: LICENSE
+  homepage: https://github.com/Archont561/qgis-sdk
+  repository: https://github.com/Archont561/qgis-sdk
