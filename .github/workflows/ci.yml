@@ -80,6 +80,26 @@ jobs:
       - name: Verify the scoped versions and the shared contract
         run: pixi run -e default release-verify-versions
 
+      - name: Test native forms offscreen
+        id: native_forms
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          set -o pipefail
+          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py -q -rs 2>&1 | tee native-forms.log
+
+      - name: Annotate the native form failure
+        if: failure() && steps.native_forms.outcome == 'failure'
+        run: |
+          grep -nE "FAILED|ERROR|Error|error:|assert|Traceback" native-forms.log | tail -40 | cut -c1-900 | while IFS= read -r line; do echo "::error::$line"; done
+
+      - name: Report a skipped native form run
+        if: ${{ !cancelled() && steps.native_forms.outcome == 'success' }}
+        run: |
+          if grep -q 'skipped' native-forms.log; then
+            echo "::warning::native forms did not run:" $(grep -o "native forms need.*" native-forms.log | head -1)
+          fi
+
       - name: Lint and format TypeScript
         run: pixi run -e bun biome-check
 

@@ -19,7 +19,9 @@ a stub states that contract instead of hiding it behind a full plugin setup.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, Literal
 
 import pytest
@@ -99,7 +101,24 @@ class _StubRuntime:
 
 @pytest.fixture(scope="module")
 def app():
-    return QApplication.instance() or QApplication([])
+    """One headless QGIS application, because the pickers need a project.
+
+    ``QgsMapLayerComboBox`` reads ``QgsProject.instance()``, so a bare
+    ``QApplication`` is not enough; ``QgsApplication`` is a ``QApplication`` and
+    initialises QGIS at the same time. Any application already running - the
+    services contract suite starts one - is reused rather than re-initialised.
+    """
+    from qgis.core import QgsApplication
+
+    existing = QApplication.instance()
+    if existing is not None:
+        return existing
+    prefix = Path(sys.prefix)
+    os.environ.setdefault("QGIS_PREFIX_PATH", str(prefix))
+    QgsApplication.setPrefixPath(str(prefix), True)
+    application = QgsApplication([b"qgis-sdk-native-forms"], True)
+    application.initQgis()
+    return application
 
 
 @pytest.fixture()
