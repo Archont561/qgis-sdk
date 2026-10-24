@@ -26,6 +26,15 @@ from typing import Annotated, Literal
 
 import pytest
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# The pixi environment keeps the QGIS bindings in share/qgis/python instead of
+# on sys.path, which is how the services contract suite finds them as well.
+_BINDINGS = Path(sys.prefix) / "share" / "qgis" / "python"
+if _BINDINGS.is_dir() and str(_BINDINGS) not in sys.path:
+    sys.path.insert(0, str(_BINDINGS))
+os.environ.setdefault("QGIS_PREFIX_PATH", sys.prefix)
+os.environ.setdefault("PROJ_LIB", str(Path(sys.prefix) / "share" / "proj"))
+
 try:
     from PyQt6.QtWidgets import (
         QApplication,
@@ -42,8 +51,6 @@ try:
     from qgis_sdk.models import CrsInput, LayerInput, Metres, QgisSdkFormError
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native forms need Qt and QGIS: {error}", allow_module_level=True)
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
 @plugin(id="demo:forms", title="Form demo")
