@@ -38,6 +38,12 @@ from this and not from the architecture it intends to become:
 There is no Processing module and no HTTP client yet, so TASK-14 and TASK-5 are
 greenfield work rather than extensions.
 
+The TypeScript side is not part of this train. 0.2.0 publishes
+`@archont561/qgis-sdk-bridge` at the shared version with unchanged source, because
+no m-1 task exports an action a web view could call; the typed surface is m-2's
+work. See the "Bridge track" section of
+[m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md).
+
 ## 2. Dependency read of the remaining 0.2.0 tasks
 
 Every row is read from the task files, not inferred:
