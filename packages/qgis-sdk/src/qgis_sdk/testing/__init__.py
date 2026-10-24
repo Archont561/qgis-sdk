@@ -6,6 +6,7 @@ that a fake can never become a runtime fallback.
 """
 
 from .fakes import (
+    FakeAlgorithms,
     FakeLayers,
     FakeProject,
     FakeSettings,
@@ -14,6 +15,7 @@ from .fakes import (
 )
 
 __all__ = [
+    "FakeAlgorithms",
     "FakeLayers",
     "FakeProject",
     "FakeSettings",

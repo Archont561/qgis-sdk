@@ -169,3 +169,35 @@ class QgisSdkSchedulingBlockedError(QgisSdkError):
         self.blockers = tuple(blockers)
         listed = "; ".join(self.blockers)
         super().__init__(f"Scheduling is blocked: {listed}")
+
+
+class QgisSdkAlgorithmRejectedError(QgisSdkError):
+    """An algorithm request was refused before it could touch any data.
+
+    ``reasons`` are short statements about what made the request unsafe or
+    ambiguous - an unspecified or geographic working CRS, units that are not
+    metres, a distance that is not positive. They never include the rejected
+    values themselves, so the error can be logged as-is.
+    """
+
+    code = "algorithm_rejected"
+
+    def __init__(self, request: str, reasons: Iterable[str]) -> None:
+        self.request = request
+        self.reasons = tuple(reasons)
+        listed = "; ".join(self.reasons)
+        super().__init__(f"Algorithm request {request!r} was refused: {listed}")
+
+
+class QgisSdkAlgorithmCancelledError(QgisSdkError):
+    """Cancellation was observed at an algorithm phase boundary.
+
+    Cancellation is cooperative: this says the request was not run (or its
+    result was not accepted), never that a native operation stopped mid-flight.
+    """
+
+    code = "algorithm_cancelled"
+
+    def __init__(self, algorithm_id: str) -> None:
+        self.algorithm_id = algorithm_id
+        super().__init__(f"Algorithm {algorithm_id!r} was cancelled")

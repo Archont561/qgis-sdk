@@ -20,14 +20,24 @@ the whole directory.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.services import Layers, Notifications, Project, Settings, Styles
+from qgis_sdk.models import BufferRequest, CentroidRequest
+from qgis_sdk.services import (
+    Algorithms,
+    Layers,
+    Notifications,
+    Project,
+    Settings,
+    Styles,
+)
 
 NATIVE_ENV_FLAG = "QGIS_SDK_NATIVE_SERVICES"
 # Catalog identifiers, identical on both backends because the catalog is shipped
@@ -44,12 +54,18 @@ FIXTURE_FIELDS = ("id", "value")
 # RFC 7946 GeoJSON is WGS 84, and GDAL reports it as such; the fake declares the
 # same value the provider will read from the file.
 FIXTURE_CRS = "EPSG:4326"
+# The reference workflow's distance operation needs a projected, metre-based
+# working CRS; WGS 84 is exactly what decision-19 forbids here.
+WORKING_CRS = "EPSG:3857"
+# A projected CRS whose map units are US survey feet: metres would be wrong.
+FEET_CRS = "EPSG:2227"
 
 
 @dataclass(frozen=True, slots=True)
 class Services:
     """Everything one contract test needs, supplied by the backend under test."""
 
+    algorithms: Algorithms
     layers: Layers
     project: Project
     settings: Settings
@@ -62,6 +78,8 @@ class Services:
     compatible_style: str
     incompatible_style: str
     select: Callable[[str, Sequence[int]], None]
+    working_crs: str = WORKING_CRS
+    work_directory: Path | None = None
 
 
 def _qgis_python_path() -> Path:
@@ -79,6 +97,20 @@ def _native_available() -> bool:
 _SESSION_TOKEN = f"{os.getpid()}-{int(__import__('time').time())}"
 
 _APPLICATION: object | None = None
+# Temporary outputs of the native backend. One root per session, removed with
+# the application; each services instance gets its own directory so a test can
+# never observe another test's files.
+_WORK_ROOT = Path(tempfile.mkdtemp(prefix="qgis-sdk-algorithms-"))
+_WORK_DIRECTORIES = 0
+
+
+def _algorithm_work_directory() -> Path:
+    """Return a fresh directory for one native algorithms backend."""
+    global _WORK_DIRECTORIES
+    _WORK_DIRECTORIES += 1
+    directory = _WORK_ROOT / f"services-{_WORK_DIRECTORIES}"
+    directory.mkdir(parents=True)
+    return directory
 
 
 def _start_qgis() -> None:
@@ -104,6 +136,7 @@ def _start_qgis() -> None:
 
 def _fake_services() -> Services:
     from qgis_sdk.testing import (
+        FakeAlgorithms,
         FakeLayers,
         FakeProject,
         FakeSettings,
@@ -134,8 +167,26 @@ def _fake_services() -> Services:
         field_names=("id",),
         crs=FIXTURE_CRS,
     )
+    algorithms = FakeAlgorithms(layers, scope)
+    algorithms.declare_output(
+        BufferRequest,
+        FIXTURE_ROOT / "buffer-output.gpkg",
+        name="buffer",
+        geometry_type="polygon",
+        field_names=FIXTURE_FIELDS,
+        crs=WORKING_CRS,
+    )
+    algorithms.declare_output(
+        CentroidRequest,
+        FIXTURE_ROOT / "centroid-output.gpkg",
+        name="centroid",
+        geometry_type="point",
+        field_names=FIXTURE_FIELDS,
+        crs=FIXTURE_CRS,
+    )
     styles = FakeStyles(layers, scope)
     return Services(
+        algorithms=algorithms,
         layers=layers,
         project=FakeProject(layers, scope),
         settings=FakeSettings(scope),
@@ -157,6 +208,7 @@ def _native_services() -> Services:
 
     from qgis.core import QgsProject
     from qgis_sdk.adapters.qgis import (
+        NativeAlgorithms,
         NativeLayers,
         NativeNotifications,
         NativeProject,
@@ -168,6 +220,7 @@ def _native_services() -> Services:
     # an empty project instead of inheriting the previous test's layers.
     QgsProject.instance().removeAllMapLayers()
 
+    work_directory = _algorithm_work_directory()
     scope = ResourceScope()
     layers = NativeLayers(scope)
     project = NativeProject(layers, scope)
@@ -181,6 +234,7 @@ def _native_services() -> Services:
         QgsProject.instance().mapLayer(layer_id).selectByIds(list(feature_ids))
 
     return Services(
+        algorithms=NativeAlgorithms(layers, scope, working_directory=work_directory),
         layers=layers,
         project=project,
         # A per-session prefix keeps the run out of the real profile's keys and
@@ -195,6 +249,7 @@ def _native_services() -> Services:
         compatible_style=COMPATIBLE_STYLE,
         incompatible_style=INCOMPATIBLE_STYLE,
         select=select,
+        work_directory=work_directory,
     )
 
 
@@ -218,6 +273,7 @@ def _stop_qgis_after_the_session() -> object:
     if application is not None:
         _APPLICATION = None
         application.exitQgis()  # type: ignore[attr-defined]
+    shutil.rmtree(_WORK_ROOT, ignore_errors=True)
 
 
 @pytest.fixture

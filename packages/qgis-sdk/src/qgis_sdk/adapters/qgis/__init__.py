@@ -9,6 +9,7 @@ as the in-memory doubles, and the contract suite in ``tests/services`` runs both
 against one set of tests.
 """
 
+from .algorithms import NativeAlgorithms
 from .layers import NativeLayers
 from .notifications import NativeNotifications
 from .project import NativeProject
@@ -16,6 +17,7 @@ from .settings import NativeSettings
 from .styles import NativeStyles
 
 __all__ = [
+    "NativeAlgorithms",
     "NativeLayers",
     "NativeNotifications",
     "NativeProject",

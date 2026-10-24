@@ -138,12 +138,22 @@ class ControlledCancellation:
         return self.cancelled
 
 
+class NoAlgorithms:
+    """Stand-in for the execution capability; these tests never execute."""
+
+    def execute(self, request: object) -> object:
+        raise AssertionError("no algorithm runs in a context test")
+
+
 def test_algorithm_receives_execution_capabilities_not_plugin_state() -> None:
     owner = ResourceScope()
     progress = RecordingProgress()
     cancellation = ControlledCancellation()
     context = AlgorithmContext(
-        progress=progress, cancellation=cancellation, scope=owner.child()
+        progress=progress,
+        cancellation=cancellation,
+        scope=owner.child(),
+        algorithms=NoAlgorithms(),
     )
 
     context.progress.report(0.5)

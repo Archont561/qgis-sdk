@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import (
+    Algorithms,
     Cancellation,
     DesktopAccess,
     Notifications,
@@ -41,11 +42,18 @@ class UiContext:
 
 @dataclass(frozen=True, slots=True)
 class AlgorithmContext:
-    """Execution-only capabilities for one Processing invocation."""
+    """Execution-only capabilities for one Processing invocation.
+
+    Built fresh for each invocation and thrown away afterwards (decision-11), so
+    an author class can hold it as ``self.ctx`` without carrying state from one
+    run into the next. It is not a ``PluginContext``: no ``iface``, no dialogs,
+    no GUI notifications - only what one execution legitimately needs.
+    """
 
     progress: Progress
     cancellation: Cancellation
     scope: ResourceScope
+    algorithms: Algorithms
 
 
 @dataclass(frozen=True, slots=True)

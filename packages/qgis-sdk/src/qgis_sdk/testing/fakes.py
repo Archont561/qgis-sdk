@@ -13,7 +13,9 @@ from pathlib import Path
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
+    AlgorithmRequest,
     GeometryType,
+    QgisSdkAlgorithmRejectedError,
     QgisSdkLayerNotFoundError,
     QgisSdkStyleIncompatibleError,
     VectorLayerInfo,
@@ -22,12 +24,64 @@ from qgis_sdk.resources import require_style
 from qgis_sdk.services import Layers
 
 __all__ = [
+    "FakeAlgorithms",
     "FakeLayers",
     "FakeProject",
     "FakeSettings",
     "FakeStyles",
     "RecordingNotifications",
 ]
+
+
+class FakeAlgorithms:
+    """An ``Algorithms`` backend that runs nothing and returns declared outputs.
+
+    It records every request, so a pure test can prove what an algorithm asked
+    for as well as what it did with the answer. It deliberately does not decide
+    whether a working CRS is projected: that needs a CRS database the fake does
+    not have, so the check belongs to the native adapter and its own test rather
+    than to a guess here.
+    """
+
+    def __init__(self, layers: FakeLayers, scope: ResourceScope) -> None:
+        self._layers = layers
+        self._scope = scope
+        self.requests: list[AlgorithmRequest] = []
+        self._outputs: dict[type, Path] = {}
+
+    def declare_output(
+        self,
+        request_type: type,
+        source: Path,
+        *,
+        name: str,
+        geometry_type: GeometryType,
+        field_names: Sequence[str],
+        crs: str | None = None,
+    ) -> None:
+        """Declare what a request type produces; setup, not part of the contract."""
+        self._layers.register(
+            source,
+            name=name,
+            geometry_type=geometry_type,
+            field_names=field_names,
+            crs=crs,
+        )
+        self._outputs[request_type] = source
+
+    def execute(self, request: AlgorithmRequest) -> VectorLayerInfo:
+        """Record the request and open the output declared for its type."""
+        self._scope.ensure_open()
+        # The source has to be a layer this runtime owns, exactly as the native
+        # adapter requires before it can hand the source to Processing.
+        self._layers.layer(request.layer_id)
+        self.requests.append(request)
+        declared = self._outputs.get(type(request))
+        if declared is None:
+            raise QgisSdkAlgorithmRejectedError(
+                "execute", [f"no output declared for {type(request).__name__}"]
+            )
+        return self._layers.open_vector(declared)
 
 
 class FakeLayers:

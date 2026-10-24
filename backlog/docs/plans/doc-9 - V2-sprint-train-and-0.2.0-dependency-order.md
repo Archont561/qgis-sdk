@@ -206,3 +206,19 @@ QGIS-free tests for them live in `packages/qgis-sdk/tests/scripts/`.
 - [doc-4](doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md) — version policy and task inventory.
 - [doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md) — the vocabulary, predicate and slicing rules this plan follows.
 - [decision-6](../../decisions/decision-6%20-%20Separate-models-services-core-and-runtime-adapters.md), [decision-16](../../decisions/decision-16%20-%20Separate-reusable-layer-styles-from-UI-themes.md), [decision-19](../../decisions/decision-19%20-%20Prove-a-non-destructive-local-GIS-reference-workflow.md).
+
+## 3b. TASK-14 outcome (2026-10-24)
+
+TASK-14 is `Done`: one decorated plain class per algorithm, `describe_algorithm`
+without construction, a fresh instance and `AlgorithmContext` per invocation, and
+an `Algorithms` service whose native backend writes a new output, refuses a
+geographic or non-metre working CRS, cleans up on failure and hands nothing to the
+project before success. Evidence is in the task notes (pure `497`, native `553`,
+`tests/services` `100`, coverage `100%`), not in a separate document, because the
+claims are the tests themselves.
+
+decision-11 stays `proposed`: class-per-algorithm and fresh-per-invocation are
+implemented, but provider/catalog registration, `QgsProcessingAlgorithm`/
+`createInstance`, mid-flight cancellation and thread-affinity proofs are not.
+
+m-1 is now 9/14. Remaining: TASK-3, TASK-5, TASK-15, and TASK-28 as the gate.

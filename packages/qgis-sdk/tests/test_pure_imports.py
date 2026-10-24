@@ -20,10 +20,14 @@ LAYER_ORDER = {
     "scaffold": 1,
     "resources": 1,
     "core": 2,
+    "algorithms": 2,
+    "reference": 3,
     "testing": 3,
 }
 LAYER_PATHS = {
+    "algorithms": SOURCE_ROOT / "algorithms.py",
     "core": SOURCE_ROOT / "core",
+    "reference": SOURCE_ROOT / "reference",
     "scaffold": SOURCE_ROOT / "scaffold",
     "declarations": SOURCE_ROOT / "declarations.py",
     "models": SOURCE_ROOT / "models",

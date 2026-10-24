@@ -26,11 +26,13 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata |
+| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError` |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
-| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, and `DesktopAccess` protocols; implementations are supplied by the host or by tests |
+| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, and `Algorithms` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
+| `algorithms` | `@algorithm`, `describe_algorithm`, `invoke`, and `AlgorithmResult`; request and result schemas come from the same generator the plugin declarations use (TASK-14) |
+| `reference` | `BufferLayer` and `CentroidLayer`, the two operations the reference workflow runs (decision-19) |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -74,6 +76,40 @@ print(qgis_sdk.__all__)
 ```
 
 Importing the package with native modules forbidden is the real wiring check, so a placeholder API is no longer needed to prove it.
+
+## Processing algorithms and safe outputs (experimental, TASK-14)
+
+`qgis_sdk.algorithms` is the authoring surface decision-11 settled on: one decorated plain class per algorithm, one typed `run(inputs) -> Result` entry point, and a constructor-injected `AlgorithmContext`. Describing an algorithm never constructs it, and every invocation constructs a **fresh** author instance and a **fresh** context over a child scope that is closed again when the invocation ends:
+
+```python
+from pathlib import Path
+
+from qgis_sdk.algorithms import describe_algorithm, invoke
+from qgis_sdk.core import ResourceScope
+from qgis_sdk.models import BufferRequest
+from qgis_sdk.reference import BufferLayer
+
+print(describe_algorithm(BufferLayer).to_dict()["inputs"]["schema"]["required"])
+# ['layer_id', 'distance_metres', 'working_crs']
+
+scope = ResourceScope()
+result = invoke(
+    BufferLayer,
+    BufferRequest(layer_id=source_id, distance_metres=500.0, working_crs="EPSG:3857"),
+    algorithms=algorithms,  # qgis_sdk.services.Algorithms
+    project=project,        # qgis_sdk.services.Project
+    scope=scope,
+)
+# invoke already added result.output to the project - after success only.
+```
+
+The request schemas come from the same `qgis_sdk.declarations` generator that describes plugin actions, so an algorithm's inputs are held to one documented typing subset and are bridge-eligible for TASK-17.
+
+**Non-destructive by construction (decision-19).** `Algorithms.execute` writes a *new* output and opens it as a layer the runtime owns; no method edits the source dataset. A run that fails deletes its own temporary directory before re-raising, so no partial output survives a failure, and the intermediate reprojection a buffer needs is scaffolding that never outlives the run either. `invoke` adds the output to the project only after the operation succeeded, the result matched its declared type *and* cancellation was not requested in between; a failure or cancellation at any point leaves the project as it was.
+
+**Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
+
+Two honest limits of this slice: cancellation is observed at phase boundaries (before the operation, and after it before the project is touched), not by aborting a native operation mid-flight; and algorithm grouping through an explicit provider catalog is deferred, so today each class is described and invoked directly.
 
 ## Development
 
