@@ -1,17 +1,29 @@
 {
-	"name": "qgis-sdk-bridge",
+	"name": "@archont561/qgis-sdk-bridge",
 	"version": "0.1.0",
+	"description": "TypeScript bridge contracts and error primitives for QGIS SDK WebEngine plugin interfaces.",
 	"license": "MIT",
 	"type": "module",
 	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
 	"exports": {
 		".": {
-			"import": "./dist/index.js"
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
 		}
 	},
 	"files": [
-		"dist"
+		"dist",
+		"README.md"
 	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Archont561/qgis-sdk.git"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"build": "bunup",
 		"test": "bun test",

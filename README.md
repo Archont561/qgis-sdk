@@ -42,7 +42,7 @@ That prints the declaration decorators and their descriptions, and nothing else;
 | Package | Role | Current state |
 | :-- | :-- | :-- |
 | [`packages/qgis-sdk`](packages/qgis-sdk) | Python package intended as the core for QGIS plugin development | Experimental pure models/services/context contracts, declarations, a bounded plugin lifecycle runtime and the `qgis-sdk scaffold` project generator; no native plugin adapter yet; PyPI and Conda build pipelines are configured |
-| [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge for a plugin web UI hosted in QGIS `QWebEngineView` | Intended to connect the web frontend with the Python/QGIS plugin side; no bridge API yet, so the entry module is deliberately empty (a test pins that) and ships JavaScript only - no `types` mapping, because `bunup` emits no declaration for an exportless entry; built with Bunup |
+| [`packages/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript bridge (`@archont561/qgis-sdk-bridge`) for a plugin web UI hosted in QGIS `QWebEngineView` | Experimental `0.1.0` contract, safe-integer wire bounds (`MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `isSafeJsonInteger`), `parsePluginDescription`, and `QgisSdk*` error hierarchy with `.d.ts` declarations; built with Bunup (`QWebChannel` transport and generated clients are scheduled for milestone `0.3.0`) |
 | [`packages/config`](packages/config) | Shared TypeScript configuration and Bunup preset | Used by the bridge package |
 
 The Python package is source-based and configured for a Python 3.11+ runtime. The Pixi `default` environment also provides QGIS for development and integration work.

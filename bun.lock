@@ -22,7 +22,7 @@
       "version": "0.1.0",
     },
     "packages/qgis-sdk-bridge": {
-      "name": "qgis-sdk-bridge",
+      "name": "@archont561/qgis-sdk-bridge",
       "version": "0.1.0",
       "devDependencies": {
         "@archont561/bun-test-utils": "^0.1.0",
@@ -343,7 +343,7 @@
 
     "qgis-sdk": ["qgis-sdk@workspace:packages/qgis-sdk"],
 
-    "qgis-sdk-bridge": ["qgis-sdk-bridge@workspace:packages/qgis-sdk-bridge"],
+    "@archont561/qgis-sdk-bridge": ["@archont561/qgis-sdk-bridge@workspace:packages/qgis-sdk-bridge"],
 
     "readdirp": ["readdirp@5.1.1", "", {}, "sha512-Kko+Y5XQ6fM+Ce3dq3m9YGxnacYZYl9cA1wZjaF3Vbry2L3i1qVg8+CAgNPsXRArPMUMCaOR7oa9Nqntc43JKA=="],
 

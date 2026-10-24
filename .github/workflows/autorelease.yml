@@ -154,7 +154,7 @@ jobs:
             pixi run -e build release-build-python
           fi
           if [ "${{ steps.plan.outputs.typescript }}" = "true" ]; then
-            pixi run -e bun bun run --filter qgis-sdk-bridge build
+            pixi run -e bun bun run --filter '@archont561/qgis-sdk-bridge' build
           fi
 
       - name: Push the release tag

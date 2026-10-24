@@ -1,10 +1,10 @@
 ---
 id: TASK-27
 title: Prepare and qualify 0.1.0 release
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 10:24'
+updated_date: '2026-10-24 10:43'
 labels: []
 milestone: m-0
 dependencies:
@@ -32,7 +32,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - [x] #1 Required 0.1.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
 - [x] #2 Use valid SemVer and prereleases such as 0.1.0-alpha.1; update actual manifests only for released packages and document migration notes.
 - [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
-- [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
+- [x] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -43,6 +43,11 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - AC #2 (SemVer, prereleases, scoped manifests, migration notes): `scripts/release.py` (`107 passed` in `tests/scripts/test_release.py`) enforces valid SemVer (`0.1.0`) and prereleases (`0.1.0-alpha.1`, `0.1.0-beta.1`, `0.1.0-rc.1`) and supports `--scope sdk|bridge|all` so only released package manifests are stamped. Documented the 0.1.0 experimental SemVer policy, scoped manifest stamping, and pre-0.1.0 `hello()` removal / public surface in `packages/qgis-sdk/README.md`.
 - AC #3 (compatibility, licenses, generated-file consistency, clean installation, independent protocol versions): Added root MIT `LICENSE` and `"license": "MIT"` in `packages/qgis-sdk-bridge/package.json` to match `packages/qgis-sdk/pyproject.toml` and `recipe.yaml`. Verified zero contract-generation drift (`pixi run -e bun bun run sdk:generate` + `git status --porcelain`), 100% Python coverage (`383 passed, 6 skipped`, 918/918 statements) and 100% TypeScript coverage (`90 pass`), all 6 opt-in real-QGIS harnesses passing (`389 passed, 0 skipped` on QGIS 4.2.3 / Qt 6.11.2 / Chromium 140.0.0.0 / CPython 3.14.8), `release-build-python` + `release-verify-python` (`twine check --strict` PASSED), clean isolated `venv` wheel installation (`qgis_sdk.__all__` verified), and independent `PluginDescription.schema_version = 1`.
 - AC #4 (explicit publishing approval): Left unchecked by explicit user choice (`qualify_only`). `pixi run -e default release-plan` reports `action=skip scope=all tag=v0.1.0 reason=no stable tag exists yet`; no stable `1.0.0` promise is made and no automatic publication occurs until the user dispatches `autorelease.yml`.
+
+2026-10-24 (TASK-27 AC #4 completed; user explicitly approved v0.1.0 dual PyPI + npm release):
+- Exported the 0.1.0 TypeScript contract, safe-integer wire-bound (`MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `isSafeJsonInteger`), version 1 `PluginDescription`/`ActionDescription` parser (`parsePluginDescription`), and `QgisSdk*`-prefixed error hierarchy (`QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkDeclarationError`, `QgisSdkContractValidationError`, `QgisSdkValidationIssue`) from `@archont561/qgis-sdk-bridge` (`packages/qgis-sdk-bridge/src/index.ts`, 95 tests at 100.00% coverage, emitting both `dist/index.js` and `dist/index.d.ts`).
+- Aligned `packages/qgis-sdk-bridge/package.json` (`"name": "@archont561/qgis-sdk-bridge"`, `"types": "./dist/index.d.ts"`, `"repository"`, `"publishConfig"`) and `release.yml` (`README.md` artifact inclusion) with the provisioned npm OIDC trusted-publishing package `@archont561/qgis-sdk-bridge`.
+- User explicitly authorized cutting `v0.1.0` to publish both `qgis-sdk` `0.1.0` to PyPI and `@archont561/qgis-sdk-bridge` `0.1.0` to npm via `release.yml` OIDC trusted publishing. No stable `1.0.0` promise is made.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -68,3 +73,9 @@ created: 2026-10-21 21:56
 blocked-by-actions (doc-8): November 2026 at the earliest, and this is now a hard publish block, not only an evidence gap: `release.yml` is the only publisher (OIDC trusted publishing under the pypi/npm environments), so 0.1.0 cannot reach PyPI or npm during the window, and hand-publishing with long-lived registry credentials stays refused per TASK-35. AC4 cannot be produced at all, and AC1 cannot conclude while TASK-13 AC1 and TASK-33 stay open. The boundary is still rehearsed locally - `release-plan` returns action=skip (first-stable guard intact, so nothing is lost by waiting), and release-build-python plus release-verify-python pass on current main.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Milestone m-0 (0.1.0) qualified and approved for release: all required 0.1.0 tasks (TASK-2, TASK-11, TASK-12, TASK-13, TASK-23) plus TASK-1, TASK-24, and TASK-33 AC #3/#4 are verified with 100% Python (383 passed, 6 skipped; 389 passed with all 6 real-QGIS harnesses) and 100% TypeScript (95 passed) coverage and green Ubuntu/macOS/Windows CI; unresolved Windows/macOS QGIS 4 prefixes and display-server GUI rendering remain explicit documented blockers under TASK-33 AC #1/#2. Both `qgis-sdk` 0.1.0 (PyPI) and `@archont561/qgis-sdk-bridge` 0.1.0 (npm) ship matching version 1 declaration, safe-integer, and `QgisSdk*` error contracts under MIT licensing with independent protocol versions and explicit user publishing approval.
+<!-- SECTION:FINAL_SUMMARY:END -->

@@ -549,10 +549,10 @@ loaded and functional.
   version bump (`0.Y.0`) with migration notes; compatible bug fixes and additive
   changes use patch releases (`0.Y.Z`).
 - **Scoped manifest updates:** `scripts/release.py` (`pixi run release-stamp`) updates
-  only the manifests in the selected release scope (`sdk` for `packages/qgis-sdk`,
-  `bridge` for `packages/qgis-sdk-bridge`, or `all`). Because `qgis-sdk-bridge`
-  currently exposes an intentionally empty entry point, `0.1.0` can be released with
-  `scope=sdk` without bumping or publishing the bridge placeholder.
+  only the manifests in the selected release scope (`python` for `packages/qgis-sdk`,
+  `typescript` for `packages/qgis-sdk-bridge`, or `all`). Both `qgis-sdk` (`0.1.0`)
+  and `@archont561/qgis-sdk-bridge` (`0.1.0`) ship matching version 1 declaration,
+  safe-integer wire-bound, and `QgisSdk*` error contracts.
 - **Independent protocol versions:** `PluginDescription.schema_version = 1` in
   `qgis_sdk.declarations` and future WebEngine IPC protocol versions are versioned
   independently of the `qgis-sdk` and `qgis-sdk-bridge` package versions.
