@@ -197,3 +197,40 @@ closeout draws.
 
 **Promotion condition:** unchanged from the closeout — promotion follows TASK-17,
 not TASK-12.
+
+## Amendment (2026-10-24): the documented annotation subset gains `tuple[X, ...]`
+
+The Decision section says the authoring surface is "a documented Python typing
+subset" and the generator refused anything outside primitives, `list`, union,
+`Literal` and dataclasses. TASK-25's service payloads use `tuple[str, ...]`
+(`VectorLayerInfo.field_names`, `StyleSpec.required_fields`) because they are
+frozen value DTOs and an immutable collection is the honest spelling there. A
+probe against the generator rejected them:
+
+```
+QgisSdkDeclarationError: probe.field_names: unsupported annotation tuple[str, ...];
+  use JSON primitives, list, union, Literal or a dataclass
+```
+
+Nothing was broken yet - no TypeScript is generated in m-1 - but TASK-17 would
+have met the refusal after the DTOs were already depended on by both service
+backends. The user chose to extend the subset now (option A) rather than change
+the fields to mutable lists.
+
+**What changed.** `tuple[X, ...]` is now part of the documented subset and
+produces exactly the schema `list[X]` produces - JSON has one array type, so the
+wire form is identical and the difference is a Python-side immutability choice.
+Beyond the subset, also refused and now stated explicitly: a **fixed-length**
+tuple (`tuple[str, int]`, `tuple[str]`) and a bare `tuple`. They have no JSON
+counterpart - accepting them would either drop the length or invent a branch - so
+the generator raises rather than emitting a looser schema than the annotation. A
+union of variadic tuples is accepted, because each arm is a legal array.
+
+**Evidence.** Nine new declaration tests (`tuple[str, ...]` equals `list[str]`,
+tuple-of-dataclass items, three refusals, the union case, and a guard that
+`VectorLayerInfo` and `StyleSpec` stay generatable). The checked-in contract
+fixtures regenerate byte-identically, so no existing wire form moved.
+
+**Status unchanged: this decision stays `proposed`.** Accepting it still waits on
+TASK-17 producing real generated TypeScript, exactly as the closeout above states;
+widening the subset does not substitute for that.
