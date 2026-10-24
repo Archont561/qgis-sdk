@@ -6,6 +6,9 @@ made through QGIS is readable through the contract, and proves that closing the
 owner scope releases the layers and refuses further work. It prints a
 machine-readable report.
 
+It covers both the layer/project services and, since TASK-25.3, the scoped
+settings service and the notification contract.
+
 It is **not** a Desktop GUI qualification: there is no display, no canvas and no
 widget in this sandbox, and no Windows or macOS claim comes from it. Those remain
 TASK-33.
@@ -37,6 +40,11 @@ EXPECTED_GEOMETRY = "point"
 EXPECTED_CRS = "EPSG:4326"
 EXPECTED_FIELDS = ("id", "value")
 SELECTED_FEATURES = (1, 3)
+SETTINGS_KEY = "reference/distance-unit"
+SETTINGS_VALUE = "metres"
+NOTIFICATION = "reference workflow opened"
+# One fixed prefix keeps repeated runs from accumulating keys in the profile.
+SETTINGS_PREFIX = "qgis-sdk/native-services-smoke"
 
 
 @dataclass(frozen=True)
@@ -57,6 +65,10 @@ class NativeServicesReport:
     project_layer_ids: tuple[str, ...]
     scope_closed: bool
     reads_refused_after_close: bool
+    settings_round_trip: bool
+    settings_refused_after_close: bool
+    notification_delivered: bool
+    notification_refused_after_close: bool
     qgis_exited: bool
     error: str | None = None
 
@@ -74,6 +86,10 @@ class NativeServicesReport:
             and len(self.project_layer_ids) == 1
             and self.scope_closed
             and self.reads_refused_after_close
+            and self.settings_round_trip
+            and self.settings_refused_after_close
+            and self.notification_delivered
+            and self.notification_refused_after_close
             and self.qgis_exited
         )
 
@@ -101,6 +117,10 @@ class NativeServicesReport:
             project_layer_ids=(),
             scope_closed=False,
             reads_refused_after_close=False,
+            settings_round_trip=False,
+            settings_refused_after_close=False,
+            notification_delivered=False,
+            notification_refused_after_close=False,
             qgis_exited=False,
             error=error,
         )
@@ -136,13 +156,18 @@ def run_smoke(prefix: Path | None = None) -> NativeServicesReport:
 def _run_services(prefix: Path) -> NativeServicesReport:
     """Drive one native services run inside a real headless QgsApplication."""
     from PyQt6.QtCore import QT_VERSION_STR
-    from qgis.core import Qgis, QgsApplication, QgsProject
+    from qgis.core import Qgis, QgsApplication, QgsProject, QgsSettings
 
     QgsApplication.setPrefixPath(str(prefix), True)
     application = QgsApplication([b"qgis-sdk-native-services-smoke"], True)
     application.initQgis()
 
-    from qgis_sdk.adapters.qgis import NativeLayers, NativeProject
+    from qgis_sdk.adapters.qgis import (
+        NativeLayers,
+        NativeNotifications,
+        NativeProject,
+        NativeSettings,
+    )
     from qgis_sdk.core import ResourceScope
     from qgis_sdk.models import QgisSdkScopeClosedError
 
@@ -150,6 +175,13 @@ def _run_services(prefix: Path) -> NativeServicesReport:
     scope = ResourceScope()
     layers = NativeLayers(scope)
     project = NativeProject(layers, scope)
+    settings = NativeSettings(scope, prefix=SETTINGS_PREFIX)
+    delivered: list[str] = []
+    notifications = NativeNotifications(scope, sink=delivered.append)
+    # The default sink writes to the QGIS message log, which QGIS swallows from
+    # Python's stdout, so this run proves it executes without raising rather than
+    # claiming to read the log back.
+    NativeNotifications(scope).info("default message-log sink")
 
     info = layers.open_vector(FIXTURE_DATASET)
     project.add_layer(info.id)
@@ -158,6 +190,11 @@ def _run_services(prefix: Path) -> NativeServicesReport:
     selection = tuple(sorted(layers.selection(info.id)))
     project_layer_ids = project.layer_ids()
 
+    settings.set(SETTINGS_KEY, SETTINGS_VALUE)
+    settings_round_trip = settings.get(SETTINGS_KEY) == SETTINGS_VALUE
+    notifications.info(NOTIFICATION)
+    notification_delivered = delivered == [NOTIFICATION]
+
     scope.close()
     try:
         layers.list_layers()
@@ -165,8 +202,21 @@ def _run_services(prefix: Path) -> NativeServicesReport:
         refused = True
     else:
         refused = False
+    try:
+        settings.set(SETTINGS_KEY, "after-close")
+    except QgisSdkScopeClosedError:
+        settings_refused = True
+    else:
+        settings_refused = False
+    try:
+        notifications.info("after-close")
+    except QgisSdkScopeClosedError:
+        notification_refused = True
+    else:
+        notification_refused = False
     scope.close()  # repeated close must stay a no-op
 
+    QgsSettings().remove(SETTINGS_PREFIX)
     QgsProject.instance().removeAllMapLayers()
     application.exitQgis()
 
@@ -185,6 +235,10 @@ def _run_services(prefix: Path) -> NativeServicesReport:
         project_layer_ids=project_layer_ids,
         scope_closed=scope.closed,
         reads_refused_after_close=refused,
+        settings_round_trip=settings_round_trip,
+        settings_refused_after_close=settings_refused,
+        notification_delivered=notification_delivered,
+        notification_refused_after_close=notification_refused,
         qgis_exited=True,
     )
 

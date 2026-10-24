@@ -133,17 +133,28 @@ class FakeProject:
 
 
 class FakeSettings:
-    """A ``Settings`` backend over one in-memory dictionary."""
+    """A ``Settings`` backend over one in-memory dictionary.
 
-    def __init__(self, values: Mapping[str, str] | None = None) -> None:
+    It carries an owner scope like the native adapter, so the same disposal
+    contract holds for both backends.
+    """
+
+    def __init__(
+        self,
+        scope: ResourceScope,
+        values: Mapping[str, str] | None = None,
+    ) -> None:
+        self._scope = scope
         self._values = dict(values or {})
 
     def get(self, key: str, default: str | None = None) -> str | None:
         """Return the stored value, else the default."""
+        self._scope.ensure_open()
         return self._values.get(key, default)
 
     def set(self, key: str, value: str) -> None:
         """Store a value."""
+        self._scope.ensure_open()
         self._values[key] = value
 
 
@@ -176,9 +187,11 @@ class FakeStyles:
 class RecordingNotifications:
     """A ``Notifications`` backend that records the messages it was given."""
 
-    def __init__(self) -> None:
+    def __init__(self, scope: ResourceScope) -> None:
+        self._scope = scope
         self.messages: list[str] = []
 
     def info(self, message: str) -> None:
         """Record an informational message."""
+        self._scope.ensure_open()
         self.messages.append(message)

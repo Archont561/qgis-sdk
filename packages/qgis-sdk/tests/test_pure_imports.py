@@ -146,3 +146,24 @@ def test_only_the_testing_package_imports_the_test_doubles() -> None:
                 for name in imported
             )
     assert offenders == []
+
+
+def test_settings_reach_the_profile_only_through_the_qgis_adapter() -> None:
+    """TASK-25.3: a global settings instance is an adapter concern, not a leak."""
+    offenders: list[str] = []
+    for path in sorted(SOURCE_ROOT.rglob("*.py")):
+        if path.is_relative_to(SOURCE_ROOT / "adapters" / "qgis"):
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, (ast.ImportFrom, ast.Import)):
+                names.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.Name):
+                names.append(node.id)
+            offenders.extend(
+                f"{path.relative_to(SOURCE_ROOT)}:{node.lineno}: {name}"
+                for name in names
+                if name == "QgsSettings"
+            )
+    assert offenders == []

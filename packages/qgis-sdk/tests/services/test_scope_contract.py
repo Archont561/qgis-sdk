@@ -74,3 +74,28 @@ def test_adding_to_the_project_after_the_owner_closed_is_refused(
 def test_closing_the_owner_scope_twice_is_safe(services: Services) -> None:
     services.scope.close()
     services.scope.close()
+
+
+def test_reading_a_setting_after_the_owner_closed_is_refused(
+    services: Services,
+) -> None:
+    services.scope.close()
+
+    with pytest.raises(QgisSdkScopeClosedError):
+        services.settings.get("reference/distance-unit")
+
+
+def test_writing_a_setting_after_the_owner_closed_is_refused(
+    services: Services,
+) -> None:
+    services.scope.close()
+
+    with pytest.raises(QgisSdkScopeClosedError):
+        services.settings.set("reference/distance-unit", "metres")
+
+
+def test_notifying_after_the_owner_closed_is_refused(services: Services) -> None:
+    services.scope.close()
+
+    with pytest.raises(QgisSdkScopeClosedError):
+        services.notifications.info("plugin is unloading")

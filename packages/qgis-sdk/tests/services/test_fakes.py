@@ -32,7 +32,7 @@ def _opened_layer(layers: FakeLayers) -> str:
 
 
 def test_recorded_notifications_are_readable_in_order() -> None:
-    notifications = RecordingNotifications()
+    notifications = RecordingNotifications(ResourceScope())
 
     notifications.info("first")
     notifications.info("second")
@@ -58,6 +58,6 @@ def test_style_application_to_an_unknown_layer_is_refused() -> None:
 
 
 def test_settings_accept_initial_values() -> None:
-    settings = FakeSettings({"reference/distance-unit": "metres"})
+    settings = FakeSettings(ResourceScope(), {"reference/distance-unit": "metres"})
 
     assert settings.get("reference/distance-unit") == "metres"

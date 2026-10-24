@@ -67,6 +67,10 @@ def _native_available() -> bool:
     return os.environ.get(NATIVE_ENV_FLAG) == "1" and _qgis_python_path().is_dir()
 
 
+# Identifies one test session's settings prefix, so values written by the native
+# backend cannot outlive the run or collide with another session's.
+_SESSION_TOKEN = f"{os.getpid()}-{int(__import__('time').time())}"
+
 _APPLICATION: object | None = None
 
 
@@ -117,9 +121,9 @@ def _fake_services() -> Services:
     return Services(
         layers=layers,
         project=FakeProject(layers, scope),
-        settings=FakeSettings(),
+        settings=FakeSettings(scope),
         styles=styles,
-        notifications=RecordingNotifications(),
+        notifications=RecordingNotifications(scope),
         scope=scope,
         dataset=FIXTURE_DATASET,
         compatible_style="reference/output.qml",
@@ -133,8 +137,13 @@ def _native_services() -> Services:
     _start_qgis()
 
     from qgis.core import QgsProject
-    from qgis_sdk.adapters.qgis import NativeLayers, NativeProject
-    from qgis_sdk.testing import FakeSettings, FakeStyles, RecordingNotifications
+    from qgis_sdk.adapters.qgis import (
+        NativeLayers,
+        NativeNotifications,
+        NativeProject,
+        NativeSettings,
+    )
+    from qgis_sdk.testing import FakeStyles
 
     # Contract tests share one application, so each backend instance starts from
     # an empty project instead of inheriting the previous test's layers.
@@ -159,9 +168,11 @@ def _native_services() -> Services:
     return Services(
         layers=layers,
         project=project,
-        settings=FakeSettings(),
+        # A per-session prefix keeps the run out of the real profile's keys and
+        # keeps one test's values out of the next one's.
+        settings=NativeSettings(scope, prefix=f"qgis-sdk-contract/{_SESSION_TOKEN}"),
         styles=styles,
-        notifications=RecordingNotifications(),
+        notifications=NativeNotifications(scope),
         scope=scope,
         dataset=FIXTURE_DATASET,
         compatible_style="reference/output.qml",

@@ -10,6 +10,8 @@ against one set of tests.
 """
 
 from .layers import NativeLayers
+from .notifications import NativeNotifications
 from .project import NativeProject
+from .settings import NativeSettings
 
-__all__ = ["NativeLayers", "NativeProject"]
+__all__ = ["NativeLayers", "NativeNotifications", "NativeProject", "NativeSettings"]

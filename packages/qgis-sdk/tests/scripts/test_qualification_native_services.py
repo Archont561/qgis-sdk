@@ -46,6 +46,10 @@ def successful_report() -> NativeServicesReport:
         project_layer_ids=("points_c6597b70",),
         scope_closed=True,
         reads_refused_after_close=True,
+        settings_round_trip=True,
+        settings_refused_after_close=True,
+        notification_delivered=True,
+        notification_refused_after_close=True,
         qgis_exited=True,
     )
 
@@ -65,10 +69,16 @@ def test_report_passes_only_when_every_stage_matches_its_expected_value() -> Non
     wrong_crs = replace(successful_report(), layer_crs="EPSG:2180")
     empty_selection = replace(successful_report(), selection=())
     no_project = replace(successful_report(), project_layer_ids=())
+    lost_setting = replace(successful_report(), settings_round_trip=False)
+    leaked_after_close = replace(
+        successful_report(), notification_refused_after_close=False
+    )
 
     assert wrong_crs.passed is False
     assert empty_selection.passed is False
     assert no_project.passed is False
+    assert lost_setting.passed is False
+    assert leaked_after_close.passed is False
 
 
 def test_unavailable_report_is_serialisable_and_never_passes() -> None:
@@ -87,6 +97,10 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 
     assert set(payload) == {
         "error",
+        "notification_delivered",
+        "notification_refused_after_close",
+        "settings_refused_after_close",
+        "settings_round_trip",
         "layer_crs",
         "layer_field_names",
         "layer_geometry_type",
@@ -130,4 +144,8 @@ def test_native_services_smoke_opens_a_layer_and_releases_it() -> None:
     assert payload["selection"] == list(SELECTED_FEATURES)
     assert payload["scope_closed"] is True
     assert payload["reads_refused_after_close"] is True
+    assert payload["settings_round_trip"] is True
+    assert payload["settings_refused_after_close"] is True
+    assert payload["notification_delivered"] is True
+    assert payload["notification_refused_after_close"] is True
     assert payload["qgis_exited"] is True
