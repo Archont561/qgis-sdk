@@ -1,0 +1,177 @@
+"""The versioned bridge envelope, and the JSON rules behind it.
+
+An envelope is the only thing that crosses the transport: the protocol version,
+a call id, an operation id and a payload. It names no Python object, no
+attribute path and no view - the host knows which view is calling from the
+transport it owns, so a claim inside the payload cannot change who the caller is
+(decision-9, decision-18).
+
+The protocol version is deliberately not the package version. A wire break bumps
+it, a package release does not, and the two languages agree on it the way they
+agree on ``PLUGIN_DESCRIPTION_SCHEMA_VERSION``.
+"""
+
+from __future__ import annotations
+
+import math
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any
+
+from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkBridgeProtocolError
+
+BRIDGE_PROTOCOL_VERSION = 1
+MAX_CALL_ID_LENGTH = 128
+MAX_WIRE_DEPTH = 32
+
+_OPERATION_ID = re.compile(r"[a-zA-Z][a-zA-Z0-9_.-]*")
+
+
+class BridgeErrorCode(str, Enum):
+    """Codes a failure reply may carry.
+
+    A client switches on these, never on the message text: the text is for a
+    human reading a log, the code is the contract.
+    """
+
+    UNKNOWN_OPERATION = "unknown_operation"
+    NOT_AUTHORIZED = "not_authorized"
+    STALE_GENERATION = "stale_generation"
+    INVALID_PAYLOAD = "invalid_payload"
+    INVALID_MESSAGE = "invalid_bridge_message"
+    INVALID_PROTOCOL = "invalid_protocol"
+    NOT_SERIALIZABLE = "not_serializable"
+    OPERATION_FAILED = "operation_failed"
+    CANCELLED = "cancelled"
+
+
+def to_wire(value: Any, *, depth: int = 0) -> Any:
+    """Return a JSON-safe copy of ``value``, or refuse it.
+
+    Only JSON primitives, lists and string-keyed mappings survive. Refusing here,
+    at the boundary, is what makes "no raw Qt/QGIS object crosses the wire" a
+    property of the code instead of a rule authors are asked to remember.
+    """
+    if depth > MAX_WIRE_DEPTH:
+        raise QgisSdkBridgeError(f"value is nested deeper than {MAX_WIRE_DEPTH}")
+    if value is None or isinstance(value, (bool, str)):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise QgisSdkBridgeError("non-finite floats have no JSON representation")
+        return value
+    if isinstance(value, Mapping):
+        copy: dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise QgisSdkBridgeError(f"mapping key {key!r} is not a string")
+            copy[key] = to_wire(item, depth=depth + 1)
+        return copy
+    if isinstance(value, (list, tuple)):
+        return [to_wire(item, depth=depth + 1) for item in value]
+    raise QgisSdkBridgeError(f"{type(value).__name__} is not wire-serializable")
+
+
+@dataclass(frozen=True, slots=True)
+class BridgeOperation:
+    """One operation a view may call, declared rather than discovered.
+
+    The id is the allowlist entry: there is no ``getattr`` path, no dotted
+    attribute walk and no way to reach a Python callable that was not declared
+    here with a handler.
+    """
+
+    id: str
+    title: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.id, str) or not _OPERATION_ID.fullmatch(self.id):
+            raise QgisSdkBridgeError(
+                f"Invalid operation id {self.id!r}: use a letter followed by "
+                "letters, digits, _, . or -"
+            )
+        if not isinstance(self.title, str) or not self.title.strip():
+            raise QgisSdkBridgeError(f"{self.id}: title must be a nonempty string")
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the advertised description of this operation."""
+        return {"id": self.id, "title": self.title}
+
+
+@dataclass(frozen=True, slots=True)
+class InvokeEnvelope:
+    """A parsed invocation: the only request shape the dispatcher accepts."""
+
+    call_id: str
+    operation: str
+    payload: Mapping[str, Any]
+
+    @classmethod
+    def parse(cls, raw: Any) -> InvokeEnvelope:
+        """Validate ``raw`` as an invocation, refusing anything else.
+
+        Every refusal is a :class:`QgisSdkBridgeProtocolError`; the dispatcher
+        catches it and answers with the call id when one can be read, so a
+        malformed envelope still correlates instead of hanging the view.
+        """
+        if not isinstance(raw, Mapping):
+            raise QgisSdkBridgeProtocolError("An invocation must be an object")
+        protocol = raw.get("protocol")
+        if protocol != BRIDGE_PROTOCOL_VERSION:
+            raise QgisSdkBridgeProtocolError(
+                f"Unsupported bridge protocol: {protocol!r}; "
+                f"this host speaks {BRIDGE_PROTOCOL_VERSION}"
+            )
+        call_id = peek_call_id(raw)
+        if call_id is None:
+            raise QgisSdkBridgeProtocolError(
+                f"call_id must be a nonempty string of at most "
+                f"{MAX_CALL_ID_LENGTH} characters"
+            )
+        operation = raw.get("operation")
+        if not isinstance(operation, str) or not operation:
+            raise QgisSdkBridgeProtocolError("operation must be a nonempty string")
+        payload = raw.get("payload", {})
+        if not isinstance(payload, Mapping):
+            raise QgisSdkBridgeProtocolError("payload must be an object")
+        return cls(call_id=call_id, operation=operation, payload=payload)
+
+
+def peek_call_id(raw: Any) -> str | None:
+    """Return a usable call id from ``raw``, or ``None``.
+
+    Used on both sides of validation: a refusal about an unsupported protocol or
+    an unknown operation still has to name the call it refuses.
+    """
+    if not isinstance(raw, Mapping):
+        return None
+    call_id = raw.get("call_id")
+    if not isinstance(call_id, str) or not call_id:
+        return None
+    if len(call_id) > MAX_CALL_ID_LENGTH:
+        return None
+    return call_id
+
+
+def success(call_id: str, value: Any) -> dict[str, Any]:
+    """Build a success reply, refusing a value that cannot cross the wire."""
+    return {
+        "protocol": BRIDGE_PROTOCOL_VERSION,
+        "call_id": call_id,
+        "ok": True,
+        "value": to_wire(value),
+    }
+
+
+def failure(call_id: str, code: BridgeErrorCode, message: str) -> dict[str, Any]:
+    """Build a failure reply: a code the client switches on, and a message."""
+    return {
+        "protocol": BRIDGE_PROTOCOL_VERSION,
+        "call_id": call_id,
+        "ok": False,
+        "error": {"code": code.value, "message": message[:200]},
+    }

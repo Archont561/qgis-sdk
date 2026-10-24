@@ -2,5 +2,5 @@ import { bunupPreset } from "@workspace/config/bunup";
 
 export default {
 	...bunupPreset,
-	entry: "src/index.ts",
+	entry: ["src/index.ts", "src/bridge.ts"],
 };

@@ -4,6 +4,8 @@ from .algorithms import AlgorithmRequest, BufferRequest, CentroidRequest
 from .errors import (
     QgisSdkAlgorithmCancelledError,
     QgisSdkAlgorithmRejectedError,
+    QgisSdkBridgeError,
+    QgisSdkBridgeProtocolError,
     QgisSdkContractValidationError,
     QgisSdkError,
     QgisSdkFormError,
@@ -34,6 +36,8 @@ __all__ = [
     "Metres",
     "QgisSdkAlgorithmCancelledError",
     "QgisSdkAlgorithmRejectedError",
+    "QgisSdkBridgeError",
+    "QgisSdkBridgeProtocolError",
     "QgisSdkContractValidationError",
     "QgisSdkError",
     "QgisSdkFormError",
