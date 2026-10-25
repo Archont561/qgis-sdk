@@ -87,3 +87,14 @@ scheduler, without redesign:
   loop; `adapters.qgis.ThreadPoolWorkers` is the first `Workers`, and
   `tests/test_jobs_native.py` shows every callback on the GUI thread over a
   real `QThreadPool`.
+
+## Amended by decision-38 (2026-10-25)
+
+The authoring shape above - a class with `__init__(self, ctx)` and a typed
+`run(self, inputs)` - was replaced in the 0.6.0 line by
+[decision-38](decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md):
+`@job` decorates a plain function `def name(ctx: JobContext, ...) -> Result`
+whose keyword parameters are the inputs, submitted as
+`ctx.jobs.bind(name).delay(**inputs)`. Everything else here - bound
+submission, typed handles, late-subscriber replay, no nested event loop,
+view-owned by default - is unchanged.

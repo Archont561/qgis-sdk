@@ -39,96 +39,95 @@ from qgis_sdk.testing import FakeWorkers
 
 
 @dataclass(frozen=True)
-class SumInputs:
-    a: int
-    b: int
-
-
-@dataclass(frozen=True)
 class SumResult:
     total: int
 
 
 @job(id="demo.sum", title="Sum two numbers")
-class Sum:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    def run(self, inputs: SumInputs) -> SumResult:
-        self.ctx.progress.report(0.5)
-        return SumResult(total=inputs.a + inputs.b)
+def add(ctx: JobContext, a: int, b: int) -> SumResult:
+    ctx.progress.report(0.5)
+    return SumResult(total=a + b)
 
 
 @job(id="demo.offloaded", title="Sum off the driving thread")
-class OffloadedSum:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    async def run(self, inputs: SumInputs) -> SumResult:
-        workers = self.ctx.require_workers()
-        self.ctx.progress.report(0.1)
-        total = await workers.offload(lambda: inputs.a + inputs.b)
-        self.ctx.progress.report(1.0)
-        return SumResult(total=total)
+async def offloaded_add(ctx: JobContext, a: int, b: int) -> SumResult:
+    workers = ctx.require_workers()
+    ctx.progress.report(0.1)
+    total = await workers.offload(lambda: a + b)
+    ctx.progress.report(1.0)
+    return SumResult(total=total)
 
 
-def test_a_job_class_is_described_without_being_constructed() -> None:
-    description = describe_job(Sum)
+def test_a_job_function_is_described_from_its_signature() -> None:
+    description = describe_job(add)
 
     assert isinstance(description, JobDescription)
     assert description.id == "demo.sum"
     assert description.title == "Sum two numbers"
-    assert description.inputs_type is SumInputs
+    assert description.parameters == ("a", "b")
+    assert description.required == ("a", "b")
+    assert description.annotations == {"a": int, "b": int}
     assert description.result_type is SumResult
     assert description.inputs_schema["properties"]["a"]["type"] == "integer"
     assert description.result_schema["properties"]["total"]["type"] == "integer"
     assert description.asynchronous is False
-    assert describe_job(OffloadedSum).asynchronous is True
-    assert description.to_dict()["inputs"]["type"] == "SumInputs"
+    assert describe_job(offloaded_add).asynchronous is True
+    assert description.to_dict()["result"]["type"] == "SumResult"
+    assert description.to_dict()["inputs"] == description.inputs_schema
 
 
-class _NoRun:
-    pass
+def _no_context(a: int) -> SumResult:
+    return SumResult(a)
 
 
-class _UntypedInputs:
-    def run(self, inputs) -> SumResult:  # type: ignore[no-untyped-def]
-        return SumResult(0)
+def _untyped_context(ctx, a: int) -> SumResult:  # type: ignore[no-untyped-def]
+    return SumResult(a)
 
 
-class _NoResult:
-    def run(self, inputs: SumInputs):  # type: ignore[no-untyped-def]
-        return None
+def _untyped_parameter(ctx: JobContext, a) -> SumResult:  # type: ignore[no-untyped-def]
+    return SumResult(a)
 
 
-class _TwoInputs:
-    def run(self, inputs: SumInputs, extra: int) -> SumResult:
-        return SumResult(0)
+def _no_result(ctx: JobContext, a: int):  # type: ignore[no-untyped-def]
+    return None
 
 
-def _decorated(cls: type) -> type:
-    return job(id=f"demo.refused.{cls.__name__}", title=cls.__name__)(cls)
+def _generator(ctx: JobContext, a: int) -> SumResult:  # type: ignore[misc]
+    yield SumResult(a)
+
+
+def _plain(ctx: JobContext, a: int) -> SumResult:
+    return SumResult(a)
+
+
+def _decorated(fn: Callable[..., object]) -> Callable[..., object]:
+    return job(id=f"demo.refused.{fn.__name__}", title=fn.__name__)(fn)
 
 
 @pytest.mark.parametrize(
     ("declare", "problem"),
     [
-        pytest.param(lambda: _decorated(_NoRun), "run", id="no run method"),
+        pytest.param(lambda: _decorated(_no_context), "JobContext", id="no context"),
         pytest.param(
-            lambda: _decorated(_UntypedInputs), "annotated", id="untyped inputs"
+            lambda: _decorated(_untyped_context), "JobContext", id="untyped context"
         ),
-        pytest.param(lambda: _decorated(_NoResult), "result", id="no declared result"),
-        pytest.param(lambda: _decorated(_TwoInputs), "exactly one", id="two inputs"),
-        pytest.param(lambda: SumInputs, "@job", id="not decorated"),
         pytest.param(
-            lambda: job(id="demo.twice", title="Twice")(Sum),
+            lambda: _decorated(_untyped_parameter),
+            "unsupported annotation",
+            id="untyped parameter",
+        ),
+        pytest.param(lambda: _decorated(_no_result), "result", id="no declared result"),
+        pytest.param(lambda: _decorated(_generator), "generator", id="generator"),
+        pytest.param(lambda: _plain, "@job", id="not decorated"),
+        pytest.param(
+            lambda: job(id="demo.twice", title="Twice")(add),
             "duplicate",
             id="decorated twice",
         ),
     ],
 )
 def test_a_declaration_that_cannot_be_described_is_refused(
-    declare: Callable[[], type], problem: str
+    declare: Callable[[], Callable[..., object]], problem: str
 ) -> None:
     with pytest.raises(QgisSdkDeclarationError, match=problem):
         describe_job(declare())
@@ -203,25 +202,22 @@ def view_jobs(jobs: JobService, view_scope: ResourceScope) -> JobService:
 def test_bind_then_delay_submits_without_running_author_code(
     jobs: JobService,
 ) -> None:
-    constructed: list[JobContext] = []
+    called: list[JobContext] = []
 
     @job(id="demo.spy", title="Spy")
-    class Spy:
-        def __init__(self, ctx: JobContext) -> None:
-            constructed.append(ctx)
+    def spy(ctx: JobContext, a: int, b: int) -> SumResult:
+        called.append(ctx)
+        return SumResult(a)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            return SumResult(inputs.a)
-
-    handle = jobs.bind(Spy).delay(SumInputs(1, 2))
+    handle = jobs.bind(spy).delay(a=1, b=2)
 
     assert handle.status is JobStatus.QUEUED
     assert handle.id == "demo.spy#1"
     assert handle.attempt == 1
     assert handle.description.id == "demo.spy"
-    assert constructed == []  # construction is part of the first step
+    assert called == []  # the function runs on the first step, not on delay
     jobs.tick()
-    assert len(constructed) == 1
+    assert len(called) == 1
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.result == SumResult(1)
 
@@ -229,9 +225,9 @@ def test_bind_then_delay_submits_without_running_author_code(
 def test_each_submission_has_its_own_logical_id_and_a_first_attempt(
     jobs: JobService,
 ) -> None:
-    bound = jobs.bind(Sum)
-    first = bound.delay(SumInputs(1, 1))
-    second = bound.delay(SumInputs(2, 2))
+    bound = jobs.bind(add)
+    first = bound.delay(a=1, b=1)
+    second = bound.delay(a=2, b=2)
 
     assert (first.id, second.id) == ("demo.sum#1", "demo.sum#2")
     assert (first.attempt, second.attempt) == (1, 1)
@@ -239,31 +235,29 @@ def test_each_submission_has_its_own_logical_id_and_a_first_attempt(
     assert (first.result.total, second.result.total) == (2, 4)
 
 
-def test_inputs_of_the_wrong_type_are_rejected_before_anything_runs(
+def test_arguments_of_the_wrong_type_are_rejected_before_anything_runs(
     jobs: JobService,
 ) -> None:
-    with pytest.raises(QgisSdkJobRejectedError, match="SumInputs") as info:
-        jobs.bind(Sum).delay({"a": 1, "b": 2})  # type: ignore[arg-type]
+    with pytest.raises(QgisSdkJobRejectedError, match="a must be int") as info:
+        jobs.bind(add).delay(a="1", b=2)  # type: ignore[arg-type]
     assert info.value.code == "job_rejected"
     assert info.value.job_id == "demo.sum"
     assert jobs.active == ()
 
 
-def test_binding_an_undeclared_class_fails_at_bind_time(jobs: JobService) -> None:
+def test_binding_an_undeclared_function_fails_at_bind_time(
+    jobs: JobService,
+) -> None:
     with pytest.raises(QgisSdkDeclarationError):
-        jobs.bind(SumInputs)
+        jobs.bind(_plain)
 
 
 def test_a_result_of_the_wrong_type_fails_the_job(jobs: JobService) -> None:
     @job(id="demo.liar", title="Liar")
-    class Liar:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def liar(ctx: JobContext, a: int, b: int) -> SumResult:
+        return 3  # type: ignore[return-value]
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            return 3  # type: ignore[return-value]
-
-    handle = jobs.bind(Liar).delay(SumInputs(1, 2))
+    handle = jobs.bind(liar).delay(a=1, b=2)
     jobs.tick()
 
     assert handle.status is JobStatus.FAILED
@@ -275,14 +269,10 @@ def test_a_failure_in_run_is_the_job_s_outcome_not_the_tick_s(
     jobs: JobService,
 ) -> None:
     @job(id="demo.boom", title="Boom")
-    class Boom:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def boom(ctx: JobContext, a: int, b: int) -> SumResult:
+        raise ValueError("no")
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            raise ValueError("no")
-
-    handle = jobs.bind(Boom).delay(SumInputs(1, 2))
+    handle = jobs.bind(boom).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
     jobs.tick()
@@ -297,7 +287,7 @@ def test_a_failure_in_run_is_the_job_s_outcome_not_the_tick_s(
 def test_the_result_is_not_available_before_the_job_succeeds(
     jobs: JobService,
 ) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(1, 2))
+    handle = jobs.bind(add).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobNotSettledError, match="queued") as info:
         _ = handle.result
     assert info.value.code == "job_not_settled"
@@ -307,12 +297,12 @@ def test_the_result_is_not_available_before_the_job_succeeds(
 def test_a_service_over_a_closed_scope_refuses_to_submit(
     jobs: JobService, plugin_scope: ResourceScope
 ) -> None:
-    bound = jobs.bind(Sum)
+    bound = jobs.bind(add)
     plugin_scope.close()
     with pytest.raises(QgisSdkScopeClosedError):
-        bound.delay(SumInputs(1, 2))
+        bound.delay(a=1, b=2)
     with pytest.raises(QgisSdkScopeClosedError):
-        jobs.bind(Sum)
+        jobs.bind(add)
 
 
 # -- progress, success, failure, cancellation subscriptions ---------------------
@@ -321,7 +311,7 @@ def test_a_service_over_a_closed_scope_refuses_to_submit(
 def test_callbacks_fire_on_the_tick_in_order_and_each_terminal_once(
     jobs: JobService,
 ) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(2, 3))
+    handle = jobs.bind(add).delay(a=2, b=3)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
 
@@ -336,7 +326,7 @@ def test_callbacks_fire_on_the_tick_in_order_and_each_terminal_once(
 def test_a_subscription_is_disposable_and_disposal_is_idempotent(
     jobs: JobService,
 ) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(2, 3))
+    handle = jobs.bind(add).delay(a=2, b=3)
     recorder = _Recorder()
     subscription = handle.on_success(recorder.success)
     assert subscription.active is True
@@ -349,7 +339,7 @@ def test_a_subscription_is_disposable_and_disposal_is_idempotent(
 
 
 def test_a_late_subscriber_replays_the_current_state_once(jobs: JobService) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(2, 3))
+    handle = jobs.bind(add).delay(a=2, b=3)
     jobs.tick()
     assert handle.status is JobStatus.SUCCEEDED
 
@@ -373,14 +363,10 @@ def test_a_late_progress_subscriber_without_any_report_gets_nothing(
     jobs: JobService,
 ) -> None:
     @job(id="demo.quiet", title="Quiet")
-    class Quiet:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def quiet(ctx: JobContext, a: int, b: int) -> SumResult:
+        return SumResult(a)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            return SumResult(inputs.a)
-
-    handle = jobs.bind(Quiet).delay(SumInputs(1, 2))
+    handle = jobs.bind(quiet).delay(a=1, b=2)
     recorder = _Recorder()
     handle.on_progress(recorder.progress)
     jobs.tick()
@@ -393,19 +379,15 @@ def test_progress_reported_from_a_worker_thread_is_delivered_on_the_tick(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
     @job(id="demo.worker-progress", title="Worker progress")
-    class WorkerProgress:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    async def worker_progress(ctx: JobContext, a: int, b: int) -> SumResult:
+        def work() -> int:
+            for step in (0.25, 0.5, 0.75):
+                ctx.progress.report(step)
+            return a
 
-        async def run(self, inputs: SumInputs) -> SumResult:
-            def work() -> int:
-                for step in (0.25, 0.5, 0.75):
-                    self.ctx.progress.report(step)
-                return inputs.a
+        return SumResult(await ctx.require_workers().offload(work))
 
-            return SumResult(await self.ctx.require_workers().offload(work))
-
-    handle = jobs.bind(WorkerProgress).delay(SumInputs(7, 0))
+    handle = jobs.bind(worker_progress).delay(a=7, b=0)
     recorder = _Recorder()
     handle.on_progress(recorder.progress)
     jobs.tick()
@@ -426,15 +408,11 @@ def test_a_progress_fraction_outside_the_unit_interval_is_refused(
     jobs: JobService,
 ) -> None:
     @job(id="demo.overflow", title="Overflow")
-    class Overflow:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    def overflow(ctx: JobContext, a: int, b: int) -> SumResult:
+        ctx.progress.report(1.5)
+        return SumResult(0)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            self.ctx.progress.report(1.5)
-            return SumResult(0)
-
-    handle = jobs.bind(Overflow).delay(SumInputs(0, 0))
+    handle = jobs.bind(overflow).delay(a=0, b=0)
     jobs.tick()
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, ValueError)
@@ -443,7 +421,7 @@ def test_a_progress_fraction_outside_the_unit_interval_is_refused(
 def test_a_failing_callback_is_detached_and_reported_not_raised(
     jobs: JobService,
 ) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(2, 3))
+    handle = jobs.bind(add).delay(a=2, b=3)
     recorder = _Recorder()
 
     def explode(result: object) -> None:
@@ -467,7 +445,7 @@ def test_a_fault_hook_hears_about_failing_callbacks(
 ) -> None:
     heard = []
     jobs = JobService(plugin_scope, on_fault=heard.append, gui_thread=lambda: False)
-    handle = jobs.bind(Sum).delay(SumInputs(2, 3))
+    handle = jobs.bind(add).delay(a=2, b=3)
     handle.on_progress(lambda fraction: 1 / 0)
     jobs.tick()
     assert [fault.event for fault in heard] == ["progress"]
@@ -479,17 +457,14 @@ def test_a_fault_hook_hears_about_failing_callbacks(
 def test_cancel_before_the_first_step_settles_as_cancelled(
     jobs: JobService,
 ) -> None:
-    constructed = []
+    called = []
 
     @job(id="demo.never", title="Never runs")
-    class Never:
-        def __init__(self, ctx: JobContext) -> None:
-            constructed.append(ctx)
+    def never(ctx: JobContext, a: int, b: int) -> SumResult:
+        called.append(ctx)
+        return SumResult(0)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            return SumResult(0)
-
-    handle = jobs.bind(Never).delay(SumInputs(0, 0))
+    handle = jobs.bind(never).delay(a=0, b=0)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
 
@@ -499,7 +474,7 @@ def test_cancel_before_the_first_step_settles_as_cancelled(
     jobs.tick()
 
     assert handle.status is JobStatus.CANCELLED
-    assert constructed == []
+    assert called == []
     assert recorder.terminal == [("cancelled", None)]
     assert handle.cancel() is False
 
@@ -507,7 +482,7 @@ def test_cancel_before_the_first_step_settles_as_cancelled(
 def test_cancellation_is_a_request_until_the_job_acknowledges_it(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
-    handle = jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = jobs.bind(offloaded_add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
     jobs.tick()
@@ -534,19 +509,15 @@ def test_author_cleanup_runs_when_cancellation_is_delivered(
     cleaned = []
 
     @job(id="demo.cleanup", title="Cleanup")
-    class Cleanup:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    async def cleanup(ctx: JobContext, a: int, b: int) -> SumResult:
+        try:
+            await ctx.require_workers().offload(lambda: 1)
+        except QgisSdkJobCancelledError:
+            cleaned.append("partial output removed")
+            raise
+        return SumResult(0)
 
-        async def run(self, inputs: SumInputs) -> SumResult:
-            try:
-                await self.ctx.require_workers().offload(lambda: 1)
-            except QgisSdkJobCancelledError:
-                cleaned.append("partial output removed")
-                raise
-            return SumResult(0)
-
-    handle = jobs.bind(Cleanup).delay(SumInputs(0, 0))
+    handle = jobs.bind(cleanup).delay(a=0, b=0)
     jobs.tick()
     handle.cancel()
     workers.run_all()
@@ -563,16 +534,12 @@ def test_a_sync_run_that_finishes_despite_a_request_succeeds_honestly(
     seen = []
 
     @job(id="demo.stubborn", title="Stubborn")
-    class Stubborn:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    def stubborn(ctx: JobContext, a: int, b: int) -> SumResult:
+        handle.cancel()
+        seen.append(ctx.cancellation.is_cancelled())
+        return SumResult(a)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            handle.cancel()
-            seen.append(self.ctx.cancellation.is_cancelled())
-            return SumResult(inputs.a)
-
-    handle = jobs.bind(Stubborn).delay(SumInputs(4, 0))
+    handle = jobs.bind(stubborn).delay(a=4, b=0)
     jobs.tick()
 
     assert seen == [True]
@@ -583,7 +550,7 @@ def test_a_sync_run_that_finishes_despite_a_request_succeeds_honestly(
 def test_stuck_work_stays_running_and_is_named_as_a_blocker(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
-    handle = jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = jobs.bind(offloaded_add).delay(a=1, b=2)
     jobs.tick()
     handle.cancel()
     for _ in range(5):
@@ -605,7 +572,7 @@ def test_stuck_work_stays_running_and_is_named_as_a_blocker(
 def test_a_view_owned_job_is_detached_and_asked_to_stop_when_the_view_closes(
     jobs: JobService, view_jobs: JobService, view_scope: ResourceScope, workers
 ) -> None:
-    handle = view_jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = view_jobs.bind(offloaded_add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
     jobs.tick()
@@ -636,7 +603,7 @@ def test_hiding_a_view_is_not_disposal(
             self.hidden = True
 
     dock = Dock()
-    handle = view_jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = view_jobs.bind(offloaded_add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
     jobs.tick()
@@ -655,7 +622,7 @@ def test_plugin_lifetime_work_is_explicit_and_outlives_the_view(
 ) -> None:
     assert view_jobs.parent is jobs
     assert jobs.parent is None
-    handle = view_jobs.parent.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = view_jobs.parent.bind(offloaded_add).delay(a=1, b=2)
     view_recorder = _Recorder()
     plugin_recorder = _Recorder()
     # The view's callbacks on a plugin-owned job are owned by the view.
@@ -676,7 +643,7 @@ def test_plugin_lifetime_work_is_explicit_and_outlives_the_view(
 def test_a_finished_job_does_not_replay_into_a_view_closed_afterwards(
     jobs: JobService, view_jobs: JobService, view_scope: ResourceScope
 ) -> None:
-    handle = view_jobs.bind(Sum).delay(SumInputs(1, 2))
+    handle = view_jobs.bind(add).delay(a=1, b=2)
     jobs.tick()
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.owner_closed is False
@@ -692,7 +659,7 @@ def test_a_finished_job_does_not_replay_into_a_view_closed_afterwards(
 def test_a_subscription_owner_must_be_open(
     jobs: JobService, view_scope: ResourceScope
 ) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(1, 2))
+    handle = jobs.bind(add).delay(a=1, b=2)
     view_scope.close()
     with pytest.raises(QgisSdkScopeClosedError):
         handle.on_success(lambda result: None, owner=view_scope)
@@ -701,11 +668,11 @@ def test_a_subscription_owner_must_be_open(
 def test_unloading_the_plugin_abandons_everything_without_callbacks(
     jobs: JobService, view_jobs: JobService, plugin_scope: ResourceScope, workers
 ) -> None:
-    running = view_jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    running = view_jobs.bind(offloaded_add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(running)
     jobs.tick()
-    queued = jobs.bind(Sum).delay(SumInputs(1, 2))
+    queued = jobs.bind(add).delay(a=1, b=2)
     recorder.subscribe_all(queued)
 
     plugin_scope.close()
@@ -726,14 +693,11 @@ def test_a_settled_job_leaves_the_active_set_and_its_attempt_scope_closes(
     closed = []
 
     @job(id="demo.scoped", title="Scoped")
-    class Scoped:
-        def __init__(self, ctx: JobContext) -> None:
-            ctx.scope.on_close(lambda: closed.append(ctx.scope))
+    def scoped(ctx: JobContext, a: int, b: int) -> SumResult:
+        ctx.scope.on_close(lambda: closed.append(ctx.scope))
+        return SumResult(0)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            return SumResult(0)
-
-    handle = jobs.bind(Scoped).delay(SumInputs(0, 0))
+    handle = jobs.bind(scoped).delay(a=0, b=0)
     assert jobs.active == (handle,)
     jobs.tick()
     assert jobs.active == ()
@@ -745,27 +709,23 @@ def test_a_settled_job_leaves_the_active_set_and_its_attempt_scope_closes(
 
 
 @job(id="demo.offline", title="Asks for a network")
-class NeedsNetwork:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    def run(self, inputs: SumInputs) -> SumResult:
-        self.ctx.require_network()
-        return SumResult(0)
+def needs_network(ctx: JobContext, a: int, b: int) -> SumResult:
+    ctx.require_network()
+    return SumResult(0)
 
 
 @pytest.mark.parametrize(
-    ("cls", "capability"),
+    ("fn", "capability"),
     [
-        pytest.param(OffloadedSum, "workers", id="workers"),
-        pytest.param(NeedsNetwork, "network", id="network"),
+        pytest.param(offloaded_add, "workers", id="workers"),
+        pytest.param(needs_network, "network", id="network"),
     ],
 )
 def test_a_job_fails_explicitly_when_it_asks_for_a_capability_the_host_lacks(
-    plugin_scope: ResourceScope, cls: type, capability: str
+    plugin_scope: ResourceScope, fn: Callable[..., object], capability: str
 ) -> None:
     jobs = JobService(plugin_scope, gui_thread=lambda: False)  # no workers, no network
-    handle = jobs.bind(cls).delay(SumInputs(1, 2))
+    handle = jobs.bind(fn).delay(a=1, b=2)
     jobs.tick()
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, QgisSdkUnsupportedCapabilityError)
@@ -776,17 +736,13 @@ def test_a_worker_failure_reaches_the_job_as_its_exception(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
     @job(id="demo.worker-fails", title="Worker fails")
-    class WorkerFails:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    async def worker_fails(ctx: JobContext, a: int, b: int) -> SumResult:
+        def work() -> int:
+            raise OSError("disk full")
 
-        async def run(self, inputs: SumInputs) -> SumResult:
-            def work() -> int:
-                raise OSError("disk full")
+        return SumResult(await ctx.require_workers().offload(work))
 
-            return SumResult(await self.ctx.require_workers().offload(work))
-
-    handle = jobs.bind(WorkerFails).delay(SumInputs(1, 2))
+    handle = jobs.bind(worker_fails).delay(a=1, b=2)
     jobs.tick()
     workers.run_all()
     jobs.tick()
@@ -800,16 +756,13 @@ def test_the_job_context_is_fresh_per_attempt_and_carries_the_services(
     contexts: list[JobContext] = []
 
     @job(id="demo.ctx", title="Context")
-    class Ctx:
-        def __init__(self, ctx: JobContext) -> None:
-            contexts.append(ctx)
+    def record(ctx: JobContext, a: int, b: int) -> SumResult:
+        contexts.append(ctx)
+        return SumResult(0)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            return SumResult(0)
-
-    bound = jobs.bind(Ctx)
-    bound.delay(SumInputs(0, 0))
-    bound.delay(SumInputs(0, 0))
+    bound = jobs.bind(record)
+    bound.delay(a=0, b=0)
+    bound.delay(a=0, b=0)
     jobs.tick()
 
     first, second = contexts
@@ -825,7 +778,7 @@ def test_the_job_context_is_fresh_per_attempt_and_carries_the_services(
 
 def test_get_is_refused_on_the_gui_thread(plugin_scope: ResourceScope) -> None:
     jobs = JobService(plugin_scope, gui_thread=lambda: True)
-    handle = jobs.bind(Sum).delay(SumInputs(1, 2))
+    handle = jobs.bind(add).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobWaitRefusedError) as info:
         handle.get()
     assert info.value.code == "job_wait_refused"
@@ -840,7 +793,7 @@ def test_get_is_refused_on_the_gui_thread(plugin_scope: ResourceScope) -> None:
 def test_get_waits_for_the_outcome_off_the_gui_thread(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
-    handle = jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = jobs.bind(offloaded_add).delay(a=1, b=2)
     box: list[object] = []
 
     def wait() -> None:
@@ -863,21 +816,17 @@ def test_get_times_out_as_not_settled_and_raises_the_failure(
     jobs: JobService,
 ) -> None:
     @job(id="demo.boom2", title="Boom")
-    class Boom:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def boom(ctx: JobContext, a: int, b: int) -> SumResult:
+        raise KeyError("missing")
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            raise KeyError("missing")
-
-    handle = jobs.bind(Boom).delay(SumInputs(1, 2))
+    handle = jobs.bind(boom).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobNotSettledError):
         handle.get(timeout=0.01)
     jobs.tick()
     with pytest.raises(KeyError):
         handle.get(timeout=0.01)
 
-    cancelled = jobs.bind(Sum).delay(SumInputs(1, 2))
+    cancelled = jobs.bind(add).delay(a=1, b=2)
     cancelled.cancel()
     jobs.tick()
     with pytest.raises(QgisSdkJobCancelledError):
@@ -888,7 +837,7 @@ def test_the_default_gui_thread_is_the_main_thread(
     plugin_scope: ResourceScope,
 ) -> None:
     jobs = JobService(plugin_scope)
-    handle = jobs.bind(Sum).delay(SumInputs(1, 2))
+    handle = jobs.bind(add).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobWaitRefusedError):
         handle.get()
 
@@ -902,22 +851,18 @@ def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
     attempts = []
 
     @job(id="demo.flaky", title="Flaky")
-    class Flaky:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def flaky(ctx: JobContext, a: int, b: int) -> SumResult:
+        attempts.append(1)
+        raise TimeoutError("transient")
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            attempts.append(1)
-            raise TimeoutError("transient")
-
-    bound = jobs.bind(Flaky)
-    first = bound.delay(SumInputs(0, 0))
+    bound = jobs.bind(flaky)
+    first = bound.delay(a=0, b=0)
     for _ in range(3):
         jobs.tick()
     assert first.status is JobStatus.FAILED
     assert len(attempts) == 1
 
-    second = bound.delay(SumInputs(0, 0))
+    second = bound.delay(a=0, b=0)
     jobs.tick()
     assert second.id == "demo.flaky#2"
     assert second.attempt == 1
@@ -928,8 +873,7 @@ def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
 # -- 2026-10-25 audit follow-ups ----------------------------------------------------
 
 
-@job(id="demo.reentrant", title="Re-enters the tick from author code")
-class ReentrantRun:
+class _Reentrant:
     """Stands in for a job that opens a modal dialog while it runs.
 
     The dialog's nested event loop fires the host timer, which calls
@@ -939,23 +883,22 @@ class ReentrantRun:
     service: ClassVar[JobService]
     nested: ClassVar[list[int]] = []
 
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
 
-    def run(self, inputs: SumInputs) -> SumResult:
-        ReentrantRun.nested.append(ReentrantRun.service.tick())
-        return SumResult(total=inputs.a + inputs.b)
+@job(id="demo.reentrant", title="Re-enters the tick from author code")
+def reentrant_run(ctx: JobContext, a: int, b: int) -> SumResult:
+    _Reentrant.nested.append(_Reentrant.service.tick())
+    return SumResult(total=a + b)
 
 
 def test_a_tick_entered_from_author_code_is_a_no_op(jobs: JobService) -> None:
-    ReentrantRun.service = jobs
-    ReentrantRun.nested = []
-    first = jobs.bind(ReentrantRun).delay(SumInputs(1, 2))
-    second = jobs.bind(Sum).delay(SumInputs(3, 4))
+    _Reentrant.service = jobs
+    _Reentrant.nested = []
+    first = jobs.bind(reentrant_run).delay(a=1, b=2)
+    second = jobs.bind(add).delay(a=3, b=4)
 
     steps = jobs.tick()
 
-    assert ReentrantRun.nested == [0]
+    assert _Reentrant.nested == [0]
     assert first.status is JobStatus.SUCCEEDED
     assert first.result == SumResult(3)
     # The queued neighbour was not stepped by the nested tick; the next real
@@ -967,8 +910,8 @@ def test_a_tick_entered_from_author_code_is_a_no_op(jobs: JobService) -> None:
 
 def test_a_tick_entered_from_a_subscriber_is_a_no_op(jobs: JobService) -> None:
     seen: list[object] = []
-    handle = jobs.bind(Sum).delay(SumInputs(1, 2))
-    later = jobs.bind(Sum).delay(SumInputs(5, 6))
+    handle = jobs.bind(add).delay(a=1, b=2)
+    later = jobs.bind(add).delay(a=5, b=6)
     handle.on_progress(lambda fraction: seen.append(("nested", jobs.tick())))
     handle.on_success(lambda result: seen.append(("success", result)))
     later.on_success(lambda result: seen.append(("later", result)))
@@ -989,15 +932,11 @@ def test_a_quiesce_entered_from_author_code_is_refused_without_stopping_anything
     outcomes: list[object] = []
 
     @job(id="demo.reentrant.quiesce", title="Quiesces from inside a step")
-    class QuiesceInside:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def quiesce_inside(ctx: JobContext, a: int, b: int) -> SumResult:
+        outcomes.append(jobs.quiesce(max_ticks=1))
+        return SumResult(total=a)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            outcomes.append(jobs.quiesce(max_ticks=1))
-            return SumResult(total=inputs.a)
-
-    handle = jobs.bind(QuiesceInside).delay(SumInputs(9, 0))
+    handle = jobs.bind(quiesce_inside).delay(a=9, b=0)
     jobs.tick()
 
     assert handle.status is JobStatus.SUCCEEDED
@@ -1008,14 +947,10 @@ def test_a_quiesce_entered_from_author_code_is_refused_without_stopping_anything
 
 def test_result_raises_the_failure_of_a_failed_job(jobs: JobService) -> None:
     @job(id="demo.boom3", title="Boom")
-    class Boom:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def boom(ctx: JobContext, a: int, b: int) -> SumResult:
+        raise KeyError("missing")
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            raise KeyError("missing")
-
-    handle = jobs.bind(Boom).delay(SumInputs(1, 2))
+    handle = jobs.bind(boom).delay(a=1, b=2)
     jobs.tick()
 
     assert handle.status is JobStatus.FAILED
@@ -1025,7 +960,7 @@ def test_result_raises_the_failure_of_a_failed_job(jobs: JobService) -> None:
 
 
 def test_result_raises_cancelled_for_a_cancelled_job(jobs: JobService) -> None:
-    handle = jobs.bind(Sum).delay(SumInputs(1, 2))
+    handle = jobs.bind(add).delay(a=1, b=2)
     handle.cancel()
     jobs.tick()
 
@@ -1040,7 +975,7 @@ def test_a_finished_job_leaves_nothing_behind_on_an_explicit_subscription_owner(
 ) -> None:
     hooks_before = len(plugin_scope._callbacks)
     for i in range(20):
-        handle = view_jobs.bind(Sum).delay(SumInputs(i, 1))
+        handle = view_jobs.bind(add).delay(a=i, b=1)
         handle.on_success(lambda result: None, owner=plugin_scope)
         handle.on_progress(lambda fraction: None, owner=plugin_scope)
         jobs.tick()
@@ -1060,7 +995,7 @@ def test_an_explicit_owner_still_detaches_an_active_subscription(
 ) -> None:
     other_view = plugin_scope.child()
     seen: list[object] = []
-    handle = view_jobs.bind(OffloadedSum).delay(SumInputs(1, 2))
+    handle = view_jobs.bind(offloaded_add).delay(a=1, b=2)
     subscription = handle.on_success(
         lambda result: seen.append(result), owner=other_view
     )

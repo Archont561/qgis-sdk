@@ -56,12 +56,8 @@ class Algorithm:
 
 
 @job(id="describe.job", title="A job")
-class Job:
-    def __init__(self, ctx: JobContext) -> None:
-        pass
-
-    async def run(self, inputs: Inputs) -> Result:
-        return Result(inputs.value)
+async def echo_job(ctx: JobContext, value: int) -> Result:
+    return Result(value)
 
 
 provider = Provider(id="describe.provider", title="A provider")
@@ -86,7 +82,7 @@ class Registered:
         pytest.param(
             Algorithm, AlgorithmDescription, describe_algorithm, id="algorithm"
         ),
-        pytest.param(Job, JobDescription, describe_job, id="job"),
+        pytest.param(echo_job, JobDescription, describe_job, id="job"),
     ],
 )
 def test_describe_dispatches_to_the_narrow_describer(
@@ -98,10 +94,12 @@ def test_describe_dispatches_to_the_narrow_describer(
     assert isinstance(described, Description)
 
 
-def test_describe_refuses_an_undecorated_class_and_a_non_class() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="@plugin, @algorithm or @job"):
+def test_describe_refuses_an_undecorated_class_a_function_and_a_non_class() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="@plugin or @algorithm"):
         describe(Inputs)
-    with pytest.raises(QgisSdkDeclarationError, match="requires a class"):
+    with pytest.raises(QgisSdkDeclarationError, match="function declared with @job"):
+        describe(lambda ctx: None)
+    with pytest.raises(QgisSdkDeclarationError, match="requires a class or a function"):
         describe(object())  # type: ignore[arg-type]
 
 
@@ -113,7 +111,7 @@ def test_describe_refuses_an_undecorated_class_and_a_non_class() -> None:
     [
         pytest.param(describe_plugin(Plugin), id="plugin"),
         pytest.param(describe_algorithm(Algorithm), id="algorithm"),
-        pytest.param(describe_job(Job), id="job"),
+        pytest.param(describe_job(echo_job), id="job"),
         pytest.param(provider.describe(), id="provider"),
     ],
 )
@@ -171,5 +169,5 @@ def test_a_subclass_does_not_inherit_the_marker_as_its_own_declaration() -> None
         QgisSdkDeclarationError, match="requires a class with @algorithm"
     ):
         describe_algorithm(Child)
-    with pytest.raises(QgisSdkDeclarationError, match="@plugin, @algorithm or @job"):
+    with pytest.raises(QgisSdkDeclarationError, match="@plugin or @algorithm"):
         describe(Child)
