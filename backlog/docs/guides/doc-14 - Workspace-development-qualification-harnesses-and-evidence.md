@@ -35,7 +35,7 @@ Check the package wiring from the workspace — `__all__` is the entire public s
 pixi run -e default python -c 'import qgis_sdk; print(qgis_sdk.__all__)'
 ```
 
-That prints the declarations API and nothing else; everything beyond it lives in an explicit submodule. To start a plugin project, install the package (`pip install qgis-sdk` or `pixi add --pypi qgis-sdk`) and run `qgis-sdk scaffold <directory>`, which is the same entry point as `python -m qgis_sdk`; `qgis_sdk.scaffold` is the public API behind it. [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md#choosing-desktop-or-standalone-qt-mode) covers Desktop versus standalone Qt mode, and [the scaffold evidence below](#load-and-unload-evidence-for-the-scaffolded-project) is the headless QGIS Desktop load/unload proof.
+That prints the declarations API and nothing else; everything beyond it lives in an explicit submodule. To start a plugin project, install the package (`pip install qgis-sdk` or `pixi add --pypi qgis-sdk`) and run `qgis-sdk new <directory>`, which is the same entry point as `python -m qgis_sdk`; `qgis_sdk.scaffold` is the public API behind it. [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md#choosing-desktop-or-standalone-qt-mode) covers Desktop versus standalone Qt mode, and [the scaffold evidence below](#load-and-unload-evidence-for-the-scaffolded-project) is the headless QGIS Desktop load/unload proof.
 
 ## Development environments
 

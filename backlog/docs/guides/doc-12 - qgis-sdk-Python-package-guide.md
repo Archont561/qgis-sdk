@@ -725,7 +725,7 @@ thread evidence over a real pool and a real Qt event loop.
 
 ## Project scaffold
 
-`qgis-sdk scaffold <directory>` writes a minimal but genuinely loadable QGIS plugin
+`qgis-sdk new <directory>` writes a minimal but genuinely loadable QGIS plugin
 project, built from the public declaration API instead of generated boilerplate.
 The command is a thin Typer layer in `src/qgis_sdk/__main__.py` over the public
 `qgis_sdk.scaffold` API, so a pip or `pixi add --pypi` install gets the console
@@ -733,10 +733,13 @@ script and `python -m qgis_sdk` reaches the identical entry point. Typer is a
 runtime dependency of the wheel for this command alone:
 
 ```sh
-qgis-sdk scaffold /tmp/demo --title "Demo Tools"            # installed console script
-python -m qgis_sdk scaffold /tmp/demo --title "Demo Tools"  # same command via -m
-pixi run -e default python -m qgis_sdk scaffold /tmp/demo   # from workspace source
+qgis-sdk new /tmp/demo --title "Demo Tools"            # installed console script
+python -m qgis_sdk new /tmp/demo --title "Demo Tools"  # same command via -m
+pixi run -e default python -m qgis_sdk new /tmp/demo   # from workspace source
 ```
+
+`scaffold` was the command's name through 0.3.0; it still runs, hidden from
+`--help` and marked deprecated, and goes away in a later minor.
 
 `ScaffoldOptions.resolve` validates everything before a single byte is written: the
 plugin name must be a lowercase Python identifier that neither QGIS nor the
@@ -801,7 +804,7 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
   `plugin`), plus the explicit submodules `qgis_sdk.models`, `qgis_sdk.services`,
   `qgis_sdk.core`, `qgis_sdk.adapters.desktop`, `qgis_sdk.adapters.webengine`,
   `qgis_sdk.adapters.pydantic`, `qgis_sdk.adapters.pydantic_types`, and
-  `qgis_sdk.scaffold` (`qgis-sdk scaffold` CLI). All packages and the repository root
+  `qgis_sdk.scaffold` (`qgis-sdk new` CLI, spelled `scaffold` until 0.3.0). All packages and the repository root
   are licensed under MIT (`LICENSE`).
 
 ## 0.2.0 migration notes
@@ -868,3 +871,10 @@ published for the bridge, and no `ts-v*` tag exists.
   `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
+
+## Unreleased migration notes
+
+- **CLI rename:** the project generator is `qgis-sdk new <directory>`
+  (`python -m qgis_sdk new`). `qgis-sdk scaffold` keeps working as a hidden,
+  deprecated alias so existing scripts do not break; it will be removed in a
+  later minor. The Python API (`qgis_sdk.scaffold`) is unchanged.

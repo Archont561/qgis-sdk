@@ -17,7 +17,7 @@ is documented, nothing is promised stable.
 
 | Package | What it is | Install |
 | :-- | :-- | :-- |
-| [`qgis-sdk`](packages/qgis-sdk) | Python declarations, contracts, runtime, adapters, `qgis-sdk scaffold` | `pip install qgis-sdk` |
+| [`qgis-sdk`](packages/qgis-sdk) | Python declarations, contracts, runtime, adapters, `qgis-sdk new` | `pip install qgis-sdk` |
 | [`@archont561/qgis-sdk-bridge`](packages/qgis-sdk-bridge) | TypeScript transport client, host namespaces, generated clients | `bun add @archont561/qgis-sdk-bridge` |
 | [`@workspace/config`](packages/config) | Shared TypeScript and Bunup configuration (private) | — |
 
@@ -25,7 +25,7 @@ is documented, nothing is promised stable.
 
 ```sh
 pip install qgis-sdk
-qgis-sdk scaffold my_tools --title "My Tools"   # a loadable plugin project
+qgis-sdk new my_tools --title "My Tools"   # a loadable plugin project
 ```
 
 ## Develop

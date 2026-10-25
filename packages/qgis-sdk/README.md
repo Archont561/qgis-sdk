@@ -45,7 +45,7 @@ class Tools:
 print(describe_plugin(Tools).to_json())
 ```
 
-`qgis-sdk scaffold <directory>` writes a loadable plugin project built on the
+`qgis-sdk new <directory>` writes a loadable plugin project built on the
 same API.
 
 ## Documentation
