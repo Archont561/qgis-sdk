@@ -843,6 +843,47 @@ The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-python/src pytest -q` runs load, action and
 unload through the SDK runtime with no QGIS installation at all.
 
+### Web UI: vanilla or React, dialog or dock
+
+`new` can add a page (decision-18). On a terminal it asks four questions -
+web UI (`none`/`vanilla`/`react`), placement (`dialog`/`dock`), package
+manager (`npm`/`pnpm`/`bun`), install now (`no`/`yes`) - and the answers feed
+the same `ScaffoldOptions.resolve(web=, placement=, package_manager=)` the
+flags do, so a script and a human get one validated plan. Any web flag
+silences the questions; `--no-input` or a pipe means no questions and, without
+flags, no page.
+
+```sh
+qgis-sdk new field_tools --web react --placement dock --package-manager bun --install
+qgis-sdk new field_tools --no-input          # a plain plugin, as before
+```
+
+What the web plan adds:
+
+- `web/` - a Vite app: `package.json` (every dependency pinned exactly,
+  `@archont561/qgis-sdk` at the version this release was qualified with; Vite
+  and Vitest for every manager, never Bunup), `vite.config.ts` (`base: "./"`
+  for `file:` pages, output into `<plugin>/web`, Chromium target of the
+  oldest supported QGIS), `tsconfig.json`, `index.html` (loads Qt's
+  `qwebchannel.js`), `src/transport.ts` (the QWebChannel `WireTransport`),
+  `src/bridge.ts` (the typed client rendered from the plugin's declarations
+  and checked in - `<pm> run bindings` is the CI drift check), the page
+  (`main.ts`/`app.ts` or `main.tsx`/`App.tsx`) and a Vitest test against
+  `@archont561/qgis-sdk/testing`.
+- `<plugin>/webview.py` - opens the built page in a `QWebEngineView` behind
+  `BrowserPolicy(asset_roots=(<plugin>/web,))` and a `Dispatcher` built from
+  the running `PluginRuntime`, as a `QDialog` or a `QDockWidget`; Qt is
+  imported inside the functions, so `qgis-sdk check` stays clean with no
+  native exemption and the starter tests still run without QGIS.
+- `<plugin>/plugin.py` - `classFactory` returns a small wrapper around the
+  SDK lifecycle that adds one toolbar button opening the view.
+
+Installing is opt-in: `--install` (or answering `yes`) runs the manager's
+install in `web/` after every file is written. A failure keeps the project and
+prints the retry (`cd <target>/web && npm install`) with exit code 1; nothing
+is rolled back and nothing else is ever downloaded. A package named `web` or
+`tests` is refused because the project owns those directories.
+
 ## Project checks
 
 `qgis-sdk check [PATH]` reads a plugin project and reports what would stop it
@@ -1012,6 +1053,14 @@ published for the bridge, and no `ts-v*` tag exists.
   and the class and method decorators accept the bare form. Existing explicit
   declarations are unchanged; `events=` is now the only required keyword of
   `@stream`.
+- **`qgis-sdk new --web`.** The scaffold grows a questionnaire and the
+  `--web`, `--placement`, `--package-manager`, `--install/--no-install` and
+  `--no-input` flags; `ScaffoldOptions` gains `web: WebOptions | None` and
+  the plan a `web/` Vite app plus `<plugin>/webview.py` (see "Web UI").
+  Without `--web` the plan is unchanged. `web` and `tests` join the reserved
+  package names. `CliRuntime` gains `inp`, `interactive` and `run_process`;
+  `FakeCliRuntime(input=, interactive=, run_process=)` records spawned
+  processes in `.processes`.
 - **`qgis-sdk check` and `qgis_sdk.check`.** New non-mutating project check
   with stable diagnostics (`QGIS001`, `ARCH001`, `META00x`, `PROJECT001`,
   `CONFIG001`, `SYNTAX001`); see "Project checks". Commands now receive a

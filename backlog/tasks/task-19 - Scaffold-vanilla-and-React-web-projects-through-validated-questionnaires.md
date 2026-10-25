@@ -1,10 +1,10 @@
 ---
 id: TASK-19
 title: Scaffold vanilla and React web projects through validated questionnaires
-status: To Do
+status: In Progress
 assignee: []
-created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 12:02'
+created_date: 2026-10-16 12:02
+updated_date: '2026-10-25T12:09:00Z'
 labels: []
 milestone: m-3
 dependencies:

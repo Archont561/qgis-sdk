@@ -17,7 +17,6 @@ LAYER_ORDER = {
     "models": 0,
     "declarations": 1,
     "services": 1,
-    "scaffold": 1,
     "check": 1,
     "cli": 1,
     "resources": 1,
@@ -26,11 +25,16 @@ LAYER_ORDER = {
     "jobs": 2,
     "providers": 2,
     "network": 2,
+    "bridge": 2,
+    # The scaffold renders a generated project's bridge client, so it sits
+    # with the bridge: still QGIS-free, no longer declarations-only.
+    "scaffold": 2,
     "reference": 3,
     "testing": 3,
 }
 LAYER_PATHS = {
     "algorithms": SOURCE_ROOT / "algorithms.py",
+    "bridge": SOURCE_ROOT / "bridge",
     "core": SOURCE_ROOT / "core",
     "jobs": SOURCE_ROOT / "jobs.py",
     "reference": SOURCE_ROOT / "reference",

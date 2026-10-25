@@ -43,8 +43,9 @@ print(describe_plugin(Tools).to_json())
 ```
 
 `qgis-sdk new <directory>` writes a loadable plugin project built on the
-same API; `qgis-sdk check` reports what would stop one from loading in QGIS
-or from being tested without it.
+same API, with an optional Vite web UI (`--web vanilla|react`); `qgis-sdk
+check` reports what would stop one from loading in QGIS or from being tested
+without it.
 
 ## Documentation
 
