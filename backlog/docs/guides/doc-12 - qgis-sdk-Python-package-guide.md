@@ -130,9 +130,10 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError` |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
-| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, and `Algorithms` protocols; implementations are supplied by the host or by tests |
+| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, and `Workers` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `@algorithm`, `describe_algorithm`, `invoke`, and `AlgorithmResult`; request and result schemas come from the same generator the plugin declarations use (TASK-14) |
+| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery (TASK-15) |
 | `providers` | `Provider` and `@provider.algorithm` registration, plus `parameter_kinds` - which host parameter each request field deserves (TASK-39) |
 | `reference` | `BufferLayer` and `CentroidLayer`, the two operations the reference workflow runs (decision-19) |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
@@ -161,7 +162,7 @@ except QgisSdkUnsupportedCapabilityError as error:
     assert error.capability == "desktop"
 ```
 
-`PluginContext` is plugin-lifetime state. Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. This foundation does **not** implement job scheduling, callback delivery, cancellation acknowledgement, or GUI-thread handoff.
+`PluginContext` is plugin-lifetime state. Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities with `require_workers()` / `require_network()` refusals; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
 
 The runtime owns the scopes: `scope.on_close(cleanup)` registers synchronous cleanup, `scope.child()` creates an owned scope, and `scope.close()` closes children before local callbacks (last registered first). Closing is idempotent. A child closed on its own stops being owned by its parent. New registrations/children after closure raise `QgisSdkScopeClosedError` (`code="scope_closed"`); `require_native()` also rejects a disposed scope. If cleanup fails, remaining children and callbacks still run and the failures are raised as an `ExceptionGroup`. Scope closure is **not** proof that an in-flight task stopped; adapters must request cancellation, detach callbacks and wait for safe completion where needed. The scope does not make services thread-safe or automatically revoke references to them.
 
@@ -593,6 +594,115 @@ async def load(self, ctx):
   The native transport is covered by `tests/test_network_native.py` against
   loopback servers, including the QGIS proxy setting, a Basic authentication
   configuration, and a certificate trusted through the auth manager.
+
+## Scoped jobs
+
+`ctx.jobs` is the local job runtime
+[decision-13](../../decisions/decision-13%20-%20Use-runtime-bound-Celery-inspired-local-jobs.md)
+shaped and
+[decision-21](../../decisions/decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md)
+scoped: a job is a decorated class with a typed `run`, submission is
+`bind(JobClass).delay(inputs)` and nothing else, and the handle you get back is
+typed end to end. `qgis_sdk.jobs` is QGIS-free; it runs on the TASK-13 step
+scheduler and a host drives `JobService.tick()` from whatever event loop it
+already has.
+
+```python
+from dataclasses import dataclass
+
+from qgis_sdk.core import JobContext
+from qgis_sdk.jobs import job
+
+
+@dataclass(frozen=True)
+class SumInputs:
+    left: int
+    right: int
+
+
+@dataclass(frozen=True)
+class SumResult:
+    total: int
+
+
+@job(id="demo.sum", title="Add two numbers")
+class Sum:
+    def __init__(self, ctx: JobContext) -> None:
+        self.ctx = ctx
+
+    async def run(self, inputs: SumInputs) -> SumResult:
+        def work() -> int:  # runs on a worker thread, reports from there
+            self.ctx.progress.report(0.5)
+            return inputs.left + inputs.right
+
+        total = await self.ctx.require_workers().offload(work)
+        return SumResult(total)
+
+
+handle = ctx.jobs.bind(Sum).delay(SumInputs(1, 2))
+handle.on_progress(lambda fraction: bar.setValue(int(fraction * 100)))
+handle.on_success(lambda result: label.setText(str(result.total)))
+handle.on_failure(lambda error: label.setText(str(error)))
+handle.on_cancelled(lambda: label.setText("cancelled"))
+```
+
+`describe_job(Sum)` returns the `JobDescription` (`id`, `title`, the inputs
+and result types, and their schemas from the declarations generator) without
+constructing the class; a class without `@job`, without `run`, or with an
+untyped `run` is refused at bind time with `QgisSdkDeclarationError`. Inputs of
+the wrong type are refused by `delay` with `QgisSdkJobRejectedError` before
+anything runs; a result of the wrong type fails the job, not the tick.
+
+Three rules decide everything else:
+
+- **A request is not a state.** `handle.cancel()` returns whether the job was
+  still active and sets `cancel_requested`; `status` becomes `cancelled` only
+  when the job acknowledges it at a suspension point (or before it ever
+  started). A job that finishes anyway reports `succeeded`, honestly. Work
+  that never reaches a suspension point stays `running`; `quiesce()` names it
+  as a blocker instead of pretending it stopped, and nothing kills a thread.
+- **Callbacks run on the tick, never on a worker.** Progress reported from a
+  worker thread is coalesced to the latest fraction and delivered on the next
+  tick; each terminal outcome is delivered exactly once, in subscription
+  order. Subscribing late replays the current state synchronously as one
+  transition; a terminal replay completes the subscription. A callback that
+  raises is detached and reported through `faults` / `on_fault`, never
+  raised into the tick. `handle.get(timeout)` blocks only off the GUI thread -
+  on it, `QgisSdkJobWaitRefusedError`; a timeout is
+  `QgisSdkJobNotSettledError`.
+- **Disposal beats delivery.** `ctx.jobs` in a view is
+  `plugin_jobs.scoped(view_scope)`: closing the view disposes every
+  subscription it owns first, then asks each of its jobs to stop. Hiding a
+  dock is not disposal. A finished handle whose view closed afterwards refuses
+  new subscriptions rather than replaying into it. Plugin-lifetime work is
+  explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
+  plugin scope abandons everything through the scheduler's existing rule;
+  nobody is called.
+
+There are no automatic retries: resubmission is `delay` again, with a new
+logical id, and `attempt` is carried as `1` so a later, explicit retry policy
+has somewhere to count.
+
+Hosts compose the service once per plugin:
+
+```python
+from qgis_sdk.adapters.qgis import ThreadPoolWorkers
+from qgis_sdk.jobs import JobService
+
+jobs = JobService(plugin_scope, workers=ThreadPoolWorkers(plugin_scope), network=network)
+timer.timeout.connect(jobs.tick)  # the GUI thread's event loop drives delivery
+```
+
+`ThreadPoolWorkers` runs offloaded callables on a `QThreadPool` and reports
+through the scheduler's `Handoff`; a callable still queued when its job is
+cancelled reports without running, a callable already running is left to
+finish. In tests, `qgis_sdk.testing.FakeWorkers` holds offloaded callables
+until the test says `run_one()` / `run_all()`, which is how the suite stages
+races between workers, ticks and disposal. `tests/test_jobs.py` holds the
+examples, `tests/test_jobs_properties.py` a Hypothesis state machine over
+submit / tick / cancel / worker reports / close view / close plugin, and
+`tests/test_jobs_native.py` the thread evidence over a real pool and a real Qt
+event loop.
 
 ## Project scaffold
 
