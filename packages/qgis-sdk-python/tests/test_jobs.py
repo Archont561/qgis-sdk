@@ -593,7 +593,9 @@ def test_stuck_work_stays_running_and_is_named_as_a_blocker(
     assert handle.cancel_requested is True
     outcome = jobs.quiesce(max_ticks=3)
     assert outcome.refused is True
-    assert outcome.blockers == ("job 1 is waiting on an unresolved worker handoff",)
+    assert outcome.blockers == (
+        f"job {handle.id} is waiting on an unresolved worker handoff",
+    )
     assert workers.pending == 1
 
 

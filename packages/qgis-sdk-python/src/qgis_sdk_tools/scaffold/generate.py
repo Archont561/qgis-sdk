@@ -317,10 +317,12 @@ finds QGIS (`--qgis-prefix`, `[tool.qgis-sdk] qgis-prefix` in pyproject.toml,
 Desktop with its own profile in `.qgis-sdk/profiles/dev`, and puts this
 directory on `QGIS_PLUGINPATH` so QGIS loads `{plugin}/` from source. QGIS
 imports `{plugin}.classFactory`, calls it with its interface, then calls
-`initGui()`; the Reload button (Ctrl+Shift+R) unloads and starts the current
-source again. A syntax error refuses the reload and keeps the running revision;
-if unloading or starting fails the plugin stays disabled and the message says
-so - restart `qgis-sdk dev`. Quit QGIS to stop.
+`initGui()`; saving a Python or metadata file (or the Reload button,
+Ctrl+Shift+R) unloads and starts the current source again. A syntax error
+refuses the reload and keeps the running revision; work that cannot stop
+within two seconds refuses it too and is named; if unloading or starting fails
+the plugin stays disabled and the message says so - restart `qgis-sdk dev`.
+`--no-watch` leaves reloads to the button. Quit QGIS to stop.
 
 To install into a real profile instead, copy or symlink `{plugin}/` into
 `<profile>/python/plugins/` and enable {options.title!r} in Plugins, then

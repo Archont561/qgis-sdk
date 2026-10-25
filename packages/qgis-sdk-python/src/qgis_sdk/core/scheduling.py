@@ -34,7 +34,7 @@ from qgis_sdk.models import (
     QgisSdkUnsupportedCapabilityError,
 )
 
-from .scope import ResourceScope
+from .scope import QuiesceOutcome, ResourceScope
 
 MAX_STEPS_PER_JOB_PER_TICK = 8
 """Steps one job may take before the tick moves on to the next job."""
@@ -187,23 +187,6 @@ class Handoff:
             return self._box.get_nowait()
         except Empty:
             return None
-
-
-@dataclass(frozen=True, slots=True)
-class QuiesceOutcome:
-    """Whether the scheduler reached a safe point for an in-process replacement."""
-
-    refused: bool
-    blockers: tuple[str, ...]
-
-    @property
-    def safe_to_replace(self) -> bool:
-        """Return whether the host may dispose this generation now."""
-        return not self.refused
-
-    def as_dict(self) -> dict[str, object]:
-        """Return a JSON-serialisable summary for qualification reports."""
-        return {"refused": self.refused, "blockers": list(self.blockers)}
 
 
 class CancellationToken:

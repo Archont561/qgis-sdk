@@ -505,11 +505,24 @@ and drives the command line a user would type: `test` (pure) deselects both;
 `iface`, loading the source plugin through `qgis.utils`; a failing desktop
 test fails the command with pytest's exit code 1; a native target in which
 every test skipped fails too. `dev --exercise <report>` (a hidden flag that
-scripts the Reload button) proves the Desktop story end to end in one QGIS
-process: the source plugin starts from `QGIS_PLUGINPATH`, reloads, a file
-with a syntax error is refused while revision 2 keeps running, and after the
-file is removed and the plugin's `ping` is edited to add 1000, the third
-revision answers `1001`. `dev --mode standalone` reports the plugin running
+hands the bootstrap to `qgis_sdk_tools.devtools.exercise`) proves the
+Desktop story and the TASK-21 reload policy end to end in one QGIS process:
+the source plugin starts from `QGIS_PLUGINPATH`, reloads, a file with a
+syntax error is refused while revision 2 keeps running, after the file is
+removed and the plugin's `ping` is edited to add 1000 the third revision
+answers `1001`; a job whose worker thread blocks on an event makes the next
+reload refuse after the 2 s bound with the blocker `job exercise.stuck#1 is
+waiting on an unresolved worker handoff` while the plugin and the job stay
+running, and the reload after the event is released succeeds; an import
+error injected into `plugin.py` fails the start after teardown, the plugin
+is reported disabled and not active, and the next reload recovers; three
+back-to-back requests become one reload; with the watcher running, an edit
+to `plugin.py` (`+ 2000`) reloads once without a button press and `ping`
+answers `2001`. Eight revisions in total. The reload policy itself is unit
+tested without QGIS in `tests/test_devtools_reloader.py` against a scripted
+plugin host, and the runtime side (`scope.on_quiesce`,
+`PluginRuntime.quiesce`) in `tests/test_quiesce.py`.
+`dev --mode standalone` reports the plugin running
 with its window and a `ping` answer. With Bun available (on `PATH` or in the
 sibling Pixi environment) it also scaffolds a vanilla web project, installs
 its dependencies, and runs `dev` with the Vite server the command starts -

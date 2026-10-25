@@ -1,10 +1,10 @@
 ---
 id: TASK-21
 title: Implement generation safe development refresh and reconnection
-status: To Do
+status: In Progress
 assignee: []
-created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 12:02'
+created_date: 2026-10-16 12:02
+updated_date: '2026-10-25T15:34:00Z'
 labels: []
 milestone: m-3
 dependencies:

@@ -425,11 +425,19 @@ def dev(
     port: Annotated[
         int | None, typer.Option(help="Loopback port for the Vite dev server.")
     ] = None,
+    no_watch: Annotated[
+        bool,
+        typer.Option(
+            "--no-watch",
+            help="Do not reload on saved Python/metadata changes; "
+            "only the Reload button (Ctrl+Shift+R) reloads.",
+        ),
+    ] = False,
     exercise: Annotated[
         Path | None, typer.Option(hidden=True, help="Self-drive and write a report.")
     ] = None,
 ) -> None:
-    """Run the source plugin inside QGIS, with HMR for a web UI; quit QGIS to stop."""
+    """Run the source plugin inside QGIS, reloading on save, with HMR for a web UI."""
     runtime: CliRuntime = ctx.obj
     root = runtime.resolve(path or Path("."))
     try:
@@ -475,6 +483,7 @@ def dev(
             headless=wants_headless(runtime.env),
             dev_server=origin,
             exercise=exercise,
+            watch=not no_watch,
         )
         for note in plan.notes:
             typer.echo(note, file=runtime.err)

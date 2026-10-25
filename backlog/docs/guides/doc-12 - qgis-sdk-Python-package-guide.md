@@ -308,6 +308,23 @@ runtime still reaches `stopped`, all remaining callbacks run, and the failures
 are raised as an `ExceptionGroup`. Scope closure is not proof that in-flight work
 stopped, and the runtime does not create Qt actions, dialogs, docks or jobs.
 
+**Quiescing before a replacement** (decision-15, decision-21). A development
+host that wants to swap the revision in place asks first:
+`runtime.quiesce()` returns a `QuiesceOutcome`; `safe_to_replace` means
+everything the plugin owns reached a safe point, `refused` names the
+`blockers`. The answer comes from the scope: owners that hold work register
+a check with `scope.on_quiesce(check, resume=...)`, and `scope.quiesce()`
+asks children first (a view's work before the plugin's), then every
+registered owner, and combines all blockers so the host can report them at
+once. A root `JobService` registers itself on the scope it is built on, so
+jobs are cancelled and ticked up to the bound and anything still waiting on
+a worker handoff is named by its handle id (`job sum#1 is waiting on an
+unresolved worker handoff`). A refusal leaves the runtime `running`;
+`runtime.resume()` (`scope.resume()`) lets every owner accept work again.
+A runtime that is not running refuses with `the plugin is not running
+(state new)`. Nothing here kills a thread or closes a scope: the host
+decides whether to `unload()`.
+
 ## Desktop lifecycle adapter
 
 A QGIS plugin package can expose the adapter through its normal entry point:
@@ -963,22 +980,47 @@ unit tests assert on; the commands print the notes to stderr before running.
 ## Developing against QGIS: `qgis-sdk dev`
 
 `qgis-sdk dev [PATH] [--mode desktop|standalone] [--qgis-prefix PATH] [--no-web]
-[--port N]` runs the plugin from source in a real QGIS (decision-8, decision-15):
+[--port N] [--no-watch]` runs the plugin from source in a real QGIS
+(decision-8, decision-15, decision-21):
 
 - **desktop** (default) starts the located QGIS Desktop binary with
   `--profiles-path <root>/.qgis-sdk --profile dev`, so the profile is the
   project's own and survives between runs (`.gitignore`d by the scaffold),
   and puts the project root on `QGIS_PLUGINPATH`, which is how QGIS finds and
-  imports `<plugin>/` in place: no copy, no symlink, no `sys.path` edit. A
-  startup script (`--code`) enables the plugin, installs a **Reload** toolbar
-  action (Ctrl+Shift+R) and reports to the terminal. Reload first compiles
-  every source file of the package; a syntax error is *refused* and the
-  running revision stays up. Otherwise it unloads, drops the package's
-  modules and starts the current source. If unloading or starting fails the
-  plugin is left disabled, the message bar and terminal carry the traceback,
-  and the predictable fallback is to restart the command. Safe replacement
-  of a *running* runtime (jobs, handlers in flight) is TASK-21; until then
-  the rule is "reload between operations, restart on failure".
+  imports `<plugin>/` in place: no copy, no symlink, no `sys.path` edit. The
+  SDK's own packages join that process's `PYTHONPATH`, so the bootstrap
+  (`qgis_sdk_tools.devtools.reloader`) imports inside QGIS's interpreter
+  whichever Python runs the CLI. It enables the plugin, installs a
+  **Reload** toolbar action (Ctrl+Shift+R), watches `<plugin>/` for saved
+  `*.py` and `metadata.txt` changes (polling every 500 ms; `web/` and caches
+  excluded - the page is Vite's business) and reports to the terminal.
+  `--no-watch` leaves reloads to the button.
+
+  Every reload, however triggered, follows one policy:
+
+  1. **Preflight** without touching the running revision: every module of
+     the package compiles and `check_project` finds nothing QGIS would
+     refuse (`SYNTAX*`, `META*`, `PROJECT*`, `CONFIG*` errors inside the
+     package); `QGIS001`/`ARCH001` only warn, findings in `tests/` never
+     block. A problem is *refused* - `reload refused, revision N keeps
+     running: ...` - and nothing is unloaded.
+  2. **Quiesce** through `PluginRuntime.quiesce()`: owned jobs are
+     cancelled and given up to 2 s (pumping the event loop between checks)
+     to reach a safe point. A refusal names the blockers, resumes the
+     revision exactly as it was and says that finishing or cancelling the
+     work, or restarting `qgis-sdk dev`, is the way out. No thread is
+     killed, nothing unsaved is discarded.
+  3. **Replace**: unload (drops the package's modules), then load and start
+     the current source. A failure after teardown cannot be undone: the
+     partially imported modules are dropped, the plugin stays *disabled*,
+     and the message bar and terminal say so until a Reload succeeds.
+
+  Requests are serialised and coalesced: a burst of saves becomes one reload
+  (300 ms debounce), and a request that lands while a reload is in flight is
+  folded into exactly one follow-up. Each attempt carries a generation
+  number in its report. Old-generation work cannot deliver into the new
+  revision because the old scope is closed on unload (subscriptions
+  disposed, late worker reports counted as dropped).
 - **standalone** runs `classFactory(None)` + `initGui()` in a bare
   `QgsApplication` under the QGIS Python. It is the documented reduced mode:
   no `iface`, no plugin lifecycle hooks beyond the two calls, no reload;
@@ -1107,6 +1149,18 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## Unreleased migration notes
 
+- **`qgis-sdk dev` reloads on save and quiesces first** (TASK-21). The
+  Desktop bootstrap is now the importable module
+  `qgis_sdk_tools.devtools.reloader` (the `--code` probe only reaches it);
+  `plan_dev(...)` and the `qgis`/`desktop` test plans put the SDK's own
+  import locations on the QGIS process's `PYTHONPATH`. The request JSON
+  gains `watch` (default `True`; `--no-watch`). New runtime API, additive:
+  `ResourceScope.on_quiesce(check, *, resume=None)`, `scope.quiesce()`,
+  `scope.resume()`, `PluginRuntime.quiesce()` / `resume()`;
+  `QuiesceOutcome` now lives in `qgis_sdk.core.scope` (still exported from
+  `qgis_sdk.core`). A root `JobService` registers on its scope, and its
+  blockers name the handle id (`job sum#1 ...`) instead of the scheduler's
+  number.
 - **The developer tools moved to `qgis_sdk_tools`** (decision-35, step 1).
   `qgis_sdk.scaffold`, `qgis_sdk.check`, `qgis_sdk.cli`, `qgis_sdk.devtools`,
   `qgis_sdk.pytest_plugin` and `qgis_sdk.bridge.generate` are now

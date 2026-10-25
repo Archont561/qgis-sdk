@@ -12,9 +12,11 @@ What it proves, each through the command line a user would type:
   runs a ``desktop``-marked test *inside* QGIS Desktop with the real
   ``iface``, and a failing test fails the command;
 * ``dev`` loads the source plugin in place, reloads it, refuses a reload
-  over a syntax error while the old revision keeps running, and runs the
-  edited source after the next reload; ``dev --mode standalone`` runs the
-  plugin without Desktop;
+  over a syntax error while the old revision keeps running, runs the
+  edited source after the next reload, refuses while a real worker thread
+  is stuck and names it, disables visibly when a start fails after
+  teardown, coalesces a burst of requests, and reloads on a saved edit
+  (TASK-21); ``dev --mode standalone`` runs the plugin without Desktop;
 * with a web UI, ``dev`` serves the page from Vite inside QGIS with hot
   module replacement, and the bridge answers after the page updated.
 """
@@ -176,6 +178,7 @@ class TestDevCommand:
 
         assert result.returncode == 0, result.stdout + result.stderr
         report = json.loads(report_path.read_text(encoding="utf-8"))
+        blockers = report.pop("stuck_blockers")
         assert report == {
             "started": True,
             "error": None,
@@ -184,11 +187,25 @@ class TestDevCommand:
             "kept_running": True,
             "reload_after_fix": True,
             "ping_after_edit": 1001,
-            "revision": 3,
+            "stuck_refused": True,
+            "kept_running_stuck": True,
+            "reload_after_release": True,
+            "start_failure_disabled": True,
+            "reload_after_start_failure": True,
+            "coalesced": True,
+            "watch_reloaded": True,
+            "ping_after_watched_edit": 2001,
+            "revision": 8,
             "unloaded": True,
         }
+        # decision-21: the refusal names the work that could not reach a safe point.
+        assert len(blockers) == 1
+        assert "exercise.stuck#1" in blockers[0]
+        assert "worker handoff" in blockers[0]
         assert "reload refused, revision 2 keeps running" in result.stderr
-        assert "field_tools running (revision 3)" in result.stderr
+        assert "restart `qgis-sdk dev`" in result.stderr
+        assert "field_tools is disabled until a Reload succeeds" in result.stderr
+        assert "field_tools running (revision 8)" in result.stderr
         assert (project / ".qgis-sdk" / "profiles" / "dev").is_dir()
         assert "1000" not in (project / "field_tools" / "plugin.py").read_text()
 

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import socket
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pytest
 from qgis_sdk_tools.__main__ import app
-from qgis_sdk_tools.devtools.dev import DEV_SERVER_ENV
+from qgis_sdk_tools.devtools.dev import DEV_SERVER_ENV, REQUEST_ENV
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.testing import FakeCliRuntime
 from test_devtools_installs import make_prefix
@@ -73,6 +74,28 @@ def test_desktop_is_the_default_and_runs_the_binary_in_place(
     assert runtime.started == []
     assert "desktop:" in runtime.stderr
     assert "Ctrl+Shift+R" in runtime.stderr
+
+
+def test_no_watch_is_passed_to_the_bootstrap(project: Path, prefix: Path) -> None:
+    requests: list[dict[str, object]] = []
+
+    def run_process(argv: Sequence[str], cwd: Path) -> int:
+        # The request file lives in the workspace, which the command removes
+        # once QGIS exits, so read it while "QGIS" runs.
+        env = runtime.environments[-1]
+        assert env is not None
+        requests.append(json.loads(Path(env[REQUEST_ENV]).read_text(encoding="utf-8")))
+        return 0
+
+    runtime = FakeCliRuntime(project, {"HOME": "/h"}, run_process=run_process)
+
+    result = runner.invoke(
+        app, ["dev", "--qgis-prefix", str(prefix), "--no-watch"], obj=runtime
+    )
+
+    assert result.exit_code == 0, runtime.stderr
+    assert requests[0]["watch"] is False
+    assert "on save" not in runtime.stderr
 
 
 def test_the_qgis_exit_code_is_the_commands(project: Path, prefix: Path) -> None:

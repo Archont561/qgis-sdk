@@ -116,6 +116,26 @@ class QgisInstall:
         return env
 
 
+def sdk_import_paths() -> tuple[Path, ...]:
+    """Where ``qgis_sdk`` and ``qgis_sdk_tools`` import from, for a QGIS process.
+
+    The CLI may run under any interpreter; QGIS runs its own. Putting the
+    SDK's own locations on that process's ``PYTHONPATH`` is what lets the
+    dev bootstrap and the pytest plugin import there. A source checkout and
+    an installed distribution both resolve through the packages' files.
+    """
+    import qgis_sdk
+
+    import qgis_sdk_tools
+
+    paths: dict[Path, None] = {}
+    for package in (qgis_sdk, qgis_sdk_tools):
+        location = getattr(package, "__file__", None)
+        if location:
+            paths[Path(location).resolve().parent.parent] = None
+    return tuple(paths)
+
+
 def wants_headless(env: Mapping[str, str], *, platform: str = sys.platform) -> bool:
     """Whether there is no display to show a window on, so Qt must go offscreen.
 
