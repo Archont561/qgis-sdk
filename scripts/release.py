@@ -114,7 +114,7 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
     ts = False
     for raw in files:
         path = raw.strip()
-        if path.startswith(_PYTHON_PREFIX):
+        if path.startswith(_PYTHON_PREFIXES):
             py = True
         elif path.startswith(_TYPESCRIPT_PREFIXES):
             ts = True
@@ -256,9 +256,16 @@ def parse_log_with_files(raw: str) -> tuple[Commit, ...]:
     return tuple(commits)
 
 
-_PYTHON_PREFIX = "packages/qgis-sdk-python/"
+# The package directories were renamed on 2026-10-24 (PR #66). History before
+# that commit - and the whole 0.4.0 Python range starts before it - lives under
+# the old names, so both spellings count for scope detection.
+_PYTHON_PREFIXES = ("packages/qgis-sdk-python/", "packages/qgis-sdk/")
 # The alias ships with the bridge: a change to either is a TypeScript release.
-_TYPESCRIPT_PREFIXES = ("packages/qgis-sdk-typescript/", "packages/qgis-sdk-alias/")
+_TYPESCRIPT_PREFIXES = (
+    "packages/qgis-sdk-typescript/",
+    "packages/qgis-sdk-alias/",
+    "packages/qgis-sdk-bridge/",
+)
 
 
 def commit_packages(commit: Commit) -> tuple[bool, bool]:
@@ -273,7 +280,7 @@ def commit_packages(commit: Commit) -> tuple[bool, bool]:
     if not commit.files:
         return True, True
     return (
-        any(path.startswith(_PYTHON_PREFIX) for path in commit.files),
+        any(path.startswith(_PYTHON_PREFIXES) for path in commit.files),
         any(path.startswith(_TYPESCRIPT_PREFIXES) for path in commit.files),
     )
 

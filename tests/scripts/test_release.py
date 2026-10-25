@@ -19,6 +19,7 @@ from release import (
     Version,
     checksums,
     classify,
+    commit_packages,
     commits_for_scope,
     compute_plan,
     contract_versions,
@@ -1487,6 +1488,24 @@ def test_a_record_without_a_path_block_is_refused():
 def test_a_commit_without_file_information_affects_every_scope():
     """Omitting ``--name-only`` must not silently drop a commit."""
     assert commits_for_scope((_commit("feat: x"),), "python") == (_commit("feat: x"),)
+
+
+def test_commits_under_the_pre_rename_package_paths_still_count():
+    """The 0.4.0 history straddles the 2026-10-24 directory rename.
+
+    ``python-v0.3.0`` predates it, so the Python commits of PR #65 live under
+    ``packages/qgis-sdk/`` and the bridge history before ``ts-v0.3.0`` under
+    ``packages/qgis-sdk-bridge/``. Found while planning 0.4.0 (TASK-30): the
+    generated changelog silently dropped the derived-ids, ctx-attribute and
+    PluginContext-services features.
+    """
+    old_python = _commit("feat(declarations): derive ids", "packages/qgis-sdk/src/x.py")
+    old_bridge = _commit("feat(bridge): y", "packages/qgis-sdk-bridge/src/index.ts")
+
+    assert commit_packages(old_python) == (True, False)
+    assert commit_packages(old_bridge) == (False, True)
+    assert detect_scope_from_files(["packages/qgis-sdk/src/x.py"]) == "python"
+    assert detect_scope_from_files(["packages/qgis-sdk-bridge/a.ts"]) == "typescript"
 
 
 def test_a_scoped_tag_sort_keeps_that_package_history_only():

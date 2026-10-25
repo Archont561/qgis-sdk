@@ -2,7 +2,7 @@
 id: decision-15
 title: Refresh development through owned runtime generations
 date: '2026-10-16 08:05'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -57,3 +57,12 @@ differs from the proposal above, deliberately:
   coalesced bursts and a watcher-triggered reload in a real QGIS.
 - Presentation-state restore and unsaved-dialog transfer remain open; a
   reload closes the plugin's views like an unload does.
+
+## Accepted (TASK-30, 2026-10-25)
+
+Accepted at the 0.4.0 gate on the implementation note above: the shipped
+slice is the decision. The one item that stays open - presentation-state
+restore across reloads (view geometry, unsaved dialog state) - is deferred
+past 0.4.0 and will be picked up as its own task when a generated project
+needs it; until then a reload closes the plugin's views the way an unload
+does.
