@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -177,7 +178,7 @@ class TestEnvironment:
         )
 
         assert env["HOME"] == "/home/x"
-        assert env["PYTHONPATH"].split(":" if ":" in env["PYTHONPATH"] else ";") == [
+        assert env["PYTHONPATH"].split(os.pathsep) == [
             str(install.bindings),
             str(tmp_path),
             "/already",

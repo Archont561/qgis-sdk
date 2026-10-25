@@ -15,8 +15,8 @@ from qgis_sdk.devtools.testrun import (
     QgisSdkTestRunError,
     plan_tests,
 )
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk.pytest_plugin import TARGET_ENV
+from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
 from test_devtools_installs import make_prefix, no_which
 
 
@@ -66,7 +66,14 @@ class TestQgis:
     def test_runs_the_installs_interpreter_under_its_bindings(
         self, project: Path, install: QgisInstall
     ) -> None:
-        plan = plan_tests(project, "qgis", ("-x",), env={"HOME": "/h"}, install=install)
+        plan = plan_tests(
+            project,
+            "qgis",
+            ("-x",),
+            env={"HOME": "/h"},
+            install=install,
+            platform="linux",  # no DISPLAY in env: headless
+        )
 
         assert plan.argv == (
             str(install.python),
@@ -139,6 +146,7 @@ class TestDesktop:
             env={},
             install=install,
             workspace=workspace,
+            platform="linux",
         )
 
         assert plan.argv == (
