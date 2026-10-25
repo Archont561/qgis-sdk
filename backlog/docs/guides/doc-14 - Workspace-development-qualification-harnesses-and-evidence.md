@@ -781,6 +781,24 @@ nothing is inferred from CI.
   ("Gate + stamp + tag + publish", chosen from the three scopes offered),
   with a pause for "Merge" on each pull request; the tag follows on the
   merge commit of the gate-and-stamp pull request.
+- **Released afterwards.** PR #83 merged as `386089b`; the annotated tag
+  `python-v0.5.0` (release notes in the annotation) on that commit ran
+  `release.yml` 40232586520: `build`, `conda`, `pypi` and `github-release`
+  succeeded, `npm` and `github-packages` skipped as a Python-scope tag must.
+  PyPI now serves `qgis-sdk 0.5.0` (`d4d933d9…0816f`), `qgis-sdk-runtime
+  0.5.0` (`c5f3a3ac…6a764`) and `qgis-sdk-tools 0.5.0` (`7c2247ca…38de`) -
+  the same hashes as the wheels built here before the merge, so the build is
+  reproducible; `pip install qgis-sdk==0.5.0` from the index into a fresh
+  CPython 3.11.2 venv resolves runtime and tools at 0.5.0 with `pip check`
+  clean and `qgis-sdk targets` running from the installed package. The
+  GitHub Release carries the three wheels, `qgis-sdk-0.5.0-pyhb2c62a3_0.conda`,
+  `qgis-sdk-runtime-0.5.0-pyh4616a5c_0.conda`,
+  `qgis-sdk-tools-0.5.0-pyh4616a5c_0.conda` and `SHA256SUMS`; the three
+  prefix.dev uploads succeeded in the job log. The release-asset CDN and
+  prefix.dev are not reachable from the sandbox, so the Conda checksums and
+  that channel's listing are attested by the run only. The `0.0.0`
+  placeholders of the runtime and the tools (and the kit's own `0.0.0`) on
+  PyPI are now superseded and should be yanked by the owner.
 
 ## Split release pipeline rehearsal (TASK-57 AC 3)
 
