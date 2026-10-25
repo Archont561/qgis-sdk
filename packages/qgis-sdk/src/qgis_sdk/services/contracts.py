@@ -1,6 +1,9 @@
 """Small host-facing Protocols for the first pure authoring slice."""
 
-from typing import Protocol
+from collections.abc import Awaitable, Callable
+from typing import Protocol, TypeVar
+
+T_co = TypeVar("T_co", covariant=True)
 
 
 class Notifications(Protocol):
@@ -34,3 +37,17 @@ class DesktopAccess(Protocol):
     def iface(self) -> object:
         """The runtime-owned QGIS Desktop interface (opaque to pure code)."""
         ...
+
+
+class Workers(Protocol):
+    """Run one plain callable off the thread that drives the scheduler.
+
+    ``offload`` returns an awaitable the job suspends on; the callable runs on
+    a worker the host owns (a ``QThreadPool`` in QGIS, a scripted fake in a
+    test) and its return value or exception resumes the job on the driving
+    thread at the next tick. The callable must be worker-safe: no widgets, no
+    live layers - it may poll the job's ``Cancellation`` and report
+    ``Progress``, both of which are thread-safe by contract.
+    """
+
+    def offload(self, fn: Callable[[], T_co]) -> Awaitable[T_co]: ...

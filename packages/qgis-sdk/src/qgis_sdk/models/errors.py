@@ -156,6 +156,51 @@ class QgisSdkJobCancelledError(QgisSdkError):
         super().__init__(f"Job {job_id} was cancelled at its next suspension point")
 
 
+class QgisSdkJobRejectedError(QgisSdkError):
+    """A job submission was refused before any author code ran.
+
+    ``problems`` name what was wrong with the submission - inputs of the wrong
+    type, most often - without repeating the submitted values.
+    """
+
+    code = "job_rejected"
+
+    def __init__(self, job_id: str, problems: Iterable[str]) -> None:
+        self.job_id = job_id
+        self.problems = tuple(problems)
+        listed = "; ".join(self.problems)
+        super().__init__(f"Job {job_id!r} was refused: {listed}")
+
+
+class QgisSdkJobNotSettledError(QgisSdkError):
+    """A result was asked for before the job reached a terminal state."""
+
+    code = "job_not_settled"
+
+    def __init__(self, job_id: str, status: str) -> None:
+        self.job_id = job_id
+        self.status = status
+        super().__init__(f"Job {job_id!r} is still {status}; it has no result yet")
+
+
+class QgisSdkJobWaitRefusedError(QgisSdkError):
+    """A blocking wait for a job was attempted on the GUI thread.
+
+    Waiting there would freeze the thread that delivers the outcome. Subscribe
+    with ``on_success``/``on_failure``/``on_cancelled`` or read the ``result``
+    property after a terminal callback instead.
+    """
+
+    code = "job_wait_refused"
+
+    def __init__(self, job_id: str) -> None:
+        self.job_id = job_id
+        super().__init__(
+            f"Job {job_id!r}: a blocking wait is refused on the GUI thread; "
+            "subscribe to the outcome instead"
+        )
+
+
 class QgisSdkSchedulingBlockedError(QgisSdkError):
     """The scheduler refused a submission or in-process replacement.
 

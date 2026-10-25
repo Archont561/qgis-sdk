@@ -11,6 +11,7 @@ from qgis_sdk.services import (
     Notifications,
     Progress,
     ViewControl,
+    Workers,
 )
 
 from .scope import ResourceScope
@@ -81,8 +82,28 @@ class AlgorithmContext:
 
 @dataclass(frozen=True, slots=True)
 class JobContext:
-    """One job attempt, owned by a view unless plugin ownership is explicit."""
+    """One job attempt, owned by a view unless plugin ownership is explicit.
+
+    Built fresh for every attempt by :class:`qgis_sdk.jobs.JobService`. The
+    scope is the attempt's own: it closes when the attempt settles or the
+    plugin unloads, not when the owning view is disposed, because closing it
+    under a worker that has not acknowledged cancellation would be exactly the
+    teardown decision-21 forbids.
+    """
 
     progress: Progress
     cancellation: Cancellation
     scope: ResourceScope
+    workers: Workers | None = None
+    network: Network | None = None
+
+    def require_workers(self) -> Workers:
+        """Request the worker pool; a host without one fails explicitly."""
+        self.scope.ensure_open()
+        if self.workers is None:
+            raise QgisSdkUnsupportedCapabilityError("workers")
+        return self.workers
+
+    def require_network(self) -> Network:
+        """Request the network client; a host without one fails explicitly."""
+        return _require_network(self.scope, self.network)

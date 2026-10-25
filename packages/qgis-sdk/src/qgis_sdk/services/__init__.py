@@ -1,7 +1,14 @@
 """Pure capability contracts; implementations are injected by runtime adapters."""
 
 from .algorithms import Algorithms
-from .contracts import Cancellation, DesktopAccess, Notifications, Progress, ViewControl
+from .contracts import (
+    Cancellation,
+    DesktopAccess,
+    Notifications,
+    Progress,
+    ViewControl,
+    Workers,
+)
 from .layers import Layers
 from .network import BlockingNetwork, Deliver, Network, NetworkTransport, Params
 from .project import Project
@@ -24,4 +31,5 @@ __all__ = [
     "Settings",
     "Styles",
     "ViewControl",
+    "Workers",
 ]
