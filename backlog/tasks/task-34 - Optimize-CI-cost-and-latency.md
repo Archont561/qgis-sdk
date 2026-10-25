@@ -45,7 +45,7 @@ Baseline (PR #14 run 39055033648, job time): checks 1m15s, cross-platform (macos
 
 Changes, all in .github/workflows/ci.yml:
 - Concurrency group `${{ github.workflow }}-${{ github.head_ref || github.ref }}` with cancel-in-progress everywhere except the default branch, where runs queue so a landed commit's result is never discarded mid-run.
-- pip download cache via setup-python `cache: pip` keyed on packages/qgis-sdk/pyproject.toml, and a Bun install store cache via actions/cache@v6 keyed on bun.lock (setup-bun only caches the Bun executable).
+- pip download cache via setup-python `cache: pip` keyed on packages/qgis-sdk-python/pyproject.toml, and a Bun install store cache via actions/cache@v6 keyed on bun.lock (setup-bun only caches the Bun executable).
 - Node 24 actions: checkout v4->v7, setup-python v5->v7, codecov-action v5->v7 (v5 embedded github-script@60a0d83 v7.0.1 on node20, the last deprecation source in checks). setup-bun@v2 already resolves to v2.2.0 on node24, so no bump was needed.
 
 Cold run (first run, populates caches): 39058323856, wall 1m46s, success; jobs checks 57s, macOS 35s, Windows 1m41s.

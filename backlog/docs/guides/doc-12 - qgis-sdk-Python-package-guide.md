@@ -7,7 +7,7 @@ created_date: '2026-10-24 21:20'
 # qgis-sdk Python package guide
 
 The reference prose for the `qgis-sdk` Python package. It used to live in
-`packages/qgis-sdk/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
+`packages/qgis-sdk-python/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
 moved it here, where it is the source the documentation site
 ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md))
 will render. The headings dropped the task tags they carried in the README;
@@ -20,13 +20,13 @@ TASK-14 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
 policy and migration notes, TASK-29 for 0.3.0). Status at the time of writing:
 Python `0.3.0` released alongside bridge `0.2.0`.
 
-Companion guides: [doc-13](doc-13%20-%20qgis-sdk-bridge-TypeScript-package-guide.md)
+Companion guides: [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
 (TypeScript bridge) and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
 (workspace tooling, harnesses and qualification evidence).
 
 ## Installation
 
-Install from [PyPI](https://pypi.org/project/qgis-sdk/) or from the [`prefix.dev` Conda channel (`archont561/archont561`)](https://prefix.dev/channels/archont561/packages/qgis-sdk):
+Install from [PyPI](https://pypi.org/project/qgis-sdk/) or from the [`prefix.dev` Conda channel (`archont561/archont561`)](https://prefix.dev/channels/archont561/packages/qgis-sdk-python):
 
 ```sh
 pip install qgis-sdk
@@ -36,7 +36,7 @@ pip install "qgis-sdk[controlled-deployment]"
 pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ```
 
-The companion TypeScript package [`@archont561/qgis-sdk-bridge`](https://www.npmjs.com/package/@archont561/qgis-sdk-bridge) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk-bridge); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-bridge-TypeScript-package-guide.md).
+The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md).
 
 ## Declarations
 
@@ -581,7 +581,7 @@ register_host_operations(
   read as the first page, and no operation takes a filesystem path.
 - **Versioned with the client.** The handshake advertises `host_schema_version`
   and the registered ids, and the TypeScript side ships generated inside the npm
-  package as `@archont561/qgis-sdk-bridge/host`.
+  package as `@archont561/qgis-sdk/host`.
 
 ## Networking
 
@@ -840,14 +840,14 @@ The README the scaffold writes teaches both modes; they differ in one thing, whe
 | Standalone Qt | call `build_context(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so `require_native()` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
 
 The starter tests are the standalone mode: in the generated project,
-`PYTHONPATH=<this workspace>/packages/qgis-sdk/src pytest -q` runs load, action and
+`PYTHONPATH=<this workspace>/packages/qgis-sdk-python/src pytest -q` runs load, action and
 unload through the SDK runtime with no QGIS installation at all.
 
 ## Optional controlled-deployment adapter
 
 `qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound, which both it and the schema generator take from the one `qgis_sdk.models.MAX_SAFE_INTEGER` constant while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
 
-Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8 (which carries PyQGIS in the workspace), the QGIS-free suite on CPython 3.11.2 (the minimum supported version), and GitHub Actions `macos-latest` (`arm64`) and `windows-latest` (`x86_64`) on CPython 3.14 (`pip install -e "packages/qgis-sdk[dev]"`). In-process coexistence with another Pydantic-using plugin inside the real QGIS 4.2.3 Desktop application is proven on Linux by `scripts/plugin_coexistence_smoke.py`; Windows/macOS QGIS installations, display-server Desktop/WebEngine rendering, and Conda delivery remain explicit qualification gates.
+Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8 (which carries PyQGIS in the workspace), the QGIS-free suite on CPython 3.11.2 (the minimum supported version), and GitHub Actions `macos-latest` (`arm64`) and `windows-latest` (`x86_64`) on CPython 3.14 (`pip install -e "packages/qgis-sdk-python[dev]"`). In-process coexistence with another Pydantic-using plugin inside the real QGIS 4.2.3 Desktop application is proven on Linux by `scripts/plugin_coexistence_smoke.py`; Windows/macOS QGIS installations, display-server Desktop/WebEngine rendering, and Conda delivery remain explicit qualification gates.
 
 ## 0.1.0 experimental release and migration policy
 
@@ -858,7 +858,7 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
   changes use patch releases (`0.Y.Z`).
 - **Scoped manifests, independent versions:** `scripts/release.py`
   (`pixi run release-stamp --scope python|typescript|all`) updates only the manifests
-  in the selected scope. `qgis-sdk` and `@archont561/qgis-sdk-bridge` both shipped
+  in the selected scope. `qgis-sdk` and `@archont561/qgis-sdk` both shipped
   `0.1.0`/`0.1.1` because they were built together; they version independently from
   0.2.0 onward, so the 0.2.0 Python release leaves the bridge at `0.1.1`.
 - **Independent protocol versions:** `PluginDescription.schema_version = 1`
@@ -880,7 +880,7 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
 ## 0.2.0 migration notes
 
 `0.2.0` is the first release where the two packages carry different numbers: the
-Python SDK moves to `0.2.0` and `@archont561/qgis-sdk-bridge` stays at `0.1.1`,
+Python SDK moves to `0.2.0` and `@archont561/qgis-sdk` stays at `0.1.1`,
 because no task in this milestone changes the bridge's source. Nothing is
 published for the bridge, and no `ts-v*` tag exists.
 
@@ -908,7 +908,7 @@ published for the bridge, and no `ts-v*` tag exists.
 ## 0.3.0 migration notes
 
 `0.3.0` closes the m-2 milestone. It is released together with
-`@archont561/qgis-sdk-bridge` `0.2.0` - two tags, `python-v0.3.0` and
+`@archont561/qgis-sdk` `0.2.0` - two tags, `python-v0.3.0` and
 `ts-v0.2.0`, two numbers that are not meant to match
 ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
 

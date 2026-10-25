@@ -39,7 +39,7 @@ owns file/resource authority. So the inventory question is real, not cosmetic.
 owners.**
 
 - **`host`** - generated from a `HostManifest` declared next to
-  `qgis_sdk.services`, shipped *inside* `@archont561/qgis-sdk-bridge` and
+  `qgis_sdk.services`, shipped *inside* `@archont561/qgis-sdk` and
   versioned with it. Every plugin's frontend gets `host.layers.*` without a
   build step, and the surface cannot drift from the npm version it ships in. A
   test reflects each Protocol's method names and fails when a method exists in a

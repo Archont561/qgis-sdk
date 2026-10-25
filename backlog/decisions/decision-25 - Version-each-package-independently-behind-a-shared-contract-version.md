@@ -18,8 +18,8 @@ Working with it for a single milestone exposed where the cost lands - on the
 bridge:
 
 - **The bridge has nothing to release in 0.2.0.** Between `v0.1.1` and the
-  branch that closes m-1, `packages/qgis-sdk/` gains about 2,200 lines across 31
-  files and `packages/qgis-sdk-bridge/` gains zero. A shared number publishes a
+  branch that closes m-1, `packages/qgis-sdk-python/` gains about 2,200 lines across 31
+  files and `packages/qgis-sdk-typescript/` gains zero. A shared number publishes a
   bridge version whose tarball is identical to 0.1.1, and npm versions are
   immutable.
 - **Every release gate has to verify an unchanged artifact.** The 0.2.0
@@ -36,7 +36,7 @@ the bridge parses the `PluginDescription` that Python generates.
 
 ## Decision
 
-**`qgis-sdk` and `@archont561/qgis-sdk-bridge` version independently.** Each
+**`qgis-sdk` and `@archont561/qgis-sdk` version independently.** Each
 package derives its own `major.minor.patch` from the conventional commits that
 touch it - plus the repository-wide files both depend on - starting from its own
 last release tag. A release stamps only the manifests of the package it
@@ -45,7 +45,7 @@ publishes:
 | Tag | Stamps | Publishes |
 | --- | --- | --- |
 | `python-vX.Y.Z` | `pyproject.toml`, `recipe.yaml` | PyPI, prefix.dev |
-| `ts-vX.Y.Z` | `packages/qgis-sdk-bridge/package.json` | npm, GitHub Packages |
+| `ts-vX.Y.Z` | `packages/qgis-sdk-typescript/package.json` | npm, GitHub Packages |
 | `vX.Y.Z` | all three | both, aligned at one version |
 
 `v*` survives as the deliberate **alignment release**: the way to re-couple the
@@ -109,7 +109,7 @@ advances, and the contract check proves the pair is coherent.
   `verify-versions --scope/--version`, `contract_versions()` and
   `PLUGIN_DESCRIPTION_SCHEMA_VERSION` readers.
 - `PLUGIN_DESCRIPTION_SCHEMA_VERSION` is now declared in
-  `packages/qgis-sdk/src/qgis_sdk/declarations.py` and used as the default of
+  `packages/qgis-sdk-python/src/qgis_sdk/declarations.py` and used as the default of
   `PluginDescription.schema_version`; the bridge already declared it.
 - `.github/workflows/release.yml` stamps and verifies by the tag's scope, so a
   `python-v*` release never touches the bridge manifest.

@@ -16,4 +16,4 @@
 # instead of being inferred from a coverage drop.
 [run]
 omit =
-    packages/qgis-sdk/src/qgis_sdk/adapters/qgis/*
+    packages/qgis-sdk-python/src/qgis_sdk/adapters/qgis/*

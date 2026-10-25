@@ -45,7 +45,7 @@ Pixi keeps the toolchains separate:
 - `build`: Python packaging and test tools without QGIS.
 - `bun`: Bun and JavaScript workspace tooling, isolated from the Python environments.
 
-Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis, pytest-cov, and Pydantic 2.14.1 are pinned as PyPI wheels (matching the package `dev` extra); Pydantic is present in development only to exercise the opt-in adapter and is not a required package runtime dependency. The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk/src`.
+Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis, pytest-cov, and Pydantic 2.14.1 are pinned as PyPI wheels (matching the package `dev` extra); Pydantic is present in development only to exercise the opt-in adapter and is not a required package runtime dependency. The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk-python/src`.
 
 ## Reproducible sandbox
 
@@ -66,7 +66,7 @@ pixi run -e bun bun run build
 pixi run -e bun typecheck
 ```
 
-Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk` and `qgis-sdk-bridge`, with repository-root-relative LCOV reports for Codecov.
+Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk-python` and `qgis-sdk-typescript`, with repository-root-relative LCOV reports for Codecov.
 
 | Task | Command | Purpose |
 | :-- | :-- | :-- |
@@ -77,17 +77,18 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 | Lint Python | `pixi run lint-python` | Ruff lint across the whole checkout |
 | Format check Python | `pixi run format-python-check` | Ruff format check across the whole checkout |
 
-Keep Python development tools in `packages/qgis-sdk/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
+Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 
 ## Repository layout
 
 | Path | Role |
 | :-- | :-- |
-| `packages/qgis-sdk` | Python package: pure contract layer, declarations, scaffold command, lifecycle runtime |
-| `packages/qgis-sdk/scripts` | Standalone developer executables (qualification harnesses, contract generators), covered by QGIS-free tests in `packages/qgis-sdk/tests/scripts` |
-| `packages/qgis-sdk/tests` | Python tests for the package |
-| `packages/qgis-sdk-bridge` | TypeScript bridge for QWebEngineView plugin interfaces |
-| `packages/qgis-sdk-bridge/tests` | Bun tests for the bridge |
+| `packages/qgis-sdk-python` | Python package: pure contract layer, declarations, scaffold command, lifecycle runtime |
+| `packages/qgis-sdk-python/scripts` | Standalone developer executables (qualification harnesses, contract generators), covered by QGIS-free tests in `packages/qgis-sdk-python/tests/scripts` |
+| `packages/qgis-sdk-python/tests` | Python tests for the package |
+| `packages/qgis-sdk-typescript` | TypeScript bridge for QWebEngineView plugin interfaces |
+| `packages/qgis-sdk-typescript/tests` | Bun tests for the bridge |
+| `packages/qgis-sdk-alias` | Unscoped npm alias `qgis-sdk`: re-export files, manifest and Bun tests that pin it to the scoped package |
 | `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
 | `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
 | `scripts` | Repository-root developer scripts (restore) |
@@ -109,16 +110,16 @@ From the workspace root, install the Pixi environments and run the Python tests:
 ```sh
 pixi install -e default
 pixi install -e build
-pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests
 ```
 
-The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis, pytest-cov, and Pydantic 2.14.1 as wheels; Pydantic is needed only to test the optional adapter. The workspace package is loaded from `packages/qgis-sdk/src` on `PYTHONPATH` rather than installed as a Pixi path dependency.
+The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis, pytest-cov, and Pydantic 2.14.1 as wheels; Pydantic is needed only to test the optional adapter. The workspace package is loaded from `packages/qgis-sdk-python/src` on `PYTHONPATH` rather than installed as a Pixi path dependency.
 
 The checked contract-generation examples live in `tests/contract_sample/` and are run via the workspace's `sdk:generate` package script; see [Contract generation (checked example)](#contract-generation-checked-example). Mashumaro remains a separate test-only schema-export example. The Pydantic example uses the optional adapter, emits its own request/reader/writer schemas, and is checked against the same Python/Ajv case corpus. Neither example is a general SDK generator or public operation.
 
 ## Test layers
 
-Every test in `packages/qgis-sdk/tests` belongs to exactly one layer, and each layer is a pytest marker you can select on its own (TASK-7). The markers are registered under `--strict-markers` by `tests/conftest.py` from `tests/layers.py`:
+Every test in `packages/qgis-sdk-python/tests` belongs to exactly one layer, and each layer is a pytest marker you can select on its own (TASK-7). The markers are registered under `--strict-markers` by `tests/conftest.py` from `tests/layers.py`:
 
 | Marker | Needs | Selected by |
 | :-- | :-- | :-- |
@@ -131,10 +132,10 @@ Every test in `packages/qgis-sdk/tests` belongs to exactly one layer, and each l
 
 ```sh
 # the pure half, the way the macOS/Windows matrix runs it (QGIS is not installed there)
-pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -m pure
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m pure
 # one native layer, or all of them, offscreen
-QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -m webengine
-QT_QPA_PLATFORM=offscreen QGIS_SDK_NATIVE_SERVICES=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -m native
+QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m webengine
+QT_QPA_PLATFORM=offscreen QGIS_SDK_NATIVE_SERVICES=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m native
 ```
 
 How the layers stay honest:
@@ -143,7 +144,7 @@ How the layers stay honest:
 - The one application per process is owned by the session fixtures `qt_app` and `qgis_app` in `tests/conftest.py` (`qt_app` is already a `QgsApplication` whenever the QGIS bindings import, so the two layers never disagree about the application a process holds; `qgis_app` skips when only Qt is there) and stopped once at the end of the session; `webengine_profile` is the one `QWebEngineProfile`, because Chromium tears a profile down once per process. Native modules take `app` from these fixtures rather than building their own, so module order no longer decides which application a test sees. `tests/layers.py` prepares the headless environment (`QT_QPA_PLATFORM`, `QGIS_PREFIX_PATH`, the Chromium flags, an auth database directory) before any native module is collected, without importing Qt.
 - The service backends in `tests/services/` run every contract against the in-memory fakes in the pure layer, and against real QGIS as a second `qgis`-marked parameter when `QGIS_SDK_NATIVE_SERVICES=1` is set; `tests/native_support.py` carries the loopback HTTP origin and the `pump`/`settle` loop helpers the network, WebEngine and WebChannel modules share.
 - `pytest-bdd` features under `tests/features/` are ordinary pytest tests: the steps are functions in the same modules, and `tests/bridge_steps.py` - loaded as a plugin by `tests/conftest.py` - shows the shared form, where the `contract_host` fixture and the step definitions serve both `bridge_contract.feature` and `test_bridge_contract_fixtures.py`. A scenario can carry a native marker like any other test.
-- The bridge contract vectors in `packages/qgis-sdk-bridge/tests/contracts/bridge/cases.json` are generated by `scripts/generate_bridge_cases.py` from the real dispatcher and consumed by the TypeScript client, the pure replay test and the feature above; `tests/test_webchannel_native.py` is the separate integration evidence that a real page over `QWebChannel` is bound to the host-minted identity and loses its subscriptions when the host disposes the view.
+- The bridge contract vectors in `packages/qgis-sdk-typescript/tests/contracts/bridge/cases.json` are generated by `scripts/generate_bridge_cases.py` from the real dispatcher and consumed by the TypeScript client, the pure replay test and the feature above; `tests/test_webchannel_native.py` is the separate integration evidence that a real page over `QWebChannel` is bound to the host-minted identity and loses its subscriptions when the host disposes the view.
 
 ## Contract generation (checked example)
 
@@ -155,7 +156,7 @@ pixi run -e bun bun run coverage
 pixi run -e bun typecheck
 ```
 
-The `sdk:generate` package script keeps two schema examples separate. The test-only Mashumaro exporter uses ordinary dataclasses in `packages/qgis-sdk/tests/contract_sample/models.py`; the optional controlled-deployment exporter uses the adapter and fixtures in `packages/qgis-sdk/tests/contract_sample/pydantic_*`. Each emits request, result-reader, and result-writer Draft 2020-12 schemas. The bridge's locally installed `json2ts` (`json-schema-to-typescript==16.0.0`) generates checked-in TypeScript declarations under `packages/qgis-sdk-bridge/tests/contracts/`. No `npx`/`bunx` download is needed during generation. Python's test-only `jsonschema` oracle and bridge Ajv2020 tests check the same 40 cases against both schema sets with coercion and mutation disabled; generation drift and TypeScript required/nullable distinctions are checked in the normal suite.
+The `sdk:generate` package script keeps two schema examples separate. The test-only Mashumaro exporter uses ordinary dataclasses in `packages/qgis-sdk-python/tests/contract_sample/models.py`; the optional controlled-deployment exporter uses the adapter and fixtures in `packages/qgis-sdk-python/tests/contract_sample/pydantic_*`. Each emits request, result-reader, and result-writer Draft 2020-12 schemas. The bridge's locally installed `json2ts` (`json-schema-to-typescript==16.0.0`) generates checked-in TypeScript declarations under `packages/qgis-sdk-typescript/tests/contracts/`. No `npx`/`bunx` download is needed during generation. Python's test-only `jsonschema` oracle and bridge Ajv2020 tests check the same 40 cases against both schema sets with coercion and mutation disabled; generation drift and TypeScript required/nullable distinctions are checked in the normal suite.
 
 `qgis_sdk.adapters.pydantic.PydanticContractAdapter` is a narrow optional prototype for controlled deployments: strict JSON request validation, typed handler dispatch, result serialization, and separate reader/writer schemas. `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` implements the agreed finite JavaScript-safe integer range while accepting integral JSON numbers such as `2.0`. Its safe structured errors expose paths and validator codes, not rejected values. Pydantic is not imported by the default SDK modules or included in the base runtime; an administrator or developer must explicitly provision the `qgis-sdk[controlled-deployment]` extra. No startup installer is provided. Pydantic's native core and the `jsonschema` oracle remain outside ordinary plugin runtime dependencies.
 
@@ -166,14 +167,14 @@ These examples are **not** public SDK operations, a general SDK generator, or us
 The package uses Hatchling for Python distributions and an explicit Conda recipe:
 
 ```sh
-pixi run -e bun bun run --filter qgis-sdk build
+pixi run -e bun bun run --filter qgis-sdk-python build
 ```
 
 The combined build produces a wheel and source distribution under `dist/pypi/`, checks them with Twine, and builds the Conda artifact under `dist/conda/`.
 
 ## Developer scripts
 
-Standalone executables live in `packages/qgis-sdk/scripts/` next to `src/`: they are runnable
+Standalone executables live in `packages/qgis-sdk-python/scripts/` next to `src/`: they are runnable
 tools rather than test data, so they stay out of `tests/`, and they must stay out
 of `src/qgis_sdk/` because a wheel cannot ship a command that imports a display
 server. Each script is covered by a module in `tests/scripts/`, and the harnesses
@@ -194,7 +195,7 @@ installed the wheel has no `scripts/` directory to point at.
 `scripts/webengine_smoke.py` is a repeatable harness for the headless path QGIS uses to host a `QWebEngineView`. It starts a real QGIS application, loads a page in a real WebEngine view, tears QGIS down again and prints a machine-readable report:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/webengine_smoke.py
+pixi run -e default python packages/qgis-sdk-python/scripts/webengine_smoke.py
 ```
 
 ```json
@@ -218,7 +219,7 @@ The harness resolves everything it needs from the active prefix, so the same com
 | Requirement | Linux (`linux-64`) | macOS (`macos-latest` arm64) | Windows (`windows-latest` x86-64) |
 | :-- | :-- | :-- | :-- |
 | QGIS-free Python SDK + `PydanticContractAdapter` (`pydantic==2.14.1`) | Qualified (CPython 3.14.8 & 3.11.2) | Qualified in CI (`pip`, CPython 3.14) | Qualified in CI (`pip`, CPython 3.14) |
-| TypeScript bridge (`packages/qgis-sdk-bridge`) | Qualified (Bun 1.4.2, 95 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 95 tests) | Qualified in CI (Bun 1.4.2, 95 tests) |
+| TypeScript bridge (`packages/qgis-sdk-typescript`) | Qualified (Bun 1.4.2, 95 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 95 tests) | Qualified in CI (Bun 1.4.2, 95 tests) |
 | QGIS with Python bindings | Qualified (Pixi `default`, QGIS 4.2.3) | Blocker: no macOS QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) | Blocker: no Windows QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) |
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
@@ -232,7 +233,7 @@ Without the Chromium flags the WebEngine process fails with `eglInitialize: Fail
 `tests/scripts/test_qualification_webengine.py` covers the harness helpers in the QGIS-free suite. The end-to-end run is opt-in, because it needs a real QGIS installation:
 
 ```sh
-QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_webengine.py
+QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_webengine.py
 ```
 
 The headless path is **not** a visible Desktop GUI qualification and does **not** claim universal QGIS 4 support: the Linux sandbox and CI runners have no display server or `Xvfb`, and `pixi.toml` locks `linux-64` only, so no Windows or macOS QGIS 4 installation has been tested. `qgis_sdk.adapters.webengine` therefore only proves that the optional bindings can be located on a qualified host and that a missing installation is reported with an actionable error.
@@ -242,7 +243,7 @@ The headless path is **not** a visible Desktop GUI qualification and does **not*
 The headless lifecycle harness uses a real `QgsApplication` and the adapter:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/desktop_lifecycle_smoke.py
+pixi run -e default python packages/qgis-sdk-python/scripts/desktop_lifecycle_smoke.py
 ```
 
 ```json
@@ -266,7 +267,7 @@ menus, dialogs or docks, so it is the always-runnable fallback and **not** a rea
 Desktop startup/unload qualification. Run the opt-in test with:
 
 ```sh
-QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_lifecycle.py
+QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_lifecycle.py
 ```
 
 ### Real Desktop startup and unload evidence
@@ -278,7 +279,7 @@ start and unload it. The fixture belongs to this harness rather than to the scaf
 project, so the adapter contract is proven without depending on `qgis_sdk.scaffold`.
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/desktop_adapter_smoke.py
+pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smoke.py
 ```
 
 ```json
@@ -318,7 +319,7 @@ window and renders nothing: GUI, canvas, 3D and WebEngine behaviour remain under
 TASK-33, as does every non-Linux candidate.
 
 ```sh
-QGIS_SDK_DESKTOP_ADAPTER=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_desktop_adapter.py
+QGIS_SDK_DESKTOP_ADAPTER=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_desktop_adapter.py
 ```
 
 The Qt scheduler harness exercises the `StepScheduler` seam inside a real
@@ -328,7 +329,7 @@ and quiesce blocking on an unresolved handoff. It compares tick latency while a
 worker is blocked against latency while phases are scheduled:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/qt_scheduler_smoke.py
+pixi run -e default python packages/qgis-sdk-python/scripts/qt_scheduler_smoke.py
 ```
 
 ```json
@@ -347,7 +348,7 @@ reasoning and the repeated runs are recorded in
 opt-in test with:
 
 ```sh
-QGIS_SDK_QT_SCHEDULER=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_scheduler.py
+QGIS_SDK_QT_SCHEDULER=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scheduler.py
 ```
 
 The network limits probe measures what
@@ -359,7 +360,7 @@ transport-followed hop costs, and how long the GUI thread stalls when a 1 to
 `recommended` block:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/network_limits_probe.py
+pixi run -e default python packages/qgis-sdk-python/scripts/network_limits_probe.py
 ```
 
 The shipped defaults (20 redirects, 16 MiB buffered body) and the finding that
@@ -369,7 +370,7 @@ made the transport follow redirects itself are recorded in
 QGIS-free suite; the measurement itself is opt-in:
 
 ```sh
-QGIS_SDK_NETWORK_PROBE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_network_limits_probe.py
+QGIS_SDK_NETWORK_PROBE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_network_limits_probe.py
 ```
 
 The transport's own integration coverage is `tests/test_network_native.py`:
@@ -394,8 +395,8 @@ Desktop process. `scripts/plugin_coexistence_smoke.py` proves that an SDK plugin
 already imports and validates with Pydantic:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/plugin_coexistence_smoke.py
-QGIS_SDK_PLUGIN_COEXISTENCE=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_coexistence.py
+pixi run -e default python packages/qgis-sdk-python/scripts/plugin_coexistence_smoke.py
+QGIS_SDK_PLUGIN_COEXISTENCE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_coexistence.py
 ```
 
 ```json
@@ -443,8 +444,8 @@ invokes the declared action and unloads it, with the SDK reporting `running` and
 then `stopped`:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/scaffold_desktop_smoke.py
-QGIS_SDK_SCAFFOLD_DESKTOP=1 pixi run -e default pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/scripts/test_qualification_scaffold.py
+pixi run -e default python packages/qgis-sdk-python/scripts/scaffold_desktop_smoke.py
+QGIS_SDK_SCAFFOLD_DESKTOP=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scaffold.py
 ```
 
 Headless Desktop needs three variables that are easy to get wrong, which is why the

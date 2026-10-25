@@ -33,11 +33,16 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_PYPROJECT = _REPO_ROOT / "packages/qgis-sdk/pyproject.toml"
-_RECIPE = _REPO_ROOT / "packages/qgis-sdk/recipe.yaml"
-_BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-bridge/package.json"
-_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk/src/qgis_sdk/declarations.py"
-_TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-bridge/src/index.ts"
+_PYPROJECT = _REPO_ROOT / "packages/qgis-sdk-python/pyproject.toml"
+_RECIPE = _REPO_ROOT / "packages/qgis-sdk-python/recipe.yaml"
+_BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
+# The unscoped npm alias ``qgis-sdk`` re-exports ``@archont561/qgis-sdk`` at an
+# exact pin (decision-33); it is stamped and verified with the bridge whenever
+# it exists, and ignored when it does not.
+_ALIAS_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-alias/package.json"
+_ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
+_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-python/src/qgis_sdk/declarations.py"
+_TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-typescript/src/index.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 
 __all__ = [
@@ -109,9 +114,9 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
     ts = False
     for raw in files:
         path = raw.strip()
-        if path.startswith("packages/qgis-sdk/"):
+        if path.startswith(_PYTHON_PREFIX):
             py = True
-        elif path.startswith("packages/qgis-sdk-bridge/"):
+        elif path.startswith(_TYPESCRIPT_PREFIXES):
             ts = True
     if py and ts:
         return "all"
@@ -251,8 +256,9 @@ def parse_log_with_files(raw: str) -> tuple[Commit, ...]:
     return tuple(commits)
 
 
-_PYTHON_PREFIX = "packages/qgis-sdk/"
-_TYPESCRIPT_PREFIX = "packages/qgis-sdk-bridge/"
+_PYTHON_PREFIX = "packages/qgis-sdk-python/"
+# The alias ships with the bridge: a change to either is a TypeScript release.
+_TYPESCRIPT_PREFIXES = ("packages/qgis-sdk-typescript/", "packages/qgis-sdk-alias/")
 
 
 def commit_packages(commit: Commit) -> tuple[bool, bool]:
@@ -268,7 +274,7 @@ def commit_packages(commit: Commit) -> tuple[bool, bool]:
         return True, True
     return (
         any(path.startswith(_PYTHON_PREFIX) for path in commit.files),
-        any(path.startswith(_TYPESCRIPT_PREFIX) for path in commit.files),
+        any(path.startswith(_TYPESCRIPT_PREFIXES) for path in commit.files),
     )
 
 
@@ -394,11 +400,15 @@ _SCOPE_ALIASES = {
     "python": "python",
     "py": "python",
     "qgis-sdk": "python",
+    "qgis-sdk-python": "python",
     "typescript": "typescript",
     "ts": "typescript",
     "bridge": "typescript",
+    "qgis-sdk-typescript": "typescript",
+    "@archont561/qgis-sdk": "typescript",
+    # Legacy alias: the npm package was published as @archont561/qgis-sdk-bridge
+    # through ts-v0.2.0 (decision-33).
     "qgis-sdk-bridge": "typescript",
-    "@archont561/qgis-sdk-bridge": "typescript",
     "bun": "typescript",
 }
 _SCOPE_PREFIXES = {
@@ -969,6 +979,27 @@ def stamp_package_json(text: str, version: Version) -> str:
     return json.dumps(data, indent="\t") + "\n"
 
 
+def stamp_alias_package_json(
+    text: str, version: Version, dependency: str = _ALIAS_DEPENDENCY
+) -> str:
+    """Stamp the alias manifest: its own version and its exact pin on the bridge.
+
+    The alias has no surface of its own, so the two numbers are one number; a
+    pin that floats (``^``) or lags would let ``qgis-sdk@X`` install a bridge
+    that is not ``@archont561/qgis-sdk@X``.
+    """
+    data = json.loads(text)
+    dependencies = data.get("dependencies")
+    if not isinstance(dependencies, dict) or dependency not in dependencies:
+        raise QgisSdkReleaseError(
+            f"alias package.json does not depend on {dependency}; "
+            "it cannot re-export what it does not install"
+        )
+    data["version"] = str(version)
+    dependencies[dependency] = str(version)
+    return json.dumps(data, indent="\t") + "\n"
+
+
 _PEP440 = re.compile(r"^(?P<core>\d+\.\d+\.\d+)(?:(?P<pre>a|b|rc)(?P<num>\d+))?$")
 # ``to_pep440`` shortens these; the inverse has to expand them back, or
 # ``0.2.0-rc.1`` and ``0.2.0-alpha.1`` read back as ``rc.1``/``a.1`` and stop
@@ -1013,6 +1044,24 @@ def read_package_json_version(text: str) -> Version:
     return Version.parse(str(json.loads(text)["version"]))
 
 
+def read_alias_versions(
+    text: str, dependency: str = _ALIAS_DEPENDENCY
+) -> tuple[Version, Version]:
+    """Return ``(alias version, pinned bridge version)`` from the alias manifest.
+
+    The pin has to be an exact version: ``Version.parse`` refuses ranges, which
+    is the point.
+    """
+    data = json.loads(text)
+    dependencies = data.get("dependencies")
+    if not isinstance(dependencies, dict) or dependency not in dependencies:
+        raise QgisSdkReleaseError(f"alias package.json does not depend on {dependency}")
+    return (
+        Version.parse(str(data["version"])),
+        Version.parse(str(dependencies[dependency])),
+    )
+
+
 @dataclass(frozen=True)
 class ManifestVersions:
     """The version each released manifest currently carries."""
@@ -1020,6 +1069,8 @@ class ManifestVersions:
     pyproject: Version
     package_json: Version
     recipe: Version | None = None
+    alias: Version | None = None
+    alias_dependency: Version | None = None
 
     def items(self) -> tuple[tuple[str, Version], ...]:
         """Return the labelled versions that exist, in reporting order."""
@@ -1029,6 +1080,10 @@ class ManifestVersions:
         ]
         if self.recipe is not None:
             found.append(("recipe.yaml", self.recipe))
+        if self.alias is not None:
+            found.append(("alias package.json", self.alias))
+        if self.alias_dependency is not None:
+            found.append(("alias dependency", self.alias_dependency))
         return tuple(found)
 
     def agreed(self) -> Version:
@@ -1046,18 +1101,26 @@ class ManifestVersions:
 
 
 def manifest_versions(
-    pyproject_text: str, package_text: str, recipe_text: str | None = None
+    pyproject_text: str,
+    package_text: str,
+    recipe_text: str | None = None,
+    alias_text: str | None = None,
 ) -> ManifestVersions:
     """Read all released manifests and return what each one carries."""
+    alias, alias_dependency = (
+        read_alias_versions(alias_text) if alias_text is not None else (None, None)
+    )
     return ManifestVersions(
         pyproject=read_pyproject_version(pyproject_text),
         package_json=read_package_json_version(package_text),
         recipe=read_recipe_version(recipe_text) if recipe_text is not None else None,
+        alias=alias,
+        alias_dependency=alias_dependency,
     )
 
 
 _PYTHON_MANIFESTS = ("pyproject.toml", "recipe.yaml")
-_TYPESCRIPT_MANIFESTS = ("package.json",)
+_TYPESCRIPT_MANIFESTS = ("package.json", "alias package.json", "alias dependency")
 
 
 def scoped_manifest_versions(
@@ -1303,7 +1366,7 @@ def resolve_dry_run(trigger: str, requested: bool) -> tuple[bool, str]:
     A branch push never tags. The train still plans and gates the candidate on
     every merge, but cutting the tag stays an explicit act - a dispatch or a
     milestone tag - so a merge cannot consume a version, and a package minor
-    (which is what a ``feat!`` landing on ``packages/qgis-sdk`` derives) cannot
+    (which is what a ``feat!`` landing on ``packages/qgis-sdk-python`` derives) cannot
     bypass its release gate. On 2026-10-24 a merge planned ``v0.2.0`` for both
     packages this way and the only thing that stopped it was luck.
     """
@@ -1461,6 +1524,12 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
             stamp_package_json(package_text, version), encoding="utf-8"
         )
         stamped.append(str(_BRIDGE_PACKAGE))
+        if _ALIAS_PACKAGE.is_file():
+            alias_text = _ALIAS_PACKAGE.read_text(encoding="utf-8")
+            _ALIAS_PACKAGE.write_text(
+                stamp_alias_package_json(alias_text, version), encoding="utf-8"
+            )
+            stamped.append(f"{_ALIAS_PACKAGE} (and its pin on {_ALIAS_DEPENDENCY})")
     print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
     return 0
 
@@ -1469,10 +1538,14 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
     scope_raw = (getattr(args, "scope", "") or "").strip()
     expected_raw = (getattr(args, "version", "") or "").strip()
     recipe_text = _RECIPE.read_text(encoding="utf-8") if _RECIPE.is_file() else None
+    alias_text = (
+        _ALIAS_PACKAGE.read_text(encoding="utf-8") if _ALIAS_PACKAGE.is_file() else None
+    )
     versions = manifest_versions(
         _PYPROJECT.read_text(encoding="utf-8"),
         _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
         recipe_text,
+        alias_text,
     )
     contract = contract_versions(
         _PY_DECLARATIONS.read_text(encoding="utf-8"),
@@ -1660,7 +1733,7 @@ def _build_parser() -> argparse.ArgumentParser:
     versions.set_defaults(handler=_cmd_verify_versions)
 
     build = sub.add_parser("build-python", help="build and check the wheel")
-    build.add_argument("--package", default="packages/qgis-sdk")
+    build.add_argument("--package", default="packages/qgis-sdk-python")
     build.add_argument("--outdir", default="dist/pypi")
     build.set_defaults(handler=_cmd_build_python)
 

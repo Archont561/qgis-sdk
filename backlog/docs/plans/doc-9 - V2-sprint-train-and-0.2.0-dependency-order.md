@@ -27,7 +27,7 @@ closed. Milestone m-1 is the next milestone and reads 2/8 done
 What the package actually contains today, because the sprint plan has to start
 from this and not from the architecture it intends to become:
 
-| Area | Present in `packages/qgis-sdk/src/qgis_sdk` | Missing for 0.2.0 |
+| Area | Present in `packages/qgis-sdk-python/src/qgis_sdk` | Missing for 0.2.0 |
 | --- | --- | --- |
 | `declarations.py` | Decorators, annotation walker, generated description | Actions/forms rendering (TASK-3) |
 | `core/` | `PluginRuntime`, `ResourceScope`, `StepScheduler`/`Job`/`Handoff`, four contexts | Job submission API and typed result handles (TASK-15) |
@@ -39,7 +39,7 @@ There is no Processing module and no HTTP client yet, so TASK-14 and TASK-5 are
 greenfield work rather than extensions.
 
 The TypeScript side is not part of this train. 0.2.0 publishes no bridge version
-at all: no m-1 task changes `packages/qgis-sdk-bridge`, so it stays at 0.1.1 and
+at all: no m-1 task changes `packages/qgis-sdk-typescript`, so it stays at 0.1.1 and
 nothing is consumed from npm. The release still checks the shared
 plugin-description contract version, and the typed surface is m-2's work. See the
 "Bridge track" section of
@@ -84,7 +84,7 @@ Why TASK-25 and not another unblocked task:
   Processing outputs exist.
 - Evidence is obtainable locally: QGIS `4.2.3` and `pyqt6-webengine` are pinned
   in `pixi.toml`'s `qgis` feature, and the existing opt-in harnesses
-  (`packages/qgis-sdk/scripts/*.py`) already drive real QGIS headless.
+  (`packages/qgis-sdk-python/scripts/*.py`) already drive real QGIS headless.
 
 **Parallel track (best effort, not part of sprint 1's exit criteria):**
 TASK-15 builds directly on the landed `StepScheduler`, so it is the cheapest
@@ -205,11 +205,11 @@ pixi run format-python-check
 pixi run -e bun typecheck
 
 # opt-in real-QGIS harnesses, e.g.
-pixi run -e default python packages/qgis-sdk/scripts/desktop_lifecycle_smoke.py
+pixi run -e default python packages/qgis-sdk-python/scripts/desktop_lifecycle_smoke.py
 ```
 
 The harnesses stay opt-in through their `QGIS_SDK_*` environment flags; the
-QGIS-free tests for them live in `packages/qgis-sdk/tests/scripts/`.
+QGIS-free tests for them live in `packages/qgis-sdk-python/tests/scripts/`.
 
 ## 6. Risks and blockers
 

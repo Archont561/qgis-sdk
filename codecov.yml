@@ -4,21 +4,21 @@ coverage:
   range: "90...100"
   status:
     project:
-      qgis-sdk:
+      qgis-sdk-python:
         target: 90%
         threshold: 0%
         flags:
-          - qgis-sdk
-      qgis-sdk-bridge:
+          - qgis-sdk-python
+      qgis-sdk-typescript:
         target: 90%
         threshold: 0%
         flags:
-          - qgis-sdk-bridge
+          - qgis-sdk-typescript
 
 flags:
-  qgis-sdk:
+  qgis-sdk-python:
     paths:
-      - packages/qgis-sdk/src/
-  qgis-sdk-bridge:
+      - packages/qgis-sdk-python/src/
+  qgis-sdk-typescript:
     paths:
-      - packages/qgis-sdk-bridge/src/
+      - packages/qgis-sdk-typescript/src/

@@ -25,7 +25,7 @@ jsonschema = "==4.26.0"
 pydantic = "==2.14.1"
 
 [feature.python.activation.env]
-PYTHONPATH = "packages/qgis-sdk/src"
+PYTHONPATH = "packages/qgis-sdk-python/src"
 
 [feature.python.tasks.test-skill-creator]
 cmd = "pytest -q .agents/skills/skill-creator/tests"
@@ -59,10 +59,10 @@ cmd = "python scripts/release.py build-python"
 cmd = "python scripts/release.py verify-python"
 
 [feature.python.tasks.package]
-cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk/recipe.yaml --output-dir dist/conda -c conda-forge"
+cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk-python/recipe.yaml --output-dir dist/conda -c conda-forge"
 
 [feature.python.tasks.release-build-conda]
-cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk/recipe.yaml --output-dir dist/conda -c conda-forge"
+cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk-python/recipe.yaml --output-dir dist/conda -c conda-forge"
 
 [feature.python.tasks.publish-conda]
 args = [{ arg = "files", default = "dist/conda/*.conda" }]
@@ -121,7 +121,7 @@ cmd = "bun install --frozen-lockfile"
 cmd = "bun run biome check ."
 
 [feature.bun.tasks.typecheck]
-cmd = "bun run --filter '@archont561/qgis-sdk-bridge' typecheck"
+cmd = "bun run --filter '@archont561/qgis-sdk' typecheck"
 
 [feature.bun.tasks.turbo-test]
 cmd = "bun run test"

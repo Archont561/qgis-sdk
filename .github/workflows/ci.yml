@@ -98,14 +98,14 @@ jobs:
       - name: Check the generated bridge clients are current
         id: s19
         run: |
-          python packages/qgis-sdk/scripts/generate_bridge_clients.py
+          python packages/qgis-sdk-python/scripts/generate_bridge_clients.py
           # Both artifacts: the plugin client under tests, and the host module the
           # package ships under src. A generator that stopped writing one of them
           # shows up as an unexpected deletion, not as a stale byte comparison.
-          generated=$(git status --porcelain -- packages/qgis-sdk-bridge)
+          generated=$(git status --porcelain -- packages/qgis-sdk-typescript)
           if [ -n "$generated" ]; then
-            git --no-pager diff -- packages/qgis-sdk-bridge
-            echo "::error title=generated client is stale::Run \`python packages/qgis-sdk/scripts/generate_bridge_clients.py\` and commit the result."
+            git --no-pager diff -- packages/qgis-sdk-typescript
+            echo "::error title=generated client is stale::Run \`python packages/qgis-sdk-python/scripts/generate_bridge_clients.py\` and commit the result."
             exit 1
           fi
 
@@ -129,7 +129,7 @@ jobs:
           set -o pipefail
           log=native-layers.log
           status=0
-          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -m native -q -rs 2>&1 | tee "$log" || status=$?
+          pixi run -e default python -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m native -q -rs 2>&1 | tee "$log" || status=$?
           if [ "$status" -eq 0 ]; then
             exit 0
           fi
@@ -193,8 +193,8 @@ jobs:
         # node24; v5 makes fresh runs emit Node 20 deprecation warnings.
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          files: packages/qgis-sdk/coverage/lcov.info
-          flags: qgis-sdk
+          files: packages/qgis-sdk-python/coverage/lcov.info
+          flags: qgis-sdk-python
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -203,8 +203,8 @@ jobs:
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
-          files: coverage/qgis-sdk-bridge/lcov.info
-          flags: qgis-sdk-bridge
+          files: coverage/qgis-sdk-typescript/lcov.info
+          flags: qgis-sdk-typescript
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -261,10 +261,10 @@ jobs:
           # Warm pip's download cache from the dependency declaration so warm
           # runs skip re-resolving the dev extra's wheels (TASK-34).
           cache: pip
-          cache-dependency-path: packages/qgis-sdk/pyproject.toml
+          cache-dependency-path: packages/qgis-sdk-python/pyproject.toml
 
       - name: Install Python test dependencies
-        run: python -m pip install --disable-pip-version-check -e "packages/qgis-sdk[dev]"
+        run: python -m pip install --disable-pip-version-check -e "packages/qgis-sdk-python[dev]"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -288,8 +288,8 @@ jobs:
       - name: Test Python SDK and skill tooling
         shell: bash
         run: >-
-          python -m pytest -c packages/qgis-sdk/pyproject.toml
-          packages/qgis-sdk/tests .agents/skills/skill-creator/tests -q
+          python -m pytest -c packages/qgis-sdk-python/pyproject.toml
+          packages/qgis-sdk-python/tests .agents/skills/skill-creator/tests -q
           --junitxml=python-tests.xml
 
       # Job logs are served from a blob host that some networks cannot read, so
@@ -303,7 +303,7 @@ jobs:
         run: |
           # bun writes its summary to stderr; keep both streams and bun's status.
           set -o pipefail
-          bun test packages/qgis-sdk-bridge/tests 2>&1 | tee bun-tests.log
+          bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests 2>&1 | tee bun-tests.log
 
       - name: Report TypeScript test results
         if: ${{ !cancelled() }}

@@ -139,7 +139,7 @@ def test_every_milestone_documents_both_artifacts() -> None:
         text = path.read_text(encoding="utf-8")
         absent = [
             artifact
-            for artifact in ("`qgis-sdk`", "qgis-sdk-bridge")
+            for artifact in ("`qgis-sdk`", "@archont561/qgis-sdk")
             if artifact not in text
         ]
         if absent:
@@ -211,4 +211,6 @@ def test_milestone_exit_criteria_cover_both_packages(identifier: str) -> None:
     end = text.find("\n## ", start + 1)
     section = text[start:end]
     assert "`qgis-sdk`" in section, f"{identifier}: no Python-side exit criterion"
-    assert "qgis-sdk-bridge" in section, f"{identifier}: no bridge exit criterion"
+    assert "@archont561/qgis-sdk" in section, (
+        f"{identifier}: no TypeScript-side exit criterion"
+    )

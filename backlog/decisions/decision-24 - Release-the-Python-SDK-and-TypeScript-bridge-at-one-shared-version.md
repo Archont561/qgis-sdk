@@ -7,7 +7,7 @@ status: accepted
 ## Context
 
 Two published artifacts ship from this repository: the Python package `qgis-sdk`
-(PyPI, conda) and the TypeScript bridge `@archont561/qgis-sdk-bridge` (npm, GitHub
+(PyPI, conda) and the TypeScript bridge `@archont561/qgis-sdk` (npm, GitHub
 Packages). They are not independent products. The bridge mirrors the Python wire
 primitives and its contract tests run against the Python declarations, so a
 consumer pairs a bridge version with a Python version and expects that pair to be
@@ -28,7 +28,7 @@ the public minor before the milestone it belonged to was finished.
 ## Decision
 
 **One package version for both artifacts.** Every release stamps and publishes the
-same `major.minor.patch` for `qgis-sdk` and `@archont561/qgis-sdk-bridge`, and
+same `major.minor.patch` for `qgis-sdk` and `@archont561/qgis-sdk`, and
 `release.py verify-versions` refuses a workspace whose released manifests
 disagree. The release workflow runs that check immediately after stamping, so a
 divergence fails the build instead of being discovered by a consumer.

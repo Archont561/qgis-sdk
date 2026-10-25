@@ -17,14 +17,14 @@ that changed the transport's shape.
 
 ## The harness
 
-`packages/qgis-sdk/scripts/network_limits_probe.py` starts a headless
+`packages/qgis-sdk-python/scripts/network_limits_probe.py` starts a headless
 `QgsApplication`, two loopback `http.server` origins on different ports, and
 drives `QgsNetworkAccessManager.instance()` on the GUI thread with
 `processEvents()`. It prints one JSON report and is deterministic in what it
 asks, not in the milliseconds it gets back:
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/network_limits_probe.py
+pixi run -e default python packages/qgis-sdk-python/scripts/network_limits_probe.py
 ```
 
 Three questions, in order:

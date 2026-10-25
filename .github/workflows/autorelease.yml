@@ -155,11 +155,11 @@ jobs:
             pixi run -e default lint-python
             pixi run -e default format-python-check
             pixi run -e default test-release-tool
-            pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -q
+            pixi run -e default python -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -q
           elif [ "$SCOPE" = "typescript" ]; then
             pixi run -e bun biome-check
             pixi run -e bun typecheck
-            pixi run -e bun bun test packages/qgis-sdk-bridge/tests
+            pixi run -e bun bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests
           fi
 
       - name: Dry-run packaging check
@@ -170,7 +170,7 @@ jobs:
             pixi run -e build release-build-conda
           fi
           if [ "${{ steps.plan.outputs.typescript }}" = "true" ]; then
-            pixi run -e bun bun run --filter '@archont561/qgis-sdk-bridge' build
+            pixi run -e bun bun run --filter '@archont561/qgis-sdk' build
           fi
 
       - name: Push the release tag

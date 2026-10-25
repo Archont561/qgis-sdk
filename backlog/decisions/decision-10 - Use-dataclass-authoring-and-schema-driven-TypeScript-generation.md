@@ -192,7 +192,7 @@ met. TASK-2 landed the production description, but
 (the checked-in generated TypeScript contracts, clients and validators) is still
 `To Do` in milestone m-2, so the authoring/generation direction has no production
 generator to accept. The generated schemas that exist today are test fixtures
-under `qgis-sdk-bridge/tests/contracts/`, which is exactly the distinction the
+under `qgis-sdk-typescript/tests/contracts/`, which is exactly the distinction the
 closeout draws.
 
 **Promotion condition:** unchanged from the closeout — promotion follows TASK-17,

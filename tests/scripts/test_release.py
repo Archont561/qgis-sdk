@@ -31,6 +31,7 @@ from release import (
     parse_milestone_tag,
     parse_release_tag,
     parse_versionrc,
+    read_alias_versions,
     read_pyproject_version,
     read_python_contract_version,
     read_recipe_version,
@@ -38,6 +39,7 @@ from release import (
     render_changelog,
     resolve_dry_run,
     sort_tags,
+    stamp_alias_package_json,
     stamp_package_json,
     stamp_pyproject,
     stamp_recipe,
@@ -51,8 +53,10 @@ from release import (
 
 PYPROJECT = '[build-system]\nrequires = ["hatchling==1.32.4"]\n\n[project]\nname = "qgis-sdk"\nversion = "0.1.0"\ndescription = "Kept."\n'
 RECIPE_YAML = 'schema_version: 1\n\ncontext:\n  version: "0.1.0"\n\npackage:\n  name: qgis-sdk\n  version: ${{ version }}\n'
-PACKAGE_JSON = (
-    '{\n\t"name": "qgis-sdk-bridge",\n\t"version": "0.1.0",\n\t"private": false\n}\n'
+PACKAGE_JSON = '{\n\t"name": "@archont561/qgis-sdk",\n\t"version": "0.1.0",\n\t"private": false\n}\n'
+ALIAS_PACKAGE_JSON = (
+    '{\n\t"name": "qgis-sdk",\n\t"version": "0.1.0",\n'
+    '\t"dependencies": {\n\t\t"@archont561/qgis-sdk": "0.1.0"\n\t}\n}\n'
 )
 
 
@@ -181,6 +185,8 @@ def test_parse_milestone_tag_returns_none_for_regular_tags_and_rejects_malformed
         ("typescript/v0.1.0", "typescript", "0.1.0"),
         ("bridge-v0.1.0", "typescript", "0.1.0"),
         ("bridge/v0.1.0-rc.1", "typescript", "0.1.0-rc.1"),
+        ("qgis-sdk-typescript-v0.1.0", "typescript", "0.1.0"),
+        ("qgis-sdk-python-v0.1.0", "python", "0.1.0"),
         ("qgis-sdk-bridge-v0.1.0", "typescript", "0.1.0"),
     ],
 )
@@ -524,16 +530,19 @@ def test_version_override_wins(sample_config):
             ["backlog/tasks/task-1.md", "README.md", ".agents/skills/tdd/SKILL.md"],
             "none",
         ),
-        (["packages/qgis-sdk/src/qgis_sdk/declarations.py"], "python"),
-        (["packages/qgis-sdk-bridge/src/index.ts"], "typescript"),
+        (["packages/qgis-sdk-python/src/qgis_sdk/declarations.py"], "python"),
+        (["packages/qgis-sdk-typescript/src/index.ts"], "typescript"),
         (
             [
-                "packages/qgis-sdk/src/qgis_sdk/declarations.py",
-                "packages/qgis-sdk-bridge/src/index.ts",
+                "packages/qgis-sdk-python/src/qgis_sdk/declarations.py",
+                "packages/qgis-sdk-typescript/src/index.ts",
             ],
             "all",
         ),
-        (["pixi.toml", "packages/qgis-sdk/src/qgis_sdk/declarations.py"], "python"),
+        (
+            ["pixi.toml", "packages/qgis-sdk-python/src/qgis_sdk/declarations.py"],
+            "python",
+        ),
         (
             [
                 "scripts/release.py",
@@ -780,7 +789,7 @@ def test_create_tag_sets_git_identity_and_pushes():
 def test_stamp_package_json_preserves_tabs_and_order():
     stamped = stamp_package_json(PACKAGE_JSON, Version.parse("0.2.0-rc.1"))
     assert stamped == (
-        '{\n\t"name": "qgis-sdk-bridge",\n\t"version": "0.2.0-rc.1",\n'
+        '{\n\t"name": "@archont561/qgis-sdk",\n\t"version": "0.2.0-rc.1",\n'
         '\t"private": false\n}\n'
     )
 
@@ -1416,10 +1425,10 @@ def test_the_repository_contract_versions_agree():
     repo_root = Path(__file__).resolve().parents[2]
 
     contract = contract_versions(
-        (repo_root / "packages/qgis-sdk/src/qgis_sdk/declarations.py").read_text(
+        (repo_root / "packages/qgis-sdk-python/src/qgis_sdk/declarations.py").read_text(
             encoding="utf-8"
         ),
-        (repo_root / "packages/qgis-sdk-bridge/src/index.ts").read_text(
+        (repo_root / "packages/qgis-sdk-typescript/src/index.ts").read_text(
             encoding="utf-8"
         ),
     )
@@ -1454,7 +1463,7 @@ def _commit(subject, *files, body=""):
 def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
     raw = (
         "\x1e" + "a" * 40 + "\x1ffeat(sdk): x\x1fbody line\n\nsecond para\x1d\n"
-        "packages/qgis-sdk/src/qgis_sdk/declarations.py\n"
+        "packages/qgis-sdk-python/src/qgis_sdk/declarations.py\n"
         "pixi.toml\n"
         "\x1e" + "b" * 40 + "\x1fdocs: y\x1f\x1d\n"
         "backlog/tasks/task-1.md\n"
@@ -1463,7 +1472,7 @@ def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
     commits = parse_log_with_files(raw)
 
     assert commits[0].files == (
-        "packages/qgis-sdk/src/qgis_sdk/declarations.py",
+        "packages/qgis-sdk-python/src/qgis_sdk/declarations.py",
         "pixi.toml",
     )
     assert "second para" in commits[0].body
@@ -1490,12 +1499,16 @@ def test_a_scoped_tag_sort_keeps_that_package_history_only():
 
 def test_commits_are_kept_for_the_packages_they_touch():
     commits = (
-        _commit("feat(sdk): python only", "packages/qgis-sdk/src/qgis_sdk/core.py"),
-        _commit("feat(bridge): bridge only", "packages/qgis-sdk-bridge/src/index.ts"),
+        _commit(
+            "feat(sdk): python only", "packages/qgis-sdk-python/src/qgis_sdk/core.py"
+        ),
+        _commit(
+            "feat(bridge): bridge only", "packages/qgis-sdk-typescript/src/index.ts"
+        ),
         _commit(
             "feat(both): spans packages",
-            "packages/qgis-sdk/src/qgis_sdk/core.py",
-            "packages/qgis-sdk-bridge/src/index.ts",
+            "packages/qgis-sdk-python/src/qgis_sdk/core.py",
+            "packages/qgis-sdk-typescript/src/index.ts",
         ),
         _commit("docs: backlog", "backlog/tasks/task-1.md"),
     )
@@ -1526,7 +1539,7 @@ def test_a_repository_wide_change_cannot_trigger_a_package_release():
 
 def test_a_bridge_feature_does_not_move_the_python_version(sample_config):
     commits = (
-        _commit("feat(bridge): transport", "packages/qgis-sdk-bridge/src/index.ts"),
+        _commit("feat(bridge): transport", "packages/qgis-sdk-typescript/src/index.ts"),
     )
 
     python_plan = compute_plan(
@@ -1543,7 +1556,7 @@ def test_a_bridge_feature_does_not_move_the_python_version(sample_config):
 
 def test_each_scope_bumps_from_its_own_last_release(sample_config):
     commits = (
-        _commit("fix(bridge): parsing", "packages/qgis-sdk-bridge/src/index.ts"),
+        _commit("fix(bridge): parsing", "packages/qgis-sdk-typescript/src/index.ts"),
     )
     tags = ("v0.1.0", "python-v0.3.0")
 
@@ -1691,3 +1704,139 @@ def test_the_repository_config_still_keeps_features_visible_in_the_changelog():
     rule = config.rule_for("feat")
 
     assert (rule.increment, rule.section, rule.hidden) == ("Patch", "Features", False)
+
+
+# ---------------------------------------------------------------------------
+# The unscoped npm alias ``qgis-sdk`` (decision-33, TASK-55)
+# ---------------------------------------------------------------------------
+
+
+def test_stamp_alias_package_json_pins_the_dependency_to_the_version():
+    stamped = stamp_alias_package_json(ALIAS_PACKAGE_JSON, Version.parse("0.3.0"))
+
+    data = json.loads(stamped)
+    assert data["version"] == "0.3.0"
+    assert data["dependencies"] == {"@archont561/qgis-sdk": "0.3.0"}
+    assert stamped.startswith('{\n\t"name": "qgis-sdk"')
+
+
+def test_stamp_alias_package_json_refuses_a_manifest_without_the_dependency():
+    with pytest.raises(QgisSdkReleaseError, match="@archont561/qgis-sdk"):
+        stamp_alias_package_json(PACKAGE_JSON, Version.parse("0.3.0"))
+
+
+def test_read_alias_versions_returns_the_version_and_the_pin():
+    assert read_alias_versions(ALIAS_PACKAGE_JSON) == (
+        Version.parse("0.1.0"),
+        Version.parse("0.1.0"),
+    )
+
+
+def test_read_alias_versions_refuses_a_range_pin():
+    loose = ALIAS_PACKAGE_JSON.replace('"0.1.0"\n\t}', '"^0.1.0"\n\t}')
+
+    with pytest.raises(QgisSdkReleaseVersionError):
+        read_alias_versions(loose)
+
+
+def _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", alias_text=None):
+    pyproject = tmp_path / "pyproject.toml"
+    package = tmp_path / "package.json"
+    alias = tmp_path / "alias.json"
+    pyproject.write_text(PYPROJECT, encoding="utf-8")
+    package.write_text(
+        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
+        encoding="utf-8",
+    )
+    alias.write_text(alias_text or ALIAS_PACKAGE_JSON, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RECIPE", tmp_path / "no-recipe.yaml")
+    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+    monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
+    return package, alias
+
+
+def test_stamp_scope_typescript_stamps_the_alias_with_the_bridge(tmp_path, monkeypatch):
+    package, alias = _alias_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.3.0", "--scope", "typescript"]) == 0
+
+    assert json.loads(package.read_text())["version"] == "0.3.0"
+    data = json.loads(alias.read_text())
+    assert data["version"] == "0.3.0"
+    assert data["dependencies"]["@archont561/qgis-sdk"] == "0.3.0"
+    assert main(["verify-versions", "--scope", "typescript", "--version", "0.3.0"]) == 0
+
+
+def test_stamp_scope_python_leaves_the_alias_alone(tmp_path, monkeypatch):
+    _, alias = _alias_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.9.0", "--scope", "python"]) == 0
+
+    assert json.loads(alias.read_text())["version"] == "0.1.0"
+
+
+def test_verify_versions_names_an_alias_that_lags_the_bridge(
+    tmp_path, monkeypatch, capsys
+):
+    _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
+
+    assert main(["verify-versions", "--scope", "typescript"]) == 1
+
+    out = capsys.readouterr().out
+    assert "alias package.json=0.1.0" in out
+    assert "package.json=0.1.1" in out
+
+
+def test_verify_versions_names_an_alias_pin_that_drifts(tmp_path, monkeypatch, capsys):
+    drifted = ALIAS_PACKAGE_JSON.replace('"0.1.0"\n\t}', '"0.0.9"\n\t}')
+    _alias_manifests(tmp_path, monkeypatch, alias_text=drifted)
+
+    assert main(["verify-versions", "--scope", "typescript"]) == 1
+
+    assert "alias dependency=0.0.9" in capsys.readouterr().out
+
+
+def test_verify_versions_for_python_ignores_the_alias(tmp_path, monkeypatch):
+    _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.1.0"]) == 0
+
+
+def test_alias_changes_count_as_typescript():
+    assert commits_for_scope(
+        [
+            _commit(
+                "fix(alias): re-export testing", "packages/qgis-sdk-alias/testing.js"
+            )
+        ],
+        "typescript",
+    )
+    assert not commits_for_scope(
+        [
+            _commit(
+                "fix(alias): re-export testing", "packages/qgis-sdk-alias/testing.js"
+            )
+        ],
+        "python",
+    )
+    assert (
+        detect_scope_from_files(["packages/qgis-sdk-alias/package.json"])
+        == "typescript"
+    )
+
+
+def test_the_repository_alias_agrees_with_the_bridge(monkeypatch):
+    """The committed manifests, not fixtures: the alias must track the bridge."""
+    import release
+
+    root = Path(release.__file__).resolve().parent.parent
+    bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
+    alias = root / "packages" / "qgis-sdk-alias" / "package.json"
+    monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
+
+    bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
+    assert read_alias_versions(alias.read_text()) == (bridge_version, bridge_version)
+    assert main(["verify-versions", "--scope", "typescript"]) == 0
