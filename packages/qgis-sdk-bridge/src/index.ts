@@ -165,7 +165,13 @@ export class QgisSdkContractValidationError extends QgisSdkError {
 const DECLARATION_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.-]*$/;
 const PYTHON_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
+/**
+ * Return whether `value` is a non-null, non-array object: the shape every wire
+ * envelope, description and event payload must have before its fields are read.
+ */
+export function isPlainRecord(
+	value: unknown,
+): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

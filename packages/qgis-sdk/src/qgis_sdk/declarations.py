@@ -10,11 +10,13 @@ from typing import (
     Annotated,
     Any,
     Literal,
+    Protocol,
     TypeVar,
     Union,
     get_args,
     get_origin,
     get_type_hints,
+    runtime_checkable,
 )
 
 from .models import MAX_SAFE_INTEGER, QgisSdkError
@@ -39,52 +41,90 @@ class QgisSdkDeclarationError(QgisSdkError):
 
 
 @dataclass(frozen=True)
-class _Metadata:
+class Metadata:
+    """What every declaration decorator records: a validated id and a title."""
+
     id: str
     title: str
 
 
-def _metadata(id: str, title: str) -> _Metadata:
+def metadata(id: str, title: str) -> Metadata:
+    """Validate the id and title every ``@plugin``/``@algorithm``/``@job`` takes."""
     if not isinstance(id, str) or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_.-]*", id):
         raise QgisSdkDeclarationError(
             f"Invalid declaration id {id!r}: use a letter followed by letters, digits, _, . or -"
         )
     if not isinstance(title, str) or not title.strip():
         raise QgisSdkDeclarationError(f"{id}: title must be a nonempty string")
-    return _Metadata(id, title)
+    return Metadata(id, title)
 
 
-def plugin(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
-    """Attach plugin metadata without wrapping or constructing the class."""
-    metadata = _metadata(id, title)
+def mark_class(cls: Any, attribute: str, declared: Metadata, decorator: str) -> None:
+    """Record ``declared`` on ``cls`` under ``attribute`` - the one marker pattern.
+
+    The class is left otherwise untouched: no base class, no injected method
+    (decision-6, decision-10). A marker set on a parent is not the child's own
+    declaration, which is why every describer reads ``vars(cls)`` and not
+    ``getattr``.
+    """
+    if not inspect.isclass(cls):
+        raise QgisSdkDeclarationError(f"{decorator} requires a class")
+    if attribute in vars(cls):
+        raise QgisSdkDeclarationError(
+            f"{declared.id}: duplicate {decorator} declaration"
+        )
+    setattr(cls, attribute, declared)
+
+
+def declare_class(
+    attribute: str, decorator: str, *, id: str, title: str
+) -> Callable[[type[T]], type[T]]:
+    """Build the class decorator ``@plugin``, ``@algorithm`` and ``@job`` all are."""
+    declared = metadata(id, title)
 
     def decorate(cls: type[T]) -> type[T]:
-        if not inspect.isclass(cls):
-            raise QgisSdkDeclarationError("@plugin requires a class")
-        if "__qgis_sdk_plugin__" in vars(cls):
-            raise QgisSdkDeclarationError(f"{id}: duplicate @plugin declaration")
-        cls.__qgis_sdk_plugin__ = metadata
+        mark_class(cls, attribute, declared, decorator)
         return cls
 
     return decorate
 
 
+def declared_metadata(
+    cls: Any, attribute: str, describer: str, decorator: str
+) -> Metadata:
+    """Return the class's own marker, or refuse with the describer's message."""
+    if not inspect.isclass(cls) or attribute not in vars(cls):
+        raise QgisSdkDeclarationError(f"{describer} requires a class with {decorator}")
+    declared = vars(cls)[attribute]
+    if not isinstance(declared, Metadata):
+        raise QgisSdkDeclarationError(f"{describer} requires a class with {decorator}")
+    return declared
+
+
+PLUGIN_ATTRIBUTE = "__qgis_sdk_plugin__"
+
+
+def plugin(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
+    """Attach plugin metadata without wrapping or constructing the class."""
+    return declare_class(PLUGIN_ATTRIBUTE, "@plugin", id=id, title=title)
+
+
 def action(*, id: str, title: str) -> Callable[[T], T]:
     """Attach allowlisted action metadata to an ordinary instance method."""
-    metadata = _metadata(id, title)
+    declared = metadata(id, title)
 
     def decorate(method: T) -> T:
         if not inspect.isfunction(method):
             raise QgisSdkDeclarationError("@action requires an instance method")
         _require_undeclared(method, id, "@action")
-        method.__qgis_sdk_action__ = metadata
+        method.__qgis_sdk_action__ = declared
         return method
 
     return decorate
 
 
 @dataclass(frozen=True)
-class _StreamMetadata(_Metadata):
+class _StreamMetadata(Metadata):
     events: dict[str, Any]
 
 
@@ -98,7 +138,7 @@ def stream(*, id: str, title: str, events: Any) -> Callable[[T], T]:
     annotation), and a kind the map does not name is one the host refuses to
     emit.
     """
-    metadata = _metadata(id, title)
+    declared = metadata(id, title)
     if not isinstance(events, dict):
         raise QgisSdkDeclarationError(f"{id}: events must be a mapping of kind to type")
     if not events:
@@ -111,13 +151,13 @@ def stream(*, id: str, title: str, events: Any) -> Callable[[T], T]:
                 f"{id}: {kind!r} is not a stream event kind; "
                 f"use one of {', '.join(STREAM_EVENT_KINDS)}"
             )
-    declared = _StreamMetadata(metadata.id, metadata.title, dict(events))
+    streamed = _StreamMetadata(declared.id, declared.title, dict(events))
 
     def decorate(method: T) -> T:
         if not inspect.isfunction(method):
             raise QgisSdkDeclarationError("@stream requires an instance method")
         _require_undeclared(method, id, "@stream")
-        method.__qgis_sdk_stream__ = declared
+        method.__qgis_sdk_stream__ = streamed
         return method
 
     return decorate
@@ -128,6 +168,44 @@ def _require_undeclared(method: Any, id: str, decorator: str) -> None:
     for marker in ("__qgis_sdk_action__", "__qgis_sdk_stream__"):
         if hasattr(method, marker):
             raise QgisSdkDeclarationError(f"{id}: duplicate {decorator} declaration")
+
+
+def canonical_json(value: Any) -> str:
+    """The one JSON form every description and fingerprint uses.
+
+    Sorted keys and compact separators make two equal descriptions two equal
+    strings, and ``allow_nan=False`` keeps a nonfinite number from becoming a
+    token no JSON parser accepts.
+    """
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _json_copy(value: Any) -> Any:
+    """Return an independent JSON-compatible copy, refusing nonfinite numbers."""
+    return json.loads(json.dumps(value, allow_nan=False))
+
+
+@runtime_checkable
+class Description(Protocol):
+    """What every description object offers, whatever it describes.
+
+    ``PluginDescription``, ``AlgorithmDescription``, ``JobDescription`` and
+    ``ProviderDescription`` all satisfy it; generators and the bridge consume
+    this shape rather than one of the concrete types.
+    """
+
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def schema_version(self) -> int: ...
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+    def to_json(self) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -142,7 +220,7 @@ class ActionDescription:
 
     def to_dict(self) -> dict[str, Any]:
         """Return an independent JSON-compatible value."""
-        return json.loads(json.dumps(vars(self), allow_nan=False))
+        return _json_copy(vars(self))
 
 
 @dataclass(frozen=True)
@@ -162,7 +240,7 @@ class StreamDescription:
 
     def to_dict(self) -> dict[str, Any]:
         """Return an independent JSON-compatible value."""
-        return json.loads(json.dumps(vars(self), allow_nan=False))
+        return _json_copy(vars(self))
 
 
 @dataclass(frozen=True)
@@ -187,9 +265,7 @@ class PluginDescription:
 
     def to_json(self) -> str:
         """Produce canonical key ordering with no nonfinite JSON numbers."""
-        return json.dumps(
-            self.to_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
-        )
+        return canonical_json(self.to_dict())
 
 
 def _object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
@@ -199,7 +275,8 @@ def _object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
     return schema
 
 
-def _hints(target: Any, path: str) -> dict[str, Any]:
+def resolve_hints(target: Any, path: str) -> dict[str, Any]:
+    """Resolve ``target``'s annotations, naming ``path`` when one cannot be."""
     try:
         return get_type_hints(target, include_extras=True)
     except (NameError, TypeError) as error:
@@ -218,6 +295,11 @@ _PRIMITIVE_JSON_TYPES: dict[Any, str] = {
     type(None): "null",
     None: "null",
 }
+
+
+def schema_for(annotation: Any, path: str, *, result: bool) -> dict[str, Any]:
+    """Describe one annotation using the JSON Schema subset the contract allows."""
+    return _schema(annotation, path, result=result)
 
 
 def _schema(
@@ -314,7 +396,7 @@ def _dataclass_schema(
         raise QgisSdkDeclarationError(
             f"{path}: recursive dataclasses are not supported"
         )
-    hints = _hints(annotation, path)
+    hints = resolve_hints(annotation, path)
     properties, required = {}, []
     for field in fields(annotation):
         properties[field.name] = _schema(
@@ -384,13 +466,13 @@ def _action_inputs(
 
 
 def _describe_action(
-    name: str, method: Any, declaration: _Metadata
+    name: str, method: Any, declaration: Metadata
 ) -> ActionDescription:
     path = f"action {declaration.id} ({name})"
     _require_plain_method(method, path)
     parameters = list(inspect.signature(method).parameters.values())
     _require_self_first(parameters, path)
-    hints = _hints(method, path)
+    hints = resolve_hints(method, path)
     properties, required = _action_inputs(parameters[1:], hints, path)
     result = _schema(
         hints.get("return", inspect.Signature.empty), f"{path}.return", result=True
@@ -411,7 +493,7 @@ def _describe_stream(
     _require_plain_method(method, path, generator=True)
     parameters = list(inspect.signature(method).parameters.values())
     _require_self_first(parameters, path)
-    hints = _hints(method, path)
+    hints = resolve_hints(method, path)
     properties, required = _action_inputs(parameters[1:], hints, path)
     events = {
         kind: _schema(annotation, f"{path}.events.{kind}", result=True)
@@ -426,6 +508,94 @@ def _describe_stream(
     )
 
 
+@dataclass(frozen=True)
+class RunSignature:
+    """What ``@algorithm`` and ``@job`` classes declare through their ``run``."""
+
+    metadata: Metadata
+    inputs_type: Any
+    result_type: Any
+    inputs_schema: dict[str, Any]
+    result_schema: dict[str, Any]
+    asynchronous: bool
+
+
+def describe_run_method(cls: Any, attribute: str, kind: str) -> RunSignature:
+    """Inspect a ``run(self, inputs) -> Result`` class without constructing it.
+
+    ``kind`` is the noun the messages use (``"algorithm"``, ``"job"``); the
+    decorator and describer names follow from it. The schemas come from the
+    same generator the plugin declarations use, so a type the contract cannot
+    express fails here, at inspection time, rather than during a run.
+    """
+    declared = declared_metadata(cls, attribute, f"describe_{kind}", f"@{kind}")
+    run = vars(cls).get("run")
+    article = "an" if kind[:1] in "aeiou" else "a"
+    if not inspect.isfunction(run):
+        raise QgisSdkDeclarationError(
+            f"{declared.id}: {article} {kind} needs its own run method"
+        )
+    parameters = list(inspect.signature(run).parameters.values())
+    if len(parameters) != 2 or parameters[0].name != "self":
+        raise QgisSdkDeclarationError(
+            f"{declared.id}: run takes self and exactly one typed inputs argument"
+        )
+    # Resolved, not raw: a module using `from __future__ import annotations`
+    # hands us strings, and a forward reference has to be evaluated the same way
+    # a plugin action's annotations are.
+    hints = resolve_hints(run, f"{kind} {declared.id}")
+    inputs_type = hints.get(parameters[1].name, inspect.Parameter.empty)
+    result_type = hints.get("return", inspect.Signature.empty)
+    if inputs_type is inspect.Parameter.empty:
+        raise QgisSdkDeclarationError(f"{declared.id}: run inputs must be annotated")
+    if result_type is inspect.Signature.empty:
+        raise QgisSdkDeclarationError(f"{declared.id}: run must declare its result")
+    return RunSignature(
+        metadata=declared,
+        inputs_type=inputs_type,
+        result_type=result_type,
+        inputs_schema=schema_for(inputs_type, f"{declared.id}.inputs", result=False),
+        result_schema=schema_for(result_type, f"{declared.id}.result", result=True),
+        asynchronous=inspect.iscoroutinefunction(run),
+    )
+
+
+def type_name(annotation: Any) -> str:
+    """The short name a message or a transport view uses for a type."""
+    return getattr(annotation, "__name__", str(annotation))
+
+
+_DESCRIBERS: dict[str, Callable[[type], Description]] = {}
+
+
+def register_describer(
+    attribute: str, describer: Callable[[type], Description]
+) -> None:
+    """Teach :func:`describe` the marker a decorator sets and who reads it.
+
+    Each decorating module registers itself when imported; a class can only
+    carry a marker if that module ran, so ``describe`` never needs to import
+    a higher layer.
+    """
+    _DESCRIBERS[attribute] = describer
+
+
+def describe(cls: type) -> Description:
+    """Describe whatever ``cls`` declares - plugin, algorithm or job.
+
+    The narrow forms (``describe_plugin`` and friends) return the concrete type;
+    this one answers for any decorated class and returns the protocol.
+    """
+    if not inspect.isclass(cls):
+        raise QgisSdkDeclarationError("describe requires a class")
+    for attribute, describer in _DESCRIBERS.items():
+        if attribute in vars(cls):
+            return describer(cls)
+    raise QgisSdkDeclarationError(
+        "describe requires a class declared with @plugin, @algorithm or @job"
+    )
+
+
 def describe_plugin(cls: type) -> PluginDescription:
     """Inspect trusted author code without constructing it or invoking handlers.
 
@@ -435,9 +605,7 @@ def describe_plugin(cls: type) -> PluginDescription:
     Actions and streams share one id namespace (decision-28): the dispatcher
     allowlists both by id, so a duplicate across the two is refused here.
     """
-    if not inspect.isclass(cls) or "__qgis_sdk_plugin__" not in vars(cls):
-        raise QgisSdkDeclarationError("describe_plugin requires a class with @plugin")
-    metadata = vars(cls)["__qgis_sdk_plugin__"]
+    own = declared_metadata(cls, PLUGIN_ATTRIBUTE, "describe_plugin", "@plugin")
     members = {}
     for base in reversed(cls.__mro__):
         members.update(vars(base))
@@ -470,8 +638,11 @@ def describe_plugin(cls: type) -> PluginDescription:
         else:
             streams.append(_describe_stream(name, member, streamed))
     return PluginDescription(
-        metadata.id,
-        metadata.title,
+        own.id,
+        own.title,
         tuple(sorted(actions, key=lambda item: item.id)),
         streams=tuple(sorted(streams, key=lambda item: item.id)),
     )
+
+
+register_describer(PLUGIN_ATTRIBUTE, describe_plugin)

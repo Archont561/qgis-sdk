@@ -14,7 +14,6 @@ validation does not need a QGIS installation to be exercised.
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
@@ -22,10 +21,11 @@ from typing import Any, TypeVar
 from qgis_sdk.core import AlgorithmContext, ResourceScope
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
-    _hints,
-    _Metadata,
-    _metadata,
-    _schema,
+    canonical_json,
+    declare_class,
+    describe_run_method,
+    register_describer,
+    type_name,
 )
 from qgis_sdk.models import (
     QgisSdkAlgorithmCancelledError,
@@ -62,25 +62,9 @@ class _NotCancelled:
         return False
 
 
-def _type_name(annotation: Any) -> str:
-    """Name an annotation for an error message, unions included."""
-    return getattr(annotation, "__name__", str(annotation))
-
-
 def algorithm(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
     """Attach algorithm metadata without wrapping or constructing the class."""
-
-    metadata = _metadata(id, title)
-
-    def decorate(cls: type[T]) -> type[T]:
-        if not inspect.isclass(cls):
-            raise QgisSdkDeclarationError("@algorithm requires a class")
-        if _ALGORITHM_ATTRIBUTE in vars(cls):
-            raise QgisSdkDeclarationError(f"{id}: duplicate @algorithm declaration")
-        setattr(cls, _ALGORITHM_ATTRIBUTE, metadata)
-        return cls
-
-    return decorate
+    return declare_class(_ALGORITHM_ATTRIBUTE, "@algorithm", id=id, title=title)
 
 
 @dataclass(frozen=True)
@@ -107,14 +91,18 @@ class AlgorithmDescription:
             "id": self.id,
             "title": self.title,
             "inputs": {
-                "type": _type_name(self.inputs_type),
+                "type": type_name(self.inputs_type),
                 "schema": self.inputs_schema,
             },
             "result": {
-                "type": _type_name(self.result_type),
+                "type": type_name(self.result_type),
                 "schema": self.result_schema,
             },
         }
+
+    def to_json(self) -> str:
+        """The canonical JSON form shared by every description."""
+        return canonical_json(self.to_dict())
 
 
 def describe_algorithm(cls: type) -> AlgorithmDescription:
@@ -125,43 +113,18 @@ def describe_algorithm(cls: type) -> AlgorithmDescription:
     action's request - and a type the contract cannot express fails here, at
     inspection time, rather than during a run.
     """
-    if not inspect.isclass(cls) or _ALGORITHM_ATTRIBUTE not in vars(cls):
-        raise QgisSdkDeclarationError(
-            "describe_algorithm requires a class with @algorithm"
-        )
-    metadata = vars(cls)[_ALGORITHM_ATTRIBUTE]
-    if not isinstance(metadata, _Metadata):
-        raise QgisSdkDeclarationError(
-            "describe_algorithm requires a class with @algorithm"
-        )
-    run = vars(cls).get("run")
-    if not inspect.isfunction(run):
-        raise QgisSdkDeclarationError(
-            f"{metadata.id}: an algorithm needs its own run method"
-        )
-    parameters = list(inspect.signature(run).parameters.values())
-    if len(parameters) != 2 or parameters[0].name != "self":
-        raise QgisSdkDeclarationError(
-            f"{metadata.id}: run takes self and exactly one typed inputs argument"
-        )
-    # Resolved, not raw: a module using `from __future__ import annotations`
-    # hands us strings, and a forward reference has to be evaluated the same way
-    # a plugin action's annotations are.
-    hints = _hints(run, f"algorithm {metadata.id}")
-    inputs_type = hints.get(parameters[1].name, inspect.Parameter.empty)
-    result_type = hints.get("return", inspect.Signature.empty)
-    if inputs_type is inspect.Parameter.empty:
-        raise QgisSdkDeclarationError(f"{metadata.id}: run inputs must be annotated")
-    if result_type is inspect.Signature.empty:
-        raise QgisSdkDeclarationError(f"{metadata.id}: run must declare its result")
+    signature = describe_run_method(cls, _ALGORITHM_ATTRIBUTE, "algorithm")
     return AlgorithmDescription(
-        id=metadata.id,
-        title=metadata.title,
-        inputs_type=inputs_type,
-        result_type=result_type,
-        inputs_schema=_schema(inputs_type, f"{metadata.id}.inputs", result=False),
-        result_schema=_schema(result_type, f"{metadata.id}.result", result=True),
+        id=signature.metadata.id,
+        title=signature.metadata.title,
+        inputs_type=signature.inputs_type,
+        result_type=signature.result_type,
+        inputs_schema=signature.inputs_schema,
+        result_schema=signature.result_schema,
     )
+
+
+register_describer(_ALGORITHM_ATTRIBUTE, describe_algorithm)
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,7 +170,7 @@ def invoke(
         raise QgisSdkAlgorithmRejectedError(
             description.id,
             [
-                f"inputs must be {_type_name(description.inputs_type)}, not {_type_name(type(inputs))}"
+                f"inputs must be {type_name(description.inputs_type)}, not {type_name(type(inputs))}"
             ],
         )
     progress = progress if progress is not None else _SilentProgress()
@@ -226,7 +189,7 @@ def invoke(
         result = algorithm(context).run(inputs)
         if not isinstance(result, description.result_type):
             raise QgisSdkDeclarationError(
-                f"{description.id}: run returned {_type_name(type(result))}, not the declared {_type_name(description.result_type)}"
+                f"{description.id}: run returned {type_name(type(result))}, not the declared {type_name(description.result_type)}"
             )
         if cancellation.is_cancelled():
             raise QgisSdkAlgorithmCancelledError(description.id)

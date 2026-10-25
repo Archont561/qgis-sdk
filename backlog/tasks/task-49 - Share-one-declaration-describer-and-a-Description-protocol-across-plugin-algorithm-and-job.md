@@ -3,9 +3,10 @@ id: TASK-49
 title: >-
   Share one declaration-describer and a Description protocol across plugin,
   algorithm and job
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-25T01:08:00Z'
+updated_date: '2026-10-25 01:24'
 labels:
   - refactor
 milestone: m-2
@@ -37,10 +38,16 @@ Non-goals: no base class, mixin, metaclass or method added to author classes; no
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 declarations exposes one small internal describer surface (for example describe_run_method(cls, marker, kind) plus the metadata/schema helpers under non-underscore names) and algorithms.py, jobs.py and providers.py import only public names from declarations; describe_algorithm and describe_job are thin calls into it with the same error messages as today.
-- [ ] #2 A Description Protocol (id, title, schema_version, to_dict, to_json) lives in declarations; PluginDescription, AlgorithmDescription, JobDescription and ProviderDescription satisfy it, to_json is implemented once with the canonical JSON options, bridge/generate reuses that canonical dumper and _as_mapping checks the protocol instead of hasattr.
-- [ ] #3 One describe(cls) -> Description entry point dispatches on the decorator marker and raises the same QgisSdkDeclarationError text for an undecorated class; a shared declare(marker, decorator_name) builds the four marker decorators so the isclass/duplicate/setattr pattern exists once; _type_name exists once.
-- [ ] #4 Behaviour is unchanged: every existing test in tests/test_declarations*.py, test_algorithms*.py, test_jobs*.py, test_providers*.py, tests/scripts/test_contract_generation.py and the bridge contract vectors passes without modification; generate_bridge_clients.py --check reports no drift; package coverage gate holds.
-- [ ] #5 TypeScript: one isPlainRecord in src/index.ts is imported by bridge.ts and react.ts (surface.test.ts still proves index/bridge/host stay free of framework and browser-global imports); src/generated/host.ts is untouched.
-- [ ] #6 doc-12 names describe() and the Description protocol in the pure-contract table and keeps the sentence that decorators attach metadata without wrapping the class.
+- [x] #1 declarations exposes one small internal describer surface (for example describe_run_method(cls, marker, kind) plus the metadata/schema helpers under non-underscore names) and algorithms.py, jobs.py and providers.py import only public names from declarations; describe_algorithm and describe_job are thin calls into it with the same error messages as today.
+- [x] #2 A Description Protocol (id, title, schema_version, to_dict, to_json) lives in declarations; PluginDescription, AlgorithmDescription, JobDescription and ProviderDescription satisfy it, to_json is implemented once with the canonical JSON options, bridge/generate reuses that canonical dumper and _as_mapping checks the protocol instead of hasattr.
+- [x] #3 One describe(cls) -> Description entry point dispatches on the decorator marker and raises the same QgisSdkDeclarationError text for an undecorated class; a shared declare(marker, decorator_name) builds the four marker decorators so the isclass/duplicate/setattr pattern exists once; _type_name exists once.
+- [x] #4 Behaviour is unchanged: every existing test in tests/test_declarations*.py, test_algorithms*.py, test_jobs*.py, test_providers*.py, tests/scripts/test_contract_generation.py and the bridge contract vectors passes without modification; generate_bridge_clients.py --check reports no drift; package coverage gate holds.
+- [x] #5 TypeScript: one isPlainRecord in src/index.ts is imported by bridge.ts and react.ts (surface.test.ts still proves index/bridge/host stay free of framework and browser-global imports); src/generated/host.ts is untouched.
+- [x] #6 doc-12 names describe() and the Description protocol in the pure-contract table and keeps the sentence that decorators attach metadata without wrapping the class.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in PR #61. declarations.py now owns Metadata/metadata, mark_class/declare_class/declared_metadata, resolve_hints/schema_for, RunSignature + describe_run_method(cls, attribute, kind), type_name, canonical_json, the runtime-checkable Description protocol, and describe(cls) over a register_describer registry (each decorating module registers its marker on import, so declarations never imports a higher layer and test_pure_imports holds). @plugin/@algorithm/@job are one-liners over declare_class; describe_algorithm/describe_job build their concrete description from describe_run_method with the pinned error texts; Algorithm/Job/ProviderDescription gained to_json via canonical_json; bridge/generate.py uses canonical_json for the fingerprint and isinstance(Description) in _as_mapping. TS: isPlainRecord exported once from src/index.ts and imported by bridge.ts and react.ts (stableKey). doc-12 gained a declarations row naming describe() and Description. New tests: packages/qgis-sdk/tests/test_describe.py (12) and an isPlainRecord case in tests/index.test.ts. Gate: Python suite 1065 passed/33 skipped, tests/scripts 174 passed, ruff lint+format clean, biome-check clean, typecheck clean, bun test green, coverage Python 97.10% / bridge 96.49% lines, generate_bridge_clients.py --check: no drift.
+<!-- SECTION:NOTES:END -->

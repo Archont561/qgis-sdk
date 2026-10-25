@@ -77,6 +77,13 @@ Python code only**, not untrusted modules. Put DTOs in module scope so postponed
 annotations resolve normally; function-local forward-reference names are not
 reconstructed from vanished local scopes.
 
+`describe_algorithm` and `describe_job` follow the same rules, and
+`qgis_sdk.declarations.describe(cls)` picks the right one from the class's
+decorator marker when a tool does not know which kind it holds. All four
+descriptions share the `Description` protocol, so one `to_json()` canonical form
+(sorted keys, compact separators, no NaN) feeds the bridge generator's
+fingerprint and every CLI dump.
+
 ### Version 1 description contract
 
 The public `PluginDescription` contains `schema_version: 1`, `id`, `title`, and
@@ -127,6 +134,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
+| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(cls)` dispatches on the `@plugin`/`@algorithm`/`@job` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class (TASK-2, TASK-49) |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError` |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |

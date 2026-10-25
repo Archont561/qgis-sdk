@@ -44,10 +44,11 @@ from qgis_sdk.core import JobContext, ResourceScope
 from qgis_sdk.core.scheduling import Job, JobState, QuiesceOutcome, StepScheduler
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
-    _hints,
-    _Metadata,
-    _metadata,
-    _schema,
+    canonical_json,
+    declare_class,
+    describe_run_method,
+    register_describer,
+    type_name,
 )
 from qgis_sdk.models import (
     QgisSdkJobCancelledError,
@@ -79,10 +80,6 @@ JobEvent = Literal["progress", "success", "failure", "cancelled"]
 """The four things a handle can be subscribed to."""
 
 _EVENTS: tuple[JobEvent, ...] = ("progress", "success", "failure", "cancelled")
-
-
-def _type_name(annotation: Any) -> str:
-    return getattr(annotation, "__name__", str(annotation))
 
 
 def _main_thread() -> bool:
@@ -120,18 +117,7 @@ _STATUS_OF_STATE = {
 
 def job(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
     """Attach job metadata without wrapping or constructing the class."""
-
-    metadata = _metadata(id, title)
-
-    def decorate(cls: type[T]) -> type[T]:
-        if not inspect.isclass(cls):
-            raise QgisSdkDeclarationError("@job requires a class")
-        if _JOB_ATTRIBUTE in vars(cls):
-            raise QgisSdkDeclarationError(f"{id}: duplicate @job declaration")
-        setattr(cls, _JOB_ATTRIBUTE, metadata)
-        return cls
-
-    return decorate
+    return declare_class(_JOB_ATTRIBUTE, "@job", id=id, title=title)
 
 
 @dataclass(frozen=True)
@@ -161,47 +147,35 @@ class JobDescription:
             "title": self.title,
             "asynchronous": self.asynchronous,
             "inputs": {
-                "type": _type_name(self.inputs_type),
+                "type": type_name(self.inputs_type),
                 "schema": self.inputs_schema,
             },
             "result": {
-                "type": _type_name(self.result_type),
+                "type": type_name(self.result_type),
                 "schema": self.result_schema,
             },
         }
 
+    def to_json(self) -> str:
+        """The canonical JSON form shared by every description."""
+        return canonical_json(self.to_dict())
+
 
 def describe_job(cls: type) -> JobDescription:
     """Inspect one decorated class without constructing it or calling ``run``."""
-    if not inspect.isclass(cls) or _JOB_ATTRIBUTE not in vars(cls):
-        raise QgisSdkDeclarationError("describe_job requires a class with @job")
-    metadata = vars(cls)[_JOB_ATTRIBUTE]
-    if not isinstance(metadata, _Metadata):
-        raise QgisSdkDeclarationError("describe_job requires a class with @job")
-    run = vars(cls).get("run")
-    if not inspect.isfunction(run):
-        raise QgisSdkDeclarationError(f"{metadata.id}: a job needs its own run method")
-    parameters = list(inspect.signature(run).parameters.values())
-    if len(parameters) != 2 or parameters[0].name != "self":
-        raise QgisSdkDeclarationError(
-            f"{metadata.id}: run takes self and exactly one typed inputs argument"
-        )
-    hints = _hints(run, f"job {metadata.id}")
-    inputs_type = hints.get(parameters[1].name, inspect.Parameter.empty)
-    result_type = hints.get("return", inspect.Signature.empty)
-    if inputs_type is inspect.Parameter.empty:
-        raise QgisSdkDeclarationError(f"{metadata.id}: run inputs must be annotated")
-    if result_type is inspect.Signature.empty:
-        raise QgisSdkDeclarationError(f"{metadata.id}: run must declare its result")
+    signature = describe_run_method(cls, _JOB_ATTRIBUTE, "job")
     return JobDescription(
-        id=metadata.id,
-        title=metadata.title,
-        inputs_type=inputs_type,
-        result_type=result_type,
-        inputs_schema=_schema(inputs_type, f"{metadata.id}.inputs", result=False),
-        result_schema=_schema(result_type, f"{metadata.id}.result", result=True),
-        asynchronous=inspect.iscoroutinefunction(run),
+        id=signature.metadata.id,
+        title=signature.metadata.title,
+        inputs_type=signature.inputs_type,
+        result_type=signature.result_type,
+        inputs_schema=signature.inputs_schema,
+        result_schema=signature.result_schema,
+        asynchronous=signature.asynchronous,
     )
+
+
+register_describer(_JOB_ATTRIBUTE, describe_job)
 
 
 # -- subscriptions ----------------------------------------------------------------
@@ -493,8 +467,8 @@ async def _run_attempt(attempt: _Attempt, cls: type, inputs: object) -> object:
     description = attempt.description
     if not isinstance(outcome, description.result_type):
         raise QgisSdkDeclarationError(
-            f"{description.id}: run returned {_type_name(type(outcome))}, not the "
-            f"declared {_type_name(description.result_type)}"
+            f"{description.id}: run returned {type_name(type(outcome))}, not the "
+            f"declared {type_name(description.result_type)}"
         )
     return outcome
 
@@ -809,8 +783,8 @@ class JobService:
         self._scope.ensure_open()
         description = bound.description
         if not isinstance(inputs, description.inputs_type):
-            expected = _type_name(description.inputs_type)
-            problem = f"inputs must be {expected}, not {_type_name(type(inputs))}"
+            expected = type_name(description.inputs_type)
+            problem = f"inputs must be {expected}, not {type_name(type(inputs))}"
             raise QgisSdkJobRejectedError(description.id, [problem])
         runtime = self._runtime
         number = runtime.counters.get(description.id, 0) + 1
