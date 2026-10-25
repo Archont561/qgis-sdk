@@ -59,7 +59,7 @@ that is TASK-15 work. No public API selection is claimed here.
 
 ## What the harness measures
 
-`packages/qgis-sdk/tests/qualification/qt_scheduler_smoke.py` runs the scheduler
+`packages/qgis-sdk-python/tests/qualification/qt_scheduler_smoke.py` runs the scheduler
 inside a real `QgsApplication` with a real `QTimer` heartbeat (2 ms interval), a real
 `QThreadPool` worker and `processEvents()` driving the loop, across five phases:
 
@@ -169,9 +169,9 @@ Both were found by running the harness rather than by reasoning about it.
 
 Standalone developer scripts now live in their own directory rather than inside the
 test tree, so the harness cited above is at
-`packages/qgis-sdk/scripts/qt_scheduler_smoke.py` and its QGIS-free tests at
-`packages/qgis-sdk/tests/scripts/test_qualification_scheduler.py`.
-`packages/qgis-sdk/tests/qualification/` no longer exists; the same move applies to
+`packages/qgis-sdk-python/scripts/qt_scheduler_smoke.py` and its QGIS-free tests at
+`packages/qgis-sdk-python/tests/scripts/test_qualification_scheduler.py`.
+`packages/qgis-sdk-python/tests/qualification/` no longer exists; the same move applies to
 `webengine_smoke.py`, `desktop_lifecycle_smoke.py`, `generate_contract.py` and
 `generate_pydantic_contract.py`. The evidence here is otherwise unchanged: after the
 move the harness re-ran on this host reporting `passed: true`,

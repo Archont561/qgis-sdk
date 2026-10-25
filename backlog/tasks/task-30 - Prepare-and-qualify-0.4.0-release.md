@@ -34,7 +34,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - [ ] #2 Use valid SemVer and prereleases such as 0.4.0-alpha.1; release Python at its own explicitly advanced minor and release the bridge only if it changed, at a patch of its own version; verify both scopes plus the shared contract version, and document migration notes.
 - [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
-- [ ] #5 The milestone's "no bridge source change" claim is tested rather than assumed: the release diff touches no file under `packages/qgis-sdk-bridge`, or every such change is recorded with its own changelog entry and a bridge patch released at its own version.
+- [ ] #5 The milestone's "no bridge source change" claim is tested rather than assumed: the release diff touches no file under `packages/qgis-sdk-typescript`, or every such change is recorded with its own changelog entry and a bridge patch released at its own version.
 <!-- AC:END -->
 
 ## Comments

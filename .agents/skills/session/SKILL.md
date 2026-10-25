@@ -49,7 +49,7 @@ After restore and orientation, prepare dependencies before running workspace che
   ```
 
 - Run the narrowest relevant check first, then the appropriate root check. Report exact commands and outcomes. If a check cannot run, state why instead of implying success.
-- Keep Python development tools in `packages/qgis-sdk/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi pins exact, Bun separate, and Codecov LCOV paths repository-root-relative.
+- Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi pins exact, Bun separate, and Codecov LCOV paths repository-root-relative.
 
 ## 4. Prepare a normal merge
 

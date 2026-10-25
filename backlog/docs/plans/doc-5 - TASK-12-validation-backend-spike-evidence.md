@@ -7,7 +7,7 @@ created_date: '2026-10-16 14:05'
 
 # TASK-12 — archived backend evidence and direct-generator review
 
-**Status (2026-10-16):** No production validation or TypeScript generation backend has been selected. At the user's request, the entire experimental `packages/qgis-sdk/tests/spikes/` tree (DTO fixtures, Python tests, JSON Schema snapshots, JS harness, and its test-only dependency manifests) was removed from the checkout. The old apischema/TypeAdapter and direct-generator observations below remain **historical results**, not checks a fresh checkout can rerun. A separate, durable **test-only** mashumaro → JSON Schema → `json2ts`/Ajv contract example was subsequently added (see below); its development dependencies are now pinned in the Pixi/Bun locks, but no candidate was added to SDK **runtime** dependencies. The QGIS-free `ResourceScope` Hypothesis and BDD tests also remain in the normal test suite.
+**Status (2026-10-16):** No production validation or TypeScript generation backend has been selected. At the user's request, the entire experimental `packages/qgis-sdk-python/tests/spikes/` tree (DTO fixtures, Python tests, JSON Schema snapshots, JS harness, and its test-only dependency manifests) was removed from the checkout. The old apischema/TypeAdapter and direct-generator observations below remain **historical results**, not checks a fresh checkout can rerun. A separate, durable **test-only** mashumaro → JSON Schema → `json2ts`/Ajv contract example was subsequently added (see below); its development dependencies are now pinned in the Pixi/Bun locks, but no candidate was added to SDK **runtime** dependencies. The QGIS-free `ResourceScope` Hypothesis and BDD tests also remain in the normal test suite.
 
 ## The SDK requirements
 
@@ -30,7 +30,7 @@ The previous root suite before cleanup had 23 Python passes plus 17 intentional 
 
 ## Live checked contract example (added after spike removal)
 
-The new, persistent `packages/qgis-sdk/tests/contract_sample/` example is **not** the retired spike recreated under another name: it has only one ordinary dataclass request/result pair, no production public DTOs or Python decoder, and does not rerun the apischema/TypeAdapter comparison. Its `generate_contract.py` entry point is invoked by the root `sdk:generate` package script in a QGIS-free Python build environment. Mashumaro **3.23** emits Draft 2020-12 schemas for the request and the separately authored result reader. For the writer, the example requires all fields that its default-including serializer emits; the reader accepts only an explicitly declared `revision` extension, not arbitrary extra properties. Three generated schemas and `json-schema-to-typescript` **16.0.0** declarations are checked in under `packages/qgis-sdk-bridge/tests/contracts/generated/`. Biome excludes generated artifacts so its formatter cannot silently change codegen output.
+The new, persistent `packages/qgis-sdk-python/tests/contract_sample/` example is **not** the retired spike recreated under another name: it has only one ordinary dataclass request/result pair, no production public DTOs or Python decoder, and does not rerun the apischema/TypeAdapter comparison. Its `generate_contract.py` entry point is invoked by the root `sdk:generate` package script in a QGIS-free Python build environment. Mashumaro **3.23** emits Draft 2020-12 schemas for the request and the separately authored result reader. For the writer, the example requires all fields that its default-including serializer emits; the reader accepts only an explicitly declared `revision` extension, not arbitrary extra properties. Three generated schemas and `json-schema-to-typescript` **16.0.0** declarations are checked in under `packages/qgis-sdk-typescript/tests/contracts/generated/`. Biome excludes generated artifacts so its formatter cannot silently change codegen output.
 
 The Python tests compare a fresh export byte-for-byte to the checked schemas, use **test-only** `jsonschema` **4.26.0**'s Draft 2020-12 validator on **24 independently specified JSON cases**, exercise result serialization with Hypothesis, and include five pytest-bdd scenarios. Bridge tests use Ajv2020 **8.20.0** with `coerceTypes: false`, `useDefaults: false`, `removeAdditional: false` on the **same 24 cases**, verify that validation does not mutate payloads, and compare the checked TS byte-for-byte to `compileFromFile`; TypeScript 7 checks required/nullable/defaulted distinctions. On Linux/Python 3.14.8, the current root coverage run passed **55 Python tests and 30 bridge tests**, with **100% measured production-source coverage** for each package. Ruff, Biome and TS typechecking also passed. An isolated Linux/Python 3.11.2 Mashumaro smoke export reproduced the same three schema files byte-for-byte; this was not a 3.11 test-suite or QGIS run. The Hypothesis-generated Python data are not sent to Ajv; shared cross-language examples are the fixed cases.
 
@@ -399,9 +399,9 @@ while booleans, strings, fractions, nonfinite values, and values outside the
 inclusive JavaScript safe-integer range are rejected.
 
 The persistent model fixtures and exporter are separate from the Mashumaro sample
-under `packages/qgis-sdk/tests/contract_sample/pydantic_*`. Checked schemas and
+under `packages/qgis-sdk-python/tests/contract_sample/pydantic_*`. Checked schemas and
 `json2ts` declarations live under
-`packages/qgis-sdk-bridge/tests/contracts/pydantic/generated/`. Python's
+`packages/qgis-sdk-typescript/tests/contracts/pydantic/generated/`. Python's
 `jsonschema` oracle and Ajv2020 each validate the same **40 shared examples** for
 both schema sets with coercion/default insertion/additional-field removal disabled;
 tests also assert payload nonmutation, checked schema/type drift, and TypeScript
@@ -480,7 +480,7 @@ Environment: Linux x86_64, Pixi `default` environment Python **3.14.8**, QGIS
   `Requires-Dist: pydantic==2.14.1; extra == 'controlled-deployment'`, with no
   unconditional Pydantic requirement; the wheel ships the adapter modules.
 - **Conda is still blocked, not qualified:** `pixi build --path
-  packages/qgis-sdk/recipe.yaml` fails with `failed to query the conda gateway`
+  packages/qgis-sdk-python/recipe.yaml` fails with `failed to query the conda gateway`
   → `Request failed after 3 retries` →
   `https://conda.anaconda.org/conda-forge/linux-64/repodata_shards.msgpack.zst`
   → `tls handshake eof`. Network access to conda-forge is unavailable here.

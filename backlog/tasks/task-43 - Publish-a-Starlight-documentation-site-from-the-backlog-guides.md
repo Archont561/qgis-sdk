@@ -12,7 +12,7 @@ references:
     backlog/decisions/decision-29 -
     Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md
   - backlog/docs/guides/doc-12 - qgis-sdk-Python-package-guide.md
-  - backlog/docs/guides/doc-13 - qgis-sdk-bridge-TypeScript-package-guide.md
+  - backlog/docs/guides/doc-13 - qgis-sdk-TypeScript-package-guide.md
   - >-
     backlog/docs/guides/doc-14 -
     Workspace-development-qualification-harnesses-and-evidence.md

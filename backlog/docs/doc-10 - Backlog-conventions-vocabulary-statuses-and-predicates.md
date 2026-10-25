@@ -220,8 +220,8 @@ document:
   the missing evidence named.
 - Tests are the default evidence; a real QGIS host test is required wherever the
   criteria concern native behaviour. The opt-in harnesses are the mechanism
-  (`QGIS_SDK_*` flags, harnesses in `packages/qgis-sdk/scripts`, QGIS-free tests
-  in `packages/qgis-sdk/tests/scripts`).
+  (`QGIS_SDK_*` flags, harnesses in `packages/qgis-sdk-python/scripts`, QGIS-free tests
+  in `packages/qgis-sdk-python/tests/scripts`).
 - The Linux sandbox is headless: no GUI, canvas, 3D or Windows/macOS claim may
   originate from it, and the recorded evidence must say so. TASK-33 owns those.
 - Notes record execution progress; comments record review discussion and blockers.

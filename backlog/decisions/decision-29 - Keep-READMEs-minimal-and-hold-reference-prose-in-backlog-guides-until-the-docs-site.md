@@ -7,7 +7,7 @@ status: accepted
 ## Context
 
 By 0.2.0 the three READMEs had become the project's only documentation:
-`packages/qgis-sdk/README.md` ran to 870 lines and `README.md` to 130, each
+`packages/qgis-sdk-python/README.md` ran to 870 lines and `README.md` to 130, each
 task appending the section that proved its acceptance criteria. That shape has
 three costs. A reader looking for "how do I install this" scrolls past
 qualification matrices; the same prose is the PyPI and npm long description, so
@@ -31,7 +31,7 @@ of pixi-sandbox's Astro Starlight docs.
    than plans or specifications:
    [doc-12](../docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md)
    (Python package),
-   [doc-13](../docs/guides/doc-13%20-%20qgis-sdk-bridge-TypeScript-package-guide.md)
+   [doc-13](../docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
    (TypeScript bridge) and
    [doc-14](../docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
    (workspace tooling, harnesses, qualification evidence). A task that lands a
@@ -51,7 +51,7 @@ of pixi-sandbox's Astro Starlight docs.
 ## Consequences
 
 - The PyPI and npm long descriptions become short landing pages; `release.yml`
-  still packs `packages/qgis-sdk-bridge/README.md` into the npm artifact
+  still packs `packages/qgis-sdk-typescript/README.md` into the npm artifact
   unchanged.
 - `tests/scripts/test_backlog.py` already checks relative links across the
   backlog, so a guide that moves or renames is caught; the links the guides

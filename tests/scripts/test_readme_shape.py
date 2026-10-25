@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 READMES = (
     ROOT / "README.md",
-    ROOT / "packages" / "qgis-sdk" / "README.md",
-    ROOT / "packages" / "qgis-sdk-bridge" / "README.md",
+    ROOT / "packages" / "qgis-sdk-python" / "README.md",
+    ROOT / "packages" / "qgis-sdk-typescript" / "README.md",
     ROOT / "packages" / "config" / "README.md",
 )
 

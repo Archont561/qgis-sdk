@@ -2,7 +2,7 @@
 
 Adds ``scripts/`` to ``sys.path`` so tests can import the standalone
 ``release`` script as a module, matching the pattern used by
-``packages/qgis-sdk/tests/conftest.py``.
+``packages/qgis-sdk-python/tests/conftest.py``.
 """
 
 from __future__ import annotations

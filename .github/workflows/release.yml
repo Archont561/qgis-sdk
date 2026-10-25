@@ -1,7 +1,7 @@
 name: release
 
 # Artifact pipeline for every release tag (TASK-35, TASK-37). Builds the
-# qgis-sdk wheel and/or the qgis-sdk-bridge npm package according to the tag
+# qgis-sdk wheel and/or the @archont561/qgis-sdk npm package according to the tag
 # scope (v*, <scope>-v*, <scope>/v*), publishes a GitHub Release with
 # SHA256SUMS, and hands the artifacts to the registries.
 #
@@ -15,8 +15,10 @@ name: release
 # Registry publishing runs under the OIDC trusted-publishing bindings the
 # repository owner provisioned: PyPI project `qgis-sdk` accepts tokens from
 # this workflow file (release.yml) under GitHub environment `pypi`, and npm
-# package `qgis-sdk-bridge` from release.yml under environment `npm`. Renaming
-# this file or those environments breaks publishing. Prerelease tags
+# package `@archont561/qgis-sdk` from release.yml under environment `npm`
+# (the binding is per package name: the one provisioned for the former
+# `qgis-sdk-bridge` does not carry over, see decision-33). Renaming this file
+# or those environments breaks publishing. Prerelease tags
 # (vX.Y.Z-suffix) dry-run both registries instead of uploading, so version
 # space is only consumed by a deliberate clean release.
 
@@ -116,7 +118,7 @@ jobs:
 
       - name: Build the TypeScript bridge
         if: steps.classify.outputs.typescript == 'true'
-        run: pixi run -e bun bun run --filter '@archont561/qgis-sdk-bridge' build
+        run: pixi run -e bun bun run --filter '@archont561/qgis-sdk' build
 
       - name: Capture the tag annotation as release notes
         env:
@@ -148,10 +150,10 @@ jobs:
         with:
           name: bridge-package
           path: |
-            packages/qgis-sdk-bridge/package.json
-            packages/qgis-sdk-bridge/README.md
-            packages/qgis-sdk-bridge/LICENSE
-            packages/qgis-sdk-bridge/dist
+            packages/qgis-sdk-typescript/package.json
+            packages/qgis-sdk-typescript/README.md
+            packages/qgis-sdk-typescript/LICENSE
+            packages/qgis-sdk-typescript/dist
 
       - name: Upload release notes artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -259,7 +261,7 @@ jobs:
     if: needs.build.outputs.typescript == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Trusted-publishing binding: npm package `qgis-sdk-bridge` accepts OIDC
+    # Trusted-publishing binding: npm package `@archont561/qgis-sdk` accepts OIDC
     # tokens from release.yml running under the `npm` environment only. npm
     # trusted publishing needs npm >= 11.5.1, so the runner's npm is replaced
     # with an exact pin before packing or publishing.
@@ -311,8 +313,8 @@ jobs:
         working-directory: bridge
         run: |
           set -o pipefail
-          if [ "$(npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
-            echo "npm already has @archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}; skipping."
+          if [ "$(npm view "@archont561/qgis-sdk@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
+            echo "npm already has @archont561/qgis-sdk@${{ needs.build.outputs.version }}; skipping."
           else
             npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee ../npm-publish.log
           fi
@@ -370,8 +372,8 @@ jobs:
         working-directory: bridge
         run: |
           set -o pipefail
-          if [ "$(npm view "@archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}" version --registry=https://npm.pkg.github.com 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
-            echo "GitHub Packages already has @archont561/qgis-sdk-bridge@${{ needs.build.outputs.version }}; skipping."
+          if [ "$(npm view "@archont561/qgis-sdk@${{ needs.build.outputs.version }}" version --registry=https://npm.pkg.github.com 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
+            echo "GitHub Packages already has @archont561/qgis-sdk@${{ needs.build.outputs.version }}; skipping."
           else
             npm publish --registry=https://npm.pkg.github.com 2>&1 | tee ../gh-pkg-publish.log
           fi

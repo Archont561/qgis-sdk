@@ -17,13 +17,13 @@
       "name": "@workspace/config",
       "version": "0.1.0",
     },
-    "packages/qgis-sdk": {
+    "packages/qgis-sdk-python": {
       "name": "qgis-sdk",
       "version": "0.1.1",
     },
-    "packages/qgis-sdk-bridge": {
-      "name": "@archont561/qgis-sdk-bridge",
-      "version": "0.1.1",
+    "packages/qgis-sdk-typescript": {
+      "name": "@archont561/qgis-sdk",
+      "version": "0.2.0",
       "devDependencies": {
         "@archont561/bun-test-utils": "^0.1.0",
         "@types/node": "26.6.5",
@@ -50,7 +50,7 @@
 
     "@archont561/bun-test-utils": ["@archont561/bun-test-utils@0.1.0", "", { "dependencies": { "@clack/prompts": "1.8.1", "citty": "^0.2.2", "smol-toml": "^1.9.0" }, "peerDependencies": { "@aboviq/bun-test-cucumber": ">=0.2.0", "fast-check": ">=4.0.0", "happy-dom": ">=20.0.0", "playwright": ">=1.40.0" }, "optionalPeers": ["@aboviq/bun-test-cucumber", "fast-check", "happy-dom", "playwright"], "bin": { "test-utils": "dist/cli.js" } }, "sha512-TaTQdenDigY3oc2pcHCqlrcf2gz8aeyJnl5NgJuI+2K8gmSTjUcp4x9fcmrumwXeMr1+WXkRkZJbO8UOcObdDA=="],
 
-    "@archont561/qgis-sdk-bridge": ["@archont561/qgis-sdk-bridge@workspace:packages/qgis-sdk-bridge"],
+    "@archont561/qgis-sdk": ["@archont561/qgis-sdk@workspace:packages/qgis-sdk-typescript"],
 
     "@babel/helper-string-parser": ["@babel/helper-string-parser@7.29.7", "", {}, "sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw=="],
 
@@ -370,7 +370,7 @@
 
     "prettier": ["prettier@3.9.10", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-skGHTH1Yb9QvaTC4hWnRTzEYtCpApF0UMBPz+t/0ZPzP8ihefo/btKd+QA7pUE0fEwA1SbS/NmhyEcstdXOIdA=="],
 
-    "qgis-sdk": ["qgis-sdk@workspace:packages/qgis-sdk"],
+    "qgis-sdk": ["qgis-sdk@workspace:packages/qgis-sdk-python"],
 
     "react": ["react@19.3.1", "", {}, "sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw=="],
 

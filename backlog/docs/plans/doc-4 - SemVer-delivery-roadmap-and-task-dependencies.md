@@ -13,11 +13,11 @@ updated_date: '2026-10-16 12:03'
 
 Milestones use valid major.minor.patch targets. Experimental 0.x breaking changes get a documented minor release; patches are compatible fixes. Use prereleases such as 0.3.0-alpha.1/0.3.0-beta.1. Stable 1.0.0 requires a later explicit API-stability decision.
 
-`qgis-sdk` and `@archont561/qgis-sdk-bridge` **version independently** ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)). Each package derives its own version from the conventional commits that touch it, starting from its own last release tag; `python-v*` stamps `pyproject.toml` and `recipe.yaml`, `ts-v*` stamps the bridge `package.json`, and `v*` is a deliberate alignment release that stamps all three. What holds a pair together is the plugin-description **contract version** (`PLUGIN_DESCRIPTION_SCHEMA_VERSION`), declared once per language and checked by `release.py verify-versions` on every release; wire protocol versions stay independent of package versions. Within a milestone, feature and fix work bumps only the patch; the minor advances on a breaking change or when a milestone closes by an explicit `--bump minor`/`--version-override`, **per package**. Existing unreleased 0.1.0 metadata is not proof of a published usable release. The 0.6.0 reservation is tentative deferred research and requires renewed approval, not a Rust-shipping commitment.
+`qgis-sdk` and `@archont561/qgis-sdk` **version independently** ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)). Each package derives its own version from the conventional commits that touch it, starting from its own last release tag; `python-v*` stamps `pyproject.toml` and `recipe.yaml`, `ts-v*` stamps the bridge `package.json`, and `v*` is a deliberate alignment release that stamps all three. What holds a pair together is the plugin-description **contract version** (`PLUGIN_DESCRIPTION_SCHEMA_VERSION`), declared once per language and checked by `release.py verify-versions` on every release; wire protocol versions stay independent of package versions. Within a milestone, feature and fix work bumps only the patch; the minor advances on a breaking change or when a milestone closes by an explicit `--bump minor`/`--version-override`, **per package**. Existing unreleased 0.1.0 metadata is not proof of a published usable release. The 0.6.0 reservation is tentative deferred research and requires renewed approval, not a Rust-shipping commitment.
 
 ## Milestones and release tasks
 
-| Milestone | Python version (`qgis-sdk`) | Python deliverable | Bridge version (`@archont561/qgis-sdk-bridge`) | Bridge deliverable | Release gate |
+| Milestone | Python version (`qgis-sdk`) | Python deliverable | Bridge version (`@archont561/qgis-sdk`) | Bridge deliverable | Release gate |
 | --- | --- | --- | --- | --- | --- |
 | 0.1.0 [m-0](../../milestones/m-0%20-%200.1.0-%E2%80%94-architecture-and-qualification-spikes.md) | 0.1.0 → 0.1.1, published | Contracts, declarations, scheduler spikes | 0.1.0 → 0.1.1, published | Wire primitives: description parsing, safe integers, error hierarchy | [TASK-27](../../tasks/task-27%20-%20Prepare-and-qualify-0.1.0-release.md) |
 | 0.2.0 [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md) | **0.2.0** | Native runtime, Processing algorithms, UI dispatch | **stays at 0.1.1 — not released** | No source change; no npm version consumed | [TASK-28](../../tasks/task-28%20-%20Prepare-and-qualify-0.2.0-release.md) |
@@ -58,7 +58,7 @@ Every implementation task includes focused tests; fixture integration is not per
 
 ### 0.2.0
 
-No task in this milestone changes `packages/qgis-sdk-bridge`, so the 0.2.0 release publishes only the Python package and the bridge stays at 0.1.1 (see [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)).
+No task in this milestone changes `packages/qgis-sdk-typescript`, so the 0.2.0 release publishes only the Python package and the bridge stays at 0.1.1 (see [m-1](../../milestones/m-1%20-%200.2.0-%E2%80%94-native-runtime-and-processing-algorithms.md)).
 
 Re-scoped on 2026-10-24: TASK-5 and TASK-15 moved to 0.3.0, because they block nothing here, sit outside the milestone's name, and were both still waiting on decisions that are only `proposed` (decision-4, decision-13). TASK-3 is the last open feature.
 
@@ -110,6 +110,7 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-51](../../tasks/task-51%20-%20Derive-declaration-ids-and-titles-from-names-by-default.md): Derive declaration ids and titles from names by default — deterministic, explicit values win (decision-30)
 - [TASK-52](../../tasks/task-52%20-%20Bind-PluginContext-as-the-ctx-class-attribute-instead-of-a-constructor-argument.md): Bind PluginContext as the ctx class attribute instead of a constructor argument (decision-31)
 - [TASK-53](../../tasks/task-53%20-%20Offer-the-curated-services-on-PluginContext-and-build-the-web-view-surface-from-it.md): Offer the curated services on PluginContext and build the web-view surface from it (decision-32)
+- [TASK-54](../../tasks/task-54%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md): Rename the npm package to @archont561/qgis-sdk and suffix the package directories (decision-33)
 
 ### 0.5.0
 

@@ -29,7 +29,7 @@ still unchecked.
 ## Command and result
 
 ```sh
-pixi run -e default python packages/qgis-sdk/scripts/native_services_smoke.py
+pixi run -e default python packages/qgis-sdk-python/scripts/native_services_smoke.py
 # exit 0
 ```
 

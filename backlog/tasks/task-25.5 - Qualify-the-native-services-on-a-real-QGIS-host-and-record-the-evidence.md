@@ -28,12 +28,12 @@ ordinal: 25500
 <!-- SECTION:DESCRIPTION:BEGIN -->
 Sprint 1, slice 5 (TASK-25). The opt-in harness and the evidence record that turn slices 1-4 from "tested in the pure layer" into "qualified on a real host".
 
-The harness belongs in packages/qgis-sdk/scripts (a wheel must not ship a tool that needs QGIS) and its QGIS-free test in packages/qgis-sdk/tests/scripts, following the existing QGIS_SDK_* opt-in pattern. The record must state what a headless host cannot prove: no GUI, canvas, 3D or Windows/macOS claim from here - TASK-33 owns those.
+The harness belongs in packages/qgis-sdk-python/scripts (a wheel must not ship a tool that needs QGIS) and its QGIS-free test in packages/qgis-sdk-python/tests/scripts, following the existing QGIS_SDK_* opt-in pattern. The record must state what a headless host cannot prove: no GUI, canvas, 3D or Windows/macOS claim from here - TASK-33 owns those.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 An opt-in harness under packages/qgis-sdk/scripts drives the native services on real QGIS 4.2.3 and is covered by a QGIS-free test in packages/qgis-sdk/tests/scripts that asserts its unavailable-host report instead of skipping silently.
+- [x] #1 An opt-in harness under packages/qgis-sdk-python/scripts drives the native services on real QGIS 4.2.3 and is covered by a QGIS-free test in packages/qgis-sdk-python/tests/scripts that asserts its unavailable-host report instead of skipping silently.
 - [x] #2 The recorded evidence names exact QGIS, Python and Qt versions and lists what the headless run cannot prove, with no GUI, Windows or macOS claim.
 - [x] #3 TASK-25 notes quote the actual run; no acceptance criterion is checked on intent, and any unproven criterion stays open with its blocker named.
 <!-- AC:END -->
@@ -45,7 +45,7 @@ The harness belongs in packages/qgis-sdk/scripts (a wheel must not ship a tool t
 
 Added: a `--prefix` entry point (`parse_prefix`, both `--prefix X` and `--prefix=X`) so the harness can be pointed at a candidate root on any host, and so its failure path is drivable; and a QGIS-free test that runs the script against a prefix containing no QGIS and asserts a serialisable JSON report with every stage false, a non-empty `error`, and exit code 1 - the "answers instead of skipping silently" requirement, tested against the real script rather than against the helper.
 
-AC #1: harness at `packages/qgis-sdk/scripts/native_services_smoke.py`, QGIS-free coverage in `packages/qgis-sdk/tests/scripts/test_qualification_native_services.py` (7 tests: report shape, per-stage pass rule, unavailable report, prefix parsing, unusable-host subprocess, fixture presence, plus the opt-in end-to-end run).
+AC #1: harness at `packages/qgis-sdk-python/scripts/native_services_smoke.py`, QGIS-free coverage in `packages/qgis-sdk-python/tests/scripts/test_qualification_native_services.py` (7 tests: report shape, per-stage pass rule, unavailable report, prefix parsing, unusable-host subprocess, fixture presence, plus the opt-in end-to-end run).
 
 AC #2: recorded in [doc-11](../docs/plans/doc-11%20-%20TASK-25-native-services-qualification-evidence.md) with the verbatim JSON report and the exact versions - QGIS 4.2.3-Belém do Pará, Qt 6.11.2, CPython 3.14.8, Linux-6.1.158+ x86_64, offscreen. Six explicit non-claims are listed: nothing visual (no window/canvas/3D/WebEngine), no real Desktop iface, no Windows/macOS, message-log sink content unobservable (only the injected sink proves delivery), no real Processing outputs (TASK-14), and no style rendering fidelity. TASK-33 remains the owner of AC #1/#2 there.
 

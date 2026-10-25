@@ -33,11 +33,11 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_PYPROJECT = _REPO_ROOT / "packages/qgis-sdk/pyproject.toml"
-_RECIPE = _REPO_ROOT / "packages/qgis-sdk/recipe.yaml"
-_BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-bridge/package.json"
-_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk/src/qgis_sdk/declarations.py"
-_TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-bridge/src/index.ts"
+_PYPROJECT = _REPO_ROOT / "packages/qgis-sdk-python/pyproject.toml"
+_RECIPE = _REPO_ROOT / "packages/qgis-sdk-python/recipe.yaml"
+_BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
+_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-python/src/qgis_sdk/declarations.py"
+_TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-typescript/src/index.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 
 __all__ = [
@@ -109,9 +109,9 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
     ts = False
     for raw in files:
         path = raw.strip()
-        if path.startswith("packages/qgis-sdk/"):
+        if path.startswith("packages/qgis-sdk-python/"):
             py = True
-        elif path.startswith("packages/qgis-sdk-bridge/"):
+        elif path.startswith("packages/qgis-sdk-typescript/"):
             ts = True
     if py and ts:
         return "all"
@@ -251,8 +251,8 @@ def parse_log_with_files(raw: str) -> tuple[Commit, ...]:
     return tuple(commits)
 
 
-_PYTHON_PREFIX = "packages/qgis-sdk/"
-_TYPESCRIPT_PREFIX = "packages/qgis-sdk-bridge/"
+_PYTHON_PREFIX = "packages/qgis-sdk-python/"
+_TYPESCRIPT_PREFIX = "packages/qgis-sdk-typescript/"
 
 
 def commit_packages(commit: Commit) -> tuple[bool, bool]:
@@ -394,11 +394,15 @@ _SCOPE_ALIASES = {
     "python": "python",
     "py": "python",
     "qgis-sdk": "python",
+    "qgis-sdk-python": "python",
     "typescript": "typescript",
     "ts": "typescript",
     "bridge": "typescript",
+    "qgis-sdk-typescript": "typescript",
+    "@archont561/qgis-sdk": "typescript",
+    # Legacy alias: the npm package was published as @archont561/qgis-sdk-bridge
+    # through ts-v0.2.0 (decision-33).
     "qgis-sdk-bridge": "typescript",
-    "@archont561/qgis-sdk-bridge": "typescript",
     "bun": "typescript",
 }
 _SCOPE_PREFIXES = {
@@ -1303,7 +1307,7 @@ def resolve_dry_run(trigger: str, requested: bool) -> tuple[bool, str]:
     A branch push never tags. The train still plans and gates the candidate on
     every merge, but cutting the tag stays an explicit act - a dispatch or a
     milestone tag - so a merge cannot consume a version, and a package minor
-    (which is what a ``feat!`` landing on ``packages/qgis-sdk`` derives) cannot
+    (which is what a ``feat!`` landing on ``packages/qgis-sdk-python`` derives) cannot
     bypass its release gate. On 2026-10-24 a merge planned ``v0.2.0`` for both
     packages this way and the only thing that stopped it was luck.
     """
@@ -1660,7 +1664,7 @@ def _build_parser() -> argparse.ArgumentParser:
     versions.set_defaults(handler=_cmd_verify_versions)
 
     build = sub.add_parser("build-python", help="build and check the wheel")
-    build.add_argument("--package", default="packages/qgis-sdk")
+    build.add_argument("--package", default="packages/qgis-sdk-python")
     build.add_argument("--outdir", default="dist/pypi")
     build.set_defaults(handler=_cmd_build_python)
 

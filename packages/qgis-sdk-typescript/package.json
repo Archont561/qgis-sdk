@@ -1,0 +1,77 @@
+{
+	"name": "@archont561/qgis-sdk",
+	"version": "0.2.0",
+	"description": "TypeScript bridge contracts and error primitives for QGIS SDK WebEngine plugin interfaces.",
+	"license": "MIT",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./bridge": {
+			"types": "./dist/bridge.d.ts",
+			"import": "./dist/bridge.js",
+			"default": "./dist/bridge.js"
+		},
+		"./host": {
+			"types": "./dist/host.d.ts",
+			"import": "./dist/host.js",
+			"default": "./dist/host.js"
+		},
+		"./react": {
+			"types": "./dist/react.d.ts",
+			"import": "./dist/react.js",
+			"default": "./dist/react.js"
+		},
+		"./testing": {
+			"types": "./dist/testing.d.ts",
+			"import": "./dist/testing.js",
+			"default": "./dist/testing.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Archont561/qgis-sdk.git",
+		"directory": "packages/qgis-sdk-typescript"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bunup",
+		"test": "bun test",
+		"coverage": "bun --cwd=../.. --config=bunfig.toml test --coverage packages/qgis-sdk-typescript/tests",
+		"typecheck": "tsc --noEmit",
+		"generate:contract-types": "json2ts -i 'tests/contracts/generated/schemas/*.json' -o tests/contracts/generated/types/ && json2ts -i 'tests/contracts/pydantic/generated/schemas/*.json' -o tests/contracts/pydantic/generated/types/"
+	},
+	"peerDependencies": {
+		"react": ">=18"
+	},
+	"peerDependenciesMeta": {
+		"react": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@archont561/bun-test-utils": "^0.1.0",
+		"@types/node": "26.6.5",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"@workspace/config": "workspace:*",
+		"ajv": "8.20.0",
+		"bunup": "^0.16.32",
+		"happy-dom": "21.0.4",
+		"json-schema-to-typescript": "16.0.0",
+		"react": "19.3.1",
+		"react-dom": "19.3.1"
+	}
+}

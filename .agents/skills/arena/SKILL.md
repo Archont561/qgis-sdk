@@ -51,15 +51,15 @@ When Pixi, Bun or the bundle is unavailable, this fallback reproduces most of th
 TypeScript checks. It is lower fidelity: say so in every report.
 
 ```sh
-pip install --user --break-system-packages -e "packages/qgis-sdk[dev]"
-PYTHONPATH=packages/qgis-sdk/src python3 -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -q
+pip install --user --break-system-packages -e "packages/qgis-sdk-python[dev]"
+PYTHONPATH=packages/qgis-sdk-python/src python3 -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -q
 python3 -m ruff check .
 python3 -m ruff format --check .
 ```
 
-- `-c packages/qgis-sdk/pyproject.toml` is required inside the repository: the root config is not a
+- `-c packages/qgis-sdk-python/pyproject.toml` is required inside the repository: the root config is not a
   pytest config, and without it discovery picks the wrong roots.
-- `packages/qgis-sdk/tests/test_pure_imports.py` fails under a plain interpreter because it asserts
+- `packages/qgis-sdk-python/tests/test_pure_imports.py` fails under a plain interpreter because it asserts
   the SDK imports with native modules blocked. Treat that single file as environment-specific and
   say CI is the authority for it.
 - `pip --user` lands in `~/.local/bin`, which is not on `PATH`; call `python3 -m pytest` and
@@ -70,9 +70,9 @@ committed and the snapshot stays small:
 
 ```sh
 mkdir -p /tmp/tc && cd /tmp/tc && npm install typescript@5.9.3 bun @biomejs/biome@2.5.15 ajv@8.20.0 json-schema-to-typescript@16.0.0
-cd - && ln -sfn /tmp/tc/node_modules packages/qgis-sdk-bridge/node_modules
-packages/qgis-sdk-bridge/node_modules/.bin/bun test tests
-packages/qgis-sdk-bridge/node_modules/.bin/tsc --noEmit
+cd - && ln -sfn /tmp/tc/node_modules packages/qgis-sdk-typescript/node_modules
+packages/qgis-sdk-typescript/node_modules/.bin/bun test tests
+packages/qgis-sdk-typescript/node_modules/.bin/tsc --noEmit
 /tmp/tc/node_modules/.bin/biome check .
 ```
 
@@ -111,9 +111,9 @@ npx -y skills@1.7.2 list
   excluded from snapshots — keep build output there and out of Git.
 - `node_modules` and `dist` are not the only ignored trees: `.pixi/` is ignored by Git but *is*
   snapshotted, so avoid materialising a full Pixi environment unless restore succeeded.
-- Never commit generated artifacts by hand. `packages/qgis-sdk-bridge/src/generated/` and
-  `packages/qgis-sdk-bridge/tests/contracts/generated/` are written by
-  `packages/qgis-sdk/scripts/generate_bridge_clients.py`; regenerate, then commit the diff.
+- Never commit generated artifacts by hand. `packages/qgis-sdk-typescript/src/generated/` and
+  `packages/qgis-sdk-typescript/tests/contracts/generated/` are written by
+  `packages/qgis-sdk-python/scripts/generate_bridge_clients.py`; regenerate, then commit the diff.
 - The harness saves file changes between turns, but a clean `git status` and a conventional commit
   are still what make a handoff reviewable.
 
