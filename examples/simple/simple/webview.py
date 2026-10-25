@@ -24,9 +24,9 @@ from qgis_sdk.environment import dev_server
 
 ASSETS = Path(__file__).resolve().parent / "web"  # `bun run build` in web/ writes it
 INDEX = ASSETS / "index.html"
-VIEW_ID = "reference_plugin.main"
+VIEW_ID = "simple.main"
 CHANNEL_OBJECT = "bridge"  # the name web/src/transport.ts looks up
-TITLE = "Reference workflow"
+TITLE = "Simple"
 
 
 def add_toolbar_action(

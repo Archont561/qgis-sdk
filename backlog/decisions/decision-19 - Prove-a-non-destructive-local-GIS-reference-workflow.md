@@ -51,7 +51,7 @@ this decision that are observable headlessly:
 
 TASK-22 (0.5.0) closed the chain and the equivalence half:
 
-- **One workflow, two front ends.** `examples/reference_plugin`'s
+- **One workflow, two front ends.** `examples/simple`'s
   `workflow.LocalGisWorkflow` chains open -> selection -> buffer (`invoke`
   without presentation) -> apply the packaged `reference/polygon-output`
   style -> add to the project, so the output is styled *before* it is

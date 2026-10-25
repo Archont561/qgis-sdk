@@ -24,8 +24,8 @@ from qgis_sdk.testing import (
     FakeStyles,
     RecordingNotifications,
 )
-from reference_plugin.plugin import FIXTURE
-from reference_plugin.workflow import LocalGisWorkflow
+from simple.plugin import FIXTURE
+from simple.workflow import LocalGisWorkflow
 
 
 class _Journal:

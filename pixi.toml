@@ -39,11 +39,11 @@ cmd = "pytest -q .agents/skills/skill-creator/tests"
 [feature.python.tasks.test-release-tool]
 cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q"
 
-# The reference plugin (examples/reference_plugin) through its own
+# The reference plugin (examples/simple) through its own
 # `qgis-sdk test`: the pure target on the SDK fakes, then the `qgis` target
 # against the headless QGIS this environment carries.
 [feature.python.tasks.test-reference-example]
-cmd = "python -m qgis_sdk_tools test --project examples/reference_plugin -q && python -m qgis_sdk_tools test --project examples/reference_plugin --target qgis -q"
+cmd = "python -m qgis_sdk_tools test --project examples/simple -q && python -m qgis_sdk_tools test --project examples/simple --target qgis -q"
 env = { QT_QPA_PLATFORM = "offscreen" }
 
 [feature.python.tasks.release-plan]

@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
 	base: "./",
 	build: {
-		outDir: "../reference_plugin/web",
+		outDir: "../simple/web",
 		emptyOutDir: true,
 		target: "chrome108",
 	},

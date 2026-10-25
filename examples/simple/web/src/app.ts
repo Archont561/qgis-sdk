@@ -7,7 +7,7 @@ import type { PluginOperations } from "./bridge";
  * typed here - an export names a file inside the directory the host chose.
  */
 const PAGE = `
-	<h1>Reference workflow</h1>
+	<h1>Simple</h1>
 	<section>
 		<button id="open" type="button">Open the fixture dataset</button>
 		<output id="source" for="open"></output>

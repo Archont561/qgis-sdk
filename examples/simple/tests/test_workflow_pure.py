@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import reference_plugin
+import simple
 from conftest import WORKING_CRS, FakeHost
 from qgis_sdk import describe_plugin
 from qgis_sdk.models import (
@@ -18,12 +18,12 @@ from qgis_sdk.models import (
     QgisSdkExportRefusedError,
     QgisSdkUnsupportedCapabilityError,
 )
-from reference_plugin.plugin import EXPORT_DIRECTORY_KEY, ReferencePlugin
-from reference_plugin.workflow import LocalGisWorkflow
+from simple.plugin import EXPORT_DIRECTORY_KEY, SimplePlugin
+from simple.workflow import LocalGisWorkflow
 
 
 def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
-    description = describe_plugin(ReferencePlugin)
+    description = describe_plugin(SimplePlugin)
 
     assert sorted(a.id for a in description.actions) == [
         "buffer",
@@ -35,7 +35,7 @@ def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
 
 
 def test_class_factory_starts_and_unloads_without_a_host() -> None:
-    plugin = reference_plugin.classFactory(None)
+    plugin = simple.classFactory(None)
     plugin.initGui()
     try:
         assert plugin.runtime.state.value == "running"

@@ -71,7 +71,7 @@ Read from the task files:
   Linux evidence rows. Windows rows are recorded as blockers until a host
   exists (TASK-33). Landed as: the `qgis_sdk.exports` policy and
   `Layers.export_vector` (fake and native, one contract), the
-  `reference/polygon-output` style, `examples/reference_plugin` (its own
+  `reference/polygon-output` style, `examples/simple` (its own
   `LocalGisWorkflow` chain - the runtime stays free of workflow code - five
   actions, vanilla page, its own pure and `qgis` tests run by CI), the opt-in `tests/test_reference_example_native.py` that
   runs `new`/`check`/`bridge generate --check`/`test`/`build`/`dev` on the

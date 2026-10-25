@@ -1,4 +1,4 @@
-"""The reference plugin (``examples/reference_plugin``) through the whole toolchain (TASK-22).
+"""The reference plugin (``examples/simple``) through the whole toolchain (TASK-22).
 
 Opt-in, because it installs the page's pinned dependencies, runs QGIS Desktop
 and a real Chromium::
@@ -56,8 +56,8 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"the page needs Qt WebEngine: {error}", allow_module_level=True)
 
-EXAMPLE = layers.PACKAGES_ROOT.parent / "examples" / "reference_plugin"
-PLUGIN = "reference_plugin"
+EXAMPLE = layers.PACKAGES_ROOT.parent / "examples" / "simple"
+PLUGIN = "simple"
 DEADLINE = 30.0
 WORKING_CRS = "EPSG:3857"
 SKIPPED = shutil.ignore_patterns(
@@ -134,7 +134,7 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "new",
         str(root),
         "--title",
-        "Reference workflow",
+        "Simple",
         "--author",
         "qgis-sdk",
         "--email",
@@ -185,7 +185,7 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
         "bridge",
         "generate",
         "--plugin",
-        f"{PLUGIN}.plugin:ReferencePlugin",
+        f"{PLUGIN}.plugin:SimplePlugin",
         "--out",
         "web/src/bridge.ts",
         "--check",

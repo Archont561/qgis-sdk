@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import reference_plugin
-from reference_plugin.plugin import EXPORT_DIRECTORY_KEY, FIXTURE
-from reference_plugin.workflow import LocalGisWorkflow
+import simple
+from simple.plugin import EXPORT_DIRECTORY_KEY, FIXTURE
+from simple.workflow import LocalGisWorkflow
 
 pytestmark = pytest.mark.qgis
 
@@ -28,7 +28,7 @@ def desktop(qgis_app: Any) -> Any:
     from qgis.core import QgsProject
 
     QgsProject.instance().removeAllMapLayers()
-    plugin = reference_plugin.classFactory(None)
+    plugin = simple.classFactory(None)
     plugin.initGui()
     try:
         yield plugin

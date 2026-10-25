@@ -559,7 +559,7 @@ archive in-process) and `tests/test_bundle_cli.py`. Last run here:
 
 ### Reference plugin through the toolchain (TASK-22)
 
-`examples/reference_plugin` is the decision-19 workflow as one plugin: open
+`examples/simple` (plugin id `simple`) is the decision-19 workflow as one plugin: open
 the bundled `data/points.geojson`, read the selection, buffer through
 Processing in an explicit projected CRS into a new layer styled with the
 packaged `reference/polygon-output` QML before it is presented, and export
@@ -569,7 +569,7 @@ renders and the vanilla page in `web/`, through the generated
 `web/src/bridge.ts`. The project was written by `qgis-sdk new` and keeps that
 layout, so the example doubles as the proof that the commands compose.
 
-The workflow class (`reference_plugin/workflow.py`) is the plugin's own code:
+The workflow class (`simple/workflow.py`) is the plugin's own code:
 the runtime ships the services and the reference *algorithms*, and what a
 plugin chains them into stays out of `qgis_sdk` (so the example is a worked
 example, not a hidden runtime feature). Deterministic, no QGIS: the export

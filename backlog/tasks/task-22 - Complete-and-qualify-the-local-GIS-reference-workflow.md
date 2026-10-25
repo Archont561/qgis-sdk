@@ -4,7 +4,7 @@ title: Complete and qualify the local GIS reference workflow
 status: Done
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-25 19:18'
+updated_date: '2026-10-25 19:38'
 labels: []
 milestone: m-4
 dependencies:
@@ -53,6 +53,8 @@ Sprint 2 of m-4 (doc-17). Landed on the session branch: qgis_sdk.exports export 
 Closed on PR #80 (CI run 40223858228 green: checks, cross-platform windows + macos). AC1: LocalGisWorkflow + reference plugin; page and native dialog dispatch one handler, outputs styled polygons, fixture sha256 unchanged (tests/test_reference_example_native.py, examples/reference_plugin/tests). AC2: new/check/bridge generate --check/test/test --target qgis/Bun test+typecheck+build/build/dev --exercise exercised by the harness; exports explicit with staged write and cleanup (tests/test_exports.py, services contract pair). AC3: Linux row recorded in doc-14 (QGIS 4.2.3, Python 3.14.8, Qt 6.11.2, Chromium 140.0.7339.225); Windows row blocked, carried by TASK-33.
 
 Follow-up (owner review after #80): the runtime stays free of workflow code. LocalGisWorkflow moved from qgis_sdk.reference to examples/reference_plugin/reference_plugin/workflow.py; qgis_sdk.reference ships the algorithms only. Its kit tests moved into the example (tests/test_workflow_ordering.py on the fakes, one more qgis-target case), and CI now runs the example's own qgis-sdk test (pure + qgis targets) through the test-reference-example Pixi task so the chain stays covered without living in the runtime.
+
+Renamed the example to examples/simple (package, plugin id, settings prefix and title all 'simple'); the generated client was regenerated (new fingerprint) and bun.lock refreshed. Harness, Pixi task and docs follow the path.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

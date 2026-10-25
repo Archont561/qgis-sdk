@@ -1,5 +1,5 @@
 [general]
-name=Reference workflow
+name=Simple
 description=The local GIS workflow qgis-sdk is qualified against.
 about=Open a bundled dataset, read the selection, buffer into a styled layer, export explicitly - the same actions behind native dialogs and a web page.
 version=0.1.0
