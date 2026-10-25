@@ -38,10 +38,18 @@ distribution, while the TypeScript directory needed a qualifier.
    the name reads a monotonic history. `scripts/release.py` keeps
    `qgis-sdk-bridge` as a legacy scope alias and adds `qgis-sdk-python` and
    `qgis-sdk-typescript`.
-4. **Old name, deprecation only.** After the first publish under the new
+4. **The unscoped name is an alias, not a second package.** `qgis-sdk` on
+   npm (`packages/qgis-sdk-alias`) depends on `@archont561/qgis-sdk` at an
+   exact pin equal to its own version and re-exports each entry with one
+   `export *`; it has no code, no build and no coverage of its own. The
+   release tool stamps and verifies the pair as one TypeScript scope, and
+   `release.yml` publishes the alias right after the scoped package from the
+   same tarball set, with an install smoke across both tarballs in between.
+   GitHub Packages accepts only owner-scoped names, so the alias is npm-only.
+5. **Old name, deprecation only.** After the first publish under the new
    name, the owner deprecates `@archont561/qgis-sdk-bridge` on npm with a
    message pointing at `@archont561/qgis-sdk`; nothing is unpublished.
-5. **The backlog uses the current name throughout**, except where a closed
+6. **The backlog uses the current name throughout**, except where a closed
    task records a published artifact (a tag annotation, a tarball name, an
    `npm view` result, the trusted-publishing binding as provisioned). Those
    lines stay as written, because they are evidence of what was shipped.
@@ -49,11 +57,14 @@ distribution, while the TypeScript directory needed a qualifier.
 ## Consequences
 
 - Trusted publishing is per package name. The npm OIDC binding provisioned
-  for `qgis-sdk-bridge` (TASK-35) does not cover `@archont561/qgis-sdk`; the
-  owner provisions a new trusted publisher (workflow `release.yml`,
-  environment `npm`) before the first `ts-v0.3.0` tag. Until then a
-  TypeScript release tag would fail in the `npm` job, not silently publish
-  the old name.
+  for `qgis-sdk-bridge` (TASK-35) covers neither `@archont561/qgis-sdk` nor
+  `qgis-sdk`. npm only lets a trusted publisher be configured on a package
+  that already exists, so the owner first publishes a `0.0.0` placeholder for
+  each name (`npx setup-npm-trusted-publish <name>`, from a logged-in
+  machine or with a one-time granular token), then binds workflow
+  `release.yml` / environment `npm` on each package's access page, all
+  before the first `ts-v0.3.0` tag. Until then a TypeScript release tag
+  fails in the `npm` job; it cannot silently publish the old name.
 - The `ts-v0.2.0` GitHub Release remains the last artifact of the old name;
   its outstanding asset dispatch (TASK-29) is unaffected.
 - Coverage flags become `qgis-sdk-python` and `qgis-sdk-typescript`; the

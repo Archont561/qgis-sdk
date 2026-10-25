@@ -12,6 +12,7 @@ Use this skill when changing the `qgis-sdk` Python package, the `@archont561/qgi
 - `packages/qgis-sdk-python`: Python package built with Hatchling and the explicit Conda recipe.
 - `packages/qgis-sdk-python/scripts`: standalone developer executables (qualification harnesses, contract generators), covered by the QGIS-free tests in `packages/qgis-sdk-python/tests/scripts`.
 - `packages/qgis-sdk-typescript`: TypeScript bridge tested with Bun and built with Bunup.
+- `packages/qgis-sdk-alias`: the unscoped npm name `qgis-sdk`, one `export *` per entry of `@archont561/qgis-sdk` at an exact pin; `scripts/release.py stamp` moves it with the bridge and its Bun tests pin it to the scoped manifest.
 - `packages/config`: shared TypeScript and Bunup configuration.
 - `pixi.toml`: root environments and pinned Conda dependencies; Bun remains in its separate environment.
 

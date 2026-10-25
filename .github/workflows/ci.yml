@@ -303,7 +303,7 @@ jobs:
         run: |
           # bun writes its summary to stderr; keep both streams and bun's status.
           set -o pipefail
-          bun test packages/qgis-sdk-typescript/tests 2>&1 | tee bun-tests.log
+          bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests 2>&1 | tee bun-tests.log
 
       - name: Report TypeScript test results
         if: ${{ !cancelled() }}

@@ -159,7 +159,7 @@ jobs:
           elif [ "$SCOPE" = "typescript" ]; then
             pixi run -e bun biome-check
             pixi run -e bun typecheck
-            pixi run -e bun bun test packages/qgis-sdk-typescript/tests
+            pixi run -e bun bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests
           fi
 
       - name: Dry-run packaging check

@@ -24,6 +24,7 @@ READMES = (
     ROOT / "README.md",
     ROOT / "packages" / "qgis-sdk-python" / "README.md",
     ROOT / "packages" / "qgis-sdk-typescript" / "README.md",
+    ROOT / "packages" / "qgis-sdk-alias" / "README.md",
     ROOT / "packages" / "config" / "README.md",
 )
 
@@ -80,9 +81,9 @@ def test_a_readme_stays_within_the_line_budget(path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("path", READMES[:3], ids=lambda p: str(p.relative_to(ROOT)))
+@pytest.mark.parametrize("path", READMES[:4], ids=lambda p: str(p.relative_to(ROOT)))
 def test_a_published_readme_points_at_the_guides(path: Path) -> None:
-    """The three READMEs that are landing pages link to where the prose went."""
+    """The READMEs that are landing pages link to where the prose went."""
     text = path.read_text(encoding="utf-8")
     assert "## Documentation" in text, f"{path.name}: no Documentation section"
     guides = sorted(p.name for p in GUIDES.glob("doc-*.md"))

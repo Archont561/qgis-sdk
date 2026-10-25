@@ -88,6 +88,7 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 | `packages/qgis-sdk-python/tests` | Python tests for the package |
 | `packages/qgis-sdk-typescript` | TypeScript bridge for QWebEngineView plugin interfaces |
 | `packages/qgis-sdk-typescript/tests` | Bun tests for the bridge |
+| `packages/qgis-sdk-alias` | Unscoped npm alias `qgis-sdk`: re-export files, manifest and Bun tests that pin it to the scoped package |
 | `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
 | `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
 | `scripts` | Repository-root developer scripts (restore) |
@@ -166,7 +167,7 @@ These examples are **not** public SDK operations, a general SDK generator, or us
 The package uses Hatchling for Python distributions and an explicit Conda recipe:
 
 ```sh
-pixi run -e bun bun run --filter qgis-sdk build
+pixi run -e bun bun run --filter qgis-sdk-python build
 ```
 
 The combined build produces a wheel and source distribution under `dist/pypi/`, checks them with Twine, and builds the Conda artifact under `dist/conda/`.

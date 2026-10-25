@@ -31,6 +31,7 @@ from release import (
     parse_milestone_tag,
     parse_release_tag,
     parse_versionrc,
+    read_alias_versions,
     read_pyproject_version,
     read_python_contract_version,
     read_recipe_version,
@@ -38,6 +39,7 @@ from release import (
     render_changelog,
     resolve_dry_run,
     sort_tags,
+    stamp_alias_package_json,
     stamp_package_json,
     stamp_pyproject,
     stamp_recipe,
@@ -52,6 +54,10 @@ from release import (
 PYPROJECT = '[build-system]\nrequires = ["hatchling==1.32.4"]\n\n[project]\nname = "qgis-sdk"\nversion = "0.1.0"\ndescription = "Kept."\n'
 RECIPE_YAML = 'schema_version: 1\n\ncontext:\n  version: "0.1.0"\n\npackage:\n  name: qgis-sdk\n  version: ${{ version }}\n'
 PACKAGE_JSON = '{\n\t"name": "@archont561/qgis-sdk",\n\t"version": "0.1.0",\n\t"private": false\n}\n'
+ALIAS_PACKAGE_JSON = (
+    '{\n\t"name": "qgis-sdk",\n\t"version": "0.1.0",\n'
+    '\t"dependencies": {\n\t\t"@archont561/qgis-sdk": "0.1.0"\n\t}\n}\n'
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1698,3 +1704,139 @@ def test_the_repository_config_still_keeps_features_visible_in_the_changelog():
     rule = config.rule_for("feat")
 
     assert (rule.increment, rule.section, rule.hidden) == ("Patch", "Features", False)
+
+
+# ---------------------------------------------------------------------------
+# The unscoped npm alias ``qgis-sdk`` (decision-33, TASK-55)
+# ---------------------------------------------------------------------------
+
+
+def test_stamp_alias_package_json_pins_the_dependency_to_the_version():
+    stamped = stamp_alias_package_json(ALIAS_PACKAGE_JSON, Version.parse("0.3.0"))
+
+    data = json.loads(stamped)
+    assert data["version"] == "0.3.0"
+    assert data["dependencies"] == {"@archont561/qgis-sdk": "0.3.0"}
+    assert stamped.startswith('{\n\t"name": "qgis-sdk"')
+
+
+def test_stamp_alias_package_json_refuses_a_manifest_without_the_dependency():
+    with pytest.raises(QgisSdkReleaseError, match="@archont561/qgis-sdk"):
+        stamp_alias_package_json(PACKAGE_JSON, Version.parse("0.3.0"))
+
+
+def test_read_alias_versions_returns_the_version_and_the_pin():
+    assert read_alias_versions(ALIAS_PACKAGE_JSON) == (
+        Version.parse("0.1.0"),
+        Version.parse("0.1.0"),
+    )
+
+
+def test_read_alias_versions_refuses_a_range_pin():
+    loose = ALIAS_PACKAGE_JSON.replace('"0.1.0"\n\t}', '"^0.1.0"\n\t}')
+
+    with pytest.raises(QgisSdkReleaseVersionError):
+        read_alias_versions(loose)
+
+
+def _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", alias_text=None):
+    pyproject = tmp_path / "pyproject.toml"
+    package = tmp_path / "package.json"
+    alias = tmp_path / "alias.json"
+    pyproject.write_text(PYPROJECT, encoding="utf-8")
+    package.write_text(
+        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
+        encoding="utf-8",
+    )
+    alias.write_text(alias_text or ALIAS_PACKAGE_JSON, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RECIPE", tmp_path / "no-recipe.yaml")
+    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+    monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
+    return package, alias
+
+
+def test_stamp_scope_typescript_stamps_the_alias_with_the_bridge(tmp_path, monkeypatch):
+    package, alias = _alias_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.3.0", "--scope", "typescript"]) == 0
+
+    assert json.loads(package.read_text())["version"] == "0.3.0"
+    data = json.loads(alias.read_text())
+    assert data["version"] == "0.3.0"
+    assert data["dependencies"]["@archont561/qgis-sdk"] == "0.3.0"
+    assert main(["verify-versions", "--scope", "typescript", "--version", "0.3.0"]) == 0
+
+
+def test_stamp_scope_python_leaves_the_alias_alone(tmp_path, monkeypatch):
+    _, alias = _alias_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.9.0", "--scope", "python"]) == 0
+
+    assert json.loads(alias.read_text())["version"] == "0.1.0"
+
+
+def test_verify_versions_names_an_alias_that_lags_the_bridge(
+    tmp_path, monkeypatch, capsys
+):
+    _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
+
+    assert main(["verify-versions", "--scope", "typescript"]) == 1
+
+    out = capsys.readouterr().out
+    assert "alias package.json=0.1.0" in out
+    assert "package.json=0.1.1" in out
+
+
+def test_verify_versions_names_an_alias_pin_that_drifts(tmp_path, monkeypatch, capsys):
+    drifted = ALIAS_PACKAGE_JSON.replace('"0.1.0"\n\t}', '"0.0.9"\n\t}')
+    _alias_manifests(tmp_path, monkeypatch, alias_text=drifted)
+
+    assert main(["verify-versions", "--scope", "typescript"]) == 1
+
+    assert "alias dependency=0.0.9" in capsys.readouterr().out
+
+
+def test_verify_versions_for_python_ignores_the_alias(tmp_path, monkeypatch):
+    _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.1.0"]) == 0
+
+
+def test_alias_changes_count_as_typescript():
+    assert commits_for_scope(
+        [
+            _commit(
+                "fix(alias): re-export testing", "packages/qgis-sdk-alias/testing.js"
+            )
+        ],
+        "typescript",
+    )
+    assert not commits_for_scope(
+        [
+            _commit(
+                "fix(alias): re-export testing", "packages/qgis-sdk-alias/testing.js"
+            )
+        ],
+        "python",
+    )
+    assert (
+        detect_scope_from_files(["packages/qgis-sdk-alias/package.json"])
+        == "typescript"
+    )
+
+
+def test_the_repository_alias_agrees_with_the_bridge(monkeypatch):
+    """The committed manifests, not fixtures: the alias must track the bridge."""
+    import release
+
+    root = Path(release.__file__).resolve().parent.parent
+    bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
+    alias = root / "packages" / "qgis-sdk-alias" / "package.json"
+    monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
+
+    bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
+    assert read_alias_versions(alias.read_text()) == (bridge_version, bridge_version)
+    assert main(["verify-versions", "--scope", "typescript"]) == 0

@@ -111,6 +111,7 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-52](../../tasks/task-52%20-%20Bind-PluginContext-as-the-ctx-class-attribute-instead-of-a-constructor-argument.md): Bind PluginContext as the ctx class attribute instead of a constructor argument (decision-31)
 - [TASK-53](../../tasks/task-53%20-%20Offer-the-curated-services-on-PluginContext-and-build-the-web-view-surface-from-it.md): Offer the curated services on PluginContext and build the web-view surface from it (decision-32)
 - [TASK-54](../../tasks/task-54%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md): Rename the npm package to @archont561/qgis-sdk and suffix the package directories (decision-33)
+- [TASK-55](../../tasks/task-55%20-%20Publish-qgis-sdk-as-an-unscoped-npm-alias-of-archont561-qgis-sdk.md): Publish qgis-sdk as an unscoped npm alias of @archont561/qgis-sdk (decision-33)
 
 ### 0.5.0
 

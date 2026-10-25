@@ -30,6 +30,11 @@ bun add @archont561/qgis-sdk
 npm install @archont561/qgis-sdk
 ```
 
+The unscoped name `qgis-sdk` is an alias published from the same tag: it
+depends on `@archont561/qgis-sdk` at the exact same version and re-exports
+every entry (`qgis-sdk`, `qgis-sdk/bridge`, `qgis-sdk/host`, `qgis-sdk/react`,
+`qgis-sdk/testing`). Use whichever name reads better; the surface is one.
+
 ## Exports
 
 ```ts
@@ -312,6 +317,11 @@ own tag (`ts-v0.2.0`); the Python SDK it pairs with is `0.3.0`.
   Replace the dependency and the import specifiers; the subpaths keep their
   names (`@archont561/qgis-sdk/bridge`, `/host`, `/react`, `/testing`). The
   old name stays installable and is deprecated on npm with a pointer here.
+- **Unscoped alias.** `qgis-sdk` on npm is a thin alias of
+  `@archont561/qgis-sdk` (same version, exact pin, one `export *` per entry),
+  published by the same release job right after the scoped package. The
+  `0.0.0` placeholder each name carries exists only so npm trusted publishing
+  could be configured; install `>= 0.3.0`.
 - **Repository layout.** The source moved from `packages/qgis-sdk-bridge` to
   `packages/qgis-sdk-typescript`; the Python package moved from
   `packages/qgis-sdk` to `packages/qgis-sdk-python`. Only contributors and
