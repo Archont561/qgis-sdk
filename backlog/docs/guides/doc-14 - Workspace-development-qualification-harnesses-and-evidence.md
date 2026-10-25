@@ -557,6 +557,70 @@ without QGIS in `tests/test_bundle.py` (which also imports the extracted
 archive in-process) and `tests/test_bundle_cli.py`. Last run here:
 2026-10-25, QGIS 4.2.3: 1 passed in 4 s.
 
+### Reference plugin through the toolchain (TASK-22)
+
+`examples/reference_plugin` is the decision-19 workflow as one plugin: open
+the bundled `data/points.geojson`, read the selection, buffer through
+Processing in an explicit projected CRS into a new layer styled with the
+packaged `reference/polygon-output` QML before it is presented, and export
+that layer to a bare file name inside a directory a native folder picker
+chose. Its five actions sit behind both the native dialogs `NativeForms`
+renders and the vanilla page in `web/`, through the generated
+`web/src/bridge.ts`. The project was written by `qgis-sdk new` and keeps that
+layout, so the example doubles as the proof that the commands compose.
+
+Deterministic, no QGIS, in the regular suite and the example's own
+`qgis-sdk test`: the export policy (`tests/test_exports.py`), the workflow
+over the fakes (`tests/test_reference_workflow.py`), the fake/native service
+contract pair (`tests/services/test_layers_contract.py`,
+`test_reference_workflow_contract.py`, nine export cases and eight workflow
+cases per backend), and the plugin's twelve pure tests (declared actions,
+fixture open, selection, styled buffer with the source untouched, refusals
+for a missing CRS, a missing export directory and a file name that is a
+path). The native half is opt-in:
+
+```sh
+QGIS_SDK_REFERENCE=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_reference_example_native.py
+```
+
+`tests/test_reference_example_native.py` runs `qgis-sdk new` with the
+example's options into a temporary directory, copies the example over it,
+then drives the command line: `check` (no problems), `bridge generate
+--check` (no drift), `test` (12 passed on the fakes), `test --target qgis`
+(3 passed: the end-to-end run with the fixture byte-identical afterwards, a
+geographic working CRS refused with nothing added, the native dialog and a
+direct call dispatching one handler), Bun `install`/`test`/`typecheck`/
+`build`, `qgis-sdk build` (the ZIP carries the fixture, the built page, the
+vendored runtime and its polygon style, no tests), and `dev --exercise`
+inside QGIS Desktop with the Vite server (a project without a `ping` action
+gets the smoke report: started, reloaded, view shown, unloaded). Finally, in
+a headless `QgsApplication`, it opens the plugin's dock with the *built* page
+in a real `QWebEngineView`, clicks Open, Buffer and Export, reads the page's
+answers over QWebChannel, then renders the native `buffer` dialog for the
+same source layer and dispatches it: both outputs are polygon layers in
+`EPSG:3857` with the source's three features and a `SimpleFill` renderer from
+the packaged style, the project holds exactly source + two outputs, the
+fixture's `sha256` is unchanged and the export directory holds exactly the
+one file the page named. Run it in its own process: like the scaffold-web
+harness it drives a generated plugin's view on Chromium's default profile
+(`tests/conftest.py` skips the other webengine modules when either is
+collected).
+
+**Evidence rows (clean profile, task-22 AC 3).** Recorded as run, not
+rounded up: the Linux row is in-sandbox evidence; no Windows host exists in
+this workspace and the cross-platform job (doc-8) has not run, so the Windows
+row is a blocker carried by TASK-33, not a pass.
+
+| Target | QGIS | Python | Qt | Chromium | GDAL | Bun / Vite | Harness | Outcome |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Linux x86-64 (glibc 2.36, offscreen) | 4.2.3 | 3.14.8 | 6.11.2 | 140.0.7339.225 | 3.13.3 | 1.4.2 / 8.3.5 | `QGIS_SDK_REFERENCE=1`, 2026-10-25 | 5 passed in 11 s; `services` 149 passed with `QGIS_SDK_NATIVE_SERVICES=1` |
+| Windows x86-64 | - | - | - | - | - | - | none available | **blocked**: no host, no CI runner (TASK-33) |
+
+The bridge inside the real `QWebEngineView` is the published
+`@archont561/qgis-sdk` 0.3.0 from npm (the example pins it like any generated
+project); no bridge defect surfaced, so the bridge is not re-released for
+0.5.0.
+
 ## 0.4.0 release gate (TASK-30, 2026-10-25)
 
 What was run before the Python 0.4.0 stamp was requested, on Linux with

@@ -49,8 +49,27 @@ this decision that are observable headlessly:
   without any working CRS, which is the "where the operation has a distance" part
   of this decision rather than a blanket rule.
 
-Still open from this decision: the style step's placement in the same observable
-workflow (the styling half shipped in TASK-25.4 but the reference *plugin* that
-chains load -> operate -> style -> present does not exist yet), native/web
-equivalence, and the transformation-choice UI. In-place editing remains out of
-scope.
+TASK-22 (0.5.0) closed the chain and the equivalence half:
+
+- **One workflow, two front ends.** `qgis_sdk.reference.LocalGisWorkflow`
+  chains open -> selection -> buffer (`invoke` without presentation) -> apply
+  the packaged `reference/polygon-output` style -> add to the project, so the
+  output is styled *before* it is presented. `examples/reference_plugin`
+  declares it as five actions; the native dialog `NativeForms` renders for
+  `buffer` and the page's Buffer button dispatch the same bound handler, and
+  the workspace harness proves both produce a styled polygon layer with the
+  source's three features inside one headless QGIS with a real
+  `QWebEngineView`.
+- **Explicit export.** `Layers.export_vector(layer_id, destination, *,
+  overwrite)` writes through `qgis_sdk.exports`: a known driver by suffix only,
+  a parent that exists, no silent overwrite, a staged write renamed into place
+  on success and removed on failure (`QgisSdkExportRefusedError` names every
+  reason; `QgisSdkExportFailedError` leaves nothing behind). The page never
+  names a path: the plugin's `export_layer` takes a *bare file name* and
+  resolves it against the directory a native folder picker stored under the
+  plugin's `export_directory` setting; no directory means a refusal, not a
+  guess.
+
+Still open: the transformation-choice UI (a datum transformation is taken as
+QGIS's default; the reference plugin does not surface a choice). In-place
+editing remains out of scope.

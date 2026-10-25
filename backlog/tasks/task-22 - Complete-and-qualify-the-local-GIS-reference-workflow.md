@@ -1,10 +1,10 @@
 ---
 id: TASK-22
 title: Complete and qualify the local GIS reference workflow
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-21 21:56'
+updated_date: '2026-10-25 18:51'
 labels: []
 milestone: m-4
 dependencies:
@@ -44,6 +44,12 @@ Complete and qualify the local GIS reference workflow. Implement only the docume
 - [ ] #2 Exercise new/check/test/dev/build, explicit exports and cleanup with deterministic pure and real native tests.
 - [ ] #3 Record clean-profile Windows/Linux QGIS/Python/Qt/Chromium evidence and inaccessible/failing targets as blockers.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Sprint 2 of m-4 (doc-17). Landed on the session branch: qgis_sdk.exports export policy + Layers.export_vector (fake and native, one contract, 9 cases per backend); reference/polygon-output style; qgis_sdk.reference.LocalGisWorkflow (open -> selection -> buffer -> style -> present -> export); examples/reference_plugin written by qgis-sdk new with five declared actions, a vanilla page over the generated client, 12 pure tests on the fakes and 3 qgis-target tests (real Processing, OGR export, NativeForms dispatch); workspace harness tests/test_reference_example_native.py (QGIS_SDK_REFERENCE=1) running new/check/bridge generate --check/test/test --target qgis/Bun test+typecheck+build/build/dev --exercise and driving the built page in a real QWebEngineView next to the native dialog; dev --exercise gained a smoke report for projects without a ping action; Layers.export_vector recorded in DEFERRED_HOST_METHODS (a page never supplies a path). Evidence: doc-14 'Reference plugin through the toolchain' - Linux row recorded, Windows row blocked (TASK-33). Bridge in the real view is the published @archont561/qgis-sdk 0.3.0; no defect, no bridge release.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 

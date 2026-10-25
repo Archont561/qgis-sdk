@@ -4,7 +4,7 @@ title: 'Qualify Windows, macOS and Desktop QGIS targets'
 status: In Progress
 assignee: []
 created_date: '2026-10-17 16:06'
-updated_date: '2026-10-24 18:13'
+updated_date: '2026-10-25 18:51'
 labels: []
 milestone: m-0
 dependencies: []
@@ -54,6 +54,8 @@ Created at the TASK-23 closeout (2026-10-17) so the targets the Linux sandbox ca
 - AC #2 (Desktop GUI path on a platform with a display) cannot be produced either: neither this sandbox nor the CI runners have a display server or `Xvfb`, and `QT_QPA_PLATFORM=offscreen` renders no widgets, no canvas, no 3D view and no visible in-Desktop `QWebEngineView`. It needs a Desktop session on Windows, macOS or a Linux host with a real or virtual display.
 - Neither criterion is a to-do this repository can finish, and neither is claimed as passing anywhere. They are carried into the 0.2.0 gate (TASK-28) as *unavailable*, not as evidence.
 - The status stays In Progress per doc-10, which forbids inventing a "blocked" status: a task keeps its status and its blocker is named. Closing it as Done would claim two criteria that have not been demonstrated.
+
+TASK-22 (0.5.0, 2026-10-25) adds a Windows blocker row for the reference workflow: doc-14 'Reference plugin through the toolchain' records the Linux x86-64 row (QGIS 4.2.3, Python 3.14.8, Qt 6.11.2, Chromium 140.0.7339.225) and leaves the Windows row blocked - no host, no QGIS-provisioning CI runner. When a Windows QGIS 4 host exists, run QGIS_SDK_REFERENCE=1 pytest packages/qgis-sdk-python/tests/test_reference_example_native.py (needs Bun) and fill that row.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
