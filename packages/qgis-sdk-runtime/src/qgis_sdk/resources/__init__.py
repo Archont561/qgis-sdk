@@ -39,6 +39,14 @@ STYLE_CATALOG: Mapping[str, StyleSpec] = MappingProxyType(
             geometry_type="line",
             required_fields=("id",),
         ),
+        # What the reference workflow's buffer step applies to its output: a
+        # polygon fill that needs only the identifier the source carried.
+        "reference/polygon-output": StyleSpec(
+            id="reference/polygon-output",
+            resource="reference-polygon-output.qml",
+            geometry_type="polygon",
+            required_fields=("id",),
+        ),
     }
 )
 
