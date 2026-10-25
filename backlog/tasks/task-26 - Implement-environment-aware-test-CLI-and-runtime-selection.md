@@ -1,10 +1,10 @@
 ---
 id: TASK-26
 title: Implement environment aware test CLI and runtime selection
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-16 12:02'
+updated_date: '2026-10-25 13:14'
 labels: []
 milestone: m-3
 dependencies:

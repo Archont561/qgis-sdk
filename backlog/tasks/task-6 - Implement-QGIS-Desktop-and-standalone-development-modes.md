@@ -1,10 +1,10 @@
 ---
 id: TASK-6
 title: Implement QGIS Desktop and standalone development modes
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-15 23:06'
-updated_date: '2026-10-16 12:02'
+updated_date: '2026-10-25 13:14'
 labels: []
 milestone: m-3
 dependencies:
