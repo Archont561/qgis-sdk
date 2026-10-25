@@ -308,6 +308,120 @@
 				"payload": {},
 				"protocol": 1
 			}
+		},
+		{
+			"expect": {
+				"ok": true,
+				"value": {
+					"generation": 0,
+					"view_id": "view-1"
+				}
+			},
+			"name": "forged-identity",
+			"reply": {
+				"call_id": "case-forged",
+				"ok": true,
+				"protocol": 1,
+				"value": {
+					"generation": 0,
+					"view_id": "view-1"
+				}
+			},
+			"request": {
+				"call_id": "case-forged",
+				"generation": 99,
+				"operation": "demo.whoami",
+				"payload": {
+					"view_id": "view-2"
+				},
+				"protocol": 1,
+				"view_id": "view-2"
+			}
+		},
+		{
+			"expect": {
+				"code": "stale_handle",
+				"ok": false
+			},
+			"name": "expired-handle",
+			"reply": {
+				"call_id": "case-expired",
+				"error": {
+					"code": "stale_handle",
+					"message": "file ref '0123456789abcdef0123456789abcdef' expired"
+				},
+				"ok": false,
+				"protocol": 1
+			},
+			"request": {
+				"call_id": "case-expired",
+				"operation": "layers.open_vector",
+				"payload": {
+					"file": {
+						"id": "0123456789abcdef0123456789abcdef",
+						"kind": "file",
+						"name": "sites.geojson",
+						"operations": ["read"]
+					}
+				},
+				"protocol": 1
+			}
+		},
+		{
+			"expect": {
+				"ok": true,
+				"value": {
+					"released": [
+						{
+							"id": "layer-1",
+							"kind": "borrowed",
+							"outcome": "borrowed_retained"
+						},
+						{
+							"id": "layer-9",
+							"kind": "borrowed",
+							"outcome": "already_released"
+						}
+					]
+				}
+			},
+			"name": "release-borrowed",
+			"reply": {
+				"call_id": "case-release",
+				"ok": true,
+				"protocol": 1,
+				"value": {
+					"released": [
+						{
+							"id": "layer-1",
+							"kind": "borrowed",
+							"outcome": "borrowed_retained"
+						},
+						{
+							"id": "layer-9",
+							"kind": "borrowed",
+							"outcome": "already_released"
+						}
+					]
+				}
+			},
+			"request": {
+				"call_id": "case-release",
+				"kind": "release",
+				"payload": {
+					"handles": [
+						{
+							"id": "layer-1",
+							"kind": "borrowed"
+						},
+						{
+							"id": "layer-9",
+							"kind": "borrowed"
+						}
+					]
+				},
+				"protocol": 1
+			}
 		}
 	],
 	"protocol": 1,

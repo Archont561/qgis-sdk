@@ -15,7 +15,9 @@ Regenerate with:
 from __future__ import annotations
 
 import json
+import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -37,12 +39,24 @@ from qgis_sdk.bridge import (
     BRIDGE_PROTOCOL_VERSION,
     BridgeOperation,
     Dispatcher,
+    ViewBinding,
 )
+from qgis_sdk.bridge.authority import HostAuthority
+from qgis_sdk.bridge.host import HostServices, register_host_operations
+from qgis_sdk.bridge.resources import HandleKind
 from qgis_sdk.bridge.streams import (
     MAX_QUEUED_EVENTS,
     StreamEventType,
 )
+from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import QgisSdkLayerNotFoundError
+from qgis_sdk.testing import (
+    FakeLayers,
+    FakeProject,
+    FakeSettings,
+    FakeStyles,
+    RecordingNotifications,
+)
 
 ECHO = BridgeOperation(id="demo.echo", title="Echo the payload")
 TICKS = BridgeOperation(id="demo.ticks", title="A pulled stream of ticks")
@@ -60,6 +74,11 @@ MALFORMED = BridgeOperation(
         "additionalProperties": False,
     },
 )
+WHOAMI = BridgeOperation(id="demo.whoami", title="Report who the host says is calling")
+
+# A fixed token keeps the expired-handle case reproducible: the ref id would
+# otherwise be fresh randomness on every run and the fixture could never match.
+FIXED_TOKEN = "0123456789abcdef0123456789abcdef"
 
 
 def _request(operation: str, payload: Any = None, call_id: str = "case") -> dict:
@@ -112,6 +131,48 @@ def _host(*, allow: bool = True) -> Dispatcher:
 
 def _raise_sdk_error(payload: Any) -> Any:
     raise QgisSdkLayerNotFoundError("sites")
+
+
+def _whoami(binding: ViewBinding, payload: Any) -> dict[str, Any]:
+    """Answer with the identity the host minted, never the one the page sent."""
+    return {"view_id": binding.view_id, "generation": binding.generation}
+
+
+def _identity_host() -> Dispatcher:
+    dispatcher = _host()
+    dispatcher.register_bound(WHOAMI, _whoami)
+    return dispatcher
+
+
+class _Clock:
+    """A clock the case advances by hand, so an expiry is a fact and not a sleep."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _file_host(clock: _Clock) -> tuple[Dispatcher, HostAuthority]:
+    """A host carrying only ``layers.open_vector`` over a clock the case controls."""
+    scope = ResourceScope()
+    layers = FakeLayers(scope)
+    authority = HostAuthority(clock=clock, token=lambda: FIXED_TOKEN)
+    services = HostServices(
+        layers=layers,
+        project=FakeProject(layers, scope),
+        settings=FakeSettings(scope),
+        styles=FakeStyles(layers, scope),
+        notifications=RecordingNotifications(scope),
+        authority=authority,
+    )
+    dispatcher = Dispatcher(
+        description={"schema_version": 1, "id": "demo.plugin", "title": "Demo"},
+        authorize=lambda binding, operation: True,
+    )
+    register_host_operations(dispatcher, services, only=("layers.open_vector",))
+    return dispatcher, authority
 
 
 def _deep(root: int) -> list:
@@ -192,6 +253,61 @@ def build_cases() -> dict[str, Any]:
         }
     )
 
+    # A page claiming to be another view, in the envelope and in the payload:
+    # the host-minted binding answers and the claim is not even an error.
+    forged = _request("demo.whoami", {"view_id": "view-2"}, "case-forged")
+    forged["view_id"] = "view-2"
+    forged["generation"] = 99
+    record("forged-identity", _identity_host(), forged)
+
+    with tempfile.TemporaryDirectory() as directory:
+        dataset = Path(directory) / "sites.geojson"
+        dataset.write_text('{"type": "FeatureCollection", "features": []}')
+        clock = _Clock()
+        file_host, authority = _file_host(clock)
+        binding = file_host.bind(view_id="view-1", origin="qgis://desktop")
+        ref = authority.grant_file(binding, dataset, ttl_seconds=60)
+        clock.now += 61
+        request = _request(
+            "layers.open_vector", {"file": ref.to_wire()}, "case-expired"
+        )
+        reply = file_host.dispatch(binding, request)
+        cases.append(
+            {
+                "name": "expired-handle",
+                "request": request,
+                "reply": reply,
+                "expect": {"ok": False, "code": reply["error"]["code"]},
+            }
+        )
+
+    # Releasing names kinds and ids, never a callable: a borrowed handle is
+    # retained by construction and a handle the view does not hold is reported,
+    # not acted on. Nothing a page sends here can turn into a delete.
+    releasing = _host()
+    binding = releasing.bind(view_id="view-1", origin="qgis://desktop")
+    releasing.track(binding, HandleKind.BORROWED, "layer-1")
+    request = {
+        "protocol": BRIDGE_PROTOCOL_VERSION,
+        "kind": "release",
+        "call_id": "case-release",
+        "payload": {
+            "handles": [
+                {"kind": "borrowed", "id": "layer-1"},
+                {"kind": "borrowed", "id": "layer-9"},
+            ]
+        },
+    }
+    reply = releasing.dispatch(binding, request)
+    cases.append(
+        {
+            "name": "release-borrowed",
+            "request": request,
+            "reply": reply,
+            "expect": {"ok": True, "value": reply["value"]},
+        }
+    )
+
     return {
         "protocol": BRIDGE_PROTOCOL_VERSION,
         "cases": cases,
@@ -236,14 +352,42 @@ def _stream_cases() -> list[dict[str, Any]]:
     return streams
 
 
+_SCALAR_ARRAY = re.compile(r"\[\n(?P<body>(?:[^\[\]{}\n]*\n)+?)(?P<indent>\t*)\]")
+_LINE_WIDTH = 80
+_TAB_WIDTH = 2
+
+
+def _collapse_short_arrays(text: str) -> str:
+    """Write arrays of scalars on one line when they fit, as biome would.
+
+    ``json.dumps`` breaks every array; biome's formatter keeps an array of
+    scalars on one line while it fits in 80 columns and only re-breaks the
+    longer ones. Matching that here keeps the checked-in file identical whether
+    the generator or the formatter wrote it last.
+    """
+
+    def collapse(match: re.Match[str]) -> str:
+        items = [line.strip() for line in match.group("body").splitlines()]
+        inline = "[" + " ".join(items) + "]"
+        start = text.rfind("\n", 0, match.start()) + 1
+        prefix = text[start : match.start()]
+        width = len(prefix.expandtabs(_TAB_WIDTH)) + len(inline)
+        return inline if width <= _LINE_WIDTH else match.group(0)
+
+    return _SCALAR_ARRAY.sub(collapse, text)
+
+
+def render(cases: dict[str, Any]) -> str:
+    """The file's text: tabs, sorted keys and biome's short arrays."""
+    return _collapse_short_arrays(json.dumps(cases, indent="\t", sort_keys=True)) + "\n"
+
+
 def main() -> int:
     cases = build_cases()
     CASES_PATH.parent.mkdir(parents=True, exist_ok=True)
     # Tabs and sorted keys are what biome writes for the same file, so the
     # generator and the formatter do not fight over it on every run.
-    CASES_PATH.write_text(
-        json.dumps(cases, indent="\t", sort_keys=True) + "\n", encoding="utf-8"
-    )
+    CASES_PATH.write_text(render(cases), encoding="utf-8")
     print(f"wrote {len(cases['cases'])} cases to {CASES_PATH}")
     return 0
 
