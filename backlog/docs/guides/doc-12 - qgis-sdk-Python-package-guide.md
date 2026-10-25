@@ -70,6 +70,42 @@ print(description.to_json())
 
 `plugin` and `action` attach metadata and return their original targets. No base
 class, constructor rewrite, host imports or runtime registration is required.
+
+### Ids and titles default from the name
+
+Every declaration decorator (`@plugin`, `@action`, `@stream`, `@algorithm`,
+`@job`, `@provider.algorithm`) takes `id=` and `title=` as optional keywords and
+derives whichever is missing from the decorated name
+([decision-30](../../decisions/decision-30%20-%20Derive-declaration-ids-and-titles-from-names-deterministically-never-randomly.md)),
+so the class and method decorators also work bare:
+
+```python
+@plugin                       # id "field_tools_<6 hex>", title "Field Tools"
+class FieldTools:
+    @action                   # id "list_layers", title "List layers"
+    def list_layers(self) -> list[str]: ...
+
+    @action(id="layers.count")  # explicit id, derived title "Count layers"
+    def count_layers(self) -> int: ...
+```
+
+- A **class** id is the snake_case class name plus `_` and six hex digits of
+  `sha256("<module>.<qualname>")`. The suffix keeps two plugins, algorithms or
+  jobs that share a class name apart without being random: the same class in
+  the same module derives the same id on every import, so generated clients and
+  the contract fingerprint stay valid until the class itself is renamed or
+  moved. Pin `id=` before publishing a contract you do not want to track the
+  class name.
+- A **method** id (action, stream) is the plain method name, without a suffix:
+  it is already unique inside its class, and the TypeScript client spells it as
+  a property (`client.list_layers(...)`), so it stays an identifier. Leading
+  underscores are dropped. Use a dotted `id=` to group actions into namespaces.
+- A **title** keeps CamelCase words (`FieldTools` -> "Field Tools") and reads a
+  snake_case name as a sentence (`list_layers` -> "List layers").
+- An explicit `id=` or `title=` is validated when the decorator is called, before
+  the class exists, exactly as before; `derive_id` and `derive_title` in
+  `qgis_sdk.declarations` expose the conversion for tools that need it.
+  `Provider(...)` itself has no class to derive from and keeps requiring both.
 `describe_plugin` does not instantiate the class, dispatch handlers, evaluate
 properties, or call dataclass default factories. It resolves annotations with
 `typing.get_type_hints`, which may evaluate forward references: inspect **trusted
@@ -874,6 +910,12 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## Unreleased migration notes
 
+- **Declaration ids and titles are optional.** `@plugin`, `@action`, `@stream`,
+  `@algorithm`, `@job` and `@provider.algorithm` derive a missing `id=` /
+  `title=` from the decorated name (see "Ids and titles default from the name")
+  and the class and method decorators accept the bare form. Existing explicit
+  declarations are unchanged; `events=` is now the only required keyword of
+  `@stream`.
 - **CLI rename:** the project generator is `qgis-sdk new <directory>`
   (`python -m qgis_sdk new`). `qgis-sdk scaffold` keeps working as a hidden,
   deprecated alias so existing scripts do not break; it will be removed in a

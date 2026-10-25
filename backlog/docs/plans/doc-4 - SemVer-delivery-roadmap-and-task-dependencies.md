@@ -107,6 +107,7 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-35](../../tasks/task-35%20-%20Add-autorelease-and-release-workflows-driven-by-a-pinned-qgis-sdk-release-package.md): Add autorelease and release workflows driven by a pinned qgis-sdk-release package
 - [TASK-36](../../tasks/task-36%20-%20Extract-qgis-sdk-release-into-a-standalone-checksum-pinned-repository.md): Extract qgis-sdk-release into a standalone checksum pinned repository
 - [TASK-50](../../tasks/task-50%20-%20Rename-the-scaffold-CLI-command-to-new.md): Rename the scaffold CLI command to new — `scaffold` stays a hidden, deprecated alias for one minor
+- [TASK-51](../../tasks/task-51%20-%20Derive-declaration-ids-and-titles-from-names-by-default.md): Derive declaration ids and titles from names by default — deterministic, explicit values win (decision-30)
 
 ### 0.5.0
 

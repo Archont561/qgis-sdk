@@ -14,7 +14,6 @@ validation does not need a QGIS installation to be exercised.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
@@ -22,7 +21,7 @@ from qgis_sdk.core import AlgorithmContext, ResourceScope
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     canonical_json,
-    declare_class,
+    class_decorator,
     describe_run_method,
     register_describer,
     type_name,
@@ -62,9 +61,19 @@ class _NotCancelled:
         return False
 
 
-def algorithm(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
-    """Attach algorithm metadata without wrapping or constructing the class."""
-    return declare_class(_ALGORITHM_ATTRIBUTE, "@algorithm", id=id, title=title)
+def algorithm(
+    cls: type[T] | None = None,
+    /,
+    *,
+    id: str | None = None,
+    title: str | None = None,
+) -> Any:
+    """Attach algorithm metadata without wrapping or constructing the class.
+
+    ``@algorithm`` alone derives the id and title from the class name, the way
+    ``@plugin`` does; ``id=`` and ``title=`` override either one.
+    """
+    return class_decorator(_ALGORITHM_ATTRIBUTE, "@algorithm", cls, id=id, title=title)
 
 
 @dataclass(frozen=True)
