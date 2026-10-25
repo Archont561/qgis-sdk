@@ -112,12 +112,14 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-53](../../tasks/task-53%20-%20Offer-the-curated-services-on-PluginContext-and-build-the-web-view-surface-from-it.md): Offer the curated services on PluginContext and build the web-view surface from it (decision-32)
 - [TASK-54](../../tasks/task-54%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md): Rename the npm package to @archont561/qgis-sdk and suffix the package directories (decision-33)
 - [TASK-55](../../tasks/task-55%20-%20Publish-qgis-sdk-as-an-unscoped-npm-alias-of-archont561-qgis-sdk.md): Publish qgis-sdk as an unscoped npm alias of @archont561/qgis-sdk (decision-33)
+- [TASK-56](../../tasks/task-56%20-%20Split-the-SDK-tree-into-qgis_sdk-runtime-and-qgis_sdk_tools-inside-one-wheel.md): Split the SDK tree into qgis_sdk (runtime) and qgis_sdk_tools inside one wheel (decision-35, step 1)
 
 ### 0.5.0
 
 - [TASK-9](../../tasks/task-9%20-%20Define-SDK-and-plugin-release-compatibility-gates.md): Define SDK and plugin release compatibility gates
 - [TASK-22](../../tasks/task-22%20-%20Complete-and-qualify-the-local-GIS-reference-workflow.md): Complete and qualify the local GIS reference workflow
 - [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md): Prepare and qualify 0.5.0 release
+- [TASK-57](../../tasks/task-57%20-%20Cut-qgis-sdk-runtime-qgis-sdk-tools-and-the-qgis-sdk-meta-kit-as-three-distributions.md): Cut qgis-sdk-runtime, qgis-sdk-tools and the qgis-sdk meta kit as three distributions (decision-35, step 2, gated on the contract freeze)
 
 ### 0.6.0
 

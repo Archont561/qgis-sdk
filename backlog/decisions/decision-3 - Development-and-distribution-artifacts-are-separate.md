@@ -59,3 +59,13 @@ libraries. Do not silently upgrade shared packages or elevate privileges.
 Validate the request backend first; do not build a dependency installer as a
 prerequisite for selecting it. Bundled pure-Python dependencies still require
 license, import-collision and real-QGIS qualification.
+
+## Amended by decision-35 (2026-10-25)
+
+The "no separate shared runtime for v1" line above is narrowed by
+[decision-35](decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md):
+the runtime becomes its own distribution (`qgis-sdk-runtime`, import
+`qgis_sdk`) that a *console user* may install shared in the QGIS Python. What
+a plugin imports is still the plugin-private, import-renamed copy `build`
+vendors; the two never meet on `sys.path`, and the two-plugin isolation test
+stays the gate.

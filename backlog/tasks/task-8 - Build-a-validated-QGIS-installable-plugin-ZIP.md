@@ -3,8 +3,8 @@ id: TASK-8
 title: Build a validated QGIS-installable plugin ZIP
 status: To Do
 assignee: []
-created_date: '2026-10-15 23:06'
-updated_date: '2026-10-16 12:02'
+created_date: 2026-10-15 23:06
+updated_date: '2026-10-25T14:50:00Z'
 labels: []
 milestone: m-3
 dependencies:
@@ -31,3 +31,9 @@ Implement qgis-sdk build with the accepted plugin-private pure-Python-first runt
 - [ ] #3 Build validates metadata, entry point, declared assets, and reports missing or unsupported runtime dependencies.
 - [ ] #4 A clean supported QGIS profile can install and load a sample archive.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+decision-35 (2026-10-25): the ZIP ships the runtime tree (src/qgis_sdk, minus qgis_sdk.testing) under an import-renamed plugin-private path and never the tools tree (src/qgis_sdk_tools). After TASK-56 that exclusion is a package boundary, not a list.
+<!-- SECTION:NOTES:END -->
