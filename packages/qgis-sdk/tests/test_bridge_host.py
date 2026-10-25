@@ -848,3 +848,64 @@ def test_network_fetch_without_a_transport_fails_rather_than_pretending() -> Non
     assert opened["ok"] is False
     assert opened["error"]["code"] == BridgeErrorCode.OPERATION_FAILED.value
     assert "network" in opened["error"]["message"]
+
+
+def test_host_services_built_from_a_plugin_context_share_its_instances() -> None:
+    """One service set serves Python handlers and the web view alike.
+
+    Whatever the plugin reads through ``self.ctx.layers`` is the very object
+    ``layers.list`` answers from, so the two sides can never see different
+    projects, settings or styles.
+    """
+    from qgis_sdk.core import PluginContext, ResourceScope
+
+    layers = FakeLayers(layers=[_info(0)])
+    project = FakeProject(ids=["layer-0"])
+    settings = FakeSettings(values={"theme": "dark"})
+    styles = FakeStyles()
+    notifications = FakeNotifications()
+    transport = FakeNetworkTransport()
+    authority = HostAuthority()
+    context = PluginContext(
+        notifications=notifications,
+        scope=ResourceScope(),
+        layers=layers,
+        project=project,
+        settings=settings,
+        styles=styles,
+    )
+
+    services = HostServices.from_context(
+        context, authority=authority, network=transport
+    )
+
+    assert services.layers is layers
+    assert services.project is project
+    assert services.settings is settings
+    assert services.styles is styles
+    assert services.notifications is notifications
+    assert services.authority is authority
+    assert services.network is transport
+
+    dispatcher = _dispatcher(services)
+    result = _call(dispatcher, "layers.list", {})
+    assert result["ok"] is True
+    assert [item["id"] for item in result["value"]["items"]] == ["layer-0"]
+
+
+def test_host_services_from_a_context_missing_a_service_name_the_gap() -> None:
+    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
+
+    context = PluginContext(
+        notifications=FakeNotifications(),
+        scope=ResourceScope(),
+        layers=FakeLayers(layers=[]),
+        project=FakeProject(ids=[]),
+        settings=FakeSettings(values={}),
+    )
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
+        HostServices.from_context(context)
+
+    assert caught.value.capability == "styles"

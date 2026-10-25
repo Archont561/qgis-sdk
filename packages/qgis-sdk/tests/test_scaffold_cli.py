@@ -220,7 +220,7 @@ def test_the_generated_starter_tests_pass_inside_the_generated_project(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "2 passed" in result.stdout
+    assert "3 passed" in result.stdout
 
 
 def test_dash_m_reaches_the_same_command_as_the_console_script(

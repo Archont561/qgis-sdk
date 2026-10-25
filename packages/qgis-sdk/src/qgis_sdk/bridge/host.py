@@ -38,6 +38,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from typing import TYPE_CHECKING, Any
 
+from qgis_sdk.core import PluginContext
 from qgis_sdk.models import (
     NetworkRequest,
     QgisSdkDecodeError,
@@ -394,6 +395,37 @@ class HostServices:
     notifications: Notifications
     authority: HostAuthority = field(default_factory=HostAuthority)
     network: NetworkTransport | None = None
+
+    @classmethod
+    def from_context(
+        cls,
+        context: PluginContext,
+        *,
+        authority: HostAuthority | None = None,
+        network: NetworkTransport | None = None,
+    ) -> HostServices:
+        """Wrap the services a plugin context already holds, instance for instance.
+
+        This is how a page and a Python handler end up reading one project:
+        the bridge answers ``layers.list`` from the very ``Layers`` the plugin
+        reaches as ``self.ctx.layers``. A context missing one of the four
+        required services fails here, by capability name, before anything is
+        registered. ``network`` is the transport ``network.fetch`` sends through;
+        left out, it is the transport under the context's own client when that
+        client exposes one (``NetworkClient.transport``), so a page's fetch and
+        a handler's ``await self.ctx.network.get(...)`` leave through one door.
+        """
+        if network is None and context.network is not None:
+            network = getattr(context.network, "transport", None)
+        return cls(
+            layers=context.require_layers(),
+            project=context.require_project(),
+            settings=context.require_settings(),
+            styles=context.require_styles(),
+            notifications=context.notifications,
+            authority=authority if authority is not None else HostAuthority(),
+            network=network,
+        )
 
 
 def _plain(value: Any) -> Any:
