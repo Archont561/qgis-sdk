@@ -18,8 +18,8 @@ TASK-14 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
 (generated client and streams), TASK-5 and decision-4 (networking), TASK-1
 (scaffold), TASK-27 and TASK-28 (release
 policy and migration notes, TASK-29 for 0.3.0, TASK-30 for 0.4.0). Status at
-the time of writing: Python `0.4.0` stamped at the m-3 close; the bridge stays
-at `0.3.0`, unchanged since its rename release.
+the time of writing: Python `0.4.0` released (`python-v0.4.0`, PyPI and
+prefix.dev); the bridge stays at `0.3.0`, unchanged since its rename release.
 
 Companion guides: [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
 (TypeScript bridge) and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)

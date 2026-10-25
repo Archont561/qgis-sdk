@@ -607,9 +607,18 @@ inferred from CI.
   `build` performs: `DEP001` refuses third-party code inside the package, so
   there is no other licence to collect yet. When the `external` allowance
   grows beyond the runtime, licence collection becomes a build rule.
-- **Not done here, by design.** No version bump, tag, GitHub Release or
-  upload; the stamp PR and the `python-v0.4.0` tag wait for an explicit
-  request (TASK-30 AC4; TASK-29 is the template).
+- **Released afterwards, on two explicit requests.** The stamp PR (#76,
+  `release.py stamp --scope python --version 0.4.0`, merged as `a6b3d8e`)
+  and then the annotated tag `python-v0.4.0` on that merge commit.
+  `release.yml` run 40214978629 re-stamped from the tag, verified both
+  scopes and the contract, built and published: PyPI `qgis-sdk 0.4.0`
+  (wheel sha256 `66de7e45…3a7eb7`, bit-identical to the wheel built here
+  before the stamp - the build is reproducible), prefix.dev conda
+  `qgis-sdk-0.4.0-pyh4616a5c_0.conda` (sha256 `6354bbdc…2128a`), and the
+  GitHub Release with both files and `SHA256SUMS`; the npm and GitHub
+  Packages jobs skipped, as a Python-scope tag must. PyPI's JSON API
+  confirms 0.4.0 as the latest version; prefix.dev is not reachable from
+  the sandbox, so the conda publish is attested by the job log only.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
