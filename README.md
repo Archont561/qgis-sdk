@@ -19,7 +19,7 @@ is documented, nothing is promised stable.
 | :-- | :-- | :-- |
 | [`qgis-sdk`](packages/qgis-sdk-python) | The Python developer kit: installs the runtime and the tools below at one tested version | `pip install qgis-sdk` |
 | [`qgis-sdk-runtime`](packages/qgis-sdk-runtime) | Python declarations, contracts, runtime, adapters - what a plugin imports, dependency-free | `pip install qgis-sdk-runtime` |
-| [`qgis-sdk-tools`](packages/qgis-sdk-tools) | `qgis-sdk new` / `check` / `test` / `dev` / `build` | `pip install qgis-sdk-tools` |
+| [`qgis-sdk-tools`](packages/qgis-sdk-tools) | `qgis-sdk new` / `check` / `test` / `dev` / `build` / `targets` | `pip install qgis-sdk-tools` |
 | [`@archont561/qgis-sdk`](packages/qgis-sdk-typescript) | TypeScript transport client, host namespaces, generated clients | `bun add @archont561/qgis-sdk` |
 | [`qgis-sdk` on npm](packages/qgis-sdk-alias) | Unscoped alias re-exporting `@archont561/qgis-sdk` at the same version | `bun add qgis-sdk` |
 | [`@workspace/config`](packages/config) | Shared TypeScript and Bunup configuration (private) | — |
@@ -33,6 +33,7 @@ qgis-sdk check my_tools                    # QGIS-free project checks
 cd my_tools && qgis-sdk test               # pytest, QGIS-free by default (--target qgis|desktop)
 qgis-sdk dev                               # the plugin from source in a real QGIS, reload on save
 qgis-sdk build                             # dist/<plugin>-<version>.zip with the runtime vendored inside
+qgis-sdk targets                           # where the kit is qualified, and where this host stands
 ```
 
 ## Develop

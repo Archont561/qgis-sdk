@@ -79,11 +79,25 @@ Read from the task files:
   rows in doc-14 ("Reference plugin through the toolchain"). The bridge
   inside the real view is the published `@archont561/qgis-sdk` 0.3.0; no
   defect surfaced, so no bridge release.
-- **Sprint 3: TASK-9.** The gates, written as checks: the explicit
+- **Sprint 3 (done 2026-10-25, PR #82): TASK-9.** The gates, written as checks: the explicit
   QGIS/Python/Qt/OS matrix, the tools-to-runtime range and the
   bridge-to-contract pair stated on the distributions TASK-57 created,
   `pixi lock --check` in the release path, and the metadata/build checks the
-  release workflow already runs named as the gate.
+  release workflow already runs named as the gate. Landed as: the release
+  planner fix first (a prerelease tag no longer advances the stable base:
+  `plan --scope python --bump minor` after `python-v0.5.0-rc.1` proposes
+  `python-v0.5.0` from `python-v0.4.0`, a suffixed plan continues the
+  candidate train); `qgis_sdk_tools.targets` as the one machine-readable
+  support matrix ([decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md))
+  rendered into doc-12, printed by `qgis-sdk targets`, pinned by the native
+  suite (`test_targets_native.py`: the host CI runs on must be a qualified
+  row) and recorded in the release workflow's job summary; the gate named in
+  `release.yml` at the step that runs it (`verify-versions` already holds the
+  tools-to-runtime range and the bridge-to-contract pair, `twine check`
+  before and in every publish job); the lockfile check is `setup-pixi
+  locked: true` on every environment the CI, autorelease and release jobs
+  install, with `relock.yml` as the only place that moves the lock, and
+  `pixi lock --check` run there ahead of any install.
 - **Close: TASK-31.** Release gate only; the Python minor is the deliberate
   act (`--bump minor`), the bridge is published only if the matrix found a
   defect, and the stamp, tag and publication wait for explicit requests.

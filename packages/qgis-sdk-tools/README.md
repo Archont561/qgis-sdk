@@ -25,6 +25,7 @@ qgis-sdk check field_tools
 qgis-sdk test field_tools
 qgis-sdk dev field_tools
 qgis-sdk build field_tools
+qgis-sdk targets    # the support matrix, and where this host stands in it
 ```
 
 ## Documentation

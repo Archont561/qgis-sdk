@@ -112,11 +112,30 @@ jobs:
           --version "${{ steps.classify.outputs.version }}"
           --scope "${{ steps.classify.outputs.scope }}"
 
+      # The release compatibility gate (TASK-9). The four steps below are the
+      # checks a release must pass before anything is uploaded: the scoped
+      # manifests agree on the version, the tools' runtime range holds the
+      # runtime next to them and both sides of the bridge contract agree
+      # (verify-versions); the support matrix the kit claims is recorded with
+      # the run; the wheels build and pass `twine check` (build-python, and
+      # again in each publish job before the upload); the Conda package
+      # builds from the same tree.
+      # The locked Pixi environments this job installs with `locked: true`
+      # are the lockfile check: a stale `pixi.lock` fails the job before any
+      # of this runs, and relock.yml is what moves the lock.
       - name: Verify the stamped manifests and the shared contract
         run: >-
           pixi run -e build release-verify-versions
           --scope "${{ steps.classify.outputs.scope }}"
           --version "${{ steps.classify.outputs.version }}"
+
+      - name: Record the support matrix the release is qualified on
+        run: |
+          {
+            echo "## Support matrix"
+            echo
+            pixi run -e build python -m qgis_sdk_tools targets
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build and check the Python wheels the scope ships
         if: steps.classify.outputs.python == 'true'
