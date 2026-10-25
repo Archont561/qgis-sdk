@@ -46,3 +46,14 @@ same capability is callable from a web view and from Python.
   `HOST_SCHEMA_VERSION` are untouched; only who supplies the instances moved.
 - A later `ctx.jobs` follows the same shape: an optional field on the context,
   bound to the plugin scope, with a `require_jobs()`.
+
+## Amended by decision-39 (2026-10-25)
+
+The `require_<name>()` accessors this record introduced were replaced in the
+0.6.0 line by
+[decision-39](decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md):
+each optional service is a capability attribute that refuses by name on read
+(`ctx.layers`, `ctx.workers` ...), with `ctx.has(name)` / `ctx.capabilities`
+as the probes. Everything else here - the curated services on
+`PluginContext`, `HostServices.from_context` wrapping the same instances -
+stands.

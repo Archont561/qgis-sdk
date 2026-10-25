@@ -92,7 +92,7 @@ class TestScope:
 
 @job(id="sum", title="Sum")
 async def double(ctx: JobContext, value: int) -> int:
-    return await ctx.require_workers().offload(lambda: value * 2)
+    return await ctx.workers.offload(lambda: value * 2)
 
 
 class TestJobService:

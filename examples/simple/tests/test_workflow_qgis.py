@@ -52,9 +52,7 @@ def test_the_workflow_runs_end_to_end_and_preserves_the_source(
     before = hashlib.sha256(FIXTURE.read_bytes()).hexdigest()
     exports = tmp_path / "exports"
     exports.mkdir()
-    desktop.runtime.instance.ctx.require_settings().set(
-        EXPORT_DIRECTORY_KEY, str(exports)
-    )
+    desktop.runtime.instance.ctx.settings.set(EXPORT_DIRECTORY_KEY, str(exports))
 
     source = actions["open_fixture"]()
     _qgs_layer(source.id).selectByIds([1, 3])

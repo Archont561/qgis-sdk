@@ -107,11 +107,11 @@ class SimplePlugin:
     @action(id="choose_export_directory", title="Choose the export directory")
     def choose_export_directory(self) -> str:
         """Ask the user for a directory through the Desktop and remember it."""
-        iface = self.ctx.require_native().iface
+        iface = self.ctx.desktop.iface
         chosen = webview.ask_for_directory(iface, TITLE)
         if not chosen:
             raise QgisSdkExportRefusedError("", ["no directory was chosen"])
-        self.ctx.require_settings().set(EXPORT_DIRECTORY_KEY, chosen)
+        self.ctx.settings.set(EXPORT_DIRECTORY_KEY, chosen)
         return chosen
 
 
@@ -120,7 +120,7 @@ def _destination(ctx: PluginContext, file_name: str) -> Path:
     reasons: list[str] = []
     if not file_name or Path(file_name).name != file_name or file_name in (".", ".."):
         reasons.append("file_name must be a bare file name, not a path")
-    directory = ctx.require_settings().get(EXPORT_DIRECTORY_KEY)
+    directory = ctx.settings.get(EXPORT_DIRECTORY_KEY)
     if not directory:
         reasons.append(
             f"no export directory is set; run 'choose_export_directory' first "

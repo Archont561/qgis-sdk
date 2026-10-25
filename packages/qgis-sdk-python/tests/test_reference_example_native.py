@@ -262,7 +262,7 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
 
     desktop = module.classFactory(None)
     desktop.initGui()
-    desktop.runtime.instance.ctx.require_settings().set(
+    desktop.runtime.instance.ctx.settings.set(
         plugin_module.EXPORT_DIRECTORY_KEY, str(exports)
     )
     widget = module.webview.open_view(desktop.runtime, None, placement="dock")

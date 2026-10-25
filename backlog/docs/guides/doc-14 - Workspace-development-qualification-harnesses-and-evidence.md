@@ -309,7 +309,7 @@ pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smok
 "No fake fallback" is what makes each field worth reading: the run fails outright if
 QGIS provides no interface object, `iface_is_host` requires the adapter to hold the very
 same object as `qgis.utils.iface`, `native_context_matches` requires
-`ctx.require_native()` to hand that live object back through the typed escape hatch, and
+`ctx.desktop` to hand that live object back through the typed escape hatch, and
 `message_bar_received` requires the notifications service to add a real widget to QGIS's
 own bar. `scope_released` and `actions_detached` are the runtime's side of the same
 cycle: the owned scope closed and no stale callable survived `unload()`.

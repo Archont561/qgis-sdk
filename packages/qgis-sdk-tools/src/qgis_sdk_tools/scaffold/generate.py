@@ -56,7 +56,7 @@ class {class_name}Plugin:
     @action(id="project_layers", title="Project layers")
     def project_layers(self) -> list[str]:
         """The same project service a web view reaches as ``host.project``."""
-        return list(self.ctx.require_project().layer_ids())
+        return list(self.ctx.project.layer_ids())
 
 
 def build_context(iface: object | None) -> PluginContext:
@@ -342,7 +342,7 @@ from {plugin}.plugin import build_context
 context = build_context(None)
 ```
 
-`context.desktop` is then `None`, so `context.require_native()` raises
+`context.has("desktop")` is then `False`, so reading `context.desktop` raises
 `QgisSdkUnsupportedCapabilityError` with `code="unsupported_capability"` instead
 of inventing a host: standalone mode provides no `iface`, no message bar and no
 plugin lifecycle. Informational messages are dropped, because the notifications

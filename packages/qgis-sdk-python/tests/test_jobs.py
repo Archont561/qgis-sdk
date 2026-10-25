@@ -51,7 +51,7 @@ def add(ctx: JobContext, a: int, b: int) -> SumResult:
 
 @job(id="demo.offloaded", title="Sum off the driving thread")
 async def offloaded_add(ctx: JobContext, a: int, b: int) -> SumResult:
-    workers = ctx.require_workers()
+    workers = ctx.workers
     ctx.progress.report(0.1)
     total = await workers.offload(lambda: a + b)
     ctx.progress.report(1.0)
@@ -385,7 +385,7 @@ def test_progress_reported_from_a_worker_thread_is_delivered_on_the_tick(
                 ctx.progress.report(step)
             return a
 
-        return SumResult(await ctx.require_workers().offload(work))
+        return SumResult(await ctx.workers.offload(work))
 
     handle = jobs.bind(worker_progress).delay(a=7, b=0)
     recorder = _Recorder()
@@ -511,7 +511,7 @@ def test_author_cleanup_runs_when_cancellation_is_delivered(
     @job(id="demo.cleanup", title="Cleanup")
     async def cleanup(ctx: JobContext, a: int, b: int) -> SumResult:
         try:
-            await ctx.require_workers().offload(lambda: 1)
+            await ctx.workers.offload(lambda: 1)
         except QgisSdkJobCancelledError:
             cleaned.append("partial output removed")
             raise
@@ -710,7 +710,7 @@ def test_a_settled_job_leaves_the_active_set_and_its_attempt_scope_closes(
 
 @job(id="demo.offline", title="Asks for a network")
 def needs_network(ctx: JobContext, a: int, b: int) -> SumResult:
-    ctx.require_network()
+    _ = ctx.network
     return SumResult(0)
 
 
@@ -740,7 +740,7 @@ def test_a_worker_failure_reaches_the_job_as_its_exception(
         def work() -> int:
             raise OSError("disk full")
 
-        return SumResult(await ctx.require_workers().offload(work))
+        return SumResult(await ctx.workers.offload(work))
 
     handle = jobs.bind(worker_fails).delay(a=1, b=2)
     jobs.tick()
@@ -754,10 +754,12 @@ def test_the_job_context_is_fresh_per_attempt_and_carries_the_services(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
     contexts: list[JobContext] = []
+    seen_workers: list[object] = []
 
     @job(id="demo.ctx", title="Context")
     def record(ctx: JobContext, a: int, b: int) -> SumResult:
         contexts.append(ctx)
+        seen_workers.append(ctx.workers)  # readable while the attempt runs
         return SumResult(0)
 
     bound = jobs.bind(record)
@@ -769,8 +771,10 @@ def test_the_job_context_is_fresh_per_attempt_and_carries_the_services(
     assert first is not second
     assert first.scope is not second.scope
     assert first.scope.closed and second.scope.closed
-    assert first.workers is workers
-    assert first.network is None
+    assert seen_workers == [workers, workers]
+    assert first.has("network") is False
+    with pytest.raises(QgisSdkScopeClosedError):
+        _ = first.workers  # a settled attempt's capabilities are closed with it
 
 
 # -- waiting -----------------------------------------------------------------------

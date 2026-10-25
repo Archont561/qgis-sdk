@@ -381,9 +381,9 @@ def test_contexts_expose_the_injected_client_and_refuse_its_absence(
     with_network = PluginContext(notifications, scope, network=network)
     without = PluginContext(notifications, scope)
 
-    assert with_network.require_network() is network
+    assert with_network.network is network
     with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
-        without.require_network()
+        _ = without.network
     assert caught.value.capability == "network"
 
     class Closeable:
@@ -391,8 +391,7 @@ def test_contexts_expose_the_injected_client_and_refuse_its_absence(
             return
 
     assert (
-        UiContext(notifications, Closeable(), scope, network=network).require_network()
-        is network
+        UiContext(notifications, Closeable(), scope, network=network).network is network
     )
     algorithm = AlgorithmContext(
         progress=_Progress(),
@@ -401,7 +400,7 @@ def test_contexts_expose_the_injected_client_and_refuse_its_absence(
         algorithms=_NoAlgorithms(),
     )
     with pytest.raises(QgisSdkUnsupportedCapabilityError):
-        algorithm.require_network()
+        _ = algorithm.network
 
 
 class _Progress:

@@ -48,7 +48,7 @@ def sync_echo(ctx: JobContext, value: int, reenter: bool = False) -> Result:
 @job(id="prop.offloaded", title="Offloaded")
 async def offloaded_echo(ctx: JobContext, value: int, reenter: bool = False) -> Result:
     ctx.progress.report(0.1)
-    value = await ctx.require_workers().offload(lambda: value)
+    value = await ctx.workers.offload(lambda: value)
     if reenter:
         NESTED.append(HOST_TICK[0]())
     if value < 0:

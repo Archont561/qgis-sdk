@@ -33,7 +33,7 @@ def sum_numbers(ctx: JobContext, a: int, b: int = 0) -> SumResult:
 
 @job(id="fn.offloaded", title="Sum off the driving thread")
 async def offloaded_sum(ctx: JobContext, a: int, b: int) -> SumResult:
-    total = await ctx.require_workers().offload(lambda: a + b)
+    total = await ctx.workers.offload(lambda: a + b)
     return SumResult(total=total)
 
 

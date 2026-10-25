@@ -45,14 +45,14 @@ def test_native_plugin_context_wires_every_curated_service(
 
     assert isinstance(context, PluginContext)
     assert context.scope is scope
-    assert context.require_native().iface is iface
-    assert isinstance(context.require_layers(), NativeLayers)
-    assert isinstance(context.require_project(), NativeProject)
-    assert isinstance(context.require_settings(), NativeSettings)
-    assert isinstance(context.require_styles(), NativeStyles)
-    assert isinstance(context.require_algorithms(), NativeAlgorithms)
-    assert isinstance(context.require_workers(), ThreadPoolWorkers)
-    assert isinstance(context.require_network(), NetworkClient)
+    assert context.desktop.iface is iface
+    assert isinstance(context.layers, NativeLayers)
+    assert isinstance(context.project, NativeProject)
+    assert isinstance(context.settings, NativeSettings)
+    assert isinstance(context.styles, NativeStyles)
+    assert isinstance(context.algorithms, NativeAlgorithms)
+    assert isinstance(context.workers, ThreadPoolWorkers)
+    assert isinstance(context.network, NetworkClient)
     assert isinstance(context.notifications, NativeNotifications)
     assert isinstance(context.network.transport, NativeNetworkTransport)
 
@@ -71,7 +71,7 @@ def test_native_plugin_context_wires_every_curated_service(
 
     scope.close()
     with pytest.raises(QgisSdkScopeClosedError):
-        context.require_layers()
+        _ = context.layers
 
 
 def test_native_plugin_context_without_an_iface_has_no_desktop_access(
@@ -90,9 +90,9 @@ def test_native_plugin_context_without_an_iface_has_no_desktop_access(
         ResourceScope(), settings_prefix="qgis-sdk-test", notifications=Bar()
     )
 
-    assert context.desktop is None
+    assert context.has("desktop") is False
     with pytest.raises(QgisSdkUnsupportedCapabilityError):
-        context.require_native()
+        _ = context.desktop
     context.notifications.info("hello")
     assert messages == ["hello"]
     context.scope.close()
