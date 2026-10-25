@@ -29,6 +29,9 @@ LAYER_ORDER = {
     # The scaffold renders a generated project's bridge client, so it sits
     # with the bridge: still QGIS-free, no longer declarations-only.
     "scaffold": 2,
+    # Developer workflows plan processes over the check and scaffold layers;
+    # QGIS runs in the process they start, never in theirs.
+    "devtools": 2,
     "reference": 3,
     "testing": 3,
 }
@@ -42,6 +45,7 @@ LAYER_PATHS = {
     "check": SOURCE_ROOT / "check",
     "cli": SOURCE_ROOT / "cli.py",
     "declarations": SOURCE_ROOT / "declarations.py",
+    "devtools": SOURCE_ROOT / "devtools",
     "models": SOURCE_ROOT / "models",
     "network": SOURCE_ROOT / "network",
     "providers": SOURCE_ROOT / "providers.py",

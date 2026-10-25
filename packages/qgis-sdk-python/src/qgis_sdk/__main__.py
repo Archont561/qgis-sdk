@@ -18,6 +18,8 @@ arguments receives a :class:`qgis_sdk.cli.CliRuntime` through ``ctx.obj``
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
@@ -35,6 +37,20 @@ from qgis_sdk.bridge.generate import (
 from qgis_sdk.bridge.host import host_description
 from qgis_sdk.check import QgisSdkCheckError, check_project
 from qgis_sdk.cli import CliRuntime
+from qgis_sdk.devtools import (
+    QgisSdkQgisNotFoundError,
+    find_qgis_install,
+    wants_headless,
+)
+from qgis_sdk.devtools.dev import (
+    QgisSdkDevError,
+    free_port,
+    inspect_project,
+    plan_dev,
+    plan_web_server,
+    wait_for_port,
+)
+from qgis_sdk.devtools.testrun import NATIVE_TARGETS, QgisSdkTestRunError, plan_tests
 from qgis_sdk.models import QgisSdkBridgeError
 from qgis_sdk.scaffold import (
     QgisSdkScaffoldError,
@@ -314,6 +330,158 @@ def check(
         )
     if not report.ok:
         raise typer.Exit(code=1)
+
+
+@app.command(
+    "test",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def test(
+    ctx: typer.Context,
+    pytest_args: Annotated[
+        list[str] | None,
+        typer.Argument(help="Passed to pytest (or the web test script) unchanged."),
+    ] = None,
+    project: Annotated[
+        Path | None,
+        typer.Option(help="Plugin project root; defaults to the working directory."),
+    ] = None,
+    target: Annotated[
+        str,
+        typer.Option(
+            help="pure (default, no QGIS), qgis (PyQGIS, headless), "
+            "desktop (inside QGIS Desktop) or web (Vitest)."
+        ),
+    ] = "pure",
+    qgis_prefix: Annotated[
+        Path | None,
+        typer.Option(help="QGIS install prefix for the qgis and desktop targets."),
+    ] = None,
+) -> None:
+    """Run the project's tests for one target; other arguments go to pytest."""
+    runtime: CliRuntime = ctx.obj
+    root = runtime.resolve(project or Path("."))
+    forwarded = (*(pytest_args or ()), *ctx.args)
+    workspace: Path | None = None
+    try:
+        install = None
+        if target in NATIVE_TARGETS:
+            install = find_qgis_install(runtime.env, prefix=qgis_prefix, project=root)
+        if target == "desktop":
+            workspace = Path(tempfile.mkdtemp(prefix="qgis-sdk-test-"))
+        plan = plan_tests(
+            root,
+            target,
+            forwarded,
+            env=runtime.env,
+            install=install,
+            workspace=workspace,
+        )
+        for note in plan.notes:
+            typer.echo(note, file=runtime.err)
+        exit_code = runtime.run_process(plan.argv, plan.cwd, plan.env)
+    except (QgisSdkQgisNotFoundError, QgisSdkTestRunError) as error:
+        typer.echo(str(error), file=runtime.err)
+        raise typer.Exit(code=2) from error
+    finally:
+        if workspace is not None:
+            shutil.rmtree(workspace, ignore_errors=True)
+    if exit_code == 127:
+        typer.echo(f"{plan.argv[0]} was not found", file=runtime.err)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command("dev")
+def dev(
+    ctx: typer.Context,
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Plugin project root; defaults to the working directory."),
+    ] = None,
+    mode: Annotated[
+        str,
+        typer.Option(
+            help="desktop (default: real QGIS Desktop, isolated profile, Reload) "
+            "or standalone (bare QgsApplication: no iface, no lifecycle)."
+        ),
+    ] = "desktop",
+    qgis_prefix: Annotated[
+        Path | None, typer.Option(help="QGIS install prefix to run.")
+    ] = None,
+    no_web: Annotated[
+        bool,
+        typer.Option(
+            "--no-web", help="Do not start the Vite dev server; serve web/ as built."
+        ),
+    ] = False,
+    port: Annotated[
+        int | None, typer.Option(help="Loopback port for the Vite dev server.")
+    ] = None,
+    exercise: Annotated[
+        Path | None, typer.Option(hidden=True, help="Self-drive and write a report.")
+    ] = None,
+) -> None:
+    """Run the source plugin inside QGIS, with HMR for a web UI; quit QGIS to stop."""
+    runtime: CliRuntime = ctx.obj
+    root = runtime.resolve(path or Path("."))
+    try:
+        project = inspect_project(root)
+        install = find_qgis_install(runtime.env, prefix=qgis_prefix, project=root)
+        server_plan = None if no_web else plan_web_server(project, port or free_port())
+    except (QgisSdkDevError, QgisSdkQgisNotFoundError) as error:
+        typer.echo(str(error), file=runtime.err)
+        raise typer.Exit(code=2) from error
+    workspace = Path(tempfile.mkdtemp(prefix="qgis-sdk-dev-"))
+    server = None
+    origin = None
+    try:
+        if server_plan is not None:
+            shown = " ".join(server_plan.argv)
+            typer.echo(f"web: {shown} in web/", file=runtime.err)
+            server = runtime.start_process(
+                server_plan.argv, server_plan.cwd, runtime.env
+            )
+            if server is None:
+                typer.echo(
+                    f"{server_plan.argv[0]} was not found; install it or pass --no-web",
+                    file=runtime.err,
+                )
+                raise typer.Exit(code=2)
+            if not wait_for_port(
+                server_plan.port, still_running=lambda: server.poll() is None
+            ):
+                typer.echo(
+                    f"the dev server did not answer on {server_plan.origin}; see its "
+                    "output above, or pass --no-web to run without it",
+                    file=runtime.err,
+                )
+                raise typer.Exit(code=2)
+            origin = server_plan.origin
+            typer.echo(f"web: {origin} (hot module replacement)", file=runtime.err)
+        plan = plan_dev(
+            project,
+            mode,
+            install,
+            env=runtime.env,
+            workspace=workspace,
+            headless=wants_headless(runtime.env),
+            dev_server=origin,
+            exercise=exercise,
+        )
+        for note in plan.notes:
+            typer.echo(note, file=runtime.err)
+        exit_code = runtime.run_process(plan.argv, plan.cwd, plan.env)
+    except QgisSdkDevError as error:
+        typer.echo(str(error), file=runtime.err)
+        raise typer.Exit(code=2) from error
+    finally:
+        if server is not None and server.poll() is None:
+            server.terminate()
+            server.wait(timeout=10)
+        shutil.rmtree(workspace, ignore_errors=True)
+    if exit_code == 127:
+        typer.echo(f"{plan.argv[0]} was not found", file=runtime.err)
+    raise typer.Exit(code=exit_code)
 
 
 @app.callback()

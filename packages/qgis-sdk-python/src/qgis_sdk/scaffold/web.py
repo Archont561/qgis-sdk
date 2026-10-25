@@ -570,10 +570,16 @@ Qt and the SDK's native adapters are imported inside the functions, so
 QGIS calls the functions with its ``iface``. The page may load files from
 ``web/`` only and reach no remote origin until you grant one in
 ``BrowserPolicy``.
+
+Under `qgis-sdk dev` the Vite dev server serves the page instead, with hot
+module replacement: the command puts its origin in ``QGIS_SDK_DEV_SERVER``
+for the QGIS process it starts, and only there. A built plugin never sees the
+variable and never reaches a dev server.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -585,6 +591,12 @@ INDEX = ASSETS / "index.html"
 VIEW_ID = "{plugin}.main"
 CHANNEL_OBJECT = "bridge"  # the name web/src/transport.ts looks up
 TITLE = "{title}"
+DEV_SERVER_ENV = "QGIS_SDK_DEV_SERVER"
+
+
+def dev_server() -> str | None:
+    """The Vite origin `qgis-sdk dev` is serving the page from, if any."""
+    return os.environ.get(DEV_SERVER_ENV) or None
 
 
 def add_toolbar_action(
@@ -626,19 +638,28 @@ def open_view(runtime: Any, iface: Any, *, placement: str) -> Any:
         create_webengine_view,
     )
 
+    served_from = dev_server()
     dispatcher = Dispatcher.from_runtime(
         runtime, authorize=lambda binding, operation: binding.view_id == VIEW_ID
     )
-    binding = dispatcher.bind(view_id=VIEW_ID, origin=ASSETS.as_uri())
+    binding = dispatcher.bind(
+        view_id=VIEW_ID, origin=served_from or ASSETS.as_uri()
+    )
+    policy = BrowserPolicy(
+        origins=() if served_from is None else (served_from,),
+        asset_roots=(ASSETS,) if ASSETS.is_dir() else (),
+    )
     view = create_webengine_view()
-    page = create_restricted_page(BrowserPolicy(asset_roots=(ASSETS,)), parent=view)
+    page = create_restricted_page(policy, parent=view)
     channel = QWebChannel(page)
     channel.registerObject(
         CHANNEL_OBJECT, create_channel_object(dispatcher, binding, parent=page)
     )
     page.setWebChannel(channel)
     view.setPage(page)
-    if INDEX.is_file():
+    if served_from is not None:
+        page.load(QUrl(served_from + "/"))
+    elif INDEX.is_file():
         page.load(QUrl.fromLocalFile(str(INDEX)))
     else:
         page.setHtml(

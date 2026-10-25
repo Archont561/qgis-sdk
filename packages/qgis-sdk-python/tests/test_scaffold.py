@@ -107,6 +107,7 @@ def test_plan_is_deterministic_and_lists_the_minimal_project_layout() -> None:
     plan = plan_scaffold(ScaffoldOptions.resolve("demo_tools"))
 
     assert [file.path for file in plan] == [
+        ".gitignore",
         "README.md",
         "demo_tools/__init__.py",
         "demo_tools/metadata.txt",
@@ -315,5 +316,5 @@ def test_a_missing_target_directory_is_created(tmp_path: Path) -> None:
         ScaffoldOptions.resolve("demo_tools"), tmp_path / "deep" / "nested"
     )
 
-    assert len(written) == 6
+    assert len(written) == 7
     assert all(path.is_file() for path in written)
