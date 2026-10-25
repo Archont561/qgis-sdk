@@ -345,6 +345,12 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
         "protocol does not have for it yet"
     ),
     "Project.add_layer": "mutates the open project; arrives with the mutation slice",
+    "Layers.export_vector": (
+        "takes a filesystem destination, which a page never supplies (decision-20); "
+        "a page exports through `files.export` and a host-minted write ref, and a "
+        "plugin action resolves a bare file name against a host-chosen directory "
+        "(the reference plugin's `export_layer`)"
+    ),
     "Settings.set": "mutates persisted state; arrives with the mutation slice",
     "Algorithms.execute": (
         "long-running; needs the job and stream surface (TASK-15, TASK-14), not a "

@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import conftest
 import pytest
-from qgis_sdk.models import QgisSdkLayerNotFoundError
+from qgis_sdk import exports
+from qgis_sdk.models import (
+    QgisSdkExportFailedError,
+    QgisSdkExportRefusedError,
+    QgisSdkLayerNotFoundError,
+    VectorExport,
+)
 
 if TYPE_CHECKING:
     Services = conftest.Services
@@ -65,3 +72,134 @@ def test_layer_without_a_selection_reports_an_empty_selection(
 def test_selection_of_an_unknown_layer_is_refused(services: Services) -> None:
     with pytest.raises(QgisSdkLayerNotFoundError):
         services.layers.selection("no-such-layer")
+
+
+# --- explicit export (decision-19: permanent results are an explicit act) ---
+
+
+def test_export_writes_the_named_destination_and_describes_it(
+    services: Services, tmp_path: Path
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+    destination = tmp_path / "exported.geojson"
+
+    export = services.layers.export_vector(info.id, destination)
+
+    assert export == VectorExport(path=str(destination), driver="GeoJSON")
+    assert destination.is_file()
+    assert destination.stat().st_size > 0
+    # Nothing but the destination is left behind: no staging directory survives.
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["exported.geojson"]
+
+
+def test_export_names_the_driver_from_the_destination_suffix(
+    services: Services, tmp_path: Path
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+
+    export = services.layers.export_vector(info.id, tmp_path / "exported.gpkg")
+
+    assert export.driver == "GPKG"
+    assert Path(export.path).is_file()
+
+
+def test_export_leaves_the_source_dataset_untouched(
+    services: Services, tmp_path: Path
+) -> None:
+    before = services.dataset.read_bytes()
+    info = services.layers.open_vector(services.dataset)
+
+    services.layers.export_vector(info.id, tmp_path / "exported.geojson")
+
+    assert services.dataset.read_bytes() == before
+
+
+def test_export_refuses_an_existing_destination_without_overwrite(
+    services: Services, tmp_path: Path
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+    destination = tmp_path / "exported.geojson"
+    destination.write_text("keep me", encoding="utf-8")
+
+    with pytest.raises(QgisSdkExportRefusedError) as error:
+        services.layers.export_vector(info.id, destination)
+
+    assert error.value.destination == str(destination)
+    assert any("overwrite" in reason for reason in error.value.reasons)
+    assert destination.read_text(encoding="utf-8") == "keep me"
+
+
+def test_export_overwrites_only_when_told_to(
+    services: Services, tmp_path: Path
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+    destination = tmp_path / "exported.geojson"
+    destination.write_text("stale", encoding="utf-8")
+
+    services.layers.export_vector(info.id, destination, overwrite=True)
+
+    assert destination.read_text(encoding="utf-8") != "stale"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["exported.geojson"]
+
+
+def test_export_refuses_an_unknown_format_before_touching_disk(
+    services: Services, tmp_path: Path
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+
+    with pytest.raises(QgisSdkExportRefusedError) as error:
+        services.layers.export_vector(info.id, tmp_path / "exported.shp")
+
+    assert any(".shp" in reason for reason in error.value.reasons)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_export_refuses_a_destination_whose_directory_is_missing(
+    services: Services, tmp_path: Path
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+
+    with pytest.raises(QgisSdkExportRefusedError) as error:
+        services.layers.export_vector(info.id, tmp_path / "missing" / "out.geojson")
+
+    assert any("directory" in reason for reason in error.value.reasons)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_export_of_an_unknown_layer_is_refused(
+    services: Services, tmp_path: Path
+) -> None:
+    with pytest.raises(QgisSdkLayerNotFoundError):
+        services.layers.export_vector("no-such-layer", tmp_path / "out.geojson")
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_failed_export_leaves_no_partial_file(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whatever backend writes, a failure mid-write removes the staged file.
+
+    The writer is the backend's own (OGR for the native adapter, a copy for the
+    fake); the seam under test is ``exports.run_export``, which every backend
+    hands its writer to. Wrapping it with a writer that leaves half a file and
+    raises is how both backends are held to the same cleanup rule.
+    """
+    info = services.layers.open_vector(services.dataset)
+    destination = tmp_path / "exported.geojson"
+    real_run_export = exports.run_export
+
+    def half_then_fail(partial: Path) -> None:
+        partial.write_text("{partial", encoding="utf-8")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(
+        exports, "run_export", lambda plan, write: real_run_export(plan, half_then_fail)
+    )
+
+    with pytest.raises(QgisSdkExportFailedError) as error:
+        services.layers.export_vector(info.id, destination)
+
+    assert error.value.destination == str(destination)
+    assert "disk full" in error.value.detail
+    assert list(tmp_path.iterdir()) == []

@@ -22,3 +22,16 @@ class VectorLayerInfo:
     geometry_type: GeometryType
     field_names: tuple[str, ...]
     crs: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class VectorExport:
+    """What an explicit export produced: the file written and its format.
+
+    ``path`` is the destination the caller named, as a string so the value
+    crosses the bridge unchanged; ``driver`` is the OGR driver the suffix
+    selected (``GeoJSON`` or ``GPKG``).
+    """
+
+    path: str
+    driver: str
