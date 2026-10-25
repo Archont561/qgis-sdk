@@ -32,3 +32,22 @@ Import-boundary rules and native runtime resolution are detailed in [decision-14
 ## Confirmed development and scaffold policy (2026-10-16)
 
 Automatic Python reload is the intended default only after lifecycle tests prove safe teardown and reconstruction (ADR-15). Unsafe changes require restart. Scaffolding downloads dependencies only after explicit consent; non-interactive installation requires an explicit option. The accepted release boundary is ADR-17 and web scaffolding choices are ADR-18. Exact CLI flags remain illustrative.
+
+## Implemented shape of `test` and `dev` (2026-10-25)
+
+TASK-26 and TASK-6 fixed the command spelling that was illustrative above:
+`qgis-sdk test [PYTEST_ARGS]... [--project PATH] [--target pure|qgis|desktop|web]
+[--qgis-prefix PATH]` and `qgis-sdk dev [PATH] [--mode desktop|standalone]
+[--qgis-prefix PATH] [--no-web] [--port N]`. Both commands plan a process
+(`qgis_sdk.devtools.plan_tests` / `plan_dev`) and run it through the CLI
+runtime (decision-34), so the plans are unit-tested and the binary is driven
+by one opt-in harness. The pure target is also an import guard: a test that
+imports a native module fails rather than passing by accident, and a native
+target whose selection only skipped fails the gate. `dev` loads the source
+plugin through `QGIS_PLUGINPATH` and a project-local profile
+(`.qgis-sdk/profiles/dev`), reloads on demand (preflight compile, refuse on
+syntax errors, leave disabled on a failed unload/start) and starts a Vite
+dev server on loopback only for a project with a web UI, handing its origin
+to the QGIS process as `QGIS_SDK_DEV_SERVER`; the generated view honours the
+variable, a build never does. Source watching with automatic Python reload
+stays behind decision-15 and TASK-21.

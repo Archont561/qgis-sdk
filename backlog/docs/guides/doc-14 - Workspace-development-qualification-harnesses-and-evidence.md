@@ -484,3 +484,36 @@ React project opens as a dock, the vanilla one as a dialog. Last run here:
 2026-10-25, QGIS 4.2.3 (Qt 6.11.2, Chromium 140) on Linux with Bun 1.4.2,
 npm 10.9.8 (Node 22) and pnpm 10.34.8: 12 passed. A manager that is absent
 is a skip, never a pass.
+
+### `qgis-sdk test` and `qgis-sdk dev` against real QGIS (TASK-26, TASK-6)
+
+The unit tests of `qgis_sdk.devtools` assert on *plans* - the argv, working
+directory, environment and notes a command would run with - through
+`FakeCliRuntime`, and compile the startup scripts the commands hand to QGIS
+(a `--code` script with a syntax error makes a headless QGIS hang in a modal
+error dialog, silently). What only the binary can prove is opt-in:
+
+```sh
+QGIS_SDK_DEVTOOLS=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_devtools_native.py
+```
+
+It scaffolds a project, adds one `qgis`-marked and one `desktop`-marked test,
+and drives the command line a user would type: `test` (pure) deselects both;
+`test --target qgis` runs the first under a headless `QgsApplication`;
+`test --target desktop` runs the second *inside* QGIS Desktop with the real
+`iface`, loading the source plugin through `qgis.utils`; a failing desktop
+test fails the command with pytest's exit code 1; a native target in which
+every test skipped fails too. `dev --exercise <report>` (a hidden flag that
+scripts the Reload button) proves the Desktop story end to end in one QGIS
+process: the source plugin starts from `QGIS_PLUGINPATH`, reloads, a file
+with a syntax error is refused while revision 2 keeps running, and after the
+file is removed and the plugin's `ping` is edited to add 1000, the third
+revision answers `1001`. `dev --mode standalone` reports the plugin running
+with its window and a `ping` answer. With Bun available (on `PATH` or in the
+sibling Pixi environment) it also scaffolds a vanilla web project, installs
+its dependencies, and runs `dev` with the Vite server the command starts -
+the report carries `view_shown` - then, in-process, loads the Vite-served
+page in a restricted `QWebEnginePage`, clicks Ping, edits `web/src/app.ts`,
+waits for the page to show the edit without a command restart and clicks
+Ping again. Last run here: 2026-10-25, QGIS 4.2.3 (Qt 6.11.2, Chromium 140)
+on Linux with Bun 1.4.2 and Vite 8.3.5: 9 passed in 19 s.

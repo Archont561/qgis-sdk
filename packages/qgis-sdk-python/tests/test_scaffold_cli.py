@@ -39,6 +39,7 @@ def test_scaffold_writes_every_planned_file_and_reports_the_paths(
         if path.is_file()
     )
     assert written == [
+        ".gitignore",
         "README.md",
         "field_tools/__init__.py",
         "field_tools/metadata.txt",

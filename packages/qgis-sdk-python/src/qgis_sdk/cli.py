@@ -15,19 +15,43 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TextIO
+from typing import Protocol, TextIO
 
-__all__ = ["CliRuntime", "ProcessRunner"]
+__all__ = ["CliRuntime", "ProcessRunner", "ProcessStarter", "RunningProcess"]
 
-ProcessRunner = Callable[[Sequence[str], Path], int]
-"""Run ``argv`` in ``cwd`` with the user's terminal attached; return the exit code.
 
-A missing executable is exit code ``127``, the shell's convention, so a caller
-reports it like any other failed command instead of catching ``OSError``.
-"""
+class ProcessRunner(Protocol):
+    """Run ``argv`` in ``cwd`` with the user's terminal attached; return the exit code.
+
+    ``env`` replaces the process environment when given. A missing executable
+    is exit code ``127``, the shell's convention, so a caller reports it like
+    any other failed command instead of catching ``OSError``.
+    """
+
+    def __call__(
+        self, argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
+    ) -> int: ...
+
+
+class RunningProcess(Protocol):
+    """What a command holds for a process it started and must stop again."""
+
+    def poll(self) -> int | None: ...
+
+    def terminate(self) -> None: ...
+
+    def wait(self, timeout: float | None = None) -> int: ...
+
+
+class ProcessStarter(Protocol):
+    """Start ``argv`` in ``cwd`` and return without waiting; ``None`` when missing."""
+
+    def __call__(
+        self, argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
+    ) -> RunningProcess | None: ...
 
 
 @dataclass(frozen=True)
@@ -47,6 +71,7 @@ class CliRuntime:
     inp: TextIO
     interactive: bool
     run_process: ProcessRunner
+    start_process: ProcessStarter
 
     @classmethod
     def for_process(cls) -> CliRuntime:
@@ -59,6 +84,7 @@ class CliRuntime:
             inp=sys.stdin,
             interactive=_is_terminal(sys.stdin) and _is_terminal(sys.stdout),
             run_process=run_attached,
+            start_process=start_attached,
         )
 
     def resolve(self, path: Path) -> Path:
@@ -66,12 +92,28 @@ class CliRuntime:
         return (self.cwd / path).resolve()
 
 
-def run_attached(argv: Sequence[str], cwd: Path) -> int:
+def run_attached(
+    argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
+) -> int:
     """Run a tool with the terminal attached, so its own output reaches the user."""
     try:
-        return subprocess.run(list(argv), cwd=cwd, check=False).returncode
+        return subprocess.run(
+            list(argv), cwd=cwd, env=None if env is None else dict(env), check=False
+        ).returncode
     except FileNotFoundError:
         return 127
+
+
+def start_attached(
+    argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
+) -> RunningProcess | None:
+    """Start a tool in the background with the terminal attached; None if missing."""
+    try:
+        return subprocess.Popen(
+            list(argv), cwd=cwd, env=None if env is None else dict(env)
+        )
+    except FileNotFoundError:
+        return None
 
 
 def _is_terminal(stream: TextIO) -> bool:

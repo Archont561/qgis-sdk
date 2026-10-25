@@ -920,6 +920,80 @@ list dotted module globs under `[tool.qgis-sdk.check] native-modules` in the
 project's `pyproject.toml`, or pass `--native` for one run. Tooling trees
 (`.venv`, `node_modules`, `.pixi`, `build`, `dist`, caches) are never checked.
 
+## Running tests: `qgis-sdk test`
+
+`qgis-sdk test [PYTEST_ARGS]... [--project PATH] [--target pure|qgis|desktop|web]
+[--qgis-prefix PATH]` is a thin, environment-aware pytest runner (decision-8,
+decision-7): it decides *where* pytest runs and forwards everything else.
+Unknown arguments go to pytest unchanged (`qgis-sdk test -x -k ping`,
+`qgis-sdk test -- --lf`), pytest's output is pytest's and its exit code is the
+command's. A plain `pytest` in the project keeps working: the generated
+`pyproject.toml` loads the same plugin through
+`addopts = "-p qgis_sdk.pytest_plugin"`.
+
+| Target | Where pytest runs | Selection |
+| :-- | :-- | :-- |
+| `pure` (default) | this interpreter | `-m "not qgis and not desktop"`; importing `qgis`, `PyQt*` or `PySide*` fails the test that did it |
+| `qgis` | the located QGIS's Python with its bindings on `PYTHONPATH`, headless by default | `-m qgis`; the `qgis_app` fixture is a `QgsApplication` |
+| `desktop` | pytest **inside** the QGIS Desktop binary, temporary profile | `-m desktop`; `qgis_iface` is the real `iface`, `qgis_app` the running application |
+| `web` | the project's package manager (`bun`/`pnpm`/`npm` from the lockfile) | `run test` in `web/`, i.e. the generated Vitest suite |
+
+`qgis_sdk.pytest_plugin` registers the `qgis` and `desktop` markers, provides
+the fixtures, applies the pure-target import guard and fails a native target
+in which every selected test skipped (exit 1 with the reason), so a required
+gate cannot pass by skipping. A native target whose QGIS cannot be found
+exits 2 naming what was tried; nothing is downloaded. Temporary profiles and
+the request file live under a per-run directory that is removed afterwards;
+`QT_QPA_PLATFORM`, `QTWEBENGINE_CHROMIUM_FLAGS` and a placeholder `DISPLAY`
+are set only when the shell has no display (`DISPLAY`/`WAYLAND_DISPLAY`
+unset on Linux); an exported `QT_QPA_PLATFORM` wins.
+
+QGIS is located the same way for `test` and `dev` (decision-14, in
+`qgis_sdk.devtools.installs.find_qgis_install`): `--qgis-prefix`, then
+`[tool.qgis-sdk] qgis-prefix` in `pyproject.toml`, then `QGIS_PREFIX_PATH`,
+then `qgis` on `PATH`, then the interpreter's own prefix. An explicit answer
+that lacks the bindings (`share/qgis/python`, `apps/qgis*/python`) is an
+error, not a fall-through. `plan_tests(...)` / `plan_dev(...)` return the
+process plan (argv, cwd, env, notes) without running it, which is what the
+unit tests assert on; the commands print the notes to stderr before running.
+
+## Developing against QGIS: `qgis-sdk dev`
+
+`qgis-sdk dev [PATH] [--mode desktop|standalone] [--qgis-prefix PATH] [--no-web]
+[--port N]` runs the plugin from source in a real QGIS (decision-8, decision-15):
+
+- **desktop** (default) starts the located QGIS Desktop binary with
+  `--profiles-path <root>/.qgis-sdk --profile dev`, so the profile is the
+  project's own and survives between runs (`.gitignore`d by the scaffold),
+  and puts the project root on `QGIS_PLUGINPATH`, which is how QGIS finds and
+  imports `<plugin>/` in place: no copy, no symlink, no `sys.path` edit. A
+  startup script (`--code`) enables the plugin, installs a **Reload** toolbar
+  action (Ctrl+Shift+R) and reports to the terminal. Reload first compiles
+  every source file of the package; a syntax error is *refused* and the
+  running revision stays up. Otherwise it unloads, drops the package's
+  modules and starts the current source. If unloading or starting fails the
+  plugin is left disabled, the message bar and terminal carry the traceback,
+  and the predictable fallback is to restart the command. Safe replacement
+  of a *running* runtime (jobs, handlers in flight) is TASK-21; until then
+  the rule is "reload between operations, restart on failure".
+- **standalone** runs `classFactory(None)` + `initGui()` in a bare
+  `QgsApplication` under the QGIS Python. It is the documented reduced mode:
+  no `iface`, no plugin lifecycle hooks beyond the two calls, no reload;
+  close the window to stop.
+- **web**: when the project has `web/` with installed dependencies, the
+  command starts the project's Vite dev server (`<manager> run dev --host
+  127.0.0.1 --port N --strictPort`) on loopback, waits for the port, and
+  hands its origin to the QGIS process as `QGIS_SDK_DEV_SERVER`. The
+  generated `webview.py` reads that variable, loads the page from the origin
+  and grants it in `BrowserPolicy(origins=...)`; the bridge binding carries
+  the same origin, so hot module replacement works and the bridge keeps
+  answering across updates. A built plugin never sees the variable and
+  `bun run build` never references the server. `--no-web` skips it; a
+  server that does not answer within 60 s stops the command with exit 2.
+
+Both modes exit with the QGIS process's code; QGIS not found is exit 2 with
+the discovery report, a directory without a plugin package is exit 2.
+
 ### CLI runtime
 
 Commands that read or write anything beyond their arguments receive a
@@ -1030,6 +1104,17 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## Unreleased migration notes
 
+- **`qgis-sdk test` and `qgis-sdk dev`.** New commands over
+  `qgis_sdk.devtools` (`installs`, `testrun`, `dev`) and the pytest plugin
+  `qgis_sdk.pytest_plugin`; see "Running tests" and "Developing against
+  QGIS". Projects generated by `qgis-sdk new` now carry a `.gitignore`,
+  `addopts = "-p qgis_sdk.pytest_plugin"` and a commented
+  `[tool.qgis-sdk] qgis-prefix`; the generated `webview.py` honours
+  `QGIS_SDK_DEV_SERVER`. Existing projects opt in by adding the `addopts`
+  line (or passing `-p qgis_sdk.pytest_plugin`). `CliRuntime` gains
+  `start_process`; `FakeCliRuntime` records started processes in
+  `.started` and the environments passed to `run_process` in
+  `.environments`.
 - **Curated services on `PluginContext`.** `layers`, `project`, `settings`,
   `styles`, `algorithms` and `workers` are new optional fields with
   `require_<name>()` accessors; existing constructor calls are unaffected.

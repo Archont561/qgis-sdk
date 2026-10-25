@@ -64,8 +64,12 @@ Read from the task files:
   `ctx.obj`, and the rule that a project from `qgis-sdk new` passes `check`
   clean. TASK-19 follows, consuming `@archont561/qgis-sdk@0.3.0` by exact
   pin.
-- **Sprint 2: TASK-26, TASK-6.** The `test` runner and the Desktop/standalone
-  `dev` modes share the runtime discovery TASK-16 leaves behind.
+- **Sprint 2 (2026-10-25, PR #71): TASK-26, TASK-6.** The `test` runner and
+  the Desktop/standalone `dev` modes share one runtime discovery
+  (`qgis_sdk.devtools.installs`), plan processes the unit tests assert on,
+  and are proven against the binary by one opt-in harness
+  (`QGIS_SDK_DEVTOOLS=1`, doc-14). TASK-16's remaining criteria (build reuse)
+  move with sprint 3.
 - **Sprint 3: TASK-21, TASK-8.** Refresh on top of `dev`; the ZIP reusing
   the check APIs (decision-8: build calls the library, not the CLI).
 - **Close: TASK-30.** Release gate; the Python minor is the deliberate act

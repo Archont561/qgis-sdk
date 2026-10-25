@@ -30,6 +30,7 @@ from qgis_sdk.scaffold.web import (
 SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
 
 PLAIN_FILES = [
+    ".gitignore",
     "README.md",
     "field_tools/__init__.py",
     "field_tools/metadata.txt",
