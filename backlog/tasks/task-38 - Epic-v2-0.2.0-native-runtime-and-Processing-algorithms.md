@@ -1,10 +1,10 @@
 ---
 id: TASK-38
 title: 'Epic: v2 (0.2.0) native runtime and Processing algorithms'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-24 14:14'
-updated_date: '2026-10-24 16:54'
+updated_date: '2026-10-25 21:30'
 labels: []
 milestone: m-1
 dependencies:
@@ -52,8 +52,14 @@ Evidence rule for every increment: pure tests plus a real QGIS 4.2.3 host test w
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every m-1 feature task is closed with its own recorded evidence, including a real QGIS 4.2.3 host test wherever its criteria require native behaviour: TASK-25 (and its slices), TASK-14, TASK-39 and TASK-3. TASK-5 and TASK-15 left the milestone on 2026-10-24 and are m-2's.
-- [ ] #2 TASK-25 landed before TASK-14 and TASK-3 were opened, so neither dependency-blocked feature was started against services that did not exist yet. Satisfied: TASK-25 closed 2026-10-24 before TASK-14 landed, and TASK-3 was never opened early.
-- [ ] #3 The 0.2.0 release gate (TASK-28) is evaluated only after its children are closed, and records actual artifacts, checks and explicit publishing approval - including the contract version agreeing across both languages, with no bridge version published.
-- [ ] #4 Unavailable targets stay explicit blockers rather than implied support: no Desktop GUI, Windows or macOS qualification is claimed from this epic (TASK-33 owns those).
+- [x] #1 Every m-1 feature task is closed with its own recorded evidence, including a real QGIS 4.2.3 host test wherever its criteria require native behaviour: TASK-25 (and its slices), TASK-14, TASK-39 and TASK-3. TASK-5 and TASK-15 left the milestone on 2026-10-24 and are m-2's.
+- [x] #2 TASK-25 landed before TASK-14 and TASK-3 were opened, so neither dependency-blocked feature was started against services that did not exist yet. Satisfied: TASK-25 closed 2026-10-24 before TASK-14 landed, and TASK-3 was never opened early.
+- [x] #3 The 0.2.0 release gate (TASK-28) is evaluated only after its children are closed, and records actual artifacts, checks and explicit publishing approval - including the contract version agreeing across both languages, with no bridge version published.
+- [x] #4 Unavailable targets stay explicit blockers rather than implied support: no Desktop GUI, Windows or macOS qualification is claimed from this epic (TASK-33 owns those).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Closed 2026-10-25 as hygiene: every child had been Done since 2026-10-24 and the container was never closed. AC 1: TASK-25 (slices 25.1-25.5), TASK-14, TASK-39 and TASK-3 are Done with their evidence recorded on each task and in doc-14 (native services qualification, Processing algorithms, providers, native forms on the real QGIS 4.2.3 host). AC 2: TASK-25 closed before TASK-14 landed; TASK-3 was opened after it. AC 3: TASK-28 is Done; python-v0.2.0 was tagged on c742fcb (tag object 53250fa, 2026-10-24) after its children closed, with the contract version agreeing across both languages and no bridge version published. AC 4: no Desktop GUI, Windows or macOS claim was made from this epic; TASK-33 still owns those targets and the support matrix (decision-37) lists them as unqualified.
+<!-- SECTION:NOTES:END -->
