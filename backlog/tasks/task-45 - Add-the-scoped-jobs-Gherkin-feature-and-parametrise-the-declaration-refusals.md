@@ -1,10 +1,10 @@
 ---
 id: TASK-45
 title: Add the scoped-jobs Gherkin feature and parametrise the declaration refusals
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T00:21:00Z'
-updated_date: '2026-10-25 00:38'
+updated_date: '2026-10-25T11:25:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -32,4 +32,6 @@ Found by the 2026-10-25 TASK-15 audit. Every other core runtime piece ships thre
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in 9c74613: tests/features/scoped_jobs.feature (10 scenarios) + tests/test_jobs_bdd.py over the public API with FakeWorkers; declaration refusals are one parametrised table (six named cases) and the workers/network refusals one parametrised test. Package coverage 97.06% via `bun run coverage`; doc-12 names the feature file.
+
+Closed 2026-10-25 at m-3 sprint start (doc-16): the implementation commits (dc03278, 9c74613) merged to main in PR #60 and every criterion was already checked; the status had not been moved.
 <!-- SECTION:NOTES:END -->

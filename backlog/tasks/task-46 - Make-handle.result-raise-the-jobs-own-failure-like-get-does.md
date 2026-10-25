@@ -1,10 +1,10 @@
 ---
 id: TASK-46
 title: Make handle.result raise the job's own failure like get() does
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T00:21:00Z'
-updated_date: '2026-10-25 00:38'
+updated_date: '2026-10-25T11:25:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -32,4 +32,6 @@ Found by the 2026-10-25 TASK-15 audit. `JobHandle.result` on a FAILED job raises
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in dc03278: `_Attempt.outcome()` is the single reader behind `result` and `get()`; NotSettled is only raised for queued/running. Examples cover failed (same object as `error`) and cancelled; the state machine asserts result and get agree and that the raised kind matches the status (reverting the change fails it). doc-12 documents the contract next to get().
+
+Closed 2026-10-25 at m-3 sprint start (doc-16): the implementation commits (dc03278, 9c74613) merged to main in PR #60 and every criterion was already checked; the status had not been moved.
 <!-- SECTION:NOTES:END -->

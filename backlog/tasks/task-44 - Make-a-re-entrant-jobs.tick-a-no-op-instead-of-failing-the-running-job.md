@@ -1,10 +1,10 @@
 ---
 id: TASK-44
 title: Make a re-entrant jobs.tick() a no-op instead of failing the running job
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T00:21:00Z'
-updated_date: '2026-10-25 00:38'
+updated_date: '2026-10-25T11:25:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -32,4 +32,6 @@ Found by the 2026-10-25 TASK-15 audit. A nested `JobService.tick()` while a job 
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in dc03278: `_Runtime.ticking` guards `tick()` (returns 0) and `quiesce()` (refused, blocker 'a tick is already in progress on this thread') for the whole step-plus-delivery span. Evidence: test_jobs.py (author-code re-entry with a queued neighbour; subscriber re-entry; nested quiesce), the state machine re-enters from both places and checks outcomes are the job's own (reverting the guard fails it), and scoped_jobs.feature has the scenario. doc-12 updated.
+
+Closed 2026-10-25 at m-3 sprint start (doc-16): the implementation commits (dc03278, 9c74613) merged to main in PR #60 and every criterion was already checked; the status had not been moved.
 <!-- SECTION:NOTES:END -->

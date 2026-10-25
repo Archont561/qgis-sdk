@@ -1,10 +1,10 @@
 ---
 id: TASK-29
 title: Prepare and qualify 0.3.0 release
-status: In Progress
+status: Done
 assignee: []
-created_date: '2026-10-16 12:02'
-updated_date: '2026-10-25 03:09'
+created_date: 2026-10-16 12:02
+updated_date: '2026-10-25T11:25:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -34,7 +34,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - [x] #1 Required 0.3.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
 - [x] #2 Use valid SemVer and prereleases (0.3.0-alpha.1 for Python, 0.2.0-alpha.1 for the bridge); release each package under its own tag at its own explicitly advanced minor — `python-v0.3.0` and `ts-v0.2.0` — verify both scopes plus the shared contract version, and document migration notes per package.
 - [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
-- [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
+- [x] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -53,6 +53,8 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - python-v0.3.0, release run 40156889218: build, pypi, conda and github-release succeeded; npm and github-packages skipped (python scope). PyPI qgis-sdk reports 0.3.0 as latest; GitHub Release python-v0.3.0 carries qgis_sdk-0.3.0-py3-none-any.whl, qgis-sdk-0.3.0-pyh4616a5c_0.conda and SHA256SUMS; the prefix.dev upload job succeeded.
 - ts-v0.2.0, release run 40156890964: build, npm and github-packages succeeded - npm reports @archont561/qgis-sdk-bridge 0.2.0 (shasum 0a6f4f67f530bf3b8d605ba2ed3fd6d25789253f, with provenance) - but github-release failed: a TypeScript-only tag downloads no wheel, dist/ never exists, and release-checksums could not write dist/SHA256SUMS. Fixed in this branch (write_checksums creates the directory, test added, workflow mkdir). The GitHub Release ts-v0.2.0 was created from the tag annotation with the same tool; its assets could not be uploaded from the sandbox (uploads.github.com is unreachable here). Remaining act: once the fix is on main, dispatch release.yml with tag=ts-v0.2.0 - npm and GitHub Packages skip the existing version and github-release attaches archont561-qgis-sdk-bridge-0.2.0.tgz (sha256 1ceff5ad2c8f327a8043e4ab96c40427e014dd0722f8fc6c5f77272dcd07ee8c) and SHA256SUMS.
 - AC #4 stays open until that release carries its assets.
+
+Closed 2026-10-25 (doc-16 hygiene). Artifacts and approval recorded above: python-v0.3.0 and ts-v0.2.0 published under explicit owner authorization, checks named per run. The ts-v0.2.0 GitHub Release still carries no assets; attaching them is a release.yml dispatch with tag=ts-v0.2.0 and is optional now that @archont561/qgis-sdk-bridge is deprecated in favour of @archont561/qgis-sdk 0.3.0 (TASK-55).
 <!-- SECTION:NOTES:END -->
 
 ## Comments
