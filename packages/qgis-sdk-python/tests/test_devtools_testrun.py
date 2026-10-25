@@ -8,15 +8,15 @@ import sys
 from pathlib import Path
 
 import pytest
-from qgis_sdk.devtools import QgisInstall, find_qgis_install
-from qgis_sdk.devtools.testrun import (
+from qgis_sdk_tools.devtools import QgisInstall, find_qgis_install
+from qgis_sdk_tools.devtools.testrun import (
     PLUGIN,
     REQUEST_ENV,
     QgisSdkTestRunError,
     plan_tests,
 )
-from qgis_sdk.pytest_plugin import TARGET_ENV
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
+from qgis_sdk_tools.pytest_plugin import TARGET_ENV
+from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from test_devtools_installs import make_prefix, no_which
 
 

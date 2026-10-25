@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from qgis_sdk.check import QgisSdkCheckError, check_project
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
+from qgis_sdk_tools.check import QgisSdkCheckError, check_project
+from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
 METADATA = """[general]
 name=Field Tools

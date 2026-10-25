@@ -12,9 +12,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from qgis_sdk.pytest_plugin import TARGET_ENV
+from qgis_sdk_tools.pytest_plugin import TARGET_ENV
 
-PLUGIN = "qgis_sdk.pytest_plugin"
+PLUGIN = "qgis_sdk_tools.pytest_plugin"
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
 
 

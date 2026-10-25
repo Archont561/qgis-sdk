@@ -9,8 +9,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from qgis_sdk.check import check_project
-from qgis_sdk.scaffold import (
+from qgis_sdk_tools.check import check_project
+from qgis_sdk_tools.scaffold import (
     GeneratedFile,
     QgisSdkScaffoldError,
     ScaffoldOptions,
@@ -18,7 +18,7 @@ from qgis_sdk.scaffold import (
     plan_scaffold,
     write_scaffold,
 )
-from qgis_sdk.scaffold.web import (
+from qgis_sdk_tools.scaffold.web import (
     BROWSER_TARGET,
     SDK_NPM_PACKAGE,
     SDK_NPM_VERSION,
@@ -200,7 +200,7 @@ def test_the_checked_in_bindings_are_what_bridge_generate_renders(
         [
             sys.executable,
             "-m",
-            "qgis_sdk",
+            "qgis_sdk_tools",
             "bridge",
             "generate",
             "--plugin",

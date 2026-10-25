@@ -89,7 +89,7 @@ def test_request_document_names_every_input_the_probe_reads() -> None:
 
 def test_the_expected_metadata_matches_what_the_scaffold_writes() -> None:
     """The harness asserts against the generator's own output, not a copy."""
-    from qgis_sdk.scaffold import ScaffoldOptions, plan_scaffold
+    from qgis_sdk_tools.scaffold import ScaffoldOptions, plan_scaffold
 
     plan = plan_scaffold(ScaffoldOptions.resolve("demo_tools"))
     generated = next(

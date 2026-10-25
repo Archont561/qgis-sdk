@@ -1,7 +1,7 @@
 """The questions ``qgis-sdk new`` asks a terminal, and nothing about terminals.
 
 Interactive answers and command-line flags feed the same
-:class:`~qgis_sdk.scaffold.options.ScaffoldOptions` (decision-18), so this
+:class:`~qgis_sdk_tools.scaffold.options.ScaffoldOptions` (decision-18), so this
 module only decides *what* is asked, in which order, and what an answer means.
 Whoever calls :func:`ask_web_questions` supplies the ``ask`` callable that
 prints a prompt and reads a line; a test supplies a script.

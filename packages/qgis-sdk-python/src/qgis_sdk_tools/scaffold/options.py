@@ -30,6 +30,7 @@ RESERVED_PACKAGE_NAMES: Final = frozenset(
         "providers",
         "qgis",
         "qgis_sdk",
+        "qgis_sdk_tools",
         "tests",
         "utils",
         "web",

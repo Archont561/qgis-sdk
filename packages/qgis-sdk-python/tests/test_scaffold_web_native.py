@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
-from qgis_sdk.scaffold.web import install_command, script_command
+from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
+from qgis_sdk_tools.scaffold.web import install_command, script_command
 
 pytestmark = pytest.mark.webengine
 

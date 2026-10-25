@@ -10,15 +10,18 @@ from pathlib import Path
 import pytest
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
-# Ranked dependency direction: a layer may import only itself and lower layers.
-# `testing` is outermost on purpose: the in-memory service fakes depend on the
-# contracts, and nothing that ships may depend on the fakes (TASK-25.1).
+TOOLS_ROOT = SOURCE_ROOT.parent / "qgis_sdk_tools"
+# Ranked dependency direction inside the runtime: a layer may import only
+# itself and lower layers. `testing` is outermost on purpose: the in-memory
+# service fakes depend on the contracts, and nothing that ships may depend on
+# the fakes (TASK-25.1). The developer tools (`qgis_sdk_tools`) are not in the
+# table at all: they may import the runtime, Typer and pytest, and the runtime
+# never imports them (decision-35).
 LAYER_ORDER = {
     "models": 0,
+    "environment": 0,
     "declarations": 1,
     "services": 1,
-    "check": 1,
-    "cli": 1,
     "resources": 1,
     "core": 2,
     "algorithms": 2,
@@ -26,12 +29,6 @@ LAYER_ORDER = {
     "providers": 2,
     "network": 2,
     "bridge": 2,
-    # The scaffold renders a generated project's bridge client, so it sits
-    # with the bridge: still QGIS-free, no longer declarations-only.
-    "scaffold": 2,
-    # Developer workflows plan processes over the check and scaffold layers;
-    # QGIS runs in the process they start, never in theirs.
-    "devtools": 2,
     "reference": 3,
     "testing": 3,
 }
@@ -41,11 +38,8 @@ LAYER_PATHS = {
     "core": SOURCE_ROOT / "core",
     "jobs": SOURCE_ROOT / "jobs.py",
     "reference": SOURCE_ROOT / "reference",
-    "scaffold": SOURCE_ROOT / "scaffold",
-    "check": SOURCE_ROOT / "check",
-    "cli": SOURCE_ROOT / "cli.py",
     "declarations": SOURCE_ROOT / "declarations.py",
-    "devtools": SOURCE_ROOT / "devtools",
+    "environment": SOURCE_ROOT / "environment.py",
     "models": SOURCE_ROOT / "models",
     "network": SOURCE_ROOT / "network",
     "providers": SOURCE_ROOT / "providers.py",
@@ -53,11 +47,17 @@ LAYER_PATHS = {
     "resources": SOURCE_ROOT / "resources",
     "testing": SOURCE_ROOT / "testing",
 }
+#: Third-party packages the tools tree is allowed to import; the runtime
+#: tree is allowed none. ``qgis`` is the host: the pytest plugin's fixtures
+#: reach it from inside the QGIS process ``qgis-sdk test`` started.
+TOOLS_DEPENDENCIES = frozenset({"typer", "click", "pytest", "qgis"})
 
 
-def imports_in(path: Path, layer: str) -> list[tuple[str, int]]:
+def imports_in(
+    path: Path, layer: str, *, package: str | None = None
+) -> list[tuple[str, int]]:
     """Read declared imports even inside functions or conditional blocks."""
-    package = f"qgis_sdk.{layer}"
+    package = f"qgis_sdk.{layer}" if package is None else package
     imports: list[tuple[str, int]] = []
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Import):
@@ -94,6 +94,36 @@ def test_pure_layers_only_import_the_stdlib_and_lower_pure_layers(layer: str) ->
             )
 
 
+def package_of(file: Path, root: Path) -> str:
+    """The package a module's relative imports resolve against."""
+    parts = (root.name, *file.relative_to(root).parent.parts)
+    return ".".join(parts)
+
+
+def test_the_runtime_tree_never_imports_the_tools_tree() -> None:
+    """``qgis_sdk`` is what a plugin vendors; ``qgis_sdk_tools`` never ships."""
+    for file in sorted(SOURCE_ROOT.rglob("*.py")):
+        for module, line in imports_in(file, "", package=package_of(file, SOURCE_ROOT)):
+            assert module.split(".")[0] != "qgis_sdk_tools", (
+                f"{file.relative_to(SOURCE_ROOT)}:{line}: runtime imports tools "
+                f"({module})"
+            )
+
+
+def test_the_tools_tree_imports_the_runtime_the_stdlib_and_its_declared_deps() -> None:
+    files = sorted(TOOLS_ROOT.rglob("*.py"))
+    assert files, "missing src/qgis_sdk_tools"
+    for file in files:
+        for module, line in imports_in(file, "", package=package_of(file, TOOLS_ROOT)):
+            top = module.split(".")[0]
+            allowed = top in {"qgis_sdk", "qgis_sdk_tools"}
+            allowed = allowed or top in sys.stdlib_module_names
+            allowed = allowed or top in TOOLS_DEPENDENCIES
+            assert allowed, (
+                f"{file.relative_to(TOOLS_ROOT)}:{line}: forbidden import {module}"
+            )
+
+
 def test_pure_public_imports_succeed_with_native_modules_forbidden(
     tmp_path: Path,
 ) -> None:
@@ -112,8 +142,8 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
 
         sys.meta_path.insert(0, RejectNative())
         for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
-                       'qgis_sdk.services', 'qgis_sdk.scaffold', 'qgis_sdk.__main__',
-                       'qgis_sdk.check', 'qgis_sdk.cli',
+                       'qgis_sdk.services', 'qgis_sdk_tools.scaffold', 'qgis_sdk_tools.__main__',
+                       'qgis_sdk_tools.check', 'qgis_sdk_tools.cli',
                        'qgis_sdk.core', 'qgis_sdk.jobs',
                        'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
                        'qgis_sdk.adapters.desktop',

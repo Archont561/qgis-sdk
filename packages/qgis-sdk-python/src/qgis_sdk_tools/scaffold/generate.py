@@ -181,7 +181,7 @@ testpaths = ["tests"]
 # The SDK's pytest plugin: the `qgis` and `desktop` markers, the `qgis_app` and
 # `qgis_iface` fixtures, and the guard `qgis-sdk test` relies on. Plain `pytest`
 # keeps working; `qgis-sdk test --target qgis|desktop` runs the native layers.
-addopts = "-p qgis_sdk.pytest_plugin"
+addopts = "-p qgis_sdk_tools.pytest_plugin"
 
 [tool.qgis-sdk]
 # Where QGIS is, when `qgis-sdk test` and `qgis-sdk dev` should not discover it

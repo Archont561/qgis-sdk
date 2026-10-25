@@ -19,8 +19,11 @@ from typing import Any
 
 import pytest
 from contract_sample.bridge_plugin import SitesPlugin
-from qgis_sdk.__main__ import app
-from qgis_sdk.bridge.generate import (
+from qgis_sdk.bridge.host import host_description
+from qgis_sdk.declarations import describe_plugin
+from qgis_sdk.models.errors import QgisSdkBridgeError
+from qgis_sdk_tools.__main__ import app
+from qgis_sdk_tools.generate import (
     GENERATED_MARKER,
     check_generated,
     contract_fingerprint,
@@ -30,9 +33,6 @@ from qgis_sdk.bridge.generate import (
     load_description,
     write_generated,
 )
-from qgis_sdk.bridge.host import host_description
-from qgis_sdk.declarations import describe_plugin
-from qgis_sdk.models.errors import QgisSdkBridgeError
 from typer.testing import CliRunner
 
 runner = CliRunner()

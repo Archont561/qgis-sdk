@@ -34,9 +34,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from qgis_sdk.devtools.dev import DEV_SERVER_ENV
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
-from qgis_sdk.scaffold.web import install_command
+from qgis_sdk_tools.devtools.dev import DEV_SERVER_ENV
+from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
+from qgis_sdk_tools.scaffold.web import install_command
 
 pytestmark = pytest.mark.desktop
 
@@ -93,7 +93,7 @@ def _cli(
     env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
     env["PYTHONPATH"] = str(SDK_SOURCE)
     return subprocess.run(
-        [sys.executable, "-m", "qgis_sdk", *args],
+        [sys.executable, "-m", "qgis_sdk_tools", *args],
         cwd=cwd,
         env=env,
         capture_output=True,
@@ -252,7 +252,7 @@ def test_dev_serves_the_page_from_vite_inside_desktop(
     env_path = os.pathsep.join((str(Path(bun).parent), os.environ.get("PATH", "")))
 
     result = subprocess.run(
-        [sys.executable, "-m", "qgis_sdk", "dev", "--exercise", str(report_path)],
+        [sys.executable, "-m", "qgis_sdk_tools", "dev", "--exercise", str(report_path)],
         cwd=web_project,
         env={
             **{k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")},

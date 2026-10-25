@@ -7,8 +7,8 @@ import os
 from pathlib import Path
 
 import pytest
-from qgis_sdk.devtools import QgisInstall, find_qgis_install
-from qgis_sdk.devtools.dev import (
+from qgis_sdk_tools.devtools import QgisInstall, find_qgis_install
+from qgis_sdk_tools.devtools.dev import (
     DESKTOP_PROBE,
     DEV_SERVER_ENV,
     REQUEST_ENV,
@@ -19,8 +19,8 @@ from qgis_sdk.devtools.dev import (
     plan_web_server,
     wait_for_port,
 )
-from qgis_sdk.devtools.testrun import DESKTOP_PROBE as TEST_PROBE
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
+from qgis_sdk_tools.devtools.testrun import DESKTOP_PROBE as TEST_PROBE
+from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from test_devtools_installs import make_prefix, no_which
 
 

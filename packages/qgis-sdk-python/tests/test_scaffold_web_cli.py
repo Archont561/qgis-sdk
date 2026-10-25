@@ -6,8 +6,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
-from qgis_sdk.__main__ import app
-from qgis_sdk.scaffold.questionnaire import (
+from qgis_sdk_tools.__main__ import app
+from qgis_sdk_tools.scaffold.questionnaire import (
     INSTALL_QUESTION,
     PACKAGE_MANAGER_QUESTION,
     PLACEMENT_QUESTION,
@@ -17,7 +17,7 @@ from qgis_sdk.scaffold.questionnaire import (
     answer,
     ask_web_questions,
 )
-from qgis_sdk.testing import FakeCliRuntime
+from qgis_sdk_tools.testing import FakeCliRuntime
 from typer.testing import CliRunner
 
 runner = CliRunner()

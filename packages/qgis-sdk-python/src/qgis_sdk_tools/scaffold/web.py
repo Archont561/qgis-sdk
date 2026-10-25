@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 from typing import Final
 
-from qgis_sdk.bridge.generate import generate_typescript
 from qgis_sdk.declarations import action, describe_plugin, plugin
+
+from qgis_sdk_tools.generate import generate_typescript
 
 from .options import PackageManager, ScaffoldOptions, WebOptions
 
@@ -573,30 +574,25 @@ QGIS calls the functions with its ``iface``. The page may load files from
 
 Under `qgis-sdk dev` the Vite dev server serves the page instead, with hot
 module replacement: the command puts its origin in ``QGIS_SDK_DEV_SERVER``
-for the QGIS process it starts, and only there. A built plugin never sees the
+(``qgis_sdk.environment.DEV_SERVER_ENV``) for the QGIS process it starts, and
+only there. A built plugin never sees the
 variable and never reaches a dev server.
 """
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from qgis_sdk.bridge import Dispatcher
+from qgis_sdk.environment import dev_server
 
 ASSETS = Path(__file__).resolve().parent / "web"  # `{build}` in web/ writes it
 INDEX = ASSETS / "index.html"
 VIEW_ID = "{plugin}.main"
 CHANNEL_OBJECT = "bridge"  # the name web/src/transport.ts looks up
 TITLE = "{title}"
-DEV_SERVER_ENV = "QGIS_SDK_DEV_SERVER"
-
-
-def dev_server() -> str | None:
-    """The Vite origin `qgis-sdk dev` is serving the page from, if any."""
-    return os.environ.get(DEV_SERVER_ENV) or None
 
 
 def add_toolbar_action(

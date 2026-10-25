@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from qgis_sdk.check import Diagnostic, check_source
+from qgis_sdk_tools.check import Diagnostic, check_source
 
 MODULE = Path("field_tools/plugin.py")
 

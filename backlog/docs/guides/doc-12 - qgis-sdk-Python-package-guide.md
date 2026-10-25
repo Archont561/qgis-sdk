@@ -797,15 +797,18 @@ thread evidence over a real pool and a real Qt event loop.
 
 `qgis-sdk new <directory>` writes a minimal but genuinely loadable QGIS plugin
 project, built from the public declaration API instead of generated boilerplate.
-The command is a thin Typer layer in `src/qgis_sdk/__main__.py` over the public
-`qgis_sdk.scaffold` API, so a pip or `pixi add --pypi` install gets the console
-script and `python -m qgis_sdk` reaches the identical entry point. Typer is a
+The command is a thin Typer layer in `src/qgis_sdk_tools/__main__.py` over the
+public `qgis_sdk_tools.scaffold` API, so a pip or `pixi add --pypi` install gets
+the console script and `python -m qgis_sdk_tools` reaches the identical entry
+point. The tools tree is separate from the runtime package `qgis_sdk` a plugin
+imports (decision-35): it may use Typer and pytest, the runtime may not, and the
+runtime never imports it. Typer is a
 runtime dependency of the wheel for this command alone:
 
 ```sh
 qgis-sdk new /tmp/demo --title "Demo Tools"            # installed console script
-python -m qgis_sdk new /tmp/demo --title "Demo Tools"  # same command via -m
-pixi run -e default python -m qgis_sdk new /tmp/demo   # from workspace source
+python -m qgis_sdk_tools new /tmp/demo --title "Demo Tools"  # same command via -m
+pixi run -e default python -m qgis_sdk_tools new /tmp/demo   # from workspace source
 ```
 
 `scaffold` was the command's name through 0.3.0; it still runs, hidden from
@@ -890,7 +893,7 @@ is rolled back and nothing else is ever downloaded. A package named `web` or
 from loading in QGIS or from being inspected without QGIS. It is non-mutating
 and QGIS-free by design (decision-8): it imports nothing from the project,
 installs nothing and runs no handler. The command is a thin layer over
-`qgis_sdk.check.check_project(root, native_modules=...)`, which `qgis-sdk build`
+`qgis_sdk_tools.check.check_project(root, native_modules=...)`, which `qgis-sdk build`
 will call in-process rather than through a subprocess.
 
 ```sh
@@ -929,7 +932,7 @@ Unknown arguments go to pytest unchanged (`qgis-sdk test -x -k ping`,
 `qgis-sdk test -- --lf`), pytest's output is pytest's and its exit code is the
 command's. A plain `pytest` in the project keeps working: the generated
 `pyproject.toml` loads the same plugin through
-`addopts = "-p qgis_sdk.pytest_plugin"`.
+`addopts = "-p qgis_sdk_tools.pytest_plugin"`.
 
 | Target | Where pytest runs | Selection |
 | :-- | :-- | :-- |
@@ -938,7 +941,7 @@ command's. A plain `pytest` in the project keeps working: the generated
 | `desktop` | pytest **inside** the QGIS Desktop binary, temporary profile | `-m desktop`; `qgis_iface` is the real `iface`, `qgis_app` the running application |
 | `web` | the project's package manager (`bun`/`pnpm`/`npm` from the lockfile) | `run test` in `web/`, i.e. the generated Vitest suite |
 
-`qgis_sdk.pytest_plugin` registers the `qgis` and `desktop` markers, provides
+`qgis_sdk_tools.pytest_plugin` registers the `qgis` and `desktop` markers, provides
 the fixtures, applies the pure-target import guard and fails a native target
 in which every selected test skipped (exit 1 with the reason), so a required
 gate cannot pass by skipping. A native target whose QGIS cannot be found
@@ -949,7 +952,7 @@ are set only when the shell has no display (`DISPLAY`/`WAYLAND_DISPLAY`
 unset on Linux); an exported `QT_QPA_PLATFORM` wins.
 
 QGIS is located the same way for `test` and `dev` (decision-14, in
-`qgis_sdk.devtools.installs.find_qgis_install`): `--qgis-prefix`, then
+`qgis_sdk_tools.devtools.installs.find_qgis_install`): `--qgis-prefix`, then
 `[tool.qgis-sdk] qgis-prefix` in `pyproject.toml`, then `QGIS_PREFIX_PATH`,
 then `qgis` on `PATH`, then the interpreter's own prefix. An explicit answer
 that lacks the bindings (`share/qgis/python`, `apps/qgis*/python`) is an
@@ -997,9 +1000,9 @@ the discovery report, a directory without a plugin package is exit 2.
 ### CLI runtime
 
 Commands that read or write anything beyond their arguments receive a
-`qgis_sdk.cli.CliRuntime` (`cwd`, `env`, `out`, `err`) through Typer's
+`qgis_sdk_tools.cli.CliRuntime` (`cwd`, `env`, `out`, `err`) through Typer's
 `ctx.obj` (decision-34). The shell seeds it with `CliRuntime.for_process()`;
-a test passes `qgis_sdk.testing.FakeCliRuntime(cwd=..., env=...)` as
+a test passes `qgis_sdk_tools.testing.FakeCliRuntime(cwd=..., env=...)` as
 `CliRunner().invoke(app, args, obj=runtime)` and reads `runtime.stdout` /
 `runtime.stderr` back.
 
@@ -1104,6 +1107,19 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## Unreleased migration notes
 
+- **The developer tools moved to `qgis_sdk_tools`** (decision-35, step 1).
+  `qgis_sdk.scaffold`, `qgis_sdk.check`, `qgis_sdk.cli`, `qgis_sdk.devtools`,
+  `qgis_sdk.pytest_plugin` and `qgis_sdk.bridge.generate` are now
+  `qgis_sdk_tools.scaffold`, `.check`, `.cli`, `.devtools`, `.pytest_plugin`
+  and `qgis_sdk_tools.generate`; `FakeCliRuntime` is
+  `qgis_sdk_tools.testing.FakeCliRuntime`. `python -m qgis_sdk` is gone -
+  use the `qgis-sdk` script or `python -m qgis_sdk_tools`. Generated projects
+  now carry `addopts = "-p qgis_sdk_tools.pytest_plugin"`; a project generated
+  from an unreleased build with the old path repoints that one line. The
+  runtime API (`qgis_sdk.*` that a plugin imports) is unchanged;
+  `qgis_sdk.environment` is new and holds the `QGIS_SDK_DEV_SERVER` /
+  `QGIS_SDK_TEST_TARGET` names the generated `webview.py` and the tools
+  share. The one wheel still ships both trees until the distributions split.
 - **`qgis-sdk test` and `qgis-sdk dev`.** New commands over
   `qgis_sdk.devtools` (`installs`, `testrun`, `dev`) and the pytest plugin
   `qgis_sdk.pytest_plugin`; see "Running tests" and "Developing against
