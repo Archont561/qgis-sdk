@@ -221,6 +221,8 @@ pixi run -e default python packages/qgis-sdk-python/scripts/webengine_smoke.py
 
 The harness resolves everything it needs from the active prefix, so the same command works in any environment that provides a QGIS installation. It sets `QT_QPA_PLATFORM=offscreen`, the Chromium flags `--no-sandbox --disable-gpu --disable-dev-shm-usage --single-process`, the `PROJ_LIB` and `QGIS_PREFIX_PATH` of that prefix, and puts the QGIS Python bindings on `PYTHONPATH`.
 
+The support promise itself is one machine-readable source, `qgis_sdk_tools.targets` (TASK-9 AC 2, [decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)): `qgis-sdk targets` prints it, [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md#supported-targets) renders it, `tests/test_targets_native.py` fails when the host the native suite runs on is not a qualified row, and the release workflow records it in the job summary. The table below is the per-requirement evidence behind those rows.
+
 | Requirement | Linux (`linux-64`) | macOS (`macos-latest` arm64) | Windows (`windows-latest` x86-64) |
 | :-- | :-- | :-- | :-- |
 | QGIS-free Python SDK + `PydanticContractAdapter` (`pydantic==2.14.1`) | Qualified (CPython 3.14.8 & 3.11.2) | Qualified in CI (`pip`, CPython 3.14) | Qualified in CI (`pip`, CPython 3.14) |

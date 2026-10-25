@@ -47,6 +47,38 @@ the version it was released with. `pip install qgis-sdk` keeps meaning "the
 developer kit"; a QGIS console user installs `qgis-sdk-runtime` by name; a
 plugin installs nothing because the ZIP carries its own copy.
 
+## Supported targets
+
+Where the kit is qualified is stated once, in `qgis_sdk_tools.targets`
+(TASK-9 AC 2), and rendered here from that source; the test
+`test_targets.py::test_the_python_guide_renders_the_same_matrix` fails when
+the table and the module disagree, and `test_targets_native.py` fails when
+the host the native suite runs on stops being a qualified row. `qualified`
+means the workspace demonstrated the kit on that combination and the record
+names how; `unqualified` means the combination is reachable but not
+demonstrated, with the blocker named. Rows match on the series a user reads
+off their installation (QGIS `4.2`, Qt `6.11`, Chromium `140`), not on a
+patch level; `-` means the component is not on the target, and a row without
+QGIS is the QGIS-free kit (`pip install`, scaffold, check, bridge generation).
+`qgis-sdk targets` prints the same table and where the current host stands in
+it; `qgis-sdk targets --json` is the machine-readable form.
+
+<!-- support-matrix:begin -->
+| OS | Arch | Python | QGIS | Qt | Chromium | Status | Evidence |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+| linux | x86-64 | 3.14 | 4.2 | 6.11 | 140 | qualified | the locked Pixi environment (QGIS 4.2.3, Qt 6.11.2, Chromium 140, CPython 3.14): native suite, headless Desktop harnesses, the reference plugin through the toolchain and the release gate (doc-14) |
+| linux | x86-64 | 3.11 | - | - | - | qualified | the QGIS-free suite on CPython 3.11.2, the `requires-python` floor (doc-14) |
+| windows | x86-64 | 3.14 | - | - | - | qualified | ci.yml `cross-platform (windows-latest)`: `pip install` of the kit and the QGIS-free suite |
+| macos | arm64 | 3.14 | - | - | - | qualified | ci.yml `cross-platform (macos-latest)`: `pip install` of the kit and the QGIS-free suite |
+| windows | x86-64 | 3.14 | 4.2 | - | - | unqualified | no Windows QGIS 4 installation in CI or the sandbox (TASK-33 AC 1) |
+| macos | arm64 | 3.14 | 4.2 | - | - | unqualified | no macOS QGIS 4 installation in CI or the sandbox (TASK-33 AC 1) |
+<!-- support-matrix:end -->
+
+The release workflow records this table in its job summary next to the
+metadata and build checks it runs ([doc-17](../plans/doc-17%20-%20M4-sprint-train-and-0.5.0-dependency-order.md),
+sprint 3), so a release says on which targets its qualification holds. The
+detailed per-requirement evidence stays in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#headless-qgis-and-webengine-qualification).
+
 The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md).
 
 ## Declarations
