@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qgis-sdk"
-version = "0.4.0"
+version = "0.5.0"
 description = "The qgis-sdk developer kit: the runtime a QGIS plugin imports plus the tools that scaffold, check, test, run and build it."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,10 +14,10 @@ authors = [{ name = "QGIS SDK contributors" }]
 # meaning "the developer kit". The pins are exact and stamped together with the
 # two distributions they name; `release.py verify-versions` refuses a kit whose
 # pins disagree with the manifests next to it.
-dependencies = ["qgis-sdk-runtime==0.4.0", "qgis-sdk-tools==0.4.0"]
+dependencies = ["qgis-sdk-runtime==0.5.0", "qgis-sdk-tools==0.5.0"]
 
 [project.optional-dependencies]
-controlled-deployment = ["qgis-sdk-runtime[controlled-deployment]==0.4.0"]
+controlled-deployment = ["qgis-sdk-runtime[controlled-deployment]==0.5.0"]
 # The workspace's own test suite (packages/qgis-sdk-python/tests), which covers
 # both distributions; installed by the QGIS-free CI matrix and the arena fallback
 # next to editable installs of the runtime and the tools.

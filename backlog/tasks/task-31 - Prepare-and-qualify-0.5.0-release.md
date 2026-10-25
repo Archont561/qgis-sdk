@@ -1,10 +1,10 @@
 ---
 id: TASK-31
 title: Prepare and qualify 0.5.0 release
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 19:10'
+updated_date: '2026-10-25 20:42'
 labels: []
 milestone: m-4
 dependencies:
@@ -32,6 +32,12 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [ ] #5 The bridge is qualified as a pair, not as a bystander: the record states which bridge version ran inside a real `QWebEngineView` against which `qgis-sdk` version, any defect the matrix finds lands as a recorded bridge source change with its own changelog entry, and no bridge version is published unless such a fix exists.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Gate run 2026-10-25 on main 3c7aaa5 + this branch; the full record is doc-14 '0.5.0 release gate (TASK-31)'. Publishing approval: the owner chose 'Gate + stamp + tag + publish' (2026-10-25) when offered gate-only / gate+stamp / full, with a pause for 'Merge' on each PR; tag python-v0.5.0 goes on the merge commit of the gate-and-stamp PR. Bridge pair (AC 5): @archont561/qgis-sdk 0.3.0 inside a real QWebEngineView against the 0.5.0 runtime, contract version 1 both sides, no defect, no bridge publish. ACs are checked only after the tag's release.yml run is green and the artifacts are verified.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
