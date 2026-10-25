@@ -279,6 +279,16 @@ class NetworkClient:
         return self._defaults
 
     @property
+    def transport(self) -> NetworkTransport:
+        """The transport every request leaves through.
+
+        Exposed so a host that builds the web-view surface from the plugin
+        context (``HostServices.from_context``) can route ``network.fetch``
+        through the same transport, grants and scope the Python client uses.
+        """
+        return self._transport
+
+    @property
     def in_flight(self) -> int:
         """Requests started through this client (or a derivation) and not yet delivered."""
         return len(self._in_flight)

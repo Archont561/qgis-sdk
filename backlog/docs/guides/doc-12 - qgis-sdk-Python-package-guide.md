@@ -56,9 +56,6 @@ class RunRequest:
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx):
-        self.ctx = ctx
-
     @action(id="run", title="Run")
     def run(self, request: RunRequest) -> int:
         return request.count
@@ -70,6 +67,42 @@ print(description.to_json())
 
 `plugin` and `action` attach metadata and return their original targets. No base
 class, constructor rewrite, host imports or runtime registration is required.
+
+### Ids and titles default from the name
+
+Every declaration decorator (`@plugin`, `@action`, `@stream`, `@algorithm`,
+`@job`, `@provider.algorithm`) takes `id=` and `title=` as optional keywords and
+derives whichever is missing from the decorated name
+([decision-30](../../decisions/decision-30%20-%20Derive-declaration-ids-and-titles-from-names-deterministically-never-randomly.md)),
+so the class and method decorators also work bare:
+
+```python
+@plugin                       # id "field_tools_<6 hex>", title "Field Tools"
+class FieldTools:
+    @action                   # id "list_layers", title "List layers"
+    def list_layers(self) -> list[str]: ...
+
+    @action(id="layers.count")  # explicit id, derived title "Count layers"
+    def count_layers(self) -> int: ...
+```
+
+- A **class** id is the snake_case class name plus `_` and six hex digits of
+  `sha256("<module>.<qualname>")`. The suffix keeps two plugins, algorithms or
+  jobs that share a class name apart without being random: the same class in
+  the same module derives the same id on every import, so generated clients and
+  the contract fingerprint stay valid until the class itself is renamed or
+  moved. Pin `id=` before publishing a contract you do not want to track the
+  class name.
+- A **method** id (action, stream) is the plain method name, without a suffix:
+  it is already unique inside its class, and the TypeScript client spells it as
+  a property (`client.list_layers(...)`), so it stays an identifier. Leading
+  underscores are dropped. Use a dotted `id=` to group actions into namespaces.
+- A **title** keeps CamelCase words (`FieldTools` -> "Field Tools") and reads a
+  snake_case name as a sentence (`list_layers` -> "List layers").
+- An explicit `id=` or `title=` is validated when the decorator is called, before
+  the class exists, exactly as before; `derive_id` and `derive_title` in
+  `qgis_sdk.declarations` expose the conversion for tools that need it.
+  `Provider(...)` itself has no class to derive from and keeps requiring both.
 `describe_plugin` does not instantiate the class, dispatch handlers, evaluate
 properties, or call dataclass default factories. It resolves annotations with
 `typing.get_type_hints`, which may evaluate forward references: inspect **trusted
@@ -170,7 +203,33 @@ except QgisSdkUnsupportedCapabilityError as error:
     assert error.capability == "desktop"
 ```
 
-`PluginContext` is plugin-lifetime state. Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities with `require_workers()` / `require_network()` refusals; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
+`PluginContext` is plugin-lifetime state. Beside `notifications` and `scope` it
+carries the curated services as optional fields — `layers`, `project`,
+`settings`, `styles`, `algorithms`, `workers`, plus `desktop` and `network` —
+the very Protocols the web-view host surface wraps (decision-27, decision-32).
+Each optional one has a `require_<name>()` that raises
+`QgisSdkUnsupportedCapabilityError(capability=<name>)` on a host that did not
+supply it, and every one of them refuses on a closed scope. A handler therefore
+writes `self.ctx.require_project().layer_ids()` and a page calls
+`host.project.layerIds()`, and when the host built the bridge with
+`HostServices.from_context(ctx)` both read the same object:
+
+```python
+from qgis_sdk.bridge.host import HostServices, register_host_operations
+
+services = HostServices.from_context(ctx)      # same layers/project/settings/styles
+register_host_operations(dispatcher, services) # instances the plugin's handlers use
+```
+
+`from_context` takes the transport under `ctx.network` (`NetworkClient.transport`)
+for `network.fetch` unless a `network=` is passed, and an `authority=` for file
+refs and grants. Inside QGIS, `qgis_sdk.adapters.qgis.native_plugin_context(scope,
+settings_prefix=..., iface=iface)` assembles every PyQGIS-backed service into one
+context owned by that scope; the scaffold's `build_context` calls it whenever a
+`QgsApplication` is running and falls back to a notifications-only context in a
+bare interpreter, which is what its starter tests exercise.
+
+Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities with `require_workers()` / `require_network()` refusals; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
 
 The runtime owns the scopes: `scope.on_close(cleanup)` registers synchronous cleanup, `scope.child()` creates an owned scope, and `scope.close()` closes children before local callbacks (last registered first). Closing is idempotent. A child closed on its own stops being owned by its parent. New registrations/children after closure raise `QgisSdkScopeClosedError` (`code="scope_closed"`); `require_native()` also rejects a disposed scope. If cleanup fails, remaining children and callbacks still run and the failures are raised as an `ExceptionGroup`. Scope closure is **not** proof that an in-flight task stopped; adapters must request cancellation, detach callbacks and wait for safe completion where needed. The scope does not make services thread-safe or automatically revoke references to them.
 
@@ -199,9 +258,10 @@ from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
-        ctx.scope.on_close(lambda: print("disposed"))
+    ctx: PluginContext           # bound by the runtime; the annotation is for the type checker
+
+    def __init__(self) -> None:
+        self.ctx.scope.on_close(lambda: print("disposed"))
 
     @action(id="run", title="Run")
     def run(self, value: int) -> int:
@@ -210,17 +270,26 @@ class Tools:
 
 context = PluginContext(notifications=..., scope=ResourceScope())
 runtime = PluginRuntime(Tools, context)
-instance = runtime.start()   # calls Tools(context) exactly once
+instance = runtime.start()   # sets Tools.ctx = context, then calls Tools() once
 runtime.actions["run"](3)    # read-only action ID -> bound method
-runtime.unload()             # closes the owned scope once
+runtime.unload()             # closes the owned scope once and removes Tools.ctx
 runtime.unload()             # safe no-op
 ```
 
-The default factory calls `plugin_class(context)`. Pass
+The context is a **class attribute, not a constructor argument** (decision-31).
+`start()` sets `plugin_class.ctx` to the runtime's `PluginContext` before
+constructing the class with no arguments, so `self.ctx` is available everywhere
+including `__init__`; `unload()` (and a failed start) removes the attribute
+again, so the class is plain outside a running lifecycle and never retains a
+closed scope. Annotate `ctx: PluginContext` in the class body for IDEs and type
+checkers — it declares the attribute without initialising it, exactly like a
+dataclass field. A constructor that still takes `ctx` fails `start()` with a
+`QgisSdkPluginLifecycleError` that says so. One class runs under one runtime at
+a time; the most recently started runtime owns the attribute. Pass
 `PluginRuntime(..., instance_factory=factory)` when a plugin needs custom
-dependencies; the runtime never inspects or rewrites the constructor.
-Declarations are validated at construction time, but no author code runs until
-`start()`. After construction, every declared action must resolve to a callable
+dependencies: the factory still receives the context, and `ctx` is already
+bound on the class when it runs. Declarations are validated at construction
+time, but no author code runs until `start()`. After construction, every declared action must resolve to a callable
 on the instance; otherwise `QgisSdkPluginLifecycleError`
 (`code="invalid_plugin_lifecycle"`) is raised and startup is rolled back.
 
@@ -250,7 +319,8 @@ classFactory = create_class_factory(Tools, context_factory=build_context)
 ```
 
 `build_context(iface)` returns the typed `PluginContext` for that host,
-including any `DesktopAccess` service. The adapter imports neither QGIS nor Qt,
+including any `DesktopAccess` service — in a Desktop host, usually
+`native_plugin_context(...)` from `qgis_sdk.adapters.qgis` (see above). The adapter imports neither QGIS nor Qt,
 never serializes `iface`, calls `runtime.start()` from `initGui()` and
 `runtime.unload()` from `unload()`. Repeated `unload()` calls are safe. It is
 lifecycle glue, not a complete plugin template: plugin metadata, native action
@@ -725,7 +795,7 @@ thread evidence over a real pool and a real Qt event loop.
 
 ## Project scaffold
 
-`qgis-sdk scaffold <directory>` writes a minimal but genuinely loadable QGIS plugin
+`qgis-sdk new <directory>` writes a minimal but genuinely loadable QGIS plugin
 project, built from the public declaration API instead of generated boilerplate.
 The command is a thin Typer layer in `src/qgis_sdk/__main__.py` over the public
 `qgis_sdk.scaffold` API, so a pip or `pixi add --pypi` install gets the console
@@ -733,10 +803,13 @@ script and `python -m qgis_sdk` reaches the identical entry point. Typer is a
 runtime dependency of the wheel for this command alone:
 
 ```sh
-qgis-sdk scaffold /tmp/demo --title "Demo Tools"            # installed console script
-python -m qgis_sdk scaffold /tmp/demo --title "Demo Tools"  # same command via -m
-pixi run -e default python -m qgis_sdk scaffold /tmp/demo   # from workspace source
+qgis-sdk new /tmp/demo --title "Demo Tools"            # installed console script
+python -m qgis_sdk new /tmp/demo --title "Demo Tools"  # same command via -m
+pixi run -e default python -m qgis_sdk new /tmp/demo   # from workspace source
 ```
+
+`scaffold` was the command's name through 0.3.0; it still runs, hidden from
+`--help` and marked deprecated, and goes away in a later minor.
 
 `ScaffoldOptions.resolve` validates everything before a single byte is written: the
 plugin name must be a lowercase Python identifier that neither QGIS nor the
@@ -801,7 +874,7 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
   `plugin`), plus the explicit submodules `qgis_sdk.models`, `qgis_sdk.services`,
   `qgis_sdk.core`, `qgis_sdk.adapters.desktop`, `qgis_sdk.adapters.webengine`,
   `qgis_sdk.adapters.pydantic`, `qgis_sdk.adapters.pydantic_types`, and
-  `qgis_sdk.scaffold` (`qgis-sdk scaffold` CLI). All packages and the repository root
+  `qgis_sdk.scaffold` (`qgis-sdk new` CLI, spelled `scaffold` until 0.3.0). All packages and the repository root
   are licensed under MIT (`LICENSE`).
 
 ## 0.2.0 migration notes
@@ -868,3 +941,33 @@ published for the bridge, and no `ts-v*` tag exists.
   `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
+
+## Unreleased migration notes
+
+- **Curated services on `PluginContext`.** `layers`, `project`, `settings`,
+  `styles`, `algorithms` and `workers` are new optional fields with
+  `require_<name>()` accessors; existing constructor calls are unaffected.
+  `HostServices.from_context(ctx)` builds the web-view surface over the same
+  instances, `NetworkClient.transport` is public, and
+  `qgis_sdk.adapters.qgis.native_plugin_context` wires all of them inside QGIS.
+  Projects generated by `qgis-sdk new` now carry a `project_layers` action and
+  a `build_context` that uses it when a `QgsApplication` is running.
+- **`PluginContext` is a class attribute.** The runtime no longer calls
+  `plugin_class(context)`; it sets `plugin_class.ctx = context` and calls
+  `plugin_class()`. Replace `def __init__(self, ctx): self.ctx = ctx` with a
+  bare `ctx: PluginContext` annotation (and `def __init__(self)` if you still
+  need one — `self.ctx` is already there). A constructor that keeps the `ctx`
+  parameter fails `start()` with a `QgisSdkPluginLifecycleError` naming the
+  change. `AlgorithmContext` and `JobContext` are unchanged: they are built
+  fresh per invocation/attempt and still arrive through the constructor
+  (decision-11, decision-13).
+- **Declaration ids and titles are optional.** `@plugin`, `@action`, `@stream`,
+  `@algorithm`, `@job` and `@provider.algorithm` derive a missing `id=` /
+  `title=` from the decorated name (see "Ids and titles default from the name")
+  and the class and method decorators accept the bare form. Existing explicit
+  declarations are unchanged; `events=` is now the only required keyword of
+  `@stream`.
+- **CLI rename:** the project generator is `qgis-sdk new <directory>`
+  (`python -m qgis_sdk new`). `qgis-sdk scaffold` keeps working as a hidden,
+  deprecated alias so existing scripts do not break; it will be removed in a
+  later minor. The Python API (`qgis_sdk.scaffold`) is unchanged.

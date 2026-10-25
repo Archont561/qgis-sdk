@@ -45,7 +45,7 @@ from qgis_sdk.core.scheduling import Job, JobState, QuiesceOutcome, StepSchedule
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     canonical_json,
-    declare_class,
+    class_decorator,
     describe_run_method,
     register_describer,
     type_name,
@@ -115,9 +115,19 @@ _STATUS_OF_STATE = {
 }
 
 
-def job(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
-    """Attach job metadata without wrapping or constructing the class."""
-    return declare_class(_JOB_ATTRIBUTE, "@job", id=id, title=title)
+def job(
+    cls: type[T] | None = None,
+    /,
+    *,
+    id: str | None = None,
+    title: str | None = None,
+) -> Any:
+    """Attach job metadata without wrapping or constructing the class.
+
+    ``@job`` alone derives the id and title from the class name, the way
+    ``@plugin`` does; ``id=`` and ``title=`` override either one.
+    """
+    return class_decorator(_JOB_ATTRIBUTE, "@job", cls, id=id, title=title)
 
 
 @dataclass(frozen=True)

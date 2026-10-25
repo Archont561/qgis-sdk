@@ -23,8 +23,7 @@ class RecordingNotifications:
 
 @plugin(id="example.property", title="Property example")
 class PropertyPlugin:
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
+    ctx: PluginContext
 
     @action(id="noop", title="Noop")
     def noop(self) -> None:

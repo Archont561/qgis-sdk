@@ -25,8 +25,7 @@ class RecordingNotifications:
 
 @plugin(id="example.desktop", title="Desktop example")
 class DesktopTools:
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
+    ctx: PluginContext
 
     @action(id="run", title="Run")
     def run(self, value: int) -> int:

@@ -34,9 +34,6 @@ class RunRequest:
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx):
-        self.ctx = ctx
-
     @action(id="run", title="Run")
     def run(self, request: RunRequest) -> int:
         return request.count
@@ -45,7 +42,7 @@ class Tools:
 print(describe_plugin(Tools).to_json())
 ```
 
-`qgis-sdk scaffold <directory>` writes a loadable plugin project built on the
+`qgis-sdk new <directory>` writes a loadable plugin project built on the
 same API.
 
 ## Documentation

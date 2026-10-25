@@ -253,3 +253,47 @@ def test_closed_scope_rejects_registration_and_native_access() -> None:
         scope.on_close(lambda: None)
     with pytest.raises(QgisSdkScopeClosedError):
         scope.child()
+
+
+@pytest.mark.parametrize(
+    "capability", ["layers", "project", "settings", "styles", "algorithms", "workers"]
+)
+def test_a_plugin_context_without_a_service_refuses_it_by_name(capability: str) -> None:
+    """The curated services are optional on the context, like desktop and network.
+
+    A pure or standalone host leaves them out; `require_<name>()` is how a
+    handler asks for one and gets `unsupported_capability` instead of `None`.
+    """
+    context = PluginContext(
+        notifications=RecordingNotifications(), scope=ResourceScope()
+    )
+
+    assert getattr(context, capability) is None
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
+        getattr(context, f"require_{capability}")()
+
+    assert caught.value.capability == capability
+
+
+def test_a_plugin_context_hands_back_the_injected_services() -> None:
+    sentinels = {
+        name: object()
+        for name in ("layers", "project", "settings", "styles", "algorithms", "workers")
+    }
+    context = PluginContext(
+        notifications=RecordingNotifications(), scope=ResourceScope(), **sentinels
+    )
+
+    for name, service in sentinels.items():
+        assert getattr(context, f"require_{name}")() is service
+
+
+def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:
+    scope = ResourceScope()
+    context = PluginContext(
+        notifications=RecordingNotifications(), scope=scope, layers=object()
+    )
+    scope.close()
+
+    with pytest.raises(QgisSdkScopeClosedError):
+        context.require_layers()

@@ -31,8 +31,7 @@ def plugin_context() -> PluginContext:
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
+    ctx: PluginContext
 
     @action(id="run", title="Run")
     def run(self, value: int) -> int:
@@ -64,7 +63,9 @@ def test_explicit_instance_factory_receives_context_without_calling_the_construc
     factory_calls: list[PluginContext] = []
 
     class ConstructorTrap(Tools):
-        def __init__(self, ctx: PluginContext) -> None:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
             raise AssertionError("the default constructor must not run")
 
     @plugin(id="example.factory", title="Factory example")
@@ -88,7 +89,9 @@ def test_runtime_rejects_an_undeclared_class_without_constructing_it() -> None:
     constructed: list[bool] = []
 
     class Plain:
-        def __init__(self, ctx: PluginContext) -> None:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
             constructed.append(True)
 
     with pytest.raises(QgisSdkDeclarationError):
@@ -110,7 +113,9 @@ def test_starting_twice_does_not_construct_twice() -> None:
 
     @plugin(id="example.counted", title="Counted")
     class Counted:
-        def __init__(self, ctx: PluginContext) -> None:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
             constructed.append(1)
 
         @action(id="noop", title="Noop")
@@ -129,7 +134,8 @@ def test_starting_twice_does_not_construct_twice() -> None:
 
 
 def test_actions_are_read_only_and_cleared_on_unload() -> None:
-    runtime = PluginRuntime(Tools, plugin_context())
+    context = plugin_context()
+    runtime = PluginRuntime(Tools, context)
     instance = runtime.start()
 
     with pytest.raises(TypeError):
@@ -140,7 +146,8 @@ def test_actions_are_read_only_and_cleared_on_unload() -> None:
     assert runtime.state is PluginRuntimeState.STOPPED
     assert runtime.instance is None
     assert dict(runtime.actions) == {}
-    assert instance.ctx.scope.closed
+    assert context.scope.closed
+    assert not hasattr(instance, "ctx"), "an unloaded instance keeps no context"
 
 
 def test_unload_closes_the_owned_scope_once_and_is_repeatable() -> None:
@@ -175,11 +182,13 @@ def test_unload_disposes_owned_resources_in_reverse_registration_order() -> None
 
     @plugin(id="example.owned", title="Owned")
     class Owned:
-        def __init__(self, ctx: PluginContext) -> None:
-            ctx.scope.on_close(lambda: released.append("action"))
-            ctx.scope.on_close(lambda: released.append("signal"))
-            ctx.scope.on_close(lambda: released.append("dock"))
-            ctx.scope.on_close(lambda: released.append("work"))
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.ctx.scope.on_close(lambda: released.append("action"))
+            self.ctx.scope.on_close(lambda: released.append("signal"))
+            self.ctx.scope.on_close(lambda: released.append("dock"))
+            self.ctx.scope.on_close(lambda: released.append("work"))
 
         @action(id="run", title="Run")
         def run(self) -> None:
@@ -199,9 +208,11 @@ def test_partial_startup_failure_disposes_owned_resources_and_reraises() -> None
 
     @plugin(id="example.broken", title="Broken")
     class Broken:
-        def __init__(self, ctx: PluginContext) -> None:
-            ctx.scope.on_close(lambda: released.append("action"))
-            ctx.scope.on_close(lambda: released.append("work"))
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.ctx.scope.on_close(lambda: released.append("action"))
+            self.ctx.scope.on_close(lambda: released.append("work"))
             raise ValueError("author construction failed")
 
         @action(id="run", title="Run")
@@ -251,8 +262,12 @@ def test_startup_cleanup_failure_is_attached_to_the_original_error() -> None:
 
     @plugin(id="example.cleanup", title="Cleanup")
     class Cleanup:
-        def __init__(self, ctx: PluginContext) -> None:
-            ctx.scope.on_close(lambda: (_ for _ in ()).throw(RuntimeError("cleanup")))
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.ctx.scope.on_close(
+                lambda: (_ for _ in ()).throw(RuntimeError("cleanup"))
+            )
             raise ValueError("startup")
 
         @action(id="run", title="Run")
@@ -292,7 +307,9 @@ def test_start_after_unload_is_rejected_without_constructing() -> None:
 
     @plugin(id="example.stopped", title="Stopped")
     class Stopped:
-        def __init__(self, ctx: PluginContext) -> None:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
             constructed.append(1)
 
         @action(id="noop", title="Noop")
@@ -342,8 +359,7 @@ def test_non_callable_action_binding_fails_and_cleans_up() -> None:
 def test_declared_streams_are_bound_beside_the_actions_and_cleared_on_unload() -> None:
     @plugin(id="example.watch", title="Watch")
     class Watch:
-        def __init__(self, ctx: PluginContext) -> None:
-            self.ctx = ctx
+        ctx: PluginContext
 
         @action(id="run", title="Run")
         def run(self) -> None:
@@ -374,7 +390,9 @@ def test_declared_streams_are_bound_beside_the_actions_and_cleared_on_unload() -
 def test_non_callable_stream_binding_names_the_stream() -> None:
     @plugin(id="example.watch", title="Watch")
     class Watch:
-        def __init__(self, ctx: PluginContext) -> None:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
             self.ticks = "shadowed"
 
         @stream(id="ticks", title="Ticks", events={"data": int})
@@ -385,3 +403,112 @@ def test_non_callable_stream_binding_names_the_stream() -> None:
     with pytest.raises(QgisSdkPluginLifecycleError, match="stream 'ticks'"):
         runtime.start()
     assert runtime.state is PluginRuntimeState.FAILED
+
+
+def test_the_context_is_a_class_attribute_while_running_and_gone_after_unload() -> None:
+    context = plugin_context()
+
+    @plugin(id="example.classvar", title="Class variable")
+    class Tools:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.seen = self.ctx
+
+        @action(id="whoami", title="Who am I")
+        def whoami(self) -> str:
+            return type(self.ctx).__name__
+
+    assert "ctx" not in vars(Tools)
+    runtime = PluginRuntime(Tools, context)
+    assert "ctx" not in vars(Tools), "binding happens at start, not construction"
+
+    instance = runtime.start()
+
+    assert vars(Tools)["ctx"] is context
+    assert instance.seen is context
+    assert runtime.actions["whoami"]() == "PluginContext"
+
+    runtime.unload()
+
+    assert "ctx" not in vars(Tools)
+
+
+def test_a_failed_start_leaves_no_context_on_the_class() -> None:
+    @plugin(id="example.failing", title="Failing")
+    class Failing:
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            raise ValueError("startup")
+
+    with pytest.raises(ValueError, match="startup"):
+        PluginRuntime(Failing, plugin_context()).start()
+
+    assert "ctx" not in vars(Failing)
+
+
+def test_a_constructor_that_still_expects_the_context_gets_a_migration_hint() -> None:
+    @plugin(id="example.legacy", title="Legacy")
+    class Legacy:
+        def __init__(self, ctx: PluginContext) -> None:
+            self.ctx = ctx
+
+    with pytest.raises(QgisSdkPluginLifecycleError) as caught:
+        PluginRuntime(Legacy, plugin_context()).start()
+
+    assert "constructed with no arguments" in str(caught.value)
+    assert "ctx" in str(caught.value)
+    assert "ctx" not in vars(Legacy)
+
+
+def test_a_type_error_raised_inside_the_constructor_is_not_rewritten() -> None:
+    @plugin(id="example.typeerror", title="Type error")
+    class Explodes:
+        def __init__(self) -> None:
+            raise TypeError("my own mistake")
+
+    with pytest.raises(TypeError, match="my own mistake"):
+        PluginRuntime(Explodes, plugin_context()).start()
+
+
+def test_the_most_recently_started_runtime_owns_the_class_attribute() -> None:
+    """One class, one running runtime is the supported shape (decision-31).
+
+    A second start on the same class rebinds ``ctx`` rather than failing, so a
+    runtime that was never unloaded (a crashed test, a reload) cannot poison the
+    class; each runtime only removes the attribute while it is still its own.
+    """
+
+    @plugin(id="example.shared", title="Shared")
+    class Shared:
+        ctx: PluginContext
+
+    first = PluginRuntime(Shared, plugin_context())
+    second = PluginRuntime(Shared, plugin_context())
+    first.start()
+    second.start()
+
+    assert vars(Shared)["ctx"] is second._context
+
+    first.unload()
+    assert vars(Shared)["ctx"] is second._context, "not first's to remove"
+
+    second.unload()
+    assert "ctx" not in vars(Shared)
+
+
+def test_the_instance_factory_sees_the_context_on_the_class_as_well() -> None:
+    context = plugin_context()
+
+    @plugin(id="example.factory_classvar", title="Factory class variable")
+    class Tools:
+        ctx: PluginContext
+
+    def factory(received: PluginContext) -> object:
+        assert vars(Tools)["ctx"] is received
+        return Tools()
+
+    instance = PluginRuntime(Tools, context, instance_factory=factory).start()
+
+    assert instance.ctx is context

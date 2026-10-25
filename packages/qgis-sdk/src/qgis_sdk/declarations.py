@@ -1,5 +1,6 @@
 """QGIS-free experimental declaration metadata and description generation."""
 
+import hashlib
 import inspect
 import json
 import re
@@ -50,13 +51,121 @@ class Metadata:
 
 def metadata(id: str, title: str) -> Metadata:
     """Validate the id and title every ``@plugin``/``@algorithm``/``@job`` takes."""
+    _validate_id(id)
+    _validate_title(id, title)
+    return Metadata(id, title)
+
+
+def _validate_id(id: Any) -> None:
     if not isinstance(id, str) or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_.-]*", id):
         raise QgisSdkDeclarationError(
             f"Invalid declaration id {id!r}: use a letter followed by letters, digits, _, . or -"
         )
+
+
+def _validate_title(id: Any, title: Any) -> None:
     if not isinstance(title, str) or not title.strip():
         raise QgisSdkDeclarationError(f"{id}: title must be a nonempty string")
-    return Metadata(id, title)
+
+
+_WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def _words(name: str) -> list[str]:
+    """Split ``FieldTools``, ``HTTPServer`` or ``list_layers`` into its words."""
+    spaced = _WORD_BOUNDARY.sub(" ", name.replace("_", " "))
+    return spaced.split()
+
+
+def derive_id(name: str) -> str:
+    """The snake_case id a declaration gets from its Python name.
+
+    ``FieldTools`` becomes ``field_tools`` and ``HTTPServer`` becomes
+    ``http_server``; a snake_case method name is kept as it is, minus any
+    leading underscores (an id starts with a letter).
+    """
+    id = "_".join(word.lower() for word in _words(name))
+    if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", id):
+        raise QgisSdkDeclarationError(
+            f"Cannot derive a declaration id from {name!r}; pass id= explicitly"
+        )
+    return id
+
+
+def derive_title(name: str) -> str:
+    """The readable title a declaration gets from its Python name.
+
+    A CamelCase name keeps its word casing (``FieldTools`` -> ``Field Tools``);
+    a snake_case name reads as a sentence (``list_layers`` -> ``List layers``).
+    """
+    words = _words(name)
+    if not words:
+        raise QgisSdkDeclarationError(
+            f"Cannot derive a declaration title from {name!r}; pass title= explicitly"
+        )
+    if any(word[:1].isupper() for word in words):
+        return " ".join(words)
+    return " ".join([words[0].capitalize(), *words[1:]])
+
+
+def _class_id_suffix(cls: type) -> str:
+    """Six hex digits hashed from the class's module and qualified name.
+
+    The suffix is what keeps two plugins, algorithms or jobs that share a class
+    name apart without making the id random: the same class in the same place
+    derives the same id on every import, so a generated client and a
+    fingerprint stay valid until the class itself moves.
+    """
+    qualified = f"{cls.__module__}.{cls.__qualname__}"
+    return hashlib.sha256(qualified.encode()).hexdigest()[:6]
+
+
+def _declared_metadata(
+    target: Any, id: str | None, title: str | None, *, suffixed: bool
+) -> Metadata:
+    """Complete a declaration from ``target``'s name where the author left gaps."""
+    name = getattr(target, "__name__", None)
+    if id is None:
+        if not isinstance(name, str):
+            raise QgisSdkDeclarationError(
+                "cannot derive an id without a name; pass id= explicitly"
+            )
+        id = derive_id(name)
+        if suffixed:
+            id = f"{id}_{_class_id_suffix(target)}"
+    if title is None:
+        if not isinstance(name, str):
+            raise QgisSdkDeclarationError(
+                f"{id}: cannot derive a title without a name; pass title= explicitly"
+            )
+        title = derive_title(name)
+    return metadata(id, title)
+
+
+def validate_given(id: str | None, title: str | None) -> None:
+    """Refuse a bad explicit id or title at decoration time, before any class exists."""
+    if id is not None:
+        _validate_id(id)
+    if title is not None:
+        _validate_title(id if id is not None else "declaration", title)
+
+
+def class_metadata(cls: type, id: str | None, title: str | None) -> Metadata:
+    """The metadata a class declaration carries: given values, or derived ones.
+
+    A derived class id is the snake_case class name plus the module/qualname
+    hash suffix; a derived title is the class name spaced into words.
+    """
+    return _declared_metadata(cls, id, title, suffixed=True)
+
+
+def method_metadata(method: Any, id: str | None, title: str | None) -> Metadata:
+    """The metadata a method declaration carries: given values, or derived ones.
+
+    A method id is the plain method name: it is already unique inside its class,
+    and the bridge client spells it as a property, so no suffix is added.
+    """
+    return _declared_metadata(method, id, title, suffixed=False)
 
 
 def mark_class(cls: Any, attribute: str, declared: Metadata, decorator: str) -> None:
@@ -77,16 +186,45 @@ def mark_class(cls: Any, attribute: str, declared: Metadata, decorator: str) -> 
 
 
 def declare_class(
-    attribute: str, decorator: str, *, id: str, title: str
+    attribute: str,
+    decorator: str,
+    *,
+    id: str | None = None,
+    title: str | None = None,
 ) -> Callable[[type[T]], type[T]]:
-    """Build the class decorator ``@plugin``, ``@algorithm`` and ``@job`` all are."""
-    declared = metadata(id, title)
+    """Build the class decorator ``@plugin``, ``@algorithm`` and ``@job`` all are.
+
+    An omitted ``id`` or ``title`` is derived from the class once it is known
+    (:func:`class_metadata`); a given one is validated right here.
+    """
+    validate_given(id, title)
 
     def decorate(cls: type[T]) -> type[T]:
-        mark_class(cls, attribute, declared, decorator)
+        if not inspect.isclass(cls):
+            raise QgisSdkDeclarationError(f"{decorator} requires a class")
+        mark_class(cls, attribute, class_metadata(cls, id, title), decorator)
         return cls
 
     return decorate
+
+
+def class_decorator(
+    attribute: str,
+    decorator: str,
+    cls: Any,
+    *,
+    id: str | None,
+    title: str | None,
+) -> Any:
+    """Serve both ``@plugin`` and ``@plugin(...)`` from one definition.
+
+    Used bare, the decorator receives the class as its only positional
+    argument and decorates it at once; called, it returns the decorator.
+    """
+    decorate = declare_class(attribute, decorator, id=id, title=title)
+    if cls is None:
+        return decorate
+    return decorate(cls)
 
 
 def declared_metadata(
@@ -104,23 +242,47 @@ def declared_metadata(
 PLUGIN_ATTRIBUTE = "__qgis_sdk_plugin__"
 
 
-def plugin(*, id: str, title: str) -> Callable[[type[T]], type[T]]:
-    """Attach plugin metadata without wrapping or constructing the class."""
-    return declare_class(PLUGIN_ATTRIBUTE, "@plugin", id=id, title=title)
+def plugin(
+    cls: type[T] | None = None,
+    /,
+    *,
+    id: str | None = None,
+    title: str | None = None,
+) -> Any:
+    """Attach plugin metadata without wrapping or constructing the class.
+
+    ``@plugin`` alone derives the id (``field_tools_<hash>`` for a class named
+    ``FieldTools``) and the title (``Field Tools``); ``id=`` and ``title=``
+    override either one.
+    """
+    return class_decorator(PLUGIN_ATTRIBUTE, "@plugin", cls, id=id, title=title)
 
 
-def action(*, id: str, title: str) -> Callable[[T], T]:
-    """Attach allowlisted action metadata to an ordinary instance method."""
-    declared = metadata(id, title)
+def action(
+    method: T | None = None,
+    /,
+    *,
+    id: str | None = None,
+    title: str | None = None,
+) -> Any:
+    """Attach allowlisted action metadata to an ordinary instance method.
+
+    ``@action`` alone names the action after the method (``list_layers``, titled
+    ``List layers``); ``id=`` and ``title=`` override either one.
+    """
+    validate_given(id, title)
 
     def decorate(method: T) -> T:
         if not inspect.isfunction(method):
             raise QgisSdkDeclarationError("@action requires an instance method")
-        _require_undeclared(method, id, "@action")
+        declared = method_metadata(method, id, title)
+        _require_undeclared(method, declared.id, "@action")
         method.__qgis_sdk_action__ = declared
         return method
 
-    return decorate
+    if method is None:
+        return decorate
+    return decorate(method)
 
 
 @dataclass(frozen=True)
@@ -128,7 +290,9 @@ class _StreamMetadata(Metadata):
     events: dict[str, Any]
 
 
-def stream(*, id: str, title: str, events: Any) -> Callable[[T], T]:
+def stream(
+    *, events: Any, id: str | None = None, title: str | None = None
+) -> Callable[[T], T]:
     """Attach stream metadata to an instance method that produces events.
 
     ``events`` maps each event kind the stream emits (``data``, ``progress``,
@@ -136,28 +300,34 @@ def stream(*, id: str, title: str, events: Any) -> Callable[[T], T]:
     the wire (decision-28): the method's parameters are the subscribe request,
     its return annotation is not described (it still has to resolve, like every
     annotation), and a kind the map does not name is one the host refuses to
-    emit.
+    emit. An omitted ``id`` or ``title`` comes from the method name, as for
+    ``@action``.
     """
-    declared = metadata(id, title)
+    validate_given(id, title)
+    label = id if id is not None else "stream"
     if not isinstance(events, dict):
-        raise QgisSdkDeclarationError(f"{id}: events must be a mapping of kind to type")
+        raise QgisSdkDeclarationError(
+            f"{label}: events must be a mapping of kind to type"
+        )
     if not events:
         raise QgisSdkDeclarationError(
-            f"{id}: a stream declares at least one event kind"
+            f"{label}: a stream declares at least one event kind"
         )
     for kind in events:
         if kind not in STREAM_EVENT_KINDS:
             raise QgisSdkDeclarationError(
-                f"{id}: {kind!r} is not a stream event kind; "
+                f"{label}: {kind!r} is not a stream event kind; "
                 f"use one of {', '.join(STREAM_EVENT_KINDS)}"
             )
-    streamed = _StreamMetadata(declared.id, declared.title, dict(events))
 
     def decorate(method: T) -> T:
         if not inspect.isfunction(method):
             raise QgisSdkDeclarationError("@stream requires an instance method")
-        _require_undeclared(method, id, "@stream")
-        method.__qgis_sdk_stream__ = streamed
+        declared = method_metadata(method, id, title)
+        _require_undeclared(method, declared.id, "@stream")
+        method.__qgis_sdk_stream__ = _StreamMetadata(
+            declared.id, declared.title, dict(events)
+        )
         return method
 
     return decorate

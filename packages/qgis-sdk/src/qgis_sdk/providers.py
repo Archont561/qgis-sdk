@@ -26,7 +26,6 @@ module stays QGIS-free; only the adapter knows about the toolbox.
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
 from dataclasses import dataclass, fields
 from typing import Annotated, Any, TypeVar, get_args, get_origin
 
@@ -38,9 +37,11 @@ from qgis_sdk.algorithms import (
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     canonical_json,
+    class_metadata,
     mark_class,
     metadata,
     resolve_hints,
+    validate_given,
 )
 from qgis_sdk.models import CrsInput, LayerInput, Metres
 
@@ -189,22 +190,32 @@ class Provider:
         return self._title
 
     def algorithm(
-        self, *, id: str, title: str, group: str | None = None
-    ) -> Callable[[type[T]], type[T]]:
+        self,
+        cls: type[T] | None = None,
+        /,
+        *,
+        id: str | None = None,
+        title: str | None = None,
+        group: str | None = None,
+    ) -> Any:
         """Register a decorated-by-this-call algorithm class on the provider.
 
         The class is described immediately, so a missing ``run``, an
         uninspectable request or a field no host could render all fail here
-        rather than during the first execution.
+        rather than during the first execution. ``@provider.algorithm`` alone
+        derives the id and title from the class name, as ``@algorithm`` does.
         """
 
-        declared = metadata(id, title)
+        validate_given(id, title)
         if group is not None and (not isinstance(group, str) or not group.strip()):
-            raise QgisSdkDeclarationError(f"{id}: group must be a nonempty string")
+            raise QgisSdkDeclarationError(
+                f"{id if id is not None else 'algorithm'}: group must be a nonempty string"
+            )
 
         def decorate(cls: type[T]) -> type[T]:
             if not inspect.isclass(cls):
                 raise QgisSdkDeclarationError("@provider.algorithm requires a class")
+            declared = class_metadata(cls, id, title)
             if declared.id in self._registered:
                 raise QgisSdkDeclarationError(
                     f"{self._id}: duplicate algorithm id {declared.id!r}"
@@ -228,7 +239,9 @@ class Provider:
             self._classes[declared.id] = cls
             return cls
 
-        return decorate
+        if cls is None:
+            return decorate
+        return decorate(cls)
 
     @property
     def algorithms(self) -> tuple[type, ...]:

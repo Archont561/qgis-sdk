@@ -124,9 +124,10 @@ class IfaceDesktopAccess:
 class LifecycleProbe:
     """Record the context it was given and answer one round-trip action."""
 
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
-        OBSERVED["context"] = ctx
+    ctx: PluginContext
+
+    def __init__(self) -> None:
+        OBSERVED["context"] = self.ctx
 
     @action(id="ping", title="Ping")
     def ping(self, value: int) -> int:

@@ -48,8 +48,8 @@ bridge_app = typer.Typer(
 app.add_typer(bridge_app, name="bridge")
 
 
-@app.command()
-def scaffold(
+@app.command("new")
+def new(
     target: Annotated[
         Path, typer.Argument(help="Directory to create the plugin project in.")
     ],
@@ -95,6 +95,12 @@ def scaffold(
     except QgisSdkScaffoldError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
+
+
+# ``scaffold`` was the command's name through 0.3.0. It keeps working so an
+# existing script or tutorial does not break, but it is hidden from --help and
+# marked deprecated; ``new`` is the spelling from here on.
+app.command("scaffold", hidden=True, deprecated=True)(new)
 
 
 @bridge_app.command("generate")
@@ -163,7 +169,7 @@ def _describe(
 
 @app.callback()
 def _callback() -> None:
-    """Keep ``scaffold`` a subcommand, so the verb stays explicit."""
+    """Keep ``new`` a subcommand, so the verb stays explicit."""
 
 
 def _resolve(

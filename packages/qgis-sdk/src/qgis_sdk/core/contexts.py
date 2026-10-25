@@ -1,48 +1,97 @@
 """Typed contexts assembled explicitly by an owner, never a global registry."""
 
 from dataclasses import dataclass
+from typing import TypeVar
 
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import (
     Algorithms,
     Cancellation,
     DesktopAccess,
+    Layers,
     Network,
     Notifications,
     Progress,
+    Project,
+    Settings,
+    Styles,
     ViewControl,
     Workers,
 )
 
 from .scope import ResourceScope
 
+T = TypeVar("T")
+
+
+def _require(scope: ResourceScope, service: T | None, capability: str) -> T:
+    """Hand back an optional capability, or refuse it by name on this scope."""
+    scope.ensure_open()
+    if service is None:
+        raise QgisSdkUnsupportedCapabilityError(capability)
+    return service
+
 
 def _require_network(scope: ResourceScope, network: Network | None) -> Network:
-    scope.ensure_open()
-    if network is None:
-        raise QgisSdkUnsupportedCapabilityError("network")
-    return network
+    return _require(scope, network, "network")
 
 
 @dataclass(frozen=True, slots=True)
 class PluginContext:
-    """Capabilities owned by one plugin runtime, not an invocation."""
+    """Capabilities owned by one plugin runtime, not an invocation.
+
+    Beside notifications and the owned scope it carries the curated services
+    (``layers``, ``project``, ``settings``, ``styles``, ``algorithms``,
+    ``workers``) as optional fields, exactly the Protocols the web-view host
+    surface wraps (decision-27). A host that builds the bridge from this
+    context (``HostServices.from_context``) hands both sides the same
+    instances, so a Python handler and a page read one project. Every
+    optional capability has a ``require_<name>()`` that fails by name instead
+    of returning ``None``.
+    """
 
     notifications: Notifications
     scope: ResourceScope
     desktop: DesktopAccess | None = None
     network: Network | None = None
+    layers: Layers | None = None
+    project: Project | None = None
+    settings: Settings | None = None
+    styles: Styles | None = None
+    algorithms: Algorithms | None = None
+    workers: Workers | None = None
 
     def require_native(self) -> DesktopAccess:
         """Request Desktop access; pure/standalone runtimes fail explicitly."""
-        self.scope.ensure_open()
-        if self.desktop is None:
-            raise QgisSdkUnsupportedCapabilityError("desktop")
-        return self.desktop
+        return _require(self.scope, self.desktop, "desktop")
 
     def require_network(self) -> Network:
         """Request the network client; a host without one fails explicitly."""
         return _require_network(self.scope, self.network)
+
+    def require_layers(self) -> Layers:
+        """Request the layer service; a host without one fails explicitly."""
+        return _require(self.scope, self.layers, "layers")
+
+    def require_project(self) -> Project:
+        """Request the project service; a host without one fails explicitly."""
+        return _require(self.scope, self.project, "project")
+
+    def require_settings(self) -> Settings:
+        """Request the settings service; a host without one fails explicitly."""
+        return _require(self.scope, self.settings, "settings")
+
+    def require_styles(self) -> Styles:
+        """Request the style service; a host without one fails explicitly."""
+        return _require(self.scope, self.styles, "styles")
+
+    def require_algorithms(self) -> Algorithms:
+        """Request Processing execution; a host without it fails explicitly."""
+        return _require(self.scope, self.algorithms, "algorithms")
+
+    def require_workers(self) -> Workers:
+        """Request the worker pool; a host without one fails explicitly."""
+        return _require(self.scope, self.workers, "workers")
 
 
 @dataclass(frozen=True, slots=True)

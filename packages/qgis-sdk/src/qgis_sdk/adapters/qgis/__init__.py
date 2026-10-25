@@ -10,6 +10,7 @@ against one set of tests.
 """
 
 from .algorithms import NativeAlgorithms
+from .context import IfaceDesktopAccess, native_plugin_context
 from .layers import NativeLayers
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
@@ -20,6 +21,7 @@ from .styles import NativeStyles
 from .workers import ThreadPoolWorkers
 
 __all__ = [
+    "IfaceDesktopAccess",
     "NativeAlgorithms",
     "NativeLayers",
     "NativeNetworkTransport",
@@ -29,5 +31,6 @@ __all__ = [
     "NativeSettings",
     "NativeStyles",
     "ThreadPoolWorkers",
+    "native_plugin_context",
     "register_provider",
 ]

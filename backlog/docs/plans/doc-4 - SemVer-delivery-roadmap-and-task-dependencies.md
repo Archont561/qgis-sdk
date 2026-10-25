@@ -106,6 +106,10 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-30](../../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md): Prepare and qualify 0.4.0 release
 - [TASK-35](../../tasks/task-35%20-%20Add-autorelease-and-release-workflows-driven-by-a-pinned-qgis-sdk-release-package.md): Add autorelease and release workflows driven by a pinned qgis-sdk-release package
 - [TASK-36](../../tasks/task-36%20-%20Extract-qgis-sdk-release-into-a-standalone-checksum-pinned-repository.md): Extract qgis-sdk-release into a standalone checksum pinned repository
+- [TASK-50](../../tasks/task-50%20-%20Rename-the-scaffold-CLI-command-to-new.md): Rename the scaffold CLI command to new — `scaffold` stays a hidden, deprecated alias for one minor
+- [TASK-51](../../tasks/task-51%20-%20Derive-declaration-ids-and-titles-from-names-by-default.md): Derive declaration ids and titles from names by default — deterministic, explicit values win (decision-30)
+- [TASK-52](../../tasks/task-52%20-%20Bind-PluginContext-as-the-ctx-class-attribute-instead-of-a-constructor-argument.md): Bind PluginContext as the ctx class attribute instead of a constructor argument (decision-31)
+- [TASK-53](../../tasks/task-53%20-%20Offer-the-curated-services-on-PluginContext-and-build-the-web-view-surface-from-it.md): Offer the curated services on PluginContext and build the web-view surface from it (decision-32)
 
 ### 0.5.0
 
