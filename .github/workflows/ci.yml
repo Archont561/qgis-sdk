@@ -110,31 +110,35 @@ jobs:
           fi
 
       # The default environment carries the QGIS feature, so this is the only
-      # place the native form path, the QGIS network transport and the
-      # restricted WebEngine page and the thread-pool job workers actually
-      # execute against real Qt: a developer machine needs a display setup and
-      # this sandbox has no Qt at all. The network and browser files talk to
+      # place the native layers actually execute against real Qt and QGIS: the
+      # native form path, the QGIS network transport, the restricted WebEngine
+      # page and its WebChannel binding, the thread-pool job workers and the
+      # native service backends. A developer machine needs a display setup and
+      # this sandbox has no Qt at all. `-m native` is the umbrella marker that
+      # tests/conftest.py derives from the `qt`, `qgis`, `webengine` and
+      # `desktop` layers (TASK-7); the network and browser files talk to
       # loopback servers only (TASK-5 AC 3, TASK-20 AC 3); the browser file
       # sets the Chromium flags the TASK-23 headless harness qualified; the
       # jobs file proves GUI-thread delivery over a real QThreadPool (TASK-15).
-      - name: Test native forms, networking, browser policy and jobs offscreen
+      - name: Test the native layers offscreen
         id: s11
         env:
           QT_QPA_PLATFORM: offscreen
+          QGIS_SDK_NATIVE_SERVICES: "1"
         run: |
           set -o pipefail
-          log=native-forms.log
+          log=native-layers.log
           status=0
-          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py packages/qgis-sdk/tests/test_network_native.py packages/qgis-sdk/tests/test_webengine_native.py packages/qgis-sdk/tests/test_jobs_native.py -q -rs 2>&1 | tee "$log" || status=$?
+          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests -m native -q -rs 2>&1 | tee "$log" || status=$?
           if [ "$status" -eq 0 ]; then
             exit 0
           fi
           # pytest 9 exits 5 when a module skips itself during import, which is
           # the honest outcome on a host without usable Qt and QGIS bindings, so
           # that case is a warning carrying the reason rather than a red build.
-          reason=$(grep -o "native \(forms\|networking\|WebEngine\|jobs\) need.*" "$log" | head -1 || true)
+          reason=$(grep -o "native \(forms\|networking\|WebEngine\|WebChannel\|jobs\) need.*" "$log" | head -1 || true)
           if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
-            echo "::warning::native forms did not run: $reason"
+            echo "::warning::native layers did not run: $reason"
             exit 0
           fi
           # Log archives are not reliably downloadable from every client, so the
@@ -150,8 +154,8 @@ jobs:
           # `run:` uses bash -e, so a failing substitution would abort before the
           # annotation is printed; every capture here is allowed to fail.
           environment=$(pixi run -e default python -c 'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20 || true)
-          annotate "native forms: environment" "$environment"
-          annotate "native forms: pytest" "$(tail -60 "$log" || true)"
+          annotate "native layers: environment" "$environment"
+          annotate "native layers: pytest" "$(tail -60 "$log" || true)"
           exit "$status"
 
       - name: Lint and format TypeScript

@@ -20,33 +20,22 @@ import os
 import shutil
 import ssl
 import subprocess
-import sys
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-_BINDINGS = Path(sys.prefix) / "share" / "qgis" / "python"
-if _BINDINGS.is_dir() and str(_BINDINGS) not in sys.path:
-    sys.path.insert(0, str(_BINDINGS))
-os.environ.setdefault("QGIS_PREFIX_PATH", sys.prefix)
-os.environ.setdefault("PROJ_LIB", str(Path(sys.prefix) / "share" / "proj"))
-# The authentication tests set a master password, which must never touch a
-# developer's real auth database: point QGIS at a throwaway one before any
-# module in the session starts the application.
-_AUTH_DIR = os.environ.setdefault(
-    "QGIS_AUTH_DB_DIR_PATH", tempfile.mkdtemp(prefix="qgis-sdk-auth-")
-)
+# The qgis layer: the transport is QgsNetworkAccessManager's. The environment -
+# including the throwaway authentication database the master-password tests
+# need before the application starts - is prepared by tests/conftest.py.
+pytestmark = pytest.mark.qgis
+_AUTH_DIR = os.environ["QGIS_AUTH_DB_DIR_PATH"]
 
 try:
     from PyQt6.QtCore import QCoreApplication, QRunnable, QThread, QThreadPool
-    from PyQt6.QtWidgets import QApplication
     from qgis.core import QgsApplication, QgsAuthMethodConfig, QgsNetworkAccessManager
     from qgis_sdk.adapters.qgis import NativeNetworkTransport
     from qgis_sdk.core import ResourceScope
@@ -287,16 +276,9 @@ def tls_origin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[_Server]:
 
 
 @pytest.fixture(scope="module")
-def app():
-    """One headless QGIS application; reuse whatever another module started."""
-    existing = QApplication.instance()
-    if existing is not None:
-        return existing
-    prefix = Path(sys.prefix)
-    QgsApplication.setPrefixPath(str(prefix), True)
-    application = QgsApplication([b"qgis-sdk-native-network"], True)
-    application.initQgis()
-    return application
+def app(qgis_app):
+    """The session's one application, with QGIS initialised (``tests/layers.py``)."""
+    return qgis_app
 
 
 @pytest.fixture()

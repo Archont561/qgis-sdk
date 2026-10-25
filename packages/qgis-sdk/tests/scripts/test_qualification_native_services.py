@@ -129,6 +129,7 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
     }
 
 
+@pytest.mark.desktop
 @pytest.mark.skipif(
     os.environ.get(SMOKE_ENV_FLAG) != "1",
     reason=f"set {SMOKE_ENV_FLAG}=1 to run the real native services smoke",

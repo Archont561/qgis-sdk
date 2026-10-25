@@ -22,6 +22,8 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 
+pytestmark = pytest.mark.qgis
+
 if TYPE_CHECKING:
     from .conftest import Services
 

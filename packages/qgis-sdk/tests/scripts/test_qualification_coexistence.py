@@ -225,6 +225,7 @@ def test_the_unavailable_report_confirms_nothing() -> None:
     assert report.to_payload()["passed"] is False
 
 
+@pytest.mark.desktop
 @pytest.mark.skipif(
     os.environ.get(SMOKE_ENV_FLAG) != "1",
     reason=f"set {SMOKE_ENV_FLAG}=1 to qualify plugin coexistence in real QGIS Desktop",
