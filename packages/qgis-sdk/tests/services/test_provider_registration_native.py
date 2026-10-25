@@ -24,6 +24,8 @@ from qgis_sdk.models import (
 from qgis_sdk.providers import Provider, parameter_kinds
 from qgis_sdk.reference import reference_provider
 
+pytestmark = pytest.mark.qgis
+
 if TYPE_CHECKING:
     from .conftest import Services
 

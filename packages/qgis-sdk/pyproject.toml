@@ -45,3 +45,6 @@ exclude = ["scripts"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# The layer markers are registered by tests/conftest.py from tests/layers.py;
+# a misspelt layer is an error, not a test that silently runs everywhere.
+addopts = ["--strict-markers"]

@@ -7,7 +7,9 @@ therefore a property of the test run, not a claim in a review.
 
 The ``native`` backend is registered only when ``QGIS_SDK_NATIVE_SERVICES=1`` and
 the QGIS Python bindings of the active prefix exist, so the ordinary QGIS-free
-run stays pure and the opt-in run exercises real QGIS. It is a *partial* native
+run stays pure and the opt-in run exercises real QGIS; its parameter carries the
+``qgis`` layer marker, so ``-m qgis`` and ``-m pure`` split it like any other
+test. The application itself is the session's one (``tests/layers.py``). It is a *partial* native
 backend by design: layers and project are PyQGIS-backed (TASK-25.2), while
 settings, styles and notifications are still the in-memory doubles until
 TASK-25.3 and TASK-25.4 land. Each of those tasks replaces its double here.
@@ -21,12 +23,12 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import layers as test_layers
 import pytest
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import BufferRequest, CentroidRequest
@@ -82,21 +84,18 @@ class Services:
     work_directory: Path | None = None
 
 
-def _qgis_python_path() -> Path:
-    """Return the directory holding the QGIS Python bindings of this prefix."""
-    return Path(sys.prefix) / "share" / "qgis" / "python"
-
-
 def _native_available() -> bool:
     """Whether the opt-in native backend can be registered for this run."""
-    return os.environ.get(NATIVE_ENV_FLAG) == "1" and _qgis_python_path().is_dir()
+    return (
+        os.environ.get(NATIVE_ENV_FLAG) == "1"
+        and test_layers.qgis_bindings() is not None
+    )
 
 
 # Identifies one test session's settings prefix, so values written by the native
 # backend cannot outlive the run or collide with another session's.
 _SESSION_TOKEN = f"{os.getpid()}-{int(__import__('time').time())}"
 
-_APPLICATION: object | None = None
 # Temporary outputs of the native backend. One root per session, removed with
 # the application; each services instance gets its own directory so a test can
 # never observe another test's files.
@@ -111,27 +110,6 @@ def _algorithm_work_directory() -> Path:
     directory = _WORK_ROOT / f"services-{_WORK_DIRECTORIES}"
     directory.mkdir(parents=True)
     return directory
-
-
-def _start_qgis() -> None:
-    """Start one headless ``QgsApplication`` for the whole native run."""
-    global _APPLICATION
-    if _APPLICATION is not None:
-        return
-    prefix = Path(sys.prefix)
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    os.environ.setdefault("PROJ_LIB", str(prefix / "share" / "proj"))
-    os.environ.setdefault("QGIS_PREFIX_PATH", str(prefix))
-    bindings = str(_qgis_python_path())
-    if bindings not in sys.path:
-        sys.path.insert(0, bindings)
-
-    from qgis.core import QgsApplication
-
-    QgsApplication.setPrefixPath(str(prefix), True)
-    application = QgsApplication([b"qgis-sdk-services-contract"], True)
-    application.initQgis()
-    _APPLICATION = application
 
 
 def _fake_services() -> Services:
@@ -203,8 +181,8 @@ def _fake_services() -> Services:
 
 
 def _native_services() -> Services:
-    # Environment and bindings path must be in place before QGIS is imported.
-    _start_qgis()
+    # The session's application, started here if no module asked before.
+    test_layers.start_application()
 
     from qgis.core import QgsProject
     from qgis_sdk.adapters.qgis import (
@@ -258,21 +236,24 @@ if _native_available():
     BACKENDS["native"] = _native_services
 
 
-@pytest.fixture(params=sorted(BACKENDS))
+def _backend_params() -> list[object]:
+    return [
+        pytest.param(name, marks=pytest.mark.qgis) if name == "native" else name
+        for name in sorted(BACKENDS)
+    ]
+
+
+@pytest.fixture(params=_backend_params())
 def services(request: pytest.FixtureRequest) -> Services:
     """Run the calling contract test against every registered backend."""
     return BACKENDS[request.param]()
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _stop_qgis_after_the_session() -> object:
-    """Stop the headless application this suite may have started."""
+def _remove_native_outputs_after_the_session() -> object:
+    """Remove the native backend's temporary outputs; QGIS itself is stopped
+    by the session fixture in ``tests/conftest.py``."""
     yield
-    global _APPLICATION
-    application = _APPLICATION
-    if application is not None:
-        _APPLICATION = None
-        application.exitQgis()  # type: ignore[attr-defined]
     shutil.rmtree(_WORK_ROOT, ignore_errors=True)
 
 

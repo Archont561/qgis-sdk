@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 import pytest
 from qgis_sdk.models import QgisSdkStyleIncompatibleError
 
+pytestmark = pytest.mark.qgis
+
 if TYPE_CHECKING:
     from .conftest import Services
 

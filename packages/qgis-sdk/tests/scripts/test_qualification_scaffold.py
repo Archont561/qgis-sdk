@@ -146,6 +146,7 @@ def test_a_run_without_a_qgis_prefix_reports_instead_of_raising(tmp_path: Path) 
     assert "QGIS Desktop executable not found" in (report.error or "")
 
 
+@pytest.mark.desktop
 @pytest.mark.skipif(
     os.environ.get(SMOKE_ENV_FLAG) != "1",
     reason=f"set {SMOKE_ENV_FLAG}=1 to load and unload the scaffold in real QGIS Desktop",

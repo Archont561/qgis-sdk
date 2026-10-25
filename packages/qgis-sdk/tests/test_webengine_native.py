@@ -15,30 +15,19 @@ TASK-23 headless harness qualified (``scripts/webengine_smoke.py``).
 
 from __future__ import annotations
 
-import os
-import sys
-import threading
-import time
 from collections.abc import Callable, Iterator
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from native_support import LoopbackOrigin, pump, serve, settle
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-os.environ.setdefault(
-    "QTWEBENGINE_CHROMIUM_FLAGS",
-    "--no-sandbox --disable-gpu --disable-dev-shm-usage --single-process",
-)
-_BINDINGS = Path(sys.prefix) / "share" / "qgis" / "python"
-if _BINDINGS.is_dir() and str(_BINDINGS) not in sys.path:
-    sys.path.insert(0, str(_BINDINGS))
+# The webengine layer. The offscreen platform, the Chromium flags and the
+# bindings path are prepared by tests/conftest.py before this module loads.
+pytestmark = pytest.mark.webengine
 
 try:
     from PyQt6 import sip
     from PyQt6.QtCore import QUrl
-    from PyQt6.QtWebEngineCore import QWebEngineProfile
-    from PyQt6.QtWidgets import QApplication
     from qgis_sdk.adapters.webengine import (
         BrowserPolicy,
         Decision,
@@ -49,97 +38,21 @@ except ImportError as error:  # pragma: no cover - depends on the host
         f"native WebEngine needs Qt WebEngine: {error}", allow_module_level=True
     )
 
-DEADLINE_SECONDS = 20.0
 
-
-# -- loopback origins ------------------------------------------------------------
-
-
-class _Handler(BaseHTTPRequestHandler):
-    def log_message(self, *args: object) -> None:
-        """Quiet; the test reads ``server.seen`` instead."""
-
-    def do_GET(self) -> None:
-        server = self.server
-        assert isinstance(server, _Origin)
-        server.seen.append(self.path)
-        body, content_type = server.pages.get(
-            self.path.split("?")[0], (b"hello", "text/plain")
-        )
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(body)
-
-
-class _Origin(ThreadingHTTPServer):
-    allow_reuse_address = True
-
-    def __init__(self) -> None:
-        super().__init__(("127.0.0.1", 0), _Handler)
-        self.seen: list[str] = []
-        self.pages: dict[str, tuple[bytes, str]] = {}
-
-    @property
-    def origin(self) -> str:
-        return f"http://127.0.0.1:{self.server_port}"
-
-    def url(self, path: str) -> str:
-        return self.origin + path
-
-    def page(self, path: str, html: str) -> None:
-        self.pages[path] = (html.encode("utf-8"), "text/html; charset=utf-8")
-
-
-def _serve() -> Iterator[_Origin]:
-    server = _Origin()
-    thread = threading.Thread(
-        target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
-    )
-    thread.start()
-    try:
-        yield server
-    finally:
-        server.shutdown()
-        server.server_close()
+@pytest.fixture(scope="module")
+def allowed() -> Iterator[LoopbackOrigin]:
+    yield from serve()
 
 
 @pytest.fixture(scope="module")
-def allowed() -> Iterator[_Origin]:
-    yield from _serve()
+def blocked() -> Iterator[LoopbackOrigin]:
+    yield from serve()
 
 
 @pytest.fixture(scope="module")
-def blocked() -> Iterator[_Origin]:
-    yield from _serve()
-
-
-@pytest.fixture(scope="module")
-def app():
-    """One headless application; reuse whatever another module started."""
-    existing = QApplication.instance()
-    if existing is not None:
-        return existing
-    return QApplication([sys.argv[0]])
-
-
-def pump(app, until: Callable[[], bool], *, deadline: float = DEADLINE_SECONDS) -> None:
-    end = time.monotonic() + deadline
-    while not until():
-        if time.monotonic() > end:
-            raise AssertionError("condition not met within the deadline")
-        app.processEvents()
-        time.sleep(0.005)
-
-
-def settle(app, seconds: float) -> None:
-    """Spin the loop for a while: the absence of a request needs time to show."""
-    end = time.monotonic() + seconds
-    while time.monotonic() < end:
-        app.processEvents()
-        time.sleep(0.005)
+def app(qt_app):
+    """The session's one application (see ``tests/layers.py``)."""
+    return qt_app
 
 
 class _Page:
@@ -184,13 +97,9 @@ class _Page:
 
 
 @pytest.fixture(scope="module")
-def profile(app):
-    """One off-the-record profile for the module, outliving every page.
-
-    Chromium tears a profile down once; destroying one and creating another
-    in the same process aborts, so the pages come and go and this stays.
-    """
-    return QWebEngineProfile(app)
+def profile(webengine_profile):
+    """The session's one profile (see ``tests/conftest.py``): pages come and go."""
+    return webengine_profile
 
 
 @pytest.fixture
@@ -232,7 +141,7 @@ window.results.opened = String(window.open("{blocked}/popup"));
 
 
 def test_a_page_cannot_reach_an_origin_the_policy_did_not_grant(
-    app, make_page, allowed: _Origin, blocked: _Origin
+    app, make_page, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
     allowed.page(
         "/",
@@ -280,7 +189,7 @@ def test_a_page_cannot_reach_an_origin_the_policy_did_not_grant(
 
 
 def test_a_navigation_out_of_the_policy_is_refused_and_one_inside_is_not(
-    app, make_page, allowed: _Origin, blocked: _Origin
+    app, make_page, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
     allowed.page("/start", "<html><body>start</body></html>")
     allowed.page("/second", "<html><body>second</body></html>")
@@ -319,7 +228,7 @@ def test_a_navigation_out_of_the_policy_is_refused_and_one_inside_is_not(
 
 
 def test_a_subframe_cannot_navigate_out_either(
-    app, make_page, allowed: _Origin, blocked: _Origin
+    app, make_page, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
     allowed.page(
         "/parent",
@@ -350,7 +259,7 @@ def test_a_subframe_cannot_navigate_out_either(
 
 
 def test_packaged_assets_load_from_their_root_and_from_nowhere_else(
-    app, make_page, tmp_path: Path, allowed: _Origin, blocked: _Origin
+    app, make_page, tmp_path: Path, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
     """A ``file:`` page: its own root, a granted origin, and nothing else."""
     root = tmp_path / "assets"

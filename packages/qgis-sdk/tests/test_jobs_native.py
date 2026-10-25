@@ -12,24 +12,19 @@ what it lacks instead of failing collection.
 
 from __future__ import annotations
 
-import os
-import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from pathlib import Path
 
 import pytest
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-_BINDINGS = Path(sys.prefix) / "share" / "qgis" / "python"
-if _BINDINGS.is_dir() and str(_BINDINGS) not in sys.path:
-    sys.path.insert(0, str(_BINDINGS))
+# The qt layer: a real event loop and thread pool, no QGIS needed. The headless
+# environment and the bindings path are prepared by tests/conftest.py.
+pytestmark = pytest.mark.qt
 
 try:
     from PyQt6.QtCore import QThread, QThreadPool, QTimer
-    from PyQt6.QtWidgets import QApplication
     from qgis_sdk.adapters.qgis.workers import ThreadPoolWorkers
     from qgis_sdk.core import JobContext, ResourceScope
     from qgis_sdk.jobs import JobService, JobStatus, job
@@ -72,12 +67,9 @@ class Count:
 
 
 @pytest.fixture(scope="module")
-def app():
-    """One headless application; reuse whatever another module started."""
-    existing = QApplication.instance()
-    if existing is not None:
-        return existing
-    return QApplication([sys.argv[0]])
+def app(qt_app):
+    """The session's one application (see ``tests/layers.py``)."""
+    return qt_app
 
 
 @pytest.fixture()
