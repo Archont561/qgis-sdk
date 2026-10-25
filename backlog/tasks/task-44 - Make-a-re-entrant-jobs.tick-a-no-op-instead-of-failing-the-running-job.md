@@ -1,10 +1,10 @@
 ---
 id: TASK-44
 title: Make a re-entrant jobs.tick() a no-op instead of failing the running job
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-25T00:21:00Z'
-updated_date: '2026-10-25T00:22:00Z'
+updated_date: '2026-10-25 00:38'
 labels: []
 milestone: m-2
 dependencies:
@@ -22,8 +22,14 @@ Found by the 2026-10-25 TASK-15 audit. A nested `JobService.tick()` while a job 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A `tick()` (and `quiesce()`) entered while another tick of the same root service is on the stack returns 0 immediately, steps no job and delivers nothing; the outer tick finishes normally.
-- [ ] #2 Re-entry from a subscriber callback during delivery is covered as well as re-entry from author code mid-step; neither job fails, and the queued job still runs on the next real tick.
-- [ ] #3 doc-12 'Scoped jobs' states that nested ticks are ignored; nothing else in the tick contract changes and the scheduler keeps its existing behaviour (the guard lives in JobService).
-- [ ] #4 A unit test in tests/test_jobs.py and a rule in the tests/test_jobs_properties.py state machine (a callback that re-enters tick) pin the behaviour; a Gherkin scenario is added to the jobs feature if TASK-45 lands first.
+- [x] #1 A `tick()` (and `quiesce()`) entered while another tick of the same root service is on the stack returns 0 immediately, steps no job and delivers nothing; the outer tick finishes normally.
+- [x] #2 Re-entry from a subscriber callback during delivery is covered as well as re-entry from author code mid-step; neither job fails, and the queued job still runs on the next real tick.
+- [x] #3 doc-12 'Scoped jobs' states that nested ticks are ignored; nothing else in the tick contract changes and the scheduler keeps its existing behaviour (the guard lives in JobService).
+- [x] #4 A unit test in tests/test_jobs.py and a rule in the tests/test_jobs_properties.py state machine (a callback that re-enters tick) pin the behaviour; a Gherkin scenario is added to the jobs feature if TASK-45 lands first.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in dc03278: `_Runtime.ticking` guards `tick()` (returns 0) and `quiesce()` (refused, blocker 'a tick is already in progress on this thread') for the whole step-plus-delivery span. Evidence: test_jobs.py (author-code re-entry with a queued neighbour; subscriber re-entry; nested quiesce), the state machine re-enters from both places and checks outcomes are the job's own (reverting the guard fails it), and scoped_jobs.feature has the scenario. doc-12 updated.
+<!-- SECTION:NOTES:END -->

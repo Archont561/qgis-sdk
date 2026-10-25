@@ -1,9 +1,10 @@
 ---
 id: TASK-48
 title: Give derived JobService instances a complete constructor
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-25T00:22:00Z'
+updated_date: '2026-10-25 00:38'
 labels:
   - refactor
 milestone: m-2
@@ -22,7 +23,13 @@ Found by the 2026-10-25 TASK-15 audit (core-encapsulation, solid-lsp-contracts).
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 No code path constructs a JobService without running a constructor that sets every attribute the class reads; vars(root) and vars(derived) have the same keys, or the root-only state lives in one shared object both hold.
-- [ ] #2 Public behaviour is unchanged: tests/test_jobs.py, test_jobs_properties.py and test_jobs_native.py pass without modification, and the public surface (__all__) is unchanged.
-- [ ] #3 No new abstraction beyond that one shared-state object; the refactor is one commit, lint and coverage gates stay green.
+- [x] #1 No code path constructs a JobService without running a constructor that sets every attribute the class reads; vars(root) and vars(derived) have the same keys, or the root-only state lives in one shared object both hold.
+- [x] #2 Public behaviour is unchanged: tests/test_jobs.py, test_jobs_properties.py and test_jobs_native.py pass without modification, and the public surface (__all__) is unchanged.
+- [x] #3 No new abstraction beyond that one shared-state object; the refactor is one commit, lint and coverage gates stay green.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in dc03278 together with TASK-44/46/47 (they share the same restructuring, so one commit rather than one per task): `_Runtime` dataclass holds scheduler, attempts, counters, faults, owner hooks, workers, network, gui_thread, on_fault and the ticking flag; root and derived services both set exactly `_scope`, `_parent`, `_runtime` through `_bind`. Test: vars(root) == vars(derived) keys. Public __all__ unchanged; existing test files pass with no change except the two tests that pinned the old result contract (TASK-46).
+<!-- SECTION:NOTES:END -->

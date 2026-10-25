@@ -1,9 +1,10 @@
 ---
 id: TASK-46
 title: Make handle.result raise the job's own failure like get() does
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-25T00:21:00Z'
+updated_date: '2026-10-25 00:38'
 labels: []
 milestone: m-2
 dependencies:
@@ -21,8 +22,14 @@ Found by the 2026-10-25 TASK-15 audit. `JobHandle.result` on a FAILED job raises
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 handle.result on a FAILED job raises the job's recorded exception (the same object handle.error returns); on a CANCELLED job it raises QgisSdkJobCancelledError; on QUEUED/RUNNING it raises QgisSdkJobNotSettledError as today.
-- [ ] #2 QgisSdkJobNotSettledError is only ever constructed for queued/running statuses; its message no longer says 'still <terminal state>'.
-- [ ] #3 Tests cover the three branches through the handle, and the Hypothesis state machine asserts result/get agree for every settled tracked job.
-- [ ] #4 doc-12 'Scoped jobs' documents the result contract in one sentence next to get().
+- [x] #1 handle.result on a FAILED job raises the job's recorded exception (the same object handle.error returns); on a CANCELLED job it raises QgisSdkJobCancelledError; on QUEUED/RUNNING it raises QgisSdkJobNotSettledError as today.
+- [x] #2 QgisSdkJobNotSettledError is only ever constructed for queued/running statuses; its message no longer says 'still <terminal state>'.
+- [x] #3 Tests cover the three branches through the handle, and the Hypothesis state machine asserts result/get agree for every settled tracked job.
+- [x] #4 doc-12 'Scoped jobs' documents the result contract in one sentence next to get().
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in dc03278: `_Attempt.outcome()` is the single reader behind `result` and `get()`; NotSettled is only raised for queued/running. Examples cover failed (same object as `error`) and cancelled; the state machine asserts result and get agree and that the raised kind matches the status (reverting the change fails it). doc-12 documents the contract next to get().
+<!-- SECTION:NOTES:END -->
