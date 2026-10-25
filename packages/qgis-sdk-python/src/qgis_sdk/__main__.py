@@ -8,12 +8,16 @@ reason: unlike the automation tools in ``packages/qgis-sdk-python/scripts``, whi
 development-only and are not part of either distribution, generating a project is a
 library operation with no display, no QGIS and no Qt, so shipping it is the point.
 
-All behaviour lives in :mod:`qgis_sdk.scaffold` and :mod:`qgis_sdk.bridge.generate`,
-so callers that do not want a shell reach the same API directly.
+All behaviour lives in :mod:`qgis_sdk.scaffold`, :mod:`qgis_sdk.check` and
+:mod:`qgis_sdk.bridge.generate`, so callers that do not want a shell reach the
+same API directly. A command that reads or writes anything beyond its
+arguments receives a :class:`qgis_sdk.cli.CliRuntime` through ``ctx.obj``
+(decision-34): the shell gets the process, a test passes its own.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
@@ -29,6 +33,8 @@ from qgis_sdk.bridge.generate import (
     write_generated,
 )
 from qgis_sdk.bridge.host import host_description
+from qgis_sdk.check import QgisSdkCheckError, check_project
+from qgis_sdk.cli import CliRuntime
 from qgis_sdk.models import QgisSdkBridgeError
 from qgis_sdk.scaffold import (
     QgisSdkScaffoldError,
@@ -167,9 +173,55 @@ def _describe(
     return load_description(description), generate_typescript
 
 
+@app.command("check")
+def check(
+    ctx: typer.Context,
+    path: Annotated[
+        Path | None,
+        typer.Argument(help="Plugin project root; defaults to the working directory."),
+    ] = None,
+    native: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--native",
+            help="Module glob allowed to import QGIS at load time (repeatable).",
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Print the report as JSON.")
+    ] = False,
+) -> None:
+    """Read a plugin project and report problems; import, install and change nothing."""
+    runtime: CliRuntime = ctx.obj
+    root = runtime.resolve(path or Path("."))
+    try:
+        report = check_project(root, native_modules=tuple(native or ()))
+    except QgisSdkCheckError as error:
+        typer.echo(str(error), file=runtime.err)
+        raise typer.Exit(code=2) from error
+    if as_json:
+        typer.echo(json.dumps(report.to_json(), indent=2), file=runtime.out)
+    else:
+        for diagnostic in report.diagnostics:
+            typer.echo(diagnostic.render(), file=runtime.out)
+        count = len(report.diagnostics)
+        problems = (
+            "no problems"
+            if count == 0
+            else f"{count} problem{'s' if count != 1 else ''}"
+        )
+        typer.echo(
+            f"checked {report.files_checked} files: {problems}", file=runtime.out
+        )
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
 @app.callback()
-def _callback() -> None:
-    """Keep ``new`` a subcommand, so the verb stays explicit."""
+def _callback(ctx: typer.Context) -> None:
+    """Keep ``new`` a subcommand, and give every command its runtime."""
+    if ctx.obj is None:
+        ctx.obj = CliRuntime.for_process()
 
 
 def _resolve(

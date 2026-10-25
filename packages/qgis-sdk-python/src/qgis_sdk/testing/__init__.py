@@ -5,6 +5,7 @@ Production modules must not import this package: the import-boundary test in
 that a fake can never become a runtime fallback.
 """
 
+from .cli import FakeCliRuntime
 from .fakes import (
     FakeAlgorithms,
     FakeLayers,
@@ -23,6 +24,7 @@ from .network import (
 
 __all__ = [
     "FakeAlgorithms",
+    "FakeCliRuntime",
     "FakeLayers",
     "FakeNetworkTransport",
     "FakeProject",

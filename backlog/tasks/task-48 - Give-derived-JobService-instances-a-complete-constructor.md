@@ -1,10 +1,10 @@
 ---
 id: TASK-48
 title: Give derived JobService instances a complete constructor
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T00:22:00Z'
-updated_date: '2026-10-25 00:38'
+updated_date: '2026-10-25T11:25:00Z'
 labels:
   - refactor
 milestone: m-2
@@ -32,4 +32,6 @@ Found by the 2026-10-25 TASK-15 audit (core-encapsulation, solid-lsp-contracts).
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in dc03278 together with TASK-44/46/47 (they share the same restructuring, so one commit rather than one per task): `_Runtime` dataclass holds scheduler, attempts, counters, faults, owner hooks, workers, network, gui_thread, on_fault and the ticking flag; root and derived services both set exactly `_scope`, `_parent`, `_runtime` through `_bind`. Test: vars(root) == vars(derived) keys. Public __all__ unchanged; existing test files pass with no change except the two tests that pinned the old result contract (TASK-46).
+
+Closed 2026-10-25 at m-3 sprint start (doc-16): the implementation commits (dc03278, 9c74613) merged to main in PR #60 and every criterion was already checked; the status had not been moved.
 <!-- SECTION:NOTES:END -->

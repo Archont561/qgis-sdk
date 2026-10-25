@@ -38,3 +38,13 @@ implemented checks" therefore remains literally true.
 diagnostics for the same boundaries the tests already guard, in the build as well
 as the check command. Until then the guard is real but the decision's contract is
 not delivered.
+
+## Progress (2026-10-25): check emits the diagnostics; build does not yet
+
+TASK-16's first slice (`qgis_sdk.check`, `qgis-sdk check`) now emits `QGIS001`
+and `ARCH001` with path/line/column, rule and remediation, treats module, class,
+`try`, `with` and module-level `if` as import time, allows function bodies and
+`if TYPE_CHECKING:`, and narrows the native exemption to configured globs
+(`[tool.qgis-sdk.check] native-modules`, `--native`). The status stays
+`proposed` for the half of the promotion condition that remains: `qgis-sdk build`
+(TASK-21) calling `check_project` in-process.

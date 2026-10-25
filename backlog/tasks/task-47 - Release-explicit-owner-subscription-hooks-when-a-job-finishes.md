@@ -1,10 +1,10 @@
 ---
 id: TASK-47
 title: Release explicit-owner subscription hooks when a job finishes
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T00:21:00Z'
-updated_date: '2026-10-25 00:38'
+updated_date: '2026-10-25T11:25:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -32,4 +32,6 @@ Found by the 2026-10-25 TASK-15 audit. `JobHandle.on_*(callback, owner=scope)` w
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in dc03278 inside qgis_sdk.jobs (ResourceScope untouched): `_Runtime.owner_hooks` keeps one close hook per explicit owner scope holding the live subscriptions; `JobSubscription.dispose()` releases its entry on every path (finish, owner_disposed, abandoned, explicit dispose). Deviation from AC1 as written: the owner's close list grows by at most one entry per distinct owner scope (not per job), since ResourceScope has no unregister; the regression test asserts <= before + 1 across 20 finished jobs and that the live set is empty. The state machine subscribes through a separate listener scope and checks no settled job holds a hook (reverting the release fails it). doc-12 'Scoped jobs' describes the behaviour.
+
+Closed 2026-10-25 at m-3 sprint start (doc-16): the implementation commits (dc03278, 9c74613) merged to main in PR #60 and every criterion was already checked; the status had not been moved.
 <!-- SECTION:NOTES:END -->
