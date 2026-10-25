@@ -13,7 +13,7 @@ updated_date: '2026-10-16 12:03'
 
 Milestones use valid major.minor.patch targets. Experimental 0.x breaking changes get a documented minor release; patches are compatible fixes. Use prereleases such as 0.3.0-alpha.1/0.3.0-beta.1. Stable 1.0.0 requires a later explicit API-stability decision.
 
-`qgis-sdk` and `@archont561/qgis-sdk` **version independently** ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)). Each package derives its own version from the conventional commits that touch it, starting from its own last release tag; `python-v*` stamps `pyproject.toml` and `recipe.yaml`, `ts-v*` stamps the bridge `package.json`, and `v*` is a deliberate alignment release that stamps all three. What holds a pair together is the plugin-description **contract version** (`PLUGIN_DESCRIPTION_SCHEMA_VERSION`), declared once per language and checked by `release.py verify-versions` on every release; wire protocol versions stay independent of package versions. Within a milestone, feature and fix work bumps only the patch; the minor advances on a breaking change or when a milestone closes by an explicit `--bump minor`/`--version-override`, **per package**. Existing unreleased 0.1.0 metadata is not proof of a published usable release. The 0.6.0 reservation is tentative deferred research and requires renewed approval, not a Rust-shipping commitment.
+`qgis-sdk` and `@archont561/qgis-sdk` **version independently** ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)). Each package derives its own version from the conventional commits that touch it, starting from its own last release tag; `python-v*` stamps `pyproject.toml` and `recipe.yaml`, `ts-v*` stamps the bridge `package.json`, and `v*` is a deliberate alignment release that stamps all three. What holds a pair together is the plugin-description **contract version** (`PLUGIN_DESCRIPTION_SCHEMA_VERSION`), declared once per language and checked by `release.py verify-versions` on every release; wire protocol versions stay independent of package versions. Within a milestone, feature and fix work bumps only the patch; the minor advances on a breaking change or when a milestone closes by an explicit `--bump minor`/`--version-override`, **per package**. Existing unreleased 0.1.0 metadata is not proof of a published usable release. The 0.7.0 reservation (re-pointed from 0.6.0 on 2026-10-25, when the API-ergonomics changes took that number) is tentative deferred research and requires renewed approval, not a Rust-shipping commitment.
 
 ## Milestones and release tasks
 
@@ -24,7 +24,8 @@ Milestones use valid major.minor.patch targets. Experimental 0.x breaking change
 | 0.3.0 [m-2](../../milestones/m-2%20-%200.3.0-%E2%80%94-typed-bridge-runtime-web-ui-networking-and-local-jobs.md) | **0.3.0** | Transport host side, per-view authority, generated fixtures, HTTP client, local jobs (carried over from 0.2.0) | **0.2.0** | Transport contract, generated clients, React helpers, resource authority | [TASK-29](../../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md) |
 | 0.4.0 [m-3](../../milestones/m-3%20-%200.4.0-%E2%80%94-developer-workflow-and-plugin-packaging.md) | **0.4.0** | Scaffolds, check/test/dev/build, ZIP packaging | **unchanged (0.3.0, the rename release of 2026-10-24)** | New consumers (generated projects), not new surface | [TASK-30](../../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md) |
 | 0.5.0 [m-4](../../milestones/m-4%20-%200.5.0-%E2%80%94-qualified-experimental-reference-release.md) | **0.5.0**, published 2026-10-25 (`python-v0.5.0`: kit, runtime and tools) | Three distributions, qualified reference workflow, support matrix and compatibility gates | **unchanged (0.3.0): no defect found** | Qualified as a pair through a real WebEngine view against 0.5.0 | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) |
-| 0.6.0 [m-5](../../milestones/m-5%20-%200.6.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) | tentative | Deferred research only | no release | None planned; nothing published unless revived | [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md) |
+| 0.6.0 [m-6](../../milestones/m-6%20-%200.6.0-%E2%80%94-API-ergonomics-function-jobs-and-capability-attributes.md) | **0.6.0**, planned (runtime, tools and kit together) | Function-form `@job` (decision-38) and capability attributes replacing `require_<name>()` (decision-39) - both already on `main`, documented in doc-12's 0.6.0 migration notes | **unchanged (0.3.0): no bridge source change expected, re-checked by the gate** | Confirmed as a bystander with evidence, not assumed | [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) |
+| 0.7.0 [m-5](../../milestones/m-5%20-%200.7.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) | tentative | Deferred research only | no release | None planned; nothing published unless revived | [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release-tentative-deferred-target.md) |
 
 ## Bridge across milestones
 
@@ -123,5 +124,13 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 
 ### 0.6.0
 
+Re-pointed on 2026-10-25: the two breaking API changes that followed 0.5.0 take the next minor; the deferred native-compute research moves to 0.7.0.
+
+- [TASK-58](../../tasks/task-58%20-%20Redesign-job-as-a-plain-function-with-the-JobContext-injected.md): Redesign @job as a plain function with the JobContext injected (decision-38; landed on PR #86)
+- [TASK-59](../../tasks/task-59%20-%20Expose-optional-context-services-as-capability-attributes-that-refuse-by-name.md): Expose optional context services as capability attributes that refuse by name (decision-39; landed on PR #87)
+- [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md): Prepare and qualify 0.6.0 release
+
+### 0.7.0
+
 - [TASK-10](../../tasks/task-10%20-%20Prototype-an-optional-Rust-algorithm-backend-after-v1.md): Prototype an optional Rust algorithm backend after v1
-- [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.6.0-release-tentative-deferred-target.md): Prepare and qualify 0.6.0 release (tentative deferred target)
+- [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release-tentative-deferred-target.md): Prepare and qualify 0.7.0 release (tentative deferred target)

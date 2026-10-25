@@ -1,10 +1,10 @@
 ---
 id: TASK-32
-title: Prepare and qualify 0.6.0 release (tentative deferred target)
+title: Prepare and qualify 0.7.0 release (tentative deferred target)
 status: To Do
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 19:10'
+updated_date: '2026-10-25 23:26'
 labels: []
 milestone: m-5
 dependencies:
@@ -20,13 +20,13 @@ ordinal: 32000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Explicit release gate, not evidence of release or permission to publish. Verify milestone work and obtain explicit release authorization. Fresh scope/go-no-go approval is required; 0.6.0 is reserved, not a commitment to native shipping.
+Explicit release gate, not evidence of release or permission to publish. Verify milestone work and obtain explicit release authorization. Fresh scope/go-no-go approval is required; 0.7.0 is reserved, not a commitment to native shipping. Re-pointed from 0.6.0 on 2026-10-25, when the API-ergonomics release (m-6, TASK-60) took that number.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Required 0.6.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
-- [ ] #2 Use valid SemVer and prereleases such as 0.6.0-alpha.1; update actual manifests only for released packages and document migration notes.
+- [ ] #1 Required 0.7.0 work has verified outcomes and relevant test/artifact evidence; unresolved targets/spikes remain blockers.
+- [ ] #2 Use valid SemVer and prereleases such as 0.7.0-alpha.1; update actual manifests only for released packages and document migration notes.
 - [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; keep protocol versions independent.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [ ] #5 The expected zero bridge delta is confirmed rather than assumed: no file under `packages/qgis-sdk-typescript` changed, no npm version is consumed, and the plugin-description contract version still agrees across both languages.
@@ -38,7 +38,7 @@ Explicit release gate, not evidence of release or permission to publish. Verify 
 author: qgis-sdk agent
 created: 2026-10-24 19:10
 ---
-AC #5 was added on 2026-10-24 to carry the bridge obligation [m-5](../milestones/m-5%20-%200.6.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) already states: a native backend changes what runs behind Python, not what crosses `QWebChannel`, so this milestone expects no bridge release at all - and the milestone requires that expectation to be re-checked rather than repeated. Deferred or not, the gate has to be able to say "nothing crossed" with evidence. No criterion had been checked.
+AC #5 was added on 2026-10-24 to carry the bridge obligation [m-5](../milestones/m-5%20-%200.7.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) already states: a native backend changes what runs behind Python, not what crosses `QWebChannel`, so this milestone expects no bridge release at all - and the milestone requires that expectation to be re-checked rather than repeated. Deferred or not, the gate has to be able to say "nothing crossed" with evidence. No criterion had been checked.
 ---
 
 created: 2026-10-21 21:56
