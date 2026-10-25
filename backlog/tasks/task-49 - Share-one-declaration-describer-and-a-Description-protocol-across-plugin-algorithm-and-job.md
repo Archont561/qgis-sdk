@@ -3,10 +3,10 @@ id: TASK-49
 title: >-
   Share one declaration-describer and a Description protocol across plugin,
   algorithm and job
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T01:08:00Z'
-updated_date: '2026-10-25 01:24'
+updated_date: '2026-10-25 01:26'
 labels:
   - refactor
 milestone: m-2
@@ -50,4 +50,6 @@ Non-goals: no base class, mixin, metaclass or method added to author classes; no
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in PR #61. declarations.py now owns Metadata/metadata, mark_class/declare_class/declared_metadata, resolve_hints/schema_for, RunSignature + describe_run_method(cls, attribute, kind), type_name, canonical_json, the runtime-checkable Description protocol, and describe(cls) over a register_describer registry (each decorating module registers its marker on import, so declarations never imports a higher layer and test_pure_imports holds). @plugin/@algorithm/@job are one-liners over declare_class; describe_algorithm/describe_job build their concrete description from describe_run_method with the pinned error texts; Algorithm/Job/ProviderDescription gained to_json via canonical_json; bridge/generate.py uses canonical_json for the fingerprint and isinstance(Description) in _as_mapping. TS: isPlainRecord exported once from src/index.ts and imported by bridge.ts and react.ts (stableKey). doc-12 gained a declarations row naming describe() and Description. New tests: packages/qgis-sdk/tests/test_describe.py (12) and an isPlainRecord case in tests/index.test.ts. Gate: Python suite 1065 passed/33 skipped, tests/scripts 174 passed, ruff lint+format clean, biome-check clean, typecheck clean, bun test green, coverage Python 97.10% / bridge 96.49% lines, generate_bridge_clients.py --check: no drift.
+
+Closed with PR #61 (CI: checks, macos, windows all green). Behaviour unchanged: existing declaration/algorithm/job/provider tests, contract vectors and generated artifacts pass unmodified.
 <!-- SECTION:NOTES:END -->
