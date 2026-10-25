@@ -186,14 +186,17 @@ def _install(
     assert options.web is not None
     command = install_command(options.web.package_manager)
     shown = " ".join(command)
-    typer.echo(f"{shown} in {target / 'web'} ...", file=runtime.out)
+    # Forward slashes: valid in every shell the managers run in, and the
+    # message reads the same on every platform.
+    web = (target / "web").as_posix()
+    typer.echo(f"{shown} in {web} ...", file=runtime.out)
     exit_code = runtime.run_process(command, root / "web")
     if exit_code == 0:
         typer.echo(f"{shown}: done", file=runtime.out)
         return
     typer.echo(
         f"{shown} failed (exit {exit_code}). The project is complete; retry with:\n"
-        f"  cd {target / 'web'} && {shown}",
+        f"  cd {web} && {shown}",
         file=runtime.err,
     )
     raise typer.Exit(code=1)
