@@ -552,3 +552,73 @@ rewrite, reproducibility, validation rules, the web build step - is covered
 without QGIS in `tests/test_bundle.py` (which also imports the extracted
 archive in-process) and `tests/test_bundle_cli.py`. Last run here:
 2026-10-25, QGIS 4.2.3: 1 passed in 4 s.
+
+## 0.4.0 release gate (TASK-30, 2026-10-25)
+
+What was run before the Python 0.4.0 stamp was requested, on Linux with
+QGIS 4.2.3 (Qt 6.11.2, Chromium 140), Bun 1.4.2, from `main` `7c7a1d0`
+plus the gate branch. Every line is a command that ran here; nothing is
+inferred from CI.
+
+- **Required work.** TASK-6, TASK-8, TASK-16, TASK-19, TASK-21, TASK-26
+  (and TASK-29, the previous gate) are Done; their merges are PRs #65,
+  #69-#71, #73 and #74, each green on `checks`, macOS and Windows.
+- **Scope.** `release.py plan --scope python --bump minor` from
+  `python-v0.3.0` plans `python-v0.4.0` with ten features and three fixes
+  (the push default would plan a 0.3.1 patch; the minor is the explicit
+  act doc-4 requires). `plan --scope typescript` skips: no release-worthy
+  commit since `ts-v0.3.0`, and `git diff ts-v0.3.0..main` under
+  `packages/qgis-sdk-typescript` and `packages/qgis-sdk-alias` is empty, so
+  the bridge is not released (TASK-30 AC5). `verify-versions` agrees on
+  0.3.0 for both scopes and on contract version 1; the planned stamp moves
+  the Python manifests only.
+- **Changelog fix.** The 0.4.0 Python range starts before the 2026-10-24
+  directory rename, and `release.py` classified commits by the new
+  `packages/qgis-sdk-python/` prefix only, so the four features of PR #65
+  (`new`, derived ids, `ctx` class attribute, services on `PluginContext`)
+  were missing from the generated notes. Both spellings now count, with a
+  test in `tests/scripts/test_release.py`.
+- **Static gate.** `lint-python`, `format-python-check` (241 files),
+  `test-release-tool` (192), `lint-github-actions`, `typecheck`,
+  `biome-check` (44 files), `generate_bridge_clients.py --check` (up to
+  date): all clean.
+- **Suites.** Bun 3/3 tasks; `bun run coverage` 96.19% (gate 90%); Python
+  1369 passed, 38 skipped; `tests/scripts` 192 passed.
+- **Opt-in harnesses, one process per file** (see the note below):
+  lifecycle 5, desktop adapter 22, coexistence 23, scaffold desktop 10,
+  scaffold web 8 (21 s), native services qualification 6 + 1 skipped and
+  `tests/services` 112, devtools 9 (29 s), built ZIP in a clean profile 1,
+  headless WebEngine smoke 9. All passed.
+- **Artifact.** `release.py build-python` + `verify-python` (twine) pass
+  on `qgis_sdk-0.3.0-py3-none-any.whl` (99 files: `qgis_sdk`,
+  `qgis_sdk_tools`, `dist-info/licenses/LICENSE`, no tests, no scripts,
+  console script `qgis-sdk = qgis_sdk_tools.__main__:main`, one runtime
+  dependency `typer==0.27.3`). In a fresh `venv` with only that wheel and
+  its dependencies, every runtime and tools module imports without `qgis`
+  entering `sys.modules`; `qgis-sdk new field_tools --no-input`, `check`
+  (`checked 3 files: no problems`) and `build` (70 files, runtime 0.3.0,
+  web: none) run from the installed package; the unpacked ZIP imports with
+  the SDK absent from the interpreter, resolving `field_tools._vendor.qgis_sdk`
+  and nothing top-level. `qgis-sdk test` needs `pytest`, which the wheel
+  does not require - the `dev` extra does; that is the documented shape,
+  not a defect.
+- **Licences.** The wheel carries the MIT `LICENSE`; the built ZIP carries
+  the SDK `NOTICE` under `_vendor`. That is the whole licence validation
+  `build` performs: `DEP001` refuses third-party code inside the package, so
+  there is no other licence to collect yet. When the `external` allowance
+  grows beyond the runtime, licence collection becomes a build rule.
+- **Not done here, by design.** No version bump, tag, GitHub Release or
+  upload; the stamp PR and the `python-v0.4.0` tag wait for an explicit
+  request (TASK-30 AC4; TASK-29 is the template).
+
+**Run the webengine harnesses in separate processes.** The scaffold-web
+harness drives a *generated* plugin's view, which uses Chromium's default
+profile, while `test_webchannel_native.py` and `test_webengine_native.py`
+share the session's off-the-record `webengine_profile`. One process that
+runs the former and then either of the latter aborts (exit 134, after every
+test passed) when Chromium tears the profiles down. Since 2026-10-25
+`tests/conftest.py` skips the other webengine modules, with the reason,
+whenever `test_scaffold_web_native.py` is collected in the same process
+(`QGIS_SDK_SCAFFOLD_WEB=1`), so a combined invocation reports skips instead
+of dying; the evidence run stays one file per process.
+

@@ -87,8 +87,17 @@ Read from the task files:
   install of two plugins in a real QGIS with `qgis_sdk` import refused
   (`QGIS_SDK_BUILD_INSTALL=1`, decision-3). TASK-16's build-reuse criterion
   closes with it.
-- **Close: TASK-30.** Release gate; the Python minor is the deliberate act
-  the version policy requires.
+- **Close: TASK-30 (2026-10-25).** Release gate; the Python minor is the
+  deliberate act the version policy requires. Qualified without stamping:
+  the required tasks are Done with merged PRs, `release.py plan` yields
+  `python-v0.4.0` only with `--bump minor` and skips the bridge, the wheel
+  installs and runs `new`/`check`/`build` in a clean venv, every opt-in
+  harness passed one file per process (doc-14, "0.4.0 release gate"), and
+  two findings were fixed on the way: the generated changelog dropped the
+  pre-rename commits of PR #65, and one pytest process could not hold the
+  scaffold-web harness next to the other webengine modules. decision-15 is
+  accepted; its presentation-state restore stays deferred. The stamp, tag
+  and publication are AC4 and wait for an explicit request.
 
 ## 4. Hygiene done at sprint start
 
