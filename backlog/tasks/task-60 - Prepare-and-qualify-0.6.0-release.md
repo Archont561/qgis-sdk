@@ -5,7 +5,7 @@ status: To Do
 assignee: []
 created_date: '2026-10-25 23:27'
 labels: []
-milestone: m-6
+milestone: m-5
 dependencies:
   - TASK-58
   - TASK-59
@@ -18,7 +18,7 @@ ordinal: 60000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Explicit release gate, not evidence of release or permission to publish. 0.6.0 is the API-ergonomics minor (m-6): function-form @job (decision-38, TASK-58) and capability attributes replacing require_<name>() (decision-39, TASK-59), both already on main with doc-12 migration notes. Verify the milestone work with the 0.5.0 gate re-run over the new API and obtain explicit release authorization; stamp, tag (python-v0.6.0 on the merge commit) and publish only on that authorization, with an -rc.N dry run first if asked.
+Explicit release gate, not evidence of release or permission to publish. 0.6.0 is the API-ergonomics minor (m-5): function-form @job (decision-38, TASK-58) and capability attributes replacing require_<name>() (decision-39, TASK-59), both already on main with doc-12 migration notes. Verify the milestone work with the 0.5.0 gate re-run over the new API and obtain explicit release authorization; stamp, tag (python-v0.6.0 on the merge commit) and publish only on that authorization, with an -rc.N dry run first if asked.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
