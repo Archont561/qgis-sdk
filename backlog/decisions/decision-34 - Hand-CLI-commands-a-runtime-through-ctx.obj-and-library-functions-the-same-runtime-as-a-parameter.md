@@ -64,3 +64,16 @@ monkeypatching module globals is how CLI suites rot, and the owner asked on
   passing, because the real runtime is still the default.
 - `FakeCliRuntime` is public API of the testing package and follows its
   compatibility rules.
+
+## Amendment (2026-10-25): `new` is the second consumer
+
+Point 6 held until the command needed something injectable. TASK-19's
+questionnaire reads a terminal and `--install` spawns a package manager, so
+`new` now takes `ctx` and the runtime grew three typed fields: `inp` (what a
+question reads), `interactive` (whether one may be asked at all: both
+`stdin` and `stdout` are terminals) and `run_process` (argv, cwd → exit code,
+terminal attached, `127` for a missing executable). The questionnaire itself
+is data plus a pure loop in `qgis_sdk.scaffold.questionnaire`; the CLI
+supplies the `ask` callable over `runtime.out`/`runtime.inp`. `bridge
+generate` is still not retrofitted.
+

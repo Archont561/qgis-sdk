@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Final
 
 from .options import QgisSdkScaffoldError, ScaffoldOptions
+from .web import install_command, plan_web, script_command
 
 LF: Final = "\n"
 
@@ -25,7 +26,7 @@ from __future__ import annotations
 from qgis_sdk import action, plugin
 from qgis_sdk.adapters.desktop import create_class_factory
 from qgis_sdk.core import PluginContext, ResourceScope
-
+{web_import}
 
 class MessageBarNotifications:
     """Send informational messages to the host message bar, if there is one."""
@@ -84,8 +85,57 @@ def _qgis_is_running() -> bool:
     return QgsApplication.instance() is not None
 
 
-classFactory = create_class_factory({class_name}Plugin, context_factory=build_context)
-'''
+{class_factory}'''
+
+PLAIN_CLASS_FACTORY = """classFactory = create_class_factory({class_name}Plugin, context_factory=build_context)
+"""
+
+# With a web UI, QGIS holds a small wrapper: the SDK lifecycle as before plus
+# one toolbar button that opens the page. ``webview`` imports Qt inside its
+# functions, so this module still loads without QGIS.
+WEB_CLASS_FACTORY = """_lifecycle = create_class_factory({class_name}Plugin, context_factory=build_context)
+
+
+class {class_name}Desktop:
+    \"\"\"What QGIS holds: the SDK lifecycle plus one toolbar button for the page.\"\"\"
+
+    def __init__(self, iface: object | None) -> None:
+        self._iface = iface
+        self._plugin = _lifecycle(iface)
+        self._action: object | None = None
+        self._view: object | None = None
+
+    @property
+    def runtime(self) -> object:
+        \"\"\"The SDK runtime: the tests read it, the view's dispatcher is built from it.\"\"\"
+        return self._plugin.runtime
+
+    def initGui(self) -> None:
+        self._plugin.initGui()
+        self._action = webview.add_toolbar_action(self._iface, "{title}", self.show_view)
+
+    def show_view(self) -> None:
+        \"\"\"Open the page on first use; bring it to the front after that.\"\"\"
+        if self._view is None:
+            self._view = webview.open_view(
+                self.runtime, self._iface, placement="{placement}"
+            )
+        self._view.show()
+        self._view.raise_()
+
+    def unload(self) -> None:
+        if self._view is not None:
+            webview.close_view(self._view, self._iface)
+            self._view = None
+        webview.remove_toolbar_action(self._iface, self._action)
+        self._action = None
+        self._plugin.unload()
+
+
+def classFactory(iface: object | None) -> {class_name}Desktop:
+    \"\"\"QGIS calls this with its interface; the starter tests call it with ``None``.\"\"\"
+    return {class_name}Desktop(iface)
+"""
 
 STARTER_TEST = '''"""Smoke tests for {title}. They need no QGIS install and no display."""
 
@@ -145,14 +195,15 @@ def plan_scaffold(options: ScaffoldOptions) -> tuple[GeneratedFile, ...]:
     Paths are built from the validated package name, so no entry can escape
     ``target``: an identifier cannot contain a separator or a parent reference.
     """
-    values = (
+    values = [
         GeneratedFile("README.md", _readme(options)),
         GeneratedFile("pyproject.toml", PYPROJECT),
         GeneratedFile(f"{options.plugin}/metadata.txt", _metadata(options)),
         GeneratedFile(f"{options.plugin}/__init__.py", ENTRY_POINT),
         GeneratedFile(f"{options.plugin}/plugin.py", _plugin_module(options)),
         GeneratedFile("tests/test_plugin_smoke.py", _starter_test(options)),
-    )
+        *(GeneratedFile(path, content) for path, content in plan_web(options)),
+    ]
     return tuple(sorted(values, key=lambda file: file.path))
 
 
@@ -190,10 +241,23 @@ def _metadata(options: ScaffoldOptions) -> str:
 
 
 def _plugin_module(options: ScaffoldOptions) -> str:
+    class_name = _class_name(options.plugin)
+    if options.web is None:
+        web_import = ""
+        class_factory = PLAIN_CLASS_FACTORY.format(class_name=class_name)
+    else:
+        web_import = "from . import webview\n"
+        class_factory = WEB_CLASS_FACTORY.format(
+            class_name=class_name,
+            title=options.title,
+            placement=options.web.placement,
+        )
     return PLUGIN_MODULE.format(
         title=options.title,
         plugin=options.plugin,
-        class_name=_class_name(options.plugin),
+        class_name=class_name,
+        web_import=web_import,
+        class_factory=class_factory,
     )
 
 
@@ -268,6 +332,41 @@ The starter tests need `qgis_sdk` importable and no QGIS install:
 ```sh
 PYTHONPATH=<path to the qgis-sdk workspace>/packages/qgis-sdk-python/src pytest -q
 ```
+{_web_readme(options)}"""
+
+
+def _web_readme(options: ScaffoldOptions) -> str:
+    web = options.web
+    if web is None:
+        return ""
+    plugin = options.plugin
+    manager = web.package_manager
+    run = " ".join(script_command(manager, "{script}"))
+    install = " ".join(install_command(manager))
+    framework = "React" if web.framework == "react" else "vanilla TypeScript"
+    return f"""
+## Web UI
+
+`web/` is a Vite app ({framework}) that QGIS shows as a {web.placement}: the
+{options.title!r} toolbar button opens it. The page talks to the plugin through
+the typed client in `web/src/bridge.ts`, generated from the declarations in
+`{plugin}/plugin.py` and checked in. Run `{run.format(script="bindings")}` in CI
+(it runs `qgis-sdk bridge generate --check`) so the file cannot drift from them.
+
+```sh
+cd web
+{install}
+{run.format(script="test")}     # Vitest against the scripted host in @archont561/qgis-sdk/testing
+{run.format(script="build")}    # writes {plugin}/web/index.html and its assets
+{run.format(script="dev")}      # Vite dev server; outside QGIS the page has no host to talk to
+```
+
+Build before enabling the plugin: `{plugin}/webview.py` loads
+`{plugin}/web/index.html` from disk and shows a hint until it exists. The page
+is confined to that directory by `BrowserPolicy(asset_roots=...)` and reaches
+no remote origin until you grant one there. Dependencies are pinned to the
+versions this SDK release was qualified with; the Chromium target in
+`web/vite.config.ts` follows the oldest QGIS you support.
 """
 
 

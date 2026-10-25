@@ -7,12 +7,13 @@ SDK through :func:`qgis_sdk.adapters.desktop.create_class_factory`.
 """
 
 from .generate import GeneratedFile, plan_scaffold, write_scaffold
-from .options import QgisSdkScaffoldError, ScaffoldOptions
+from .options import QgisSdkScaffoldError, ScaffoldOptions, WebOptions
 
 __all__ = [
     "GeneratedFile",
     "QgisSdkScaffoldError",
     "ScaffoldOptions",
+    "WebOptions",
     "plan_scaffold",
     "write_scaffold",
 ]

@@ -26,7 +26,7 @@ is documented, nothing is promised stable.
 
 ```sh
 pip install qgis-sdk
-qgis-sdk new my_tools --title "My Tools"   # a loadable plugin project
+qgis-sdk new my_tools --title "My Tools"   # a loadable plugin project (asks about a web UI)
 qgis-sdk check my_tools                    # QGIS-free project checks
 ```
 

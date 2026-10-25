@@ -42,6 +42,8 @@ from qgis_sdk.scaffold import (
     plan_scaffold,
     write_scaffold,
 )
+from qgis_sdk.scaffold.questionnaire import Question, WebAnswers, ask_web_questions
+from qgis_sdk.scaffold.web import install_command
 
 app = typer.Typer(
     add_completion=False,
@@ -56,6 +58,7 @@ app.add_typer(bridge_app, name="bridge")
 
 @app.command("new")
 def new(
+    ctx: typer.Context,
     target: Annotated[
         Path, typer.Argument(help="Directory to create the plugin project in.")
     ],
@@ -79,6 +82,28 @@ def new(
         str | None,
         typer.Option(help="Lowest QGIS version allowed to load the plugin."),
     ] = None,
+    web: Annotated[
+        str | None,
+        typer.Option(help="Add a web UI: vanilla or react (a terminal is asked)."),
+    ] = None,
+    placement: Annotated[
+        str | None,
+        typer.Option(help="Show the web UI as a dialog (default) or a dock."),
+    ] = None,
+    package_manager: Annotated[
+        str | None,
+        typer.Option(help="npm (default), pnpm or bun for the web UI."),
+    ] = None,
+    install: Annotated[
+        bool | None,
+        typer.Option(
+            "--install/--no-install",
+            help="Run the package manager's install in web/ after writing.",
+        ),
+    ] = None,
+    no_input: Annotated[
+        bool, typer.Option("--no-input", help="Never ask; flags and defaults decide.")
+    ] = False,
     dry_run: Annotated[
         bool, typer.Option(help="Print the file plan and write nothing.")
     ] = False,
@@ -86,8 +111,17 @@ def new(
         bool, typer.Option(help="Regenerate files that already exist.")
     ] = False,
 ) -> None:
-    """Write a minimal, loadable plugin project at TARGET."""
+    """Write a minimal, loadable plugin project at TARGET, with a web UI if asked."""
+    runtime: CliRuntime = ctx.obj
     try:
+        answers = _web_answers(
+            runtime,
+            web=web,
+            placement=placement,
+            package_manager=package_manager,
+            install=install,
+            no_input=no_input,
+        )
         options = _resolve(
             target,
             plugin=plugin,
@@ -96,11 +130,76 @@ def new(
             email=email,
             version=version,
             qgis_minimum_version=qgis_minimum_version,
+            web=answers.web,
+            placement=answers.placement,
+            package_manager=answers.package_manager,
         )
-        _report(options, target, dry_run=dry_run, force=force)
+        root = runtime.resolve(target)
+        _report(runtime, options, root, dry_run=dry_run, force=force)
     except QgisSdkScaffoldError as error:
-        typer.echo(str(error), err=True)
+        typer.echo(str(error), file=runtime.err)
         raise typer.Exit(code=1) from error
+    if answers.install and not dry_run and options.web is not None:
+        _install(runtime, options, target, root)
+
+
+def _web_answers(
+    runtime: CliRuntime,
+    *,
+    web: str | None,
+    placement: str | None,
+    package_manager: str | None,
+    install: bool | None,
+    no_input: bool,
+) -> WebAnswers:
+    """Flags when any were given; the questionnaire on a terminal; else no web UI."""
+    flagged = any(value is not None for value in (web, placement, package_manager))
+    if install and not flagged:
+        raise QgisSdkScaffoldError("--install needs --web vanilla or --web react")
+    if flagged or no_input or not runtime.interactive:
+        return WebAnswers(web, placement, package_manager, bool(install))
+    return ask_web_questions(_prompter(runtime))
+
+
+def _prompter(runtime: CliRuntime) -> Callable[[Question, str | None], str]:
+    """Show a question on the runtime's streams and read one line; EOF is silence."""
+
+    def ask(question: Question, error: str | None) -> str:
+        if error is not None:
+            typer.echo(error, file=runtime.out)
+        choices = "/".join(question.choices)
+        typer.echo(
+            f"{question.prompt} [{choices}] ({question.default}): ",
+            file=runtime.out,
+            nl=False,
+        )
+        runtime.out.flush()
+        return runtime.inp.readline()
+
+    return ask
+
+
+def _install(
+    runtime: CliRuntime, options: ScaffoldOptions, target: Path, root: Path
+) -> None:
+    """Run the manager's install in web/; on failure keep every file and say how to retry."""
+    assert options.web is not None
+    command = install_command(options.web.package_manager)
+    shown = " ".join(command)
+    # Forward slashes: valid in every shell the managers run in, and the
+    # message reads the same on every platform.
+    web = (target / "web").as_posix()
+    typer.echo(f"{shown} in {web} ...", file=runtime.out)
+    exit_code = runtime.run_process(command, root / "web")
+    if exit_code == 0:
+        typer.echo(f"{shown}: done", file=runtime.out)
+        return
+    typer.echo(
+        f"{shown} failed (exit {exit_code}). The project is complete; retry with:\n"
+        f"  cd {web} && {shown}",
+        file=runtime.err,
+    )
+    raise typer.Exit(code=1)
 
 
 # ``scaffold`` was the command's name through 0.3.0. It keeps working so an
@@ -233,6 +332,9 @@ def _resolve(
     email: str | None,
     version: str | None,
     qgis_minimum_version: str | None,
+    web: str | None,
+    placement: str | None,
+    package_manager: str | None,
 ) -> ScaffoldOptions:
     """Pass only what the caller chose, so the API keeps its own defaults."""
     given = {"plugin": plugin or target.name}
@@ -242,6 +344,9 @@ def _resolve(
         ("email", email),
         ("version", version),
         ("qgis_minimum_version", qgis_minimum_version),
+        ("web", web),
+        ("placement", placement),
+        ("package_manager", package_manager),
     ):
         if value is not None:
             given[key] = value
@@ -249,15 +354,20 @@ def _resolve(
 
 
 def _report(
-    options: ScaffoldOptions, target: Path, *, dry_run: bool, force: bool
+    runtime: CliRuntime,
+    options: ScaffoldOptions,
+    root: Path,
+    *,
+    dry_run: bool,
+    force: bool,
 ) -> None:
     """Echo one project-relative path per line, planned or written."""
     if dry_run:
         for file in plan_scaffold(options):
-            typer.echo(file.path)
+            typer.echo(file.path, file=runtime.out)
         return
-    for path in write_scaffold(options, target, force=force):
-        typer.echo(path.relative_to(target).as_posix())
+    for path in write_scaffold(options, root, force=force):
+        typer.echo(path.relative_to(root).as_posix(), file=runtime.out)
 
 
 def main() -> None:

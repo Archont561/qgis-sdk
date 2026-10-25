@@ -458,3 +458,29 @@ Desktop plugin path, not GUI behaviour: no widget is shown, so canvas, map and 3
 rendering still need a real display. Last run here: QGIS 4.2.3 and CPython 3.14.8
 on Linux, `"passed": true`. The same kit backs the adapter evidence in
 [Real Desktop startup and unload evidence](#real-desktop-startup-and-unload-evidence).
+
+### Generated web projects: toolchain and in-QGIS evidence
+
+`qgis-sdk new --web vanilla|react` writes a Vite app whose dependencies are
+pinned to the versions the release was qualified with (`WEB_TEMPLATE_VERSIONS`
+in `qgis_sdk/scaffold/web.py`, `@archont561/qgis-sdk` by exact version). The
+unit tests prove the plan - file list, pins, `bridge generate --check` finding
+no drift in the checked-in client, `check` passing with no native exemption,
+the starter pytest passing - without a network. What they cannot prove is that
+the pinned toolchain resolves and that the built page works inside Chromium,
+so `tests/test_scaffold_web_native.py` is opt-in:
+
+```sh
+QGIS_SDK_SCAFFOLD_WEB=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_scaffold_web_native.py
+```
+
+For every package manager it finds (`bun`, `npm`, `pnpm` on `PATH`, or Bun in
+the sibling Pixi environment) and for both frameworks it scaffolds, runs the
+manager's install, `test` (Vitest against the scripted host), `typecheck`
+(`tsc`) and `build`, then loads the built `<plugin>/web/index.html` in a
+restricted `QWebEnginePage` under a headless `QgsApplication`, clicks Ping in
+the page and waits for the plugin's answer to arrive over QWebChannel; the
+React project opens as a dock, the vanilla one as a dialog. Last run here:
+2026-10-25, QGIS 4.2.3 (Qt 6.11.2, Chromium 140) on Linux with Bun 1.4.2,
+npm 10.9.8 (Node 22) and pnpm 10.34.8: 12 passed. A manager that is absent
+is a skip, never a pass.
