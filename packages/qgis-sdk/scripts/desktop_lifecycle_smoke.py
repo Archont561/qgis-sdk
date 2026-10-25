@@ -146,12 +146,13 @@ def _run_lifecycle(prefix: Path) -> LifecycleReport:
 
     @plugin(id="qualification.lifecycle", title="Lifecycle qualification")
     class LifecyclePlugin:
-        def __init__(self, ctx: PluginContext) -> None:
-            self.ctx = ctx
-            ctx.scope.on_close(lambda: released.append("action"))
-            ctx.scope.on_close(lambda: released.append("signal"))
-            ctx.scope.on_close(lambda: released.append("dock"))
-            ctx.scope.on_close(lambda: released.append("work"))
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.ctx.scope.on_close(lambda: released.append("action"))
+            self.ctx.scope.on_close(lambda: released.append("signal"))
+            self.ctx.scope.on_close(lambda: released.append("dock"))
+            self.ctx.scope.on_close(lambda: released.append("work"))
 
         @action(id="ping", title="Ping")
         def ping(self, value: int) -> int:

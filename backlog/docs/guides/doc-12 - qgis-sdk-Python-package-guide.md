@@ -56,9 +56,6 @@ class RunRequest:
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx):
-        self.ctx = ctx
-
     @action(id="run", title="Run")
     def run(self, request: RunRequest) -> int:
         return request.count
@@ -235,9 +232,10 @@ from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
-        ctx.scope.on_close(lambda: print("disposed"))
+    ctx: PluginContext           # bound by the runtime; the annotation is for the type checker
+
+    def __init__(self) -> None:
+        self.ctx.scope.on_close(lambda: print("disposed"))
 
     @action(id="run", title="Run")
     def run(self, value: int) -> int:
@@ -246,17 +244,26 @@ class Tools:
 
 context = PluginContext(notifications=..., scope=ResourceScope())
 runtime = PluginRuntime(Tools, context)
-instance = runtime.start()   # calls Tools(context) exactly once
+instance = runtime.start()   # sets Tools.ctx = context, then calls Tools() once
 runtime.actions["run"](3)    # read-only action ID -> bound method
-runtime.unload()             # closes the owned scope once
+runtime.unload()             # closes the owned scope once and removes Tools.ctx
 runtime.unload()             # safe no-op
 ```
 
-The default factory calls `plugin_class(context)`. Pass
+The context is a **class attribute, not a constructor argument** (decision-31).
+`start()` sets `plugin_class.ctx` to the runtime's `PluginContext` before
+constructing the class with no arguments, so `self.ctx` is available everywhere
+including `__init__`; `unload()` (and a failed start) removes the attribute
+again, so the class is plain outside a running lifecycle and never retains a
+closed scope. Annotate `ctx: PluginContext` in the class body for IDEs and type
+checkers — it declares the attribute without initialising it, exactly like a
+dataclass field. A constructor that still takes `ctx` fails `start()` with a
+`QgisSdkPluginLifecycleError` that says so. One class runs under one runtime at
+a time; the most recently started runtime owns the attribute. Pass
 `PluginRuntime(..., instance_factory=factory)` when a plugin needs custom
-dependencies; the runtime never inspects or rewrites the constructor.
-Declarations are validated at construction time, but no author code runs until
-`start()`. After construction, every declared action must resolve to a callable
+dependencies: the factory still receives the context, and `ctx` is already
+bound on the class when it runs. Declarations are validated at construction
+time, but no author code runs until `start()`. After construction, every declared action must resolve to a callable
 on the instance; otherwise `QgisSdkPluginLifecycleError`
 (`code="invalid_plugin_lifecycle"`) is raised and startup is rolled back.
 
@@ -910,6 +917,15 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## Unreleased migration notes
 
+- **`PluginContext` is a class attribute.** The runtime no longer calls
+  `plugin_class(context)`; it sets `plugin_class.ctx = context` and calls
+  `plugin_class()`. Replace `def __init__(self, ctx): self.ctx = ctx` with a
+  bare `ctx: PluginContext` annotation (and `def __init__(self)` if you still
+  need one — `self.ctx` is already there). A constructor that keeps the `ctx`
+  parameter fails `start()` with a `QgisSdkPluginLifecycleError` naming the
+  change. `AlgorithmContext` and `JobContext` are unchanged: they are built
+  fresh per invocation/attempt and still arrive through the constructor
+  (decision-11, decision-13).
 - **Declaration ids and titles are optional.** `@plugin`, `@action`, `@stream`,
   `@algorithm`, `@job` and `@provider.algorithm` derive a missing `id=` /
   `title=` from the decorated name (see "Ids and titles default from the name")

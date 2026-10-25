@@ -44,8 +44,7 @@ class RuntimeScenario:
 def declared_plugin_recording_context() -> RuntimeScenario:
     @plugin(id="example.bdd.context", title="Context example")
     class Recorded:
-        def __init__(self, ctx: PluginContext) -> None:
-            self.ctx = ctx
+        ctx: PluginContext
 
         @action(id="run", title="Run")
         def run(self, value: int) -> int:
@@ -84,11 +83,13 @@ def failing_plugin_with_resources() -> RuntimeScenario:
 
     @plugin(id="example.bdd.broken", title="Broken example")
     class Broken:
-        def __init__(self, ctx: PluginContext) -> None:
-            ctx.scope.on_close(lambda: released.append("action"))
-            ctx.scope.on_close(lambda: released.append("signal"))
-            ctx.scope.on_close(lambda: released.append("dock"))
-            ctx.scope.on_close(lambda: released.append("work"))
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.ctx.scope.on_close(lambda: released.append("action"))
+            self.ctx.scope.on_close(lambda: released.append("signal"))
+            self.ctx.scope.on_close(lambda: released.append("dock"))
+            self.ctx.scope.on_close(lambda: released.append("work"))
             raise ValueError("author startup failed")
 
         @action(id="run", title="Run")
@@ -137,9 +138,11 @@ def running_plugin_with_two_resources() -> RuntimeScenario:
 
     @plugin(id="example.bdd.owned", title="Owned example")
     class Owned:
-        def __init__(self, ctx: PluginContext) -> None:
-            ctx.scope.on_close(lambda: released.append("first"))
-            ctx.scope.on_close(lambda: released.append("second"))
+        ctx: PluginContext
+
+        def __init__(self) -> None:
+            self.ctx.scope.on_close(lambda: released.append("first"))
+            self.ctx.scope.on_close(lambda: released.append("second"))
 
         @action(id="run", title="Run")
         def run(self) -> None:

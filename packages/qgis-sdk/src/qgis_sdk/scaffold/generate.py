@@ -54,8 +54,7 @@ class IfaceDesktopAccess:
 class {class_name}Plugin:
     """Declared actions only: no Qt imports and no framework glue to memorise."""
 
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
+    ctx: PluginContext  # bound by the runtime while the plugin is loaded
 
     @action(id="ping", title="Ping")
     def ping(self, value: int) -> int:

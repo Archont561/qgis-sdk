@@ -216,15 +216,16 @@ class IfaceDesktopAccess:
 class SdkPydanticProbe:
     """Exercise PydanticContractAdapter inside a live Desktop plugin."""
 
-    def __init__(self, ctx: PluginContext) -> None:
-        self.ctx = ctx
+    ctx: PluginContext
+
+    def __init__(self) -> None:
         self.adapter = PydanticContractAdapter(
             request_type=ProbeRequest,
             result_reader_type=ProbeResultReader,
             result_writer_type=ProbeResultWriter,
             handler=lambda request: ProbeResultWriter(processed=request.count),
         )
-        OBSERVED["context"] = ctx
+        OBSERVED["context"] = self.ctx
         OBSERVED["adapter"] = self.adapter
         OBSERVED["pydantic_module"] = pydantic
 

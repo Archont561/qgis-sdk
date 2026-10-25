@@ -34,9 +34,6 @@ class RunRequest:
 
 @plugin(id="example.tools", title="Example tools")
 class Tools:
-    def __init__(self, ctx):
-        self.ctx = ctx
-
     @action(id="run", title="Run")
     def run(self, request: RunRequest) -> int:
         return request.count
