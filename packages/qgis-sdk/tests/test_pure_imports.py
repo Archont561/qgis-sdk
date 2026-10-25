@@ -21,6 +21,7 @@ LAYER_ORDER = {
     "resources": 1,
     "core": 2,
     "algorithms": 2,
+    "jobs": 2,
     "providers": 2,
     "network": 2,
     "reference": 3,
@@ -29,6 +30,7 @@ LAYER_ORDER = {
 LAYER_PATHS = {
     "algorithms": SOURCE_ROOT / "algorithms.py",
     "core": SOURCE_ROOT / "core",
+    "jobs": SOURCE_ROOT / "jobs.py",
     "reference": SOURCE_ROOT / "reference",
     "scaffold": SOURCE_ROOT / "scaffold",
     "declarations": SOURCE_ROOT / "declarations.py",
@@ -99,7 +101,7 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
         sys.meta_path.insert(0, RejectNative())
         for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
                        'qgis_sdk.services', 'qgis_sdk.scaffold', 'qgis_sdk.__main__',
-                       'qgis_sdk.core',
+                       'qgis_sdk.core', 'qgis_sdk.jobs',
                        'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
                        'qgis_sdk.adapters.desktop',
                        'qgis_sdk.adapters.pydantic',

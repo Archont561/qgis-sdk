@@ -21,3 +21,25 @@ A cancellation request does not imply cancelled terminal state or safe teardown.
 - Update the earlier Celery-inspired proposal (ADR-13): retries remain future design, not initial scope.
 - Stateful tests cover disposal vs hiding, cancellation races, stuck work, plugin-owned jobs, old-generation callbacks and refused reload.
 - Exact timeout, concurrency limits, scheduler and restart interaction require testing; this decision sets failure behavior, not arbitrary numeric values.
+
+## Implementation note (2026-10-25)
+
+TASK-15 built the job half of this record in `qgis_sdk.jobs`:
+
+- View ownership is `plugin_jobs.scoped(view_scope)`; closing the view disposes
+  its subscriptions before anything else runs, then requests cancellation of
+  its jobs. Hiding is not disposal (nothing is wired to visibility).
+  Plugin-lifetime work is explicit through `ctx.jobs.parent`.
+- Cancellation is a request until acknowledged: `cancel_requested` is set at
+  once, `status` moves to `cancelled` only when the job sees
+  `QgisSdkJobCancelledError` at a suspension point (or before its first step).
+  Work that finishes anyway is reported as `succeeded`. `quiesce()` names
+  stuck work as a blocker and refuses; no thread is interrupted, and the
+  thread-pool adapter only skips callables that have not started yet.
+- No retries: `attempt` is always `1`, resubmission is a new `delay`.
+- The late-subscriber rule this record left open is now the decision-13
+  replay rule, with disposal beating replay.
+- Stateful coverage: `tests/test_jobs_properties.py` drives submit / tick /
+  cancel / worker reports / close view / close plugin and checks monotonic
+  states, a single truthful terminal event, nothing after owner close, and a
+  closed plugin leaving nothing active.

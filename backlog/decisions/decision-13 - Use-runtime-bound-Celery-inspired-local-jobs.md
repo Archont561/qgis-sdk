@@ -65,3 +65,25 @@ the delivery question were separated on purpose: this record answers *what the
 job API is*, while TASK-15 answers *whether it works*. Keeping the decision
 `proposed` until the task closed would have meant m-2 starting against an
 unsettled API - the exact failure the re-scope was meant to stop repeating.
+
+## Implementation note (2026-10-25)
+
+TASK-15 implemented this record as `qgis_sdk.jobs` over the TASK-13 step
+scheduler, without redesign:
+
+- `@job(id=, title=)` on a class with a typed `async run(inputs) -> Result`;
+  `describe_job` reads it without constructing it, reusing the declarations
+  schema generator.
+- `ctx.jobs.bind(JobClass).delay(inputs)` is the only submission form; the
+  handle carries `id`, `attempt`, `status`, `cancel()`, typed `result` /
+  `error`, and `on_progress` / `on_success` / `on_failure` / `on_cancelled`.
+- Late subscribers replay the current state once, synchronously; a terminal
+  replay completes the subscription; a disposed owner gets nothing, including
+  a replay - a handle whose view closed after the job finished refuses new
+  subscriptions outright (a case the Hypothesis state machine found).
+- `get()` on the GUI thread raises `QgisSdkJobWaitRefusedError`; no nested
+  event loop.
+- Delivery is on `JobService.tick()`, which the host drives from its event
+  loop; `adapters.qgis.ThreadPoolWorkers` is the first `Workers`, and
+  `tests/test_jobs_native.py` shows every callback on the GUI thread over a
+  real `QThreadPool`.

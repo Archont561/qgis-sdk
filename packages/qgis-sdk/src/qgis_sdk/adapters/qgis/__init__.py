@@ -17,6 +17,7 @@ from .processing import NativeProcessingProvider, register_provider
 from .project import NativeProject
 from .settings import NativeSettings
 from .styles import NativeStyles
+from .workers import ThreadPoolWorkers
 
 __all__ = [
     "NativeAlgorithms",
@@ -27,5 +28,6 @@ __all__ = [
     "NativeProject",
     "NativeSettings",
     "NativeStyles",
+    "ThreadPoolWorkers",
     "register_provider",
 ]

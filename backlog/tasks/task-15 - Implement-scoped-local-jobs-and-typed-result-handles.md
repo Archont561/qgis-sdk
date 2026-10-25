@@ -1,10 +1,10 @@
 ---
 id: TASK-15
 title: Implement scoped local jobs and typed result handles
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 17:02'
+updated_date: '2026-10-24 23:59'
 labels: []
 milestone: m-2
 dependencies:
@@ -30,10 +30,26 @@ Implement scoped local jobs and typed result handles. Implement only the documen
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Provide runtime-bound submission, progress, result/error/cancellation and explicit lifetime semantics.
-- [ ] #2 View disposal detaches callbacks and requests cancellation; hiding does not dispose; plugin lifetime is explicit.
-- [ ] #3 Stateful tests cover races/stuck work and acknowledge cancellation; no automatic retries initially.
+- [x] #1 Provide runtime-bound submission, progress, result/error/cancellation and explicit lifetime semantics.
+- [x] #2 View disposal detaches callbacks and requests cancellation; hiding does not dispose; plugin lifetime is explicit.
+- [x] #3 Stateful tests cover races/stuck work and acknowledge cancellation; no automatic retries initially.
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. qgis_sdk/jobs.py (QGIS-free): @job/describe_job (typed run, sync or async), JobService over the TASK-13 StepScheduler with bind(JobClass).delay(inputs), typed JobHandle (logical id, attempt, status, cancel request vs acknowledgement, typed result/error), disposable progress/success/failure/cancelled subscriptions with late-subscriber replay, owner-scoped detachment, GUI-thread get() refusal.
+2. Lifetimes: view-owned by default (service.scoped(view_scope)), explicit plugin-lifetime via the parent service; disposing the owner detaches callbacks and requests cancellation without abandoning the plugin's scheduler; hiding is nothing; plugin unload abandons through the scheduler. JobContext gains optional workers/network; Workers seam with a FakeWorkers for tests.
+3. Tests: examples for every rule, a Hypothesis state machine for interleaved submit/tick/cancel/report/dispose, stuck work and cancellation races; no retries anywhere.
+4. Native: adapters/qgis/workers.py ThreadPoolWorkers over QThreadPool; test_jobs_native.py proves worker-thread work and GUI-thread callbacks; join CI native step.
+5. Docs: doc-12 jobs section, decision-13/21 evidence notes, task notes.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented in `qgis_sdk.jobs` (QGIS-free) over the TASK-13 step scheduler: `@job` + `describe_job`, `JobService` (`bind(...).delay(inputs)`, `scoped(view_scope)`, `parent`, `tick`, `quiesce`, `resume`, `active`, `faults`), typed `JobHandle` (status, cancel, result/error, on_progress/on_success/on_failure/on_cancelled with one-shot replay, `get()` refused on the GUI thread), errors `QgisSdkJobRejectedError` / `QgisSdkJobNotSettledError` / `QgisSdkJobWaitRefusedError`, `Workers` protocol + `JobContext.workers/network` with `require_*`, `testing.FakeWorkers`, `adapters.qgis.ThreadPoolWorkers`. Tests: `test_jobs.py` (39 examples), `test_jobs_properties.py` (Hypothesis state machine; found the finished-handle-after-view-close replay hole, now closed), `test_jobs_native.py` (4, real QThreadPool + Qt event loop, added to CI offscreen step). Docs: doc-12 'Scoped jobs' section, decision-13/21 implementation notes.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
