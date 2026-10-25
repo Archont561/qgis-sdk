@@ -702,6 +702,19 @@ def test_write_checksums_is_sha256sum_compatible(tmp_path):
     assert target.read_text() == f"{'aa' * 32}  a.whl\n{'bb' * 32}  b.tgz\n"
 
 
+def test_write_checksums_creates_the_output_directory(tmp_path):
+    """A TypeScript-only release has no dist/ until the checksums are written.
+
+    release.yml downloads wheels into dist/pypi and the tarball into npm/, and
+    writes dist/SHA256SUMS; when no Python artifact was built the directory
+    does not exist yet. ts-v0.2.0 failed its GitHub Release step on exactly
+    that, after npm had already published.
+    """
+    target = tmp_path / "dist" / "SHA256SUMS"
+    write_checksums(target, [("bridge.tgz", "cc" * 32)])
+    assert target.read_text() == f"{'cc' * 32}  bridge.tgz\n"
+
+
 def test_twine_check_needs_a_wheel():
     with pytest.raises(QgisSdkReleaseError):
         twine_check([])

@@ -444,6 +444,9 @@ jobs:
         run: |
           shopt -s nullglob
           assets=(dist/pypi/*.whl dist/conda/*.conda npm/*.tgz)
+          # A TypeScript-only tag downloads no wheel, so dist/ does not exist
+          # yet; ts-v0.2.0 failed here after npm had already published.
+          mkdir -p dist
           pixi run -e build release-checksums --out dist/SHA256SUMS "${assets[@]}"
           pixi run -e build release-github \
             --tag "$RELEASE_TAG" \

@@ -923,9 +923,15 @@ def checksums(paths: Iterable[Path]) -> list[tuple[str, str]]:
 
 
 def write_checksums(out_path: Path, entries: Iterable[tuple[str, str]]) -> None:
-    """Write a ``sha256sum -c`` compatible SHA256SUMS file."""
+    """Write a ``sha256sum -c`` compatible SHA256SUMS file.
+
+    The parent directory is created: a TypeScript-only release downloads no
+    wheel, so ``dist/`` does not exist before this file is written there.
+    """
     lines = "".join(f"{digest}  {name}\n" for name, digest in entries)
-    Path(out_path).write_text(lines, encoding="utf-8")
+    target = Path(out_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(lines, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
