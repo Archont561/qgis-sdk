@@ -35,11 +35,14 @@ field does, so a "task that ratified this decision" is always an *inbound*
 ### Identity rules
 
 - **A milestone ID is not a version.** IDs are allocated in planning order and
-  only happen to match release order today: `m-4` is 0.5.0 and `m-5` is 0.6.0.
-  Until 2026-10-24 the two were inverted (`m-4` held 0.6.0 and `m-5` held 0.5.0),
-  which read as "the fourth milestone ships the sixth release"; the IDs were
-  swapped rather than the targets, and the tasks moved with their version. Read
-  the title, never infer the release from the number.
+  only happen to match release order today: `m-4` is 0.5.0, `m-5` is 0.6.0 and
+  `m-6` is 0.7.0. Until 2026-10-24 the first two were inverted (`m-4` held
+  0.6.0 and `m-5` held 0.5.0), which read as "the fourth milestone ships the
+  sixth release"; the IDs were swapped rather than the targets, and the tasks
+  moved with their version. The same happened on 2026-10-25 when 0.6.0 was
+  re-pointed to the API-ergonomics release: it took `m-5`, and the deferred
+  native-compute research moved to 0.7.0 as `m-6`. Read the title, never infer
+  the release from the number.
 - **The file name is the record's display name, not its identity.** Renaming a
   task's title through the CLI does not rename its file; the `id:` field is the
   identity, so a mismatched file name is cosmetic (fix it with `mv`, as done for

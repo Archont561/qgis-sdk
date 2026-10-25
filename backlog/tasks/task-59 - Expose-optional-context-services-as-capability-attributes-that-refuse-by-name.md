@@ -4,8 +4,9 @@ title: Expose optional context services as capability attributes that refuse by 
 status: Done
 assignee: []
 created_date: '2026-10-25 22:43'
-updated_date: '2026-10-25 23:10'
+updated_date: '2026-10-25 23:26'
 labels: []
+milestone: m-5
 dependencies: []
 type: enhancement
 ordinal: 59000
