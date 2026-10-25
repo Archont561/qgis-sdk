@@ -507,7 +507,14 @@ jobs:
           RELEASE_TAG: ${{ needs.build.outputs.tag_name }}
         run: |
           shopt -s nullglob
-          assets=(dist/pypi/*.whl dist/conda/*.conda npm/*.tgz)
+          # The npm-tgz artifact carries two tarballs under their pack
+          # directories (bridge/, alias/) since the alias shipped; ts-v0.3.0
+          # published both and then found no asset under npm/*.tgz.
+          assets=(dist/pypi/*.whl dist/conda/*.conda npm/*.tgz npm/*/*.tgz)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "::error::no release assets found under dist/ or npm/"
+            exit 1
+          fi
           # A TypeScript-only tag downloads no wheel, so dist/ does not exist
           # yet; ts-v0.2.0 failed here after npm had already published.
           mkdir -p dist
