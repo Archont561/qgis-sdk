@@ -219,12 +219,19 @@ class JobFault:
 class JobSubscription:
     """One disposable callback registration on a handle."""
 
-    __slots__ = ("_active", "_attempt", "_callback", "_event")
+    __slots__ = ("_active", "_attempt", "_callback", "_event", "_owner")
 
-    def __init__(self, attempt: _Attempt, event: JobEvent, callback: Callable) -> None:
+    def __init__(
+        self,
+        attempt: _Attempt,
+        event: JobEvent,
+        callback: Callable,
+        owner: ResourceScope | None = None,
+    ) -> None:
         self._attempt = attempt
         self._event = event
         self._callback = callback
+        self._owner = owner
         self._active = True
 
     @property
@@ -243,6 +250,8 @@ class JobSubscription:
             return False
         self._active = False
         self._attempt._subscriptions[self._event].pop(self, None)
+        if self._owner is not None:
+            self._attempt.runtime.release_owner_hook(self._owner, self)
         return True
 
 
@@ -298,17 +307,17 @@ class _Attempt:
     def __init__(
         self,
         *,
-        root: JobService,
+        runtime: _Runtime,
         owner: JobService,
         description: JobDescription,
         logical_id: str,
     ) -> None:
-        self.root = root
+        self.runtime = runtime
         self.owner = owner
         self.description = description
         self.id = logical_id
         self.attempt = 1
-        self.scope = root._scope.child()
+        self.scope = runtime.scope.child()
         self.progress = _Progress()
         self._job: Job | None = None
         self._subscriptions: dict[JobEvent, dict[JobSubscription, None]] = {
@@ -342,6 +351,19 @@ class _Attempt:
     def error(self) -> BaseException | None:
         return self.job.error if self.status is JobStatus.FAILED else None
 
+    def outcome(self) -> object:
+        """Return the result, or raise what stands in its place (TASK-46)."""
+        status = self.status
+        if status is JobStatus.SUCCEEDED:
+            return self.job.result
+        if status is JobStatus.CANCELLED:
+            raise QgisSdkJobCancelledError(self.job.id)
+        if status is JobStatus.FAILED:
+            error = self.job.error
+            assert error is not None, "a failed job records its error"
+            raise error
+        raise QgisSdkJobNotSettledError(self.id, status.value)
+
     # -- subscriptions
 
     def subscribe(
@@ -351,12 +373,16 @@ class _Attempt:
             raise QgisSdkScopeClosedError()
         if owner is not None:
             owner.ensure_open()
-        subscription = JobSubscription(self, event, callback)
+        # The job's own owner detaches everything on disposal; only a
+        # different owner needs a hook of its own, held per scope so a
+        # finished job leaves nothing behind on it (TASK-47).
+        hooked = owner if owner is not None and owner is not self.owner._scope else None
+        subscription = JobSubscription(self, event, callback, hooked)
         if self._replay(subscription):
             return subscription
         self._subscriptions[event][subscription] = None
-        if owner is not None and owner is not self.owner._scope:
-            owner.on_close(subscription.dispose)
+        if hooked is not None:
+            self.runtime.add_owner_hook(hooked, subscription)
         return subscription
 
     def _replay(self, subscription: JobSubscription) -> bool:
@@ -389,7 +415,7 @@ class _Attempt:
             subscription._callback(*payload)
         except Exception as error:  # noqa: BLE001 - a subscriber fault is reported
             subscription.dispose()
-            self.root._fault(JobFault(self.id, subscription.event, error))
+            self.runtime.fault(JobFault(self.id, subscription.event, error))
 
     def _emit(self, event: JobEvent, *payload: object) -> None:
         for subscription in tuple(self._subscriptions[event]):
@@ -423,7 +449,7 @@ class _Attempt:
         """Complete the attempt: no more callbacks, waiters wake, the scope closes."""
         self.detach()
         self.settled.set()
-        self.root._attempts.pop(self.id, None)
+        self.runtime.attempts.pop(self.id, None)
         if not self.scope.closed:
             self.scope.close()
 
@@ -442,6 +468,8 @@ class _Attempt:
         self.settled.set()
 
 
+_TICK_IN_PROGRESS = "a tick is already in progress on this thread"
+
 _TERMINAL_EVENT: dict[JobStatus, JobEvent] = {
     JobStatus.SUCCEEDED: "success",
     JobStatus.FAILED: "failure",
@@ -456,8 +484,8 @@ async def _run_attempt(attempt: _Attempt, cls: type, inputs: object) -> object:
         progress=attempt.progress,
         cancellation=_Cancellation(attempt),
         scope=attempt.scope,
-        workers=attempt.root._workers,
-        network=attempt.root._network,
+        workers=attempt.runtime.workers,
+        network=attempt.runtime.network,
     )
     outcome = cls(context).run(inputs)
     if inspect.isawaitable(outcome):
@@ -526,11 +554,14 @@ class JobHandle:
 
     @property
     def result(self) -> Any:
-        """The typed result of a succeeded job; anything else is refused."""
-        attempt = self._attempt
-        if attempt.status is not JobStatus.SUCCEEDED:
-            raise QgisSdkJobNotSettledError(attempt.id, attempt.status.value)
-        return attempt.job.result
+        """The typed result of a succeeded job.
+
+        A failed job raises its own exception (the one ``error`` returns), a
+        cancelled job raises ``QgisSdkJobCancelledError``, and a job that has
+        not settled raises ``QgisSdkJobNotSettledError`` - the same reading
+        :meth:`get` gives, without the wait.
+        """
+        return self._attempt.outcome()
 
     @property
     def error(self) -> BaseException | None:
@@ -553,18 +584,10 @@ class JobHandle:
         for a cancelled job.
         """
         attempt = self._attempt
-        if attempt.root._gui_thread():
+        if attempt.runtime.gui_thread():
             raise QgisSdkJobWaitRefusedError(attempt.id)
-        if not attempt.settled.wait(timeout):
-            raise QgisSdkJobNotSettledError(attempt.id, attempt.status.value)
-        status = attempt.status
-        if status is JobStatus.SUCCEEDED:
-            return attempt.job.result
-        if status is JobStatus.CANCELLED:
-            raise QgisSdkJobCancelledError(attempt.job.id)
-        error = attempt.job.error
-        assert error is not None
-        raise error
+        attempt.settled.wait(timeout)
+        return attempt.outcome()
 
     # -- subscriptions
 
@@ -621,6 +644,67 @@ class BoundJob:
         return self.service._submit(self, inputs)
 
 
+@dataclass(eq=False)
+class _Runtime:
+    """The plugin-wide state every ``JobService`` over one scheduler shares.
+
+    Built once by the plugin's service and handed to each view-derived one, so
+    a derived service is a complete object with the same attributes as its
+    parent (TASK-48) rather than a shell that reaches into the root.
+    """
+
+    scope: ResourceScope
+    scheduler: StepScheduler
+    workers: Workers | None
+    network: Network | None
+    gui_thread: Callable[[], bool]
+    on_fault: Callable[[JobFault], None] | None
+    attempts: dict[str, _Attempt] = field(default_factory=dict)
+    counters: dict[str, int] = field(default_factory=dict)
+    faults: list[JobFault] = field(default_factory=list)
+    owner_hooks: dict[ResourceScope, dict[JobSubscription, None]] = field(
+        default_factory=dict
+    )
+    ticking: bool = False
+
+    def fault(self, fault: JobFault) -> None:
+        self.faults.append(fault)
+        if self.on_fault is not None:
+            self.on_fault(fault)
+
+    def deliver_all(self) -> None:
+        for attempt in tuple(self.attempts.values()):
+            attempt.deliver()
+
+    def abandon_all(self) -> None:
+        for attempt in tuple(self.attempts.values()):
+            attempt.abandoned()
+        self.attempts.clear()
+
+    # -- explicit subscription owners (TASK-47)
+
+    def add_owner_hook(
+        self, owner: ResourceScope, subscription: JobSubscription
+    ) -> None:
+        """Dispose ``subscription`` when ``owner`` closes; one hook per owner scope."""
+        live = self.owner_hooks.get(owner)
+        if live is None:
+            live = self.owner_hooks[owner] = {}
+            owner.on_close(lambda: self._owner_hook_fired(owner))
+        live[subscription] = None
+
+    def release_owner_hook(
+        self, owner: ResourceScope, subscription: JobSubscription
+    ) -> None:
+        live = self.owner_hooks.get(owner)
+        if live is not None:
+            live.pop(subscription, None)
+
+    def _owner_hook_fired(self, owner: ResourceScope) -> None:
+        for subscription in tuple(self.owner_hooks.pop(owner, ())):
+            subscription.dispose()
+
+
 class JobService:
     """``ctx.jobs``: binds job classes to an owner and delivers their outcomes.
 
@@ -647,32 +731,37 @@ class JobService:
         max_steps_per_job: int | None = None,
     ) -> None:
         scope.ensure_open()
-        self._scope = scope
-        self._parent: JobService | None = None
-        self._root: JobService = self
-        self._workers = workers
-        self._network = network
-        self._gui_thread = gui_thread if gui_thread is not None else _main_thread
-        self._on_fault = on_fault
-        self._scheduler = (
+        scheduler = (
             StepScheduler(scope)
             if max_steps_per_job is None
             else StepScheduler(scope, max_steps_per_job=max_steps_per_job)
         )
-        self._attempts: dict[str, _Attempt] = {}
-        self._counters: dict[str, int] = {}
-        self._faults: list[JobFault] = []
+        runtime = _Runtime(
+            scope=scope,
+            scheduler=scheduler,
+            workers=workers,
+            network=network,
+            gui_thread=gui_thread if gui_thread is not None else _main_thread,
+            on_fault=on_fault,
+        )
+        self._bind(scope, runtime, parent=None)
         # Registered after the scheduler's own disposal hook, so it runs before
         # it: every subscription is gone before any job is abandoned.
-        scope.on_close(self._abandon_all)
+        scope.on_close(runtime.abandon_all)
+
+    def _bind(
+        self, scope: ResourceScope, runtime: _Runtime, *, parent: JobService | None
+    ) -> None:
+        """Set every attribute a service has; the one constructor both routes use."""
+        self._scope = scope
+        self._runtime = runtime
+        self._parent = parent
 
     @classmethod
     def _derived(cls, parent: JobService, scope: ResourceScope) -> JobService:
         scope.ensure_open()
         service = cls.__new__(cls)
-        service._scope = scope
-        service._parent = parent
-        service._root = parent._root
+        service._bind(scope, parent._runtime, parent=parent)
         scope.on_close(service._owner_disposed)
         return service
 
@@ -694,18 +783,20 @@ class JobService:
 
     @property
     def active(self) -> tuple[JobHandle, ...]:
-        """Handles not yet settled and delivered, in submission order."""
-        root = self._root
+        """Handles not yet settled and delivered, in submission order.
+
+        The plugin's service sees every job; a derived service sees its own.
+        """
         return tuple(
             JobHandle(attempt)
-            for attempt in root._attempts.values()
-            if attempt.owner is self or self is root
+            for attempt in self._runtime.attempts.values()
+            if attempt.owner is self or self._parent is None
         )
 
     @property
     def faults(self) -> tuple[JobFault, ...]:
         """Subscriber callbacks that raised, oldest first."""
-        return tuple(self._root._faults)
+        return tuple(self._runtime.faults)
 
     # -- submission
 
@@ -721,22 +812,22 @@ class JobService:
             expected = _type_name(description.inputs_type)
             problem = f"inputs must be {expected}, not {_type_name(type(inputs))}"
             raise QgisSdkJobRejectedError(description.id, [problem])
-        root = self._root
-        number = root._counters.get(description.id, 0) + 1
-        root._counters[description.id] = number
+        runtime = self._runtime
+        number = runtime.counters.get(description.id, 0) + 1
+        runtime.counters[description.id] = number
         attempt = _Attempt(
-            root=root,
+            runtime=runtime,
             owner=self,
             description=description,
             logical_id=f"{description.id}#{number}",
         )
         coroutine = _run_attempt(attempt, bound.cls, inputs)
         try:
-            attempt._job = root._scheduler.submit(coroutine)
+            attempt._job = runtime.scheduler.submit(coroutine)
         except BaseException:
             attempt.scope.close()
             raise
-        root._attempts[attempt.id] = attempt
+        runtime.attempts[attempt.id] = attempt
         return JobHandle(attempt)
 
     # -- driving
@@ -746,42 +837,52 @@ class JobService:
 
         Call this from the thread that owns the GUI; it is the only thread on
         which subscribers run. Returns the number of author steps taken.
+
+        A tick entered while another is on the stack - a job or a subscriber
+        opened a modal dialog whose nested event loop fired the host timer -
+        does nothing and returns ``0``; the outer tick finishes when the
+        dialog closes (TASK-44). Re-stepping a job that is mid-step would fail
+        it, and an exception here would escape a Qt slot.
         """
-        root = self._root
-        steps = root._scheduler.tick()
-        for attempt in tuple(root._attempts.values()):
-            attempt.deliver()
+        runtime = self._runtime
+        if runtime.ticking:
+            return 0
+        runtime.ticking = True
+        try:
+            steps = runtime.scheduler.tick()
+            runtime.deliver_all()
+        finally:
+            runtime.ticking = False
         return steps
 
     def quiesce(self, *, max_ticks: int | None = None) -> QuiesceOutcome:
-        """Ask every job to stop and look for a safe replacement point."""
-        root = self._root
-        outcome = (
-            root._scheduler.quiesce()
-            if max_ticks is None
-            else root._scheduler.quiesce(max_ticks=max_ticks)
-        )
-        for attempt in tuple(root._attempts.values()):
-            attempt.deliver()
+        """Ask every job to stop and look for a safe replacement point.
+
+        Refused outright from inside a tick, for the same reason a nested tick
+        is ignored; the blocker names the condition.
+        """
+        runtime = self._runtime
+        if runtime.ticking:
+            return QuiesceOutcome(refused=True, blockers=(_TICK_IN_PROGRESS,))
+        runtime.ticking = True
+        try:
+            outcome = (
+                runtime.scheduler.quiesce()
+                if max_ticks is None
+                else runtime.scheduler.quiesce(max_ticks=max_ticks)
+            )
+            runtime.deliver_all()
+        finally:
+            runtime.ticking = False
         return outcome
 
     def resume(self) -> None:
         """Accept new work again after a refused replacement."""
-        self._root._scheduler.resume()
+        self._runtime.scheduler.resume()
 
     # -- ownership hooks
 
     def _owner_disposed(self) -> None:
-        for attempt in tuple(self._root._attempts.values()):
+        for attempt in tuple(self._runtime.attempts.values()):
             if attempt.owner is self:
                 attempt.owner_disposed()
-
-    def _abandon_all(self) -> None:
-        for attempt in tuple(self._attempts.values()):
-            attempt.abandoned()
-        self._attempts.clear()
-
-    def _fault(self, fault: JobFault) -> None:
-        self._faults.append(fault)
-        if self._on_fault is not None:
-            self._on_fault(fault)
