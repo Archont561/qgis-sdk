@@ -13,7 +13,7 @@ on ``qgis_sdk_tools.scaffold``. Every claim is checked against the real host:
 
 * ``iface_is_host`` - the interface the adapter holds *is* ``qgis.utils.iface``, so
   nothing substituted a stand-in; the run fails outright if QGIS offered no iface.
-* ``native_context_matches`` - ``ctx.require_native()`` hands the author code that same
+* ``native_context_matches`` - ``ctx.desktop`` hands the author code that same
   live object back through the typed escape hatch.
 * ``message_bar_received`` - calling the notifications service actually added a widget
   to QGIS's real message bar, which is the first time that path is exercised at all.
@@ -237,7 +237,7 @@ try:
 
     module = importlib.import_module(plugin + ".plugin")
     context = module.OBSERVED["context"]
-    payload["native_context_matches"] = context.require_native().iface is host
+    payload["native_context_matches"] = context.desktop.iface is host
 
     # The notifications service must reach the host's own bar, not a stand-in.
     bar = host.messageBar()

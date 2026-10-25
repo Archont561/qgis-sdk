@@ -45,13 +45,13 @@ class LocalGisWorkflow:
 
     def open_dataset(self, source: Path) -> VectorLayerInfo:
         """Open a local vector dataset and present it, so the user can select."""
-        info = self.ctx.require_layers().open_vector(Path(source))
-        self.ctx.require_project().add_layer(info.id)
+        info = self.ctx.layers.open_vector(Path(source))
+        self.ctx.project.add_layer(info.id)
         return info
 
     def selected_features(self, layer_id: str) -> tuple[int, ...]:
         """Read the host's current selection; the workflow never sets one."""
-        return self.ctx.require_layers().selection(layer_id)
+        return self.ctx.layers.selection(layer_id)
 
     def buffer(
         self,
@@ -72,11 +72,11 @@ class LocalGisWorkflow:
             distance_metres=distance_metres,
             working_crs=working_crs,
         )
-        project = self.ctx.require_project()
+        project = self.ctx.project
         result = invoke(
             BufferLayer,
             request,
-            algorithms=self.ctx.require_algorithms(),
+            algorithms=self.ctx.algorithms,
             project=project,
             scope=self.ctx.scope,
             progress=progress,
@@ -84,7 +84,7 @@ class LocalGisWorkflow:
             add_to_project=False,
         )
         output = result.output
-        self.ctx.require_styles().apply_style(output.id, self.OUTPUT_STYLE)
+        self.ctx.styles.apply_style(output.id, self.OUTPUT_STYLE)
         project.add_layer(output.id)
         return output
 
@@ -92,6 +92,6 @@ class LocalGisWorkflow:
         self, layer_id: str, destination: Path, *, overwrite: bool = False
     ) -> VectorExport:
         """Write a layer to a file the caller named; explicit, never implied."""
-        return self.ctx.require_layers().export_vector(
+        return self.ctx.layers.export_vector(
             layer_id, Path(destination), overwrite=overwrite
         )

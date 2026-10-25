@@ -27,12 +27,118 @@ def test_pure_plugin_context_rejects_native_desktop_access() -> None:
     )
 
     with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
-        context.require_native()
+        _ = context.desktop
 
     assert (caught.value.code, caught.value.capability) == (
         "unsupported_capability",
         "desktop",
     )
+
+
+# -- capabilities are attributes that refuse by name (decision-39) ----------------
+
+
+class FakeWorkers:
+    def offload(self, work: object) -> object:
+        raise AssertionError("never offloaded in a context test")
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "desktop",
+        "network",
+        "layers",
+        "project",
+        "settings",
+        "styles",
+        "algorithms",
+        "workers",
+    ],
+)
+def test_every_optional_plugin_capability_is_refused_by_name_when_absent(
+    capability: str,
+) -> None:
+    context = PluginContext(
+        notifications=RecordingNotifications(), scope=ResourceScope()
+    )
+
+    assert context.has(capability) is False
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
+        getattr(context, capability)
+    assert caught.value.capability == capability
+
+
+def test_a_provided_capability_is_the_very_instance_the_host_passed() -> None:
+    workers = FakeWorkers()
+    context = JobContext(
+        progress=RecordingProgress(),
+        cancellation=ControlledCancellation(),
+        scope=ResourceScope(),
+        workers=workers,
+    )
+
+    assert context.workers is workers
+    assert context.has("workers") is True
+    assert context.has("network") is False
+    assert context.capabilities == frozenset({"workers"})
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
+        _ = context.network
+    assert caught.value.capability == "network"
+
+
+def test_capabilities_lists_what_the_host_provided() -> None:
+    context = PluginContext(
+        notifications=RecordingNotifications(),
+        scope=ResourceScope(),
+        workers=FakeWorkers(),
+    )
+
+    assert context.capabilities == frozenset({"workers"})
+    assert context.has("workers") is True
+
+
+def test_probing_an_unknown_capability_is_a_mistake_not_a_false() -> None:
+    context = UiContext(
+        notifications=RecordingNotifications(),
+        view=RecordingView(),
+        scope=ResourceScope(),
+    )
+
+    with pytest.raises(ValueError, match="no capability named 'layers'"):
+        context.has("layers")
+
+
+def test_a_capability_read_on_a_closed_scope_is_refused_as_closed() -> None:
+    scope = ResourceScope()
+    context = JobContext(
+        progress=RecordingProgress(),
+        cancellation=ControlledCancellation(),
+        scope=scope,
+        workers=FakeWorkers(),
+    )
+    scope.close()
+
+    with pytest.raises(QgisSdkScopeClosedError):
+        _ = context.workers
+    assert context.has("workers") is True  # probing does not touch the scope
+
+
+def test_the_require_accessors_are_gone() -> None:
+    for context_type in (PluginContext, UiContext, AlgorithmContext, JobContext):
+        leftovers = [name for name in dir(context_type) if name.startswith("require_")]
+        assert leftovers == [], (context_type.__name__, leftovers)
+
+
+def test_a_context_is_immutable_once_assembled() -> None:
+    context = PluginContext(
+        notifications=RecordingNotifications(), scope=ResourceScope()
+    )
+
+    with pytest.raises(AttributeError):
+        context.workers = FakeWorkers()  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        context.scope = ResourceScope()  # type: ignore[misc]
 
 
 def test_two_plugin_handlers_use_only_their_injected_services() -> None:
@@ -243,36 +349,16 @@ def test_closed_scope_rejects_registration_and_native_access() -> None:
     context = PluginContext(
         notifications=RecordingNotifications(), scope=scope, desktop=desktop
     )
-    assert context.require_native() is desktop
+    assert context.desktop is desktop
     scope.close()
 
     with pytest.raises(QgisSdkScopeClosedError) as caught:
-        context.require_native()
+        _ = context.desktop
     assert caught.value.code == "scope_closed"
     with pytest.raises(QgisSdkScopeClosedError):
         scope.on_close(lambda: None)
     with pytest.raises(QgisSdkScopeClosedError):
         scope.child()
-
-
-@pytest.mark.parametrize(
-    "capability", ["layers", "project", "settings", "styles", "algorithms", "workers"]
-)
-def test_a_plugin_context_without_a_service_refuses_it_by_name(capability: str) -> None:
-    """The curated services are optional on the context, like desktop and network.
-
-    A pure or standalone host leaves them out; `require_<name>()` is how a
-    handler asks for one and gets `unsupported_capability` instead of `None`.
-    """
-    context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope()
-    )
-
-    assert getattr(context, capability) is None
-    with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
-        getattr(context, f"require_{capability}")()
-
-    assert caught.value.capability == capability
 
 
 def test_a_plugin_context_hands_back_the_injected_services() -> None:
@@ -285,7 +371,8 @@ def test_a_plugin_context_hands_back_the_injected_services() -> None:
     )
 
     for name, service in sentinels.items():
-        assert getattr(context, f"require_{name}")() is service
+        assert getattr(context, name) is service
+    assert context.capabilities == frozenset(sentinels)
 
 
 def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:
@@ -296,4 +383,4 @@ def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:
     scope.close()
 
     with pytest.raises(QgisSdkScopeClosedError):
-        context.require_layers()
+        _ = context.layers

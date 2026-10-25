@@ -252,20 +252,23 @@ plugin_scope = ResourceScope()  # the runtime owns and eventually closes it
 ctx = PluginContext(notifications=Messages(), scope=plugin_scope)
 ctx.notifications.info("ready")
 try:
-    ctx.require_native()
+    ctx.desktop
 except QgisSdkUnsupportedCapabilityError as error:
     assert error.code == "unsupported_capability"
     assert error.capability == "desktop"
 ```
 
 `PluginContext` is plugin-lifetime state. Beside `notifications` and `scope` it
-carries the curated services as optional fields — `layers`, `project`,
+carries the curated services as *capabilities* — `layers`, `project`,
 `settings`, `styles`, `algorithms`, `workers`, plus `desktop` and `network` —
 the very Protocols the web-view host surface wraps (decision-27, decision-32).
-Each optional one has a `require_<name>()` that raises
-`QgisSdkUnsupportedCapabilityError(capability=<name>)` on a host that did not
-supply it, and every one of them refuses on a closed scope. A handler therefore
-writes `self.ctx.require_project().layer_ids()` and a page calls
+A capability is a plain attribute typed as the service: reading one the host
+did not supply raises `QgisSdkUnsupportedCapabilityError(capability=<name>)`
+instead of handing back `None`, and every one of them refuses on a closed
+scope ([decision-39](../../decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md)).
+`ctx.has("workers")` and `ctx.capabilities` are the probes for code that must
+ask rather than use; a typo in `has()` is a `ValueError`, not a `False`. A
+handler therefore writes `self.ctx.project.layer_ids()` and a page calls
 `host.project.layerIds()`, and when the host built the bridge with
 `HostServices.from_context(ctx)` both read the same object:
 
@@ -284,11 +287,11 @@ context owned by that scope; the scaffold's `build_context` calls it whenever a
 `QgsApplication` is running and falls back to a notifications-only context in a
 bare interpreter, which is what its starter tests exercise.
 
-Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities with `require_workers()` / `require_network()` refusals; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
+Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities, refused by name on access when the host lacks them; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
 
-The runtime owns the scopes: `scope.on_close(cleanup)` registers synchronous cleanup, `scope.child()` creates an owned scope, and `scope.close()` closes children before local callbacks (last registered first). Closing is idempotent. A child closed on its own stops being owned by its parent. New registrations/children after closure raise `QgisSdkScopeClosedError` (`code="scope_closed"`); `require_native()` also rejects a disposed scope. If cleanup fails, remaining children and callbacks still run and the failures are raised as an `ExceptionGroup`. Scope closure is **not** proof that an in-flight task stopped; adapters must request cancellation, detach callbacks and wait for safe completion where needed. The scope does not make services thread-safe or automatically revoke references to them.
+The runtime owns the scopes: `scope.on_close(cleanup)` registers synchronous cleanup, `scope.child()` creates an owned scope, and `scope.close()` closes children before local callbacks (last registered first). Closing is idempotent. A child closed on its own stops being owned by its parent. New registrations/children after closure raise `QgisSdkScopeClosedError` (`code="scope_closed"`); reading a capability such as `ctx.desktop` also rejects a disposed scope. If cleanup fails, remaining children and callbacks still run and the failures are raised as an `ExceptionGroup`. Scope closure is **not** proof that an in-flight task stopped; adapters must request cancellation, detach callbacks and wait for safe completion where needed. The scope does not make services thread-safe or automatically revoke references to them.
 
-Only a Desktop runtime may inject `DesktopAccess`. Its `iface` is deliberately typed as opaque `object`: consumers must opt in via `PluginContext.require_native()`, and must not serialize it or expose it through a bridge or worker context. Pure/standalone runtimes leave it absent and raise `QgisSdkUnsupportedCapabilityError` rather than silently fabricating a native capability. Both `QgisSdkScopeClosedError` and `QgisSdkUnsupportedCapabilityError` extend `QgisSdkError`; `code` is available to downstream adapters, but structured bridge errors are not implemented here.
+Only a Desktop runtime may inject `DesktopAccess`. Its `iface` is deliberately typed as opaque `object`: consumers must opt in via `ctx.desktop`, and must not serialize it or expose it through a bridge or worker context. Pure/standalone runtimes leave it absent and raise `QgisSdkUnsupportedCapabilityError` rather than silently fabricating a native capability. Both `QgisSdkScopeClosedError` and `QgisSdkUnsupportedCapabilityError` extend `QgisSdkError`; `code` is available to downstream adapters, but structured bridge errors are not implemented here.
 
 Pure tests check declared import direction throughout the three layers and import the public modules in a fresh subprocess that rejects native imports. This is not a security sandbox or a full dynamic-import/side-effect analyzer; the CLI static checker and real QGIS adapters are separate backlog work.
 
@@ -679,7 +682,7 @@ context = PluginContext(
 
 ```python
 async def load(self, ctx):
-    api = ctx.require_network().configure(
+    api = ctx.network.configure(
         base_url="https://example.org/api/",
         headers={"Accept": "application/json"},
         timeout=10,
@@ -778,7 +781,7 @@ async def add(ctx: JobContext, left: int, right: int = 0) -> SumResult:
         ctx.progress.report(0.5)
         return left + right
 
-    total = await ctx.require_workers().offload(work)
+    total = await ctx.workers.offload(work)
     return SumResult(total)
 
 
@@ -953,8 +956,8 @@ The README the scaffold writes teaches both modes; they differ in one thing, whe
 
 | Mode | How it runs | What the SDK sees |
 | :-- | :-- | :-- |
-| Desktop | copy `<plugin>/` into a profile's `python/plugins/` and enable it under Plugins, Manage and Install Plugins, or launch `qgis --profiles-path <dir> --profile <name>` | `iface` is present, so `context.require_native()` succeeds and messages reach the real message bar |
-| Standalone Qt | call `build_context(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so `require_native()` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
+| Desktop | copy `<plugin>/` into a profile's `python/plugins/` and enable it under Plugins, Manage and Install Plugins, or launch `qgis --profiles-path <dir> --profile <name>` | `iface` is present, so `context.desktop` succeeds and messages reach the real message bar |
+| Standalone Qt | call `build_context(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so reading `context.desktop` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
 
 The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
@@ -1294,8 +1297,26 @@ published for the bridge, and no `ts-v*` tag exists.
 
 0.6.0 of `qgis-sdk-runtime` changes how a job is written
 ([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md);
-TASK-58). Everything about submission, handles, delivery and ownership is as
+TASK-58) and how optional services are reached on every context
+([decision-39](../../decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md);
+TASK-59). Everything about submission, handles, delivery and ownership is as
 in 0.5.
+
+- **`require_<name>()` is gone; the attribute refuses by name.** On
+  `PluginContext`, `UiContext`, `AlgorithmContext` and `JobContext` every
+  optional service (`desktop`, `network`, `layers`, `project`, `settings`,
+  `styles`, `algorithms`, `workers`) is now typed as the service itself and
+  reading one the host did not provide raises
+  `QgisSdkUnsupportedCapabilityError(capability=<name>)` — the same error
+  `require_<name>()` raised, now on `ctx.workers.offload(...)` directly.
+  Replace `ctx.require_workers()` with `ctx.workers`, `ctx.require_native()`
+  with `ctx.desktop`, and so on; constructor keyword arguments are unchanged.
+  Code that *probed* a slot (`if ctx.network is not None:`) uses
+  `ctx.has("network")` or `ctx.capabilities` instead - the attribute no longer
+  evaluates to `None`, and `has()` raises `ValueError` for a name the context
+  does not carry. Contexts are no longer dataclasses: they stay immutable
+  (`AttributeError` on assignment) but `dataclasses.replace`/`asdict` do not
+  apply to them.
 
 - **`@job` decorates a function, not a class.** The first parameter is the
   `JobContext` the runtime injects, the remaining parameters are typed

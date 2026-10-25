@@ -53,7 +53,7 @@ async def count(ctx: JobContext, count: int, delay_seconds: float = 0.0) -> Resu
             ctx.progress.report(step / count)
         return Result(total=total, thread=threading.get_ident())
 
-    return await ctx.require_workers().offload(work)
+    return await ctx.workers.offload(work)
 
 
 @pytest.fixture(scope="module")
@@ -189,7 +189,7 @@ def test_a_cancelled_job_still_queued_on_the_pool_acknowledges_without_running(
             ran.append(1)
             return Result(0, threading.get_ident())
 
-        return await ctx.require_workers().offload(hold)
+        return await ctx.workers.offload(hold)
 
     pool.setMaxThreadCount(1)
     holder = jobs.bind(blocker).delay(delay_seconds=0.2)

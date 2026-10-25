@@ -47,8 +47,8 @@ def native_plugin_context(
 
     ``settings_prefix`` scopes the settings service to this plugin's keys in
     the QGIS profile. ``iface`` becomes ``ctx.desktop``; without one (a
-    standalone ``QgsApplication``) ``require_native()`` refuses, and the other
-    services still work. ``notifications`` defaults to the QGIS message log;
+    standalone ``QgsApplication``) reading ``ctx.desktop`` refuses by name,
+    and the other services still work. ``notifications`` defaults to the QGIS message log;
     a plugin passes its own to reach the message bar. ``working_directory``
     is where Processing outputs land; left out, the service owns a temporary
     directory and removes it with the scope.

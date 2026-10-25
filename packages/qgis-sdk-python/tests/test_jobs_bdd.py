@@ -37,7 +37,7 @@ def add(ctx: JobContext, a: int, b: int) -> SumResult:
 
 @job(id="bdd.offloaded", title="Sum on a worker")
 async def offloaded_add(ctx: JobContext, a: int, b: int) -> SumResult:
-    total = await ctx.require_workers().offload(lambda: a + b)
+    total = await ctx.workers.offload(lambda: a + b)
     return SumResult(total)
 
 

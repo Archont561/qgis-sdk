@@ -421,13 +421,13 @@ class HostServices:
         client exposes one (``NetworkClient.transport``), so a page's fetch and
         a handler's ``await self.ctx.network.get(...)`` leave through one door.
         """
-        if network is None and context.network is not None:
+        if network is None and context.has("network"):
             network = getattr(context.network, "transport", None)
         return cls(
-            layers=context.require_layers(),
-            project=context.require_project(),
-            settings=context.require_settings(),
-            styles=context.require_styles(),
+            layers=context.layers,
+            project=context.project,
+            settings=context.settings,
+            styles=context.styles,
             notifications=context.notifications,
             authority=authority if authority is not None else HostAuthority(),
             network=network,

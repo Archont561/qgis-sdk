@@ -167,11 +167,11 @@ def _stuck_job(runtime: Any, gate: threading.Event) -> Any:
 
     @job(id="exercise.stuck", title="Stuck on purpose")
     async def stuck(ctx: JobContext, value: int) -> int:
-        await ctx.require_workers().offload(gate.wait)
+        await ctx.workers.offload(gate.wait)
         return value
 
     context = runtime.instance.ctx
-    jobs = JobService(context.scope, workers=context.require_workers())
+    jobs = JobService(context.scope, workers=context.workers)
     handle = jobs.bind(stuck).delay(value=1)
     jobs.tick()  # now suspended on the handoff
     return handle
