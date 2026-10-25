@@ -36,7 +36,8 @@ PLUGIN_CLIENT_PATH = (
 )
 HOST_CLIENT_PATH = BRIDGE_PACKAGE / "src" / "generated" / "host.ts"
 
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-tools" / "src"))
+sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src"))
 sys.path.insert(0, str(PROJECT_ROOT / "tests"))
 
 from contract_sample.bridge_plugin import SitesPlugin

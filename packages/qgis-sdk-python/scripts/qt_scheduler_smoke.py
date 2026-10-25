@@ -47,7 +47,7 @@ DISPOSED_DRAIN_S = 0.2
 POOL_DRAIN_MS = 2000
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SOURCE_ROOT = SCRIPT_DIR.parent / "src"
+SOURCE_ROOT = SCRIPT_DIR.parents[1] / "qgis-sdk-runtime" / "src"
 
 VERDICT_ADOPT = "adopt-scheduler-seam"
 VERDICT_REVIEW = "review-scope-before-async-syntax"

@@ -16,9 +16,9 @@
 # instead of being inferred from a coverage drop.
 [run]
 omit =
-    packages/qgis-sdk-python/src/qgis_sdk/adapters/qgis/*
+    packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/*
     # `qgis-sdk dev`'s in-QGIS side: imported only by the `--code` probe inside the
     # QGIS Desktop process. The policy it runs is `devtools/reloader.py`, measured
     # here; these two are measured by `QGIS_SDK_DEVTOOLS=1 tests/test_devtools_native.py`.
-    packages/qgis-sdk-python/src/qgis_sdk_tools/devtools/bootstrap.py
-    packages/qgis-sdk-python/src/qgis_sdk_tools/devtools/exercise.py
+    packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/bootstrap.py
+    packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/exercise.py

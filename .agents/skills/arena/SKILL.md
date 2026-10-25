@@ -51,8 +51,8 @@ When Pixi, Bun or the bundle is unavailable, this fallback reproduces most of th
 TypeScript checks. It is lower fidelity: say so in every report.
 
 ```sh
-pip install --user --break-system-packages -e "packages/qgis-sdk-python[dev]"
-PYTHONPATH=packages/qgis-sdk-python/src python3 -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -q
+pip install --user --break-system-packages -e packages/qgis-sdk-runtime -e packages/qgis-sdk-tools -e "packages/qgis-sdk-python[dev]"
+PYTHONPATH=packages/qgis-sdk-runtime/src:packages/qgis-sdk-tools/src python3 -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -q
 python3 -m ruff check .
 python3 -m ruff format --check .
 ```

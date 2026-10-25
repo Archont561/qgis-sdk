@@ -89,9 +89,10 @@ class TestQgis:
         assert plan.env[TARGET_ENV] == "qgis"
         # Bindings first; then the SDK itself, so ``-p qgis_sdk_tools.pytest_plugin``
         # resolves in QGIS's interpreter even when the CLI runs under another.
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[:2] == [
+        sdk_paths = [str(path) for path in sdk_import_paths()]
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[: 1 + len(sdk_paths)] == [
             str(install.bindings),
-            *(str(path) for path in sdk_import_paths()),
+            *sdk_paths,
         ]
         assert plan.env["QGIS_PREFIX_PATH"] == str(install.prefix)
         assert plan.env["QT_QPA_PLATFORM"] == "offscreen"  # no DISPLAY in env

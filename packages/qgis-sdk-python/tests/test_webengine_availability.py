@@ -6,19 +6,19 @@ import sys
 import textwrap
 from pathlib import Path
 
+import layers
 import pytest
 from qgis_sdk.adapters import webengine
 from qgis_sdk.models.errors import QgisSdkOptionalDependencyError
 
 
 def test_webengine_adapter_imports_without_native_modules(tmp_path: Path) -> None:
-    source_root = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
     script = textwrap.dedent(
         """
         import sys
         import importlib
 
-        sys.path.insert(0, sys.argv[1])
+        sys.path[:0] = sys.argv[1:]
 
         class RejectNative:
             def find_spec(self, fullname, path=None, target=None):
@@ -34,7 +34,7 @@ def test_webengine_adapter_imports_without_native_modules(tmp_path: Path) -> Non
     import subprocess
 
     result = subprocess.run(
-        [sys.executable, "-I", "-c", script, str(source_root.parent)],
+        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
         cwd=tmp_path,
         capture_output=True,
         text=True,

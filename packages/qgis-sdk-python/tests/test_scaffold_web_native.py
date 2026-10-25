@@ -45,7 +45,6 @@ except ImportError as error:  # pragma: no cover - depends on the host
         f"the generated view needs Qt WebEngine: {error}", allow_module_level=True
     )
 
-SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
 DEADLINE = 30.0
 
 

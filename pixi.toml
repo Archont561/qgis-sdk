@@ -25,7 +25,7 @@ jsonschema = "==4.26.0"
 pydantic = "==2.14.1"
 
 [feature.python.activation.env]
-PYTHONPATH = "packages/qgis-sdk-python/src"
+PYTHONPATH = "packages/qgis-sdk-runtime/src:packages/qgis-sdk-tools/src"
 
 [feature.python.tasks.test-skill-creator]
 cmd = "pytest -q .agents/skills/skill-creator/tests"

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qgis-sdk-runtime"
+version = "0.4.0"
+description = "The qgis-sdk runtime a QGIS plugin imports: declarations, contracts, scoped runtime, services and adapters."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "QGIS SDK contributors" }]
+# Stdlib only (decision-35): QGIS and Qt are host-provided and never declared,
+# and `qgis-sdk build` vendors this tree into a plugin ZIP as-is. A dependency
+# here would have to be vendored too.
+dependencies = []
+
+[project.optional-dependencies]
+controlled-deployment = ["pydantic==2.14.1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qgis_sdk"]

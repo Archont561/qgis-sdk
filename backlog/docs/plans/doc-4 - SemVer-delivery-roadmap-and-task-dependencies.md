@@ -119,7 +119,7 @@ The bridge is consumed here (generated projects, packaged bundle) but should not
 - [TASK-9](../../tasks/task-9%20-%20Define-SDK-and-plugin-release-compatibility-gates.md): Define SDK and plugin release compatibility gates
 - [TASK-22](../../tasks/task-22%20-%20Complete-and-qualify-the-local-GIS-reference-workflow.md): Complete and qualify the local GIS reference workflow
 - [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md): Prepare and qualify 0.5.0 release
-- [TASK-57](../../tasks/task-57%20-%20Cut-qgis-sdk-runtime-qgis-sdk-tools-and-the-qgis-sdk-meta-kit-as-three-distributions.md): Cut qgis-sdk-runtime, qgis-sdk-tools and the qgis-sdk meta kit as three distributions (decision-35, step 2, gated on the contract freeze)
+- [TASK-57](../../tasks/task-57%20-%20Cut-qgis-sdk-runtime-qgis-sdk-tools-and-the-qgis-sdk-meta-kit-as-three-distributions.md): Cut qgis-sdk-runtime, qgis-sdk-tools and the qgis-sdk meta kit as three distributions (decision-35 step 2, un-gated by decision-36; ordered in [doc-17](doc-17%20-%20M4-sprint-train-and-0.5.0-dependency-order.md))
 
 ### 0.6.0
 

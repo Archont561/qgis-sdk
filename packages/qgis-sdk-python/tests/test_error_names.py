@@ -1,8 +1,8 @@
 """SDK-defined error names are unambiguous alongside host exceptions."""
 
 import ast
-from pathlib import Path
 
+import layers
 from qgis_sdk import models
 
 
@@ -26,7 +26,7 @@ def test_public_sdk_exceptions_have_qgis_sdk_prefix() -> None:
 
 
 def test_sdk_defined_exception_classes_keep_the_prefix() -> None:
-    source = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
+    source = layers.RUNTIME_SOURCE / "qgis_sdk"
     for path in source.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):

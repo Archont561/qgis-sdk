@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree
 
+import layers
 import pytest
 from qgis_sdk.models import (
     QgisSdkPackagedResourceError,
@@ -14,7 +15,7 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.resources import STYLE_CATALOG, STYLE_DIRECTORY, require_style, style_path
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
+PACKAGE_ROOT = layers.RUNTIME_SOURCE / "qgis_sdk"
 
 
 def layer(**overrides: object) -> VectorLayerInfo:

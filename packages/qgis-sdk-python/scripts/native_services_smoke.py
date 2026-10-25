@@ -37,7 +37,12 @@ from pathlib import Path
 from desktop_lifecycle_smoke import headless_environment, qgis_python_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = PROJECT_ROOT / "src"
+# The runtime and the tools are separate distributions (decision-35); both go
+# on the path so the probe imports the trees under test.
+SOURCE_ROOTS = (
+    PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src",
+    PROJECT_ROOT.parent / "qgis-sdk-tools" / "src",
+)
 FIXTURE_DATASET = PROJECT_ROOT / "tests" / "fixtures" / "reference" / "points.geojson"
 EXPECTED_NAME = "points"
 EXPECTED_GEOMETRY = "point"
@@ -166,8 +171,9 @@ def run_smoke(prefix: Path | None = None) -> NativeServicesReport:
     bindings = str(qgis_python_path(prefix))
     if bindings not in sys.path:
         sys.path.insert(0, bindings)
-    if str(SOURCE_ROOT) not in sys.path:
-        sys.path.insert(0, str(SOURCE_ROOT))
+    for root in reversed(SOURCE_ROOTS):
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
 
     failed = NativeServicesReport.unavailable()
     try:

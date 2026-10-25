@@ -27,7 +27,12 @@ from pathlib import Path
 HEADLESS_PLATFORM = "offscreen"
 PING_VALUE = 7
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = PROJECT_ROOT / "src"
+# The runtime and the tools are separate distributions (decision-35); both go
+# on the path so the probe imports the trees under test.
+SOURCE_ROOTS = (
+    PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src",
+    PROJECT_ROOT.parent / "qgis-sdk-tools" / "src",
+)
 
 
 def qgis_python_path(prefix: Path) -> Path:
@@ -115,8 +120,9 @@ def run_smoke(prefix: Path | None = None) -> LifecycleReport:
     for key, value in headless_environment(prefix, os.environ).items():
         os.environ[key] = value
     sys.path.insert(0, str(qgis_python_path(prefix)))
-    if str(SOURCE_ROOT) not in sys.path:
-        sys.path.insert(0, str(SOURCE_ROOT))
+    for root in reversed(SOURCE_ROOTS):
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
 
     failed = LifecycleReport.unavailable()
     try:

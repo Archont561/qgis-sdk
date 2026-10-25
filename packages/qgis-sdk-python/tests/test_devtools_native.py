@@ -35,6 +35,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import layers
 import pytest
 from qgis_sdk_tools.devtools.dev import DEV_SERVER_ENV
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
@@ -58,7 +59,6 @@ try:  # the web half: WebEngine has to be imported before the application
 except ImportError:  # pragma: no cover - depends on the host
     WEBENGINE = False
 
-SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
 DEADLINE = 30.0
 
 NATIVE_TESTS = """import pytest
@@ -93,7 +93,7 @@ def _cli(
     *args: str, cwd: Path, timeout: float = 600
 ) -> subprocess.CompletedProcess[str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")}
-    env["PYTHONPATH"] = str(SDK_SOURCE)
+    env["PYTHONPATH"] = layers.source_path()
     return subprocess.run(
         [sys.executable, "-m", "qgis_sdk_tools", *args],
         cwd=cwd,
@@ -273,7 +273,7 @@ def test_dev_serves_the_page_from_vite_inside_desktop(
         cwd=web_project,
         env={
             **{k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")},
-            "PYTHONPATH": str(SDK_SOURCE),
+            "PYTHONPATH": layers.source_path(),
             "PATH": env_path,
         },
         capture_output=True,

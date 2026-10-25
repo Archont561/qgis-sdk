@@ -8,7 +8,11 @@ from pathlib import Path
 # PYTHONPATH, so a bare interpreter gets the same schemas as the workspace task.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-for _path in (PROJECT_ROOT / "tests", PROJECT_ROOT / "src"):
+for _path in (
+    PROJECT_ROOT / "tests",
+    PROJECT_ROOT.parent / "qgis-sdk-tools" / "src",
+    PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src",
+):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 

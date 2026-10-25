@@ -261,10 +261,19 @@ jobs:
           # Warm pip's download cache from the dependency declaration so warm
           # runs skip re-resolving the dev extra's wheels (TASK-34).
           cache: pip
-          cache-dependency-path: packages/qgis-sdk-python/pyproject.toml
+          cache-dependency-path: |
+            packages/qgis-sdk-runtime/pyproject.toml
+            packages/qgis-sdk-tools/pyproject.toml
+            packages/qgis-sdk-python/pyproject.toml
 
+      # The runtime and the tools are editable so the suite imports the working
+      # tree; the kit's exact pins on them are then already satisfied by those
+      # installs, and `[dev]` adds the suite's own dependencies (decision-35).
       - name: Install Python test dependencies
-        run: python -m pip install --disable-pip-version-check -e "packages/qgis-sdk-python[dev]"
+        run: >-
+          python -m pip install --disable-pip-version-check
+          -e packages/qgis-sdk-runtime -e packages/qgis-sdk-tools
+          -e "packages/qgis-sdk-python[dev]"
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

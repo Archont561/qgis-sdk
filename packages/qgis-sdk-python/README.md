@@ -1,20 +1,24 @@
 # qgis-sdk
 
-**Python SDK foundations for QGIS plugins.**
+**The Python developer kit for QGIS plugins: runtime plus tools.**
 
 Declare a plugin on plain classes and let the SDK derive the rest: the JSON
 description a web view reads, the native dialogs, the Processing algorithms, the
 bridge allowlist and the generated TypeScript client. The pure layers import
-without QGIS or Qt, so a plugin is testable from source.
+without QGIS or Qt, so a plugin is testable from source. `qgis-sdk` is a
+code-free kit that installs [`qgis-sdk-runtime`](../qgis-sdk-runtime) (what a
+plugin imports) and [`qgis-sdk-tools`](../qgis-sdk-tools) (the command) at
+matching versions.
 
-> Experimental `0.2.0`. Each `0.Y.0` carries migration notes; nothing is
+> Experimental `0.x`. Each `0.Y.0` carries migration notes; nothing is
 > promised stable before `1.0.0`.
 
 ## Installation
 
 ```sh
-pip install qgis-sdk
+pip install qgis-sdk                            # runtime + tools
 pip install "qgis-sdk[controlled-deployment]"   # optional Pydantic adapter
+pip install qgis-sdk-runtime                    # the runtime alone (QGIS console)
 pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ```
 

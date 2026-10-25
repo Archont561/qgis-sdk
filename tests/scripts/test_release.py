@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import pytest
+import release as release_module
 from conftest import SAMPLE_VERSIONRC
 from release import (
     Commit,
@@ -27,6 +28,7 @@ from release import (
     detect_scope_from_files,
     main,
     manifest_versions,
+    normalize_scope,
     parse_log,
     parse_log_with_files,
     parse_milestone_tag,
@@ -53,12 +55,114 @@ from release import (
 )
 
 PYPROJECT = '[build-system]\nrequires = ["hatchling==1.32.4"]\n\n[project]\nname = "qgis-sdk"\nversion = "0.1.0"\ndescription = "Kept."\n'
-RECIPE_YAML = 'schema_version: 1\n\ncontext:\n  version: "0.1.0"\n\npackage:\n  name: qgis-sdk\n  version: ${{ version }}\n'
+RECIPE_YAML = (
+    'schema_version: 1\n\ncontext:\n  version: "0.1.0"\n'
+    '  runtime_version: "0.1.0"\n  tools_version: "0.1.0"\n'
+    '  tools_runtime_requirement: "qgis-sdk-runtime>=0.1.0,<0.2"\n\n'
+    "recipe:\n  name: qgis-sdk-kit\n  version: ${{ version }}\n"
+)
 PACKAGE_JSON = '{\n\t"name": "@archont561/qgis-sdk",\n\t"version": "0.1.0",\n\t"private": false\n}\n'
 ALIAS_PACKAGE_JSON = (
     '{\n\t"name": "qgis-sdk",\n\t"version": "0.1.0",\n'
     '\t"dependencies": {\n\t\t"@archont561/qgis-sdk": "0.1.0"\n\t}\n}\n'
 )
+KIT_PYPROJECT = (
+    '[project]\nname = "qgis-sdk"\nversion = "0.1.0"\n'
+    'dependencies = [\n  "qgis-sdk-runtime==0.1.0",\n  "qgis-sdk-tools==0.1.0",\n]\n\n'
+    "[project.optional-dependencies]\n"
+    'controlled-deployment = ["qgis-sdk-runtime[controlled-deployment]==0.1.0"]\n'
+)
+RUNTIME_PYPROJECT = '[project]\nname = "qgis-sdk-runtime"\nversion = "0.1.0"\n'
+TOOLS_PYPROJECT = (
+    '[project]\nname = "qgis-sdk-tools"\nversion = "0.1.0"\n'
+    'dependencies = [\n  "qgis-sdk-runtime>=0.1.0,<0.2",\n  "typer==0.27.3",\n]\n'
+)
+
+
+@pytest.fixture(autouse=True)
+def _the_real_manifests_stay_untouched():
+    """A stamp test that forgot to redirect a manifest must not edit the repo."""
+    import release
+
+    paths = (
+        release._PYPROJECT,
+        release._RUNTIME_PYPROJECT,
+        release._TOOLS_PYPROJECT,
+        release._RECIPE,
+        release._BRIDGE_PACKAGE,
+        release._ALIAS_PACKAGE,
+    )
+    before = {
+        path: path.read_text(encoding="utf-8") for path in paths if path.is_file()
+    }
+    yield
+    after = {path: path.read_text(encoding="utf-8") for path in paths if path.is_file()}
+    assert after == before, "a test rewrote a real manifest"
+
+
+def _python_manifests(
+    tmp_path,
+    monkeypatch,
+    python_version="0.1.0",
+    bridge_version="0.1.0",
+    runtime_version=None,
+    tools_range=None,
+    kit_pin=None,
+):
+    """Write every released manifest under ``tmp_path`` and point release.py at it."""
+    runtime_version = runtime_version or python_version
+    pyproject = tmp_path / "pyproject.toml"
+    runtime = tmp_path / "runtime-pyproject.toml"
+    tools = tmp_path / "tools-pyproject.toml"
+    recipe = tmp_path / "recipe.yaml"
+    package = tmp_path / "package.json"
+    pyproject.write_text(
+        KIT_PYPROJECT.replace(
+            'version = "0.1.0"', f'version = "{python_version}"'
+        ).replace("==0.1.0", f"=={kit_pin or python_version}"),
+        encoding="utf-8",
+    )
+    runtime.write_text(
+        RUNTIME_PYPROJECT.replace(
+            'version = "0.1.0"', f'version = "{runtime_version}"'
+        ),
+        encoding="utf-8",
+    )
+    runtime_range = tools_range or (
+        f">={runtime_version},<{release_module.next_minor(Version.parse(runtime_version))}"
+    )
+    tools.write_text(
+        TOOLS_PYPROJECT.replace(
+            'version = "0.1.0"', f'version = "{python_version}"'
+        ).replace(">=0.1.0,<0.2", runtime_range),
+        encoding="utf-8",
+    )
+    recipe.write_text(
+        RECIPE_YAML.replace('  version: "0.1.0"', f'  version: "{python_version}"')
+        .replace('runtime_version: "0.1.0"', f'runtime_version: "{runtime_version}"')
+        .replace('tools_version: "0.1.0"', f'tools_version: "{python_version}"')
+        .replace(">=0.1.0,<0.2", runtime_range),
+        encoding="utf-8",
+    )
+    package.write_text(
+        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
+        encoding="utf-8",
+    )
+    import release
+
+    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
+    monkeypatch.setattr(release, "_RUNTIME_PYPROJECT", runtime)
+    monkeypatch.setattr(release, "_TOOLS_PYPROJECT", tools)
+    monkeypatch.setattr(release, "_RECIPE", recipe)
+    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+    monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "no-alias.json")
+    return {
+        "pyproject": pyproject,
+        "runtime": runtime,
+        "tools": tools,
+        "recipe": recipe,
+        "package": package,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -531,17 +635,17 @@ def test_version_override_wins(sample_config):
             ["backlog/tasks/task-1.md", "README.md", ".agents/skills/tdd/SKILL.md"],
             "none",
         ),
-        (["packages/qgis-sdk-python/src/qgis_sdk/declarations.py"], "python"),
+        (["packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"], "python"),
         (["packages/qgis-sdk-typescript/src/index.ts"], "typescript"),
         (
             [
-                "packages/qgis-sdk-python/src/qgis_sdk/declarations.py",
+                "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py",
                 "packages/qgis-sdk-typescript/src/index.ts",
             ],
             "all",
         ),
         (
-            ["pixi.toml", "packages/qgis-sdk-python/src/qgis_sdk/declarations.py"],
+            ["pixi.toml", "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"],
             "python",
         ),
         (
@@ -728,6 +832,81 @@ def test_write_checksums_creates_the_output_directory(tmp_path):
 def test_twine_check_needs_a_wheel():
     with pytest.raises(QgisSdkReleaseError):
         twine_check([])
+
+
+def test_build_python_builds_every_distribution_by_default(tmp_path, monkeypatch):
+    """One `python-v*` release ships the runtime, the tools and the kit together."""
+    outdir = tmp_path / "pypi"
+    calls = []
+
+    def fake_runner(command):
+        calls.append(list(command))
+        if command[1:3] == ["-m", "build"]:
+            package = Path(command[-1]).name.replace("-", "_")
+            target = Path(command[command.index("--outdir") + 1])
+            target.mkdir(parents=True, exist_ok=True)
+            (target / f"{package}-0.1.0-py3-none-any.whl").write_bytes(b"w")
+
+    monkeypatch.setattr(release_module, "_default_artifact_runner", fake_runner)
+
+    assert main(["build-python", "--outdir", str(outdir)]) == 0
+
+    built = [
+        Path(call[-1]).as_posix() for call in calls if call[1:3] == ["-m", "build"]
+    ]
+    assert built == [
+        "packages/qgis-sdk-runtime",
+        "packages/qgis-sdk-tools",
+        "packages/qgis-sdk-python",
+    ]
+    twine = [call for call in calls if call[:2] == ["twine", "check"]]
+    assert len(twine) == 1 and len(twine[0]) == 2 + 3
+    # One directory per distribution: the workflow publishes each on its own.
+    assert sorted(wheel.parent.name for wheel in outdir.glob("*/*.whl")) == [
+        "kit",
+        "runtime",
+        "tools",
+    ]
+
+
+def test_build_python_builds_only_the_distribution_a_scope_ships(tmp_path, monkeypatch):
+    outdir = tmp_path / "pypi"
+    calls = []
+
+    def fake_runner(command):
+        calls.append(list(command))
+        if command[1:3] == ["-m", "build"]:
+            target = Path(command[command.index("--outdir") + 1])
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "qgis_sdk_tools-0.1.0-py3-none-any.whl").write_bytes(b"w")
+
+    monkeypatch.setattr(release_module, "_default_artifact_runner", fake_runner)
+
+    assert main(["build-python", "--scope", "tools", "--outdir", str(outdir)]) == 0
+
+    built = [
+        Path(call[-1]).as_posix() for call in calls if call[1:3] == ["-m", "build"]
+    ]
+    assert built == ["packages/qgis-sdk-tools"]
+    assert [wheel.parent.name for wheel in outdir.glob("*/*.whl")] == ["tools"]
+
+
+def test_build_python_accepts_an_explicit_package_list(tmp_path, monkeypatch):
+    outdir = tmp_path / "pypi"
+    calls = []
+
+    def fake_runner(command):
+        calls.append(list(command))
+        if command[1:3] == ["-m", "build"]:
+            target = Path(command[command.index("--outdir") + 1])
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "only-0.1.0-py3-none-any.whl").write_bytes(b"w")
+
+    monkeypatch.setattr(release_module, "_default_artifact_runner", fake_runner)
+
+    assert main(["build-python", "--package", "pkg/only", "--outdir", str(outdir)]) == 0
+
+    assert [call[-1] for call in calls if call[1:3] == ["-m", "build"]] == ["pkg/only"]
 
 
 # ---------------------------------------------------------------------------
@@ -1061,6 +1240,9 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
         "prerelease": "false",
         "scope": "python",
         "python": "true",
+        "kit": "true",
+        "runtime": "true",
+        "tools": "true",
         "typescript": "false",
         "tag_name": "python-v0.2.0",
     }
@@ -1076,8 +1258,26 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
         "prerelease": "true",
         "scope": "typescript",
         "python": "false",
+        "kit": "false",
+        "runtime": "false",
+        "tools": "false",
         "typescript": "true",
         "tag_name": "ts/v0.2.0-rc.1",
+    }
+
+    out_file.write_text("", encoding="utf-8")
+    assert main(["classify", "--tag", "tools-v0.5.1", "--scoped"]) == 0
+    tools_outputs = dict(
+        line.split("=", 1) for line in out_file.read_text().splitlines() if line
+    )
+    assert tools_outputs["scope"] == "tools"
+    assert {
+        key: tools_outputs[key] for key in ("python", "kit", "runtime", "tools")
+    } == {
+        "python": "true",
+        "kit": "false",
+        "runtime": "false",
+        "tools": "true",
     }
 
 
@@ -1112,24 +1312,246 @@ def test_tag_needs_a_message():
     assert main(["tag", "--tag", "v0.1.0"]) == 1
 
 
-def test_stamp_rewrites_both_manifests(tmp_path, monkeypatch):
-    pyproject = tmp_path / "pyproject.toml"
-    recipe = tmp_path / "recipe.yaml"
-    package = tmp_path / "package.json"
-    pyproject.write_text(PYPROJECT, encoding="utf-8")
-    recipe.write_text(RECIPE_YAML, encoding="utf-8")
-    package.write_text(PACKAGE_JSON, encoding="utf-8")
-    import release
-
-    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
-    monkeypatch.setattr(release, "_RECIPE", recipe)
-    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+def test_stamp_rewrites_every_manifest(tmp_path, monkeypatch):
+    files = _python_manifests(tmp_path, monkeypatch)
     from release import main
 
     assert main(["stamp", "--version", "0.2.0-rc.1"]) == 0
-    assert 'version = "0.2.0rc1"' in pyproject.read_text()
-    assert '  version: "0.2.0rc1"' in recipe.read_text()
-    assert '"version": "0.2.0-rc.1"' in package.read_text()
+    assert 'version = "0.2.0rc1"' in files["pyproject"].read_text()
+    assert 'version = "0.2.0rc1"' in files["runtime"].read_text()
+    assert 'version = "0.2.0rc1"' in files["tools"].read_text()
+    assert '  version: "0.2.0rc1"' in files["recipe"].read_text()
+    assert '"version": "0.2.0-rc.1"' in files["package"].read_text()
+
+
+def test_stamp_pins_the_kit_to_the_runtime_and_the_tools_it_releases_with(
+    tmp_path, monkeypatch
+):
+    """``pip install qgis-sdk==X`` installs runtime X and tools X (TASK-57 AC 1)."""
+    files = _python_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.5.0", "--scope", "python"]) == 0
+
+    kit = files["pyproject"].read_text()
+    assert '"qgis-sdk-runtime==0.5.0"' in kit
+    assert '"qgis-sdk-tools==0.5.0"' in kit
+    assert '"qgis-sdk-runtime[controlled-deployment]==0.5.0"' in kit
+    assert "0.1.0" not in kit
+
+
+def test_stamp_moves_the_tools_tested_runtime_range_with_the_runtime(
+    tmp_path, monkeypatch
+):
+    """The tools were tested against the runtime they ship with, up to its next minor."""
+    files = _python_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.5.2", "--scope", "python"]) == 0
+
+    tools = files["tools"].read_text()
+    assert '"qgis-sdk-runtime>=0.5.2,<0.6"' in tools
+    assert '"typer==0.27.3"' in tools
+    assert main(["verify-versions", "--scope", "python", "--version", "0.5.2"]) == 0
+
+
+def test_stamp_kit_pins_refuses_a_kit_without_pins():
+    with pytest.raises(QgisSdkReleaseError, match="pins neither"):
+        release_module.stamp_kit_pins(PYPROJECT, Version.parse("0.2.0"))
+
+
+def test_stamp_tools_runtime_range_refuses_a_tools_manifest_without_a_range():
+    with pytest.raises(QgisSdkReleaseError, match="no qgis-sdk-runtime"):
+        release_module.stamp_tools_runtime_range(
+            RUNTIME_PYPROJECT, Version.parse("0.2.0")
+        )
+
+
+@pytest.mark.parametrize(
+    ("lower", "upper", "runtime", "included"),
+    [
+        ("0.4.0", "0.5", "0.4.0", True),
+        ("0.4.0", "0.5", "0.4.9", True),
+        ("0.4.0", "0.5", "0.5.0", False),
+        ("0.4.0", "0.5", "0.3.9", False),
+        ("0.4.0", "1.0", "0.9.0", True),
+    ],
+)
+def test_runtime_range_includes(lower, upper, runtime, included):
+    assert (
+        release_module.runtime_range_includes(
+            Version.parse(lower), upper, Version.parse(runtime)
+        )
+        is included
+    )
+
+
+def test_read_kit_pins_and_tools_range_round_trip():
+    assert release_module.read_kit_pins(KIT_PYPROJECT) == (
+        ("qgis-sdk-runtime", Version.parse("0.1.0")),
+        ("qgis-sdk-tools", Version.parse("0.1.0")),
+        ("qgis-sdk-runtime[controlled-deployment]", Version.parse("0.1.0")),
+    )
+    assert release_module.read_tools_runtime_range(TOOLS_PYPROJECT) == (
+        Version.parse("0.1.0"),
+        "0.2",
+    )
+
+
+def test_verify_versions_names_a_kit_pin_that_lags_the_release(
+    tmp_path, monkeypatch, capsys
+):
+    _python_manifests(tmp_path, monkeypatch, python_version="0.2.0", kit_pin="0.1.0")
+
+    assert main(["verify-versions", "--scope", "python"]) == 1
+
+    out = capsys.readouterr().out
+    assert "kit pin qgis-sdk-runtime=0.1.0" in out
+
+
+def test_verify_versions_refuses_tools_whose_range_excludes_the_runtime(
+    tmp_path, monkeypatch, capsys
+):
+    """A tools release must include the runtime it ships next to (TASK-57 AC 2)."""
+    _python_manifests(
+        tmp_path, monkeypatch, python_version="0.5.0", tools_range=">=0.4.0,<0.5"
+    )
+
+    assert main(["verify-versions", "--scope", "python"]) == 1
+
+    out = capsys.readouterr().out
+    assert "qgis-sdk-runtime>=0.4.0,<0.5" in out
+    assert "runtime at HEAD is 0.5.0" in out
+
+
+# ---------------------------------------------------------------------------
+# Independent runtime / tools releases (TASK-57 AC 2)
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_and_tools_are_release_scopes_of_their_own():
+    assert normalize_scope("runtime") == "runtime"
+    assert normalize_scope("qgis-sdk-tools") == "tools"
+    assert tag_for_version(Version.parse("0.5.1"), "runtime") == "runtime-v0.5.1"
+    assert parse_release_tag("tools-v0.6.0") == ("tools", Version.parse("0.6.0"))
+    assert release_module.scope_ships("runtime") == {
+        "python": True,
+        "kit": False,
+        "runtime": True,
+        "tools": False,
+        "typescript": False,
+    }
+    assert release_module.scope_ships("python")["tools"] is True
+
+
+def test_a_kit_tag_is_a_base_for_the_runtime_and_the_tools():
+    tags = ("python-v0.5.0", "runtime-v0.5.1", "tools-v0.5.2", "ts-v0.3.0")
+
+    assert sort_tags(tags, scope="runtime") == ("runtime-v0.5.1", "python-v0.5.0")
+    assert sort_tags(tags, scope="tools") == ("tools-v0.5.2", "python-v0.5.0")
+    assert sort_tags(tags, scope="python") == ("python-v0.5.0",)
+
+
+def test_commits_are_kept_for_the_distribution_they_touch():
+    runtime = _commit("fix(runtime): r", "packages/qgis-sdk-runtime/src/qgis_sdk/a.py")
+    tools = _commit("feat(tools): t", "packages/qgis-sdk-tools/src/qgis_sdk_tools/b.py")
+    kit = _commit("chore(kit): k", "packages/qgis-sdk-python/pyproject.toml")
+    bridge = _commit("fix(bridge): b", "packages/qgis-sdk-typescript/src/index.ts")
+
+    assert release_module.commit_scopes(runtime) == {"python", "runtime"}
+    assert release_module.commit_scopes(kit) == {"python"}
+    assert commits_for_scope((runtime, tools, kit, bridge), "runtime") == (runtime,)
+    assert commits_for_scope((runtime, tools, kit, bridge), "tools") == (tools,)
+    assert commits_for_scope((runtime, tools, kit, bridge), "python") == (
+        runtime,
+        tools,
+        kit,
+    )
+
+
+def test_stamp_scope_runtime_moves_the_runtime_alone(tmp_path, monkeypatch):
+    files = _python_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.1.1", "--scope", "runtime"]) == 0
+
+    assert 'version = "0.1.1"' in files["runtime"].read_text()
+    recipe = files["recipe"].read_text()
+    assert 'runtime_version: "0.1.1"' in recipe
+    assert '  version: "0.1.0"' in recipe and 'tools_version: "0.1.0"' in recipe
+    kit = files["pyproject"].read_text()
+    assert 'version = "0.1.0"' in kit and '"qgis-sdk-runtime==0.1.0"' in kit
+    assert 'version = "0.1.0"' in files["tools"].read_text()
+    # The kit's pin now lags the runtime; that is allowed. Leading is not.
+    assert main(["verify-versions"]) == 0
+    assert main(["verify-versions", "--scope", "runtime", "--version", "0.1.1"]) == 0
+
+
+def test_stamp_scope_tools_tests_against_the_runtime_at_head(tmp_path, monkeypatch):
+    files = _python_manifests(tmp_path, monkeypatch, runtime_version="0.1.3")
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "tools"]) == 0
+
+    tools = files["tools"].read_text()
+    assert 'version = "0.2.0"' in tools
+    assert '"qgis-sdk-runtime>=0.1.3,<0.2"' in tools
+    recipe = files["recipe"].read_text()
+    assert 'tools_version: "0.2.0"' in recipe
+    assert 'tools_runtime_requirement: "qgis-sdk-runtime>=0.1.3,<0.2"' in recipe
+    assert 'runtime_version: "0.1.3"' in recipe
+    assert 'version = "0.1.3"' in files["runtime"].read_text()
+    assert main(["verify-versions", "--scope", "tools", "--version", "0.2.0"]) == 0
+
+
+def test_a_runtime_release_the_tools_cannot_use_is_refused(
+    tmp_path, monkeypatch, capsys
+):
+    _python_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "runtime"]) == 0
+    assert main(["verify-versions", "--scope", "runtime", "--version", "0.2.0"]) == 1
+
+    out = capsys.readouterr().out
+    assert "qgis-sdk-runtime>=0.1.0,<0.2" in out
+    assert "runtime at HEAD is 0.2.0" in out
+    assert "stamp --scope tools" in out
+
+
+def test_a_kit_pin_that_leads_the_manifest_it_names_is_refused(
+    tmp_path, monkeypatch, capsys
+):
+    _python_manifests(tmp_path, monkeypatch, kit_pin="0.3.0")
+
+    assert main(["verify-versions"]) == 1
+
+    out = capsys.readouterr().out
+    assert "qgis-sdk-runtime==0.3.0" in out
+    assert "0.1.0 at HEAD" in out
+
+
+def test_stamp_recipe_context_names_a_missing_key():
+    with pytest.raises(QgisSdkReleaseError, match="no quoted tools_version"):
+        release_module.stamp_recipe_context(
+            PYPROJECT, "tools_version", Version.parse("0.1.0")
+        )
+    assert release_module.read_recipe_context(PYPROJECT, "tools_version") is None
+
+
+def test_verify_versions_reports_the_tools_runtime_range(tmp_path, monkeypatch, capsys):
+    _python_manifests(tmp_path, monkeypatch, python_version="0.5.0")
+
+    assert main(["verify-versions", "--scope", "python", "--json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["scopes"]["python"]["runtime_range"] == ">=0.5.0,<0.6"
+    assert set(payload["scopes"]["python"]["manifests"]) == {
+        "pyproject.toml",
+        "runtime pyproject.toml",
+        "tools pyproject.toml",
+        "kit pin qgis-sdk-runtime",
+        "kit pin qgis-sdk-tools",
+        "kit pin qgis-sdk-runtime[controlled-deployment]",
+        "recipe.yaml",
+        "recipe runtime_version",
+        "recipe tools_version",
+    }
 
 
 def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
@@ -1342,6 +1764,8 @@ def test_three_agreeing_manifests_report_their_shared_version():
         "pyproject.toml": "0.1.0",
         "package.json": "0.1.0",
         "recipe.yaml": "0.1.0",
+        "recipe runtime_version": "0.1.0",
+        "recipe tools_version": "0.1.0",
     }
 
 
@@ -1398,7 +1822,11 @@ def test_the_verify_versions_command_checks_every_scope_on_its_own(capsys):
     assert main(["verify-versions"]) == 0
 
     out = capsys.readouterr().out
-    assert "released manifests for scope python agree on" in out
+    # Without a release in hand each distribution agrees with itself; the kit
+    # is checked on its own because its pins may lag an independent release.
+    assert "released manifests for scope runtime agree on" in out
+    assert "released manifests for scope tools agree on" in out
+    assert "released manifests for scope kit agree on" in out
     assert "released manifests for scope typescript agree on" in out
     assert "contract version 1 agrees" in out
 
@@ -1407,18 +1835,50 @@ def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
     assert main(["verify-versions", "--json"]) == 0
 
     payload = json.loads(capsys.readouterr().out)
-    python_scope = payload["scopes"]["python"]
-    typescript_scope = payload["scopes"]["typescript"]
+    scopes = payload["scopes"]
+    typescript_scope = scopes["typescript"]
 
     # A release stamps these manifests, so the assertion is about the serialized
     # agreement - every manifest of a scope carrying the scope's one version -
     # rather than about the number the workspace happens to carry today.
-    assert set(python_scope["manifests"]) == {"pyproject.toml", "recipe.yaml"}
-    assert set(python_scope["manifests"].values()) == {python_scope["version"]}
+    assert set(scopes) == {"runtime", "tools", "kit", "typescript"}
+    assert set(scopes["runtime"]["manifests"]) == {
+        "runtime pyproject.toml",
+        "recipe runtime_version",
+    }
+    assert set(scopes["tools"]["manifests"]) == {
+        "tools pyproject.toml",
+        "recipe tools_version",
+    }
+    assert set(scopes["kit"]["manifests"]) == {"pyproject.toml", "recipe.yaml"}
+    assert set(scopes["kit"]["pins"]) >= {"qgis-sdk-runtime", "qgis-sdk-tools"}
+    for entry in (scopes["runtime"], scopes["tools"], scopes["kit"]):
+        assert set(entry["manifests"].values()) == {entry["version"]}
+    assert scopes["tools"]["runtime_range"].startswith(
+        f">={scopes['runtime']['version']},<"
+    )
     assert typescript_scope["manifests"] == {
         "package.json": typescript_scope["version"]
     }
     assert payload["contract"] == {"python": 1, "typescript": 1}
+
+
+def test_the_verify_versions_command_checks_the_whole_kit_on_request(capsys):
+    assert main(["verify-versions", "--scope", "python", "--json"]) == 0
+
+    python_scope = json.loads(capsys.readouterr().out)["scopes"]["python"]
+    assert set(python_scope["manifests"]) >= {
+        "pyproject.toml",
+        "runtime pyproject.toml",
+        "tools pyproject.toml",
+        "kit pin qgis-sdk-runtime",
+        "kit pin qgis-sdk-tools",
+        "recipe.yaml",
+        "recipe runtime_version",
+        "recipe tools_version",
+    }
+    assert set(python_scope["manifests"].values()) == {python_scope["version"]}
+    assert python_scope["runtime_range"].startswith(f">={python_scope['version']},<")
 
 
 def test_the_repository_contract_versions_agree():
@@ -1426,9 +1886,9 @@ def test_the_repository_contract_versions_agree():
     repo_root = Path(__file__).resolve().parents[2]
 
     contract = contract_versions(
-        (repo_root / "packages/qgis-sdk-python/src/qgis_sdk/declarations.py").read_text(
-            encoding="utf-8"
-        ),
+        (
+            repo_root / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
+        ).read_text(encoding="utf-8"),
         (repo_root / "packages/qgis-sdk-typescript/src/index.ts").read_text(
             encoding="utf-8"
         ),
@@ -1464,7 +1924,7 @@ def _commit(subject, *files, body=""):
 def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
     raw = (
         "\x1e" + "a" * 40 + "\x1ffeat(sdk): x\x1fbody line\n\nsecond para\x1d\n"
-        "packages/qgis-sdk-python/src/qgis_sdk/declarations.py\n"
+        "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py\n"
         "pixi.toml\n"
         "\x1e" + "b" * 40 + "\x1fdocs: y\x1f\x1d\n"
         "backlog/tasks/task-1.md\n"
@@ -1473,7 +1933,7 @@ def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
     commits = parse_log_with_files(raw)
 
     assert commits[0].files == (
-        "packages/qgis-sdk-python/src/qgis_sdk/declarations.py",
+        "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py",
         "pixi.toml",
     )
     assert "second para" in commits[0].body
@@ -1519,14 +1979,14 @@ def test_a_scoped_tag_sort_keeps_that_package_history_only():
 def test_commits_are_kept_for_the_packages_they_touch():
     commits = (
         _commit(
-            "feat(sdk): python only", "packages/qgis-sdk-python/src/qgis_sdk/core.py"
+            "feat(sdk): python only", "packages/qgis-sdk-runtime/src/qgis_sdk/core.py"
         ),
         _commit(
             "feat(bridge): bridge only", "packages/qgis-sdk-typescript/src/index.ts"
         ),
         _commit(
             "feat(both): spans packages",
-            "packages/qgis-sdk-python/src/qgis_sdk/core.py",
+            "packages/qgis-sdk-runtime/src/qgis_sdk/core.py",
             "packages/qgis-sdk-typescript/src/index.ts",
         ),
         _commit("docs: backlog", "backlog/tasks/task-1.md"),
@@ -1590,68 +2050,35 @@ def test_each_scope_bumps_from_its_own_last_release(sample_config):
 
 
 def test_stamp_scope_python_leaves_the_bridge_manifest_alone(tmp_path, monkeypatch):
-    pyproject = tmp_path / "pyproject.toml"
-    recipe = tmp_path / "recipe.yaml"
-    package = tmp_path / "package.json"
-    pyproject.write_text(PYPROJECT, encoding="utf-8")
-    recipe.write_text(RECIPE_YAML, encoding="utf-8")
-    package.write_text(PACKAGE_JSON, encoding="utf-8")
-    import release
-
-    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
-    monkeypatch.setattr(release, "_RECIPE", recipe)
-    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+    files = _python_manifests(tmp_path, monkeypatch)
 
     assert main(["stamp", "--version", "0.2.0", "--scope", "python"]) == 0
 
-    assert 'version = "0.2.0"' in pyproject.read_text()
-    assert '  version: "0.2.0"' in recipe.read_text()
-    assert '"version": "0.1.0"' in package.read_text()
+    assert 'version = "0.2.0"' in files["pyproject"].read_text()
+    assert '  version: "0.2.0"' in files["recipe"].read_text()
+    assert '"version": "0.1.0"' in files["package"].read_text()
 
 
 def test_stamp_scope_typescript_leaves_the_python_manifests_alone(
     tmp_path, monkeypatch
 ):
-    pyproject = tmp_path / "pyproject.toml"
-    recipe = tmp_path / "recipe.yaml"
-    package = tmp_path / "package.json"
-    pyproject.write_text(PYPROJECT, encoding="utf-8")
-    recipe.write_text(RECIPE_YAML, encoding="utf-8")
-    package.write_text(PACKAGE_JSON, encoding="utf-8")
-    import release
-
-    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
-    monkeypatch.setattr(release, "_RECIPE", recipe)
-    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
+    files = _python_manifests(tmp_path, monkeypatch)
 
     assert main(["stamp", "--version", "0.2.0", "--scope", "typescript"]) == 0
 
-    assert '"version": "0.2.0"' in package.read_text()
-    assert 'version = "0.1.0"' in pyproject.read_text()
-    assert '  version: "0.1.0"' in recipe.read_text()
+    assert '"version": "0.2.0"' in files["package"].read_text()
+    for name in ("pyproject", "runtime", "tools"):
+        assert 'version = "0.1.0"' in files[name].read_text()
+    assert '  version: "0.1.0"' in files["recipe"].read_text()
 
 
 def _diverged_manifests(tmp_path, monkeypatch, python_version, bridge_version):
-    pyproject = tmp_path / "pyproject.toml"
-    recipe = tmp_path / "recipe.yaml"
-    package = tmp_path / "package.json"
-    pyproject.write_text(
-        PYPROJECT.replace('version = "0.1.0"', f'version = "{python_version}"'),
-        encoding="utf-8",
+    _python_manifests(
+        tmp_path,
+        monkeypatch,
+        python_version=python_version,
+        bridge_version=bridge_version,
     )
-    recipe.write_text(
-        RECIPE_YAML.replace('version: "0.1.0"', f'version: "{python_version}"'),
-        encoding="utf-8",
-    )
-    package.write_text(
-        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
-        encoding="utf-8",
-    )
-    import release
-
-    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
-    monkeypatch.setattr(release, "_RECIPE", recipe)
-    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
 
 
 def test_diverged_packages_pass_when_each_scope_agrees(tmp_path, monkeypatch):
@@ -1759,22 +2186,13 @@ def test_read_alias_versions_refuses_a_range_pin():
 
 
 def _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", alias_text=None):
-    pyproject = tmp_path / "pyproject.toml"
-    package = tmp_path / "package.json"
+    files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
     alias = tmp_path / "alias.json"
-    pyproject.write_text(PYPROJECT, encoding="utf-8")
-    package.write_text(
-        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
-        encoding="utf-8",
-    )
     alias.write_text(alias_text or ALIAS_PACKAGE_JSON, encoding="utf-8")
     import release
 
-    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
-    monkeypatch.setattr(release, "_RECIPE", tmp_path / "no-recipe.yaml")
-    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
-    return package, alias
+    return files["package"], alias
 
 
 def test_stamp_scope_typescript_stamps_the_alias_with_the_bridge(tmp_path, monkeypatch):

@@ -11,11 +11,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import layers
 import pytest
 from qgis_sdk_tools.pytest_plugin import TARGET_ENV
 
 PLUGIN = "qgis_sdk_tools.pytest_plugin"
-SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src"
 
 
 def run_pytest(
@@ -26,7 +26,7 @@ def run_pytest(
         for key, value in os.environ.items()
         if key not in {TARGET_ENV, "PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST"}
     }
-    env["PYTHONPATH"] = str(SOURCE_ROOT)
+    env["PYTHONPATH"] = layers.source_path()
     if target is not None:
         env[TARGET_ENV] = target
     return subprocess.run(
