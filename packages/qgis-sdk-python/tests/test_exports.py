@@ -26,7 +26,8 @@ def test_plan_reports_every_reason_at_once(tmp_path: Path) -> None:
     assert error.value.destination == str(destination)
     assert len(error.value.reasons) == 2
     assert error.value.code == "export_refused"
-    assert "out.shp" not in str(error.value).replace(str(destination), "")
+    assert str(error.value).startswith(f"Export to {str(destination)!r} refused: ")
+    assert all("out.shp" not in reason for reason in error.value.reasons)
 
 
 def test_plan_refuses_a_directory_as_destination(tmp_path: Path) -> None:
