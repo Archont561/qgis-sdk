@@ -34,6 +34,7 @@ from release import (
     parse_milestone_tag,
     parse_release_tag,
     parse_versionrc,
+    plan_base_tag,
     read_alias_versions,
     read_pyproject_version,
     read_python_contract_version,
@@ -217,6 +218,17 @@ def test_bump_kinds_reset_lower_parts():
     assert str(base.bump("major")) == "2.0.0"
     with pytest.raises(QgisSdkReleaseVersionError):
         base.bump("breaking")
+
+
+def test_bumping_a_prerelease_graduates_it_to_its_core():
+    """A candidate is a preview of its core, so the next release *is* the core."""
+    candidate = Version.parse("0.5.0-rc.1")
+    assert str(candidate.bump("minor")) == "0.5.0"
+    assert str(candidate.bump("patch")) == "0.5.0"
+    assert str(candidate.bump("major")) == "1.0.0"
+    assert str(Version.parse("0.5.1-rc.1").bump("minor")) == "0.6.0"
+    assert str(Version.parse("0.5.1-rc.1").bump("patch")) == "0.5.1"
+    assert str(Version.parse("1.0.0-rc.1").bump("major")) == "1.0.0"
 
 
 def test_with_prerelease_validates_suffix():
@@ -535,7 +547,8 @@ def test_dispatch_continues_the_rc_train_from_a_prerelease_base(sample_config):
         sample_config,
         suffix="rc.3",
     )
-    assert plan.action == "tag" and plan.tag == "v0.2.0-rc.3"
+    assert plan.action == "tag" and plan.tag == "v0.1.0-rc.3"
+    assert plan.base_tag == "v0.1.0-rc.2"
 
 
 def test_dispatch_can_bootstrap_the_deliberate_stable_release(sample_config):
@@ -600,9 +613,68 @@ def test_breaking_escalates_minor_before_one_and_major_after(sample_config):
     assert one_x.tag == "v2.0.0"
 
 
-def test_prerelease_base_bumps_from_its_core(sample_config):
+def test_a_prerelease_base_graduates_to_its_core(sample_config):
     plan = compute_plan("dispatch", ("v0.1.0-rc.1",), _log("feat: next"), sample_config)
-    assert plan.tag == "v0.2.0"
+    assert plan.tag == "v0.1.0"
+
+
+def test_a_stable_release_after_a_candidate_starts_from_the_last_stable(
+    sample_config,
+):
+    """``python-v0.5.0-rc.1`` rehearsed 0.5.0; the stable 0.5.0 still follows 0.4.0.
+
+    The candidate is not a base for the stable release: the version comes from
+    the commits since the last stable tag, and so does the changelog, so the
+    release notes cover everything a 0.4.0 user gets.
+    """
+    tags = ("python-v0.4.0", "python-v0.5.0-rc.1", "ts-v0.3.0")
+    commits = _log("feat(python): split", "fix(python): windows path")
+
+    inferred = compute_plan("dispatch", tags, commits, sample_config, scope="python")
+    forced = compute_plan(
+        "dispatch", tags, commits, sample_config, scope="python", bump="minor"
+    )
+    patch_only = compute_plan(
+        "dispatch", tags, _log("fix(python): one"), sample_config, scope="python"
+    )
+
+    assert (inferred.tag, inferred.base_tag) == ("python-v0.5.0", "python-v0.4.0")
+    assert (forced.tag, forced.base_tag) == ("python-v0.5.0", "python-v0.4.0")
+    assert patch_only.tag == "python-v0.4.1"
+    assert (
+        "[python-v0.4.0...python-v0.5.0]"
+        in compute_plan(
+            "dispatch",
+            tags,
+            commits,
+            sample_config,
+            scope="python",
+            repo_slug="o/r",
+        ).changelog
+    )
+
+
+def test_a_second_candidate_follows_the_first_on_the_same_core(sample_config):
+    tags = ("python-v0.4.0", "python-v0.5.0-rc.1")
+
+    plan = compute_plan(
+        "dispatch",
+        tags,
+        _log("fix(python): x"),
+        sample_config,
+        scope="python",
+        suffix="rc.2",
+    )
+
+    assert (plan.tag, plan.base_tag) == ("python-v0.5.0-rc.2", "python-v0.5.0-rc.1")
+
+
+def test_plan_base_tag_prefers_the_last_stable_for_a_stable_release():
+    ordered = ("v0.5.0-rc.2", "v0.5.0-rc.1", "v0.4.0", "v0.3.0")
+    assert plan_base_tag(ordered, suffix="") == "v0.4.0"
+    assert plan_base_tag(ordered, suffix="rc.3") == "v0.5.0-rc.2"
+    assert plan_base_tag(("v0.1.0-rc.1",), suffix="") == "v0.1.0-rc.1"
+    assert plan_base_tag((), suffix="") is None
 
 
 def test_existing_tag_skips(sample_config):
@@ -1148,6 +1220,59 @@ def test_plan_dispatch_writes_outputs_and_changelog(tmp_path, monkeypatch):
     changelog = (tmp_path / "qgis-sdk-release-changelog.md").read_text()
     assert "## v0.1.0" in changelog
     assert outputs["changelog_file"].endswith("qgis-sdk-release-changelog.md")
+
+
+def test_plan_cli_logs_commits_since_the_last_stable_for_a_stable_release(
+    tmp_path, monkeypatch
+):
+    config = _versionrc(tmp_path)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    ranges: list[str | None] = []
+    log = "a" * 40 + "\x1f" + "feat(python): x" + "\x1f" + "\x1e\n"
+    monkeypatch.setattr(
+        "release.list_tags",
+        lambda runner=None: ("python-v0.4.0", "python-v0.5.0-rc.1"),
+    )
+    monkeypatch.setattr(
+        "release.log_commits_with_files",
+        lambda rng=None, runner=None: (ranges.append(rng), _with_files(log))[1],
+    )
+    from release import main
+
+    assert (
+        main(
+            [
+                "plan",
+                "--trigger",
+                "dispatch",
+                "--scope",
+                "python",
+                "--config",
+                str(config),
+            ]
+        )
+        == 0
+    )
+    assert ranges == ["python-v0.4.0..HEAD"]
+    ranges.clear()
+    assert (
+        main(
+            [
+                "plan",
+                "--trigger",
+                "dispatch",
+                "--scope",
+                "python",
+                "--suffix",
+                "rc.2",
+                "--config",
+                str(config),
+            ]
+        )
+        == 0
+    )
+    assert ranges == ["python-v0.5.0-rc.1..HEAD"]
 
 
 def test_plan_push_without_tags_skips(tmp_path, monkeypatch):

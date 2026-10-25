@@ -412,14 +412,27 @@ class Version:
         return (self.major, self.minor, self.patch, _pre_key(self.pre))
 
     def bump(self, kind: str) -> Version:
-        """Return the next release version for ``major``, ``minor``, or ``patch``."""
+        """Return the next release version for ``major``, ``minor``, or ``patch``.
+
+        A prerelease is a preview of its core: when the core already is the
+        release ``kind`` asks for (``0.5.0-rc.1`` for a minor or a patch,
+        ``1.0.0-rc.1`` for a major), the next release is that core, not the one
+        after it. Otherwise the core moves as usual.
+        """
+        if kind not in _RANK:
+            raise QgisSdkReleaseVersionError(f"unknown bump kind: {kind!r}")
+        core = Version(self.major, self.minor, self.patch)
+        if self.is_prerelease and (
+            kind == "patch"
+            or (kind == "minor" and self.patch == 0)
+            or (kind == "major" and self.minor == 0 and self.patch == 0)
+        ):
+            return core
         if kind == "major":
             return Version(self.major + 1, 0, 0)
         if kind == "minor":
             return Version(self.major, self.minor + 1, 0)
-        if kind == "patch":
-            return Version(self.major, self.minor, self.patch + 1)
-        raise QgisSdkReleaseVersionError(f"unknown bump kind: {kind!r}")
+        return Version(self.major, self.minor, self.patch + 1)
 
     def with_prerelease(self, suffix: str) -> Version:
         """Return this version's core with a validated prerelease suffix."""
@@ -759,6 +772,26 @@ def render_changelog(
 _RANK = {"patch": 0, "minor": 1, "major": 2}
 
 
+def plan_base_tag(ordered: Sequence[str], suffix: str = "") -> str | None:
+    """The tag a release is computed and described from.
+
+    ``ordered`` is :func:`sort_tags` output, newest first. A prerelease
+    continues the candidate train from the newest tag of any kind. A stable
+    release starts from the newest *stable* tag: the candidates after it were
+    previews of the version being released, so its commits and its changelog
+    reach back to what the last stable user has. With candidates only, the
+    newest candidate is the base.
+    """
+    if not ordered:
+        return None
+    if suffix:
+        return ordered[0]
+    for tag in ordered:
+        if not version_from_tag(tag).is_prerelease:
+            return tag
+    return ordered[0]
+
+
 def sort_tags(tags: Iterable[str], scope: str = "all") -> tuple[str, ...]:
     """Sort release tags newest first, optionally for one scope only.
 
@@ -859,7 +892,7 @@ def compute_plan(
     else:
         resolved_scope = "all"
     ordered = sort_tags(tags, resolved_scope)
-    base_tag = ordered[0] if ordered else None
+    base_tag = plan_base_tag(ordered, suffix)
     first = base_tag is None
     stable_exists = any(not version_from_tag(tag).is_prerelease for tag in ordered)
     if scope.strip().lower() == "none":
@@ -1647,7 +1680,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
     else:
         plan_scope = "all"
     ordered = sort_tags(tags, plan_scope)
-    base_tag = ordered[0] if ordered else None
+    base_tag = plan_base_tag(ordered, args.suffix or "")
     revision_range = f"{base_tag}..HEAD" if base_tag else None
     commits = parse_log_with_files(log_commits_with_files(revision_range))
     dry_run_raw = str(getattr(args, "dry_run", "false")).strip().lower()
