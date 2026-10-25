@@ -10,10 +10,10 @@ The reference prose for `@archont561/qgis-sdk-bridge`. It used to live in
 `packages/qgis-sdk-bridge/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
 moved it here as the source for the documentation site
 ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)).
-Status at the time of writing: `0.1.1` published; `0.2.0` ships with the Python
-`0.3.0` milestone ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md))
-and carries the transport client, the host namespaces and the generated clients
-described below.
+Status at the time of writing: `0.2.0` released with the Python `0.3.0`
+milestone ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
+it carries the transport client, the host namespaces and the generated clients
+described below. Migration notes are at the end of this guide.
 
 The Python half of every surface here is in [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md).
 
@@ -279,3 +279,24 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   host. That evidence lives in the Python suite and the qualification harnesses
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
+
+## 0.2.0 migration notes
+
+`0.2.0` is the first bridge release since `0.1.1` and the first cut under its
+own tag (`ts-v0.2.0`); the Python SDK it pairs with is `0.3.0`.
+
+- **No breaking change in the root entry.** Every export of `0.1.1` is still
+  exported from `@archont561/qgis-sdk-bridge` with the same shape;
+  `parsePluginDescription` additionally reads the `streams` list a Python
+  `0.3.0` description carries. New root exports: `StreamDescription`,
+  `StreamEventKind`, `isPlainRecord`.
+- **`PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`**, matching the Python
+  declarations; `scripts/release.py verify-versions` refuses a pair that
+  disagrees. The transport speaks `protocol: 1`.
+- **New entry points**, each an optional import: `./bridge` (the transport
+  client, frames and refusal codes), `./host` (the generated host namespaces),
+  `./react` (thin hooks; `react >= 18` is an optional peer dependency and is
+  required only by this entry) and `./testing` (the scripted host harness).
+  Consumers of `0.1.1` import nothing from them unless they choose to.
+- **Manifest:** `package.json` carries `0.2.0`. Verify with
+  `python scripts/release.py verify-versions --scope typescript --version 0.2.0`.
