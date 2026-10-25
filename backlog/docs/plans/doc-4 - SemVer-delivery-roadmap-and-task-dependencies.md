@@ -91,6 +91,7 @@ The only milestone that changes bridge source, and the only one that releases th
 - [TASK-46](../../tasks/task-46%20-%20Make-handle.result-raise-the-jobs-own-failure-like-get-does.md): Make handle.result raise the job's own failure like get() does — from the 2026-10-25 scoped-jobs audit
 - [TASK-47](../../tasks/task-47%20-%20Release-explicit-owner-subscription-hooks-when-a-job-finishes.md): Release explicit-owner subscription hooks when a job finishes — from the 2026-10-25 scoped-jobs audit
 - [TASK-48](../../tasks/task-48%20-%20Give-derived-JobService-instances-a-complete-constructor.md): Give derived JobService instances a complete constructor — from the 2026-10-25 scoped-jobs audit
+- [TASK-49](../../tasks/task-49%20-%20Share-one-declaration-describer-and-a-Description-protocol-across-plugin-algorithm-and-job.md): Share one declaration-describer and a Description protocol across plugin, algorithm and job — from the 2026-10-25 duplication scan
 
 ### 0.4.0
 
