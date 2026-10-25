@@ -4,7 +4,7 @@ title: Publish qgis-sdk as an unscoped npm alias of @archont561/qgis-sdk
 status: In Progress
 assignee: []
 created_date: '2026-10-25 10:34'
-updated_date: '2026-10-25 10:42'
+updated_date: '2026-10-25 10:59'
 labels:
   - release
   - tooling
@@ -31,4 +31,6 @@ Owner request 2026-10-25: reserve both npm names and make both deploy targets, w
 
 <!-- SECTION:NOTES:BEGIN -->
 AC #1-#3 delivered in PR #66 (83412c1, fa2ac33): packages/qgis-sdk-alias with 10 Bun tests, release.py alias stamping/verification (13 tests), release.yml pack + tarball smoke + ordered publish + SHA256SUMS, CI and autorelease run the alias tests. Smoke verified locally against the real tarballs (12/12/22/4 exports mirrored). AC #4 is the owner's step: npx setup-npm-trusted-publish for @archont561/qgis-sdk and qgis-sdk, then bind release.yml / environment npm on both access pages before ts-v0.3.0. Stays In Progress until that is recorded.
+
+2026-10-25 release prep: owner confirmed the placeholders (0.0.0 on @archont561/qgis-sdk and qgis-sdk, registry shows both created 10:45 UTC) and the trusted-publisher bindings for release.yml / environment npm. Stamped 0.3.0 for scope typescript (scoped manifest, alias manifest and its pin; bun.lock refreshed) with doc-13's 0.3.0 migration notes, as the ts-v0.3.0 stamp PR. release.py plan --version-override 0.3.0 reads ts-v0.3.0 (forced minor: feat is a patch pre-1.0; decision-33 fixes the first publish under the new name at 0.3.0). The tag is pushed on the merge commit after the PR lands; AC #4 is checked once release.yml has published both names.
 <!-- SECTION:NOTES:END -->

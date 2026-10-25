@@ -10,10 +10,10 @@ The reference prose for `@archont561/qgis-sdk`. It used to live in
 `packages/qgis-sdk-typescript/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
 moved it here as the source for the documentation site
 ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)).
-Status at the time of writing: `0.2.0` released with the Python `0.3.0`
-milestone ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
+Status at the time of writing: `0.3.0`, the first release under this name
+(packages version independently, [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
 it carries the transport client, the host namespaces and the generated clients
-described below. Through `0.2.0` the package was published as
+described below, unchanged from `0.2.0`. Through `0.2.0` the package was published as
 `@archont561/qgis-sdk-bridge`; it is `@archont561/qgis-sdk` from `0.3.0` on
 ([decision-33](../../decisions/decision-33%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md)).
 Migration notes are at the end of this guide.
@@ -309,7 +309,11 @@ own tag (`ts-v0.2.0`); the Python SDK it pairs with is `0.3.0`.
 - **Manifest:** `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope typescript --version 0.2.0`.
 
-## Unreleased migration notes
+## 0.3.0 migration notes
+
+`0.3.0` is a rename release (`ts-v0.3.0`): the exports of `0.2.0` under the
+new name, plus the unscoped alias. Verify with
+`python scripts/release.py verify-versions --scope typescript --version 0.3.0`.
 
 - **Package renamed.** `@archont561/qgis-sdk-bridge` is now
   `@archont561/qgis-sdk`, published first as `0.3.0` with the exports of
