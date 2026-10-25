@@ -70,6 +70,10 @@ Read from the task files:
   and are proven against the binary by one opt-in harness
   (`QGIS_SDK_DEVTOOLS=1`, doc-14). TASK-16's remaining criteria (build reuse)
   move with sprint 3.
+- **Sprint 2b (2026-10-25): TASK-56.** The runtime/tools tree split of
+  [decision-35](../../decisions/decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md)
+  goes in before sprint 3 so that TASK-8 ships a package boundary and the
+  unreleased `pytest_plugin`/`devtools` paths move before anyone pins them.
 - **Sprint 3: TASK-21, TASK-8.** Refresh on top of `dev`; the ZIP reusing
   the check APIs (decision-8: build calls the library, not the CLI).
 - **Close: TASK-30.** Release gate; the Python minor is the deliberate act
