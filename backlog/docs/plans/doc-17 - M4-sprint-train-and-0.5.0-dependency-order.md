@@ -79,7 +79,7 @@ Read from the task files:
   rows in doc-14 ("Reference plugin through the toolchain"). The bridge
   inside the real view is the published `@archont561/qgis-sdk` 0.3.0; no
   defect surfaced, so no bridge release.
-- **Sprint 3: TASK-9.** The gates, written as checks: the explicit
+- **Sprint 3 (done 2026-10-25, PR #82): TASK-9.** The gates, written as checks: the explicit
   QGIS/Python/Qt/OS matrix, the tools-to-runtime range and the
   bridge-to-contract pair stated on the distributions TASK-57 created,
   `pixi lock --check` in the release path, and the metadata/build checks the
