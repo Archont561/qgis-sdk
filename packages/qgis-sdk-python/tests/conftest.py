@@ -42,8 +42,10 @@ def pytest_configure(config: pytest.Config) -> None:
         config.addinivalue_line("markers", f"{name}: {help_text}")
 
 
-SCAFFOLD_WEB_MODULE = "test_scaffold_web_native.py"
-"""The one webengine module that drives a *generated* plugin's view.
+DEFAULT_PROFILE_MODULES = frozenset(
+    {"test_scaffold_web_native.py", "test_reference_example_native.py"}
+)
+"""The webengine modules that drive a *generated* plugin's view.
 
 That view uses Chromium's default profile, while every other webengine module
 shares the off-the-record ``webengine_profile`` below. Chromium aborts the
@@ -56,25 +58,24 @@ share a process: doc-14 runs each opt-in harness file on its own.
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Derive ``native`` and ``pure`` so each half of the suite is one ``-m``.
 
-    And keep the scaffold-web harness alone with Chromium: when it is collected
-    (``QGIS_SDK_SCAFFOLD_WEB`` set) every webengine test of another module is
+    And keep a generated plugin's view alone with Chromium: when one of
+    :data:`DEFAULT_PROFILE_MODULES` is collected (``QGIS_SDK_SCAFFOLD_WEB`` or
+    ``QGIS_SDK_REFERENCE`` set) every webengine test of another module is
     skipped, with the reason, instead of taking the whole process down.
     """
-    scaffold_web_live = any(item.path.name == SCAFFOLD_WEB_MODULE for item in items)
+    owners = sorted(
+        {item.path.name for item in items if item.path.name in DEFAULT_PROFILE_MODULES}
+    )
     for item in items:
         declared = {marker.name for marker in item.iter_markers()}
         if declared & layers.NATIVE_LAYERS:
             item.add_marker(pytest.mark.native)
         else:
             item.add_marker(pytest.mark.pure)
-        if (
-            scaffold_web_live
-            and "webengine" in declared
-            and item.path.name != SCAFFOLD_WEB_MODULE
-        ):
+        if owners and "webengine" in declared and item.path.name not in owners:
             item.add_marker(
                 pytest.mark.skip(
-                    reason=f"{SCAFFOLD_WEB_MODULE} owns Chromium in this process; "
+                    reason=f"{', '.join(owners)} owns Chromium in this process; "
                     "run the webengine modules in a separate process (doc-14)"
                 )
             )
