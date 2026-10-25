@@ -38,6 +38,24 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+PACKAGES_ROOT = Path(__file__).resolve().parents[2]
+"""``packages/``: the workspace directory holding every distribution."""
+RUNTIME_SOURCE = PACKAGES_ROOT / "qgis-sdk-runtime" / "src"
+TOOLS_SOURCE = PACKAGES_ROOT / "qgis-sdk-tools" / "src"
+SOURCE_ROOTS = (RUNTIME_SOURCE, TOOLS_SOURCE)
+"""The import roots of the two distributions this suite covers (decision-35).
+
+The runtime and the tools are separate distributions with separate ``src``
+trees; a child interpreter that should see the SDK from source puts both on
+``PYTHONPATH`` - see :func:`source_path`.
+"""
+
+
+def source_path(*extra: Path | str) -> str:
+    """``PYTHONPATH`` value: ``extra`` first, then the two source roots."""
+    return os.pathsep.join(str(item) for item in (*extra, *SOURCE_ROOTS))
+
+
 NATIVE_LAYERS = frozenset({"qt", "qgis", "webengine", "desktop"})
 LAYER_HELP = {
     "qt": "needs a Qt event loop (a QApplication and the PyQt bindings)",

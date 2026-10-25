@@ -73,7 +73,7 @@ def _collect(*args: str) -> tuple[str, ...]:
         text=True,
         check=False,
         cwd=PROJECT,
-        env={**os.environ, "PYTHONPATH": str(PROJECT / "src")},
+        env={**os.environ, "PYTHONPATH": layers.source_path()},
     )
     assert completed.returncode in (0, 5), completed.stdout + completed.stderr
     return tuple(line for line in completed.stdout.splitlines() if "::" in line)

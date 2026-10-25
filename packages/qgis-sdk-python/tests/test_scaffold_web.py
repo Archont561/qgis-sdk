@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import layers
 import pytest
 from qgis_sdk_tools.check import check_project
 from qgis_sdk_tools.scaffold import (
@@ -26,8 +27,6 @@ from qgis_sdk_tools.scaffold.web import (
     install_command,
     script_command,
 )
-
-SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
 
 PLAIN_FILES = [
     ".gitignore",
@@ -210,7 +209,7 @@ def test_the_checked_in_bindings_are_what_bridge_generate_renders(
             "--check",
         ],
         cwd=project,
-        env={**_clean_env(), "PYTHONPATH": str(SDK_SOURCE)},
+        env={**_clean_env(), "PYTHONPATH": layers.source_path()},
         capture_output=True,
         text=True,
         check=False,
@@ -290,7 +289,7 @@ def test_the_web_projects_starter_tests_pass_without_qgis(tmp_path: Path) -> Non
         cwd=project,
         env={
             **_clean_env(),
-            "PYTHONPATH": os.pathsep.join((str(project), str(SDK_SOURCE))),
+            "PYTHONPATH": layers.source_path(project),
         },
         capture_output=True,
         text=True,

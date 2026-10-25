@@ -179,10 +179,11 @@ class TestDesktopPlan:
         assert "on save" in plan.notes[1]
         assert "via QGIS_PLUGINPATH" in plan.notes[0]
         # The bootstrap imports qgis_sdk_tools inside QGIS's own interpreter.
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[:3] == [
+        sdk_paths = [str(path) for path in sdk_import_paths()]
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
             str(install.bindings),
             str(root),
-            *(str(path) for path in sdk_import_paths()),
+            *sdk_paths,
         ]
 
     def test_no_watch_leaves_reloads_to_the_button(
@@ -272,10 +273,11 @@ class TestStandalonePlan:
         assert plan.argv == (str(install.python), str(tmp_path / "dev-standalone.py"))
         assert plan.profile is None
         assert "PYTHONHOME" not in plan.env
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[:3] == [
+        sdk_paths = [str(path) for path in sdk_import_paths()]
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
             str(install.bindings),
             str(project.resolve()),
-            *(str(path) for path in sdk_import_paths()),
+            *sdk_paths,
         ]
         assert "no iface, no plugin lifecycle, no reload" in plan.notes[0]
         assert "classFactory(None)" in plan.notes[0]

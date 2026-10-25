@@ -48,7 +48,11 @@ def test_headless_environment_puts_qgis_and_the_sdk_on_the_python_path() -> None
 
     entries = overrides["PYTHONPATH"].split(os.pathsep)
     assert entries[0] == str(prefix / "share" / "qgis" / "python")
-    assert entries[-1] == str(SCRIPTS_DIR.parents[0] / "src")
+    packages = SCRIPTS_DIR.parents[1]
+    assert entries[1:] == [
+        str(packages / "qgis-sdk-runtime" / "src"),
+        str(packages / "qgis-sdk-tools" / "src"),
+    ]
     assert overrides["QT_QPA_PLATFORM"] == "offscreen"
     assert overrides["QGIS_PREFIX_PATH"] == str(prefix)
     assert overrides["PYTHONHOME"] == str(prefix)

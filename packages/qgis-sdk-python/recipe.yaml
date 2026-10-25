@@ -1,47 +1,113 @@
 schema_version: 1
 
+# One recipe, three outputs (decision-35): the runtime a plugin imports, the
+# tools a developer runs, and the code-free `qgis-sdk` kit that installs both at
+# the exact version it was released with. `release.py stamp` rewrites the one
+# context version; the kit's pins are `pin_subpackage(..., exact=True)` so the
+# Conda packages carry the same promise the wheels do.
+
 context:
   version: "0.4.0"
 
-package:
-  name: qgis-sdk
+recipe:
+  name: qgis-sdk-kit
   version: ${{ version }}
-
-source:
-  path: .
 
 build:
   number: 0
-  noarch: python
-  script:
-    - python -m pip install . --no-deps --no-build-isolation -vv
-  python:
-    entry_points:
-      - qgis-sdk = qgis_sdk_tools.__main__:main
 
-requirements:
-  host:
-    - hatchling ==1.32.4
-    - pip
-    - python >=3.11,<4
-  run:
-    - python >=3.11,<4
-    # The shipped `qgis-sdk` console command is Typer-based, so the Conda package
-    # carries the same runtime requirement the wheel declares.
-    - typer ==0.27.3
+outputs:
+  - package:
+      name: qgis-sdk-runtime
+    source:
+      path: ../qgis-sdk-runtime
+    build:
+      noarch: python
+      script:
+        - python -m pip install . --no-deps --no-build-isolation -vv
+    requirements:
+      host:
+        - hatchling ==1.32.4
+        - pip
+        - python >=3.11,<4
+      run:
+        - python >=3.11,<4
+    tests:
+      - python:
+          imports:
+            - qgis_sdk
+          pip_check: true
+    about:
+      summary: The in-QGIS runtime of qgis-sdk, dependency-free
+      license: MIT
+      license_file: LICENSE
+      homepage: https://github.com/Archont561/qgis-sdk
+      repository: https://github.com/Archont561/qgis-sdk
 
-tests:
-  - python:
-      imports:
-        - qgis_sdk
-        - qgis_sdk_tools
-      pip_check: true
-  - script:
-      - qgis-sdk --help
+  - package:
+      name: qgis-sdk-tools
+    source:
+      path: ../qgis-sdk-tools
+    build:
+      noarch: python
+      script:
+        - python -m pip install . --no-deps --no-build-isolation -vv
+      python:
+        entry_points:
+          - qgis-sdk = qgis_sdk_tools.__main__:main
+    requirements:
+      host:
+        - hatchling ==1.32.4
+        - pip
+        - python >=3.11,<4
+      run:
+        - python >=3.11,<4
+        - ${{ pin_subpackage("qgis-sdk-runtime", exact=True) }}
+        # The shipped `qgis-sdk` console command is Typer-based, so the Conda
+        # package carries the same requirement the wheel declares.
+        - typer ==0.27.3
+    tests:
+      - python:
+          imports:
+            - qgis_sdk_tools
+          pip_check: true
+      - script:
+          - qgis-sdk --help
+    about:
+      summary: The developer tooling of qgis-sdk - the `qgis-sdk` command
+      license: MIT
+      license_file: LICENSE
+      homepage: https://github.com/Archont561/qgis-sdk
+      repository: https://github.com/Archont561/qgis-sdk
 
-about:
-  summary: Python SDK foundations for QGIS plugin development
-  license: MIT
-  license_file: LICENSE
-  homepage: https://github.com/Archont561/qgis-sdk
-  repository: https://github.com/Archont561/qgis-sdk
+  - package:
+      name: qgis-sdk
+    source:
+      path: .
+    build:
+      noarch: python
+      script:
+        - python -m pip install . --no-deps --no-build-isolation -vv
+    requirements:
+      host:
+        - hatchling ==1.32.4
+        - pip
+        - python >=3.11,<4
+      run:
+        - python >=3.11,<4
+        - ${{ pin_subpackage("qgis-sdk-runtime", exact=True) }}
+        - ${{ pin_subpackage("qgis-sdk-tools", exact=True) }}
+    tests:
+      - python:
+          imports:
+            - qgis_sdk
+            - qgis_sdk_tools
+          pip_check: true
+      - script:
+          - qgis-sdk --help
+    about:
+      summary: Python SDK foundations for QGIS plugin development
+      license: MIT
+      license_file: LICENSE
+      homepage: https://github.com/Archont561/qgis-sdk
+      repository: https://github.com/Archont561/qgis-sdk

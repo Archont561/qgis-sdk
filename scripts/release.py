@@ -33,7 +33,18 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+# The Python side is three distributions (decision-35): the kit ``qgis-sdk``
+# (code-free, exact pins on the other two), ``qgis-sdk-runtime`` and
+# ``qgis-sdk-tools``. ``_PYPROJECT`` is the kit's manifest; the conda recipe next
+# to it builds all three outputs from one context version.
 _PYPROJECT = _REPO_ROOT / "packages/qgis-sdk-python/pyproject.toml"
+_RUNTIME_PYPROJECT = _REPO_ROOT / "packages/qgis-sdk-runtime/pyproject.toml"
+_TOOLS_PYPROJECT = _REPO_ROOT / "packages/qgis-sdk-tools/pyproject.toml"
+_PYTHON_PACKAGE_DIRS = (
+    "packages/qgis-sdk-runtime",
+    "packages/qgis-sdk-tools",
+    "packages/qgis-sdk-python",
+)
 _RECIPE = _REPO_ROOT / "packages/qgis-sdk-python/recipe.yaml"
 _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
 # The unscoped npm alias ``qgis-sdk`` re-exports ``@archont561/qgis-sdk`` at an
@@ -41,7 +52,7 @@ _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
 # it exists, and ignored when it does not.
 _ALIAS_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-alias/package.json"
 _ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
-_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-python/src/qgis_sdk/declarations.py"
+_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
 _TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-typescript/src/index.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 
@@ -258,8 +269,15 @@ def parse_log_with_files(raw: str) -> tuple[Commit, ...]:
 
 # The package directories were renamed on 2026-10-24 (PR #66). History before
 # that commit - and the whole 0.4.0 Python range starts before it - lives under
-# the old names, so both spellings count for scope detection.
-_PYTHON_PREFIXES = ("packages/qgis-sdk-python/", "packages/qgis-sdk/")
+# the old names, so both spellings count for scope detection. Since the
+# distribution split (decision-35) the runtime and the tools have directories
+# of their own; all of them are the Python scope until the scopes separate.
+_PYTHON_PREFIXES = (
+    "packages/qgis-sdk-python/",
+    "packages/qgis-sdk-runtime/",
+    "packages/qgis-sdk-tools/",
+    "packages/qgis-sdk/",
+)
 # The alias ships with the bridge: a change to either is a TypeScript release.
 _TYPESCRIPT_PREFIXES = (
     "packages/qgis-sdk-typescript/",
@@ -979,6 +997,50 @@ def stamp_recipe(text: str, version: Version) -> str:
     return stamped
 
 
+_KIT_PIN = re.compile(r'("qgis-sdk-(?:runtime|tools)(?:\[[^\]]*\])?==)[^"]+"')
+_TOOLS_RUNTIME_RANGE = re.compile(r'"qgis-sdk-runtime>=[^,"]+,<[^"]+"')
+
+
+def stamp_kit_pins(text: str, version: Version) -> str:
+    """Pin the kit's ``qgis-sdk-runtime`` / ``qgis-sdk-tools`` dependencies to ``version``.
+
+    The kit has no code, so its version and its pins are one number: a pin that
+    lagged would let ``qgis-sdk==X`` install a runtime that is not ``X``. Every
+    occurrence is rewritten, extras included (``qgis-sdk-runtime[...]==X``).
+    """
+    stamped, count = _KIT_PIN.subn(rf'\g<1>{version.to_pep440()}"', text)
+    if count == 0:
+        raise QgisSdkReleaseError(
+            "the kit pyproject.toml pins neither qgis-sdk-runtime nor qgis-sdk-tools"
+        )
+    return stamped
+
+
+def next_minor(version: Version) -> str:
+    """``0.5`` for ``0.4.x``: the exclusive upper bound of a tested runtime range."""
+    return f"{version.major}.{version.minor + 1}"
+
+
+def stamp_tools_runtime_range(text: str, runtime: Version) -> str:
+    """Set the tools' tested runtime range to ``>=runtime,<next minor``.
+
+    The range is the tools release's promise to a developer (decision-35); a
+    release that ships both at once tests exactly this runtime, so the lower
+    bound is it and the upper bound is the next minor, where the runtime may
+    change shape.
+    """
+    stamped, count = _TOOLS_RUNTIME_RANGE.subn(
+        f'"qgis-sdk-runtime>={runtime.to_pep440()},<{next_minor(runtime)}"',
+        text,
+        count=1,
+    )
+    if count == 0:
+        raise QgisSdkReleaseError(
+            "the tools pyproject.toml declares no qgis-sdk-runtime>=X,<Y range"
+        )
+    return stamped
+
+
 def stamp_package_json(text: str, version: Version) -> str:
     """Rewrite ``version`` in a package.json, preserving tab indentation."""
     data = json.loads(text)
@@ -1046,6 +1108,40 @@ def read_recipe_version(text: str) -> Version:
     return version_from_pep440(match.group(0).rsplit('"', 2)[1])
 
 
+def read_kit_pins(text: str) -> tuple[tuple[str, Version], ...]:
+    """Return every ``(requirement, pinned version)`` the kit carries, in order."""
+    found = []
+    for match in _KIT_PIN.finditer(text):
+        requirement = match.group(1)[1:-2]  # strip the quote and the ``==``
+        pinned = match.group(0).rsplit("==", 1)[1].rstrip('"')
+        found.append((requirement, version_from_pep440(pinned)))
+    if not found:
+        raise QgisSdkReleaseError(
+            "the kit pyproject.toml pins neither qgis-sdk-runtime nor qgis-sdk-tools"
+        )
+    return tuple(found)
+
+
+def read_tools_runtime_range(text: str) -> tuple[Version, str]:
+    """Return ``(lower bound, exclusive upper bound text)`` of the tools' runtime range."""
+    match = _TOOLS_RUNTIME_RANGE.search(text)
+    if match is None:
+        raise QgisSdkReleaseError(
+            "the tools pyproject.toml declares no qgis-sdk-runtime>=X,<Y range"
+        )
+    lower, upper = (
+        match.group(0).strip('"').removeprefix("qgis-sdk-runtime>=").split(",<")
+    )
+    return version_from_pep440(lower), upper
+
+
+def runtime_range_includes(lower: Version, upper: str, runtime: Version) -> bool:
+    """Whether ``runtime`` falls in ``>=lower,<upper`` (``upper`` is ``major.minor``)."""
+    major, minor = (int(part) for part in upper.split(".")[:2])
+    below_upper = (runtime.major, runtime.minor) < (major, minor)
+    return runtime.sort_key() >= lower.sort_key() and below_upper
+
+
 def read_package_json_version(text: str) -> Version:
     """Read the stamped version out of the bridge ``package.json``."""
     return Version.parse(str(json.loads(text)["version"]))
@@ -1078,6 +1174,9 @@ class ManifestVersions:
     recipe: Version | None = None
     alias: Version | None = None
     alias_dependency: Version | None = None
+    runtime: Version | None = None
+    tools: Version | None = None
+    kit_pins: tuple[tuple[str, Version], ...] = ()
 
     def items(self) -> tuple[tuple[str, Version], ...]:
         """Return the labelled versions that exist, in reporting order."""
@@ -1085,6 +1184,12 @@ class ManifestVersions:
             ("pyproject.toml", self.pyproject),
             ("package.json", self.package_json),
         ]
+        if self.runtime is not None:
+            found.append(("runtime pyproject.toml", self.runtime))
+        if self.tools is not None:
+            found.append(("tools pyproject.toml", self.tools))
+        for requirement, pinned in self.kit_pins:
+            found.append((f"kit pin {requirement}", pinned))
         if self.recipe is not None:
             found.append(("recipe.yaml", self.recipe))
         if self.alias is not None:
@@ -1112,8 +1217,14 @@ def manifest_versions(
     package_text: str,
     recipe_text: str | None = None,
     alias_text: str | None = None,
+    runtime_text: str | None = None,
+    tools_text: str | None = None,
 ) -> ManifestVersions:
-    """Read all released manifests and return what each one carries."""
+    """Read all released manifests and return what each one carries.
+
+    ``pyproject_text`` is the kit's; when the runtime's and the tools' are given
+    too, their versions and the kit's pins on them join the Python scope.
+    """
     alias, alias_dependency = (
         read_alias_versions(alias_text) if alias_text is not None else (None, None)
     )
@@ -1123,10 +1234,21 @@ def manifest_versions(
         recipe=read_recipe_version(recipe_text) if recipe_text is not None else None,
         alias=alias,
         alias_dependency=alias_dependency,
+        runtime=read_pyproject_version(runtime_text) if runtime_text else None,
+        tools=read_pyproject_version(tools_text) if tools_text else None,
+        kit_pins=read_kit_pins(pyproject_text) if runtime_text or tools_text else (),
     )
 
 
-_PYTHON_MANIFESTS = ("pyproject.toml", "recipe.yaml")
+_PYTHON_MANIFESTS = (
+    "pyproject.toml",
+    "runtime pyproject.toml",
+    "tools pyproject.toml",
+    "kit pin qgis-sdk-runtime",
+    "kit pin qgis-sdk-tools",
+    "kit pin qgis-sdk-runtime[controlled-deployment]",
+    "recipe.yaml",
+)
 _TYPESCRIPT_MANIFESTS = ("package.json", "alias package.json", "alias dependency")
 
 
@@ -1517,10 +1639,32 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
     stamped: list[str] = []
     if scope in ("all", "python"):
         pyproject_text = _PYPROJECT.read_text(encoding="utf-8")
+        split = _RUNTIME_PYPROJECT.is_file() and _TOOLS_PYPROJECT.is_file()
+        if split:
+            pyproject_text = stamp_kit_pins(pyproject_text, version)
         _PYPROJECT.write_text(
             stamp_pyproject(pyproject_text, version), encoding="utf-8"
         )
         stamped.append(f"{_PYPROJECT} (PEP 440: {version.to_pep440()})")
+        if split:
+            # One Python release stamps the kit, the runtime and the tools at
+            # one version; the tools' tested range follows the runtime.
+            _RUNTIME_PYPROJECT.write_text(
+                stamp_pyproject(
+                    _RUNTIME_PYPROJECT.read_text(encoding="utf-8"), version
+                ),
+                encoding="utf-8",
+            )
+            stamped.append(str(_RUNTIME_PYPROJECT))
+            tools_text = stamp_pyproject(
+                _TOOLS_PYPROJECT.read_text(encoding="utf-8"), version
+            )
+            _TOOLS_PYPROJECT.write_text(
+                stamp_tools_runtime_range(tools_text, version), encoding="utf-8"
+            )
+            stamped.append(
+                f"{_TOOLS_PYPROJECT} (runtime range >={version},<{next_minor(version)})"
+            )
         if _RECIPE.is_file():
             recipe_text = _RECIPE.read_text(encoding="utf-8")
             _RECIPE.write_text(stamp_recipe(recipe_text, version), encoding="utf-8")
@@ -1548,11 +1692,23 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
     alias_text = (
         _ALIAS_PACKAGE.read_text(encoding="utf-8") if _ALIAS_PACKAGE.is_file() else None
     )
+    runtime_text = (
+        _RUNTIME_PYPROJECT.read_text(encoding="utf-8")
+        if _RUNTIME_PYPROJECT.is_file()
+        else None
+    )
+    tools_text = (
+        _TOOLS_PYPROJECT.read_text(encoding="utf-8")
+        if _TOOLS_PYPROJECT.is_file()
+        else None
+    )
     versions = manifest_versions(
         _PYPROJECT.read_text(encoding="utf-8"),
         _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
         recipe_text,
         alias_text,
+        runtime_text,
+        tools_text,
     )
     contract = contract_versions(
         _PY_DECLARATIONS.read_text(encoding="utf-8"),
@@ -1581,6 +1737,15 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
             "version": str(version),
             "manifests": {name: str(value) for name, value in scoped},
         }
+        if scope == "python" and tools_text and versions.runtime is not None:
+            lower, upper = read_tools_runtime_range(tools_text)
+            if not runtime_range_includes(lower, upper, versions.runtime):
+                raise QgisSdkReleaseVersionError(
+                    f"the tools were tested against qgis-sdk-runtime>={lower},<{upper} "
+                    f"but the runtime at HEAD is {versions.runtime}; a tools release "
+                    "must include the runtime it ships next to"
+                )
+            reported[scope]["runtime_range"] = f">={lower},<{upper}"
     if getattr(args, "json", False):
         print(
             json.dumps(
@@ -1607,7 +1772,13 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
 
 def _cmd_build_python(args: argparse.Namespace) -> int:
     outdir = Path(args.outdir)
-    build_wheel(args.package, outdir)
+    packages = args.package or [
+        directory
+        for directory in _PYTHON_PACKAGE_DIRS
+        if (_REPO_ROOT / directory / "pyproject.toml").is_file()
+    ]
+    for package in packages:
+        build_wheel(package, outdir)
     wheels = sorted(outdir.glob("*.whl"))
     if not wheels:
         raise QgisSdkReleaseError(f"no wheel appeared in {outdir}")
@@ -1739,8 +1910,15 @@ def _build_parser() -> argparse.ArgumentParser:
     versions.add_argument("--json", action="store_true", help="machine-readable output")
     versions.set_defaults(handler=_cmd_verify_versions)
 
-    build = sub.add_parser("build-python", help="build and check the wheel")
-    build.add_argument("--package", default="packages/qgis-sdk-python")
+    build = sub.add_parser(
+        "build-python", help="build and check the wheel of every Python distribution"
+    )
+    build.add_argument(
+        "--package",
+        action="append",
+        help="a package directory to build; repeatable; default: the runtime, "
+        "the tools and the kit",
+    )
     build.add_argument("--outdir", default="dist/pypi")
     build.set_defaults(handler=_cmd_build_python)
 

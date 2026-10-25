@@ -18,7 +18,8 @@ coverage:
 flags:
   qgis-sdk-python:
     paths:
-      - packages/qgis-sdk-python/src/
+      - packages/qgis-sdk-runtime/src/
+      - packages/qgis-sdk-tools/src/
   qgis-sdk-typescript:
     paths:
       - packages/qgis-sdk-typescript/src/

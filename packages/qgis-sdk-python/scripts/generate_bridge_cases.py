@@ -33,7 +33,8 @@ CASES_PATH = (
     / "cases.json"
 )
 
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-tools" / "src"))
+sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src"))
 
 from qgis_sdk.bridge import (
     BRIDGE_PROTOCOL_VERSION,

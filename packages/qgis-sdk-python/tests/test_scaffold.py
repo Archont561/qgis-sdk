@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import layers
 import pytest
 from qgis_sdk_tools.scaffold import (
     GeneratedFile,
@@ -14,8 +15,6 @@ from qgis_sdk_tools.scaffold import (
     plan_scaffold,
     write_scaffold,
 )
-
-SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
 
 
 def content_of(plan: tuple[GeneratedFile, ...], path: str) -> str:
@@ -34,9 +33,16 @@ def run_generated_project(
     project: Path, statement: str
 ) -> subprocess.CompletedProcess[str]:
     """Run one statement against the generated project in a bare interpreter."""
-    script = f"import sys; sys.path[:0] = [sys.argv[1], sys.argv[2]]; {statement}"
+    script = f"import sys; sys.path[:0] = sys.argv[1:]; {statement}"
     return subprocess.run(
-        [sys.executable, "-I", "-c", script, str(project), str(SDK_SOURCE)],
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            script,
+            str(project),
+            *map(str, layers.SOURCE_ROOTS),
+        ],
         capture_output=True,
         text=True,
         check=False,

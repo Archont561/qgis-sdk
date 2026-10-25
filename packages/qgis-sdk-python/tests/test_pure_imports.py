@@ -7,10 +7,11 @@ import sys
 import textwrap
 from pathlib import Path
 
+import layers
 import pytest
 
-SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "qgis_sdk"
-TOOLS_ROOT = SOURCE_ROOT.parent / "qgis_sdk_tools"
+SOURCE_ROOT = layers.RUNTIME_SOURCE / "qgis_sdk"
+TOOLS_ROOT = layers.TOOLS_SOURCE / "qgis_sdk_tools"
 # Ranked dependency direction inside the runtime: a layer may import only
 # itself and lower layers. `testing` is outermost on purpose: the in-memory
 # service fakes depend on the contracts, and nothing that ships may depend on
@@ -132,7 +133,7 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
         import importlib
         import sys
 
-        sys.path.insert(0, sys.argv[1])
+        sys.path[:0] = sys.argv[1:]
 
         class RejectNative:
             def find_spec(self, fullname, path=None, target=None):
@@ -166,7 +167,7 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
         """
     )
     result = subprocess.run(
-        [sys.executable, "-I", "-c", script, str(SOURCE_ROOT.parent)],
+        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
         cwd=tmp_path,
         capture_output=True,
         text=True,

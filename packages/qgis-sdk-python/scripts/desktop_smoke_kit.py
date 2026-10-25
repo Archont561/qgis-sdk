@@ -39,7 +39,12 @@ PROFILE_NAME: Final = "sdk-qualification"
 WORKSPACE_ENV_VAR: Final = "QGIS_SDK_DESKTOP_WORKSPACE"
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = PROJECT_ROOT / "src"
+# The runtime and the tools are separate distributions (decision-35); both go
+# on the path so the probe imports the trees under test.
+SOURCE_ROOTS = (
+    PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src",
+    PROJECT_ROOT.parent / "qgis-sdk-tools" / "src",
+)
 
 #: The value one probe asks a declared action to return unchanged, so a matching
 #: number proves the call travelled through the runtime and back.
@@ -70,11 +75,11 @@ def headless_environment(prefix: Path, environ: dict[str, str]) -> dict[str, str
     pointing somewhere that no longer exists, so the app starts and then cannot even
     ``import sys``. Pointing it at the live prefix is what makes ``--code`` run.
 
-    ``SOURCE_ROOT`` goes on ``PYTHONPATH`` so the probe imports the ``qgis_sdk``
-    under test rather than an installed copy, which is what makes the evidence
-    describe this working tree.
+    ``SOURCE_ROOTS`` go on ``PYTHONPATH`` so the probe imports the ``qgis_sdk``
+    and ``qgis_sdk_tools`` under test rather than installed copies, which is
+    what makes the evidence describe this working tree.
     """
-    python_path = [str(qgis_python_path(prefix)), str(SOURCE_ROOT)]
+    python_path = [str(qgis_python_path(prefix)), *map(str, SOURCE_ROOTS)]
     existing = environ.get("PYTHONPATH")
     if existing:
         python_path.append(existing)
@@ -190,5 +195,6 @@ def read_report(workspace: Path) -> dict[str, object] | None:
 
 def ensure_source_root_on_path() -> None:
     """Make the ``qgis_sdk`` under test importable from this working tree."""
-    if str(SOURCE_ROOT) not in sys.path:
-        sys.path.insert(0, str(SOURCE_ROOT))
+    for root in reversed(SOURCE_ROOTS):
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))

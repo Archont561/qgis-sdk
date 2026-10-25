@@ -6,12 +6,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import layers
 import pytest
 from qgis_sdk_tools.__main__ import app, main
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from typer.testing import CliRunner
-
-SDK_SOURCE = Path(__file__).resolve().parents[1] / "src"
 
 runner = CliRunner()
 
@@ -209,7 +208,7 @@ def test_the_generated_starter_tests_pass_inside_the_generated_project(
         for key, value in os.environ.items()
         if not key.startswith(("PYTEST_", "QGIS"))
     }
-    env["PYTHONPATH"] = os.pathsep.join((str(project), str(SDK_SOURCE)))
+    env["PYTHONPATH"] = layers.source_path(project)
 
     result = subprocess.run(
         [sys.executable, "-m", "pytest", "-q"],
