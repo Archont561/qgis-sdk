@@ -696,6 +696,92 @@ inferred from CI.
   confirms 0.4.0 as the latest version; prefix.dev is not reachable from
   the sandbox, so the conda publish is attested by the job log only.
 
+## 0.5.0 release gate (TASK-31, 2026-10-25)
+
+What was run before the Python 0.5.0 tag, on Linux x86-64 with QGIS 4.2.3
+(Qt 6.11.2, Chromium 140), CPython 3.14.8 in the locked Pixi environment and
+CPython 3.11.2 for the clean install, Bun 1.4.2, from `main` `3c7aaa5` (the
+TASK-9 merge) plus this gate branch. Every line is a command that ran here;
+nothing is inferred from CI.
+
+- **Required work.** TASK-57, TASK-22 and TASK-9 are Done; their merges are
+  PRs #78, #80, #81 and #82, each green on `checks`, macOS and Windows. The
+  pipeline rehearsal `python-v0.5.0-rc.1` (run 40220722995) built three
+  wheels and three Conda outputs from the split tree. Open targets stay
+  blockers, not promises: Windows and macOS QGIS rows are `unqualified` in
+  the support matrix (TASK-33), the display-server Desktop GUI row is a
+  blocker, decision-15's presentation-state restore and decision-19's
+  transformation-choice gap are recorded and out of this release.
+- **Scope.** `release.py plan --scope python --bump minor` from
+  `python-v0.4.0` plans `python-v0.5.0` with six features and one fix (the
+  push default would plan 0.4.1; the minor is the explicit act). After the
+  TASK-9 planner fix the candidate `python-v0.5.0-rc.1` no longer moves the
+  base: the changelog covers everything since 0.4.0, which is what a 0.4.0
+  user upgrades across. `plan --scope typescript` skips: no release-worthy
+  commit since `ts-v0.3.0`, and `git diff ts-v0.3.0..main` under
+  `packages/qgis-sdk-typescript` and `packages/qgis-sdk-alias` is empty, so
+  the bridge is not released (AC 5). `verify-versions` on the unstamped tree
+  agrees on 0.4.0 for runtime, tools and kit, 0.3.0 for the bridge, contract
+  version 1 on both sides.
+- **Static gate.** `lint-python`, `format-python-check` (258 files),
+  `test-release-tool` (226), `lint-github-actions`, `typecheck`,
+  `biome-check` (52 files), `generate_bridge_clients.py --check` (up to
+  date): all clean.
+- **Suites.** `bun run test` 3/3 tasks (bridge 187, alias 10, Python 1458
+  passed / 42 skipped); `bun run coverage` Python 96.11%, bridge 96.49%
+  lines (gate 90%); `tests/scripts` 226 passed.
+- **Opt-in harnesses, one process per file:** lifecycle 5, desktop adapter
+  22, coexistence 23, scaffold desktop 10, scaffold web 8, native services
+  qualification 6 + 1 skipped and `tests/services` 133, devtools 9, built
+  ZIP in a clean profile 1, headless WebEngine smoke 9, reference example
+  through the toolchain 5 (`new`/`check`/`bridge generate --check`/`test`/
+  `build`/`dev` on `examples/simple`, page and native dialog in one QGIS).
+  `qgis-sdk check examples/simple`: 8 files, no problems; `qgis-sdk test
+  --project examples/simple` 17 pure, `--target qgis` 4 native. All passed.
+- **The bridge pair (AC 5).** The page inside the real `QWebEngineView` of
+  the reference harness runs the published `@archont561/qgis-sdk` 0.3.0
+  against this tree (the 0.5.0 runtime), contract version 1 on both sides.
+  No defect surfaced, so no bridge source change and no bridge version is
+  published; doc-12's "Supported targets" names the pair.
+- **Stamp and artifacts.** `release.py stamp --scope python --version 0.5.0`
+  moved the kit, runtime and tools manifests, the kit's exact pins, the
+  tools' runtime range (`>=0.5.0,<0.6`) and the recipe's three versions;
+  `verify-versions --scope python --version 0.5.0` agrees on all nine
+  manifest entries and the contract. `build-python --scope python` +
+  `verify-python` (twine) pass on `qgis_sdk-0.5.0-py3-none-any.whl`
+  (`d4d933d9…0816f`, 4 files, no code, pins `qgis-sdk-runtime==0.5.0` and
+  `qgis-sdk-tools==0.5.0`), `qgis_sdk_runtime-0.5.0-py3-none-any.whl`
+  (`c5f3a3ac…6a764`, 75 files, no dependency; `pydantic==2.14.1` behind the
+  `controlled-deployment` extra) and `qgis_sdk_tools-0.5.0-py3-none-any.whl`
+  (`7c2247ca…38de`, 32 files, console script
+  `qgis-sdk = qgis_sdk_tools.__main__:main`, `qgis-sdk-runtime>=0.5.0,<0.6`
+  and `typer==0.27.3`). Each wheel carries the MIT `LICENSE` under
+  `dist-info/licenses`; `Requires-Python >=3.11` on all three. The Python
+  suite and `tests/scripts` were rerun on the stamped tree: 1433 passed /
+  42 skipped, 226 passed.
+- **Clean install, on the `requires-python` floor.** A fresh CPython 3.11.2
+  `venv` with only the three wheels and `typer` from PyPI: 79 of 82 modules
+  import without `qgis` or `PyQt6` entering `sys.modules`; the three that do
+  not are the documented optional edges (`adapters.pydantic_types` without
+  pydantic, `adapters.qgis` without QGIS, `pytest_plugin` without pytest).
+  `qgis-sdk new field_tools --no-input`, `check` (`checked 3 files: no
+  problems`), `build` (72 files, runtime 0.5.0, web: none) and `targets`
+  (the host lands on the CPython 3.11 QGIS-free row) run from the installed
+  package; the unpacked ZIP imports under `python -S` with the SDK absent,
+  resolving `field_tools._vendor.qgis_sdk` and no top-level `qgis_sdk`,
+  with the SDK `NOTICE` under `_vendor` and no `qgis_sdk_tools` inside.
+- **Licences.** As for 0.4.0: MIT `LICENSE` in each wheel, `NOTICE` in the
+  built ZIP; `DEP001` still refuses third-party code inside a plugin, so
+  there is no other licence to collect.
+- **Not run here.** The Conda build (`release-build-conda`): rattler-build
+  is not cached in the sandbox; the rc.1 rehearsal built all three outputs
+  from the split recipe and `release.yml` builds them again before any
+  upload, so a Conda defect fails the tag's run, not the user.
+- **Approval.** Publishing 0.5.0 was authorised explicitly on 2026-10-25
+  ("Gate + stamp + tag + publish", chosen from the three scopes offered),
+  with a pause for "Merge" on each pull request; the tag follows on the
+  merge commit of the gate-and-stamp pull request.
+
 ## Split release pipeline rehearsal (TASK-57 AC 3)
 
 The pipeline for three distributions landed with PR #78 (`60c1dc2`):

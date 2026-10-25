@@ -74,6 +74,16 @@ it; `qgis-sdk targets --json` is the machine-readable form.
 | macos | arm64 | 3.14 | 4.2 | - | - | unqualified | no macOS QGIS 4 installation in CI or the sandbox (TASK-33 AC 1) |
 <!-- support-matrix:end -->
 
+**The bridge pair.** The TypeScript bridge is qualified as a pair with a
+Python release, never alone: `@archont561/qgis-sdk` 0.3.0 ran inside a real
+`QWebEngineView` against `qgis-sdk` 0.5.0 on the Linux row above
+(`tests/test_reference_example_native.py`, the published package, contract
+version 1 on both sides - `HOST_SCHEMA_VERSION` and
+`PLUGIN_DESCRIPTION_SCHEMA_VERSION`, what `VERSION002` checks a generated
+client against). A plugin author pinning that pair may assume what the
+matrix says; the package numbers are otherwise independent
+([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+
 The release workflow records this table in its job summary next to the
 metadata and build checks it runs ([doc-17](../plans/doc-17%20-%20M4-sprint-train-and-0.5.0-dependency-order.md),
 sprint 3), so a release says on which targets its qualification holds. The
@@ -1236,12 +1246,18 @@ published for the bridge, and no `ts-v*` tag exists.
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
 
-## 0.5.0 migration notes (in progress)
+## 0.5.0 migration notes
 
-The 0.5.0 development line splits the one `qgis-sdk` wheel into three
+0.5.0 splits the one `qgis-sdk` wheel into three
 distributions ([decision-35](../../decisions/decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md)
 step 2, un-gated by [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md);
-TASK-57). Nothing is published yet; this note is what the release will say.
+TASK-57), adds the reference workflow (`qgis_sdk.exports`,
+`Layers.export_vector`, the `reference/polygon-output` style, `examples/simple`;
+TASK-22), the support matrix and `qgis-sdk targets` (TASK-9,
+[decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)),
+and `dev --exercise`'s smoke report. The bridge is unchanged: `@archont561/qgis-sdk`
+stays 0.3.0 and was qualified inside a real `QWebEngineView` against this
+release (TASK-31 AC 5, [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-task-31-2026-10-25)).
 
 **Who installs what.**
 
@@ -1270,8 +1286,9 @@ TASK-57). Nothing is published yet; this note is what the release will say.
   and `packages/qgis-sdk-tools/src`; `packages/qgis-sdk-python` keeps the
   shared tests, scripts and the recipe. `pip install -e` the runtime and the
   tools before the kit's `dev` extra (the pins resolve against the editables).
-- **PyPI placeholders.** `qgis-sdk-runtime` and `qgis-sdk-tools` exist at
-  `0.0.0` until the first real publish; do not pin `0.0.0`.
+- **PyPI placeholders.** `qgis-sdk-runtime` and `qgis-sdk-tools` existed at
+  `0.0.0` before 0.5.0, as name reservations with no code; do not pin
+  `0.0.0`. 0.5.0 is their first real publish.
 
 ## 0.4.0 migration notes
 
