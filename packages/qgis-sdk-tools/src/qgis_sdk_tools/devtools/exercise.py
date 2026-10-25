@@ -21,6 +21,8 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+from qgis_sdk.core import JobContext
+
 from .bootstrap import DevSession, say
 
 STUCK_SECONDS = 2.0  # the coordinator's bound; the gate stays shut longer
@@ -161,20 +163,16 @@ def run_exercise(session: DevSession, path: Path) -> None:
 
 def _stuck_job(runtime: Any, gate: threading.Event) -> Any:
     """Submit a job whose worker blocks on ``gate``; a real thread, never killed."""
-    from qgis_sdk.jobs import JobContext, JobService, job
+    from qgis_sdk.jobs import JobService, job
 
     @job(id="exercise.stuck", title="Stuck on purpose")
-    class Stuck:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
-
-        async def run(self, inputs: int) -> int:
-            await self.ctx.require_workers().offload(gate.wait)
-            return inputs
+    async def stuck(ctx: JobContext, value: int) -> int:
+        await ctx.require_workers().offload(gate.wait)
+        return value
 
     context = runtime.instance.ctx
     jobs = JobService(context.scope, workers=context.require_workers())
-    handle = jobs.bind(Stuck).delay(1)
+    handle = jobs.bind(stuck).delay(value=1)
     jobs.tick()  # now suspended on the handoff
     return handle
 

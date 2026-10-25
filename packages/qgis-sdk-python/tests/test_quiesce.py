@@ -91,12 +91,8 @@ class TestScope:
 
 
 @job(id="sum", title="Sum")
-class Sum:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    async def run(self, inputs: int) -> int:
-        return await self.ctx.require_workers().offload(lambda: inputs * 2)
+async def double(ctx: JobContext, value: int) -> int:
+    return await ctx.require_workers().offload(lambda: value * 2)
 
 
 class TestJobService:
@@ -104,7 +100,7 @@ class TestJobService:
         scope = ResourceScope()
         workers = FakeWorkers()
         jobs = JobService(scope, workers=workers)
-        handle = jobs.bind(Sum).delay(21)
+        handle = jobs.bind(double).delay(value=21)
         jobs.tick()  # the job is now waiting on the worker
 
         outcome = scope.quiesce()
@@ -123,7 +119,7 @@ class TestJobService:
         workers = FakeWorkers()
         jobs = JobService(scope, workers=workers)
         view = jobs.scoped(scope.child())
-        view.bind(Sum).delay(1)
+        view.bind(double).delay(value=1)
         jobs.tick()
 
         assert scope.quiesce().refused
@@ -148,7 +144,7 @@ class TestPluginRuntime:
         runtime.start()
         workers = FakeWorkers()
         jobs = JobService(scope, workers=workers)
-        jobs.bind(Sum).delay(1)
+        jobs.bind(double).delay(value=1)
         jobs.tick()
 
         outcome = runtime.quiesce()
@@ -157,7 +153,9 @@ class TestPluginRuntime:
         assert outcome.blockers
         assert runtime.state is PluginRuntimeState.RUNNING
         runtime.resume()
-        assert jobs.bind(Sum).delay(2).status.value == "queued"  # accepting work again
+        assert (
+            jobs.bind(double).delay(value=2).status.value == "queued"
+        )  # accepting work again
 
     def test_a_plugin_that_is_not_running_refuses_with_its_state(self) -> None:
         context = PluginContext(notifications=Notes(), scope=ResourceScope())

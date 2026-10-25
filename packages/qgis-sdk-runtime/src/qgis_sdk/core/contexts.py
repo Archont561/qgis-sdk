@@ -133,10 +133,12 @@ class AlgorithmContext:
 class JobContext:
     """One job attempt, owned by a view unless plugin ownership is explicit.
 
-    Built fresh for every attempt by :class:`qgis_sdk.jobs.JobService`. The
-    scope is the attempt's own: it closes when the attempt settles or the
-    plugin unloads, not when the owning view is disposed, because closing it
-    under a worker that has not acknowledged cancellation would be exactly the
+    Built fresh for every attempt by :class:`qgis_sdk.jobs.JobService` and
+    passed to the ``@job`` function as its first argument (decision-38); the
+    function never builds one itself, and a test hands it a fake. The scope
+    is the attempt's own: it closes when the attempt settles or the plugin
+    unloads, not when the owning view is disposed, because closing it under a
+    worker that has not acknowledged cancellation would be exactly the
     teardown decision-21 forbids.
     """
 

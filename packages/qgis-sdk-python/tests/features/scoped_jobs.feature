@@ -1,5 +1,5 @@
 Feature: Scoped local jobs with typed handles
-  A job is a decorated class bound to an owner and submitted with delay; the
+  A job is a decorated function bound to an owner and submitted with delay; the
   handle it returns is typed end to end. Three rules carry the design: a
   cancellation request is not a state, callbacks run on the host's tick and
   never from a worker, and disposal of the owner beats any delivery. Hiding a

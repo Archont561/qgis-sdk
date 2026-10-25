@@ -1,13 +1,15 @@
-"""Scoped local jobs: one decorated class per job, bound to an owner, typed end to end.
+"""Scoped local jobs: one decorated function per job, bound to an owner, typed end to end.
 
-decision-13 fixed the authoring and submission shape - ``@job`` on a plain class
-with a typed ``run(inputs) -> Result``, submitted as
-``ctx.jobs.bind(JobClass).delay(inputs)`` - and decision-21 fixed what owns the
-work: a view by default, a plugin only explicitly, with disposal detaching the
-view's callbacks at once and *requesting* cancellation rather than pretending
-to have it. This module is both, over the TASK-13 step scheduler, and it is
-QGIS-free: a host drives :meth:`JobService.tick` from the event loop it already
-has, and that is the only thread author callbacks ever run on.
+decision-13 fixed the submission shape and decision-38 the authoring one:
+``@job`` goes on a plain function ``def name(ctx: JobContext, ...) -> Result``
+whose keyword parameters are typed the way an action's are, and the work is
+submitted as ``ctx.jobs.bind(name).delay(**inputs)`` with the context injected
+by the runtime at call time. decision-21 fixed what owns the work: a view by
+default, a plugin only explicitly, with disposal detaching the view's callbacks
+at once and *requesting* cancellation rather than pretending to have it. This
+module is both, over the TASK-13 step scheduler, and it is QGIS-free: a host
+drives :meth:`JobService.tick` from the event loop it already has, and that is
+the only thread author callbacks ever run on.
 
 Three rules carry the rest of the design and are worth stating once:
 
@@ -38,17 +40,24 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Literal, TypeVar
+from types import UnionType
+from typing import Annotated, Any, Literal, TypeVar, Union, get_args, get_origin
 
 from qgis_sdk.core import JobContext, ResourceScope
 from qgis_sdk.core.scheduling import Job, JobState, QuiesceOutcome, StepScheduler
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     canonical_json,
-    class_decorator,
-    describe_run_method,
+    declared_function_metadata,
+    function_metadata,
+    keyword_inputs,
+    mark_function,
+    object_schema,
     register_describer,
+    resolve_hints,
+    schema_for,
     type_name,
+    validate_given,
 )
 from qgis_sdk.models import (
     QgisSdkJobCancelledError,
@@ -116,37 +125,62 @@ _STATUS_OF_STATE = {
 
 
 def job(
-    cls: type[T] | None = None,
+    function: Callable[..., Any] | None = None,
     /,
     *,
     id: str | None = None,
     title: str | None = None,
 ) -> Any:
-    """Attach job metadata without wrapping or constructing the class.
+    """Attach job metadata to a plain function without wrapping it.
 
-    ``@job`` alone derives the id and title from the class name, the way
-    ``@plugin`` does; ``id=`` and ``title=`` override either one.
+    The function takes the :class:`JobContext` first and its inputs as typed
+    keyword parameters, and declares its result::
+
+        @job(id="demo.sum", title="Sum two numbers")
+        def sum_numbers(ctx: JobContext, a: int, b: int = 0) -> SumResult: ...
+
+    ``@job`` alone derives the id and title from the function name, the way
+    ``@plugin`` does for a class; ``id=`` and ``title=`` override either one.
+    Nothing is injected at decoration time: the runtime passes the context
+    when it runs the attempt, so a test calls the function directly with a
+    fake. ``async def`` is allowed and suspends on the scheduler at each
+    ``await``.
     """
-    return class_decorator(_JOB_ATTRIBUTE, "@job", cls, id=id, title=title)
+    validate_given(id, title)
+
+    def decorate(target: Callable[..., Any]) -> Callable[..., Any]:
+        mark_function(
+            target, _JOB_ATTRIBUTE, function_metadata(target, id, title), "@job"
+        )
+        return target
+
+    if function is None:
+        return decorate
+    return decorate(function)
 
 
 @dataclass(frozen=True)
 class JobDescription:
-    """Inspectable job structure: its typed inputs and result, and how it runs.
+    """Inspectable job structure: its keyword inputs, its result, and how it runs.
 
-    ``asynchronous`` says whether ``run`` is a coroutine function. A plain
-    ``run`` executes in one scheduler step on the driving thread, so it is for
-    short work or work that hands itself off through ``ctx.workers``; an
-    ``async def run`` suspends on the scheduler at every ``await``.
+    ``parameters`` are the input names in signature order and ``required``
+    the ones without a default; ``inputs_schema`` is the object schema built
+    from them, the same way an action's is. ``asynchronous`` says whether the
+    function is a coroutine function. A plain function executes in one
+    scheduler step on the driving thread, so it is for short work or work
+    that hands itself off through ``ctx.workers``; an ``async def`` suspends
+    on the scheduler at every ``await``.
     """
 
     id: str
     title: str
-    inputs_type: Any
-    result_type: Any
-    inputs_schema: dict[str, Any]
-    result_schema: dict[str, Any]
-    asynchronous: bool
+    parameters: tuple[str, ...]
+    required: tuple[str, ...]
+    annotations: dict[str, Any] = field(repr=False, compare=False)
+    result_type: Any = field(default=None)
+    inputs_schema: dict[str, Any] = field(default_factory=dict)
+    result_schema: dict[str, Any] = field(default_factory=dict)
+    asynchronous: bool = False
     schema_version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
@@ -156,10 +190,7 @@ class JobDescription:
             "id": self.id,
             "title": self.title,
             "asynchronous": self.asynchronous,
-            "inputs": {
-                "type": type_name(self.inputs_type),
-                "schema": self.inputs_schema,
-            },
+            "inputs": self.inputs_schema,
             "result": {
                 "type": type_name(self.result_type),
                 "schema": self.result_schema,
@@ -171,21 +202,112 @@ class JobDescription:
         return canonical_json(self.to_dict())
 
 
-def describe_job(cls: type) -> JobDescription:
-    """Inspect one decorated class without constructing it or calling ``run``."""
-    signature = describe_run_method(cls, _JOB_ATTRIBUTE, "job")
+def describe_job(function: Callable[..., Any]) -> JobDescription:
+    """Inspect one decorated function without calling it."""
+    declared = declared_function_metadata(
+        function, _JOB_ATTRIBUTE, "describe_job", "@job"
+    )
+    path = f"job {declared.id}"
+    if inspect.isgeneratorfunction(function) or inspect.isasyncgenfunction(function):
+        raise QgisSdkDeclarationError(
+            f"{path}: a job is a function or coroutine function, not a generator"
+        )
+    parameters = list(inspect.signature(function).parameters.values())
+    hints = resolve_hints(function, path)
+    context_first = (
+        bool(parameters)
+        and parameters[0].kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.POSITIONAL_ONLY)
+        and hints.get(parameters[0].name) is JobContext
+    )
+    if not context_first:
+        raise QgisSdkDeclarationError(
+            f"{path}: first parameter must be the JobContext the runtime injects "
+            "(annotate it `ctx: JobContext`)"
+        )
+    inputs = parameters[1:]
+    properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
+    result_type = hints.get("return", inspect.Signature.empty)
+    if result_type is inspect.Signature.empty:
+        raise QgisSdkDeclarationError(f"{path}: a job must declare its result")
     return JobDescription(
-        id=signature.metadata.id,
-        title=signature.metadata.title,
-        inputs_type=signature.inputs_type,
-        result_type=signature.result_type,
-        inputs_schema=signature.inputs_schema,
-        result_schema=signature.result_schema,
-        asynchronous=signature.asynchronous,
+        id=declared.id,
+        title=declared.title,
+        parameters=tuple(parameter.name for parameter in inputs),
+        required=tuple(required),
+        annotations={parameter.name: hints[parameter.name] for parameter in inputs},
+        result_type=result_type,
+        inputs_schema=object_schema(properties, required),
+        result_schema=schema_for(result_type, f"{path}.result", result=True),
+        asynchronous=inspect.iscoroutinefunction(function),
     )
 
 
 register_describer(_JOB_ATTRIBUTE, describe_job)
+
+
+def _accepts(value: object, annotation: Any) -> bool:
+    """Whether ``value`` fits ``annotation`` for the shapes a job may declare.
+
+    The same subset :func:`qgis_sdk.declarations.schema_for` admits, checked
+    on Python values: primitives, ``None``, unions, ``Literal``, ``list``,
+    ``tuple`` and dataclasses. The check is about the outer shape - a list is
+    a list - so a wrong submission is refused before anything is queued while
+    the author's function keeps the last word on the values.
+    """
+    origin = get_origin(annotation)
+    if origin is Annotated:
+        return _accepts(value, get_args(annotation)[0])
+    if annotation is Any:
+        return True
+    if annotation is None or annotation is type(None):
+        return value is None
+    if origin in (Union, UnionType):
+        return any(_accepts(value, arg) for arg in get_args(annotation))
+    if origin is Literal:
+        return value in get_args(annotation)
+    if origin is not None:
+        return isinstance(value, origin)
+    if annotation is float:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if annotation is int:
+        return isinstance(value, int) and not isinstance(value, bool)
+    return isinstance(value, annotation)
+
+
+def _describe_annotation(annotation: Any) -> str:
+    """Spell an annotation the way the author wrote it, for a refusal message."""
+    origin, args = get_origin(annotation), get_args(annotation)
+    if origin is Annotated:
+        return _describe_annotation(args[0])
+    if origin is Literal:
+        return "one of " + ", ".join(repr(arg) for arg in args)
+    if origin in (Union, UnionType):
+        return " | ".join(_describe_annotation(arg) for arg in args)
+    if origin is not None and args:
+        inner = ", ".join(_describe_annotation(arg) for arg in args)
+        return f"{type_name(origin)}[{inner}]"
+    return type_name(annotation)
+
+
+def _check_arguments(
+    description: JobDescription, arguments: dict[str, Any]
+) -> list[str]:
+    """Name every way ``arguments`` fails the signature, without the values."""
+    problems = [
+        f"missing {name}" for name in description.required if name not in arguments
+    ]
+    problems += [
+        f"unexpected {name}" for name in arguments if name not in description.parameters
+    ]
+    for name, value in arguments.items():
+        annotation = description.annotations.get(name)
+        if name in description.parameters and not _accepts(value, annotation):
+            problems.append(
+                f"{name} must be {_describe_annotation(annotation)}, "
+                f"not {type_name(type(value))}"
+            )
+    return problems
 
 
 # -- subscriptions ----------------------------------------------------------------
@@ -461,8 +583,10 @@ _TERMINAL_EVENT: dict[JobStatus, JobEvent] = {
 }
 
 
-async def _run_attempt(attempt: _Attempt, cls: type, inputs: object) -> object:
-    """The coroutine the scheduler drives: construct, run, check the result type."""
+async def _run_attempt(
+    attempt: _Attempt, function: Callable[..., Any], arguments: dict[str, Any]
+) -> object:
+    """The coroutine the scheduler drives: inject the context, call, check the result."""
     attempt.scope.ensure_open()
     context = JobContext(
         progress=attempt.progress,
@@ -471,13 +595,13 @@ async def _run_attempt(attempt: _Attempt, cls: type, inputs: object) -> object:
         workers=attempt.runtime.workers,
         network=attempt.runtime.network,
     )
-    outcome = cls(context).run(inputs)
+    outcome = function(context, **arguments)
     if inspect.isawaitable(outcome):
         outcome = await outcome
     description = attempt.description
-    if not isinstance(outcome, description.result_type):
+    if not _accepts(outcome, description.result_type):
         raise QgisSdkDeclarationError(
-            f"{description.id}: run returned {type_name(type(outcome))}, not the "
+            f"{description.id}: returned {type_name(type(outcome))}, not the "
             f"declared {type_name(description.result_type)}"
         )
     return outcome
@@ -617,15 +741,15 @@ class JobHandle:
 
 @dataclass(frozen=True, slots=True)
 class BoundJob:
-    """A job class bound to an owner; ``delay`` submits one attempt."""
+    """A job function bound to an owner; ``delay`` submits one attempt."""
 
     description: JobDescription
-    cls: type
+    function: Callable[..., Any]
     service: JobService = field(repr=False)
 
-    def delay(self, inputs: object) -> JobHandle:
-        """Submit one attempt with ``inputs``; no author code runs yet."""
-        return self.service._submit(self, inputs)
+    def delay(self, **arguments: Any) -> JobHandle:
+        """Submit one attempt with the inputs as keywords; no author code runs yet."""
+        return self.service._submit(self, arguments)
 
 
 @dataclass(eq=False)
@@ -690,7 +814,7 @@ class _Runtime:
 
 
 class JobService:
-    """``ctx.jobs``: binds job classes to an owner and delivers their outcomes.
+    """``ctx.jobs``: binds job functions to an owner and delivers their outcomes.
 
     One *root* service exists per plugin runtime; it owns the step scheduler
     over the plugin scope. :meth:`scoped` derives a view-owned service over a
@@ -787,18 +911,21 @@ class JobService:
 
     # -- submission
 
-    def bind(self, cls: type) -> BoundJob:
-        """Bind a ``@job`` class to this owner; the declaration is checked now."""
+    def bind(self, function: Callable[..., Any]) -> BoundJob:
+        """Bind a ``@job`` function to this owner; the declaration is checked now."""
         self._scope.ensure_open()
-        return BoundJob(describe_job(cls), cls, self)
+        return BoundJob(describe_job(function), function, self)
 
-    def _submit(self, bound: BoundJob, inputs: object) -> JobHandle:
+    def delay(self, function: Callable[..., Any], /, **arguments: Any) -> JobHandle:
+        """``bind(function).delay(**arguments)`` in one call."""
+        return self.bind(function).delay(**arguments)
+
+    def _submit(self, bound: BoundJob, arguments: dict[str, Any]) -> JobHandle:
         self._scope.ensure_open()
         description = bound.description
-        if not isinstance(inputs, description.inputs_type):
-            expected = type_name(description.inputs_type)
-            problem = f"inputs must be {expected}, not {type_name(type(inputs))}"
-            raise QgisSdkJobRejectedError(description.id, [problem])
+        problems = _check_arguments(description, arguments)
+        if problems:
+            raise QgisSdkJobRejectedError(description.id, problems)
         runtime = self._runtime
         number = runtime.counters.get(description.id, 0) + 1
         runtime.counters[description.id] = number
@@ -808,7 +935,7 @@ class JobService:
             description=description,
             logical_id=f"{description.id}#{number}",
         )
-        coroutine = _run_attempt(attempt, bound.cls, inputs)
+        coroutine = _run_attempt(attempt, bound.function, dict(arguments))
         try:
             attempt._job = runtime.scheduler.submit(coroutine)
         except BaseException:

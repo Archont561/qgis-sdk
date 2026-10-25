@@ -159,6 +159,56 @@ def class_metadata(cls: type, id: str | None, title: str | None) -> Metadata:
     return _declared_metadata(cls, id, title, suffixed=True)
 
 
+def function_metadata(function: Any, id: str | None, title: str | None) -> Metadata:
+    """The metadata a module-level function declaration (``@job``) carries.
+
+    Derived the way a class id is - snake_case name plus the module/qualname
+    suffix - because a job id has to stay unique across modules the same way
+    an algorithm id does, and because the two are documented as one rule.
+    """
+    return _declared_metadata(function, id, title, suffixed=True)
+
+
+def mark_function(
+    function: Any, attribute: str, declared: Metadata, decorator: str
+) -> None:
+    """Record ``declared`` on a plain function under ``attribute``.
+
+    The function is left otherwise untouched: not wrapped, not bound, no
+    attribute beyond the marker (decision-10 applied to functions). A class
+    is refused with the way forward, because ``@job`` used to take one.
+    """
+    if inspect.isclass(function):
+        raise QgisSdkDeclarationError(
+            f"{decorator} declares a function, not a class: write "
+            f"`{decorator} def name(ctx: JobContext, ...) -> Result` "
+            "(the class form was removed; see the 0.6.0 migration notes)"
+        )
+    if not inspect.isfunction(function):
+        raise QgisSdkDeclarationError(f"{decorator} requires a function")
+    if attribute in vars(function):
+        raise QgisSdkDeclarationError(
+            f"{declared.id}: duplicate {decorator} declaration"
+        )
+    setattr(function, attribute, declared)
+
+
+def declared_function_metadata(
+    function: Any, attribute: str, describer: str, decorator: str
+) -> Metadata:
+    """Return the function's own marker, or refuse with the describer's message."""
+    if not inspect.isfunction(function) or attribute not in vars(function):
+        raise QgisSdkDeclarationError(
+            f"{describer} requires a function with {decorator}"
+        )
+    declared = vars(function)[attribute]
+    if not isinstance(declared, Metadata):
+        raise QgisSdkDeclarationError(
+            f"{describer} requires a function with {decorator}"
+        )
+    return declared
+
+
 def method_metadata(method: Any, id: str | None, title: str | None) -> Metadata:
     """The metadata a method declaration carries: given values, or derived ones.
 
@@ -192,7 +242,7 @@ def declare_class(
     id: str | None = None,
     title: str | None = None,
 ) -> Callable[[type[T]], type[T]]:
-    """Build the class decorator ``@plugin``, ``@algorithm`` and ``@job`` all are.
+    """Build the class decorator ``@plugin`` and ``@algorithm`` both are.
 
     An omitted ``id`` or ``title`` is derived from the class once it is known
     (:func:`class_metadata`); a given one is validated right here.
@@ -438,7 +488,7 @@ class PluginDescription:
         return canonical_json(self.to_dict())
 
 
-def _object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
+def object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
     schema = {"type": "object", "properties": properties, "additionalProperties": False}
     if required:
         schema["required"] = required
@@ -577,7 +627,7 @@ def _dataclass_schema(
         )
         if result or (field.default is MISSING and field.default_factory is MISSING):
             required.append(field.name)
-    return _object_schema(properties, required)
+    return object_schema(properties, required)
 
 
 def _require_plain_method(method: Any, path: str, *, generator: bool = False) -> None:
@@ -612,7 +662,7 @@ def _require_self_first(parameters: list[Any], path: str) -> None:
         raise QgisSdkDeclarationError(f"{path}: first parameter must be self")
 
 
-def _action_inputs(
+def keyword_inputs(
     parameters: list[Any], hints: dict[str, Any], path: str
 ) -> tuple[dict[str, Any], list[str]]:
     """Describe the accepted inputs and say which of them must arrive."""
@@ -643,7 +693,7 @@ def _describe_action(
     parameters = list(inspect.signature(method).parameters.values())
     _require_self_first(parameters, path)
     hints = resolve_hints(method, path)
-    properties, required = _action_inputs(parameters[1:], hints, path)
+    properties, required = keyword_inputs(parameters[1:], hints, path)
     result = _schema(
         hints.get("return", inspect.Signature.empty), f"{path}.return", result=True
     )
@@ -651,7 +701,7 @@ def _describe_action(
         declaration.id,
         declaration.title,
         name,
-        _object_schema(properties, required),
+        object_schema(properties, required),
         result,
     )
 
@@ -664,7 +714,7 @@ def _describe_stream(
     parameters = list(inspect.signature(method).parameters.values())
     _require_self_first(parameters, path)
     hints = resolve_hints(method, path)
-    properties, required = _action_inputs(parameters[1:], hints, path)
+    properties, required = keyword_inputs(parameters[1:], hints, path)
     events = {
         kind: _schema(annotation, f"{path}.events.{kind}", result=True)
         for kind, annotation in declaration.events.items()
@@ -673,14 +723,14 @@ def _describe_stream(
         declaration.id,
         declaration.title,
         name,
-        _object_schema(properties, required),
+        object_schema(properties, required),
         events,
     )
 
 
 @dataclass(frozen=True)
 class RunSignature:
-    """What ``@algorithm`` and ``@job`` classes declare through their ``run``."""
+    """What an ``@algorithm`` class declares through its ``run``."""
 
     metadata: Metadata
     inputs_type: Any
@@ -750,19 +800,21 @@ def register_describer(
     _DESCRIBERS[attribute] = describer
 
 
-def describe(cls: type) -> Description:
+def describe(cls: Any) -> Description:
     """Describe whatever ``cls`` declares - plugin, algorithm or job.
 
     The narrow forms (``describe_plugin`` and friends) return the concrete type;
-    this one answers for any decorated class and returns the protocol.
+    this one answers for any decorated class or job function and returns the
+    protocol.
     """
-    if not inspect.isclass(cls):
-        raise QgisSdkDeclarationError("describe requires a class")
+    if not (inspect.isclass(cls) or inspect.isfunction(cls)):
+        raise QgisSdkDeclarationError("describe requires a class or a function")
     for attribute, describer in _DESCRIBERS.items():
         if attribute in vars(cls):
             return describer(cls)
     raise QgisSdkDeclarationError(
-        "describe requires a class declared with @plugin, @algorithm or @job"
+        "describe requires a class declared with @plugin or @algorithm, "
+        "or a function declared with @job"
     )
 
 

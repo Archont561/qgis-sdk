@@ -36,34 +36,24 @@ DEADLINE_SECONDS = 10.0
 
 
 @dataclass(frozen=True)
-class Inputs:
-    count: int
-    delay_seconds: float = 0.0
-
-
-@dataclass(frozen=True)
 class Result:
     total: int
     thread: int
 
 
 @job(id="native.count", title="Count on a worker")
-class Count:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
+async def count(ctx: JobContext, count: int, delay_seconds: float = 0.0) -> Result:
+    def work() -> Result:
+        total = 0
+        for step in range(1, count + 1):
+            if ctx.cancellation.is_cancelled():
+                break
+            time.sleep(delay_seconds)
+            total += step
+            ctx.progress.report(step / count)
+        return Result(total=total, thread=threading.get_ident())
 
-    async def run(self, inputs: Inputs) -> Result:
-        def work() -> Result:
-            total = 0
-            for step in range(1, inputs.count + 1):
-                if self.ctx.cancellation.is_cancelled():
-                    break
-                time.sleep(inputs.delay_seconds)
-                total += step
-                self.ctx.progress.report(step / inputs.count)
-            return Result(total=total, thread=threading.get_ident())
-
-        return await self.ctx.require_workers().offload(work)
+    return await ctx.require_workers().offload(work)
 
 
 @pytest.fixture(scope="module")
@@ -128,7 +118,7 @@ def test_work_runs_on_the_pool_and_every_callback_runs_on_the_gui_thread(
 ) -> None:
     gui = threading.get_ident()
     seen: list[tuple[str, int, object]] = []
-    handle = jobs.bind(Count).delay(Inputs(count=5))
+    handle = jobs.bind(count).delay(count=5)
     handle.on_progress(lambda f: seen.append(("progress", threading.get_ident(), f)))
     handle.on_success(lambda r: seen.append(("success", threading.get_ident(), r)))
 
@@ -148,7 +138,7 @@ def test_work_runs_on_the_pool_and_every_callback_runs_on_the_gui_thread(
 def test_get_is_refused_on_the_gui_thread_and_works_from_another(
     app, jobs: JobService
 ) -> None:
-    handle = jobs.bind(Count).delay(Inputs(count=3))
+    handle = jobs.bind(count).delay(count=3)
     with pytest.raises(QgisSdkJobWaitRefusedError):
         handle.get(timeout=0.01)
 
@@ -167,7 +157,7 @@ def test_disposing_the_view_detaches_callbacks_while_the_pool_keeps_working(
     view_scope = plugin_scope.child()
     view_jobs = jobs.scoped(view_scope)
     seen: list[str] = []
-    handle = view_jobs.bind(Count).delay(Inputs(count=50, delay_seconds=0.01))
+    handle = view_jobs.bind(count).delay(count=50, delay_seconds=0.01)
     handle.on_progress(lambda f: seen.append("progress"))
     handle.on_success(lambda r: seen.append("success"))
     handle.on_cancelled(lambda: seen.append("cancelled"))
@@ -193,21 +183,17 @@ def test_a_cancelled_job_still_queued_on_the_pool_acknowledges_without_running(
     ran: list[int] = []
 
     @job(id="native.blocker", title="Hold the pool")
-    class Blocker:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    async def blocker(ctx: JobContext, delay_seconds: float) -> Result:
+        def hold() -> Result:
+            time.sleep(delay_seconds)
+            ran.append(1)
+            return Result(0, threading.get_ident())
 
-        async def run(self, inputs: Inputs) -> Result:
-            def hold() -> Result:
-                time.sleep(inputs.delay_seconds)
-                ran.append(1)
-                return Result(0, threading.get_ident())
-
-            return await self.ctx.require_workers().offload(hold)
+        return await ctx.require_workers().offload(hold)
 
     pool.setMaxThreadCount(1)
-    holder = jobs.bind(Blocker).delay(Inputs(count=0, delay_seconds=0.2))
-    queued = jobs.bind(Blocker).delay(Inputs(count=0, delay_seconds=0.0))
+    holder = jobs.bind(blocker).delay(delay_seconds=0.2)
+    queued = jobs.bind(blocker).delay(delay_seconds=0.0)
     drive(
         app,
         jobs,

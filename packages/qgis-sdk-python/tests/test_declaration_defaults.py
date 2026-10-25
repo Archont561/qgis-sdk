@@ -9,10 +9,12 @@ and the bridge client spells it as a property, so it stays a plain identifier.
 
 import hashlib
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin, stream
 from qgis_sdk.algorithms import algorithm, describe_algorithm
+from qgis_sdk.core import JobContext
 from qgis_sdk.declarations import derive_id, derive_title
 from qgis_sdk.jobs import describe_job, job
 from qgis_sdk.providers import Provider
@@ -23,7 +25,7 @@ class Inputs:
     count: int
 
 
-def suffix(cls: type) -> str:
+def suffix(cls: Any) -> str:
     return hashlib.sha256(f"{cls.__module__}.{cls.__qualname__}".encode()).hexdigest()[
         :6
     ]
@@ -105,16 +107,15 @@ def test_algorithms_and_jobs_derive_their_ids_the_same_way() -> None:
             return inputs
 
     @job(title="Sum")
-    class AddNumbers:
-        def run(self, inputs: int) -> int:
-            return inputs
+    def add_numbers(ctx: JobContext, value: int) -> int:
+        return value
 
     smooth = describe_algorithm(SmoothGeometries)
-    add = describe_job(AddNumbers)
+    add = describe_job(add_numbers)
 
     assert smooth.id == f"smooth_geometries_{suffix(SmoothGeometries)}"
     assert smooth.title == "Smooth Geometries"
-    assert add.id == f"add_numbers_{suffix(AddNumbers)}"
+    assert add.id == f"add_numbers_{suffix(add_numbers)}"
     assert add.title == "Sum"
 
 

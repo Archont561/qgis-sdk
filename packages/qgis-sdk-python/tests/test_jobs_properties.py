@@ -30,44 +30,30 @@ from qgis_sdk.testing import FakeWorkers
 
 
 @dataclass(frozen=True)
-class Inputs:
-    value: int
-    reenter: bool = False
-    """When set, ``run`` re-enters the host tick mid-step, as a modal dialog would."""
-
-
-@dataclass(frozen=True)
 class Result:
     value: int
 
 
 @job(id="prop.sync", title="Sync")
-class Sync:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    def run(self, inputs: Inputs) -> Result:
-        self.ctx.progress.report(0.5)
-        if inputs.reenter:
-            NESTED.append(HOST_TICK[0]())
-        if inputs.value < 0:
-            raise ValueError("negative")
-        return Result(inputs.value)
+def sync_echo(ctx: JobContext, value: int, reenter: bool = False) -> Result:
+    """``reenter`` re-enters the host tick mid-step, as a modal dialog would."""
+    ctx.progress.report(0.5)
+    if reenter:
+        NESTED.append(HOST_TICK[0]())
+    if value < 0:
+        raise ValueError("negative")
+    return Result(value)
 
 
 @job(id="prop.offloaded", title="Offloaded")
-class Offloaded:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    async def run(self, inputs: Inputs) -> Result:
-        self.ctx.progress.report(0.1)
-        value = await self.ctx.require_workers().offload(lambda: inputs.value)
-        if inputs.reenter:
-            NESTED.append(HOST_TICK[0]())
-        if value < 0:
-            raise ValueError("negative")
-        return Result(value)
+async def offloaded_echo(ctx: JobContext, value: int, reenter: bool = False) -> Result:
+    ctx.progress.report(0.1)
+    value = await ctx.require_workers().offload(lambda: value)
+    if reenter:
+        NESTED.append(HOST_TICK[0]())
+    if value < 0:
+        raise ValueError("negative")
+    return Result(value)
 
 
 NESTED: list[int] = []
@@ -155,9 +141,9 @@ class JobLifetimes(RuleBasedStateMachine):
             view_owned = False
         service = self.view_jobs if view_owned else self.jobs
         owner = self.view_scope if view_owned else self.plugin_scope
-        cls = Offloaded if offloaded else Sync
+        function = offloaded_echo if offloaded else sync_echo
         reenter = self.jobs.tick if reenters else None
-        handle = service.bind(cls).delay(Inputs(value, reenters))
+        handle = service.bind(function).delay(value=value, reenter=reenters)
         self.tracked.append(_Tracked(handle, owner, value, reenter=reenter))
         if listened and not self.listener_scope.closed:
             handle.on_success(lambda result: None, owner=self.listener_scope)

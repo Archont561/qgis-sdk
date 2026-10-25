@@ -749,13 +749,16 @@ async def load(self, ctx):
 
 `ctx.jobs` is the local job runtime
 [decision-13](../../decisions/decision-13%20-%20Use-runtime-bound-Celery-inspired-local-jobs.md)
-shaped and
+shaped,
+[decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md)
+made function-based and
 [decision-21](../../decisions/decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md)
-scoped: a job is a decorated class with a typed `run`, submission is
-`bind(JobClass).delay(inputs)` and nothing else, and the handle you get back is
-typed end to end. `qgis_sdk.jobs` is QGIS-free; it runs on the TASK-13 step
-scheduler and a host drives `JobService.tick()` from whatever event loop it
-already has.
+scoped: a job is a decorated plain function whose first parameter is the
+`JobContext` the runtime injects and whose remaining keyword parameters are
+typed the way an action's are, submission is `bind(fn).delay(**inputs)` and
+nothing else, and the handle you get back is typed end to end. `qgis_sdk.jobs`
+is QGIS-free; it runs on the TASK-13 step scheduler and a host drives
+`JobService.tick()` from whatever event loop it already has.
 
 ```python
 from dataclasses import dataclass
@@ -765,43 +768,82 @@ from qgis_sdk.jobs import job
 
 
 @dataclass(frozen=True)
-class SumInputs:
-    left: int
-    right: int
-
-
-@dataclass(frozen=True)
 class SumResult:
     total: int
 
 
 @job(id="demo.sum", title="Add two numbers")
-class Sum:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
+async def add(ctx: JobContext, left: int, right: int = 0) -> SumResult:
+    def work() -> int:  # runs on a worker thread, reports from there
+        ctx.progress.report(0.5)
+        return left + right
 
-    async def run(self, inputs: SumInputs) -> SumResult:
-        def work() -> int:  # runs on a worker thread, reports from there
-            self.ctx.progress.report(0.5)
-            return inputs.left + inputs.right
-
-        total = await self.ctx.require_workers().offload(work)
-        return SumResult(total)
+    total = await ctx.require_workers().offload(work)
+    return SumResult(total)
 
 
-handle = ctx.jobs.bind(Sum).delay(SumInputs(1, 2))
+handle = ctx.jobs.bind(add).delay(left=1, right=2)
 handle.on_progress(lambda fraction: bar.setValue(int(fraction * 100)))
 handle.on_success(lambda result: label.setText(str(result.total)))
 handle.on_failure(lambda error: label.setText(str(error)))
 handle.on_cancelled(lambda: label.setText("cancelled"))
 ```
 
-`describe_job(Sum)` returns the `JobDescription` (`id`, `title`, the inputs
-and result types, and their schemas from the declarations generator) without
-constructing the class; a class without `@job`, without `run`, or with an
-untyped `run` is refused at bind time with `QgisSdkDeclarationError`. Inputs of
-the wrong type are refused by `delay` with `QgisSdkJobRejectedError` before
-anything runs; a result of the wrong type fails the job, not the tick.
+The decorator injects nothing: `add` stays the function you wrote, so a unit
+test calls `add(fake_context, left=1, right=2)` directly. A bare `@job`
+derives the id and title from the function name the way `@plugin` does for a
+class; `async def` is allowed and suspends on the scheduler at every `await`,
+a plain `def` runs in one step on the driving thread, a generator is refused.
+`ctx.jobs.delay(add, left=1, right=2)` is the one-call spelling of `bind` then
+`delay`; there is no ambient `add.delay(...)`, because the owner is always
+explicit (decision-21).
+
+`describe_job(add)` returns the `JobDescription` (`id`, `title`, the parameter
+names, which are required, the result type, and the object schema of the
+inputs plus the result schema from the declarations generator) without calling
+the function; a function without `@job`, without a `JobContext` first
+parameter, with an unannotated parameter or without a declared result is
+refused at bind time with `QgisSdkDeclarationError`, and so is a class
+(the class form was removed in 0.6.0 - see the migration note below).
+Keywords that do not fit the signature - missing, unexpected or of the wrong
+shape - are refused by `delay` with `QgisSdkJobRejectedError` naming every
+problem before anything runs; positional arguments are a `TypeError`; a
+result of the wrong type fails the job, not the tick.
+
+### Migrating from the 0.5 class form
+
+Up to `qgis-sdk-runtime` 0.5 a job was a class with `__init__(self, ctx)` and
+a typed `run(self, inputs)`, submitted as `bind(Cls).delay(InputsDataclass(...))`.
+In 0.6 the same job is the body of `run` as a module-level function:
+
+```python
+# 0.5
+@job(id="demo.sum", title="Sum")
+class Sum:
+    def __init__(self, ctx: JobContext) -> None:
+        self.ctx = ctx
+
+    def run(self, inputs: SumInputs) -> SumResult:
+        self.ctx.progress.report(0.5)
+        return SumResult(inputs.a + inputs.b)
+
+
+handle = ctx.jobs.bind(Sum).delay(SumInputs(1, 2))
+
+# 0.6
+@job(id="demo.sum", title="Sum")
+def add(ctx: JobContext, a: int, b: int) -> SumResult:
+    ctx.progress.report(0.5)
+    return SumResult(a + b)
+
+
+handle = ctx.jobs.bind(add).delay(a=1, b=2)
+```
+
+Move `self.ctx` to the injected `ctx` argument, spread the inputs dataclass
+into keyword parameters (a dataclass is still a fine parameter type when the
+inputs are genuinely one object), and call `delay` with keywords. A class
+handed to `@job` or `bind` is refused with a message that points here.
 
 Three rules decide everything else:
 
@@ -1247,6 +1289,31 @@ published for the bridge, and no `ts-v*` tag exists.
   `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
+
+## 0.6.0 migration notes
+
+0.6.0 of `qgis-sdk-runtime` changes how a job is written
+([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md);
+TASK-58). Everything about submission, handles, delivery and ownership is as
+in 0.5.
+
+- **`@job` decorates a function, not a class.** The first parameter is the
+  `JobContext` the runtime injects, the remaining parameters are typed
+  keyword inputs (defaults allowed, the same annotations an `@action`
+  accepts) and the return annotation is the result. `delay` takes the inputs
+  as keywords and refuses a submission that does not fit the signature with
+  `QgisSdkJobRejectedError` before anything is queued. `ctx.jobs.delay(fn,
+  **inputs)` is the one-call spelling of `bind` then `delay`. The class form
+  is refused by `@job` and `bind` with a message that names the change; see
+  [Migrating from the 0.5 class form](#migrating-from-the-05-class-form) for
+  the side-by-side.
+- **`JobDescription` describes a signature.** `inputs_type` is gone;
+  `parameters`, `required` and `annotations` describe the keyword inputs and
+  `inputs_schema` is their object schema (so `to_dict()["inputs"]` is the
+  schema itself, not `{"type": ...}`). `result_type` / `result_schema` are
+  unchanged. `describe(fn)` answers for a `@job` function; the refusal for an
+  undecorated class now reads "describe requires a class declared with
+  @plugin or @algorithm, or a function declared with @job".
 
 ## 0.5.0 migration notes
 

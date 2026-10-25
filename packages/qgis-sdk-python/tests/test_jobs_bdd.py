@@ -8,6 +8,7 @@ reports.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import pytest
@@ -21,12 +22,6 @@ scenarios("features/scoped_jobs.feature")
 
 
 @dataclass(frozen=True)
-class SumInputs:
-    a: int
-    b: int
-
-
-@dataclass(frozen=True)
 class SumResult:
     total: int
 
@@ -35,23 +30,15 @@ AUTHOR_CODE_RAN: list[str] = []
 
 
 @job(id="bdd.sum", title="Sum two numbers")
-class Sum:
-    def __init__(self, ctx: JobContext) -> None:
-        AUTHOR_CODE_RAN.append("constructed")
-
-    def run(self, inputs: SumInputs) -> SumResult:
-        AUTHOR_CODE_RAN.append("ran")
-        return SumResult(inputs.a + inputs.b)
+def add(ctx: JobContext, a: int, b: int) -> SumResult:
+    AUTHOR_CODE_RAN.append("ran")
+    return SumResult(a + b)
 
 
 @job(id="bdd.offloaded", title="Sum on a worker")
-class OffloadedSum:
-    def __init__(self, ctx: JobContext) -> None:
-        self.ctx = ctx
-
-    async def run(self, inputs: SumInputs) -> SumResult:
-        total = await self.ctx.require_workers().offload(lambda: inputs.a + inputs.b)
-        return SumResult(total)
+async def offloaded_add(ctx: JobContext, a: int, b: int) -> SumResult:
+    total = await ctx.require_workers().offload(lambda: a + b)
+    return SumResult(total)
 
 
 @dataclass
@@ -76,8 +63,10 @@ class JobsScenario:
         handle.on_failure(lambda error: self.events.append(("failure", error)))
         handle.on_cancelled(lambda: self.events.append(("cancelled", None)))
 
-    def submit(self, service: JobService, cls: type, inputs: SumInputs) -> JobHandle:
-        self.handle = service.bind(cls).delay(inputs)
+    def submit(
+        self, service: JobService, function: Callable[..., object], a: int, b: int
+    ) -> JobHandle:
+        self.handle = service.bind(function).delay(a=a, b=b)
         self.subscribe(self.handle)
         return self.handle
 
@@ -124,49 +113,41 @@ def plugin_with_view_on_gui_thread(
 
 @when(parsers.parse("the view binds the sum job and delays it with {a:d} and {b:d}"))
 def view_delays_sum(scenario: JobsScenario, a: int, b: int) -> None:
-    scenario.submit(scenario.view_jobs, Sum, SumInputs(a, b))
+    scenario.submit(scenario.view_jobs, add, a, b)
 
 
 @when("the view delays the offloaded sum job")
 def view_delays_offloaded(scenario: JobsScenario) -> None:
-    scenario.submit(scenario.view_jobs, OffloadedSum, SumInputs(1, 2))
+    scenario.submit(scenario.view_jobs, offloaded_add, 1, 2)
 
 
 @when("the view delays the offloaded sum job through its parent service")
 def view_delays_through_parent(scenario: JobsScenario) -> None:
     parent = scenario.view_jobs.parent
     assert parent is scenario.jobs
-    scenario.submit(parent, OffloadedSum, SumInputs(1, 2))
+    scenario.submit(parent, offloaded_add, 1, 2)
 
 
 @when("the view delays a job that is cancelled while it runs and finishes anyway")
 def view_delays_stubborn(scenario: JobsScenario) -> None:
     @job(id="bdd.stubborn", title="Finishes despite a request")
-    class Stubborn:
-        def __init__(self, ctx: JobContext) -> None:
-            self.ctx = ctx
+    def stubborn(ctx: JobContext, a: int, b: int) -> SumResult:
+        assert scenario.handle is not None
+        scenario.handle.cancel()
+        assert ctx.cancellation.is_cancelled()
+        return SumResult(a + b)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            assert scenario.handle is not None
-            scenario.handle.cancel()
-            assert self.ctx.cancellation.is_cancelled()
-            return SumResult(inputs.a + inputs.b)
-
-    scenario.submit(scenario.view_jobs, Stubborn, SumInputs(1, 2))
+    scenario.submit(scenario.view_jobs, stubborn, 1, 2)
 
 
 @when("the view delays a job that re-enters the tick while it runs")
 def view_delays_reentering(scenario: JobsScenario) -> None:
     @job(id="bdd.reentrant", title="Opens a modal dialog while running")
-    class Reentrant:
-        def __init__(self, ctx: JobContext) -> None:
-            pass
+    def reentrant(ctx: JobContext, a: int, b: int) -> SumResult:
+        scenario.nested_ticks.append(scenario.jobs.tick())
+        return SumResult(a + b)
 
-        def run(self, inputs: SumInputs) -> SumResult:
-            scenario.nested_ticks.append(scenario.jobs.tick())
-            return SumResult(inputs.a + inputs.b)
-
-    scenario.reentering = scenario.view_jobs.bind(Reentrant).delay(SumInputs(0, 0))
+    scenario.reentering = scenario.view_jobs.bind(reentrant).delay(a=0, b=0)
 
 
 @when("the host ticks once")
