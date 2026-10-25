@@ -321,21 +321,22 @@ jobs:
       # installs and resolves from the tarballs before either is published.
       - name: Smoke-test the alias against the bridge tarball
         run: |
-          set -o pipefail
-          mkdir -p smoke && cd smoke
+          mkdir -p smoke
+          cat > smoke/mirror.mjs <<'EOF'
+          const entries = ["", "/bridge", "/host", "/testing"];
+          for (const entry of entries) {
+            const scoped = Object.keys(await import(`@archont561/qgis-sdk${entry}`)).sort();
+            const alias = Object.keys(await import(`qgis-sdk${entry}`)).sort();
+            if (JSON.stringify(scoped) !== JSON.stringify(alias) || scoped.length === 0) {
+              throw new Error(`qgis-sdk${entry} does not mirror @archont561/qgis-sdk${entry}`);
+            }
+            console.log(`qgis-sdk${entry}: ${alias.length} exports mirrored`);
+          }
+          EOF
+          cd smoke
           npm init -y >/dev/null
           npm install --no-audit --no-fund --ignore-scripts ../bridge/*.tgz ../alias/*.tgz
-          node --input-type=module -e '
-            const entries = ["", "/bridge", "/host", "/testing"];
-            for (const entry of entries) {
-              const scoped = Object.keys(await import(`@archont561/qgis-sdk${entry}`)).sort();
-              const alias = Object.keys(await import(`qgis-sdk${entry}`)).sort();
-              if (JSON.stringify(scoped) !== JSON.stringify(alias) || scoped.length === 0) {
-                throw new Error(`qgis-sdk${entry} does not mirror @archont561/qgis-sdk${entry}`);
-              }
-              console.log(`qgis-sdk${entry}: ${alias.length} exports mirrored`);
-            }
-          '
+          node mirror.mjs
 
       - name: Upload tarball artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
