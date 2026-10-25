@@ -17,8 +17,8 @@ TASK-14 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
 (bridge host side, generated client, host surface), TASK-17 and decision-28
 (generated client and streams), TASK-5 and decision-4 (networking), TASK-1
 (scaffold), TASK-27 and TASK-28 (release
-policy and migration notes). Status at the time of writing: Python `0.2.0`
-published, `0.3.0` in progress.
+policy and migration notes, TASK-29 for 0.3.0). Status at the time of writing:
+Python `0.3.0` released alongside bridge `0.2.0`.
 
 Companion guides: [doc-13](doc-13%20-%20qgis-sdk-bridge-TypeScript-package-guide.md)
 (TypeScript bridge) and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
@@ -831,3 +831,40 @@ published for the bridge, and no `ts-v*` tag exists.
 - **Manifests:** `pyproject.toml` and `recipe.yaml` carry `0.2.0`; the bridge's
   `package.json` carries `0.1.1`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.2.0`.
+
+## 0.3.0 migration notes
+
+`0.3.0` closes the m-2 milestone. It is released together with
+`@archont561/qgis-sdk-bridge` `0.2.0` - two tags, `python-v0.3.0` and
+`ts-v0.2.0`, two numbers that are not meant to match
+([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+
+- **No breaking change.** Every public name of `0.2.0` is still there with the
+  same signature; what the diff adds are optional fields with defaults
+  (`AlgorithmContext.network`, `JobContext.workers` / `network`,
+  `PluginContext.network`, `UiContext.network`, `PluginDescription.streams`,
+  `BridgeOperation.request` / `result` / `events`, `Dispatcher(ledger=...)`,
+  `Handoff(on_cancel=...)`). Code written against `0.2.0` runs unchanged.
+- **`PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`.** A description now carries a
+  `streams` list beside `actions`; bridge `0.1.1` ignores the key, bridge
+  `0.2.0` reads it. `BRIDGE_PROTOCOL_VERSION` and `HOST_SCHEMA_VERSION` are
+  both `1` and are versioned independently of the packages.
+- **Package root:** `qgis_sdk.__all__` grows from six names to eight -
+  `StreamDescription` and `stream` join `ActionDescription`,
+  `PluginDescription`, `QgisSdkDeclarationError`, `action`, `describe_plugin`
+  and `plugin`.
+- **Additive:** the WebEngine bridge host side (`qgis_sdk.bridge`: `Dispatcher`,
+  protocol and refusal codes, bounded streams, `HostAuthority` file refs and
+  network grants, the release ledger, `register_host_operations`, the
+  TypeScript client generator) with `qgis_sdk.adapters.webchannel` and the
+  restricted page in `qgis_sdk.adapters.webengine` (`BrowserPolicy`,
+  `create_restricted_page`); the QGIS-aware HTTP client and typed services
+  (`qgis_sdk.network`); scoped jobs with typed handles (`qgis_sdk.jobs`,
+  `qgis_sdk.adapters.qgis` thread-pool workers); `@stream` declarations
+  (`qgis_sdk.declarations`, with `describe` and the `Description` protocol
+  shared by plugins, algorithms and jobs); `qgis_sdk.testing` fakes for all of
+  it.
+- **Manifests:** `pyproject.toml` and `recipe.yaml` carry `0.3.0`; the bridge's
+  `package.json` carries `0.2.0`. Verify with
+  `python scripts/release.py verify-versions --scope python --version 0.3.0`
+  and `--scope typescript --version 0.2.0`.
