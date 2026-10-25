@@ -37,6 +37,16 @@ pip install "qgis-sdk[controlled-deployment]"
 pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ```
 
+Since the 0.5.0 development line the Python side is three distributions
+([decision-35](../../decisions/decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md),
+[decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md)):
+`qgis-sdk` is a code-free kit that pins `qgis-sdk-runtime` (`import qgis_sdk`,
+stdlib-only, what a plugin imports and `qgis-sdk build` vendors) and
+`qgis-sdk-tools` (`import qgis_sdk_tools`, the `qgis-sdk` command, Typer) at
+the version it was released with. `pip install qgis-sdk` keeps meaning "the
+developer kit"; a QGIS console user installs `qgis-sdk-runtime` by name; a
+plugin installs nothing because the ZIP carries its own copy.
+
 The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md).
 
 ## Declarations
@@ -861,7 +871,7 @@ The README the scaffold writes teaches both modes; they differ in one thing, whe
 | Standalone Qt | call `build_context(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so `require_native()` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
 
 The starter tests are the standalone mode: in the generated project,
-`PYTHONPATH=<this workspace>/packages/qgis-sdk-python/src pytest -q` runs load, action and
+`PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
 unload through the SDK runtime with no QGIS installation at all.
 
 ### Web UI: vanilla or React, dialog or dock

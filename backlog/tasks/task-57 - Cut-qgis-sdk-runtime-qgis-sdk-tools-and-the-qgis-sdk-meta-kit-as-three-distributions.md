@@ -3,9 +3,10 @@ id: TASK-57
 title: >-
   Cut qgis-sdk-runtime, qgis-sdk-tools and the qgis-sdk meta kit as three
   distributions
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-25T14:50:00Z'
+updated_date: '2026-10-25 17:41'
 labels: []
 milestone: m-4
 dependencies:
@@ -20,7 +21,7 @@ ordinal: 57000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Step 2 of decision-35, gated on the contract freeze (an explicit decision that PluginContext, the service protocols, the description schema and the bridge protocol stop moving between minors). Three pyproject.toml files: qgis-sdk-runtime (import qgis_sdk, stdlib-only, runtime major bumps iff a contract version bumps), qgis-sdk-tools (import qgis_sdk_tools, the qgis-sdk console script, a tested runtime range), and qgis-sdk as a code-free meta distribution depending on both with extras for options. release.py gains runtime-v* and tools-v* scopes; release.yml publishes each distribution from its own step; the conda recipe produces the three outputs for the qgis-sdk* channel binding. The PyPI projects already exist at placeholder 0.0.0 with trusted publishing bound to release.yml / environment pypi.
+Step 2 of decision-35, un-gated from the contract freeze by decision-36 and executed in the 0.5.0 line. Three pyproject.toml files: qgis-sdk-runtime (packages/qgis-sdk-runtime, import qgis_sdk, stdlib-only), qgis-sdk-tools (packages/qgis-sdk-tools, import qgis_sdk_tools, the qgis-sdk console script, a tested runtime range), and qgis-sdk (packages/qgis-sdk-python) as a code-free kit pinning both with extras for options. Delivered in two PRs: first the distributions under the existing python scope (stamp/verify/build handle the three manifests at one version, three-output recipe, path updates); then the independent runtime-v* and tools-v* scopes, one publish step per distribution, the TestPyPI/workflow_dispatch rehearsal, the qgis-sdk check version diagnostic and the migration note. The PyPI projects exist at placeholder 0.0.0 with trusted publishing bound to release.yml / environment pypi; the placeholders are yanked after the first real publish.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

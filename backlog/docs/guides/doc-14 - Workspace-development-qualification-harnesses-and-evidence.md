@@ -45,7 +45,7 @@ Pixi keeps the toolchains separate:
 - `build`: Python packaging and test tools without QGIS.
 - `bun`: Bun and JavaScript workspace tooling, isolated from the Python environments.
 
-Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis, pytest-cov, and Pydantic 2.14.1 are pinned as PyPI wheels (matching the package `dev` extra); Pydantic is present in development only to exercise the opt-in adapter and is not a required package runtime dependency. The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk-python/src`.
+Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis, pytest-cov, and Pydantic 2.14.1 are pinned as PyPI wheels (matching the package `dev` extra); Pydantic is present in development only to exercise the opt-in adapter and is not a required package runtime dependency. The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk-runtime/src` and `packages/qgis-sdk-tools/src`.
 
 ## Reproducible sandbox
 
@@ -113,7 +113,7 @@ pixi install -e build
 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests
 ```
 
-The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis, pytest-cov, and Pydantic 2.14.1 as wheels; Pydantic is needed only to test the optional adapter. The workspace package is loaded from `packages/qgis-sdk-python/src` on `PYTHONPATH` rather than installed as a Pixi path dependency.
+The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis, pytest-cov, and Pydantic 2.14.1 as wheels; Pydantic is needed only to test the optional adapter. The workspace packages are loaded from `packages/qgis-sdk-runtime/src` and `packages/qgis-sdk-tools/src` on `PYTHONPATH` rather than installed as Pixi path dependencies; `packages/qgis-sdk-python` is the code-free `qgis-sdk` kit that owns the shared test suite, the developer scripts and the three-output Conda recipe.
 
 The checked contract-generation examples live in `tests/contract_sample/` and are run via the workspace's `sdk:generate` package script; see [Contract generation (checked example)](#contract-generation-checked-example). Mashumaro remains a separate test-only schema-export example. The Pydantic example uses the optional adapter, emits its own request/reader/writer schemas, and is checked against the same Python/Ajv case corpus. Neither example is a general SDK generator or public operation.
 
