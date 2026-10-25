@@ -46,8 +46,10 @@ Read from the task files:
 
 ## 3. Sprint train
 
-- **Sprint 1 (started 2026-10-25): TASK-57 in two pull requests.**
-  First the distributions: the tree moves to `packages/qgis-sdk-runtime`,
+- **Sprint 1 (started 2026-10-25): TASK-57, one pull request (#78) in
+  two commit series.** The two-PR plan collapsed into one branch because the
+  session is bound to it; the commits keep the split reviewable. First the
+  distributions: the tree moves to `packages/qgis-sdk-runtime`,
   `packages/qgis-sdk-tools` and the code-free kit in
   `packages/qgis-sdk-python`; `release.py stamp/verify-versions/build-python`
   treat the three manifests as one `python` scope at one version (kit pins
@@ -57,9 +59,11 @@ Read from the task files:
   steps, the refusal of a tools release whose range excludes HEAD's runtime,
   the TestPyPI or `workflow_dispatch` rehearsal recorded in doc-14, the
   `qgis-sdk check` diagnostic for a pinned runtime or generated client
-  outside the supported range, and the 0.5.0 migration note. The first PR
-  goes first because everything after it in this milestone talks about
-  distributions by name.
+  outside the supported range, and the 0.5.0 migration note. The
+  distributions come first because everything after them in this milestone
+  talks about distributions by name. Open after #78: the prerelease-tag
+  rehearsal of the pipeline (doc-14, "Split release pipeline rehearsal"),
+  which needs a tag and therefore an explicit request.
 - **Sprint 2: TASK-22.** The reference workflow end to end over the CLI the
   milestone inherits, with the pure and native tests it declares, the web
   view through a real `QWebEngineView` against the published bridge, and the
@@ -79,7 +83,7 @@ Read from the task files:
 - [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md)
   amends decision-35: the split no longer waits for the contract freeze; the
   freeze becomes the runtime's 1.0.
-- TASK-57's description rewritten to the two-PR shape; status In Progress.
+- TASK-57's description rewritten; status In Progress; AC 1, 2 and 4 checked on #78, AC 3 waits for the rehearsal run.
 - m-4's deliverables table lists the three Python distributions; doc-4's
   0.5.0 inventory points here.
 - decision-15's presentation-state restore stays deferred without a task; it

@@ -83,7 +83,9 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 
 | Path | Role |
 | :-- | :-- |
-| `packages/qgis-sdk-python` | Python package: pure contract layer, declarations, scaffold command, lifecycle runtime |
+| `packages/qgis-sdk-runtime` | The `qgis-sdk-runtime` distribution (`src/qgis_sdk`): pure contract layer, declarations, lifecycle runtime, services, adapters |
+| `packages/qgis-sdk-tools` | The `qgis-sdk-tools` distribution (`src/qgis_sdk_tools`): the `qgis-sdk` command, scaffold, check, devtools, pytest plugin, bridge generator |
+| `packages/qgis-sdk-python` | The code-free `qgis-sdk` kit (pins the two above), the shared test suite, developer scripts and the three-output Conda recipe |
 | `packages/qgis-sdk-python/scripts` | Standalone developer executables (qualification harnesses, contract generators), covered by QGIS-free tests in `packages/qgis-sdk-python/tests/scripts` |
 | `packages/qgis-sdk-python/tests` | Python tests for the package |
 | `packages/qgis-sdk-typescript` | TypeScript bridge for QWebEngineView plugin interfaces |
@@ -164,13 +166,15 @@ These examples are **not** public SDK operations, a general SDK generator, or us
 
 ## Build artifacts
 
-The package uses Hatchling for Python distributions and an explicit Conda recipe:
+The three Python distributions use Hatchling and share one explicit Conda recipe:
 
 ```sh
-pixi run -e bun bun run --filter qgis-sdk-python build
+pixi run -e build release-build-python            # three wheels under dist/pypi/<runtime|tools|kit>/
+pixi run -e build release-build-python --scope tools   # one distribution
+pixi run -e bun bun run --filter qgis-sdk-python build # wheels + the Conda outputs (needs rattler-build)
 ```
 
-The combined build produces a wheel and source distribution under `dist/pypi/`, checks them with Twine, and builds the Conda artifact under `dist/conda/`.
+`release.py build-python` writes one directory per distribution and checks every wheel with Twine; `release.yml` publishes each directory from its own step. The recipe builds `qgis-sdk-runtime`, `qgis-sdk-tools` and `qgis-sdk` under `dist/conda/`; only the outputs a tag's scope ships are uploaded.
 
 ## Developer scripts
 
@@ -619,6 +623,41 @@ inferred from CI.
   Packages jobs skipped, as a Python-scope tag must. PyPI's JSON API
   confirms 0.4.0 as the latest version; prefix.dev is not reachable from
   the sandbox, so the conda publish is attested by the job log only.
+
+## Split release pipeline rehearsal (TASK-57 AC 3)
+
+The pipeline for three distributions is in place on the branch of PR #78:
+`release.py classify/plan` emit `kit`/`runtime`/`tools` flags next to
+`python`; `stamp`/`verify-versions` handle `python-v*` (the kit train),
+`runtime-v*` and `tools-v*`; `build-python` writes `dist/pypi/<name>/`;
+`release.yml` publishes each wheel from its own `pypa/gh-action-pypi-publish`
+step and each Conda output from its own `publish-conda` call, in dependency
+order (runtime, tools, kit). What ran here on 2026-10-25:
+
+- `tests/scripts/test_release.py` (190) covers the scopes, the stamp shapes,
+  the two refusals (a tools range that excludes the runtime at HEAD, a kit
+  pin that leads the manifest it names) and the per-scope build.
+- `release.py build-python --outdir /tmp/dist2` built and Twine-checked
+  `runtime/qgis_sdk_runtime-0.4.0`, `tools/qgis_sdk_tools-0.4.0`,
+  `kit/qgis_sdk-0.4.0`; `verify-python --dist` finds them recursively;
+  `--scope runtime` built the runtime alone.
+- `actionlint` passes on the workflows.
+
+**Not yet run: the registry dry run.** rattler-build cannot run in the
+sandbox and the sandbox token cannot dispatch workflows, so the Conda
+three-output build and the publish steps have not executed. The rehearsal
+is one prerelease tag, which the workflow treats as a dry run (wheels and
+Conda outputs built and verified, every upload step skipped):
+
+```sh
+git tag -a python-v0.5.0-rc.1 -m "qgis-sdk 0.5.0-rc.1 rehearsal" <merge commit on main>
+git push origin python-v0.5.0-rc.1
+```
+
+(a `workflow_dispatch` of `release.yml` with `tag=python-v0.4.0` is *not*
+a rehearsal: 0.4.0 is a clean version, so the runtime and tools steps would
+publish for real). Record the run id and the per-step outcome here when it
+has run; until then AC 3 of TASK-57 stays open.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
