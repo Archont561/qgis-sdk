@@ -11,6 +11,7 @@ from qgis_sdk.declarations import PluginDescription, describe_plugin
 from qgis_sdk.models import QgisSdkError, QgisSdkScopeClosedError
 
 from .contexts import PluginContext
+from .scope import QuiesceOutcome
 
 PluginFactory = Callable[[PluginContext], object]
 """Construct a plugin instance from the context supplied by the runtime."""
@@ -125,6 +126,26 @@ class PluginRuntime:
         self._streams = MappingProxyType(streams)
         self._state = PluginRuntimeState.RUNNING
         return instance
+
+    def quiesce(self) -> QuiesceOutcome:
+        """Ask everything the plugin owns for a safe replacement point.
+
+        For a development host about to unload this revision (decision-15):
+        refused means work is still running and the revision must be left as
+        it is - ``resume()`` lets it accept work again. A plugin that is not
+        running has nothing to quiesce and refuses, naming its state.
+        """
+        if self._state is not PluginRuntimeState.RUNNING:
+            return QuiesceOutcome(
+                refused=True,
+                blockers=(f"the plugin is not running (state {self._state.value})",),
+            )
+        return self._context.scope.quiesce()
+
+    def resume(self) -> None:
+        """Accept work again after a refused replacement."""
+        if self._state is PluginRuntimeState.RUNNING:
+            self._context.scope.resume()
 
     def unload(self) -> None:
         """Dispose owned resources once; later calls are safe no-ops.

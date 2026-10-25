@@ -19,6 +19,7 @@ from qgis_sdk_tools.devtools.dev import (
     plan_web_server,
     wait_for_port,
 )
+from qgis_sdk_tools.devtools.installs import sdk_import_paths
 from qgis_sdk_tools.devtools.testrun import DESKTOP_PROBE as TEST_PROBE
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from test_devtools_installs import make_prefix, no_which
@@ -169,12 +170,38 @@ class TestDesktopPlan:
             "web": False,
             "dev_server": None,
             "exercise": None,
+            "watch": True,
         }
         assert (workspace / "dev-desktop.py").read_text(
             encoding="utf-8"
         ) == DESKTOP_PROBE
         assert "Ctrl+Shift+R" in plan.notes[1]
+        assert "on save" in plan.notes[1]
         assert "via QGIS_PLUGINPATH" in plan.notes[0]
+        # The bootstrap imports qgis_sdk_tools inside QGIS's own interpreter.
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[:3] == [
+            str(install.bindings),
+            str(root),
+            *(str(path) for path in sdk_import_paths()),
+        ]
+
+    def test_no_watch_leaves_reloads_to_the_button(
+        self, project: Path, install: QgisInstall, tmp_path: Path
+    ) -> None:
+        plan = plan_dev(
+            inspect_project(project),
+            "desktop",
+            install,
+            env={},
+            workspace=tmp_path,
+            headless=True,
+            watch=False,
+        )
+
+        request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
+        assert request["watch"] is False
+        assert "on save" not in plan.notes[1]
+        assert "Ctrl+Shift+R" in plan.notes[1]
 
     def test_hands_the_dev_server_to_the_plugin(
         self, web_project: Path, install: QgisInstall, tmp_path: Path
@@ -220,14 +247,14 @@ class TestDesktopPlan:
         assert "no QGIS Desktop binary" in str(excinfo.value)
         assert "--mode standalone" in str(excinfo.value)
 
-    def test_the_probe_keeps_a_refused_reload_from_touching_the_running_revision(
-        self,
-    ) -> None:
-        # The policy decision-15 names, readable in the source QGIS will run.
-        assert "problems = preflight()" in DESKTOP_PROBE
-        assert "keeps running" in DESKTOP_PROBE
-        assert "restart `qgis-sdk dev`" in DESKTOP_PROBE
-        assert "is disabled until a Reload succeeds" in DESKTOP_PROBE
+    def test_the_probe_is_a_bootstrap_for_the_reloader_module(self) -> None:
+        # The policy lives in an importable, unit-tested module; the probe
+        # only has to reach it and report when it cannot.
+        assert (
+            "from qgis_sdk_tools.devtools.bootstrap import bootstrap" in DESKTOP_PROBE
+        )
+        assert "cannot import qgis_sdk_tools inside QGIS" in DESKTOP_PROBE
+        assert "report_bootstrap_failure" in DESKTOP_PROBE
 
 
 class TestStandalonePlan:
@@ -245,9 +272,10 @@ class TestStandalonePlan:
         assert plan.argv == (str(install.python), str(tmp_path / "dev-standalone.py"))
         assert plan.profile is None
         assert "PYTHONHOME" not in plan.env
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[:2] == [
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[:3] == [
             str(install.bindings),
             str(project.resolve()),
+            *(str(path) for path in sdk_import_paths()),
         ]
         assert "no iface, no plugin lifecycle, no reload" in plan.notes[0]
         assert "classFactory(None)" in plan.notes[0]

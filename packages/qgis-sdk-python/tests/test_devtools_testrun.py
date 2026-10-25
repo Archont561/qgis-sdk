@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from qgis_sdk_tools.devtools import QgisInstall, find_qgis_install
+from qgis_sdk_tools.devtools.installs import sdk_import_paths
 from qgis_sdk_tools.devtools.testrun import (
     PLUGIN,
     REQUEST_ENV,
@@ -86,7 +87,12 @@ class TestQgis:
             "-x",
         )
         assert plan.env[TARGET_ENV] == "qgis"
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[0] == str(install.bindings)
+        # Bindings first; then the SDK itself, so ``-p qgis_sdk_tools.pytest_plugin``
+        # resolves in QGIS's interpreter even when the CLI runs under another.
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[:2] == [
+            str(install.bindings),
+            *(str(path) for path in sdk_import_paths()),
+        ]
         assert plan.env["QGIS_PREFIX_PATH"] == str(install.prefix)
         assert plan.env["QT_QPA_PLATFORM"] == "offscreen"  # no DISPLAY in env
         assert "PYTHONHOME" not in plan.env

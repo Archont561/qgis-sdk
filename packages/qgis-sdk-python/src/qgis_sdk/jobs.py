@@ -732,6 +732,9 @@ class JobService:
         # Registered after the scheduler's own disposal hook, so it runs before
         # it: every subscription is gone before any job is abandoned.
         scope.on_close(runtime.abandon_all)
+        # A development host asks the plugin scope before replacing the
+        # revision; the scheduler's answer is the one that counts (decision-21).
+        scope.on_quiesce(self.quiesce, resume=self.resume)
 
     def _bind(
         self, scope: ResourceScope, runtime: _Runtime, *, parent: JobService | None
@@ -858,11 +861,30 @@ class JobService:
             runtime.deliver_all()
         finally:
             runtime.ticking = False
-        return outcome
+        return self._named(outcome)
 
     def resume(self) -> None:
         """Accept new work again after a refused replacement."""
         self._runtime.scheduler.resume()
+
+    def _named(self, outcome: QuiesceOutcome) -> QuiesceOutcome:
+        """Name blockers by the handle id authors see, not the scheduler's."""
+        if not outcome.blockers:
+            return outcome
+        names = {
+            attempt._job.id: attempt.id
+            for attempt in self._runtime.attempts.values()
+            if attempt._job is not None
+        }
+        blockers = []
+        for blocker in outcome.blockers:
+            for number, handle_id in names.items():
+                prefix = f"job {number} "
+                if blocker.startswith(prefix):
+                    blocker = f"job {handle_id} " + blocker[len(prefix) :]
+                    break
+            blockers.append(blocker)
+        return QuiesceOutcome(refused=outcome.refused, blockers=tuple(blockers))
 
     # -- ownership hooks
 

@@ -35,7 +35,7 @@ from qgis_sdk.models import QgisSdkError
 
 from qgis_sdk_tools.scaffold.web import script_command
 
-from .installs import QgisInstall, wants_headless
+from .installs import QgisInstall, sdk_import_paths, wants_headless
 
 __all__ = [
     "PLUGIN",
@@ -179,7 +179,9 @@ def _plan_qgis(
             "or python.exe); PyQGIS only imports into the interpreter it was built "
             "for, so this install cannot run the qgis target"
         )
-    process_env = install.environment(env, headless=headless)
+    process_env = install.environment(
+        env, extra_paths=sdk_import_paths(), headless=headless
+    )
     process_env[TARGET_ENV] = "qgis"
     return TestPlan(
         target="qgis",
@@ -220,7 +222,7 @@ def _plan_desktop(
     probe = workspace / PROBE_NAME
     probe.write_text(DESKTOP_PROBE, encoding="utf-8", newline="\n")
     process_env = install.environment(
-        env, extra_paths=(root,), headless=headless, desktop=True
+        env, extra_paths=(root, *sdk_import_paths()), headless=headless, desktop=True
     )
     process_env[TARGET_ENV] = "desktop"
     process_env[REQUEST_ENV] = str(request)

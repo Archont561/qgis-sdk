@@ -74,8 +74,19 @@ Read from the task files:
   [decision-35](../../decisions/decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md)
   goes in before sprint 3 so that TASK-8 ships a package boundary and the
   unreleased `pytest_plugin`/`devtools` paths move before anyone pins them.
-- **Sprint 3: TASK-21, TASK-8.** Refresh on top of `dev`; the ZIP reusing
-  the check APIs (decision-8: build calls the library, not the CLI).
+- **Sprint 3 (2026-10-25): TASK-21, TASK-8.** Refresh on top of `dev`:
+  `qgis_sdk_tools.devtools.reloader` (policy, QGIS-free tests) with
+  `ResourceScope.on_quiesce` / `PluginRuntime.quiesce` on the runtime side,
+  reload on save by default (`--no-watch`), the opt-in devtools harness
+  extended to a stuck worker thread, a start failure after teardown, a
+  coalesced burst and a watcher-triggered reload. The ZIP:
+  `qgis_sdk_tools.bundle.build_plugin` behind `qgis-sdk build`, calling
+  `check_project` in-process (decision-8) plus `ENTRY001`/`DEP001`/
+  `DEP002`/`WEB001`, the runtime vendored under `<plugin>/_vendor` with
+  rewritten imports (decision-35), reproducible archive, and a clean-profile
+  install of two plugins in a real QGIS with `qgis_sdk` import refused
+  (`QGIS_SDK_BUILD_INSTALL=1`, decision-3). TASK-16's build-reuse criterion
+  closes with it.
 - **Close: TASK-30.** Release gate; the Python minor is the deliberate act
   the version policy requires.
 
