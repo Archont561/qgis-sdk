@@ -14,3 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 for _path in (PROJECT_ROOT / "tests", PROJECT_ROOT / "scripts"):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
+
+# Step definitions and fixtures shared between the BDD features and the
+# ordinary tests; declared here so every module sees the same ones.
+pytest_plugins = ["bridge_steps"]
