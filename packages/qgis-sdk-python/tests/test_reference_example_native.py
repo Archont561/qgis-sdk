@@ -195,13 +195,13 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
 
     pure = _cli("test", "-q", "-p", "no:faulthandler", cwd=project)
     assert pure.returncode == 0, pure.stdout + pure.stderr
-    assert "12 passed" in pure.stdout
+    assert "17 passed" in pure.stdout
 
     native = _cli(
         "test", "--target", "qgis", "-q", "-p", "no:faulthandler", cwd=project
     )
     assert native.returncode == 0, native.stdout + native.stderr
-    assert "3 passed" in native.stdout
+    assert "4 passed" in native.stdout
 
 
 def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:
@@ -215,7 +215,7 @@ def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:
     assert f"{PLUGIN}/data/points.geojson" in entries
     assert f"{PLUGIN}/web/index.html" in entries
     assert f"{vendored}/resources/styles/reference-polygon-output.qml" in entries
-    assert f"{vendored}/reference/workflow.py" in entries
+    assert f"{PLUGIN}/workflow.py" in entries
     assert not any("/tests/" in name for name in entries)
 
 

@@ -25,7 +25,9 @@ jsonschema = "==4.26.0"
 pydantic = "==2.14.1"
 
 [feature.python.activation.env]
-PYTHONPATH = "packages/qgis-sdk-runtime/src:packages/qgis-sdk-tools/src"
+# Absolute, so a task or a `qgis-sdk test` subprocess that runs in another
+# working directory (the reference example) still imports the source tree.
+PYTHONPATH = "$PIXI_PROJECT_ROOT/packages/qgis-sdk-runtime/src:$PIXI_PROJECT_ROOT/packages/qgis-sdk-tools/src"
 
 [feature.python.tasks.test-skill-creator]
 cmd = "pytest -q .agents/skills/skill-creator/tests"
@@ -36,6 +38,13 @@ cmd = "pytest -q .agents/skills/skill-creator/tests"
 # PYTHONPATH or locked dependency beyond the build environment.
 [feature.python.tasks.test-release-tool]
 cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q"
+
+# The reference plugin (examples/reference_plugin) through its own
+# `qgis-sdk test`: the pure target on the SDK fakes, then the `qgis` target
+# against the headless QGIS this environment carries.
+[feature.python.tasks.test-reference-example]
+cmd = "python -m qgis_sdk_tools test --project examples/reference_plugin -q && python -m qgis_sdk_tools test --project examples/reference_plugin --target qgis -q"
+env = { QT_QPA_PLATFORM = "offscreen" }
 
 [feature.python.tasks.release-plan]
 cmd = "python scripts/release.py plan"

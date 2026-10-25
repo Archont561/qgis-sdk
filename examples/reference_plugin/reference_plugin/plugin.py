@@ -7,8 +7,9 @@ The native dialog QGIS shows for an action and the page in ``web/`` are two
 front ends over the same ``runtime.actions``, which is what "equivalent native
 and web controls" means here.
 
-The work itself is ``qgis_sdk.reference.LocalGisWorkflow``; the plugin adds
-what only a plugin knows - where its fixture is and where its exports go.
+The work itself is :class:`.workflow.LocalGisWorkflow`, the plugin's own
+chain over the SDK services; this file adds what only a plugin declares -
+the actions, where its fixture is and where its exports go.
 """
 
 from __future__ import annotations
@@ -27,9 +28,9 @@ from qgis_sdk.models import (
     VectorExport,
     VectorLayerInfo,
 )
-from qgis_sdk.reference import LocalGisWorkflow
 
 from . import webview
+from .workflow import LocalGisWorkflow
 
 PLUGIN_ID = "reference_plugin"
 TITLE = "Reference workflow"

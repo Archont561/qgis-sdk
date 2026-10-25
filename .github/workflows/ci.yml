@@ -158,6 +158,14 @@ jobs:
           annotate "native layers: pytest" "$(tail -60 "$log" || true)"
           exit "$status"
 
+      # The reference plugin is a plugin project, not part of the SDK suite: it
+      # runs through its own `qgis-sdk test`, the pure target on the SDK fakes
+      # and the `qgis` target on the headless QGIS above (TASK-22 AC 2). The
+      # page, `build` and `dev` halves stay in the opt-in harness (doc-14).
+      - name: Test the reference plugin through qgis-sdk test
+        id: s20
+        run: pixi run -e default test-reference-example
+
       - name: Lint and format TypeScript
         id: s12
         run: pixi run -e bun biome-check

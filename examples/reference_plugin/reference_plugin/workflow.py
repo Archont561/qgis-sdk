@@ -2,18 +2,23 @@
 
 Load a local vector dataset, read the host's selection, run one distance
 operation in an explicit projected CRS, style the new output, present it, and
-export it only when asked. The reference plugin's declared actions call these
-methods one to one, and its web page calls those same actions through the
-bridge - so "native and web behave the same" is a property of this class and
-the services behind it, proven once on the fakes and once on QGIS, not a claim
+export it only when asked. The plugin's declared actions call these methods
+one to one, and its web page calls those same actions through the bridge - so
+"native and web behave the same" is a property of this class and the SDK
+services behind it, proven once on the fakes and once on QGIS, not a claim
 about two user interfaces.
 
 The ordering is the safety story. :meth:`buffer` runs the operation into a new
 layer (``invoke`` with ``add_to_project=False``), applies the packaged style to
 that layer, and adds it to the project *last*: a refused request, a failed run,
 a cancellation or an incompatible style all leave the project exactly as it
-was, with the source untouched. Nothing here holds Qt or QGIS: the class is a
-consumer of the injected :class:`~qgis_sdk.core.PluginContext`.
+was, with the source untouched.
+
+This class lives in the plugin, not in ``qgis_sdk``: the runtime ships the
+services and the reference *algorithms*; what a plugin chains them into is the
+plugin's own code, and this file is the worked example of that. Nothing here
+holds Qt or QGIS: the class is a consumer of the injected
+:class:`~qgis_sdk.core.PluginContext`.
 """
 
 from __future__ import annotations
@@ -23,9 +28,8 @@ from pathlib import Path
 from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
 from qgis_sdk.models import BufferRequest, VectorExport, VectorLayerInfo
+from qgis_sdk.reference import BufferLayer
 from qgis_sdk.services import Cancellation, Progress
-
-from .algorithms import BufferLayer
 
 __all__ = ["LocalGisWorkflow"]
 

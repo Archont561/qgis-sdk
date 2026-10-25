@@ -18,8 +18,8 @@ from qgis_sdk.models import (
     QgisSdkExportRefusedError,
     QgisSdkUnsupportedCapabilityError,
 )
-from qgis_sdk.reference import LocalGisWorkflow
 from reference_plugin.plugin import EXPORT_DIRECTORY_KEY, ReferencePlugin
+from reference_plugin.workflow import LocalGisWorkflow
 
 
 def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:

@@ -1,4 +1,4 @@
-"""The reference workflow (decision-19): its algorithms and the class that chains them."""
+"""The reference algorithms (decision-19); what a plugin chains them into is the plugin's."""
 
 from .algorithms import (
     BufferLayer,
@@ -7,13 +7,11 @@ from .algorithms import (
     CentroidResult,
     reference_provider,
 )
-from .workflow import LocalGisWorkflow
 
 __all__ = [
     "BufferLayer",
     "BufferResult",
     "CentroidLayer",
     "CentroidResult",
-    "LocalGisWorkflow",
     "reference_provider",
 ]
