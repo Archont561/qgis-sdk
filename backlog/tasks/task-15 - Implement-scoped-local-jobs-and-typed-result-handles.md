@@ -1,10 +1,10 @@
 ---
 id: TASK-15
 title: Implement scoped local jobs and typed result handles
-status: In Progress
+status: Done
 assignee: []
-created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 23:59'
+created_date: 2026-10-16 12:02
+updated_date: '2026-10-25T00:22:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -49,6 +49,8 @@ Implement scoped local jobs and typed result handles. Implement only the documen
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented in `qgis_sdk.jobs` (QGIS-free) over the TASK-13 step scheduler: `@job` + `describe_job`, `JobService` (`bind(...).delay(inputs)`, `scoped(view_scope)`, `parent`, `tick`, `quiesce`, `resume`, `active`, `faults`), typed `JobHandle` (status, cancel, result/error, on_progress/on_success/on_failure/on_cancelled with one-shot replay, `get()` refused on the GUI thread), errors `QgisSdkJobRejectedError` / `QgisSdkJobNotSettledError` / `QgisSdkJobWaitRefusedError`, `Workers` protocol + `JobContext.workers/network` with `require_*`, `testing.FakeWorkers`, `adapters.qgis.ThreadPoolWorkers`. Tests: `test_jobs.py` (39 examples), `test_jobs_properties.py` (Hypothesis state machine; found the finished-handle-after-view-close replay hole, now closed), `test_jobs_native.py` (4, real QThreadPool + Qt event loop, added to CI offscreen step). Docs: doc-12 'Scoped jobs' section, decision-13/21 implementation notes.
+
+Closed 2026-10-25: merged to main via PR #59 (`gh pr merge 59 --merge`) with Linux/macOS/Windows CI green. Final: `qgis_sdk.jobs` runtime, `ThreadPoolWorkers` adapter, example + Hypothesis + native test suites, doc-12 / decision-13 / decision-21 updated. Follow-ups from the 2026-10-25 audit: TASK-44 (re-entrant tick), TASK-45 (Gherkin feature + parametrised refusals), TASK-46 (result mirrors get), TASK-47 (owner hook release), TASK-48 (derived service constructor). Release work stays in TASK-29. (This closure was first recorded on the merged session branch only; re-applied here so main carries it.)
 <!-- SECTION:NOTES:END -->
 
 ## Comments

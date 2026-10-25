@@ -86,6 +86,11 @@ The only milestone that changes bridge source, and the only one that releases th
 - [TASK-40](../../tasks/task-40%20-%20Refuse-a-malformed-paging-cursor-instead-of-restarting-the-first-page.md): Refuse a malformed paging cursor instead of restarting the first page — from the 2026-10-24 host-surface audit
 - [TASK-41](../../tasks/task-41%20-%20Make-register_host_operations-atomic-and-reject-unknown-only-ids.md): Make register_host_operations atomic and reject unknown only ids — from the 2026-10-24 host-surface audit
 - [TASK-42](../../tasks/task-42%20-%20Refuse-generated-type-names-that-collide-with-the-emitters-own-identifiers.md): Refuse generated type names that collide with the emitter's own identifiers — from the 2026-10-24 host-surface audit
+- [TASK-44](../../tasks/task-44%20-%20Make-a-re-entrant-jobs.tick-a-no-op-instead-of-failing-the-running-job.md): Make a re-entrant jobs.tick() a no-op instead of failing the running job — from the 2026-10-25 scoped-jobs audit
+- [TASK-45](../../tasks/task-45%20-%20Add-the-scoped-jobs-Gherkin-feature-and-parametrise-the-declaration-refusals.md): Add the scoped-jobs Gherkin feature and parametrise the declaration refusals — from the 2026-10-25 scoped-jobs audit
+- [TASK-46](../../tasks/task-46%20-%20Make-handle.result-raise-the-jobs-own-failure-like-get-does.md): Make handle.result raise the job's own failure like get() does — from the 2026-10-25 scoped-jobs audit
+- [TASK-47](../../tasks/task-47%20-%20Release-explicit-owner-subscription-hooks-when-a-job-finishes.md): Release explicit-owner subscription hooks when a job finishes — from the 2026-10-25 scoped-jobs audit
+- [TASK-48](../../tasks/task-48%20-%20Give-derived-JobService-instances-a-complete-constructor.md): Give derived JobService instances a complete constructor — from the 2026-10-25 scoped-jobs audit
 
 ### 0.4.0
 

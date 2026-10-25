@@ -1,10 +1,10 @@
 ---
 id: TASK-20
 title: Enforce scoped file network and browser resource authority
-status: In Progress
+status: Done
 assignee: []
-created_date: '2026-10-16 12:02'
-updated_date: '2026-10-24 23:26'
+created_date: 2026-10-16 12:02
+updated_date: '2026-10-25T00:22:00Z'
 labels: []
 milestone: m-2
 dependencies:
@@ -60,4 +60,6 @@ Browser (71f6f32): adapters.webengine.BrowserPolicy (pure allowlist) and create_
 Qualification facts worth keeping: Chromium blocks file: subresources from file: pages before the interceptor unless LocalContentCanAccessFileUrls is on; Chromium itself refuses script-initiated top-frame data: navigations; a QWebEnginePage must be deleted synchronously (sip.delete) before its profile or the process traps at exit; destroying and recreating an off-the-record profile in one process aborts.
 
 Decision-20 amended with the settled mechanisms, revocation and borrowed-release rules; decision-27 records the second slice; doc-2 section 9 points at them.
+
+Merged to main via PR #58 (merge commit ba07a83, route gh pr merge --merge) with CI green on checks, macOS and Windows; the native step ran the WebEngine tests without a skip warning. (Closure re-applied on 2026-10-25 so main carries it.)
 <!-- SECTION:NOTES:END -->

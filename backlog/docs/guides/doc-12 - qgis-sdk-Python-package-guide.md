@@ -669,7 +669,14 @@ Three rules decide everything else:
   raises is detached and reported through `faults` / `on_fault`, never
   raised into the tick. `handle.get(timeout)` blocks only off the GUI thread -
   on it, `QgisSdkJobWaitRefusedError`; a timeout is
-  `QgisSdkJobNotSettledError`.
+  `QgisSdkJobNotSettledError`. `handle.result` reads the same outcome
+  without waiting: the typed result, the job's own exception for a failed
+  job, `QgisSdkJobCancelledError` for a cancelled one, and
+  `QgisSdkJobNotSettledError` only while the job is queued or running.
+  A `tick()` entered while another is on the stack - a job or a callback
+  opened a modal dialog and its nested event loop fired the host timer - is
+  ignored and returns `0`; a nested `quiesce()` is refused with the blocker
+  `a tick is already in progress on this thread`.
 - **Disposal beats delivery.** `ctx.jobs` in a view is
   `plugin_jobs.scoped(view_scope)`: closing the view disposes every
   subscription it owns first, then asks each of its jobs to stop. Hiding a
@@ -677,7 +684,10 @@ Three rules decide everything else:
   new subscriptions rather than replaying into it. Plugin-lifetime work is
   explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
   plugin scope abandons everything through the scheduler's existing rule;
-  nobody is called.
+  nobody is called. A subscription may name another owner
+  (`handle.on_success(cb, owner=other_scope)`); that owner's closure detaches
+  it, and the service keeps one close hook per such owner, released as the
+  job finishes, so a long-lived owner does not accumulate finished jobs.
 
 There are no automatic retries: resubmission is `delay` again, with a new
 logical id, and `attempt` is carried as `1` so a later, explicit retry policy
@@ -698,11 +708,12 @@ through the scheduler's `Handoff`; a callable still queued when its job is
 cancelled reports without running, a callable already running is left to
 finish. In tests, `qgis_sdk.testing.FakeWorkers` holds offloaded callables
 until the test says `run_one()` / `run_all()`, which is how the suite stages
-races between workers, ticks and disposal. `tests/test_jobs.py` holds the
-examples, `tests/test_jobs_properties.py` a Hypothesis state machine over
-submit / tick / cancel / worker reports / close view / close plugin, and
-`tests/test_jobs_native.py` the thread evidence over a real pool and a real Qt
-event loop.
+races between workers, ticks and disposal. `tests/features/scoped_jobs.feature`
+states the rules as scenarios (bound by `tests/test_jobs_bdd.py`),
+`tests/test_jobs.py` holds the examples, `tests/test_jobs_properties.py` a
+Hypothesis state machine over submit / tick / cancel / worker reports / close
+view / close listener / close plugin, and `tests/test_jobs_native.py` the
+thread evidence over a real pool and a real Qt event loop.
 
 ## Project scaffold
 
