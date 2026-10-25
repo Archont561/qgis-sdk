@@ -250,7 +250,9 @@ class TestDesktopPlan:
     def test_the_probe_is_a_bootstrap_for_the_reloader_module(self) -> None:
         # The policy lives in an importable, unit-tested module; the probe
         # only has to reach it and report when it cannot.
-        assert "from qgis_sdk_tools.devtools.reloader import bootstrap" in DESKTOP_PROBE
+        assert (
+            "from qgis_sdk_tools.devtools.bootstrap import bootstrap" in DESKTOP_PROBE
+        )
         assert "cannot import qgis_sdk_tools inside QGIS" in DESKTOP_PROBE
         assert "report_bootstrap_failure" in DESKTOP_PROBE
 

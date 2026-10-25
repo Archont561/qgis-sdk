@@ -531,3 +531,24 @@ page in a restricted `QWebEnginePage`, clicks Ping, edits `web/src/app.ts`,
 waits for the page to show the edit without a command restart and clicks
 Ping again. Last run here: 2026-10-25, QGIS 4.2.3 (Qt 6.11.2, Chromium 140)
 on Linux with Bun 1.4.2 and Vite 8.3.5: 9 passed in 19 s.
+
+**Built ZIP in a clean profile** (TASK-8 AC4, decision-3), opt-in:
+
+```sh
+QGIS_SDK_BUILD_INSTALL=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_bundle_native.py
+```
+
+`tests/test_bundle_native.py` builds two scaffolded plugins with
+`build_plugin`, unpacks both archives into a fresh profile's
+`python/plugins/` (what *Install from ZIP* does), marks each vendored
+`qgis_sdk` copy so they stand in for two SDK versions, and starts QGIS
+Desktop with `PYTHONPATH` stripped of the SDK and a `--code` probe that
+inserts a `sys.meta_path` finder refusing every `qgis_sdk` import. Both
+plugins are listed, load and start through `qgis.utils`, answer `ping`, their
+runtime classes come from `<plugin>._vendor.qgis_sdk.*` and are distinct
+objects, each sees its own mark, `qgis_sdk` never enters `sys.modules`, and
+both unload. The archive itself - layout, exclusions, vendoring and import
+rewrite, reproducibility, validation rules, the web build step - is covered
+without QGIS in `tests/test_bundle.py` (which also imports the extracted
+archive in-process) and `tests/test_bundle_cli.py`. Last run here:
+2026-10-25, QGIS 4.2.3: 1 passed in 4 s.

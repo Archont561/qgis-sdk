@@ -193,6 +193,8 @@ GITIGNORE = """__pycache__/
 .pytest_cache/
 # `qgis-sdk dev` keeps its isolated QGIS profile here.
 .qgis-sdk/
+# `qgis-sdk build` writes the installable ZIP here.
+dist/
 """
 
 
@@ -324,9 +326,10 @@ within two seconds refuses it too and is named; if unloading or starting fails
 the plugin stays disabled and the message says so - restart `qgis-sdk dev`.
 `--no-watch` leaves reloads to the button. Quit QGIS to stop.
 
-To install into a real profile instead, copy or symlink `{plugin}/` into
-`<profile>/python/plugins/` and enable {options.title!r} in Plugins, then
-Manage and Install Plugins.
+To install into a real profile instead, `qgis-sdk build` writes
+`dist/{plugin}-<version>.zip` with the SDK runtime vendored inside, and
+Plugins > Manage and Install Plugins > Install from ZIP installs it in any
+supported QGIS without qgis-sdk.
 
 ## Standalone Qt mode
 

@@ -392,3 +392,25 @@ def _bump(path: Path) -> None:
     stat = path.stat()
     os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
     time.sleep(0)
+
+
+def test_a_request_without_a_scheduler_reloads_at_once(project: Path) -> None:
+    host, console = FakeHost(), Console()
+    reloader = coordinator(project, host, console)
+    reloader.start()
+
+    reloader.request()
+
+    assert reloader.revision == 2
+    assert reloader.plugin == PLUGIN
+
+
+def test_preflight_skips_caches(project: Path) -> None:
+    cache = project / PLUGIN / "__pycache__"
+    cache.mkdir()
+    (cache / "stale.py").write_text("def (\n", encoding="utf-8")
+
+    problems, warnings = preflight(project, PLUGIN)
+
+    assert problems == []
+    assert warnings == []

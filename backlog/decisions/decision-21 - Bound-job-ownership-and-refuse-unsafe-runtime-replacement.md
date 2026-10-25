@@ -43,3 +43,11 @@ TASK-15 built the job half of this record in `qgis_sdk.jobs`:
   cancel / worker reports / close view / close plugin and checks monotonic
   states, a single truthful terminal event, nothing after owner close, and a
   closed plugin leaving nothing active.
+- TASK-21 (2026-10-25) wires the refusal to the host: a root `JobService`
+  registers `quiesce`/`resume` on its scope through
+  `ResourceScope.on_quiesce`, `PluginRuntime.quiesce()` combines children
+  first and names every blocker by handle id, and `qgis-sdk dev` waits the
+  bound (2 s), then refuses the reload, resumes the revision and asks for
+  an explicit restart. The harness proves it with a worker thread blocked
+  on an event: refused and named while the thread lives, reloaded once the
+  event is released.

@@ -27,3 +27,33 @@ Serialize reloads, coalesce intervening edits and assign generation IDs to suppr
 ## Confirmed second-interview refinement (2026-10-16)
 
 [decision-21](decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md) specifies a bounded cancellation wait; when safe completion is not achieved, refuse in-process reload and require explicit restart. Do not delete resources under running code. Exact timeout and restart UI are open.
+
+## Implementation note (TASK-21, 2026-10-25)
+
+The documented slice landed as `qgis_sdk_tools.devtools.reloader` (policy,
+tested without QGIS) and `.devtools.bootstrap` (the in-QGIS glue), with
+runtime hooks `ResourceScope.on_quiesce` / `PluginRuntime.quiesce`. What
+differs from the proposal above, deliberately:
+
+- **No separate control channel.** The coordinator runs on the GUI thread
+  inside QGIS and the watcher is an in-process poller (500 ms, `*.py` and
+  `metadata.txt` under the plugin package only). Nothing listens on a
+  socket, so there is nothing to keep out of a production ZIP. The
+  external watcher + authenticated channel stays open for a later need.
+- **Preflight** is `compile()` of every module plus `check_project`
+  (`SYNTAX*`, `META*`, `PROJECT*`, `CONFIG*` errors inside the package
+  refuse; `QGIS001`/`ARCH001` warn; findings outside the package never
+  block). Declarations and contracts are checked by the runtime at start,
+  which is after teardown - a start failure there disables visibly.
+- **Quiesce** is the decision-21 bound: 2 s, event loop pumped between
+  checks, refusal names blockers by job handle id, `resume()` restores the
+  revision, the message says finish/cancel or restart.
+- **Generations** number attempts; old-generation delivery is prevented by
+  scope closure (subscriptions disposed, late worker reports dropped), as
+  decision-21 already fixed - the guard complements cleanup.
+- **Automatic reload is on by default** (`--no-watch` opts out) because the
+  lifecycle tests this record asked for exist: the opt-in harness drives
+  preflight failure, partial startup failure, a stuck worker thread,
+  coalesced bursts and a watcher-triggered reload in a real QGIS.
+- Presentation-state restore and unsaved-dialog transfer remain open; a
+  reload closes the plugin's views like an unload does.

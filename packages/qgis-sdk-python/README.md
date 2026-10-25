@@ -48,8 +48,9 @@ check` reports what would stop one from loading in QGIS or from being tested
 without it. `qgis-sdk test` runs the project's pytest QGIS-free by default
 (`--target qgis|desktop` for the native layers, arguments pass through) and
 `qgis-sdk dev` starts the plugin from source in a real QGIS Desktop with an
-isolated profile, reload on demand and, for a web UI, Vite with hot module
-replacement.
+isolated profile, reload on save and, for a web UI, Vite with hot module
+replacement. `qgis-sdk build` checks the project and writes an installable
+ZIP with the runtime vendored inside, so the plugin needs nothing installed.
 
 ## Documentation
 

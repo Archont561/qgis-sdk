@@ -320,7 +320,7 @@ def wait_for_port(
 
 #: Runs inside QGIS Desktop (``qgis --code``). A thin bootstrap: it reads
 #: its request from a file (QGIS treats trailing arguments as project paths)
-#: and hands over to ``qgis_sdk_tools.devtools.reloader``, which the plan
+#: and hands over to ``qgis_sdk_tools.devtools.bootstrap``, which the plan
 #: puts on ``PYTHONPATH``. Anything that fails before that point is written
 #: to ``sys.__stderr__`` so it survives whatever QGIS does to ``sys.stderr``.
 DESKTOP_PROBE: Final = '''"""Load the source plugin and keep it reloadable (qgis-sdk dev)."""
@@ -334,7 +334,7 @@ from pathlib import Path
 request = json.loads(Path(os.environ["QGIS_SDK_DEV_REQUEST"]).read_text(encoding="utf-8"))
 
 try:
-    from qgis_sdk_tools.devtools.reloader import bootstrap, report_bootstrap_failure
+    from qgis_sdk_tools.devtools.bootstrap import bootstrap, report_bootstrap_failure
 except BaseException:  # noqa: BLE001 - keep QGIS up, show what happened
     log = sys.__stderr__ or sys.stderr
     log.write("qgis-sdk dev: cannot import qgis_sdk_tools inside QGIS:\\n" + traceback.format_exc())

@@ -16,7 +16,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from .reloader import DevSession, say
+from .bootstrap import DevSession, say
 
 STUCK_SECONDS = 2.0  # the coordinator's bound; the gate stays shut longer
 SETTLE_SECONDS = 4.0  # generous for a debounce + reload on a slow runner
