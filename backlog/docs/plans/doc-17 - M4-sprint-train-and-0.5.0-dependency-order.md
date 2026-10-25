@@ -6,7 +6,7 @@ created_date: '2026-10-25 17:45'
 ---
 # M4 sprint train and 0.5.0 dependency order
 
-**Status:** Planning plus the start of sprint 1. This document orders work the
+**Status:** Closed. All three sprints and the TASK-31 gate landed on 2026-10-25 (PRs #78, #80-#83); `python-v0.5.0` was published from `386089b` (`release.yml` run 40232586520). Kept as the record of the order the work took. This document orders work the
 m-4 tasks already declare; it adds no scope. Sprint membership lives here and
 in the milestone body, not in task fields ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
@@ -98,9 +98,14 @@ Read from the task files:
   locked: true` on every environment the CI, autorelease and release jobs
   install, with `relock.yml` as the only place that moves the lock, and
   `pixi lock --check` run there ahead of any install.
-- **Close: TASK-31.** Release gate only; the Python minor is the deliberate
+- **Close (done 2026-10-25, PR #83): TASK-31.** Release gate only; the Python minor is the deliberate
   act (`--bump minor`), the bridge is published only if the matrix found a
   defect, and the stamp, tag and publication wait for explicit requests.
+  Landed as: the gate record in doc-14 ("0.5.0 release gate"), the stamp
+  in the same pull request on explicit authorisation, the annotated tag
+  `python-v0.5.0` on the merge commit, `release.yml` run 40232586520 green
+  (build, conda, pypi, github-release; npm jobs skipped), the three wheels
+  on PyPI bit-identical to the ones built in the gate, no bridge release.
 
 ## 4. Hygiene done at sprint start
 
