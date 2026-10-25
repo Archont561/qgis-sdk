@@ -15,7 +15,7 @@
  *   reported as an unknown outcome and is never retried automatically.
  */
 
-import { QgisSdkError } from "./index";
+import { isPlainRecord, QgisSdkError } from "./index";
 
 export const BRIDGE_PROTOCOL_VERSION: 1 = 1;
 export const MAX_CALL_ID_LENGTH: number = 128;
@@ -203,10 +203,6 @@ export class QgisSdkBridgeRemoteError extends QgisSdkError {
 		this.callId = callId;
 		this.failure = failure;
 	}
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isNonEmptyString(value: unknown): value is string {

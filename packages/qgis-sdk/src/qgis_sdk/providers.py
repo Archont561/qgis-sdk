@@ -35,7 +35,13 @@ from qgis_sdk.algorithms import (
     AlgorithmDescription,
     describe_algorithm,
 )
-from qgis_sdk.declarations import QgisSdkDeclarationError, _hints, _metadata
+from qgis_sdk.declarations import (
+    QgisSdkDeclarationError,
+    canonical_json,
+    mark_class,
+    metadata,
+    resolve_hints,
+)
 from qgis_sdk.models import CrsInput, LayerInput, Metres
 
 __all__ = [
@@ -106,7 +112,7 @@ def parameter_kinds(inputs_type: Any) -> tuple[tuple[str, str], ...]:
         raise QgisSdkDeclarationError(
             f"request {inputs_type!r} must be a dataclass type to become parameters"
         )
-    hints = _hints(inputs_type, f"{inputs_type.__name__} request")
+    hints = resolve_hints(inputs_type, f"{inputs_type.__name__} request")
     return tuple(
         (
             field.name,
@@ -157,14 +163,18 @@ class ProviderDescription:
             ],
         }
 
+    def to_json(self) -> str:
+        """The canonical JSON form shared by every description."""
+        return canonical_json(self.to_dict())
+
 
 class Provider:
     """A named collection of algorithms, registered at definition time."""
 
     def __init__(self, *, id: str, title: str) -> None:
-        metadata = _metadata(id, title)
-        self._id = metadata.id
-        self._title = metadata.title
+        declared = metadata(id, title)
+        self._id = declared.id
+        self._title = declared.title
         self._registered: dict[str, RegisteredAlgorithm] = {}
         self._classes: dict[str, type] = {}
 
@@ -188,22 +198,22 @@ class Provider:
         rather than during the first execution.
         """
 
-        metadata = _metadata(id, title)
+        declared = metadata(id, title)
         if group is not None and (not isinstance(group, str) or not group.strip()):
             raise QgisSdkDeclarationError(f"{id}: group must be a nonempty string")
 
         def decorate(cls: type[T]) -> type[T]:
             if not inspect.isclass(cls):
                 raise QgisSdkDeclarationError("@provider.algorithm requires a class")
-            if metadata.id in self._registered:
+            if declared.id in self._registered:
                 raise QgisSdkDeclarationError(
-                    f"{self._id}: duplicate algorithm id {metadata.id!r}"
+                    f"{self._id}: duplicate algorithm id {declared.id!r}"
                 )
             if _ALGORITHM_ATTRIBUTE in vars(cls):
                 raise QgisSdkDeclarationError(
-                    f"{metadata.id}: already declared; register it on one provider"
+                    f"{declared.id}: already declared; register it on one provider"
                 )
-            setattr(cls, _ALGORITHM_ATTRIBUTE, metadata)
+            mark_class(cls, _ALGORITHM_ATTRIBUTE, declared, "@provider.algorithm")
             try:
                 described = describe_algorithm(cls)
                 parameters = parameter_kinds(described.inputs_type)
@@ -212,10 +222,10 @@ class Provider:
                 # half-declare an algorithm that describe_algorithm would accept.
                 delattr(cls, _ALGORITHM_ATTRIBUTE)
                 raise
-            self._registered[metadata.id] = RegisteredAlgorithm(
+            self._registered[declared.id] = RegisteredAlgorithm(
                 described, group, parameters
             )
-            self._classes[metadata.id] = cls
+            self._classes[declared.id] = cls
             return cls
 
         return decorate

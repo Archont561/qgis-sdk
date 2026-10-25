@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 from qgis_sdk.bridge.streams import StreamEventType, StreamTerminal
+from qgis_sdk.declarations import Description, canonical_json
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.models.limits import MAX_SAFE_INTEGER
 
@@ -232,12 +233,7 @@ def contract_fingerprint(description: Any) -> str:
     change a frontend could observe does. A surface without streams hashes
     exactly as it did before streams existed: its wire did not change.
     """
-    canonical = json.dumps(
-        _contract_view(_as_mapping(description)),
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    )
+    canonical = canonical_json(_contract_view(_as_mapping(description)))
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -439,7 +435,7 @@ _RESERVED_NAMES = _reserved_names()
 
 
 def _as_mapping(description: Any) -> dict[str, Any]:
-    if hasattr(description, "to_dict"):
+    if isinstance(description, Description):
         described = description.to_dict()
     elif isinstance(description, Mapping):
         described = dict(description)

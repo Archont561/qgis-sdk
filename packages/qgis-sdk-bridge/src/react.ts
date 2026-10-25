@@ -32,7 +32,7 @@ import {
 	QgisSdkBridgeAbortedError,
 	type WireTransport,
 } from "./bridge";
-import { QgisSdkError } from "./index";
+import { isPlainRecord, QgisSdkError } from "./index";
 
 /** A hook or provider was used outside the shape it needs. */
 export class QgisSdkBridgeReactError extends QgisSdkError {
@@ -262,11 +262,9 @@ const IDLE_STREAM: StreamState<never> = Object.freeze({
 
 function stableKey(value: unknown): string {
 	return JSON.stringify(value, (_key, item: unknown) =>
-		typeof item === "object" && item !== null && !Array.isArray(item)
+		isPlainRecord(item)
 			? Object.fromEntries(
-					Object.entries(item as Record<string, unknown>).sort(([a], [b]) =>
-						a < b ? -1 : a > b ? 1 : 0,
-					),
+					Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
 				)
 			: item,
 	);

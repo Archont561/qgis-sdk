@@ -1,6 +1,7 @@
 import { expect, test } from "@archont561/bun-test-utils";
 import * as entry from "@";
 import {
+	isPlainRecord,
 	isSafeJsonInteger,
 	MAX_SAFE_INTEGER,
 	MIN_SAFE_INTEGER,
@@ -369,4 +370,15 @@ test("parsePluginDescription rejects malformed or unsupported plugin description
 			],
 		}),
 	).toThrow(QgisSdkDeclarationError);
+});
+
+test("isPlainRecord accepts objects and rejects arrays, null and primitives", () => {
+	expect(isPlainRecord({})).toBe(true);
+	expect(isPlainRecord({ a: 1 })).toBe(true);
+	expect(isPlainRecord(Object.create(null))).toBe(true);
+	expect(isPlainRecord([])).toBe(false);
+	expect(isPlainRecord(null)).toBe(false);
+	expect(isPlainRecord(undefined)).toBe(false);
+	expect(isPlainRecord("record")).toBe(false);
+	expect(isPlainRecord(1)).toBe(false);
 });
