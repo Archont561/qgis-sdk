@@ -9,7 +9,7 @@ application's own plugin manager start and unload it.
 
 The fixture is not the generated scaffold project. TASK-1 owns that evidence; this
 file proves the adapter contract itself, so it depends on ``qgis_sdk`` only and never
-on ``qgis_sdk.scaffold``. Every claim is checked against the real host:
+on ``qgis_sdk_tools.scaffold``. Every claim is checked against the real host:
 
 * ``iface_is_host`` - the interface the adapter holds *is* ``qgis.utils.iface``, so
   nothing substituted a stand-in; the run fails outright if QGIS offered no iface.

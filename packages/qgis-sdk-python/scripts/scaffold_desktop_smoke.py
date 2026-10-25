@@ -231,7 +231,7 @@ def _run_lifecycle(
 ) -> DesktopScaffoldReport:
     """Generate the project, install it into the profile, then drive it in Desktop."""
     ensure_source_root_on_path()
-    from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
+    from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
     project = workspace / "project"
     write_scaffold(ScaffoldOptions.resolve(plugin), project)

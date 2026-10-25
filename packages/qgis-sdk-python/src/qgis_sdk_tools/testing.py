@@ -6,7 +6,7 @@ import io
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
-from qgis_sdk.cli import CliRuntime
+from qgis_sdk_tools.cli import CliRuntime
 
 __all__ = ["FakeCliRuntime", "FakeProcess"]
 

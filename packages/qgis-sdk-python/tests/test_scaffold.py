@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from qgis_sdk.scaffold import (
+from qgis_sdk_tools.scaffold import (
     GeneratedFile,
     QgisSdkScaffoldError,
     ScaffoldOptions,

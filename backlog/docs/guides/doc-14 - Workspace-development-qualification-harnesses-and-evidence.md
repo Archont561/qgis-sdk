@@ -183,10 +183,11 @@ importable package: the repository root already owns that top-level name, so
 tests import a harness by module name via `tests/conftest.py`.
 
 None of it is shipped. `[tool.hatch.build.targets.wheel].packages` packs
-`src/qgis_sdk` and nothing else, and `recipe.yaml` builds the Conda package by
+`src/qgis_sdk` (the runtime a plugin vendors) and `src/qgis_sdk_tools` (the
+developer tools; decision-35) and nothing else, and `recipe.yaml` builds the Conda package by
 pip-installing that same project, so neither the wheel nor the Conda artifact can
 carry a harness, a generator or a test path. The one executable-shaped file inside
-the package is `qgis_sdk/__main__.py`, and it belongs there because it *is* the
+the package is `qgis_sdk_tools/__main__.py`, and it belongs there because it *is* the
 distributed command; `scripts/` would be the wrong home for it, since a user who
 installed the wheel has no `scripts/` directory to point at.
 
@@ -463,7 +464,7 @@ on Linux, `"passed": true`. The same kit backs the adapter evidence in
 
 `qgis-sdk new --web vanilla|react` writes a Vite app whose dependencies are
 pinned to the versions the release was qualified with (`WEB_TEMPLATE_VERSIONS`
-in `qgis_sdk/scaffold/web.py`, `@archont561/qgis-sdk` by exact version). The
+in `qgis_sdk_tools/scaffold/web.py`, `@archont561/qgis-sdk` by exact version). The
 unit tests prove the plan - file list, pins, `bridge generate --check` finding
 no drift in the checked-in client, `check` passing with no native exemption,
 the starter pytest passing - without a network. What they cannot prove is that
@@ -487,7 +488,7 @@ is a skip, never a pass.
 
 ### `qgis-sdk test` and `qgis-sdk dev` against real QGIS (TASK-26, TASK-6)
 
-The unit tests of `qgis_sdk.devtools` assert on *plans* - the argv, working
+The unit tests of `qgis_sdk_tools.devtools` assert on *plans* - the argv, working
 directory, environment and notes a command would run with - through
 `FakeCliRuntime`, and compile the startup scripts the commands hand to QGIS
 (a `--code` script with a syntax error makes a headless QGIS hang in a modal

@@ -13,7 +13,7 @@ authors = [{ name = "QGIS SDK contributors" }]
 dependencies = ["typer==0.27.3"]
 
 [project.scripts]
-qgis-sdk = "qgis_sdk.__main__:main"
+qgis-sdk = "qgis_sdk_tools.__main__:main"
 
 [project.optional-dependencies]
 controlled-deployment = ["pydantic==2.14.1"]
@@ -33,12 +33,12 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/qgis_sdk"]
+packages = ["src/qgis_sdk", "src/qgis_sdk_tools"]
 
 [tool.hatch.build.targets.sdist]
 # `scripts/` is development automation - qualification harnesses and generators -
 # so it is not part of the distribution: the wheel cannot carry it (it only packs
-# src/qgis_sdk) and neither should the source archive. Tests stay in the sdist so a
+# src/qgis_sdk and src/qgis_sdk_tools) and neither should the source archive. Tests stay in the sdist so a
 # source install can still be verified.
 exclude = ["scripts"]
 

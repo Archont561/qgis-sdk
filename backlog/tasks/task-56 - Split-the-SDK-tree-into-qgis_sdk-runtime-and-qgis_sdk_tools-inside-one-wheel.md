@@ -1,9 +1,10 @@
 ---
 id: TASK-56
 title: Split the SDK tree into qgis_sdk (runtime) and qgis_sdk_tools inside one wheel
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-25T14:49:00Z'
+updated_date: '2026-10-25T14:51:00Z'
 labels: []
 milestone: m-3
 dependencies:

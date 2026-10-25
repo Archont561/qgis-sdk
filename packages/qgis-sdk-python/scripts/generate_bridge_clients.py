@@ -40,14 +40,14 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 sys.path.insert(0, str(PROJECT_ROOT / "tests"))
 
 from contract_sample.bridge_plugin import SitesPlugin
-from qgis_sdk.bridge.generate import (
+from qgis_sdk.bridge.host import host_description
+from qgis_sdk.declarations import describe_plugin
+from qgis_sdk_tools.generate import (
     check_generated,
     generate_host_typescript,
     generate_typescript,
     write_generated,
 )
-from qgis_sdk.bridge.host import host_description
-from qgis_sdk.declarations import describe_plugin
 
 
 def artifacts() -> list[tuple[Path, dict, object]]:

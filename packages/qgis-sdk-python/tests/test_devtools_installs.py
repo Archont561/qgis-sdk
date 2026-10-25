@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
-from qgis_sdk.devtools import (
+from qgis_sdk_tools.devtools import (
     QgisInstall,
     QgisSdkQgisNotFoundError,
     find_qgis_install,

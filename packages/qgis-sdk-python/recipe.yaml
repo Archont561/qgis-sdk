@@ -17,7 +17,7 @@ build:
     - python -m pip install . --no-deps --no-build-isolation -vv
   python:
     entry_points:
-      - qgis-sdk = qgis_sdk.__main__:main
+      - qgis-sdk = qgis_sdk_tools.__main__:main
 
 requirements:
   host:
@@ -34,6 +34,7 @@ tests:
   - python:
       imports:
         - qgis_sdk
+        - qgis_sdk_tools
       pip_check: true
   - script:
       - qgis-sdk --help

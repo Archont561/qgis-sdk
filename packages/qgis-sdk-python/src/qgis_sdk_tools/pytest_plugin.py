@@ -1,4 +1,4 @@
-"""The pytest plugin ``qgis-sdk test`` loads with ``-p qgis_sdk.pytest_plugin``.
+"""The pytest plugin ``qgis-sdk test`` loads with ``-p qgis_sdk_tools.pytest_plugin``.
 
 It is small on purpose, and every part of it also works under a direct
 ``pytest`` (decision-7: the command is a thin runner, never the only way):
@@ -31,10 +31,10 @@ from collections.abc import Iterator, Sequence
 from typing import Any, Final
 
 import pytest
+from qgis_sdk.environment import TEST_TARGET_ENV as TARGET_ENV
 
 __all__ = ["NATIVE_TARGETS", "TARGETS", "TARGET_ENV"]
 
-TARGET_ENV: Final = "QGIS_SDK_TEST_TARGET"
 TARGETS: Final = ("pure", "qgis", "desktop", "web")
 NATIVE_TARGETS: Final = frozenset({"qgis", "desktop"})
 NATIVE_ROOTS: Final = frozenset({"qgis", "PyQt5", "PyQt6", "PySide2", "PySide6"})
@@ -121,7 +121,7 @@ def qgis_app() -> Iterator[Any]:
     if existing is not None:
         yield existing
         return
-    from qgis_sdk.devtools import wants_headless
+    from qgis_sdk_tools.devtools import wants_headless
 
     if wants_headless(os.environ):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

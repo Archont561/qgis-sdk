@@ -35,9 +35,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from qgis_sdk.check import EXCLUDED_DIRECTORIES
+from qgis_sdk.environment import DEV_SERVER_ENV
 from qgis_sdk.models import QgisSdkError
-from qgis_sdk.scaffold.web import script_command
+
+from qgis_sdk_tools.check import EXCLUDED_DIRECTORIES
+from qgis_sdk_tools.scaffold.web import script_command
 
 from .installs import QgisInstall
 from .testrun import package_manager_for
@@ -63,7 +65,6 @@ MODES: Final = ("desktop", "standalone")
 PROFILE_NAME: Final = "dev"
 STATE_DIRECTORY: Final = ".qgis-sdk"
 REQUEST_ENV: Final = "QGIS_SDK_DEV_REQUEST"
-DEV_SERVER_ENV: Final = "QGIS_SDK_DEV_SERVER"
 LOOPBACK: Final = "127.0.0.1"
 DESKTOP_PROBE_NAME: Final = "dev-desktop.py"
 STANDALONE_PROBE_NAME: Final = "dev-standalone.py"

@@ -7,10 +7,10 @@ import os
 import sys
 from pathlib import Path
 
-from qgis_sdk.__main__ import app
-from qgis_sdk.cli import CliRuntime
-from qgis_sdk.scaffold import ScaffoldOptions, write_scaffold
-from qgis_sdk.testing import FakeCliRuntime
+from qgis_sdk_tools.__main__ import app
+from qgis_sdk_tools.cli import CliRuntime
+from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
+from qgis_sdk_tools.testing import FakeCliRuntime
 from typer.testing import CliRunner
 
 runner = CliRunner()

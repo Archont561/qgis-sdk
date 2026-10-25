@@ -30,8 +30,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from qgis_sdk.environment import TEST_TARGET_ENV as TARGET_ENV
 from qgis_sdk.models import QgisSdkError
-from qgis_sdk.scaffold.web import script_command
+
+from qgis_sdk_tools.scaffold.web import script_command
 
 from .installs import QgisInstall, wants_headless
 
@@ -46,8 +48,7 @@ __all__ = [
     "plan_tests",
 ]
 
-PLUGIN: Final = "qgis_sdk.pytest_plugin"
-TARGET_ENV: Final = "QGIS_SDK_TEST_TARGET"
+PLUGIN: Final = "qgis_sdk_tools.pytest_plugin"
 TARGETS: Final = ("pure", "qgis", "desktop", "web")
 NATIVE_TARGETS: Final = frozenset({"qgis", "desktop"})
 PROFILE_NAME: Final = "qgis-sdk-test"
