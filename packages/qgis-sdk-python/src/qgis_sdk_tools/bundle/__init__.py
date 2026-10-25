@@ -276,11 +276,16 @@ def _stage_runtime(vendor: Path, *, prefix: str) -> None:
 def _write_archive(archive: Path, staging: Path, plugin: str) -> tuple[str, ...]:
     """A deterministic ZIP: sorted entries, fixed timestamps, normalised modes."""
     date_time = _timestamp()
-    entries = sorted(path for path in (staging / plugin).rglob("*") if path.is_file())
+    # Sorted by the archive name, not the Path: Windows compares paths
+    # case-insensitively, and the order must be the same on every platform.
+    entries = sorted(
+        (path.relative_to(staging).as_posix(), path)
+        for path in (staging / plugin).rglob("*")
+        if path.is_file()
+    )
     names: list[str] = []
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for path in entries:
-            name = path.relative_to(staging).as_posix()
+        for name, path in entries:
             info = zipfile.ZipInfo(name, date_time=date_time)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 3  # unix, so the mode below is honoured
