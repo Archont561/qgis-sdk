@@ -3,10 +3,10 @@ id: TASK-57
 title: >-
   Cut qgis-sdk-runtime, qgis-sdk-tools and the qgis-sdk meta kit as three
   distributions
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25T14:50:00Z'
-updated_date: '2026-10-25 18:04'
+updated_date: '2026-10-25T18:24:00Z'
 labels: []
 milestone: m-4
 dependencies:
@@ -28,7 +28,7 @@ Step 2 of decision-35, un-gated from the contract freeze by decision-36 and exec
 <!-- AC:BEGIN -->
 - [x] #1 pip install qgis-sdk installs the runtime and tools at same-release pins; pip install qgis-sdk-runtime installs only qgis_sdk with no Typer; no two wheels write the same top-level directory.
 - [x] #2 release.py plan/stamp/verify handle runtime-v*, tools-v* and python-v* independently and refuse a tools release whose runtime range does not include the runtime at HEAD.
-- [ ] #3 release.yml publishes each distribution from its own pypa/gh-action-pypi-publish step and the recipe builds three outputs; a dry run against TestPyPI or a workflow_dispatch rehearsal is recorded in doc-14.
+- [x] #3 release.yml publishes each distribution from its own pypa/gh-action-pypi-publish step and the recipe builds three outputs; a dry run against TestPyPI or a workflow_dispatch rehearsal is recorded in doc-14.
 - [x] #4 qgis-sdk check reports a pinned runtime or generated client outside the versions this tools release supports, and the migration note states what console users and plugin authors install.
 <!-- AC:END -->
 
@@ -36,4 +36,6 @@ Step 2 of decision-35, un-gated from the contract freeze by decision-36 and exec
 
 <!-- SECTION:NOTES:BEGIN -->
 PR #78 (branch arena/27015bd3-qgis-sdk) carries the whole task. AC1: three wheels built and twine-checked, disjoint top-level dirs, runtime alone imports with no Typer, kit installs all three at one version in a clean venv (pip check clean). AC2: release.py scopes python (kit train), runtime, tools; stamp per scope; verify-versions refuses a tools range that excludes HEAD's runtime and a kit pin that leads the manifest it names; sort_tags/commits_for_scope/scope_ships per distribution; 190 tests in tests/scripts/test_release.py. AC3: release.yml publishes each wheel from its own pypa step (dist/pypi/<runtime|tools|kit>) and each Conda output from its own upload, recipe has three outputs with per-distribution context versions; the prerelease-tag rehearsal is NOT run yet (no dispatch from the sandbox) - recorded as pending in doc-14 'Split release pipeline rehearsal'. AC4: qgis-sdk check rules VERSION001 (runtime/kit pin outside the tools' tested range) and VERSION002 (generated client from another contract version), tests/test_check_versions.py (26); migration note in doc-12 '0.5.0 migration notes' states who installs what.
+
+AC3 rehearsal: PR #78 merged as 60c1dc2; prerelease tag python-v0.5.0-rc.1 on the merge commit ran release.yml 40220722995 green - classify python/kit/runtime/tools, stamp 0.5.0-rc.1 across the three manifests (tools range >=0.5.0rc1,<0.6), verify, three wheels, three-output Conda build; PyPI and prefix.dev upload steps skipped as prerelease; GitHub prerelease carries the six packages plus SHA256SUMS. PyPI unchanged (runtime/tools still 0.0.0 placeholders). Recorded in doc-14 'Split release pipeline rehearsal'. Closed Done.
 <!-- SECTION:NOTES:END -->

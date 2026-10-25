@@ -626,7 +626,7 @@ inferred from CI.
 
 ## Split release pipeline rehearsal (TASK-57 AC 3)
 
-The pipeline for three distributions is in place on the branch of PR #78:
+The pipeline for three distributions landed with PR #78 (`60c1dc2`):
 `release.py classify/plan` emit `kit`/`runtime`/`tools` flags next to
 `python`; `stamp`/`verify-versions` handle `python-v*` (the kit train),
 `runtime-v*` and `tools-v*`; `build-python` writes `dist/pypi/<name>/`;
@@ -643,21 +643,37 @@ order (runtime, tools, kit). What ran here on 2026-10-25:
   `--scope runtime` built the runtime alone.
 - `actionlint` passes on the workflows.
 
-**Not yet run: the registry dry run.** rattler-build cannot run in the
-sandbox and the sandbox token cannot dispatch workflows, so the Conda
-three-output build and the publish steps have not executed. The rehearsal
-is one prerelease tag, which the workflow treats as a dry run (wheels and
-Conda outputs built and verified, every upload step skipped):
+**Registry dry run (2026-10-25, after PR #78 merged as `60c1dc2`).**
+rattler-build cannot run in the sandbox and the sandbox token cannot
+dispatch workflows, so the Conda three-output build and the publish steps
+were exercised with one prerelease tag, which the workflow treats as a dry
+run (wheels and Conda outputs built and verified, every upload skipped):
 
 ```sh
-git tag -a python-v0.5.0-rc.1 -m "qgis-sdk 0.5.0-rc.1 rehearsal" <merge commit on main>
+git tag -a python-v0.5.0-rc.1 60c1dc2 -m "qgis-sdk 0.5.0-rc.1 ..."
 git push origin python-v0.5.0-rc.1
 ```
 
-(a `workflow_dispatch` of `release.yml` with `tag=python-v0.4.0` is *not*
-a rehearsal: 0.4.0 is a clean version, so the runtime and tools steps would
-publish for real). Record the run id and the per-step outcome here when it
-has run; until then AC 3 of TASK-57 stays open.
+`release.yml` run [40220722995](https://github.com/Archont561/qgis-sdk/actions/runs/40220722995),
+all jobs green:
+
+| Job | Outcome |
+| --- | --- |
+| `build` | classify (`python`, kit/runtime/tools true, prerelease true) -> stamp `0.5.0-rc.1` for scope `python` (three manifests, tools range `>=0.5.0rc1,<0.6`, recipe context) -> verify -> three wheels built and checked -> three-output Conda build -> artifacts |
+| `pypi` | "Verify the wheel without uploading" passed; `Publish qgis-sdk-runtime/-tools/qgis-sdk to PyPI` skipped (prerelease) |
+| `conda` | "Skip prefix.dev upload for prereleases"; the three per-output upload steps skipped |
+| `github-release` | prerelease `python-v0.5.0-rc.1` with `qgis_sdk_runtime-0.5.0rc1`, `qgis_sdk_tools-0.5.0rc1`, `qgis_sdk-0.5.0rc1` wheels, `qgis-sdk-runtime-0.5.0rc1-pyh4616a5c_0`, `qgis-sdk-tools-0.5.0rc1-pyh4616a5c_0`, `qgis-sdk-0.5.0rc1-pyha27c6ed_0` Conda packages and `SHA256SUMS` |
+| `npm`, `github-packages` | skipped (scope has no TypeScript) |
+
+PyPI still lists `qgis-sdk-runtime` and `qgis-sdk-tools` at the `0.0.0`
+placeholders only and `qgis-sdk` at 0.4.0, confirming nothing uploaded.
+This closes AC 3 of TASK-57. The first clean `python-v0.5.0` tag will be the
+first real publish of the two new names; yank the `0.0.0` placeholders after
+it (owner-side).
+
+Do not use a `workflow_dispatch` of `release.yml` with `tag=python-v0.4.0`
+as a rehearsal: 0.4.0 is a clean version, so the runtime and tools steps
+would publish for real.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default

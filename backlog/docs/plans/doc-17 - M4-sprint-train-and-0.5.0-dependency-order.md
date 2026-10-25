@@ -39,15 +39,15 @@ Read from the task files:
 
 | Task | Declared dependencies | State | Startable now |
 | --- | --- | --- | --- |
-| [TASK-57](../../tasks/task-57%20-%20Cut-qgis-sdk-runtime-qgis-sdk-tools-and-the-qgis-sdk-meta-kit-as-three-distributions.md) three distributions | TASK-56 ✓, TASK-8 ✓, TASK-30 ✓ | In Progress | **yes** (decision-36 removed the freeze gate) |
+| [TASK-57](../../tasks/task-57%20-%20Cut-qgis-sdk-runtime-qgis-sdk-tools-and-the-qgis-sdk-meta-kit-as-three-distributions.md) three distributions | TASK-56 ✓, TASK-8 ✓, TASK-30 ✓ | Done (#78) | **yes** (decision-36 removed the freeze gate) |
 | [TASK-22](../../tasks/task-22%20-%20Complete-and-qualify-the-local-GIS-reference-workflow.md) reference workflow | TASK-26 ✓ and the m-2/m-3 slices | To Do | **yes**; Windows rows blocked by host |
 | [TASK-9](../../tasks/task-9%20-%20Define-SDK-and-plugin-release-compatibility-gates.md) compatibility gates | TASK-8 ✓, TASK-22, TASK-23 | To Do | after 22; needs 57's ranges to say anything checkable |
 | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) 0.5.0 gate | TASK-9, TASK-22, TASK-30 ✓ | To Do | release gate |
 
 ## 3. Sprint train
 
-- **Sprint 1 (started 2026-10-25): TASK-57, one pull request (#78) in
-  two commit series.** The two-PR plan collapsed into one branch because the
+- **Sprint 1 (done 2026-10-25): TASK-57, one pull request (#78, merged as
+  `60c1dc2`) in two commit series.** The two-PR plan collapsed into one branch because the
   session is bound to it; the commits keep the split reviewable. First the
   distributions: the tree moves to `packages/qgis-sdk-runtime`,
   `packages/qgis-sdk-tools` and the code-free kit in
@@ -61,9 +61,10 @@ Read from the task files:
   `qgis-sdk check` diagnostic for a pinned runtime or generated client
   outside the supported range, and the 0.5.0 migration note. The
   distributions come first because everything after them in this milestone
-  talks about distributions by name. Open after #78: the prerelease-tag
-  rehearsal of the pipeline (doc-14, "Split release pipeline rehearsal"),
-  which needs a tag and therefore an explicit request.
+  talks about distributions by name. The prerelease tag `python-v0.5.0-rc.1`
+  on the merge commit rehearsed the pipeline end to end (`release.yml` run
+  40220722995: three wheels, three Conda outputs, every upload skipped;
+  doc-14, "Split release pipeline rehearsal").
 - **Sprint 2: TASK-22.** The reference workflow end to end over the CLI the
   milestone inherits, with the pure and native tests it declares, the web
   view through a real `QWebEngineView` against the published bridge, and the
@@ -83,7 +84,8 @@ Read from the task files:
 - [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md)
   amends decision-35: the split no longer waits for the contract freeze; the
   freeze becomes the runtime's 1.0.
-- TASK-57's description rewritten; status In Progress; AC 1, 2 and 4 checked on #78, AC 3 waits for the rehearsal run.
+- TASK-57's description rewritten; AC 1, 2 and 4 checked on #78, AC 3 on
+  the `python-v0.5.0-rc.1` rehearsal; closed Done.
 - m-4's deliverables table lists the three Python distributions; doc-4's
   0.5.0 inventory points here.
 - decision-15's presentation-state restore stays deferred without a task; it
