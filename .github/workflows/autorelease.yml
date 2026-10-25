@@ -36,7 +36,8 @@ on:
       scope:
         description: >-
           Target scope: auto (default) derives it from the changed paths;
-          set python, typescript or all to force one.
+          set python (the whole Python kit), runtime, tools, typescript or
+          all to force one.
         required: false
         default: "auto"
         type: string
@@ -151,7 +152,7 @@ jobs:
             pixi run -e bun biome-check
             pixi run -e bun typecheck
             pixi run -e bun bun run test
-          elif [ "$SCOPE" = "python" ]; then
+          elif [ "$SCOPE" = "python" ] || [ "$SCOPE" = "runtime" ] || [ "$SCOPE" = "tools" ]; then
             pixi run -e default lint-python
             pixi run -e default format-python-check
             pixi run -e default test-release-tool

@@ -1,20 +1,25 @@
 name: release
 
 # Artifact pipeline for every release tag (TASK-35, TASK-37). Builds the
-# qgis-sdk wheel and/or the @archont561/qgis-sdk npm package according to the tag
-# scope (v*, <scope>-v*, <scope>/v*), publishes a GitHub Release with
+# Python wheels and/or the @archont561/qgis-sdk npm package according to the
+# tag scope (v*, <scope>-v*, <scope>/v*), publishes a GitHub Release with
 # SHA256SUMS, and hands the artifacts to the registries.
 #
-# The two packages version independently (decision-25): `python-v*` stamps only
-# pyproject.toml and the conda recipe, `ts-v*` stamps only the bridge
-# package.json, and `v*` is an alignment release that stamps both at one
-# version. What ties a pair together is the plugin-description contract version,
-# which `release-verify-versions` checks across the Python declarations and the
-# bridge index on every release.
+# The packages version independently (decision-25, decision-35): `python-v*`
+# is the Python kit train and stamps the kit `qgis-sdk`, `qgis-sdk-runtime`
+# and `qgis-sdk-tools` at one version; `runtime-v*` and `tools-v*` stamp one
+# of those distributions alone; `ts-v*` stamps only the bridge package.json;
+# `v*` is an alignment release that stamps everything at one version. What
+# ties a pair together is the plugin-description contract version, which
+# `release-verify-versions` checks across the Python declarations and the
+# bridge index on every release. Each Python distribution is published by its
+# own step from its own directory (dist/pypi/<runtime|tools|kit>), so a
+# failure names the wheel it belongs to.
 #
 # Registry publishing runs under the OIDC trusted-publishing bindings the
-# repository owner provisioned: PyPI project `qgis-sdk` accepts tokens from
-# this workflow file (release.yml) under GitHub environment `pypi`, and npm
+# repository owner provisioned: PyPI projects `qgis-sdk`, `qgis-sdk-runtime`
+# and `qgis-sdk-tools` accept tokens from this workflow file (release.yml)
+# under GitHub environment `pypi`, and npm
 # package `@archont561/qgis-sdk` from release.yml under environment `npm`
 # (the binding is per package name: the one provisioned for the former
 # `qgis-sdk-bridge` does not carry over, see decision-33). Renaming this file
@@ -35,8 +40,8 @@ on:
     inputs:
       tag:
         description: >-
-          Release tag to publish (for example v0.1.0, python-v0.1.0, or
-          ts-v0.1.0).
+          Release tag to publish (for example v0.1.0, python-v0.1.0,
+          runtime-v0.1.0, tools-v0.1.0, or ts-v0.1.0).
         required: false
         default: ""
         type: string
@@ -57,7 +62,12 @@ jobs:
       version: ${{ steps.classify.outputs.version }}
       prerelease: ${{ steps.classify.outputs.prerelease }}
       scope: ${{ steps.classify.outputs.scope }}
+      # `python` is "at least one Python distribution"; the three flags below
+      # name them so the publish steps are one per wheel.
       python: ${{ steps.classify.outputs.python }}
+      kit: ${{ steps.classify.outputs.kit }}
+      runtime: ${{ steps.classify.outputs.runtime }}
+      tools: ${{ steps.classify.outputs.tools }}
       typescript: ${{ steps.classify.outputs.typescript }}
       tag_name: ${{ steps.classify.outputs.tag_name }}
     steps:
@@ -108,9 +118,11 @@ jobs:
           --scope "${{ steps.classify.outputs.scope }}"
           --version "${{ steps.classify.outputs.version }}"
 
-      - name: Build and check the Python wheel
+      - name: Build and check the Python wheels the scope ships
         if: steps.classify.outputs.python == 'true'
-        run: pixi run -e build release-build-python
+        run: >-
+          pixi run -e build release-build-python
+          --scope "${{ steps.classify.outputs.scope }}"
 
       - name: Build the Conda package
         if: steps.classify.outputs.python == 'true'
@@ -134,6 +146,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python-dist
+          # One subdirectory per distribution (runtime/, tools/, kit/).
           path: dist/pypi
 
       - name: Upload Conda package artifact
@@ -178,10 +191,12 @@ jobs:
     if: needs.build.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Trusted-publishing binding: PyPI project `qgis-sdk` accepts OIDC tokens
-    # from release.yml running under the `pypi` environment only. A job-level
-    # permissions block replaces the workflow-level one, so id-token is named
-    # here explicitly (the trap publish-sandbox.yml documents).
+    # Trusted-publishing binding: PyPI projects `qgis-sdk`, `qgis-sdk-runtime`
+    # and `qgis-sdk-tools` accept OIDC tokens from release.yml running under
+    # the `pypi` environment only. A job-level permissions block replaces the
+    # workflow-level one, so id-token is named here explicitly (the trap
+    # publish-sandbox.yml documents). One publish step per distribution, in
+    # dependency order: the kit pins the other two, so it goes last.
     environment: pypi
     permissions:
       id-token: write
@@ -217,11 +232,25 @@ jobs:
           pixi run -e build release-verify-python --dist dist/pypi
           echo "PyPI upload skipped: ${{ needs.build.outputs.version }} is a prerelease; registries only accept clean tags." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish to PyPI
-        if: needs.build.outputs.prerelease == 'false'
+      - name: Publish qgis-sdk-runtime to PyPI
+        if: needs.build.outputs.prerelease == 'false' && needs.build.outputs.runtime == 'true'
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
-          packages-dir: dist/pypi
+          packages-dir: dist/pypi/runtime
+          skip-existing: true
+
+      - name: Publish qgis-sdk-tools to PyPI
+        if: needs.build.outputs.prerelease == 'false' && needs.build.outputs.tools == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/pypi/tools
+          skip-existing: true
+
+      - name: Publish qgis-sdk to PyPI
+        if: needs.build.outputs.prerelease == 'false' && needs.build.outputs.kit == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/pypi/kit
           skip-existing: true
 
   conda:
@@ -264,9 +293,19 @@ jobs:
         shell: bash
         run: ': "${ACTIONS_ID_TOKEN_REQUEST_URL:?missing GitHub OIDC request URL; grant permissions.id-token: write}" && : "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:?missing GitHub OIDC request token; grant permissions.id-token: write}"'
 
-      - name: Publish Conda package to prefix.dev
-        if: needs.build.outputs.prerelease == 'false'
-        run: pixi run -e build publish-conda
+      # The recipe builds all three outputs every time; only the ones the tag
+      # ships are uploaded, so a runtime-only tag never re-publishes the kit.
+      - name: Publish qgis-sdk-runtime to prefix.dev
+        if: needs.build.outputs.prerelease == 'false' && needs.build.outputs.runtime == 'true'
+        run: pixi run -e build publish-conda "dist/conda/qgis-sdk-runtime-*.conda"
+
+      - name: Publish qgis-sdk-tools to prefix.dev
+        if: needs.build.outputs.prerelease == 'false' && needs.build.outputs.tools == 'true'
+        run: pixi run -e build publish-conda "dist/conda/qgis-sdk-tools-*.conda"
+
+      - name: Publish qgis-sdk to prefix.dev
+        if: needs.build.outputs.prerelease == 'false' && needs.build.outputs.kit == 'true'
+        run: pixi run -e build publish-conda "dist/conda/qgis-sdk-${{ needs.build.outputs.version }}-*.conda"
 
   npm:
     needs: build
@@ -510,7 +549,8 @@ jobs:
           # The npm-tgz artifact carries two tarballs under their pack
           # directories (bridge/, alias/) since the alias shipped; ts-v0.3.0
           # published both and then found no asset under npm/*.tgz.
-          assets=(dist/pypi/*.whl dist/conda/*.conda npm/*.tgz npm/*/*.tgz)
+          # Wheels sit one directory per distribution (dist/pypi/<name>/).
+          assets=(dist/pypi/*/*.whl dist/conda/*.conda npm/*.tgz npm/*/*.tgz)
           if [ "${#assets[@]}" -eq 0 ]; then
             echo "::error::no release assets found under dist/ or npm/"
             exit 1

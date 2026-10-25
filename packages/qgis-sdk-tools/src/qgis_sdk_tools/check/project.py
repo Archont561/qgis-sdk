@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
 from .imports import check_source
+from .versions import check_generated_clients, check_runtime_pins
 
 __all__ = ["EXCLUDED_DIRECTORIES", "REQUIRED_METADATA_KEYS", "check_project"]
 
@@ -66,6 +67,9 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
     native = (*configured, *native_modules)
 
     diagnostics.extend(_check_packages(root))
+    # What the project pins against what this release supports (decision-35).
+    diagnostics.extend(check_runtime_pins(root))
+    diagnostics.extend(check_generated_clients(root))
 
     files = 0
     for path in _python_files(root):

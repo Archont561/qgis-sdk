@@ -2,12 +2,19 @@ schema_version: 1
 
 # One recipe, three outputs (decision-35): the runtime a plugin imports, the
 # tools a developer runs, and the code-free `qgis-sdk` kit that installs both at
-# the exact version it was released with. `release.py stamp` rewrites the one
-# context version; the kit's pins are `pin_subpackage(..., exact=True)` so the
-# Conda packages carry the same promise the wheels do.
+# the exact version it was released with. `release.py stamp` rewrites one
+# context version per distribution (`--scope python` moves all three, `runtime`
+# and `tools` move their own); the kit's pins are
+# `pin_subpackage(..., exact=True)` so the Conda kit carries the same promise
+# the wheel does, and the tools' runtime requirement is the same range the
+# tools wheel declares. release.yml uploads only the outputs the tag's scope
+# ships; the others are rebuilt and skipped as already published.
 
 context:
   version: "0.4.0"
+  runtime_version: "0.4.0"
+  tools_version: "0.4.0"
+  tools_runtime_requirement: "qgis-sdk-runtime>=0.4.0,<0.5"
 
 recipe:
   name: qgis-sdk-kit
@@ -19,6 +26,7 @@ build:
 outputs:
   - package:
       name: qgis-sdk-runtime
+      version: ${{ runtime_version }}
     source:
       path: ../qgis-sdk-runtime
     build:
@@ -46,6 +54,7 @@ outputs:
 
   - package:
       name: qgis-sdk-tools
+      version: ${{ tools_version }}
     source:
       path: ../qgis-sdk-tools
     build:
@@ -62,7 +71,9 @@ outputs:
         - python >=3.11,<4
       run:
         - python >=3.11,<4
-        - ${{ pin_subpackage("qgis-sdk-runtime", exact=True) }}
+        # The range the tools were tested against, the same one the wheel
+        # declares; a runtime-only release stays installable next to them.
+        - ${{ tools_runtime_requirement }}
         # The shipped `qgis-sdk` console command is Typer-based, so the Conda
         # package carries the same requirement the wheel declares.
         - typer ==0.27.3
@@ -82,6 +93,7 @@ outputs:
 
   - package:
       name: qgis-sdk
+      version: ${{ version }}
     source:
       path: .
     build:
