@@ -9,6 +9,7 @@
 			"!!**/build",
 			"!!**/tests/contracts/generated",
 			"!!**/tests/contracts/pydantic/generated",
+			"!!examples/*/web/src/bridge.ts",
 			"!!**/.pixi",
 			"!!**/.bun",
 			"!!**/.npm",

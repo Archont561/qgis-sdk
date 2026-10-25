@@ -13,6 +13,8 @@ from .errors import (
     QgisSdkContractValidationError,
     QgisSdkDecodeError,
     QgisSdkError,
+    QgisSdkExportFailedError,
+    QgisSdkExportRefusedError,
     QgisSdkFormError,
     QgisSdkGrantRefusedError,
     QgisSdkHttpStatusError,
@@ -40,7 +42,7 @@ from .errors import (
     QgisSdkUnsupportedCapabilityError,
     QgisSdkValidationIssue,
 )
-from .layers import GeometryType, VectorLayerInfo
+from .layers import GeometryType, VectorExport, VectorLayerInfo
 from .limits import MAX_SAFE_INTEGER
 from .network import (
     DEFAULT_MAX_BODY_BYTES,
@@ -80,6 +82,8 @@ __all__ = [
     "QgisSdkContractValidationError",
     "QgisSdkDecodeError",
     "QgisSdkError",
+    "QgisSdkExportFailedError",
+    "QgisSdkExportRefusedError",
     "QgisSdkFormError",
     "QgisSdkGrantRefusedError",
     "QgisSdkHttpStatusError",
@@ -108,5 +112,6 @@ __all__ = [
     "QgisSdkValidationIssue",
     "Response",
     "StyleSpec",
+    "VectorExport",
     "VectorLayerInfo",
 ]

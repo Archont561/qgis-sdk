@@ -40,7 +40,7 @@ Read from the task files:
 | Task | Declared dependencies | State | Startable now |
 | --- | --- | --- | --- |
 | [TASK-57](../../tasks/task-57%20-%20Cut-qgis-sdk-runtime-qgis-sdk-tools-and-the-qgis-sdk-meta-kit-as-three-distributions.md) three distributions | TASK-56 ✓, TASK-8 ✓, TASK-30 ✓ | Done (#78) | **yes** (decision-36 removed the freeze gate) |
-| [TASK-22](../../tasks/task-22%20-%20Complete-and-qualify-the-local-GIS-reference-workflow.md) reference workflow | TASK-26 ✓ and the m-2/m-3 slices | To Do | **yes**; Windows rows blocked by host |
+| [TASK-22](../../tasks/task-22%20-%20Complete-and-qualify-the-local-GIS-reference-workflow.md) reference workflow | TASK-26 ✓ and the m-2/m-3 slices | Done (sprint 2) | Linux rows recorded; Windows rows blocked by host (TASK-33) |
 | [TASK-9](../../tasks/task-9%20-%20Define-SDK-and-plugin-release-compatibility-gates.md) compatibility gates | TASK-8 ✓, TASK-22, TASK-23 | To Do | after 22; needs 57's ranges to say anything checkable |
 | [TASK-31](../../tasks/task-31%20-%20Prepare-and-qualify-0.5.0-release.md) 0.5.0 gate | TASK-9, TASK-22, TASK-30 ✓ | To Do | release gate |
 
@@ -69,7 +69,16 @@ Read from the task files:
   milestone inherits, with the pure and native tests it declares, the web
   view through a real `QWebEngineView` against the published bridge, and the
   Linux evidence rows. Windows rows are recorded as blockers until a host
-  exists (TASK-33).
+  exists (TASK-33). Landed as: the `qgis_sdk.exports` policy and
+  `Layers.export_vector` (fake and native, one contract), the
+  `reference/polygon-output` style, `qgis_sdk.reference.LocalGisWorkflow`,
+  `examples/reference_plugin` (five actions, vanilla page, its own pure and
+  `qgis` tests), the opt-in `tests/test_reference_example_native.py` that
+  runs `new`/`check`/`bridge generate --check`/`test`/`build`/`dev` on the
+  example and drives page and native dialog in one QGIS, and the evidence
+  rows in doc-14 ("Reference plugin through the toolchain"). The bridge
+  inside the real view is the published `@archont561/qgis-sdk` 0.3.0; no
+  defect surfaced, so no bridge release.
 - **Sprint 3: TASK-9.** The gates, written as checks: the explicit
   QGIS/Python/Qt/OS matrix, the tools-to-runtime range and the
   bridge-to-contract pair stated on the distributions TASK-57 created,

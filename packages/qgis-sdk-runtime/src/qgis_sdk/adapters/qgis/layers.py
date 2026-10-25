@@ -10,12 +10,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from qgis.core import Qgis, QgsVectorLayer
+from qgis.core import (
+    Qgis,
+    QgsCoordinateTransformContext,
+    QgsVectorFileWriter,
+    QgsVectorLayer,
+)
 
+import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
     GeometryType,
+    QgisSdkExportFailedError,
     QgisSdkLayerNotFoundError,
+    VectorExport,
     VectorLayerInfo,
 )
 
@@ -65,6 +73,34 @@ class NativeLayers:
         """Return the layer's selected feature ids, unsorted by the provider."""
         self._scope.ensure_open()
         return tuple(self._require(layer_id).selectedFeatureIds())
+
+    def export_vector(
+        self, layer_id: str, destination: Path, *, overwrite: bool = False
+    ) -> VectorExport:
+        """Write the layer with ``QgsVectorFileWriter`` under the shared policy.
+
+        The writer targets the staged path :func:`qgis_sdk.export_policy.run_export`
+        hands it, so a GeoPackage journal or a half-written file never appears
+        at the destination; the commit is the policy's single rename.
+        """
+        self._scope.ensure_open()
+        layer = self._require(layer_id)
+        plan = export_policy.plan_export(destination, overwrite=overwrite)
+        options = QgsVectorFileWriter.SaveVectorOptions()
+        options.driverName = plan.driver
+        options.fileEncoding = "UTF-8"
+
+        def write(partial: Path) -> None:
+            error, message, *_ = QgsVectorFileWriter.writeAsVectorFormatV3(
+                layer, str(partial), QgsCoordinateTransformContext(), options
+            )
+            if error != QgsVectorFileWriter.WriterError.NoError:
+                raise QgisSdkExportFailedError(
+                    str(plan.destination), message or f"writer error {error}"
+                )
+
+        export_policy.run_export(plan, write)
+        return VectorExport(path=str(plan.destination), driver=plan.driver)
 
     def _qgs_layer(self, layer_id: str) -> QgsVectorLayer:
         """Hand the native handle to a sibling adapter in this package.

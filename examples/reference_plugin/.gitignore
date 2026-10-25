@@ -1,0 +1,9 @@
+__pycache__/
+.pytest_cache/
+# `qgis-sdk dev` keeps its isolated QGIS profile here.
+.qgis-sdk/
+# `qgis-sdk build` writes the installable ZIP here.
+dist/
+# The built page (`bun run build` in web/) is a build artifact in this
+# repository; a plugin you publish commits it or builds it in CI.
+reference_plugin/web/

@@ -4,6 +4,11 @@
 (``tests/test_devtools_native.py``) proves TASK-21 without a human at the
 keyboard: the steps below are the acceptance criteria in order, each
 recorded under a stable key, and QGIS quits with the report's verdict.
+
+The full exercise edits the scaffold's ``ping`` action between reloads, so it
+only fits a project that declares one. Any other project - the reference
+plugin, a user's own - gets :func:`run_smoke`: start, one reload, the view
+when there is a web UI, unload; the report says ``"smoke": true``.
 """
 
 from __future__ import annotations
@@ -41,6 +46,10 @@ def run_exercise(session: DevSession, path: Path) -> None:
         original = source.read_text(encoding="utf-8")
         source.write_text(original.replace(old, new, 1), encoding="utf-8")
         return original
+
+    if coordinator.running and "ping" not in qgis.utils.plugins[plugin].runtime.actions:
+        run_smoke(session, path)
+        return
 
     try:
         # AC2: a plain reload replaces the revision.
@@ -168,3 +177,32 @@ def _stuck_job(runtime: Any, gate: threading.Event) -> Any:
     handle = jobs.bind(Stuck).delay(1)
     jobs.tick()  # now suspended on the handoff
     return handle
+
+
+def run_smoke(session: DevSession, path: Path) -> None:
+    """The lifecycle a project without a ``ping`` action can prove: start, reload, view, unload."""
+    import qgis.utils
+
+    coordinator = session.coordinator
+    plugin = coordinator.plugin
+    report: dict[str, Any] = {
+        "smoke": True,
+        "started": coordinator.running,
+        "error": None,
+    }
+    try:
+        report["reload_ok"] = coordinator.reload().outcome == "reloaded"
+        report["revision"] = coordinator.revision
+        held = qgis.utils.plugins[plugin]
+        report["actions"] = sorted(held.runtime.actions)
+        if session.request.get("web"):
+            held.show_view()
+            report["view_shown"] = held._view is not None
+            session.pump(0.1)
+        report["unloaded"] = bool(qgis.utils.unloadPlugin(plugin))
+    except BaseException as error:  # noqa: BLE001 - the report is the only way out
+        report["error"] = "".join(traceback.format_exception(error))
+        say(report["error"])
+    Path(path).write_text(json.dumps(report), encoding="utf-8")
+    sys.__stderr__.flush() if sys.__stderr__ else None
+    os._exit(0 if report["error"] is None else 1)

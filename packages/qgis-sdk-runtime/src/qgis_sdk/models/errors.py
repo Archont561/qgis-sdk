@@ -91,6 +91,39 @@ class QgisSdkStyleNotFoundError(QgisSdkError):
         super().__init__(f"No packaged style {style!r} is available")
 
 
+class QgisSdkExportRefusedError(QgisSdkError):
+    """An export cannot start as requested: the destination fails a precondition.
+
+    Nothing has been written when this is raised. Every reason is reported at
+    once - an unknown format, a missing directory and an existing file without
+    ``overwrite`` are three separate statements, not three round trips.
+    """
+
+    code = "export_refused"
+
+    def __init__(self, destination: str, reasons: Iterable[str]) -> None:
+        self.destination = destination
+        self.reasons = tuple(reasons)
+        listed = "; ".join(self.reasons)
+        super().__init__(f"Export to {destination!r} refused: {listed}")
+
+
+class QgisSdkExportFailedError(QgisSdkError):
+    """The writer failed after the export started; the partial file is gone.
+
+    ``detail`` is the writer's own message. The destination was either never
+    created or, with ``overwrite``, still holds its previous content: the new
+    file is committed only after the writer finished.
+    """
+
+    code = "export_failed"
+
+    def __init__(self, destination: str, detail: str) -> None:
+        self.destination = destination
+        self.detail = detail
+        super().__init__(f"Export to {destination!r} failed: {detail}")
+
+
 class QgisSdkPackagedResourceError(QgisSdkError):
     """A resource the package must ship is missing or unusable.
 

@@ -8,9 +8,11 @@ observes and no more.
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
     AlgorithmRequest,
@@ -18,6 +20,7 @@ from qgis_sdk.models import (
     QgisSdkAlgorithmRejectedError,
     QgisSdkLayerNotFoundError,
     QgisSdkStyleIncompatibleError,
+    VectorExport,
     VectorLayerInfo,
 )
 from qgis_sdk.resources import require_style
@@ -84,6 +87,9 @@ class FakeAlgorithms:
         return self._layers.open_vector(declared)
 
 
+_EMPTY_COLLECTION = '{"type": "FeatureCollection", "features": []}\n'
+
+
 class FakeLayers:
     """A ``Layers`` backend over datasets declared in the test.
 
@@ -95,6 +101,7 @@ class FakeLayers:
         self._scope = scope
         self._datasets: dict[str, dict[str, object]] = {}
         self._layers: dict[str, VectorLayerInfo] = {}
+        self._sources: dict[str, Path] = {}
         self._selections: dict[str, tuple[int, ...]] = {}
         scope.on_close(self._release)
 
@@ -130,6 +137,7 @@ class FakeLayers:
             crs=declared["crs"],  # type: ignore[arg-type]
         )
         self._layers[layer_id] = info
+        self._sources[layer_id] = Path(source)
         self._selections[layer_id] = ()
         return info
 
@@ -155,8 +163,34 @@ class FakeLayers:
         self._require(layer_id)
         self._selections[layer_id] = tuple(feature_ids)
 
+    def export_vector(
+        self, layer_id: str, destination: Path, *, overwrite: bool = False
+    ) -> VectorExport:
+        """Copy the declared dataset to ``destination`` under the shared policy.
+
+        The fake has no OGR, so the bytes are the source file's (or an empty
+        feature collection when the declared source is not a real file, as a
+        declared algorithm output is not); what it exercises is everything
+        around the writer - refusal, staging, commit and cleanup - which is the
+        contract a workflow depends on.
+        """
+        self._scope.ensure_open()
+        self._require(layer_id)
+        plan = export_policy.plan_export(destination, overwrite=overwrite)
+        source = self._sources[layer_id]
+
+        def write(partial: Path) -> None:
+            if source.is_file():
+                shutil.copyfile(source, partial)
+            else:
+                partial.write_text(_EMPTY_COLLECTION, encoding="utf-8")
+
+        export_policy.run_export(plan, write)
+        return VectorExport(path=str(plan.destination), driver=plan.driver)
+
     def _release(self) -> None:
         self._layers.clear()
+        self._sources.clear()
         self._selections.clear()
 
     def _require(self, layer_id: str) -> VectorLayerInfo:
