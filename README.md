@@ -17,7 +17,7 @@ is documented, nothing is promised stable.
 
 | Package | What it is | Install |
 | :-- | :-- | :-- |
-| [`qgis-sdk`](packages/qgis-sdk-python) | Python declarations, contracts, runtime, adapters, `qgis-sdk new` | `pip install qgis-sdk` |
+| [`qgis-sdk`](packages/qgis-sdk-python) | Python declarations, contracts, runtime, adapters, `qgis-sdk new` / `check` | `pip install qgis-sdk` |
 | [`@archont561/qgis-sdk`](packages/qgis-sdk-typescript) | TypeScript transport client, host namespaces, generated clients | `bun add @archont561/qgis-sdk` |
 | [`qgis-sdk` on npm](packages/qgis-sdk-alias) | Unscoped alias re-exporting `@archont561/qgis-sdk` at the same version | `bun add qgis-sdk` |
 | [`@workspace/config`](packages/config) | Shared TypeScript and Bunup configuration (private) | — |
@@ -27,6 +27,7 @@ is documented, nothing is promised stable.
 ```sh
 pip install qgis-sdk
 qgis-sdk new my_tools --title "My Tools"   # a loadable plugin project
+qgis-sdk check my_tools                    # QGIS-free project checks
 ```
 
 ## Develop

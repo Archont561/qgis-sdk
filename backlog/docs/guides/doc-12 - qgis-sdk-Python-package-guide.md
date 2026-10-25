@@ -843,6 +843,51 @@ The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-python/src pytest -q` runs load, action and
 unload through the SDK runtime with no QGIS installation at all.
 
+## Project checks
+
+`qgis-sdk check [PATH]` reads a plugin project and reports what would stop it
+from loading in QGIS or from being inspected without QGIS. It is non-mutating
+and QGIS-free by design (decision-8): it imports nothing from the project,
+installs nothing and runs no handler. The command is a thin layer over
+`qgis_sdk.check.check_project(root, native_modules=...)`, which `qgis-sdk build`
+will call in-process rather than through a subprocess.
+
+```sh
+qgis-sdk check                       # the working directory
+qgis-sdk check my_tools --json       # the same report as data
+qgis-sdk check my_tools --native "my_tools.native.*"
+```
+
+Every finding is a `Diagnostic` with a stable `rule`, a root-relative `path`,
+1-based `line`/`column` (`0` for whole-file findings), a `message` and a
+`remediation`; text output prints `path:line:col: RULE message` with the
+remediation indented beneath, and ends with `checked N files: ...`. The exit
+code is `1` when any error was found and `2` when the path is not a directory.
+
+| Rule | Meaning |
+| :-- | :-- |
+| `QGIS001` | `qgis`, `PyQt5/6` or `PySide2/6` is imported when the module loads: module scope, a class body, a `try`, a `with` or a module-level `if` all count. Imports inside a function and under `if TYPE_CHECKING:` are fine. |
+| `ARCH001` | `qgis_sdk.adapters.qgis` (the PyQGIS-backed adapters) is imported when a pure module loads; reach it inside the function that runs in QGIS, as the scaffold's `build_context` does. |
+| `META001` / `META002` / `META003` | A plugin package has no `metadata.txt`, lacks a required key (`name`, `description`, `about`, `version`, `qgisMinimumVersion`, `author`, `email`), or has no `[general]` section. |
+| `PROJECT001` | No directory with an `__init__.py` under the root (other than `tests/`). |
+| `CONFIG001` | `[tool.qgis-sdk.check]` in `pyproject.toml` is malformed. |
+| `SYNTAX001` | A file does not parse. |
+
+A module that must import QGIS when it loads (a widget module, a native
+adapter of your own) is declared native so `QGIS001`/`ARCH001` do not apply:
+list dotted module globs under `[tool.qgis-sdk.check] native-modules` in the
+project's `pyproject.toml`, or pass `--native` for one run. Tooling trees
+(`.venv`, `node_modules`, `.pixi`, `build`, `dist`, caches) are never checked.
+
+### CLI runtime
+
+Commands that read or write anything beyond their arguments receive a
+`qgis_sdk.cli.CliRuntime` (`cwd`, `env`, `out`, `err`) through Typer's
+`ctx.obj` (decision-34). The shell seeds it with `CliRuntime.for_process()`;
+a test passes `qgis_sdk.testing.FakeCliRuntime(cwd=..., env=...)` as
+`CliRunner().invoke(app, args, obj=runtime)` and reads `runtime.stdout` /
+`runtime.stderr` back.
+
 ## Optional controlled-deployment adapter
 
 `qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound, which both it and the schema generator take from the one `qgis_sdk.models.MAX_SAFE_INTEGER` constant while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
@@ -967,6 +1012,11 @@ published for the bridge, and no `ts-v*` tag exists.
   and the class and method decorators accept the bare form. Existing explicit
   declarations are unchanged; `events=` is now the only required keyword of
   `@stream`.
+- **`qgis-sdk check` and `qgis_sdk.check`.** New non-mutating project check
+  with stable diagnostics (`QGIS001`, `ARCH001`, `META00x`, `PROJECT001`,
+  `CONFIG001`, `SYNTAX001`); see "Project checks". Commands now receive a
+  `qgis_sdk.cli.CliRuntime` through `ctx.obj`; `qgis_sdk.testing` gains
+  `FakeCliRuntime`.
 - **CLI rename:** the project generator is `qgis-sdk new <directory>`
   (`python -m qgis_sdk new`). `qgis-sdk scaffold` keeps working as a hidden,
   deprecated alias so existing scripts do not break; it will be removed in a
