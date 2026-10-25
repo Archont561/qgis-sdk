@@ -111,12 +111,13 @@ jobs:
 
       # The default environment carries the QGIS feature, so this is the only
       # place the native form path, the QGIS network transport and the
-      # restricted WebEngine page actually execute against real Qt: a
-      # developer machine needs a display setup and this sandbox has no Qt at
-      # all. The network and browser files talk to loopback servers only
-      # (TASK-5 AC 3, TASK-20 AC 3); the browser file sets the Chromium flags
-      # the TASK-23 headless harness qualified.
-      - name: Test native forms, networking and browser policy offscreen
+      # restricted WebEngine page and the thread-pool job workers actually
+      # execute against real Qt: a developer machine needs a display setup and
+      # this sandbox has no Qt at all. The network and browser files talk to
+      # loopback servers only (TASK-5 AC 3, TASK-20 AC 3); the browser file
+      # sets the Chromium flags the TASK-23 headless harness qualified; the
+      # jobs file proves GUI-thread delivery over a real QThreadPool (TASK-15).
+      - name: Test native forms, networking, browser policy and jobs offscreen
         id: s11
         env:
           QT_QPA_PLATFORM: offscreen
@@ -124,14 +125,14 @@ jobs:
           set -o pipefail
           log=native-forms.log
           status=0
-          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py packages/qgis-sdk/tests/test_network_native.py packages/qgis-sdk/tests/test_webengine_native.py -q -rs 2>&1 | tee "$log" || status=$?
+          pixi run -e default python -m pytest -c packages/qgis-sdk/pyproject.toml packages/qgis-sdk/tests/test_ui_native.py packages/qgis-sdk/tests/test_network_native.py packages/qgis-sdk/tests/test_webengine_native.py packages/qgis-sdk/tests/test_jobs_native.py -q -rs 2>&1 | tee "$log" || status=$?
           if [ "$status" -eq 0 ]; then
             exit 0
           fi
           # pytest 9 exits 5 when a module skips itself during import, which is
           # the honest outcome on a host without usable Qt and QGIS bindings, so
           # that case is a warning carrying the reason rather than a red build.
-          reason=$(grep -o "native \(forms\|networking\|WebEngine\) need.*" "$log" | head -1 || true)
+          reason=$(grep -o "native \(forms\|networking\|WebEngine\|jobs\) need.*" "$log" | head -1 || true)
           if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
             echo "::warning::native forms did not run: $reason"
             exit 0
