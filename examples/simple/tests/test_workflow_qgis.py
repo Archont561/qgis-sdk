@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import reference_plugin
-from reference_plugin.plugin import EXPORT_DIRECTORY_KEY, FIXTURE
+import simple
+from simple.plugin import EXPORT_DIRECTORY_KEY, FIXTURE
+from simple.workflow import LocalGisWorkflow
 
 pytestmark = pytest.mark.qgis
 
@@ -27,7 +28,7 @@ def desktop(qgis_app: Any) -> Any:
     from qgis.core import QgsProject
 
     QgsProject.instance().removeAllMapLayers()
-    plugin = reference_plugin.classFactory(None)
+    plugin = simple.classFactory(None)
     plugin.initGui()
     try:
         yield plugin
@@ -118,3 +119,29 @@ def _project_ids() -> list[str]:
     from qgis.core import QgsProject
 
     return list(QgsProject.instance().mapLayers())
+
+
+def test_the_workflow_class_refuses_an_unknown_layer_and_a_silent_overwrite(
+    desktop: Any, tmp_path: Path
+) -> None:
+    """The class behind the actions, held to the fakes' contract on real QGIS."""
+    from qgis.core import QgsProject
+    from qgis_sdk.models import QgisSdkExportRefusedError, QgisSdkLayerNotFoundError
+
+    workflow = LocalGisWorkflow(desktop.runtime.instance.ctx)
+
+    with pytest.raises(QgisSdkLayerNotFoundError):
+        workflow.buffer("no-such-layer", 500.0, WORKING_CRS)
+    assert list(QgsProject.instance().mapLayers()) == []
+
+    source = workflow.open_dataset(FIXTURE)
+    destination = tmp_path / "points.geojson"
+    destination.write_text("mine", encoding="utf-8")
+    with pytest.raises(QgisSdkExportRefusedError):
+        workflow.export(source.id, destination)
+    assert destination.read_text(encoding="utf-8") == "mine"
+
+    export = workflow.export(source.id, destination, overwrite=True)
+
+    assert export.driver == "GeoJSON"
+    assert destination.read_text(encoding="utf-8") != "mine"

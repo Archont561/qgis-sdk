@@ -559,7 +559,7 @@ archive in-process) and `tests/test_bundle_cli.py`. Last run here:
 
 ### Reference plugin through the toolchain (TASK-22)
 
-`examples/reference_plugin` is the decision-19 workflow as one plugin: open
+`examples/simple` (plugin id `simple`) is the decision-19 workflow as one plugin: open
 the bundled `data/points.geojson`, read the selection, buffer through
 Processing in an explicit projected CRS into a new layer styled with the
 packaged `reference/polygon-output` QML before it is presented, and export
@@ -569,15 +569,20 @@ renders and the vanilla page in `web/`, through the generated
 `web/src/bridge.ts`. The project was written by `qgis-sdk new` and keeps that
 layout, so the example doubles as the proof that the commands compose.
 
-Deterministic, no QGIS, in the regular suite and the example's own
-`qgis-sdk test`: the export policy (`tests/test_exports.py`), the workflow
-over the fakes (`tests/test_reference_workflow.py`), the fake/native service
-contract pair (`tests/services/test_layers_contract.py`,
-`test_reference_workflow_contract.py`, nine export cases and eight workflow
-cases per backend), and the plugin's twelve pure tests (declared actions,
-fixture open, selection, styled buffer with the source untouched, refusals
-for a missing CRS, a missing export directory and a file name that is a
-path). The native half is opt-in:
+The workflow class (`simple/workflow.py`) is the plugin's own code:
+the runtime ships the services and the reference *algorithms*, and what a
+plugin chains them into stays out of `qgis_sdk` (so the example is a worked
+example, not a hidden runtime feature). Deterministic, no QGIS: the export
+policy (`tests/test_exports.py`) and the fake/native layer contract
+(`tests/services/test_layers_contract.py`, nine export cases per backend) in
+the regular suite; the plugin's seventeen pure tests in its own `qgis-sdk
+test` (declared actions, fixture open, selection, styled buffer with the
+source untouched, refusals for a missing CRS, a missing export directory and
+a file name that is a path, and the ordering file: styled before presented,
+nothing presented on cancellation, an incompatible style or a host without
+Processing, the plugin's own scope). CI runs the example's `qgis-sdk test`
+and `qgis-sdk test --target qgis` on Linux through the `test-reference-example`
+Pixi task. The full native half is opt-in:
 
 ```sh
 QGIS_SDK_REFERENCE=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_reference_example_native.py
@@ -586,10 +591,11 @@ QGIS_SDK_REFERENCE=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c pac
 `tests/test_reference_example_native.py` runs `qgis-sdk new` with the
 example's options into a temporary directory, copies the example over it,
 then drives the command line: `check` (no problems), `bridge generate
---check` (no drift), `test` (12 passed on the fakes), `test --target qgis`
-(3 passed: the end-to-end run with the fixture byte-identical afterwards, a
+--check` (no drift), `test` (17 passed on the fakes), `test --target qgis`
+(4 passed: the end-to-end run with the fixture byte-identical afterwards, a
 geographic working CRS refused with nothing added, the native dialog and a
-direct call dispatching one handler), Bun `install`/`test`/`typecheck`/
+direct call dispatching one handler, the workflow class refusing an unknown
+layer and a silent overwrite), Bun `install`/`test`/`typecheck`/
 `build`, `qgis-sdk build` (the ZIP carries the fixture, the built page, the
 vendored runtime and its polygon style, no tests), and `dev --exercise`
 inside QGIS Desktop with the Vite server (a project without a `ping` action
@@ -613,7 +619,7 @@ row is a blocker carried by TASK-33, not a pass.
 
 | Target | QGIS | Python | Qt | Chromium | GDAL | Bun / Vite | Harness | Outcome |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Linux x86-64 (glibc 2.36, offscreen) | 4.2.3 | 3.14.8 | 6.11.2 | 140.0.7339.225 | 3.13.3 | 1.4.2 / 8.3.5 | `QGIS_SDK_REFERENCE=1`, 2026-10-25 | 5 passed in 11 s; `services` 149 passed with `QGIS_SDK_NATIVE_SERVICES=1` |
+| Linux x86-64 (glibc 2.36, offscreen) | 4.2.3 | 3.14.8 | 6.11.2 | 140.0.7339.225 | 3.13.3 | 1.4.2 / 8.3.5 | `QGIS_SDK_REFERENCE=1`, 2026-10-25 | 5 passed in 12 s; `services` 133 passed with `QGIS_SDK_NATIVE_SERVICES=1` (after the workflow class moved into the example; its cases run in the example's own `qgis-sdk test`) |
 | Windows x86-64 | - | - | - | - | - | - | none available | **blocked**: no host, no CI runner (TASK-33) |
 
 The bridge inside the real `QWebEngineView` is the published

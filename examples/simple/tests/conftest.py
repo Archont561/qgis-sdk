@@ -18,7 +18,7 @@ from qgis_sdk.testing import (
     FakeStyles,
     RecordingNotifications,
 )
-from reference_plugin.plugin import FIXTURE, ReferencePlugin
+from simple.plugin import FIXTURE, SimplePlugin
 
 WORKING_CRS = "EPSG:3857"
 
@@ -64,7 +64,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         styles=styles,
         algorithms=algorithms,
     )
-    factory = create_class_factory(ReferencePlugin, context_factory=lambda _: context)
+    factory = create_class_factory(SimplePlugin, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)
     adapter.initGui()
     try:

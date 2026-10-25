@@ -51,11 +51,13 @@ this decision that are observable headlessly:
 
 TASK-22 (0.5.0) closed the chain and the equivalence half:
 
-- **One workflow, two front ends.** `qgis_sdk.reference.LocalGisWorkflow`
-  chains open -> selection -> buffer (`invoke` without presentation) -> apply
-  the packaged `reference/polygon-output` style -> add to the project, so the
-  output is styled *before* it is presented. `examples/reference_plugin`
-  declares it as five actions; the native dialog `NativeForms` renders for
+- **One workflow, two front ends.** `examples/simple`'s
+  `workflow.LocalGisWorkflow` chains open -> selection -> buffer (`invoke`
+  without presentation) -> apply the packaged `reference/polygon-output`
+  style -> add to the project, so the output is styled *before* it is
+  presented. The class is the plugin's own code: the runtime ships the
+  services and the reference algorithms (`qgis_sdk.reference`), never the
+  chain. The plugin declares it as five actions; the native dialog `NativeForms` renders for
   `buffer` and the page's Buffer button dispatch the same bound handler, and
   the workspace harness proves both produce a styled polygon layer with the
   source's three features inside one headless QGIS with a real

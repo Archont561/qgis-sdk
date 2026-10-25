@@ -1,4 +1,4 @@
-"""Reference workflow: the local GIS slice of decision-19 as one qgis-sdk plugin.
+"""Simple: the local GIS slice of decision-19 as one qgis-sdk plugin.
 
 Five declared actions carry the whole workflow - open the fixture, read the
 selection, buffer in an explicit projected CRS, export, choose where exports
@@ -7,8 +7,9 @@ The native dialog QGIS shows for an action and the page in ``web/`` are two
 front ends over the same ``runtime.actions``, which is what "equivalent native
 and web controls" means here.
 
-The work itself is ``qgis_sdk.reference.LocalGisWorkflow``; the plugin adds
-what only a plugin knows - where its fixture is and where its exports go.
+The work itself is :class:`.workflow.LocalGisWorkflow`, the plugin's own
+chain over the SDK services; this file adds what only a plugin declares -
+the actions, where its fixture is and where its exports go.
 """
 
 from __future__ import annotations
@@ -27,12 +28,12 @@ from qgis_sdk.models import (
     VectorExport,
     VectorLayerInfo,
 )
-from qgis_sdk.reference import LocalGisWorkflow
 
 from . import webview
+from .workflow import LocalGisWorkflow
 
-PLUGIN_ID = "reference_plugin"
-TITLE = "Reference workflow"
+PLUGIN_ID = "simple"
+TITLE = "Simple"
 
 #: The local fixture dataset shipped inside the plugin package (decision-19: no
 #: external service gates the reference workflow).
@@ -57,7 +58,7 @@ class MessageBarNotifications:
 
 
 @plugin(id=PLUGIN_ID, title=TITLE)
-class ReferencePlugin:
+class SimplePlugin:
     """Declared actions only; the runtime binds ``ctx`` while the plugin runs."""
 
     ctx: PluginContext
@@ -157,10 +158,10 @@ def _qgis_is_running() -> bool:
     return QgsApplication.instance() is not None
 
 
-_lifecycle = create_class_factory(ReferencePlugin, context_factory=build_context)
+_lifecycle = create_class_factory(SimplePlugin, context_factory=build_context)
 
 
-class ReferenceDesktop:
+class SimpleDesktop:
     """What QGIS holds: the SDK lifecycle plus one toolbar button for the page."""
 
     def __init__(self, iface: object | None) -> None:
@@ -194,6 +195,6 @@ class ReferenceDesktop:
         self._plugin.unload()
 
 
-def classFactory(iface: object | None) -> ReferenceDesktop:
+def classFactory(iface: object | None) -> SimpleDesktop:
     """QGIS calls this with its interface; the tests call it with ``None``."""
-    return ReferenceDesktop(iface)
+    return SimpleDesktop(iface)

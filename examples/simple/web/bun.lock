@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "reference_plugin-web",
+      "name": "simple-web",
       "dependencies": {
         "@archont561/qgis-sdk": "0.3.0",
       },

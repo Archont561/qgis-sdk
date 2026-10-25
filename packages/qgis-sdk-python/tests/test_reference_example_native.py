@@ -1,4 +1,4 @@
-"""The reference plugin (``examples/reference_plugin``) through the whole toolchain (TASK-22).
+"""The reference plugin (``examples/simple``) through the whole toolchain (TASK-22).
 
 Opt-in, because it installs the page's pinned dependencies, runs QGIS Desktop
 and a real Chromium::
@@ -56,8 +56,8 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"the page needs Qt WebEngine: {error}", allow_module_level=True)
 
-EXAMPLE = layers.PACKAGES_ROOT.parent / "examples" / "reference_plugin"
-PLUGIN = "reference_plugin"
+EXAMPLE = layers.PACKAGES_ROOT.parent / "examples" / "simple"
+PLUGIN = "simple"
 DEADLINE = 30.0
 WORKING_CRS = "EPSG:3857"
 SKIPPED = shutil.ignore_patterns(
@@ -134,7 +134,7 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "new",
         str(root),
         "--title",
-        "Reference workflow",
+        "Simple",
         "--author",
         "qgis-sdk",
         "--email",
@@ -185,7 +185,7 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
         "bridge",
         "generate",
         "--plugin",
-        f"{PLUGIN}.plugin:ReferencePlugin",
+        f"{PLUGIN}.plugin:SimplePlugin",
         "--out",
         "web/src/bridge.ts",
         "--check",
@@ -195,13 +195,13 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
 
     pure = _cli("test", "-q", "-p", "no:faulthandler", cwd=project)
     assert pure.returncode == 0, pure.stdout + pure.stderr
-    assert "12 passed" in pure.stdout
+    assert "17 passed" in pure.stdout
 
     native = _cli(
         "test", "--target", "qgis", "-q", "-p", "no:faulthandler", cwd=project
     )
     assert native.returncode == 0, native.stdout + native.stderr
-    assert "3 passed" in native.stdout
+    assert "4 passed" in native.stdout
 
 
 def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:
@@ -215,7 +215,7 @@ def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:
     assert f"{PLUGIN}/data/points.geojson" in entries
     assert f"{PLUGIN}/web/index.html" in entries
     assert f"{vendored}/resources/styles/reference-polygon-output.qml" in entries
-    assert f"{vendored}/reference/workflow.py" in entries
+    assert f"{PLUGIN}/workflow.py" in entries
     assert not any("/tests/" in name for name in entries)
 
 
