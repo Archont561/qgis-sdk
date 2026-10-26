@@ -1,10 +1,10 @@
 ---
 id: TASK-60
 title: Prepare and qualify 0.6.0 release
-status: To Do
+status: In Progress
 assignee: []
-created_date: 2026-10-25 23:27
-updated_date: '2026-10-26T08:41:00Z'
+created_date: '2026-10-25 23:27'
+updated_date: '2026-10-26 18:22'
 labels: []
 milestone: m-5
 dependencies:
@@ -48,4 +48,6 @@ decisions 42/43 (TASK-63..65) join 0.6.0: function-form algorithms on plugin-own
 decision-44 (TASK-66) adds QgisSdk.fromBridgeSchema and the typed bridge.schema.ts to the bridge 0.4.0 delta; decision-45 (TASK-67) adds Desktop bindings and surfaces to the Python 0.6.0 delta. Both are wire-neutral; AC #5's fingerprint evidence still applies unchanged.
 
 TASK-66 landed (sprint 2): bridge 0.4.0 carries QgisSdk.fromBridgeSchema, the schema types, the default QWebChannel transport, the schema-driven validator, QgisSdkContractError and QgisSdkWebChannelError in the root, BridgeProvider's qgis prop and useQgisSdk, and the schema-typed harness; Python 0.6.0 carries the dispatcher's handshake answer (kind: "handshake"). Protocol 1, HOST_SCHEMA_VERSION 1 and HOST_FINGERPRINT are unchanged (the host generator's --check is green). The gate's doc-13 check covers the 0.4.0 migration note's before/after main.ts; AC #5's statement that bridge 0.4.0 ran against the 0.6.0 runtime now also means the handshake was answered by a real dispatcher (test_reference_example_native.py, QGIS_SDK_REFERENCE=1).
+
+Gate run 2026-10-26 on main 2763cad (TASK-67 merge, #98); full record in doc-14 '0.6.0 release gate (TASK-60, 2026-10-26)'. Unstamped tree. AC 1 evidence: all nine milestone tasks Done; static gate, bun run test 5/5 (bridge 234, alias 10, page 5, Python 1675/43), coverage 95.58% / 98.55%, tests/scripts 248, twelve opt-in harnesses green (lifecycle 5, desktop adapter 22, coexistence 23, scaffold desktop 10, services smoke 7, scheduler 11, WebEngine 9, services 134, scaffold web 8, devtools 9, bundle 1, reference 5), example check/test/--target qgis clean; AST diff of public names python-v0.5.0..main matched against doc-12's 0.6.0 note (RunSignature/describe_run_method added to it). AC 2: plan --bump minor from python-v0.5.0 -> python-v0.6.0 (5 breaking, 14 features) and from ts-v0.3.0 -> ts-v0.4.0 (2 breaking, 4 features, 1 fix); verify-versions agrees on 0.5.0/0.3.0 and contract 1 on the unstamped tree. AC 3: twine-checked wheels, clean CPython 3.11.2 venv install (60/62 modules QGIS-free, pip check clean, new --ui native/check/test/targets/build from the installed package, ZIP vendoring verified under python -S); 0.5-style project (scaffolded from the python-v0.5.0 worktree) under today's check reports ENTRY002/META001/PROJECT002/VERSION003, no crash. AC 5: HOST_FINGERPRINT sha256:f96bdf10..., HOST_SCHEMA_VERSION 1, BRIDGE_PROTOCOL_VERSION 1 identical at ts-v0.3.0, python-v0.5.0 and main; bridge 0.4.0 from this tree ran against the 0.6.0 runtime in the reference harness's real QWebEngineView. Not run: the Conda build (conda-forge unreachable from the sandbox). AC 4: no approval yet; nothing stamped, tagged or published. ACs stay unchecked until the tag's release.yml run is green.
 <!-- SECTION:NOTES:END -->
