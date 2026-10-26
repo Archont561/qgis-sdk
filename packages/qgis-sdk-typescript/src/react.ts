@@ -1,5 +1,5 @@
 /**
- * Thin React bindings over the bridge client (TASK-18, decision-18).
+ * Thin React bindings over the store core (TASK-18, decision-18, TASK-69).
  *
  * This entry point is optional and is the only one that imports React. It adds
  * no second client: a component reaches the same `QgisSdk` or `BridgeClient` a
@@ -9,9 +9,12 @@
  * `QgisSdk` already has - `qgis.sites.summary`, `qgis.sites.watch` - so
  * the typed contract is the generated one, not a React copy of it.
  *
- * What the hooks add is lifetime: a call aborted when its component unmounts,
- * a stale reply ignored, a stream closed on unmount or when its input changes,
- * and a simulated StrictMode remount that leaves exactly one of each.
+ * The behaviour lives in `./stores`: `useOperation` is an `OperationStore`
+ * read through `useSyncExternalStore`, `useStream` a `StreamStore`, `useForm`
+ * a `FormStore` and `useHostQuery` a `HostQueryStore`. What the hooks add is
+ * lifetime: a call aborted when its component unmounts, a stream closed on
+ * unmount or when its input changes, and a simulated StrictMode remount that
+ * leaves exactly one of each.
  */
 
 import {
@@ -19,23 +22,45 @@ import {
 	createElement,
 	type ReactElement,
 	type ReactNode,
-	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
-	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import {
 	BridgeClient,
 	type BridgeClientOptions,
-	QgisSdkBridgeAbortedError,
 	type WireTransport,
 } from "./bridge";
 import { QgisSdkError } from "./errors";
-import { isPlainRecord } from "./internal";
 import type { QgisSdk, QgisSdkCore } from "./qgis-sdk";
 import type { OperationMap, StreamMap } from "./schema";
+import {
+	type FormOptions,
+	type FormState,
+	FormStore,
+	type HostQueryState,
+	type HostQueryStore,
+	type Operation,
+	type OperationState,
+	OperationStore,
+	type Store,
+	type Stream,
+	type StreamHandlersLike,
+	type StreamState,
+	StreamStore,
+} from "./stores";
+
+export type {
+	Operation,
+	OperationState,
+	Stream,
+	StreamHandleLike,
+	StreamHandlersLike,
+	StreamState,
+	StreamTerminalLike,
+} from "./stores";
 
 /** A hook or provider was used outside the shape it needs. */
 export class QgisSdkBridgeReactError extends QgisSdkError {
@@ -157,13 +182,6 @@ export function useOperations<T>(create: (client: BridgeClient) => T): T {
 	return useMemo(() => create(client), [create, client]);
 }
 
-/** Where one invocation stands. */
-export type OperationState<R> =
-	| { readonly status: "idle" }
-	| { readonly status: "pending" }
-	| { readonly status: "ok"; readonly value: R }
-	| { readonly status: "error"; readonly error: Error };
-
 /** Controls beyond running: abort what is in flight, or forget the outcome. */
 export interface OperationControls {
 	/** Abort the in-flight call locally; the host may still run it. */
@@ -172,14 +190,14 @@ export interface OperationControls {
 	reset(): void;
 }
 
-/** An operation member of a generated map: input, optional signal, promise. */
-export type Operation<I, R> = (
-	input: I,
-	options?: { readonly signal?: AbortSignal },
-) => Promise<R>;
-
-const IDLE: OperationState<never> = Object.freeze({ status: "idle" });
-const PENDING: OperationState<never> = Object.freeze({ status: "pending" });
+/** Read any store from a component; the snapshot is the render's value. */
+export function useStore<T>(store: Store<T>): T {
+	return useSyncExternalStore(
+		store.subscribe,
+		store.getSnapshot,
+		store.getSnapshot,
+	);
+}
 
 /**
  * Run a generated operation from a component.
@@ -196,120 +214,14 @@ export function useOperation<I, R>(
 	(input: I) => Promise<R | undefined>,
 	OperationControls,
 ] {
-	const [state, setState] = useState<OperationState<R>>(IDLE);
-	const generation = useRef(0);
-	const controller = useRef<AbortController | null>(null);
-	const mounted = useRef(true);
-
-	const abort = useCallback((): void => {
-		generation.current += 1;
-		controller.current?.abort();
-		controller.current = null;
-	}, []);
-
-	useEffect(() => {
-		mounted.current = true;
-		return () => {
-			mounted.current = false;
-			abort();
-		};
-	}, [abort]);
-
-	const run = useCallback(
-		async (input: I): Promise<R | undefined> => {
-			abort();
-			const mine = generation.current;
-			const signal = new AbortController();
-			controller.current = signal;
-			setState(PENDING);
-			try {
-				const value = await operation(input, { signal: signal.signal });
-				if (generation.current !== mine || !mounted.current) {
-					return undefined;
-				}
-				setState({ status: "ok", value });
-				return value;
-			} catch (error) {
-				if (generation.current !== mine || !mounted.current) {
-					return undefined;
-				}
-				if (error instanceof QgisSdkBridgeAbortedError) {
-					return undefined;
-				}
-				setState({
-					status: "error",
-					error: error instanceof Error ? error : new Error(String(error)),
-				});
-				return undefined;
-			} finally {
-				if (controller.current === signal) {
-					controller.current = null;
-				}
-			}
-		},
-		[operation, abort],
+	const store = useMemo(() => new OperationStore(operation), [operation]);
+	useEffect(() => () => store.abort(), [store]);
+	const state = useStore(store);
+	const controls = useMemo(
+		() => ({ abort: store.abort, reset: store.reset }),
+		[store],
 	);
-
-	const reset = useCallback((): void => {
-		abort();
-		setState(IDLE);
-	}, [abort]);
-
-	const controls = useMemo(() => ({ abort, reset }), [abort, reset]);
-	return [state, run, controls];
-}
-
-/** How a stream ended, as the generated module reports it. */
-export interface StreamTerminalLike {
-	readonly kind: string;
-	readonly message?: string;
-	readonly dropped?: number;
-}
-
-/** The handle a generated stream member resolves with. */
-export interface StreamHandleLike {
-	readonly id: string;
-	readonly closed: boolean;
-	close(): void;
-}
-
-/** Handlers for a stream, as a generated module types them. */
-export interface StreamHandlersLike<E> {
-	readonly onEvent?: (event: E) => void;
-	readonly onTerminal?: (terminal: StreamTerminalLike) => void;
-}
-
-/** A stream member of a generated map. */
-export type Stream<I, E> = (
-	input: I,
-	handlers: StreamHandlersLike<E>,
-	options?: { readonly signal?: AbortSignal },
-) => Promise<StreamHandleLike>;
-
-/** Where one subscription stands. */
-export interface StreamState<E> {
-	/** `idle` with a null input, `failed` when the host refused to open it. */
-	readonly status: "idle" | "opening" | "open" | "ended" | "failed";
-	readonly lastEvent: E | null;
-	readonly terminal: StreamTerminalLike | null;
-	readonly error: Error | null;
-}
-
-const IDLE_STREAM: StreamState<never> = Object.freeze({
-	status: "idle",
-	lastEvent: null,
-	terminal: null,
-	error: null,
-});
-
-function stableKey(value: unknown): string {
-	return JSON.stringify(value, (_key, item: unknown) =>
-		isPlainRecord(item)
-			? Object.fromEntries(
-					Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
-				)
-			: item,
-	);
+	return [state, store.run, controls];
 }
 
 /**
@@ -326,74 +238,71 @@ export function useStream<I, E>(
 	input: I | null,
 	handlers: StreamHandlersLike<E> = {},
 ): StreamState<E> {
-	const [state, setState] = useState<StreamState<E>>(IDLE_STREAM);
-	const latest = useRef(handlers);
-	latest.current = handlers;
-	const key = input === null ? null : stableKey(input);
-	// `input` is deliberately read through `key`: two objects with the same
-	// fields are the same subscription.
-	const inputRef = useRef(input);
-	inputRef.current = input;
-
+	const store = useMemo(() => new StreamStore(open), [open]);
+	store.setHandlers(handlers);
+	// The store keys the input by content, so an effect per render is cheap
+	// and a new object with the same fields reopens nothing.
 	useEffect(() => {
-		if (key === null) {
-			setState(IDLE_STREAM);
-			return undefined;
-		}
-		const current = inputRef.current as I;
-		let cancelled = false;
-		let handle: StreamHandleLike | null = null;
-		setState({
-			status: "opening",
-			lastEvent: null,
-			terminal: null,
-			error: null,
-		});
-		open(current, {
-			onEvent: (event) => {
-				if (cancelled) {
-					return;
-				}
-				latest.current.onEvent?.(event);
-				setState((previous) => ({ ...previous, lastEvent: event }));
-			},
-			onTerminal: (terminal) => {
-				if (cancelled) {
-					return;
-				}
-				latest.current.onTerminal?.(terminal);
-				setState((previous) => ({ ...previous, status: "ended", terminal }));
-			},
-		}).then(
-			(opened) => {
-				if (cancelled) {
-					opened.close();
-					return;
-				}
-				handle = opened;
-				setState((previous) =>
-					previous.status === "ended"
-						? previous
-						: { ...previous, status: "open" },
-				);
-			},
-			(error: unknown) => {
-				if (cancelled) {
-					return;
-				}
-				setState({
-					status: "failed",
-					lastEvent: null,
-					terminal: null,
-					error: error instanceof Error ? error : new Error(String(error)),
-				});
-			},
-		);
-		return () => {
-			cancelled = true;
-			handle?.close();
-		};
-	}, [open, key]);
-
-	return state;
+		store.setInput(input);
+	});
+	useEffect(() => () => store.close(), [store]);
+	return useStore(store);
 }
+
+/**
+ * The form of one declared action: `qgis.<id>` with its fields, values,
+ * issues and submission. The store is built once per `qgis` and `id` - the
+ * options are read on the first render only, like `useState`'s initial value
+ * - and unmounting aborts a submission in flight.
+ */
+export function useForm<O, K extends keyof O & string>(
+	qgis: QgisSdkCore<O, unknown>,
+	id: K,
+	options?: FormOptions,
+): readonly [
+	FormState<ResultOf<O, K>>,
+	FormStore<RequestOf<O, K> & object, ResultOf<O, K>>,
+] {
+	const [first] = useState(() => options ?? {});
+	const store = useMemo(
+		() =>
+			new FormStore<RequestOf<O, K> & object, ResultOf<O, K>>(
+				qgis as QgisSdkCore<unknown, unknown>,
+				id,
+				first,
+			),
+		[qgis, id, first],
+	);
+	// Abort, not dispose: StrictMode's simulated unmount keeps the store.
+	useEffect(() => () => store.abort(), [store]);
+	return [useStore(store), store];
+}
+
+/**
+ * Read a host query store: `useHostQuery(layersQuery(qgis))` for a layer
+ * picker. `refresh` runs once on mount when `auto` is not `false`.
+ */
+export function useHostQuery<T>(
+	store: HostQueryStore<T>,
+	options: { readonly auto?: boolean } = {},
+): readonly [HostQueryState<T>, HostQueryStore<T>] {
+	const auto = options.auto !== false;
+	useEffect(() => {
+		if (auto) {
+			void store.refresh();
+		}
+		return () => store.abort();
+	}, [store, auto]);
+	return [useStore(store), store];
+}
+
+type RequestOf<O, K extends keyof O> = O[K] extends {
+	readonly request: infer Req;
+}
+	? Req
+	: never;
+type ResultOf<O, K extends keyof O> = O[K] extends {
+	readonly result: infer Res;
+}
+	? Res
+	: never;

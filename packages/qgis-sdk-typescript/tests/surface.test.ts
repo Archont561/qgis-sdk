@@ -1,8 +1,10 @@
 /**
  * The package's entry points stay framework-neutral (TASK-18 AC #1,
- * decision-18): the root, `./bridge` and `./host` load no React, no test
- * utility and touch no browser global. Only `./react` depends on React and
- * only `./testing` is a harness, and both are optional entry points.
+ * decision-18, TASK-69 AC #2): the root - stores included - `./bridge` and
+ * `./host` load no framework, no test utility and touch no browser global.
+ * `./react`, `./vue` and `./svelte` each depend on their one framework and
+ * on nothing of each other, only `./testing` is a harness, and all four are
+ * optional entry points.
  *
  * One module of the root reads a browser global by design: `webchannel.ts`
  * is the default transport (decision-44), and it reads `window.qt` only when
@@ -27,9 +29,19 @@ const NEUTRAL = [
 	"internal.ts",
 	"qgis-sdk.ts",
 	"schema.ts",
+	"stores.ts",
 	"validate.ts",
 	"webchannel.ts",
 ];
+/** Each adapter, the framework it may import, and the ones it may not. */
+const ADAPTERS: Record<
+	string,
+	{ readonly peer: RegExp; readonly others: RegExp }
+> = {
+	"react.ts": { peer: /^react$/, others: /^(vue|svelte)(\/|$)/ },
+	"vue.ts": { peer: /^vue$/, others: /^(react|svelte)(\/|$)/ },
+	"svelte.ts": { peer: /^svelte(\/store)?$/, others: /^(react|vue)(\/|$)/ },
+};
 /** The default transport is allowed to read `window.qt` when called. */
 const TOUCHES_QT_ON_CALL = new Set(["webchannel.ts"]);
 const BROWSER_GLOBALS = /\b(window|document|navigator|localStorage|qt)\s*[.[]/;
@@ -45,7 +57,7 @@ test("the neutral entry points import nothing outside themselves", () => {
 		for (const specifier of importsOf(file)) {
 			expect(specifier, `${file} imports ${specifier}`).toMatch(/^\.\.?\//);
 			expect(specifier, `${file} imports ${specifier}`).not.toMatch(
-				/\/(react|testing)$/,
+				/\/(react|vue|svelte|testing)$/,
 			);
 		}
 	}
@@ -85,11 +97,37 @@ test("bundling the neutral entry points pulls in no React and no harness", async
 	for (const artifact of built.outputs) {
 		const code = await artifact.text();
 		expect(code, artifact.path).not.toMatch(/react/i);
+		expect(code, artifact.path).not.toMatch(/from\s+["'](vue|svelte)/);
 		expect(code, artifact.path).not.toMatch(/createBridgeHarness/);
 	}
 });
 
-test("react is an optional peer, and the two optional entry points are exported", () => {
+test("bundling one adapter pulls in its own framework only", async () => {
+	for (const [file, { peer, others }] of Object.entries(ADAPTERS)) {
+		const built = await Bun.build({
+			entrypoints: [join(SRC, file)],
+			target: "browser",
+			minify: false,
+			external: ["react", "vue", "svelte", "svelte/store"],
+		});
+		expect(built.success, file).toBe(true);
+		for (const artifact of built.outputs) {
+			const code = await artifact.text();
+			const imported = [...code.matchAll(IMPORT)].map((m) => m[1] as string);
+			expect(
+				imported.some((s) => peer.test(s)),
+				`${file}: ${imported}`,
+			).toBe(true);
+			expect(
+				imported.filter((s) => others.test(s)),
+				file,
+			).toEqual([]);
+			expect(code, file).not.toMatch(/createBridgeHarness/);
+		}
+	}
+});
+
+test("react, vue and svelte are optional peers, and the four optional entry points are exported", () => {
 	const manifest = JSON.parse(readFileSync(PACKAGE, "utf8")) as {
 		readonly exports: Record<string, unknown>;
 		readonly dependencies?: Record<string, string>;
@@ -101,18 +139,35 @@ test("react is an optional peer, and the two optional entry points are exported"
 		"./bridge",
 		"./host",
 		"./react",
+		"./vue",
+		"./svelte",
 		"./testing",
 	]);
 	expect(manifest.dependencies ?? {}).toEqual({});
-	expect(manifest.peerDependencies?.react).toBeDefined();
-	expect(manifest.peerDependenciesMeta?.react?.optional).toBe(true);
+	for (const peer of ["react", "vue", "svelte"]) {
+		expect(manifest.peerDependencies?.[peer], peer).toBeDefined();
+		expect(manifest.peerDependenciesMeta?.[peer]?.optional, peer).toBe(true);
+	}
 });
 
-test("only ./react imports React, and only ./testing is a harness", () => {
-	expect(importsOf("react.ts")).toContain("react");
-	expect(importsOf("react.ts")).not.toContain("./testing");
-	expect(importsOf("testing.ts")).not.toContain("react");
-	for (const file of ["react.ts", "testing.ts"]) {
+test("each adapter imports its own framework only, and only ./testing is a harness", () => {
+	for (const [file, { peer, others }] of Object.entries(ADAPTERS)) {
+		const imports = importsOf(file);
+		expect(
+			imports.some((s) => peer.test(s)),
+			file,
+		).toBe(true);
+		expect(
+			imports.filter((s) => others.test(s)),
+			file,
+		).toEqual([]);
+		expect(imports, file).not.toContain("./testing");
+		expect(imports, file).toContain("./stores");
+	}
+	for (const peer of ["react", "vue", "svelte"]) {
+		expect(importsOf("testing.ts")).not.toContain(peer);
+	}
+	for (const file of [...Object.keys(ADAPTERS), "testing.ts"]) {
 		const text = readFileSync(join(SRC, file), "utf8");
 		expect(text, file).not.toMatch(BROWSER_GLOBALS);
 	}

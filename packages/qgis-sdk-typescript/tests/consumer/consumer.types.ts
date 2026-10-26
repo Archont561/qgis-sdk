@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/correctness/useHookAtTopLevel: Vue composables share React's `use` prefix and are called from `setup()`, not from a React component. */
 /**
  * The package as a consumer sees it: the built `dist/*.d.ts`, not `src`.
  *
@@ -13,10 +14,35 @@ import { createElement } from "react";
 import {
 	type BridgeSchema,
 	defineBridgeSchema,
+	type FormState,
+	formStore,
+	type HostQueryState,
+	layersQuery,
+	type OperationState,
+	OperationStore,
 	QgisSdk,
 } from "../../dist/index";
-import { BridgeProvider, useOperation, useQgisSdk } from "../../dist/react";
+import {
+	BridgeProvider,
+	useForm,
+	useHostQuery,
+	useOperation,
+	useQgisSdk,
+} from "../../dist/react";
+import {
+	getQgisSdk,
+	setQgisSdk,
+	form as svelteForm,
+	operation as svelteOperation,
+	toRune,
+} from "../../dist/svelte";
 import { createBridgeHarness } from "../../dist/testing";
+import {
+	provideQgisSdk,
+	useForm as useVueForm,
+	useOperation as useVueOperation,
+	useQgisSdk as useVueQgisSdk,
+} from "../../dist/vue";
 
 interface Operations {
 	readonly ping: {
@@ -60,6 +86,52 @@ function View(): null {
 	const sdk = useQgisSdk<Operations, Streams>();
 	const [, run] = useOperation(sdk.ping);
 	void run({ value: 2 });
+	// A form is typed by the action id: the request names the fields the
+	// values hold, the result types the submission.
+	const [formState, form] = useForm(sdk, "ping", { initial: { value: 1 } });
+	const submission: OperationState<number> = formState.submission;
+	void submission;
+	void form.submit().then((result: number | undefined) => result);
+	const [layers] = useHostQuery(layersQuery(sdk));
+	const refused: boolean = layers.status === "refused";
+	void refused;
 	return null;
 }
 void View;
+
+// The same stores from the root, with no adapter: the vanilla path. A store
+// built from the root is the one every adapter accepts.
+const pingStore = new OperationStore(qgis.ping);
+const state: OperationState<number> = pingStore.getSnapshot();
+void state;
+const vanillaForm = formStore(qgis, "tools.reset");
+const vanillaState: FormState<null> = vanillaForm.getSnapshot();
+void vanillaState;
+const layerState: HostQueryState<unknown> = layersQuery(qgis).getSnapshot();
+void layerState;
+
+// The Vue entry point shares and reads the same instance.
+function setup(): void {
+	provideQgisSdk(qgis);
+	const sdk = useVueQgisSdk<Operations, Streams>();
+	const { run } = useVueOperation(sdk.ping);
+	void run({ value: 3 });
+	const { state } = useVueForm(sdk, "ping");
+	const vueSubmission: OperationState<number> = state.value.submission;
+	void vueSubmission;
+}
+void setup;
+
+// The Svelte entry point: context helpers and the stores as Svelte stores.
+function svelteInit(): void {
+	const shared = setQgisSdk(qgis);
+	const sdk = getQgisSdk<Operations, Streams>();
+	void shared.ping;
+	const ping = svelteOperation(sdk.ping);
+	const rune = toRune(ping);
+	const current: OperationState<number> = rune.current;
+	void current;
+	const buffer = svelteForm(sdk, "ping");
+	void buffer.fields;
+}
+void svelteInit;

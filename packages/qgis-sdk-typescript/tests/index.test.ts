@@ -20,6 +20,7 @@ import * as errors from "@/src/errors";
 import { isPlainRecord } from "@/src/internal";
 import * as qgisSdk from "@/src/qgis-sdk";
 import * as schema from "@/src/schema";
+import * as stores from "@/src/stores";
 import * as validate from "@/src/validate";
 import * as webchannel from "@/src/webchannel";
 
@@ -47,6 +48,7 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 		"QgisSdkContractValidationError",
 		"QgisSdkDeclarationError",
 		"QgisSdkError",
+		"QgisSdkStoreError",
 		"QgisSdkWebChannelError",
 	]);
 	for (const name of errorExports) {
@@ -54,7 +56,7 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 	}
 });
 
-test("the root is the union of the error root, the declarations, the bridge and the SDK", () => {
+test("the root is the union of the error root, the declarations, the bridge, the SDK and the stores", () => {
 	const names = (module: object): string[] => Object.keys(module).sort();
 	const expected = new Set([
 		...names(errors),
@@ -62,6 +64,7 @@ test("the root is the union of the error root, the declarations, the bridge and 
 		...names(bridge),
 		...names(qgisSdk),
 		...names(schema),
+		...names(stores),
 		...names(validate),
 		...names(webchannel),
 	]);
