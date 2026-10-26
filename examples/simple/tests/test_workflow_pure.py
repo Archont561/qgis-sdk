@@ -10,8 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import simple
-from conftest import WORKING_CRS, FakeHost
+from conftest import WORKING_CRS, FakeHost, classFactory
 from qgis_sdk import describe_plugin
 from qgis_sdk.models import (
     QgisSdkAlgorithmRejectedError,
@@ -35,7 +34,7 @@ def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
 
 
 def test_class_factory_starts_and_unloads_without_a_host() -> None:
-    plugin = simple.classFactory(None)
+    plugin = classFactory(None)
     plugin.initGui()
     try:
         assert plugin.runtime.state.value == "running"

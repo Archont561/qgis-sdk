@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import simple
+from conftest import classFactory
 from simple.plugin import EXPORT_DIRECTORY_KEY, FIXTURE
 from simple.workflow import LocalGisWorkflow
 
@@ -28,7 +28,7 @@ def desktop(qgis_app: Any) -> Any:
     from qgis.core import QgsProject
 
     QgsProject.instance().removeAllMapLayers()
-    plugin = simple.classFactory(None)
+    plugin = classFactory(None)
     plugin.initGui()
     try:
         yield plugin
@@ -160,7 +160,7 @@ def test_the_plugins_provider_is_in_the_toolbox_only_while_it_runs(
             and algorithm.provider().id() == "simple"
         )
 
-    plugin = simple.classFactory(None)
+    plugin = classFactory(None)
     assert advertised() == []
     plugin.initGui()
     try:

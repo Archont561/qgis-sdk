@@ -3,10 +3,13 @@
 Five declared actions carry the whole workflow - open the fixture, read the
 selection, buffer in an explicit projected CRS, export, choose where exports
 go - and one line lists the Processing provider the plugin owns
-(:mod:`.algorithms`); nothing else is in this file: no Qt import, no QGIS import, no widget.
-The native dialog QGIS shows for an action and the page in ``web/`` are two
-front ends over the same ``runtime.actions``, which is what "equivalent native
-and web controls" means here.
+(:mod:`.algorithms`); nothing else is in this file: no Qt import, no QGIS
+import, no widget, no ``classFactory``. ``pyproject.toml`` names this class
+under ``[tool.qgis-sdk] plugin``; ``qgis-sdk build`` and ``qgis-sdk dev`` bind
+QGIS's entry to it and open the page in ``web/`` as a dock (decision-43). The
+native dialog QGIS shows for an action and that page are two front ends over
+the same ``runtime.actions``, which is what "equivalent native and web
+controls" means here.
 
 The work itself is :class:`.workflow.LocalGisWorkflow`, the plugin's own
 chain over the SDK services; this file adds what only a plugin declares -
@@ -18,8 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from qgis_sdk import action, plugin
-from qgis_sdk.adapters.desktop import create_class_factory
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import PluginContext
 from qgis_sdk.models import (
     CrsInput,
     LayerInput,
@@ -29,7 +31,7 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 
-from . import algorithms, webview
+from . import algorithms, dialogs
 from .workflow import LocalGisWorkflow
 
 PLUGIN_ID = "simple"
@@ -43,18 +45,6 @@ FIXTURE = Path(__file__).resolve().parent / "data" / "points.geojson"
 #: names a path (decision-20): it names a file *inside* this directory, and the
 #: directory itself is chosen on the host - by a native folder picker here.
 EXPORT_DIRECTORY_KEY = "export_directory"
-
-
-class MessageBarNotifications:
-    """Send informational messages to the host message bar, if there is one."""
-
-    def __init__(self, iface: object | None) -> None:
-        self._iface = iface
-
-    def info(self, message: str) -> None:
-        if self._iface is None:
-            return
-        self._iface.messageBar().pushInfo(TITLE, message)
 
 
 @plugin(id=PLUGIN_ID, title=TITLE)
@@ -114,7 +104,7 @@ class SimplePlugin:
     def choose_export_directory(self) -> str:
         """Ask the user for a directory through the Desktop and remember it."""
         iface = self.ctx.desktop.iface
-        chosen = webview.ask_for_directory(iface, TITLE)
+        chosen = dialogs.ask_for_directory(iface, TITLE)
         if not chosen:
             raise QgisSdkExportRefusedError("", ["no directory was chosen"])
         self.ctx.settings.set(EXPORT_DIRECTORY_KEY, chosen)
@@ -136,71 +126,3 @@ def _destination(ctx: PluginContext, file_name: str) -> Path:
         raise QgisSdkExportRefusedError(file_name, reasons)
     assert directory is not None
     return Path(directory) / file_name
-
-
-def build_context(iface: object | None) -> PluginContext:
-    """Give the plugin exactly the capabilities this host can offer.
-
-    Inside a running QGIS every curated service is wired from PyQGIS; in a bare
-    interpreter (the pure tests) the context carries notifications and a scope,
-    and ``require_<service>()`` refuses by name instead of failing obscurely.
-    """
-    scope = ResourceScope()
-    notifications = MessageBarNotifications(iface)
-    if _qgis_is_running():
-        from qgis_sdk.adapters.qgis import native_plugin_context
-
-        return native_plugin_context(
-            scope, settings_prefix=PLUGIN_ID, iface=iface, notifications=notifications
-        )
-    return PluginContext(notifications=notifications, scope=scope)
-
-
-def _qgis_is_running() -> bool:
-    try:
-        from qgis.core import QgsApplication
-    except ImportError:
-        return False
-    return QgsApplication.instance() is not None
-
-
-_lifecycle = create_class_factory(SimplePlugin, context_factory=build_context)
-
-
-class SimpleDesktop:
-    """What QGIS holds: the SDK lifecycle plus one toolbar button for the page."""
-
-    def __init__(self, iface: object | None) -> None:
-        self._iface = iface
-        self._plugin = _lifecycle(iface)
-        self._action: object | None = None
-        self._view: object | None = None
-
-    @property
-    def runtime(self) -> object:
-        """The SDK runtime: the tests read it, the view's dispatcher is built from it."""
-        return self._plugin.runtime
-
-    def initGui(self) -> None:
-        self._plugin.initGui()
-        self._action = webview.add_toolbar_action(self._iface, TITLE, self.show_view)
-
-    def show_view(self) -> None:
-        """Open the page on first use; bring it to the front after that."""
-        if self._view is None:
-            self._view = webview.open_view(self.runtime, self._iface, placement="dock")
-        self._view.show()
-        self._view.raise_()
-
-    def unload(self) -> None:
-        if self._view is not None:
-            webview.close_view(self._view, self._iface)
-            self._view = None
-        webview.remove_toolbar_action(self._iface, self._action)
-        self._action = None
-        self._plugin.unload()
-
-
-def classFactory(iface: object | None) -> SimpleDesktop:
-    """QGIS calls this with its interface; the tests call it with ``None``."""
-    return SimpleDesktop(iface)
