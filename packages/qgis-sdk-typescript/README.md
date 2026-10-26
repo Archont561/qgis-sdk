@@ -7,11 +7,10 @@ transport client with subscriptions, the curated host namespaces, and the
 contract a generated per-plugin client is built on. Every exported error begins
 with `QgisSdk` and carries a stable wire `code`.
 
-> Experimental. Published as `@archont561/qgis-sdk-bridge` through `0.2.0`
-> (the description parser, the safe-integer wire bounds, the error hierarchy,
-> `./bridge`, `./host`, the generated clients shown below, the optional
-> `./react` bindings and the `./testing` harness); `@archont561/qgis-sdk`
-> continues from `0.3.0` with the same exports.
+> Experimental. Published as `@archont561/qgis-sdk-bridge` through `0.2.0`;
+> `@archont561/qgis-sdk` continues from `0.3.0`. The root exports the
+> transport client, the error root and the description contract; `./host`,
+> `./react` and `./testing` are opt-in entry points.
 
 ## Installation
 
@@ -23,7 +22,7 @@ npm install @archont561/qgis-sdk
 ## Example
 
 ```ts
-import { BridgeClient } from "@archont561/qgis-sdk/bridge";
+import { BridgeClient } from "@archont561/qgis-sdk";
 import { createHost } from "@archont561/qgis-sdk/host";
 
 const client = new BridgeClient({

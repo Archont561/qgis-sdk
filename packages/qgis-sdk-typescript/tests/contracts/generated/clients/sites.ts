@@ -59,11 +59,12 @@ export interface StreamHandle {
 }
 
 /** An argument or a response that does not match its declared schema. */
-export class ContractError extends Error {
+export class QgisSdkContractError extends Error {
+	public readonly code = "contract_validation_failed";
 	public readonly operation: string;
 	public constructor(operation: string, message: string) {
 		super(`operation "${operation}": ${message}`);
-		this.name = "ContractError";
+		this.name = "QgisSdkContractError";
 		this.operation = operation;
 	}
 }
@@ -369,7 +370,7 @@ async function call<T>(
 	acceptOutput: (value: unknown) => boolean,
 ): Promise<T> {
 	if (input !== undefined && !acceptInput(input, true)) {
-		throw new ContractError(operation, "the arguments do not match the declared request");
+		throw new QgisSdkContractError(operation, "the arguments do not match the declared request");
 	}
 	const value = await client.invoke(
 		operation,
@@ -377,7 +378,7 @@ async function call<T>(
 		options,
 	);
 	if (!acceptOutput(value)) {
-		throw new ContractError(operation, "the response does not match the declared result");
+		throw new QgisSdkContractError(operation, "the response does not match the declared result");
 	}
 	return value as T;
 }
@@ -392,7 +393,7 @@ async function open<E extends { readonly kind: string }>(
 	acceptEvent: (value: unknown) => value is E,
 ): Promise<StreamHandle> {
 	if (!acceptInput(input, true)) {
-		throw new ContractError(operation, "the arguments do not match the declared request");
+		throw new QgisSdkContractError(operation, "the arguments do not match the declared request");
 	}
 	// The typed stream ends exactly once, like the subscription under it: a
 	// contract violation ends it here, closes the subscription, and the
@@ -417,7 +418,7 @@ async function open<E extends { readonly kind: string }>(
 				}
 				end({
 					kind: "error",
-					message: new ContractError(
+					message: new QgisSdkContractError(
 						operation,
 						"an event does not match the declared events",
 					).message,

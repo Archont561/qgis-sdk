@@ -53,7 +53,7 @@ _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
 _ALIAS_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-alias/package.json"
 _ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
 _PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
-_TS_INDEX = _REPO_ROOT / "packages/qgis-sdk-typescript/src/index.ts"
+_TS_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-typescript/src/declarations.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 
 __all__ = [
@@ -1482,11 +1482,11 @@ def read_python_contract_version(text: str) -> int:
 
 
 def read_typescript_contract_version(text: str) -> int:
-    """Read ``PLUGIN_DESCRIPTION_SCHEMA_VERSION`` from the bridge index."""
+    """Read ``PLUGIN_DESCRIPTION_SCHEMA_VERSION`` from the bridge declarations."""
     match = _TS_CONTRACT_VERSION.search(text)
     if match is None:
         raise QgisSdkReleaseError(
-            "no PLUGIN_DESCRIPTION_SCHEMA_VERSION in the bridge index"
+            "no PLUGIN_DESCRIPTION_SCHEMA_VERSION in the bridge declarations"
         )
     return int(match.group(1))
 
@@ -1893,7 +1893,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
     )
     contract = contract_versions(
         _PY_DECLARATIONS.read_text(encoding="utf-8"),
-        _TS_INDEX.read_text(encoding="utf-8"),
+        _TS_DECLARATIONS.read_text(encoding="utf-8"),
     )
     shared_contract = contract.agreed()
     split = runtime_text is not None and tools_text is not None

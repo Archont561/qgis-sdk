@@ -31,11 +31,12 @@ export interface BridgeClientLike {
 }
 
 /** An argument or a response that does not match its declared schema. */
-export class ContractError extends Error {
+export class QgisSdkContractError extends Error {
+	public readonly code = "contract_validation_failed";
 	public readonly operation: string;
 	public constructor(operation: string, message: string) {
 		super(`operation "${operation}": ${message}`);
-		this.name = "ContractError";
+		this.name = "QgisSdkContractError";
 		this.operation = operation;
 	}
 }
@@ -276,7 +277,7 @@ async function call<T>(
 	acceptOutput: (value: unknown) => boolean,
 ): Promise<T> {
 	if (input !== undefined && !acceptInput(input, true)) {
-		throw new ContractError(operation, "the arguments do not match the declared request");
+		throw new QgisSdkContractError(operation, "the arguments do not match the declared request");
 	}
 	const value = await client.invoke(
 		operation,
@@ -284,7 +285,7 @@ async function call<T>(
 		options,
 	);
 	if (!acceptOutput(value)) {
-		throw new ContractError(operation, "the response does not match the declared result");
+		throw new QgisSdkContractError(operation, "the response does not match the declared result");
 	}
 	return value as T;
 }

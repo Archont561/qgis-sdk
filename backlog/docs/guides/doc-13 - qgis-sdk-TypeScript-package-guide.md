@@ -10,10 +10,11 @@ The reference prose for `@archont561/qgis-sdk`. It used to live in
 `packages/qgis-sdk-typescript/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
 moved it here as the source for the documentation site
 ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)).
-Status at the time of writing: `0.3.0`, the first release under this name
-(packages version independently, [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
-it carries the transport client, the host namespaces and the generated clients
-described below, unchanged from `0.2.0`. Through `0.2.0` the package was published as
+Status at the time of writing: `0.3.0` is the released version (the first
+under this name; packages version independently,
+[decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
+`main` carries the unreleased root-entry change described below and in the
+0.4.0 migration notes, which is what the next tag ships. Through `0.2.0` the package was published as
 `@archont561/qgis-sdk-bridge`; it is `@archont561/qgis-sdk` from `0.3.0` on
 ([decision-33](../../decisions/decision-33%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md)).
 Migration notes are at the end of this guide.
@@ -37,25 +38,36 @@ every entry (`qgis-sdk`, `qgis-sdk/bridge`, `qgis-sdk/host`, `qgis-sdk/react`,
 
 ## Exports
 
+The root is the import a page needs: the transport client, the error root and
+the version 1 plugin-description contract. Everything under `./bridge` is also
+exported from the root; the subpath stays for code that already uses it.
+
 ```ts
 import {
+	BridgeClient,
 	MAX_SAFE_INTEGER,
 	MIN_SAFE_INTEGER,
 	PLUGIN_DESCRIPTION_SCHEMA_VERSION,
+	QgisSdkBridgeRemoteError,
 	QgisSdkContractValidationError,
 	QgisSdkDeclarationError,
 	QgisSdkError,
-	QgisSdkScopeClosedError,
-	QgisSdkUnsupportedCapabilityError,
 	QgisSdkValidationIssue,
 	isSafeJsonInteger,
 	parsePluginDescription,
 } from "@archont561/qgis-sdk";
 ```
 
+- **Transport client:** `BridgeClient`, its options, frames, the parsers and
+  the seven `QgisSdkBridge*Error` classes, as documented under
+  [Transport client](#transport-client).
 - **Safe integer bounds:** `MAX_SAFE_INTEGER` (`9007199254740991`), `MIN_SAFE_INTEGER` (`-9007199254740991`), and `isSafeJsonInteger(value)` mirror `qgis_sdk.models.MAX_SAFE_INTEGER` and `SafeJsonInteger`.
-- **Version 1 plugin descriptions:** `parsePluginDescription(raw)` validates and freezes `PluginDescription` payloads (`schema_version: 1`) produced by Python's `describe_plugin(cls).to_json()`.
-- **Structured SDK errors:** Every SDK exception class begins with `QgisSdk` and carries a stable wire `code` property (`"sdk_error"`, `"scope_closed"`, `"unsupported_capability"`, `"invalid_declaration"`, `"contract_validation_failed"`).
+- **Version 1 plugin descriptions:** `parsePluginDescription(raw)` validates and freezes `PluginDescription` payloads (`schema_version: 1`) produced by Python's `describe_plugin(cls).to_json()`. `qgis-sdk bridge generate` is the build-time reader of the same payload; a page only needs this one to render operations it did not generate a client for.
+- **Structured SDK errors:** every error this package raises extends `QgisSdkError` and carries a stable wire `code` (`"sdk_error"`, `"invalid_declaration"`, `"contract_validation_failed"`, the transport's refusal codes, and the code of a remote fault on `QgisSdkBridgeRemoteError`). Match on the code, not on the class name; a Python-side error such as `scope_closed` or `unsupported_capability` reaches a page as a `QgisSdkBridgeRemoteError` with that code, so the package carries no idle mirror class for it ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)).
+
+What the root does **not** carry, and why: `./host` is generated and large, so
+it is opt-in; `./react` needs the optional `react` peer; `./testing` is a
+development dependency. The package exports no internal helper.
 
 ## Transport client
 
@@ -64,7 +76,7 @@ speaks envelopes over an injected transport, so a test can script a failure
 instead of reproducing one inside a running QGIS.
 
 ```ts
-import { BridgeClient } from "@archont561/qgis-sdk/bridge";
+import { BridgeClient } from "@archont561/qgis-sdk"; // or "@archont561/qgis-sdk/bridge"
 
 const client = new BridgeClient({
 	send: (message) => channel.send(JSON.stringify(message)),
@@ -131,8 +143,10 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
 - **Typed results.** `host.layers.get` returns `VectorLayerInfo`, not a record:
   `geometry_type` is one of the declared literals and `crs` is `string | null`.
 - **The same asymmetry as plugin operations.** Arguments are closed (an unknown
-  one is a `HostContractError` before the transport), responses are additive (a
-  field a newer host added is tolerated, a missing one is refused).
+  one is a `QgisSdkHostContractError` before the transport), responses are
+  additive (a field a newer host added is tolerated, a missing one is refused).
+  The error extends `QgisSdkError` with `code: "contract_validation_failed"`
+  and names the `operation`.
 - **Versioned.** `HOST_SCHEMA_VERSION` and `HOST_OPERATIONS` are exported, and the
   handshake advertises the same version, so a page can tell what it is talking to
   before its first call.
@@ -147,8 +161,11 @@ declarations instead:
 $ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin --out web/src/bridge.ts
 ```
 
-The module imports nothing from this package. It exports the declared value types,
-`OPERATIONS` and `OperationId`, one validator per type, and a nested operation map:
+The module imports nothing from this package
+([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)):
+it resolves under either npm name and does not pin the page to the SDK version
+the generator ran with. It exports the declared value types, `OPERATIONS` and
+`OperationId`, one validator per type, and a nested operation map:
 
 ```ts
 import { createOperations, type PluginOperations } from "./bridge";
@@ -163,7 +180,10 @@ const summary = await operations.sites.summary({ layer_id: "sites" });
 - **Runtime.** The same generated module validates what it sends (strict: unknown
   arguments are refused before the transport is touched) and what comes back
   (lenient: a field a newer host added is tolerated, a missing one is a
-  `ContractError` naming the operation).
+  `QgisSdkContractError` naming the operation). Because the module is
+  import-free the class extends `Error`, not `QgisSdkError`; it carries the
+  same `code: "contract_validation_failed"` as the host's error, which is what
+  a page should match on.
 - **Owned by CI.** The file is generated source, never edited by hand: the plugin's
   CI regenerates it and fails when the checked-in copy differs. `CONTRACT_FINGERPRINT`
   identifies the wire contract the file was built from.
@@ -330,3 +350,31 @@ new name, plus the unscoped alias. Verify with
   `packages/qgis-sdk-typescript`; the Python package moved from
   `packages/qgis-sdk` to `packages/qgis-sdk-python`. Only contributors and
   the generated-file paths in CI are affected.
+
+## 0.4.0 migration notes
+
+`0.4.0` is unreleased at the time of writing; it is the root-entry change of
+[decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)
+on `main`, paired with Python `0.6.0`. Neither the transport protocol (`1`),
+the plugin-description contract (`1`), `HOST_SCHEMA_VERSION` nor
+`HOST_FINGERPRINT` moves: what crosses `QWebChannel` is identical.
+
+- **The root re-exports `./bridge`.** `import { BridgeClient } from
+  "@archont561/qgis-sdk"` works; the `./bridge` subpath is unchanged and
+  remains the import of existing code. `./host`, `./react` and `./testing`
+  stay subpath-only.
+- **Removed from the root:** `QgisSdkScopeClosedError` and
+  `QgisSdkUnsupportedCapabilityError` (never raised by this package; the
+  Python error arrives as a `QgisSdkBridgeRemoteError` whose `code` is
+  `scope_closed` or `unsupported_capability`) and `isPlainRecord` (an
+  internal helper; write the three-line guard locally if you relied on it).
+- **Generated errors renamed, with a code.** `./host` exports
+  `QgisSdkHostContractError` (was `HostContractError`), now a `QgisSdkError`
+  with `code: "contract_validation_failed"`. A plugin client regenerated with
+  `qgis-sdk bridge generate` from tools `0.6.0` exports
+  `QgisSdkContractError` (was `ContractError`), still a plain `Error`, with
+  the same `code`. Replace the names in `catch` clauses and prefer matching
+  on `error.code`.
+- **Manifest:** stays `0.3.0` until the release gate stamps it. Verify a
+  stamped pair with
+  `python scripts/release.py verify-versions --scope typescript --version 0.4.0`.

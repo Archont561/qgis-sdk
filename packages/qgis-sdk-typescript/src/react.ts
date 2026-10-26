@@ -32,7 +32,8 @@ import {
 	QgisSdkBridgeAbortedError,
 	type WireTransport,
 } from "./bridge";
-import { isPlainRecord, QgisSdkError } from "./index";
+import { QgisSdkError } from "./errors";
+import { isPlainRecord } from "./internal";
 
 /** A hook or provider was used outside the shape it needs. */
 export class QgisSdkBridgeReactError extends QgisSdkError {

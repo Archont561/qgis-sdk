@@ -13,7 +13,15 @@ import { expect, test } from "@archont561/bun-test-utils";
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");
 const PACKAGE = join(SRC, "..", "package.json");
 
-const NEUTRAL = ["index.ts", "bridge.ts", "host.ts", "generated/host.ts"];
+const NEUTRAL = [
+	"index.ts",
+	"bridge.ts",
+	"host.ts",
+	"generated/host.ts",
+	"declarations.ts",
+	"errors.ts",
+	"internal.ts",
+];
 const BROWSER_GLOBALS = /\b(window|document|navigator|localStorage|qt)\s*[.[]/;
 const IMPORT = /^\s*(?:import|export)\b[^;]*?\bfrom\s+["']([^"']+)["']/gm;
 

@@ -1,4 +1,5 @@
 import { expect, test } from "@archont561/bun-test-utils";
+import { QgisSdkError } from "@";
 import {
 	createHost,
 	type FileRef,
@@ -7,12 +8,12 @@ import {
 	HOST_OPERATIONS,
 	HOST_SCHEMA_VERSION,
 	type HostClientLike,
-	HostContractError,
 	type HostInvokeOptions,
 	type HostStreamHandle,
 	type HostStreamTerminal,
 	type NetworkFetchEvent,
 	PageRequest,
+	QgisSdkHostContractError,
 	type VectorLayerInfo,
 } from "@/host";
 
@@ -115,7 +116,7 @@ test("an operation with no inputs still sends an empty payload", async () => {
 test("a declared bound is refused before the transport is touched", async () => {
 	const { client, sent } = scripted(page);
 	const tooLarge = createHost(client).layers.list({ limit: 500 } as never);
-	await expect(tooLarge).rejects.toThrow(HostContractError);
+	await expect(tooLarge).rejects.toThrow(QgisSdkHostContractError);
 	expect(sent.length).toBe(0);
 });
 
@@ -125,7 +126,7 @@ test("an unknown argument never reaches the host", async () => {
 		layer_id: "sites",
 		pick: "first",
 	} as never);
-	await expect(failing).rejects.toThrow(HostContractError);
+	await expect(failing).rejects.toThrow(QgisSdkHostContractError);
 	expect(sent.length).toBe(0);
 });
 
@@ -134,7 +135,7 @@ test("a result the host should not have produced is refused, not returned", asyn
 	const { client } = scripted(malformed);
 	await expect(
 		createHost(client).layers.get({ layer_id: "sites" }),
-	).rejects.toThrow(HostContractError);
+	).rejects.toThrow(QgisSdkHostContractError);
 });
 
 test("an added field on a result is tolerated, an absent one is not", async () => {
@@ -145,7 +146,7 @@ test("an added field on a result is tolerated, an absent one is not", async () =
 
 	const { client: broken } = scripted({ items: [sites] });
 	await expect(createHost(broken).layers.list()).rejects.toThrow(
-		HostContractError,
+		QgisSdkHostContractError,
 	);
 });
 
@@ -158,7 +159,7 @@ test("the null result of a mutation is validated as null", async () => {
 	const { client: wrong } = scripted({ ok: true });
 	await expect(
 		createHost(wrong).notifications.info({ message: "hi" }),
-	).rejects.toThrow(HostContractError);
+	).rejects.toThrow(QgisSdkHostContractError);
 });
 
 test("a setting may be absent, and that is not an error", async () => {
@@ -178,7 +179,7 @@ test("a paged id list is a list of strings and nothing else", async () => {
 	expect(result.next_cursor).toBe("2");
 	const { client: numbered } = scripted({ items: [1, 2], truncated: false });
 	await expect(createHost(numbered).project.layer_ids()).rejects.toThrow(
-		HostContractError,
+		QgisSdkHostContractError,
 	);
 });
 
@@ -187,11 +188,24 @@ test("the error names the host operation it failed on", async () => {
 	try {
 		await createHost(client).layers.list();
 	} catch (error) {
-		expect(error instanceof HostContractError).toBe(true);
-		expect((error as HostContractError).message).toContain("layers.list");
+		expect(error instanceof QgisSdkHostContractError).toBe(true);
+		expect((error as QgisSdkHostContractError).message).toContain(
+			"layers.list",
+		);
 		return;
 	}
 	throw new Error("expected the page validator to reject the reply");
+});
+
+test("the host contract error is one of the package's errors, by class and by code", async () => {
+	const { client } = scripted({ items: "everything", truncated: false });
+	const failing = createHost(client).layers.list();
+	await expect(failing).rejects.toBeInstanceOf(QgisSdkError);
+	await expect(failing).rejects.toMatchObject({
+		name: "QgisSdkHostContractError",
+		code: "contract_validation_failed",
+		operation: "layers.list",
+	});
 });
 
 test("the generated PageRequest refuses a cursor the host did not issue", () => {
@@ -222,15 +236,15 @@ test("an open takes a host-minted file ref and never a path", async () => {
 	const failing = createHost(pathClient).layers.open_vector({
 		file: "/home/me/sites.geojson",
 	} as never);
-	await expect(failing).rejects.toThrow(HostContractError);
+	await expect(failing).rejects.toThrow(QgisSdkHostContractError);
 	const otherKind = createHost(pathClient).layers.open_vector({
 		file: { kind: "layer", id: picked.id },
 	} as never);
-	await expect(otherKind).rejects.toThrow(HostContractError);
+	await expect(otherKind).rejects.toThrow(QgisSdkHostContractError);
 	const noId = createHost(pathClient).layers.open_vector({
 		file: { kind: "file", id: "not hex" },
 	} as never);
-	await expect(noId).rejects.toThrow(HostContractError);
+	await expect(noId).rejects.toThrow(QgisSdkHostContractError);
 	expect(pathSent.length).toBe(0);
 });
 
@@ -246,7 +260,7 @@ test("an export sends the ref and the text and reads back the size", async () =>
 	const { client: wrong } = scripted({ bytes_written: "4" });
 	await expect(
 		createHost(wrong).files.export({ file: picked, content: "x" }),
-	).rejects.toThrow(HostContractError);
+	).rejects.toThrow(QgisSdkHostContractError);
 });
 
 test("a fetch is a stream that delivers one typed response and ends", async () => {
@@ -291,19 +305,19 @@ test("a fetch request outside the declaration never reaches the host", async () 
 			{ url: "https://a.example.org", method: "FETCH" } as never,
 			{},
 		),
-	).rejects.toThrow(HostContractError);
+	).rejects.toThrow(QgisSdkHostContractError);
 	await expect(
 		host.network.fetch(
 			{ url: "https://a.example.org", timeout_seconds: 0 },
 			{},
 		),
-	).rejects.toThrow(HostContractError);
+	).rejects.toThrow(QgisSdkHostContractError);
 	await expect(
 		host.network.fetch(
 			{ url: "https://a.example.org", headers: ["Accept: x"] } as never,
 			{},
 		),
-	).rejects.toThrow(HostContractError);
+	).rejects.toThrow(QgisSdkHostContractError);
 	expect(scripted_.sent.length).toBe(0);
 });
 

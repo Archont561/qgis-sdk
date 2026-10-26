@@ -2014,7 +2014,7 @@ def test_the_repository_contract_versions_agree():
         (
             repo_root / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
         ).read_text(encoding="utf-8"),
-        (repo_root / "packages/qgis-sdk-typescript/src/index.ts").read_text(
+        (repo_root / "packages/qgis-sdk-typescript/src/declarations.ts").read_text(
             encoding="utf-8"
         ),
     )
@@ -2033,7 +2033,7 @@ def test_a_contract_version_that_drifted_is_refused():
 def test_a_missing_contract_version_is_named_by_language():
     with pytest.raises(QgisSdkReleaseError, match="Python declarations"):
         read_python_contract_version("schema_version: 1\n")
-    with pytest.raises(QgisSdkReleaseError, match="bridge index"):
+    with pytest.raises(QgisSdkReleaseError, match="bridge declarations"):
         read_typescript_contract_version("export const OTHER = 1;\n")
 
 
