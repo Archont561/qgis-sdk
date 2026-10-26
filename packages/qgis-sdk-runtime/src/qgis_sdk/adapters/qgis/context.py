@@ -15,7 +15,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.files import FilesService
 from qgis_sdk.network import NetworkClient
 from qgis_sdk.services import Notifications
 
@@ -61,6 +63,11 @@ def native_plugin_context(
     transport = NativeNetworkTransport(scope)
     project = NativeProject(layers, scope)
     algorithms = NativeAlgorithms(layers, scope, working_directory=working_directory)
+    # One authority per runtime (decision-20): the refs Processing mints for
+    # a toolbox run, the ones a page receives through ``HostServices`` and the
+    # ones the form components hand a handler all resolve through it.
+    authority = HostAuthority()
+    files = FilesService(authority, scope, owner=f"plugin:{settings_prefix}")
     return PluginContext(
         notifications=(
             notifications if notifications is not None else NativeNotifications(scope)
@@ -75,6 +82,11 @@ def native_plugin_context(
         algorithms=algorithms,
         workers=ThreadPoolWorkers(scope),
         processing=NativeProcessing(
-            layers=layers, algorithms=algorithms, project=project, scope=scope
+            layers=layers,
+            algorithms=algorithms,
+            project=project,
+            scope=scope,
+            authority=authority,
         ),
+        files=files,
     )

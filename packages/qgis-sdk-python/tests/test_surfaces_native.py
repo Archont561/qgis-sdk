@@ -46,9 +46,9 @@ from dataclasses import dataclass
 from qgis_sdk import action, menu, plugin, shortcut, toolbar
 from qgis_sdk.core import JobContext, PluginContext, ResourceScope
 from qgis_sdk.jobs import JobHandle, JobService, job
-from qgis_sdk.testing import FakeWorkers, RecordingNotifications
+from qgis_sdk.testing import FakeFiles, FakeWorkers, RecordingNotifications
 
-from .ui import BufferDialog, LayerPanel
+from .ui import BufferDialog, LayerPanel, NoteDialog
 
 SETTINGS: dict[str, str] = {}
 CALLS: list[str] = []
@@ -81,6 +81,7 @@ def build_context(iface: object) -> PluginContext:
         notifications=RecordingNotifications(scope),
         scope=scope,
         settings=SharedSettings(),
+        files=FakeFiles(scope),
     )
 
 
@@ -88,7 +89,7 @@ def build_context(iface: object) -> PluginContext:
 class SurfaceTools:
     ctx: PluginContext
     context_factory = staticmethod(build_context)
-    surfaces = [BufferDialog, LayerPanel]
+    surfaces = [BufferDialog, LayerPanel, NoteDialog]
 
     def __init__(self) -> None:
         self.jobs = JobService(
@@ -127,7 +128,7 @@ UI = """
 from __future__ import annotations
 
 from qgis_sdk import menu, shortcut, toolbar
-from qgis_sdk.ui import Dialog, Dock
+from qgis_sdk.ui import Dialog, Dock, Text
 
 BUILT: list[object] = []
 CLOSED: list[str] = []
@@ -159,6 +160,15 @@ class LayerPanel(Dock, area="left"):
 
     def on_close(self) -> None:
         CLOSED.append("layer_panel")
+
+
+class NoteDialog(Dialog):
+    title = "A note"
+
+    def build(self):
+        # A catalogue component: the host attaches and mounts it.
+        self.note = Text("note", value=self.initial.get("note", ""))
+        return self.note
 """
 
 
@@ -420,6 +430,32 @@ def test_ctx_ui_open_from_an_action_opens_the_dialog_with_initial_values(
     (opened,) = desktop.surfaces.dialogs
     assert opened.surface.label.text() == "distance=5"
     assert dict(opened.surface.initial) == {"distance": 5}
+
+
+def test_build_may_return_a_catalogue_component_which_the_host_mounts(
+    qgis_app: Any, desktop: Any, modules: tuple[Any, Any]
+) -> None:
+    from qgis.PyQt.QtWidgets import QLineEdit
+
+    _plugin_module, ui_module = modules
+    desktop.context.ui.open(ui_module.NoteDialog, initial={"note": "hello"})
+
+    (opened,) = desktop.surfaces.dialogs
+    note = opened.surface.note
+    assert note.attached and note.mounted
+    assert note.ctx is opened.surface.ctx
+    assert note.ctx.files is desktop.context.files
+    line = opened.widget.findChild(QLineEdit, "form/note")
+    assert line is note.widget
+    assert line.text() == "hello"
+
+    line.setText("edited")
+    assert note.value() == "edited"
+
+    opened.surface.ctx.view.request_close()
+    pump(qgis_app)
+    assert opened.scope.closed
+    assert note.attached is False
 
 
 def test_ctx_ui_refuses_a_surface_the_plugin_does_not_list(desktop: Any) -> None:

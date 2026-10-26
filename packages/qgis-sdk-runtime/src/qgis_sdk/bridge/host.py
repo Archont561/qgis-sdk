@@ -448,9 +448,14 @@ class HostServices:
         left out, it is the transport under the context's own client when that
         client exposes one (``NetworkClient.transport``), so a page's fetch and
         a handler's ``await self.ctx.network.get(...)`` leave through one door.
+        ``authority`` likewise defaults to the one under the context's
+        ``files`` service when it exposes one (``FilesService.authority``):
+        a ref the page received is then the ref ``ctx.files`` resolves.
         """
         if network is None and context.has("network"):
             network = getattr(context.network, "transport", None)
+        if authority is None and context.has("files"):
+            authority = getattr(context.files, "authority", None)
         return cls(
             layers=context.layers,
             project=context.project,

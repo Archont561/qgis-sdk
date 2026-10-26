@@ -28,7 +28,7 @@ from typing import Any
 from qgis_sdk.declarations import WIRE_KIND_KEYWORD, ActionDescription
 from qgis_sdk.models import COLOUR_PATTERN, FileRef, QgisSdkFormError, parameter_kinds
 
-__all__ = ["FieldSpec", "coerce_values", "form_fields"]
+__all__ = ["FieldSpec", "coerce_value", "coerce_values", "form_fields", "label_for"]
 
 #: JSON Schema type -> the widget family a host should use.
 _PRIMITIVE_WIDGETS: dict[str, str] = {
@@ -139,7 +139,7 @@ def coerce_values(
             if spec.required:
                 raise QgisSdkFormError(f"action {action.id!r}: {spec.name} is required")
             continue
-        coerced[spec.name] = _coerce(action.id, spec, values[spec.name])
+        coerced[spec.name] = _coerce(f"action {action.id!r}", spec, values[spec.name])
     return coerced
 
 
@@ -215,78 +215,95 @@ def _widget_for(
     return widget
 
 
-def _label(name: str) -> str:
-    """Render a field name as a form label."""
+def label_for(name: str) -> str:
+    """Render a field name as a form label: ``buffer_distance`` -> ``Buffer distance``."""
     return name.replace("_", " ").strip().capitalize()
 
 
-def _coerce(action_id: str, spec: FieldSpec, value: object) -> object:
+_label = label_for
+
+
+def coerce_value(spec: FieldSpec, value: object, *, owner: str = "form") -> object:
+    """Convert one value as ``spec`` says, or refuse it naming ``owner``.
+
+    This is the rule behind :func:`coerce_values` and behind every catalogue
+    component's ``set_value`` (:mod:`qgis_sdk.ui.components`), so a value a
+    form refuses is a value the component refuses, with the same words.
+    """
+    return _coerce(owner, spec, value)
+
+
+def _coerce(owner: str, spec: FieldSpec, value: object) -> object:
     """Convert one submitted value, or refuse it with the expected type."""
     if value is None and spec.nullable:
         return None
     if spec.widget in _STRING_WIDGETS:
         if not isinstance(value, str):
-            raise _refuse(action_id, spec, "a string")
+            raise _refuse(owner, spec, "a string")
         stripped = value.strip()
         if not stripped and spec.required:
-            raise _refuse(action_id, spec, "a non-empty string")
+            raise _refuse(owner, spec, "a non-empty string")
         return stripped
     if spec.widget in _REF_WIDGETS:
-        return _ref(action_id, spec, value)
+        return _ref(owner, spec, value)
     if spec.widget == "colour":
         if not isinstance(value, str) or not COLOUR_PATTERN.match(value.strip()):
-            raise _refuse(action_id, spec, "a #RRGGBB or #RRGGBBAA colour")
+            raise _refuse(owner, spec, "a #RRGGBB or #RRGGBBAA colour")
         return value.strip().lower()
     if spec.widget in _NUMERIC_WIDGETS:
-        return _number(action_id, spec, value)
+        return _number(owner, spec, value)
     if spec.widget == "boolean":
         if isinstance(value, bool):
             return value
         if isinstance(value, str) and value.strip().lower() in ("true", "false"):
             return value.strip().lower() == "true"
-        raise _refuse(action_id, spec, "a boolean")
+        raise _refuse(owner, spec, "a boolean")
     if spec.widget == "choice":
         if value not in spec.choices:
-            raise _refuse(action_id, spec, f"one of {list(spec.choices)!r}")
+            raise _refuse(owner, spec, f"one of {list(spec.choices)!r}")
         return value
-    raise _refuse(action_id, spec, "a renderable value")
+    raise _refuse(owner, spec, "a renderable value")
 
 
-def _ref(action_id: str, spec: FieldSpec, value: object) -> FileRef:
+def _ref(owner: str, spec: FieldSpec, value: object) -> FileRef:
     """Accept the FileRef a picker minted, as the object or its wire shape."""
     try:
         ref = FileRef.from_wire(value)
     except ValueError:
-        raise _refuse(action_id, spec, f"a {spec.widget} FileRef") from None
+        raise _refuse(owner, spec, f"a {spec.widget} FileRef") from None
     if ref.kind != spec.widget:
-        raise _refuse(action_id, spec, f"a {spec.widget} FileRef, not a {ref.kind} one")
+        raise _refuse(owner, spec, f"a {spec.widget} FileRef, not a {ref.kind} one")
     return ref
 
 
-def _number(action_id: str, spec: FieldSpec, value: object) -> object:
+def _number(owner: str, spec: FieldSpec, value: object) -> object:
     """Coerce a numeric field, keeping ``int`` and ``float`` distinct."""
     if isinstance(value, bool):
-        raise _refuse(action_id, spec, "a number")
+        raise _refuse(owner, spec, "a number")
     if spec.widget == "range":
-        number = _number(action_id, _as_number(spec), value)
+        number = _number(owner, _as_number(spec), value)
         low, high = spec.details.get("minimum"), spec.details.get("maximum")
         if low is not None and high is not None and not (low <= number <= high):
-            raise _refuse(action_id, spec, f"a number between {low} and {high}")
+            raise _refuse(owner, spec, f"a number between {low} and {high}")
         return number
     if spec.widget == "integer":
         if isinstance(value, int):
             return value
         if isinstance(value, str) and value.strip().lstrip("+-").isdigit():
             return int(value.strip())
-        raise _refuse(action_id, spec, "an integer")
+        raise _refuse(owner, spec, "an integer")
     if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
+        number = float(value)
+    elif isinstance(value, str):
         try:
-            return float(value.strip())
+            number = float(value.strip())
         except ValueError:
-            raise _refuse(action_id, spec, "a number") from None
-    raise _refuse(action_id, spec, "a number")
+            raise _refuse(owner, spec, "a number") from None
+    else:
+        raise _refuse(owner, spec, "a number")
+    if spec.widget == "metres" and number < 0:
+        raise _refuse(owner, spec, "a distance of 0 or more metres")
+    return number
 
 
 def _as_number(spec: FieldSpec) -> FieldSpec:
@@ -303,8 +320,6 @@ def _as_number(spec: FieldSpec) -> FieldSpec:
     )
 
 
-def _refuse(action_id: str, spec: FieldSpec, expected: str) -> QgisSdkFormError:
+def _refuse(owner: str, spec: FieldSpec, expected: str) -> QgisSdkFormError:
     """Build the one error shape every coercion failure uses."""
-    return QgisSdkFormError(
-        f"action {action_id!r}: field {spec.name} expects {expected}"
-    )
+    return QgisSdkFormError(f"{owner}: field {spec.name} expects {expected}")

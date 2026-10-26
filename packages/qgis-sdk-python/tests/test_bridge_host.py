@@ -927,3 +927,27 @@ def test_host_services_from_a_context_missing_a_service_name_the_gap() -> None:
         HostServices.from_context(context)
 
     assert caught.value.capability == "styles"
+
+
+def test_host_services_from_a_context_share_the_files_authority() -> None:
+    """A ref the page was granted is the ref ``ctx.files`` resolves (TASK-68)."""
+    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.testing import FakeFiles
+
+    scope = ResourceScope()
+    files = FakeFiles(scope, owner="plugin:demo")
+    context = PluginContext(
+        notifications=FakeNotifications(),
+        scope=scope,
+        layers=FakeLayers(layers=[]),
+        project=FakeProject(ids=[]),
+        settings=FakeSettings(values={}),
+        styles=FakeStyles(),
+        files=files,
+    )
+
+    services = HostServices.from_context(context)
+
+    assert services.authority is files.authority
+    explicit = HostServices.from_context(context, authority=HostAuthority())
+    assert explicit.authority is not files.authority

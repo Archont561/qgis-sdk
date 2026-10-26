@@ -33,6 +33,7 @@ LAYER_ORDER = {
     "providers": 2,
     "network": 2,
     "bridge": 2,
+    "files": 2,
     "testing": 3,
 }
 LAYER_PATHS = {
@@ -41,6 +42,7 @@ LAYER_PATHS = {
     "bridge": SOURCE_ROOT / "bridge",
     "core": SOURCE_ROOT / "core",
     "exports": SOURCE_ROOT / "exports.py",
+    "files": SOURCE_ROOT / "files.py",
     "jobs": SOURCE_ROOT / "jobs.py",
     "declarations": SOURCE_ROOT / "declarations.py",
     "environment": SOURCE_ROOT / "environment.py",
@@ -227,3 +229,22 @@ def test_settings_reach_the_profile_only_through_the_qgis_adapter() -> None:
                 if name == "QgsSettings"
             )
     assert offenders == []
+
+
+def test_the_catalogue_reaches_qt_only_by_name_at_mount_time() -> None:
+    """``qgis_sdk.ui`` stays pure; ``Component.mount()`` looks the adapter up by name.
+
+    The one edge from the pure ``ui`` layer to the Qt-importing adapters is
+    the module name ``NATIVE_CATALOGUE``, resolved with ``importlib`` when a
+    component is mounted and never by an import statement, so the layer
+    table above holds and this test keeps the edge visible.
+    """
+    from qgis_sdk.ui import components
+
+    assert components.NATIVE_CATALOGUE == "qgis_sdk.adapters.qgis.components"
+    assert (SOURCE_ROOT / "adapters" / "qgis" / "components.py").is_file()
+    declared = {
+        module for module, _ in imports_in(SOURCE_ROOT / "ui" / "components.py", "ui")
+    }
+    assert not {name for name in declared if name.startswith("qgis_sdk.adapters")}
+    assert not {name for name in declared if name.split(".")[0] in ("qgis", "PyQt6")}

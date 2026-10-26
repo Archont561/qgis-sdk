@@ -33,6 +33,7 @@ from qgis_sdk.core import PluginContext, PluginRuntime, UiContext
 from qgis_sdk.models import QgisSdkError, QgisSdkUiError
 from qgis_sdk.resources import icon_path
 from qgis_sdk.ui.actions import ViewActions
+from qgis_sdk.ui.components import Component
 from qgis_sdk.ui.surfaces import Dock, Surface, describe_surface
 
 __all__ = [
@@ -245,6 +246,9 @@ class SurfaceHost:
             network=context.network if context.has("network") else None,
             actions=ViewActions(runtime, view_id=view_id),
             settings=self._settings(),
+            layers=context.layers if context.has("layers") else None,
+            project=context.project if context.has("project") else None,
+            files=context.files if context.has("files") else None,
         )
         return ui, scope
 
@@ -262,6 +266,13 @@ class SurfaceHost:
         instance.initial = MappingProxyType(dict(initial or {}))
         try:
             widget = instance.build()
+            if isinstance(widget, Component):
+                # A catalogue component is state until mounted: bind it to
+                # this opening's context (unless build() already did) and
+                # let it build the widget that mirrors it.
+                if not widget.attached:
+                    widget.attach(ui)
+                widget = widget.mount()
         except BaseException:
             scope.close()
             raise
