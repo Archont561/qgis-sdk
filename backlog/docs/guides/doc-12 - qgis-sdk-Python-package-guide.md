@@ -18,10 +18,11 @@ TASK-14 and TASK-63 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 
 (generated client and streams), TASK-5 and decision-4 (networking), TASK-1
 (scaffold), TASK-27 and TASK-28 (release
 policy and migration notes, TASK-29 for 0.3.0, TASK-30 for 0.4.0, TASK-31 for
-0.5.0). Status at the time of writing: Python `0.5.0` released
-(`python-v0.5.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
-and prefix.dev); the bridge stays at `0.3.0`, unchanged since its rename
-release and qualified as a pair with 0.5.0.
+0.5.0, TASK-60 for 0.6.0). Status at the time of writing: Python `0.6.0`
+(`python-v0.6.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
+and prefix.dev) released as a pair with the bridge `@archont561/qgis-sdk`
+`0.4.0` (`ts-v0.4.0`), both tagged on one merge commit; the previous pair was
+`0.5.0` + `0.3.0`.
 
 Companion guides: [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
 (TypeScript bridge) and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
@@ -77,9 +78,10 @@ it; `qgis-sdk targets --json` is the machine-readable form.
 <!-- support-matrix:end -->
 
 **The bridge pair.** The TypeScript bridge is qualified as a pair with a
-Python release, never alone: `@archont561/qgis-sdk` 0.3.0 ran inside a real
-`QWebEngineView` against `qgis-sdk` 0.5.0 on the Linux row above
-(`tests/test_reference_example_native.py`, the published package, contract
+Python release, never alone: `@archont561/qgis-sdk` 0.4.0 ran inside a real
+`QWebEngineView` against `qgis-sdk` 0.6.0 on the Linux row above, 0.3.0
+against 0.5.0 before it
+(`tests/test_reference_example_native.py`, the workspace bridge, contract
 version 1 on both sides - `HOST_SCHEMA_VERSION` and
 `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, what `VERSION002` checks a generated
 client against). A plugin author pinning that pair may assume what the

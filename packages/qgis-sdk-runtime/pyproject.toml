@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qgis-sdk-runtime"
-version = "0.5.0"
+version = "0.6.0"
 description = "The qgis-sdk runtime a QGIS plugin imports: declarations, contracts, scoped runtime, services and adapters."
 readme = "README.md"
 requires-python = ">=3.11"
