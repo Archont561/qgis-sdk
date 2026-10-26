@@ -117,3 +117,14 @@ advances, and the contract check proves the pair is coherent.
   [TASK-29](../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md) and
   [TASK-30](../tasks/task-30%20-%20Prepare-and-qualify-0.4.0-release.md) AC #2
   were rewritten to the per-package rule.
+
+## Status review (2026-10-26): a third artifact joins the rule
+
+[decision-47](../decisions/decision-47%20-%20Build-web-UI-on-a-framework-free-store-core-with-per-framework-adapters-and-ship-components-as-qgis-sdk-ui.md) adds `@archont561/qgis-sdk-ui` as a third published package with
+its own `ui` release scope and `ui-v*` tags. The rule here applies unchanged:
+independent versions, each stamped by its own tag on the same merge commit
+when released together. What pairs it is not the plugin-description contract
+(the UI package never touches the wire) but a caret peer range on
+`@archont561/qgis-sdk`, which `release.py verify-versions` checks admits the
+workspace bridge before a UI release is stamped ([TASK-70](../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md), AC 3).
+

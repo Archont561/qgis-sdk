@@ -110,3 +110,19 @@ between minors.
   templates state the runtime range they target.
 - A fourth piece - the QGIS-free preview host (decision-8's "fake preview")
   - would be a tools extra over the runtime's fakes, not a new package.
+
+## Status review (2026-10-26): vendoring stays the only mechanism through 0.x
+
+Asked whether pip inside QGIS's bundled Python could hold several runtime
+versions so plugins could skip vendoring: it cannot - one importable name per
+environment, multi-version eggs are gone, `metadata.txt` names only plugin
+dependencies, and OSGeo4W / the macOS bundle / PEP 668 distros make any
+install step a support burden. Version-suffixed import names were rejected as
+worse than vendoring on every axis but disk. The post-1.0 shape, recorded here
+and not scheduled: the generated `classFactory` tries a shared `qgis_sdk`
+that satisfies the plugin's declared requirement (decision-43 amendment) and
+falls back to the vendored copy otherwise. It becomes worth building only once
+the runtime carries a backward-compatibility promise (decision-25's stability
+clause). The vendored set already excludes `qgis_sdk.testing` and
+`__pycache__` (`bundle/vendor.py`); nothing further to prune today.
+

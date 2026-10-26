@@ -1,0 +1,27 @@
+---
+id: TASK-63
+title: Declare algorithms as plain functions on providers the plugin owns
+status: To Do
+assignee: []
+created_date: '2026-10-26T08:27:00Z'
+labels: []
+milestone: m-5
+dependencies:
+  - TASK-59
+type: enhancement
+ordinal: 63000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+decision-42. Provider.algorithm decorates a plain function: AlgorithmContext first, typed keyword inputs, typed return, id/title derived from the name as for @job. LayerInput, CrsInput and Metres become annotation aliases over the LayerParameter, CrsParameter and MetresParameter markers. A @plugin class lists providers = [...]; PluginRuntime.start() registers them with the host's Processing registry when the context has the native services and unload() removes them; duplicate provider ids are refused by name. invoke(function, ctx, *, progress, cancellation, add_to_project, **inputs) runs one from any context carrying algorithms, project and scope, with a fresh AlgorithmContext per call. The class form (@algorithm on a class, run(inputs), invoke(Class, Request), public register_provider glue) is removed; qgis_sdk.reference becomes functions on reference_provider. describe_plugin and the wire contract do not change.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 @provider.algorithm accepts a function and refuses at decoration a missing leading context parameter, an input outside the parameter kinds, and a duplicate id; describe_algorithm(function) reports inputs, kinds, required names and the result; LayerInput/CrsInput/Metres are aliases and the Annotated[..., LayerParameter()] spelling describes identically; pure tests cover each.
+- [ ] #2 A @plugin class with providers = [...] has them registered in QgsApplication.processingRegistry() after start() and removed after unload() (native test under qgis_app); the same class over the fakes registers nothing; two plugins sharing a provider id are refused by name; describe_plugin output and HOST_FINGERPRINT are unchanged.
+- [ ] #3 invoke(function, ctx, **inputs) runs from a PluginContext, a JobContext and an AlgorithmContext with a fresh AlgorithmContext each time, honours progress, cancellation and add_to_project, and raises the existing QgisSdkAlgorithmRejectedError / QgisSdkAlgorithmCancelledError; the toolbox adapter calls the same function with the same context type (services native suite).
+- [ ] #4 The class form, bare @algorithm, invoke(Class, Request) and public register_provider are gone from the API and the docs; qgis_sdk.reference is rewritten on reference_provider; doc-12 migration notes list every rename; the Python suite, tests/scripts, the example and the native services harness are green.
+<!-- AC:END -->

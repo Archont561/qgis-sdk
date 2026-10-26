@@ -3,9 +3,10 @@ id: TASK-43
 title: Publish a Starlight documentation site from the backlog guides
 status: To Do
 assignee: []
-created_date: '2026-10-24 21:14'
-updated_date: '2026-10-24 21:21'
+created_date: 2026-10-24 21:14
+updated_date: '2026-10-26T08:53:00Z'
 labels: []
+milestone: m-6
 dependencies: []
 references:
   - >-
@@ -38,4 +39,6 @@ Stand up an Astro Starlight site (the pixi-sandbox docs are the model: docs/ in 
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-24: AC #3 pulled forward, it needed no site. tests/scripts/test_readme_shape.py (release-tool suite) holds each README to one H1, the decision-29 section set (Installation, Try it, Example, Develop, Documentation, License), no subsections, an 80-line budget, and a link to a backlog guide; it rejects the former 870-line package README on two counts. AC #1 and #2 remain the Starlight site itself.
+
+Joined m-6 (0.7.0) on 2026-10-26: the Storybook static build of decision-46 publishes with this site.
 <!-- SECTION:NOTES:END -->

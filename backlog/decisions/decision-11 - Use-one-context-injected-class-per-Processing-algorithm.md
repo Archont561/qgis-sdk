@@ -111,3 +111,16 @@ non-destructive output stays the SDK's, and the host owns the destination.
 `register_provider(...)` and keeps the returned bridge. Nothing here gives an
 algorithm its own GUI beyond QGIS's generated dialog, and processing these on a
 worker thread is still unqualified.
+
+## Status review (2026-10-26): authoring form superseded by decision-42
+
+The class-per-algorithm form this decision proposed - `run(inputs)` over a
+request dataclass, `self.ctx` held by the instance - is replaced by a plain
+function on a provider with the `AlgorithmContext` injected first
+([decision-42](../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md)), the shape `@job` took in decision-38. What this
+decision settled about *execution* carries over unchanged: a fresh context per
+invocation, outputs copied into the destination the user chose,
+`FlagNoThreading` until worker-thread execution is qualified, cancellation at
+phase boundaries. The open questions listed in the part-2 review (mid-flight
+cancellation, thread affinity, `createInstance` phases) remain open under
+decision-42; this record stays `proposed` as their home and is not promoted.

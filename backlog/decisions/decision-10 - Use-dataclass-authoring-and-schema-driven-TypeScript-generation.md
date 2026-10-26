@@ -2,7 +2,7 @@
 id: decision-10
 title: Use dataclass authoring and schema driven TypeScript generation
 date: '2026-10-16 07:43'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -257,3 +257,23 @@ type to describe.
 
 Status unchanged: this decision stays `proposed`, pending TASK-17's real generated
 TypeScript.
+
+## Status review (2026-10-26): promoted to `accepted`
+
+The 2026-10-24 review tied promotion to TASK-17; TASK-17 is `Done` (0.3.0)
+and the generator has since been through the rename (0.4.0), the `tuple` and
+`Annotated` amendments above and the capability-attribute work of
+decision-39. The status moves to `accepted`:
+
+- Dataclasses with the documented typing subset are the only authoring
+  surface; unsupported annotations fail with a named error rather than
+  becoming `any`.
+- `qgis-sdk bridge generate` writes deterministic TypeScript (DTOs,
+  operation maps, clients, event payloads, validators) with stale-output
+  detection in `check`; the handshake refuses a mismatched contract
+  fingerprint; both languages validate the shared vectors independently.
+
+The validation-backend question in the Decision section was settled by the
+closeout: the in-tree describer, not apischema or Pydantic. decision-44 adds
+a second generated module (the typed schema that `QgisSdk.fromBridgeSchema`
+consumes) on top of this generator; it does not replace it.

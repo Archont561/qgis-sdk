@@ -1,0 +1,34 @@
+---
+id: TASK-65
+title: Scaffold the clean project and migrate the reference plugin
+status: To Do
+assignee: []
+created_date: '2026-10-26T08:28:00Z'
+updated_date: '2026-10-26T09:23:00Z'
+labels: []
+milestone: m-5
+dependencies:
+  - TASK-64
+type: enhancement
+ordinal: 65000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+decisions 42 and 43 reach the author. qgis-sdk new writes pyproject.toml ([project], [tool.qgis-sdk] plugin/qgis-minimum-version, [tool.qgis-sdk.web] with --web), README.md, .gitignore, <plugin>/__init__.py (empty), <plugin>/plugin.py (the @plugin class with the two starter actions and, with --algorithm, one provider and one function algorithm wired to an action), tests/test_plugin.py over the SDK fakes, and the unchanged web/ app. metadata.txt, webview.py, the Desktop wrapper, build_context and MessageBarNotifications leave the templates. examples/simple migrates: the buffer workflow's BufferLayer becomes a function on a provider the plugin lists, host files are deleted, the harnesses and test-reference-example follow. Docs: doc-12 (new, check, build, dev sections and the migration), doc-14 (harness notes), README quick start, decision-11 status review (superseded for authoring).
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 qgis-sdk new produces exactly the file list of decision-43 for plain, --web and --algorithm projects (plan tests); the starter tests pass without QGIS; check, bridge generate --check, build and the scaffold-desktop / scaffold-web opt-in harnesses pass on the generated projects.
+- [ ] #2 examples/simple has no metadata.txt, webview.py or classFactory, declares providers = [...] with the buffer algorithm as a function, and test-reference-example plus the QGIS_SDK_REFERENCE=1 harness are green; the generated bridge.ts is unchanged.
+- [ ] #3 doc-12, doc-14, the README quick start and the package READMEs describe the new project shape; decision-11 carries a status review pointing at decision-42; the 0.6.0 migration notes list the removed files and the TOML to add.
+- [ ] #4 qgis-sdk new writes [project] dependencies = ["qgis-sdk-runtime>=X.Y,<X.Y+1"] and [dependency-groups] dev = ["qgis-sdk-tools>=X.Y,<X.Y+1"] with X.Y read from the installed distributions at scaffold time (checkout version when none is installed); check on the fresh project reports neither VERSION001 nor VERSION003; the example project declares the same lines (plan tests, scaffold harnesses).
+<!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-26: AC 4 added - the scaffold declares the runtime as an ordinary dependency (decision-43 amendment).
+<!-- SECTION:NOTES:END -->

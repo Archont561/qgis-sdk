@@ -51,3 +51,13 @@ TASK-15 built the job half of this record in `qgis_sdk.jobs`:
   an explicit restart. The harness proves it with a worker thread blocked
   on an event: refused and named while the thread lives, reloaded once the
   event is released.
+
+## Status review (2026-10-26)
+
+Still accepted; the scheduler question left open above is answered by
+decision-53 without changing a rule here. Offloaded steps run as `QgsTask`s
+under `QgsTaskManager` and each job appears as a parent task, but ownership
+stays explicit and view-owned by default, cancellation stays cooperative
+through the same token, the running callable is still never interrupted,
+and reload still quiesces and waits. The manager's cancel button is one
+more caller of `cancel()`, not a new semantics (TASK-82).

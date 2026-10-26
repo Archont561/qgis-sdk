@@ -43,3 +43,21 @@ exists. The *boundary* is accepted in practice; the *theme half of the contract*
 does not exist yet, and promoting now would ratify an API surface nobody has
 designed. Promote when a UI theme surface is defined, or amend this decision to
 cover only the layer-style half that has landed.
+
+## Status review (2026-10-26): theme half assigned to decision-46, stays `proposed`
+
+The layer-style half is implemented as proposed: `styles.apply` through the
+layer service applies packaged QML with compatibility checks, is one of the
+curated host operations (decision-27) and has native service tests; no
+separate style service was introduced because no workflow asked for one.
+
+The UI-theme half had nothing to point at until decision-46, which narrows
+it to the smallest useful thing: CSS variables on the web page seeded from
+the running QGIS palette by `host()`, a `./ui` set of controls that read
+them, and no change to the application's global stylesheet. Native widgets
+keep inheriting the QGIS palette; no QSS is shipped. Rich declarative themes
+and CSS/QSS equivalence stay out, as the Decision section already said.
+
+**Promotion condition:** promote when TASK-70 lands the palette tokens and
+`./ui`; the status review at that point names the variables as the theme
+surface and this decision is read with that narrowing.

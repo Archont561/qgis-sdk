@@ -2,7 +2,7 @@
 id: decision-9
 title: Declare allowlisted typed bridge endpoints with runtime owned routers
 date: '2026-10-16 07:43'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -38,3 +38,27 @@ ADR-18 accepts a broad host capability surface, host-enforced per-view allowlist
 ## Proposed Tauri-inspired invocation refinement (2026-10-16)
 
 [decision-23](decision-23%20-%20Adapt-Tauri-invocation-resource-and-testing-patterns-to-QWebChannel.md) proposes one narrow dispatcher boundary, generated typed clients, trusted host caller identity, distinct request/event/stream semantics, ownership-aware resource release and injected transport mocks. This extends rather than replaces the accepted permission, compatibility, error and cancellation policies. Native QWebEngine evidence remains separate from mock conformance.
+
+## Status review (2026-10-26): promoted to `accepted`
+
+The bridge has run three releases on this design (0.3.0 → `ts-v0.3.0`), so
+the status moves to `accepted`:
+
+- Operation IDs are declared, stable and independent of method names;
+  requests carry IDs and named argument objects; results and errors are
+  mutually exclusive with structured codes; events are typed separately;
+  handles are opaque, session-scoped and expire (`bridge/dispatch.py`,
+  `bridge/streams.py`, `bridge/resources.py`).
+- Authority is per view and deny-by-default on the Python host
+  (`test_bridge_authority.py`); no `eval`, `iface` or raw Qt object ever
+  crosses `QWebChannel`; the curated host surface of decision-27 is the only
+  way a page reaches services, and decision-43 makes its grants explicit in
+  `pyproject.toml` (none by default).
+- One channel per transport with readiness, timeouts, disposal and
+  reconnection; plugin reload invalidates the previous generation; scheduling
+  and thread affinity were decided separately (decision-21) before async
+  handlers were allowed, exactly as the last paragraph asked.
+
+decision-44 changes the *authoring* side of the client (one generated
+schema module, `QgisSdk.fromBridgeSchema`) and leaves the wire, the
+authority model and the handle rules untouched.

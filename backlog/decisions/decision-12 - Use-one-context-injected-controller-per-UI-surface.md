@@ -35,3 +35,22 @@ opening, or when this decision is narrowed by amendment to cover only the contex
 seam that already exists. Do not promote it on the strength of `UiContext` alone:
 the Consequences section's Qt and real-Desktop test obligations are unmet, and
 TASK-33 still owns the display-dependent qualification.
+
+## Status review (2026-10-26): narrowed by decision-45, stays `proposed`
+
+decision-45 settles the controller half differently from the proposal above:
+there is no decorated controller class per dialog or dock. Surfaces are named
+by an action (`@action(dialog=Cls)` / `@action(dock=Cls)`), a surface class is
+a plain class with `build() -> QWidget` that receives `UiContext` in its
+constructor, and decision-46 adds three standard surfaces (`DeclaredForm`,
+`JobProgressDock`, `LogPanel`) plus `ctx.ui.form`. What survives from this
+decision is the context seam that already exists (`UiContext` with
+notifications, `view`, its own `ResourceScope`), the "new dialog per
+opening, one dock per runtime, hide distinct from dispose" lifecycle and the
+"request closure, never destroy synchronously" rule, all of which decision-45
+restates.
+
+**Promotion condition:** promote when TASK-67 lands the `dialog=`/`dock=`
+surface classes under a `QgsApplication`, with the Decision section read as
+narrowed to the context seam and the surface lifecycle. The "decorated
+controller class" wording is superseded and should not be implemented.
