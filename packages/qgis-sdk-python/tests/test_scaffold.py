@@ -8,6 +8,7 @@ derivation against the generated manifest instead of generated files.
 
 import ast
 import configparser
+import os
 import subprocess
 import sys
 import tomllib
@@ -273,9 +274,11 @@ def test_the_starter_tests_pass_in_a_bare_interpreter(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        # The parent's environment stays (Windows needs SYSTEMROOT to start
+        # Python at all); only the SDK sources are put in front.
         env={
-            "PATH": "",
-            "PYTHONPATH": ":".join(map(str, layers.SOURCE_ROOTS)),
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(map(str, layers.SOURCE_ROOTS)),
         },
     )
 
