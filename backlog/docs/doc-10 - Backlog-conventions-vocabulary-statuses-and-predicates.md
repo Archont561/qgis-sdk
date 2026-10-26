@@ -35,14 +35,20 @@ field does, so a "task that ratified this decision" is always an *inbound*
 ### Identity rules
 
 - **A milestone ID is not a version.** IDs are allocated in planning order and
-  only happen to match release order today: `m-4` is 0.5.0, `m-5` is 0.6.0 and
-  `m-6` is 0.7.0. Until 2026-10-24 the first two were inverted (`m-4` held
+  only happen to match release order today: `m-4` is 0.5.0, `m-5` is 0.6.0,
+  `m-6` is 0.7.0 and `m-7` is 0.8.0. Until 2026-10-24 the first two were inverted (`m-4` held
   0.6.0 and `m-5` held 0.5.0), which read as "the fourth milestone ships the
   sixth release"; the IDs were swapped rather than the targets, and the tasks
   moved with their version. The same happened on 2026-10-25 when 0.6.0 was
   re-pointed to the API-ergonomics release: it took `m-5`, and the deferred
-  native-compute research moved to 0.7.0 as `m-6`. Read the title, never infer
-  the release from the number.
+  native-compute research moved to 0.7.0 as `m-6`. And again on 2026-10-26,
+  when 0.7.0 became the UI-toolkit release (decision-46): `m-6` was renamed in
+  place through `milestone rename` (which re-points the tasks' `milestone:`
+  fields), and the deferred research moved on to 0.8.0 as a new `m-7`, taking
+  TASK-10 and a fresh gate (TASK-71) with it while TASK-32 stayed as the
+  0.7.0 gate and was rewritten. A deferred reservation never keeps a number
+  that a shipping release needs. Read the title, never infer the release from
+  the number.
 - **The file name is the record's display name, not its identity.** Renaming a
   task's title through the CLI does not rename its file; the `id:` field is the
   identity, so a mismatched file name is cosmetic (fix it with `mv`, as done for

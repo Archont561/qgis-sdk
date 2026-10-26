@@ -2,7 +2,7 @@
 id: decision-8
 title: Separate check test dev and build workflows
 date: '2026-10-16 07:43'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -51,3 +51,23 @@ dev server on loopback only for a project with a web UI, handing its origin
 to the QGIS process as `QGIS_SDK_DEV_SERVER`; the generated view honours the
 variable, a build never does. Source watching with automatic Python reload
 stays behind decision-15 and TASK-21.
+
+## Status review (2026-10-26): promoted to `accepted`
+
+The four commands have shipped as described and the boundaries held through
+0.5.0, so the status moves to `accepted`:
+
+- `check` (TASK-16) is non-mutating, QGIS-free by default and emits stable
+  diagnostic codes; `test` (TASK-26) is the thin environment-aware pytest
+  runner; `dev` (TASK-6, TASK-21, TASK-61) stages into an isolated profile
+  and reloads by unloading owned resources; `build` (TASK-8) calls the shared
+  check API, generates the adapters and produces the installable ZIP without
+  installing or publishing.
+- Build consumes the check API in-process, not the CLI; stale generated
+  output is detected rather than trusted; the CLI remains argument parsing
+  over the public API with its runtime on `ctx.obj` (decision-34).
+
+The one part still moving is *what* `build`/`dev` generate: decision-43
+extends the generated set with `metadata.txt`, the `classFactory` module
+and the page view (TASK-64). That is more of the same boundary, not a change
+to it.

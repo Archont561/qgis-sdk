@@ -2,7 +2,7 @@
 id: decision-7
 title: Use layered pytest fixtures properties and behavioural contracts
 date: '2026-10-16 07:43'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -29,3 +29,28 @@ Keep pure tests collectable without QGIS: markers alone cannot stop top-level na
 - Separate pure, Qt/QGIS, Desktop and optional WebEngine gates with visible runtime diagnostics.
 - Fixture names and exact pytest registration/layout remain provisional; avoid surprising auto-loading in unrelated suites.
 - CI uses bounded reproducible Hypothesis profiles, larger exploration where useful, and regression cases for discovered failures. Coverage alone is not evidence of contract correctness.
+
+## Status review (2026-10-26): promoted to `accepted`
+
+Re-checked while re-planning the milestones after 0.5.0. Everything the
+Decision section proposes now exists in the tree, so the status moves to
+`accepted`:
+
+- The pure harness is `qgis_sdk.testing` (fakes behind every service
+  contract, captured calls, scripted network replies, a deterministic
+  scheduler) and the opt-in native fixtures are `qgis_app` /
+  `webengine_profile` in `packages/qgis-sdk-python/tests/conftest.py`, which
+  skip on QGIS-free runners instead of importing `qgis` at collection time.
+- The three layers are all present and run in the gate: ordinary pytest
+  examples, Hypothesis properties (16 modules, including the stream-ordering
+  state machine in `test_bridge_streams_properties.py`) and pytest-bdd
+  scenarios under `tests/features/` with `bridge_steps.py`.
+- Shared contract tests run against fakes and, behind
+  `QGIS_SDK_NATIVE_SERVICES=1`, against the native adapters; the harnesses
+  are opt-in environment variables, one per process, and an explicitly
+  requested but unavailable runtime fails the run rather than skipping it.
+- Python and TypeScript validate the same checked-in bridge vectors
+  independently (`tests/contracts/` on both sides, decision-10/23).
+
+Direct pytest stays the primary route; `qgis-sdk test` is the thin wrapper
+decision-8 asked for. Nothing in the Decision section is unimplemented.

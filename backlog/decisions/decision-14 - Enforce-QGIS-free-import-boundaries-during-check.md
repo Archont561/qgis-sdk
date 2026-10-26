@@ -2,7 +2,7 @@
 id: decision-14
 title: Enforce QGIS free import boundaries during check
 date: '2026-10-16 08:05'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -48,3 +48,23 @@ and `ARCH001` with path/line/column, rule and remediation, treats module, class,
 (`[tool.qgis-sdk.check] native-modules`, `--native`). The status stays
 `proposed` for the half of the promotion condition that remains: `qgis-sdk build`
 (TASK-21) calling `check_project` in-process.
+
+## Status review (2026-10-26): promoted to `accepted`
+
+Implemented by TASK-16 and enforced in every gate since 0.4.0, so the status
+moves to `accepted`:
+
+- `qgis_sdk_tools.check.imports` emits QGIS001 and ARCH001 from an AST walk
+  that covers module, class, `try`/`except` and conditional scope and
+  honours `TYPE_CHECKING` guards; `test_check_imports.py` is its test.
+- The SDK applies the rule to itself: `test_pure_imports.py` scans the tools
+  tree for literal `PyQt6`/`qgis` imports (adapters load through
+  `importlib.import_module` tables), and a subprocess test proves the pure
+  packages import without QGIS present.
+- Runtime composition picks the QGIS adapters; pure tests pick fakes
+  (decision-6/7); runtime discovery in the CLI establishes PyQGIS
+  importability and never installs QGIS.
+
+decision-43's rule that the author's project carries no `webview.py`,
+`metadata.txt` or `classFactory` is the same boundary seen from the author's
+side: QGIS-specific entry points are generated, never written by hand.

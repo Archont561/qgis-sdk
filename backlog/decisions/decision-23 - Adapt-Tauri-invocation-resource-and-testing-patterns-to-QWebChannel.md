@@ -2,7 +2,7 @@
 id: decision-23
 title: Adapt Tauri invocation resource and testing patterns to QWebChannel
 date: '2026-10-16 09:11'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -57,3 +57,27 @@ Status stays `proposed`: the invocation, authority, stream and resource patterns
 are implemented and tested, but the Qt half of the adapter has not yet carried a
 real page's traffic (TASK-22), and this decision should not read as qualified
 before that happens.
+
+## Status review (2026-10-26): promoted to `accepted`
+
+The patterns borrowed here are what the TypeScript package is made of, so the
+status moves to `accepted`:
+
+- A small transport-independent kernel (`bridge.ts`) under generated
+  operation-specific clients; raw `invoke` is not public API.
+- One narrow `QWebChannel` endpoint to a Python dispatcher; caller view,
+  origin and runtime generation come from host-owned session state, never
+  from the request body (`test_bridge_authority.py`).
+- Requests, state subscriptions and operation-scoped streams are separate,
+  with ordered sequence scope, terminal events, bounded buffering and
+  explicit coalescing (`bridge/streams.py`, `ScriptedStream`).
+- Ownership-aware release: closing a subscription disconnects it, releasing a
+  borrowed layer handle never removes the layer (decision-21, 27).
+- The injected-transport harness is `createBridgeHarness` in `./testing`
+  (typed handlers, captured calls, scripted faults and events, leak and
+  unmet-expectation checks) and it is what decision-46 mounts Storybook on.
+- Timeouts and `AbortSignal` are distinguished from acknowledged cancellation;
+  unknown-outcome invocations are not retried.
+
+decision-44's `QgisSdk.fromBridgeSchema` is the "generated operation-specific
+public client" of the first paragraph in its final shape.
