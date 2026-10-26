@@ -43,6 +43,7 @@ from .errors import (
     QgisSdkUnsupportedCapabilityError,
     QgisSdkValidationIssue,
 )
+from .files import FILE_REF, FILE_REF_KINDS, FileRef
 from .layers import GeometryType, VectorExport, VectorLayerInfo
 from .limits import MAX_SAFE_INTEGER
 from .network import (
@@ -55,25 +56,50 @@ from .network import (
     Response,
 )
 from .parameters import (
+    COLOUR_PATTERN,
+    Colour,
+    ColourParameter,
     CrsInput,
     CrsParameter,
+    DirectoryInput,
+    DirectoryParameter,
+    FieldInput,
+    FieldParameter,
+    FileInput,
+    FileParameter,
     LayerInput,
     LayerParameter,
     Metres,
     MetresParameter,
+    ParameterKind,
+    Range,
+    RangeParameter,
+    parameter_kinds,
 )
 from .styles import StyleSpec
 
 __all__ = [
+    "COLOUR_PATTERN",
     "DEFAULT_MAX_BODY_BYTES",
     "DEFAULT_MAX_REDIRECTS",
     "DEFAULT_TIMEOUT_SECONDS",
+    "FILE_REF",
+    "FILE_REF_KINDS",
     "MAX_SAFE_INTEGER",
     "AlgorithmRequest",
     "BufferRequest",
     "CentroidRequest",
+    "Colour",
+    "ColourParameter",
     "CrsInput",
     "CrsParameter",
+    "DirectoryInput",
+    "DirectoryParameter",
+    "FieldInput",
+    "FieldParameter",
+    "FileInput",
+    "FileParameter",
+    "FileRef",
     "GeometryType",
     "Headers",
     "LayerInput",
@@ -82,6 +108,7 @@ __all__ = [
     "Metres",
     "MetresParameter",
     "NetworkRequest",
+    "ParameterKind",
     "QgisSdkAlgorithmCancelledError",
     "QgisSdkAlgorithmRejectedError",
     "QgisSdkAuthenticationError",
@@ -122,8 +149,11 @@ __all__ = [
     "QgisSdkUnknownHandleError",
     "QgisSdkUnsupportedCapabilityError",
     "QgisSdkValidationIssue",
+    "Range",
+    "RangeParameter",
     "Response",
     "StyleSpec",
     "VectorExport",
     "VectorLayerInfo",
+    "parameter_kinds",
 ]

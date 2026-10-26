@@ -22,11 +22,11 @@ hold a path or a credential.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from qgis_sdk.declarations import ActionDescription
-from qgis_sdk.models import QgisSdkFormError
+from qgis_sdk.declarations import WIRE_KIND_KEYWORD, ActionDescription
+from qgis_sdk.models import COLOUR_PATTERN, FileRef, QgisSdkFormError, parameter_kinds
 
 __all__ = ["FieldSpec", "coerce_values", "form_fields"]
 
@@ -38,13 +38,21 @@ _PRIMITIVE_WIDGETS: dict[str, str] = {
     "boolean": "boolean",
 }
 
-#: Author marker (see ``models.parameters``) -> widget family. The markers say
-#: what the value *means*, which a plain type cannot: a ``str`` layer id and a
-#: ``str`` free-text note are the same JSON Schema and different widgets.
-_MARKER_WIDGETS: dict[str, str] = {"layer": "layer", "crs": "crs", "metres": "metres"}
+#: Kind name (see ``models.parameters``) -> widget family. The kinds say what
+#: the value *means*, which a plain type cannot: a ``str`` layer id and a
+#: ``str`` free-text note are the same JSON Schema and different widgets. The
+#: describer puts the kind on the wire as ``x-qgis-sdk``; ``markers=`` is the
+#: older side channel a host read from the signature and still may.
+_MARKER_WIDGETS: dict[str, str] = {
+    name: kind.widget for name, kind in parameter_kinds().items() if kind.marker
+}
 
-_NUMERIC_WIDGETS = frozenset({"integer", "number", "metres"})
-_STRING_WIDGETS = frozenset({"text", "layer", "crs"})
+_NUMERIC_WIDGETS = frozenset({"integer", "number", "metres", "range"})
+_STRING_WIDGETS = frozenset({"text", "layer", "crs", "field"})
+_REF_WIDGETS = frozenset({"file", "directory"})
+#: Schema keywords copied into ``FieldSpec.details`` for the families that
+#: need more than a name to render: bounds, a parent input, picker filters.
+_DETAIL_KEYS = ("minimum", "maximum", "step", "of", "filters", "alpha")
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +65,7 @@ class FieldSpec:
     required: bool
     nullable: bool = False
     choices: tuple[Any, ...] = ()
+    details: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the specification as a plain dictionary."""
@@ -67,6 +76,10 @@ class FieldSpec:
             "required": self.required,
             "nullable": self.nullable,
             "choices": list(self.choices),
+            "details": {
+                key: list(value) if isinstance(value, tuple) else value
+                for key, value in self.details.items()
+            },
         }
 
 
@@ -77,11 +90,12 @@ def form_fields(
 ) -> tuple[FieldSpec, ...]:
     """Describe every input of ``action`` in declaration order.
 
-    ``markers`` maps a field name to ``"layer"``, ``"crs"`` or ``"metres"`` when
-    the author annotated it; a host reads those from the handler signature,
-    because an ``Annotated`` extra is a host hint and deliberately not part of
-    the wire description. Unknown marker names are refused rather than ignored:
-    a typo in a widget hint should not quietly render a text box.
+    The kind of each input is read from the ``x-qgis-sdk`` annotation the
+    describer put on its schema, so a form built from a page's schema and one
+    built from the Python signature agree. ``markers`` maps a field name to a
+    kind name (``"layer"``) for a host that read the signature itself; it
+    overrides the annotation. Unknown marker names are refused rather than
+    ignored: a typo in a widget hint should not quietly render a text box.
     """
     schema = action.request
     required = set(schema.get("required", ()))
@@ -139,10 +153,21 @@ def _field(
 ) -> FieldSpec:
     """Turn one property schema into a widget specification."""
     concrete, nullable = _concrete(subschema)
+    intent = concrete.get(WIRE_KIND_KEYWORD) or {}
+    if marker is None and intent.get("kind") in _MARKER_WIDGETS:
+        marker = intent["kind"]
     widget = _widget_for(action_id, name, concrete, marker)
     choices: tuple[Any, ...] = ()
     if widget == "choice":
         choices = tuple(concrete["enum"])
+    details = {
+        key: tuple(value) if isinstance(value, list) else value
+        for key, value in {**concrete, **intent}.items()
+        if key in _DETAIL_KEYS
+    }
+    if widget == "integer":
+        # The safe-integer bounds are a wire rule, not an author's range.
+        details = {}
     return FieldSpec(
         name=name,
         label=_label(name),
@@ -150,6 +175,7 @@ def _field(
         required=required and not nullable,
         nullable=nullable,
         choices=choices,
+        details=details,
     )
 
 
@@ -175,7 +201,7 @@ def _widget_for(
         if widget is None:
             raise QgisSdkFormError(
                 f"action {action_id!r}: field {name} has unknown widget marker "
-                f"{marker!r}; use layer, crs or metres"
+                f"{marker!r}; use one of {', '.join(_MARKER_WIDGETS)}"
             )
         return widget
     if "enum" in subschema:
@@ -205,6 +231,12 @@ def _coerce(action_id: str, spec: FieldSpec, value: object) -> object:
         if not stripped and spec.required:
             raise _refuse(action_id, spec, "a non-empty string")
         return stripped
+    if spec.widget in _REF_WIDGETS:
+        return _ref(action_id, spec, value)
+    if spec.widget == "colour":
+        if not isinstance(value, str) or not COLOUR_PATTERN.match(value.strip()):
+            raise _refuse(action_id, spec, "a #RRGGBB or #RRGGBBAA colour")
+        return value.strip().lower()
     if spec.widget in _NUMERIC_WIDGETS:
         return _number(action_id, spec, value)
     if spec.widget == "boolean":
@@ -220,10 +252,27 @@ def _coerce(action_id: str, spec: FieldSpec, value: object) -> object:
     raise _refuse(action_id, spec, "a renderable value")
 
 
+def _ref(action_id: str, spec: FieldSpec, value: object) -> FileRef:
+    """Accept the FileRef a picker minted, as the object or its wire shape."""
+    try:
+        ref = FileRef.from_wire(value)
+    except ValueError:
+        raise _refuse(action_id, spec, f"a {spec.widget} FileRef") from None
+    if ref.kind != spec.widget:
+        raise _refuse(action_id, spec, f"a {spec.widget} FileRef, not a {ref.kind} one")
+    return ref
+
+
 def _number(action_id: str, spec: FieldSpec, value: object) -> object:
     """Coerce a numeric field, keeping ``int`` and ``float`` distinct."""
     if isinstance(value, bool):
         raise _refuse(action_id, spec, "a number")
+    if spec.widget == "range":
+        number = _number(action_id, _as_number(spec), value)
+        low, high = spec.details.get("minimum"), spec.details.get("maximum")
+        if low is not None and high is not None and not (low <= number <= high):
+            raise _refuse(action_id, spec, f"a number between {low} and {high}")
+        return number
     if spec.widget == "integer":
         if isinstance(value, int):
             return value
@@ -238,6 +287,20 @@ def _number(action_id: str, spec: FieldSpec, value: object) -> object:
         except ValueError:
             raise _refuse(action_id, spec, "a number") from None
     raise _refuse(action_id, spec, "a number")
+
+
+def _as_number(spec: FieldSpec) -> FieldSpec:
+    """A range stores an int or a float; coerce as the stored type says."""
+    integral = all(
+        isinstance(spec.details.get(key), int) for key in ("minimum", "maximum")
+    )
+    return FieldSpec(
+        name=spec.name,
+        label=spec.label,
+        widget="integer" if integral else "number",
+        required=spec.required,
+        nullable=spec.nullable,
+    )
 
 
 def _refuse(action_id: str, spec: FieldSpec, expected: str) -> QgisSdkFormError:

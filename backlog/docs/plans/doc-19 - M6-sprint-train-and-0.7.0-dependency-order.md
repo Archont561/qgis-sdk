@@ -6,13 +6,28 @@ created_date: '2026-10-26 09:20'
 ---
 # M6 sprint train and 0.7.0 dependency order
 
-**Status:** Planning; nothing starts before the TASK-60 gate closes 0.6.0.
-This document orders work the m-6 tasks already declare; it adds no scope.
-Sprint membership lives here and in the milestone body, not in task fields
-([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
+**Status:** In progress since 2026-10-26; 0.6.0 closed the same day
+([TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) Done). This document orders work the m-6 tasks already declare; it
+adds no scope. Sprint membership lives here and in the milestone body, not
+in task fields ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
-**Baseline:** measured at the start of sprint 1, on the commit that
-`python-v0.6.0` and `ts-v0.4.0` were tagged on; recorded here then.
+**Baseline (2026-10-26, `0adb47a` = `python-v0.6.0` + `ts-v0.4.0`):** Python
+suite 1650 passed / 43 skipped (QGIS 4.2.3, Qt 6.11.2, CPython 3.14.8);
+`tests/scripts` 248; Bun 234 (bridge) + 10 (alias) + 5 (page); services
+harness 134; `HOST_FINGERPRINT sha256:f96bdf10…`, `HOST_SCHEMA_VERSION 1`,
+`BRIDGE_PROTOCOL_VERSION 1`; three parameter kinds (`layer`, `crs`,
+`metres`) plus the four primitives; `NativeForms`/`DeclaredFormDialog` the
+only native UI; `ctx.notifications.info` only; bridge `./react` only.
+
+**Order as run.** The milestone opened with TASK-68 on instruction ("open
+m-6 with TASK-68"), using the swap section 3 allows: sprint 1 is TASK-68,
+sprint 2 is TASK-69. TASK-68 lands in slices, each a pull request:
+
+| Slice | Content | Status |
+| --- | --- | --- |
+| 68a | kind registry; the six kinds through describer, wire (`x-qgis-sdk`), `form_fields`, declared-form dialog (field/range/colour), Processing (all six, picker refs minted through a `HostAuthority`), dispatcher (`FileRef` inputs); `FileRef` in `models`, `grant_directory`; doc-12/13 notes | done (this PR) |
+| 68b | the eleven catalogue input components on `qgis_sdk.ui` with fake renderings and stable `objectName`s; `ctx.files` resolution of a `FileRef` from plugin code; the desktop adapter sharing one authority with Processing | next |
+| 68c | `Form.for_action`/`from_schema`/`fields`; `NativeForms`/`DeclaredFormDialog` removed with the doc-12 migration; notification levels and `with_action`; UI001 in `check`; the example's buffer dialog from `Form` | after 68b |
 
 ## 1. Where m-6 starts from
 
@@ -93,9 +108,10 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
 
 ## 4. Hygiene to do at sprint start
 
-- Re-measure the baseline and fill in section 0 of this document.
-- If sprint 5 of [m-5](../../milestones/m-5%20-%200.6.0-%E2%80%94-API-ergonomics-function-jobs-and-capability-attributes.md) (TASK-67) slid here, it runs before TASK-68 and the
-  m-6 body's sprint train is amended, not this document's history.
+- ~~Re-measure the baseline and fill in section 0 of this document.~~ Done
+  2026-10-26 (the **Baseline** paragraph above).
+- ~~If sprint 5 of [m-5](../../milestones/m-5%20-%200.6.0-%E2%80%94-API-ergonomics-function-jobs-and-capability-attributes.md) (TASK-67) slid here, it runs before TASK-68.~~ It did not
+  slide: TASK-67 shipped in 0.6.0.
 - Confirm the bridge version the UI package will peer-range on (0.4.0 or
   later) once `ts-v0.4.0` exists; the task AC already refuses a range that
   excludes the workspace bridge.

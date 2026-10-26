@@ -42,6 +42,9 @@ _KNOWN_KEYWORDS = frozenset(
         "pattern",
         "title",
         "description",
+        # The input kind a describer annotated; read by forms and pages,
+        # never by validation (``qgis_sdk.declarations.WIRE_KIND_KEYWORD``).
+        "x-qgis-sdk",
     }
 )
 

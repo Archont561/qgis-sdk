@@ -91,6 +91,45 @@ def test_a_picker_result_becomes_an_opaque_ref_the_view_can_show(
     assert len(ref.id) >= 16
 
 
+def test_a_directory_grant_is_a_directory_ref_that_resolves_to_the_directory(
+    authority: HostAuthority, dispatcher: Dispatcher, tmp_path: Path, dataset: Path
+) -> None:
+    """``DirectoryInput()`` hands a handler a ref, never a path (TASK-68)."""
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    ref = authority.grant_directory(binding, tmp_path, source="picker")
+
+    assert ref.kind == "directory"
+    assert ref.name == tmp_path.name
+    assert ref.operations == ("read",)
+    assert (
+        authority.resolve_file(binding, ref.to_wire(), FileOperation.READ)
+        == tmp_path.resolve()
+    )
+    # A directory ref is not a file ref: the brand is checked, not just the id.
+    with pytest.raises(QgisSdkUnknownHandleError):
+        authority.resolve_file(
+            binding, {**ref.to_wire(), "kind": "file"}, FileOperation.READ
+        )
+    with pytest.raises(QgisSdkBridgeError, match="is not a directory that exists"):
+        authority.grant_directory(binding, dataset)
+    with pytest.raises(QgisSdkBridgeError, match="is not a directory that exists"):
+        authority.grant_directory(binding, tmp_path / "missing")
+
+
+def test_a_directory_ref_goes_stale_when_the_directory_disappears(
+    authority: HostAuthority, dispatcher: Dispatcher, tmp_path: Path
+) -> None:
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    folder = tmp_path / "data"
+    folder.mkdir()
+    ref = authority.grant_directory(binding, folder)
+    folder.rmdir()
+
+    with pytest.raises(QgisSdkStaleHandleError, match="no longer names the directory"):
+        authority.resolve_file(binding, ref.to_wire(), FileOperation.READ)
+
+
 def test_two_grants_for_the_same_file_are_distinct_refs(
     authority: HostAuthority, dispatcher: Dispatcher, dataset: Path
 ) -> None:

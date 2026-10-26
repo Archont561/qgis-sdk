@@ -36,10 +36,24 @@ try:
         QLineEdit,
         QSpinBox,
     )
-    from qgis.gui import QgsMapLayerComboBox, QgsProjectionSelectionWidget
+    from qgis.gui import (
+        QgsColorButton,
+        QgsFieldComboBox,
+        QgsMapLayerComboBox,
+        QgsProjectionSelectionWidget,
+    )
     from qgis_sdk.adapters.qgis import ui as native_ui
     from qgis_sdk.declarations import action, describe_plugin, plugin
-    from qgis_sdk.models import CrsInput, LayerInput, Metres, QgisSdkFormError
+    from qgis_sdk.models import (
+        Colour,
+        CrsInput,
+        FieldInput,
+        FileInput,
+        LayerInput,
+        Metres,
+        QgisSdkFormError,
+        Range,
+    )
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native forms need Qt and QGIS: {error}", allow_module_level=True)
 
@@ -86,6 +100,23 @@ class FormDemo:
             }
         )
         return layer_id
+
+    @action(id="demo.kinds", title="New kinds")
+    def kinds(
+        self,
+        layer: LayerInput,
+        attribute: FieldInput(of="layer"),
+        weight: Range(0.0, 1.0),
+        fill: Colour(),
+    ) -> str:
+        self.calls.append(
+            {"layer": layer, "attribute": attribute, "weight": weight, "fill": fill}
+        )
+        return attribute
+
+    @action(id="demo.file", title="A file")
+    def file(self, source: FileInput(filters=("*.csv",))) -> str:
+        return source.name
 
 
 @dataclass
@@ -140,6 +171,46 @@ def test_a_marker_renders_a_qgis_picker_and_a_metre_spin_box(forms) -> None:
     assert isinstance(dialog.widget("working_crs"), QgsProjectionSelectionWidget)
     assert isinstance(dialog.widget("distance"), QDoubleSpinBox)
     assert dialog.widget("distance").suffix() == " m"
+
+
+def test_field_range_and_colour_render_their_qgis_widgets(forms) -> None:
+    native, _ = forms
+
+    dialog = native.render("demo.kinds")
+
+    picker = dialog.widget("attribute")
+    assert isinstance(picker, QgsFieldComboBox)
+    weight = dialog.widget("weight")
+    assert isinstance(weight, QDoubleSpinBox)
+    assert (weight.minimum(), weight.maximum()) == (0.0, 1.0)
+    assert isinstance(dialog.widget("fill"), QgsColorButton)
+    assert dialog.widget("fill").allowOpacity() is True
+    # The field picker follows the layer picker it belongs to.
+    assert picker.layer() is dialog.widget("layer").currentLayer()
+
+
+def test_a_colour_is_read_back_in_the_wire_spelling(forms) -> None:
+    """Qt names a colour #AARRGGBB; the kind stores #RRGGBBAA."""
+    from PyQt6.QtGui import QColor
+
+    native, _ = forms
+    dialog = native.render("demo.kinds")
+    dialog.widget("fill").setColor(QColor(255, 0, 16, 128))
+    dialog.widget("weight").setValue(0.5)
+
+    spec = next(spec for spec in native.fields("demo.kinds") if spec.name == "fill")
+    weight = next(spec for spec in native.fields("demo.kinds") if spec.name == "weight")
+
+    assert native_ui._read(spec, dialog.widget("fill")) == "#ff001080"
+    assert native_ui._read(weight, dialog.widget("weight")) == 0.5
+
+
+def test_file_fields_wait_for_the_form_component(forms) -> None:
+    """Minting a FileRef needs the host authority the ``Form`` helper carries."""
+    native, _ = forms
+
+    with pytest.raises(QgisSdkFormError, match="FileInput component"):
+        native.render("demo.file")
 
 
 def test_submitted_values_are_coerced_and_dispatched_to_the_handler(forms) -> None:

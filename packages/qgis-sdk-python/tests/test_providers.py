@@ -217,11 +217,18 @@ def test_an_input_outside_the_parameter_kinds_is_refused_naming_it() -> None:
         describe_algorithm(nested)
 
 
-def test_a_literal_input_is_refused_rather_than_guessed() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="cannot express"):
+def test_a_literal_input_is_the_enum_kind() -> None:
+    @_provider().algorithm
+    def mode(ctx: AlgorithmContext, mode: Literal["a", "b"]) -> VectorLayerInfo: ...
+
+    assert describe_algorithm(mode).kinds == {"mode": "enum"}
+
+
+def test_a_literal_of_non_strings_is_refused_rather_than_guessed() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="enum choices must be strings"):
 
         @_provider().algorithm
-        def mode(ctx: AlgorithmContext, mode: Literal["a", "b"]) -> VectorLayerInfo: ...
+        def mode(ctx: AlgorithmContext, mode: Literal[1, 2]) -> VectorLayerInfo: ...
 
 
 def test_a_variadic_input_is_refused() -> None:
@@ -253,11 +260,17 @@ def test_primitives_and_aliases_map_to_their_own_kinds() -> None:
     assert parameter_kind("p", Annotated[int, MetresParameter()]) == "metres"
 
 
-def test_an_annotated_input_still_describes_its_stored_type() -> None:
+def test_an_annotated_input_describes_its_stored_type_and_its_kind() -> None:
     schema = describe_algorithm(buffer_layer).inputs_schema
 
-    assert schema["properties"]["layer_id"] == {"type": "string"}
-    assert schema["properties"]["distance_metres"] == {"type": "number"}
+    assert schema["properties"]["layer_id"] == {
+        "type": "string",
+        "x-qgis-sdk": {"kind": "layer"},
+    }
+    assert schema["properties"]["distance_metres"] == {
+        "type": "number",
+        "x-qgis-sdk": {"kind": "metres"},
+    }
 
 
 def test_a_provider_reports_its_own_id_and_title() -> None:

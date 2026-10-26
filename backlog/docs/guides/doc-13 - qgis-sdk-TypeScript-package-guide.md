@@ -410,6 +410,21 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
 
+## Next minor (unreleased) migration notes
+
+**Parameter kinds on the wire (TASK-68, decision-46 point 1).** A declared
+input the Python side marked (`LayerInput`, `FileInput(filters=)`,
+`Range(min, max)`, ...) carries `"x-qgis-sdk": { kind, ...attributes }` in its
+request schema. `validateAgainstSchema` reads past the keyword (any other
+`x-` keyword is still refused), a regenerated `bridge.schema.ts` documents
+each such field with `/** @qgis-sdk-kind <kind> */` and its
+`CONTRACT_FINGERPRINT` moves - regenerate it with `qgis-sdk bridge generate`.
+`FileRef.kind` is now `"file" | "directory"` (`HostAuthority.grant_directory`
+mints the latter), so `HOST_FINGERPRINT` moved to `sha256:af91deac…`;
+`HOST_SCHEMA_VERSION` and `BRIDGE_PROTOCOL_VERSION` stay at 1. A page passes
+the `FileRef` it received from the host where an action declares
+`FileInput()`; the Python handler receives it as a `FileRef`.
+
 ## 0.2.0 migration notes
 
 `0.2.0` is the first bridge release since `0.1.1` and the first cut under its

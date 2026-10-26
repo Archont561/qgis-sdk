@@ -169,6 +169,35 @@ def test_unsupported_schema_keyword_is_refused() -> None:
         generate_typescript(described)
 
 
+def test_the_kind_annotation_is_accepted_and_documented() -> None:
+    """``x-qgis-sdk`` is the one extension keyword: the page reads the kind."""
+    described = _single(
+        "sites.paint",
+        request={
+            "type": "object",
+            "properties": {
+                "layer": {"type": "string", "x-qgis-sdk": {"kind": "layer"}},
+                "weight": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "x-qgis-sdk": {"kind": "range"},
+                },
+            },
+            "required": ["layer", "weight"],
+            "additionalProperties": False,
+        },
+        result={"type": "null"},
+    )
+
+    rendered = generate_typescript(described)
+
+    assert "layer: string;" in rendered
+    assert "weight: number;" in rendered
+    assert "@qgis-sdk-kind layer" in rendered
+    assert "@qgis-sdk-kind range" in rendered
+
+
 def test_an_object_inside_a_union_is_refused() -> None:
     described = _single(
         "sites.mixed",

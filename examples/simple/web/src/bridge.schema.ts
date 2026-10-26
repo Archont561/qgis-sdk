@@ -5,7 +5,7 @@
 import { type BridgeSchema, defineBridgeSchema } from "@archont561/qgis-sdk";
 
 export const PLUGIN_ID = "simple";
-export const CONTRACT_FINGERPRINT = "sha256:8fefd9fcee0862246805df6d8b5f83e43dd68aa2d4cd8f179d6b66b676d0b6be";
+export const CONTRACT_FINGERPRINT = "sha256:838ea7b3697c29d655bce6f5f3b3024f9af39866c5cf17147358030cf9c2ba4f";
 export const PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -20,8 +20,11 @@ export const OPERATIONS = [
 export type OperationId = (typeof OPERATIONS)[number];
 
 export interface BufferRequest {
+	/** @qgis-sdk-kind metres */
 	readonly distance_metres: number;
+	/** @qgis-sdk-kind layer */
 	readonly layer_id: string;
+	/** @qgis-sdk-kind crs */
 	readonly working_crs: string;
 }
 
@@ -39,6 +42,7 @@ export interface Choose_export_directoryRequest {
 
 export interface Export_layerRequest {
 	readonly file_name: string;
+	/** @qgis-sdk-kind layer */
 	readonly layer_id: string;
 	readonly overwrite?: boolean;
 }
@@ -61,6 +65,7 @@ export interface Open_fixtureResult {
 }
 
 export interface Selected_featuresRequest {
+	/** @qgis-sdk-kind layer */
 	readonly layer_id: string;
 }
 
@@ -90,13 +95,22 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 				"type": "object",
 				"properties": {
 					"layer_id": {
-						"type": "string"
+						"type": "string",
+						"x-qgis-sdk": {
+							"kind": "layer"
+						}
 					},
 					"distance_metres": {
-						"type": "number"
+						"type": "number",
+						"x-qgis-sdk": {
+							"kind": "metres"
+						}
 					},
 					"working_crs": {
-						"type": "string"
+						"type": "string",
+						"x-qgis-sdk": {
+							"kind": "crs"
+						}
 					}
 				},
 				"additionalProperties": false,
@@ -171,7 +185,10 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 				"type": "object",
 				"properties": {
 					"layer_id": {
-						"type": "string"
+						"type": "string",
+						"x-qgis-sdk": {
+							"kind": "layer"
+						}
 					},
 					"file_name": {
 						"type": "string"
@@ -264,7 +281,10 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 				"type": "object",
 				"properties": {
 					"layer_id": {
-						"type": "string"
+						"type": "string",
+						"x-qgis-sdk": {
+							"kind": "layer"
+						}
 					}
 				},
 				"additionalProperties": false,

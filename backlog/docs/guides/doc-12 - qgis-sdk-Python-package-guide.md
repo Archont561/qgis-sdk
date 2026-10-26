@@ -228,7 +228,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | Module | Current contract |
 | :-- | :-- |
 | `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class (TASK-2, TASK-49) |
-| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter` |
+| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
@@ -493,7 +493,15 @@ absent from the result, so the handler's own defaults apply.
 Widget selection follows `models.parameters`: a `LayerInput` (that is,
 `Annotated[str, LayerParameter()]`) becomes a vector-layer combo box, `CrsInput`
 a CRS selector, `Metres` a spin box labelled in metres, a `Literal` a combo
-box, and the rest the obvious primitive widget.
+box, `FieldInput(of=)` a `QgsFieldComboBox` that follows the layer picker it
+belongs to, `Range` a bounded spin box, `Colour()` a `QgsColorButton`, and the
+rest the obvious primitive widget. `form_fields` reads the kind from the
+`x-qgis-sdk` annotation on the action's schema, so a form built from a page's
+schema and one built from the signature agree; `FieldSpec.details` carries the
+bounds, the parent input or the picker filters a widget needs. `FileInput` and
+`DirectoryInput` fields are refused by `DeclaredFormDialog` by name: minting
+their `FileRef` needs the host authority, which the `Form` helper of 0.7.0
+carries and this dialog does not.
 
 The escape hatch is not a second API: `PluginRuntime.actions` is keyed by action
 id and holds ordinary bound methods, so conventional PyQt code can build its own
@@ -716,7 +724,22 @@ refused function keeps no marker. `providers = ...` that is not a list or tuple
 of `Provider` instances, or lists one id twice, is refused when the
 `PluginRuntime` is built.
 
-`Annotated` markers say what an input *means* to the host while the wire schema keeps describing the stored value. `LayerInput` makes an input a vector-layer picker (the picked layer is opened through the same `Layers` service, so it arrives as an owned layer id), `CrsInput` makes it a CRS chooser, and `Metres` gives a distance a metre-labelled, non-negative spin box. The aliases are `Annotated[str, LayerParameter()]`, `Annotated[str, CrsParameter()]` and `Annotated[float, MetresParameter()]`; spell the long form when you want a bound (`Annotated[float, MetresParameter(minimum=1.0)]`) - it describes identically. Plain `str`/`int`/`float`/`bool` inputs become text, integer, double and boolean parameters. Anything else - a dataclass, a list, a `Literal` - is refused at declaration with the input name and the supported kinds.
+`Annotated` markers say what an input *means* to the host while the wire schema keeps describing the stored value. The aliases are the usual spelling; the long form (`Annotated[str, LayerParameter()]`, `Annotated[float, MetresParameter(minimum=1.0)]`) describes identically and is how you add a bound. Each kind is complete across hosts (decision-46 point 1): one marker, one widget family in `qgis_sdk.ui`, one Processing parameter, one `x-qgis-sdk` annotation on the wire. `qgis_sdk.models.parameter_kinds()` is the registry the describers, the form rule and the Processing adapter all read.
+
+| Spelling | Stored | Handler receives | Processing parameter | Widget family |
+| --- | --- | --- | --- | --- |
+| `LayerInput` | `str` | a layer id, opened through `Layers` | `QgsProcessingParameterVectorLayer` | `layer` |
+| `CrsInput` | `str` | an authority code | `QgsProcessingParameterCrs` | `crs` |
+| `Metres` | `float` | metres, bounded at zero | `QgsProcessingParameterNumber` | `metres` |
+| `FileInput(filters=("*.gpkg",))` | `FileRef` | a `file` `FileRef`, never a path | `QgsProcessingParameterFile` (File) | `file` |
+| `DirectoryInput()` | `FileRef` | a `directory` `FileRef` | `QgsProcessingParameterFile` (Folder) | `directory` |
+| `FieldInput(of="layer")` | `str` | a field name of the layer input `of` names | `QgsProcessingParameterField(parentLayerParameterName=of)` | `field` |
+| `Range(0.0, 1.0, step=None)` | `float` (or `int` when both bounds are ints) | a number inside the bounds | `QgsProcessingParameterNumber` with min/max | `range` |
+| `Colour(alpha=True)` | `str` | `#RRGGBB` or `#RRGGBBAA` | `QgsProcessingParameterColor` | `colour` |
+| `Literal["fast", "safe"]` | `str` | one of the choices | `QgsProcessingParameterEnum` | `choice` |
+| `str` / `int` / `float` / `bool` | itself | itself | string / number / number / boolean | `text` / `integer` / `number` / `boolean` |
+
+A marker on a type it does not fit (`Annotated[int, LayerParameter()]`), a `Literal` of non-strings, a `FieldInput` whose `of` is not a layer input of the same declaration, or a bare `FileRef` input without `FileInput`/`DirectoryInput` is refused at declaration with the input name. A dataclass or a list input is still refused for an algorithm (a toolbox has no widget for it); an action may declare one. `FileRef` (`qgis_sdk.models`) is the branded reference of decision-20: the toolbox mints it from the dialog's picker through the host authority for the duration of the run, a page sends the ref the host minted and the handler receives the `FileRef` object, and a wrong-kind ref (a `file` where a `directory` was declared) is refused before the handler runs. Resolving a ref to a path from plugin code arrives with the `FileInput` component of the `Form` helper (TASK-68, next slice).
 
 The bridge builds an `AlgorithmContext` over the dialog's feedback and calls the function through the same `invoke` an action uses, then copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
 
@@ -1579,6 +1602,41 @@ published for the bridge, and no `ts-v*` tag exists.
   `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
+
+## 0.7.0 migration notes (in progress)
+
+**Parameter kinds (decision-46 point 1; TASK-68).** Six kinds join
+`LayerInput`/`CrsInput`/`Metres`: `FileInput(filters=)`, `DirectoryInput()`,
+`FieldInput(of=)`, `Range(min, max)`, `Colour()` and `Literal[...]` choices
+(the table under "Providers" above). What changes for existing code:
+
+- A `Literal[...]` of strings is now the `enum` kind for algorithms: it was
+  refused at declaration in 0.6 and now renders a `QgsProcessingParameterEnum`.
+  Actions and jobs already accepted `Literal`; they are unchanged.
+- Declared inputs with a marker carry `"x-qgis-sdk": {"kind": ...}` in their
+  schema (a `Range` also carries `minimum`/`maximum`). The keyword is accepted
+  by both validators and the generator; a generated `bridge.schema.ts` gains
+  `/** @qgis-sdk-kind ... */` on those fields and its `CONTRACT_FINGERPRINT`
+  moves - regenerate with `qgis-sdk bridge generate`. Pages reading
+  `request.properties[...]` see one more key.
+- `FileRef` moved to `qgis_sdk.models` (`qgis_sdk.bridge.authority` still
+  re-exports it) and gained `kind = "directory"`; `FILE_REF` lists both kinds,
+  so the host contract's `HOST_FINGERPRINT` moved (`sha256:af91deac…`); the
+  schema and protocol versions did not. `HostAuthority.grant_directory` mints a
+  directory read ref; `resolve_file` checks the ref's kind against the grant.
+- `NativeProcessing(..., authority=)` and `register_provider(...,
+  authority=)` accept the host authority the toolbox mints picker refs
+  through; without one each provider owns its own.
+- `FieldSpec` gained `details`; `FieldSpec.to_dict()` emits it.
+- `qgis_sdk.algorithms.input_refusal` is the one rule a toolbox run, a page
+  call and a form use to refuse a value; `parameter_kind` keeps its name and
+  now delegates to `qgis_sdk.declarations.resolve_kind`.
+
+Still to land in 0.7.0 from the same task: the catalogue input components
+(`LayerPicker`, `FieldPicker`, `CrsPicker`, `FileInput`, `DirectoryInput`,
+`Distance`, `Number`, `Text`, `Toggle`, `Choice`, `Colour`), the `Form`
+helper replacing `NativeForms`/`DeclaredFormDialog`, `ctx.files` resolution
+of a `FileRef` from plugin code, notification levels and `with_action`.
 
 ## 0.6.0 migration notes
 

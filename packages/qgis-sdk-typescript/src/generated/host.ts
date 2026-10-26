@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:f96bdf1046434de3c5eae01efb34c8ad2bcd1cf241a3dc42f6c4b613dc7d7d6f";
+export const HOST_FINGERPRINT = "sha256:af91deacf225dc28b6a3bcf97eb2bfa2b6031928ba594b03d4a7703155981689";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -110,7 +110,7 @@ export interface FetchRequest {
 
 export interface FileRef {
 	readonly id: string;
-	readonly kind: "file";
+	readonly kind: "file" | "directory";
 	readonly name?: string;
 	readonly operations?: readonly ("read" | "write")[];
 }
@@ -236,7 +236,7 @@ export function FileRef(value: unknown, strict = false): value is FileRef {
 	if (value["id"] !== undefined && !(typeof value["id"] === "string" && new RegExp("^(?:[a-f0-9]{16,64})$").test(value["id"]))) {
 		return false;
 	}
-	if (value["kind"] !== undefined && !((value["kind"] === "file"))) {
+	if (value["kind"] !== undefined && !((value["kind"] === "file" || value["kind"] === "directory"))) {
 		return false;
 	}
 	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {

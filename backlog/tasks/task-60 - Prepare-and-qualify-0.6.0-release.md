@@ -1,10 +1,10 @@
 ---
 id: TASK-60
 title: Prepare and qualify 0.6.0 release
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-25 23:27'
-updated_date: '2026-10-26 18:42'
+updated_date: '2026-10-26 19:15'
 labels: []
 milestone: m-5
 dependencies:
@@ -31,11 +31,11 @@ Explicit release gate, not evidence of release or permission to publish. 0.6.0 i
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Required 0.6.0 work has verified outcomes and relevant test/artifact evidence: Python suite, tests/scripts, the example project and the opt-in harnesses the two changes touched are green on the gate commit; the doc-12 0.6.0 migration note names every removed or renamed symbol.
-- [ ] #2 Use valid SemVer and prereleases such as 0.6.0-rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves to >=0.6.0,<0.7) and keep protocol versions independent.
-- [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a 0.5-style project reports the API changes rather than crashing.
-- [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
-- [ ] #5 The bridge pair is confirmed with evidence: @archont561/qgis-sdk 0.4.0 (TASK-61, decision-40) is gated with the same run - Bun tests, typecheck, Biome, release.py verify-versions agreeing on contract version 1 in both languages - and stamped and tagged ts-v0.4.0 on the same merge commit only on the same explicit authorization; HOST_FINGERPRINT, HOST_SCHEMA_VERSION and BRIDGE_PROTOCOL_VERSION are shown unchanged since ts-v0.3.0, and the record states that bridge 0.4.0 ran against the 0.6.0 runtime.
+- [x] #1 Required 0.6.0 work has verified outcomes and relevant test/artifact evidence: Python suite, tests/scripts, the example project and the opt-in harnesses the two changes touched are green on the gate commit; the doc-12 0.6.0 migration note names every removed or renamed symbol.
+- [x] #2 Use valid SemVer and prereleases such as 0.6.0-rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves to >=0.6.0,<0.7) and keep protocol versions independent.
+- [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a 0.5-style project reports the API changes rather than crashing.
+- [x] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
+- [x] #5 The bridge pair is confirmed with evidence: @archont561/qgis-sdk 0.4.0 (TASK-61, decision-40) is gated with the same run - Bun tests, typecheck, Biome, release.py verify-versions agreeing on contract version 1 in both languages - and stamped and tagged ts-v0.4.0 on the same merge commit only on the same explicit authorization; HOST_FINGERPRINT, HOST_SCHEMA_VERSION and BRIDGE_PROTOCOL_VERSION are shown unchanged since ts-v0.3.0, and the record states that bridge 0.4.0 ran against the 0.6.0 runtime.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -52,4 +52,6 @@ TASK-66 landed (sprint 2): bridge 0.4.0 carries QgisSdk.fromBridgeSchema, the sc
 Gate run 2026-10-26 on main 2763cad (TASK-67 merge, #98); full record in doc-14 '0.6.0 release gate (TASK-60, 2026-10-26)'. Unstamped tree. AC 1 evidence: all nine milestone tasks Done; static gate, bun run test 5/5 (bridge 234, alias 10, page 5, Python 1675/43), coverage 95.58% / 98.55%, tests/scripts 248, twelve opt-in harnesses green (lifecycle 5, desktop adapter 22, coexistence 23, scaffold desktop 10, services smoke 7, scheduler 11, WebEngine 9, services 134, scaffold web 8, devtools 9, bundle 1, reference 5), example check/test/--target qgis clean; AST diff of public names python-v0.5.0..main matched against doc-12's 0.6.0 note (RunSignature/describe_run_method added to it). AC 2: plan --bump minor from python-v0.5.0 -> python-v0.6.0 (5 breaking, 14 features) and from ts-v0.3.0 -> ts-v0.4.0 (2 breaking, 4 features, 1 fix); verify-versions agrees on 0.5.0/0.3.0 and contract 1 on the unstamped tree. AC 3: twine-checked wheels, clean CPython 3.11.2 venv install (60/62 modules QGIS-free, pip check clean, new --ui native/check/test/targets/build from the installed package, ZIP vendoring verified under python -S); 0.5-style project (scaffolded from the python-v0.5.0 worktree) under today's check reports ENTRY002/META001/PROJECT002/VERSION003, no crash. AC 5: HOST_FINGERPRINT sha256:f96bdf10..., HOST_SCHEMA_VERSION 1, BRIDGE_PROTOCOL_VERSION 1 identical at ts-v0.3.0, python-v0.5.0 and main; bridge 0.4.0 from this tree ran against the 0.6.0 runtime in the reference harness's real QWebEngineView. Not run: the Conda build (conda-forge unreachable from the sandbox). AC 4: no approval yet; nothing stamped, tagged or published. ACs stay unchecked until the tag's release.yml run is green.
 
 Release authorised 2026-10-26 ('release' after the gate record merged as #99 -> adc8fa0). Stamp PR on branch arena/7fcf0fef-qgis-sdk: python 0.6.0 (nine manifest entries, tools range >=0.6.0,<0.7, example windows >=0.6,<0.7) and typescript 0.4.0 (package.json, alias, scaffold pin). Stamped tree: static gate clean, bun run test 5/5 (Python 1650/43), tests/scripts 248, wheels twine-clean (kit b6861c99..., runtime 8d5143c4..., tools 10894bf4...), clean CPython 3.11.2 install with pip check clean, scaffold writes the 0.6/0.4 pins. Next: on 'Merge', tag python-v0.6.0 and ts-v0.4.0 (annotated, notes prepared) on the merge commit, watch both release.yml runs, verify PyPI/npm/GitHub Release artifacts, then check ACs.
+
+Released 2026-10-26: PR #100 (stamp) merged as 0adb47a; annotated tags python-v0.6.0 and ts-v0.4.0 on it; release.yml runs 40381881731 (build, conda, pypi, github-release) and 40381881508 (build, npm, github-packages, github-release) green. PyPI serves qgis-sdk, qgis-sdk-runtime, qgis-sdk-tools 0.6.0 with the same sha256 as the wheels built in the gate (b6861c99..., 8d5143c4..., 10894bf4...); pip install qgis-sdk==0.6.0 into a fresh CPython 3.11.2 venv resolves cleanly (pip check clean, qgis-sdk targets/new/check from the installed package). npm serves @archont561/qgis-sdk@0.4.0 and qgis-sdk@0.4.0 as latest; bun add of both resolves, QgisSdk.fromBridgeSchema callable, HOST_FINGERPRINT unchanged. GitHub Releases carry wheels + three .conda + SHA256SUMS and the two tarballs + SHA256SUMS; prefix.dev attested by the run log only. AC 1: nine milestone tasks Done with doc-14 evidence; migration note completeness checked by AST diff. AC 2: 0.6.0 / 0.4.0 stamped by release.py, tools range >=0.6.0,<0.7, contract version 1 independent. AC 3: verify-versions, twine, clean install, 0.5-style project reported by name. AC 4: approval ('release' after #99), artifacts and runs recorded in doc-14; no 1.0 promise, nothing automatic, Conda build named as run only in the tag workflows. AC 5: bridge 0.4.0 gated with the same run (Bun 234, typecheck, biome, verify-versions contract 1), tagged ts-v0.4.0 on the same merge commit, fingerprints unchanged since ts-v0.3.0, ran against the 0.6.0 runtime in a real QWebEngineView. Open for the owner: yank the 0.0.0 PyPI placeholders, deprecate 0.0.0-stage on npm.
 <!-- SECTION:NOTES:END -->
