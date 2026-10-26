@@ -10,6 +10,7 @@ from .contracts import (
     ViewControl,
     Workers,
 )
+from .files import Files
 from .layers import Layers
 from .network import BlockingNetwork, Deliver, Network, NetworkTransport, Params
 from .processing import Processing, ProviderRegistration
@@ -23,6 +24,7 @@ __all__ = [
     "Cancellation",
     "Deliver",
     "DesktopAccess",
+    "Files",
     "Layers",
     "Network",
     "NetworkTransport",

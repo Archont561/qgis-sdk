@@ -21,6 +21,7 @@ from qgis_sdk.services import (
     Algorithms,
     Cancellation,
     DesktopAccess,
+    Files,
     Layers,
     Network,
     Notifications,
@@ -136,6 +137,7 @@ class PluginContext(_Context):
     __slots__ = (
         "_algorithms",
         "_desktop",
+        "_files",
         "_layers",
         "_network",
         "_processing",
@@ -159,6 +161,7 @@ class PluginContext(_Context):
         "workers",
         "processing",
         "ui",
+        "files",
     )
 
     notifications: Notifications
@@ -173,6 +176,7 @@ class PluginContext(_Context):
     workers: Capability[Workers] = Capability()
     processing: Capability[Processing] = Capability()
     ui: Capability[Ui] = Capability()
+    files: Capability[Files] = Capability()
 
     def __init__(
         self,
@@ -188,6 +192,7 @@ class PluginContext(_Context):
         workers: Workers | None = None,
         processing: Processing | None = None,
         ui: Ui | None = None,
+        files: Files | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -202,6 +207,7 @@ class PluginContext(_Context):
             _workers=workers,
             _processing=processing,
             _ui=ui,
+            _files=files,
         )
 
     def with_services(self, **services: Any) -> PluginContext:
@@ -235,14 +241,17 @@ class UiContext(_Context):
 
     __slots__ = (
         "_actions",
+        "_files",
+        "_layers",
         "_network",
+        "_project",
         "_settings",
         "notifications",
         "scope",
         "view",
     )
 
-    _capability_names = ("network", "actions", "settings")
+    _capability_names = ("network", "actions", "settings", "layers", "project", "files")
 
     notifications: Notifications
     view: ViewControl
@@ -250,6 +259,11 @@ class UiContext(_Context):
     network: Capability[Network] = Capability()
     actions: Capability[ViewActions] = Capability()
     settings: Capability[Settings] = Capability()
+    #: What the catalogue's pickers list and the ``FileInput`` mints through
+    #: (TASK-68): the plugin's own services, handed to its surfaces.
+    layers: Capability[Layers] = Capability()
+    project: Capability[Project] = Capability()
+    files: Capability[Files] = Capability()
 
     def __init__(
         self,
@@ -259,6 +273,9 @@ class UiContext(_Context):
         network: Network | None = None,
         actions: ViewActions | None = None,
         settings: Settings | None = None,
+        layers: Layers | None = None,
+        project: Project | None = None,
+        files: Files | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -267,6 +284,9 @@ class UiContext(_Context):
             _network=network,
             _actions=actions,
             _settings=settings,
+            _layers=layers,
+            _project=project,
+            _files=files,
         )
 
 

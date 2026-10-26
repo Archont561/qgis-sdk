@@ -17,6 +17,7 @@ from .fakes import (
     FakeStyles,
     RecordingNotifications,
 )
+from .files import FakeFiles
 from .jobs import FakeWorkers
 from .network import (
     FakeNetworkTransport,
@@ -28,6 +29,7 @@ from .ui import FakeUi, FakeViewControl, OpenedSurface
 
 __all__ = [
     "FakeAlgorithms",
+    "FakeFiles",
     "FakeLayers",
     "FakeNetworkTransport",
     "FakeProcessing",
