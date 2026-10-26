@@ -15,7 +15,11 @@
  *   reported as an unknown outcome and is never retried automatically.
  */
 
-import { isPlainRecord, QgisSdkError } from "./index";
+import type { StreamEventKind } from "./declarations";
+import { QgisSdkError } from "./errors";
+import { isPlainRecord, STREAM_EVENT_KINDS } from "./internal";
+
+export type { StreamEventKind };
 
 export const BRIDGE_PROTOCOL_VERSION: 1 = 1;
 export const MAX_CALL_ID_LENGTH: number = 128;
@@ -40,9 +44,6 @@ export type InvokeReply =
 			readonly ok: false;
 			readonly error: BridgeFailure;
 	  };
-
-/** The kinds of event a stream may carry; only `progress` may be coalesced. */
-export type StreamEventKind = "data" | "progress" | "state";
 
 /** Why a subscription stopped. */
 export type StreamTerminalKind =
@@ -276,7 +277,6 @@ function isIndex(value: unknown): value is number {
 	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
-const EVENT_KINDS: readonly StreamEventKind[] = ["data", "progress", "state"];
 const TERMINAL_KINDS: readonly StreamTerminalKind[] = [
 	"cancelled",
 	"complete",
@@ -326,7 +326,7 @@ export function parseStreamFrame(raw: unknown): BridgeStreamFrame {
 			);
 		}
 		const kind = raw.event.kind;
-		if (!EVENT_KINDS.includes(kind as StreamEventKind)) {
+		if (!STREAM_EVENT_KINDS.includes(kind as StreamEventKind)) {
 			throw new QgisSdkBridgeProtocolError(
 				`${raw.subscription_id}: ${String(kind)} is not an event kind`,
 			);

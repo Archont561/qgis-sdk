@@ -21,7 +21,7 @@ import type {
 	StreamEventKind,
 	WireTransport,
 } from "./bridge";
-import { QgisSdkError } from "./index";
+import { QgisSdkError } from "./errors";
 
 const PROTOCOL = 1;
 const SUBSCRIPTION_CAPACITY = 64;

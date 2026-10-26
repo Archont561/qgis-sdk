@@ -1,20 +1,23 @@
 import { expect, test } from "@archont561/bun-test-utils";
 import * as entry from "@";
 import {
-	isPlainRecord,
+	BridgeClient,
 	isSafeJsonInteger,
 	MAX_SAFE_INTEGER,
 	MIN_SAFE_INTEGER,
 	PLUGIN_DESCRIPTION_SCHEMA_VERSION,
 	parsePluginDescription,
+	QgisSdkBridgeRemoteError,
 	QgisSdkContractValidationError,
 	QgisSdkDeclarationError,
 	QgisSdkError,
-	QgisSdkScopeClosedError,
-	QgisSdkUnsupportedCapabilityError,
 	QgisSdkValidationIssue,
 } from "@";
 import * as source from "@/src";
+import * as bridge from "@/src/bridge";
+import * as declarations from "@/src/declarations";
+import * as errors from "@/src/errors";
+import { isPlainRecord } from "@/src/internal";
 
 test("the bare @ alias and @/src both resolve the bridge entry point", () => {
 	expect(entry).toBe(source);
@@ -29,15 +32,43 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 		.map(([name]) => name);
 
 	expect(errorExports.sort()).toEqual([
+		"QgisSdkBridgeAbortedError",
+		"QgisSdkBridgeClosedError",
+		"QgisSdkBridgeProtocolError",
+		"QgisSdkBridgeRemoteError",
+		"QgisSdkBridgeSequenceError",
+		"QgisSdkBridgeStreamEndedError",
+		"QgisSdkBridgeTimeoutError",
 		"QgisSdkContractValidationError",
 		"QgisSdkDeclarationError",
 		"QgisSdkError",
-		"QgisSdkScopeClosedError",
-		"QgisSdkUnsupportedCapabilityError",
 	]);
 	for (const name of errorExports) {
 		expect(name.startsWith("QgisSdk")).toBe(true);
 	}
+});
+
+test("the root is the union of the error root, the declarations and the bridge", () => {
+	const names = (module: object): string[] => Object.keys(module).sort();
+	const expected = new Set([
+		...names(errors),
+		...names(declarations),
+		...names(bridge),
+	]);
+	expect(names(entry)).toEqual([...expected].sort());
+	// One import serves the common page: the client and the error family.
+	expect(entry.BridgeClient).toBe(BridgeClient);
+	expect(
+		new QgisSdkBridgeRemoteError("call-1", { code: "boom", message: "bad" }),
+	).toBeInstanceOf(QgisSdkError);
+});
+
+test("the root exports no internal helper and no mirror of a Python-only error", () => {
+	const names = Object.keys(entry);
+	expect(names).not.toContain("isPlainRecord");
+	expect(names).not.toContain("STREAM_EVENT_KINDS");
+	expect(names).not.toContain("QgisSdkScopeClosedError");
+	expect(names).not.toContain("QgisSdkUnsupportedCapabilityError");
 });
 
 test("safe integer bounds and predicate match the Python wire contract", () => {
@@ -66,21 +97,6 @@ test("SDK errors expose stable wire codes independent of class names", () => {
 	expect(base.name).toBe("QgisSdkError");
 	expect(base.code).toBe("sdk_error");
 	expect(base.message).toBe("failure");
-
-	const closed = new QgisSdkScopeClosedError();
-	expect(closed).toBeInstanceOf(QgisSdkError);
-	expect(closed.name).toBe("QgisSdkScopeClosedError");
-	expect(closed.code).toBe("scope_closed");
-	expect(closed.message).toBe("This resource scope has been disposed");
-
-	const unsupported = new QgisSdkUnsupportedCapabilityError("desktop");
-	expect(unsupported).toBeInstanceOf(QgisSdkError);
-	expect(unsupported.name).toBe("QgisSdkUnsupportedCapabilityError");
-	expect(unsupported.code).toBe("unsupported_capability");
-	expect(unsupported.capability).toBe("desktop");
-	expect(unsupported.message).toBe(
-		'Capability "desktop" is unavailable in this runtime',
-	);
 
 	const declaration = new QgisSdkDeclarationError("bad plugin id");
 	expect(declaration).toBeInstanceOf(QgisSdkError);
