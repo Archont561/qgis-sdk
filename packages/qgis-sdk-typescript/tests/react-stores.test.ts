@@ -40,6 +40,8 @@ import {
 
 let window: Window;
 const roots = new Set<Root>();
+const DOM_GLOBALS = ["window", "document", "HTMLElement", "navigator"] as const;
+const previous = new Map<string, unknown>();
 
 const originalError = console.error;
 
@@ -54,10 +56,11 @@ beforeEach(() => {
 	};
 	window = new Window();
 	const g = globalThis as Record<string, unknown>;
-	g.window = window;
-	g.document = window.document;
-	g.HTMLElement = window.HTMLElement;
-	g.navigator = window.navigator;
+	const w = window as unknown as Record<string, unknown>;
+	for (const name of DOM_GLOBALS) {
+		previous.set(name, g[name]);
+		g[name] = name === "window" ? window : w[name];
+	}
 });
 
 afterEach(async () => {
@@ -69,6 +72,18 @@ afterEach(async () => {
 	roots.clear();
 	console.error = originalError;
 	await window.happyDOM.close();
+	// `bun test` runs every file in one process: a global `window` left behind
+	// makes json-schema-ref-parser (contracts.test.ts) read `location.href`.
+	const g = globalThis as Record<string, unknown>;
+	for (const name of DOM_GLOBALS) {
+		const before = previous.get(name);
+		if (before === undefined) {
+			delete g[name];
+		} else {
+			g[name] = before;
+		}
+	}
+	previous.clear();
 });
 
 interface Mounted<P> {
