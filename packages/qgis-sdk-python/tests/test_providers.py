@@ -1,49 +1,42 @@
-"""The provider: registration is validated where a plugin author can see it fail."""
+"""The provider: declaration is validated where a plugin author can see it fail."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, make_dataclass
 from typing import Annotated, Literal
 
 import pytest
-from qgis_sdk.algorithms import describe_algorithm
-from qgis_sdk.declarations import QgisSdkDeclarationError
+from qgis_sdk.algorithms import describe_algorithm, parameter_kind
+from qgis_sdk.core import AlgorithmContext, JobContext
+from qgis_sdk.declarations import QgisSdkDeclarationError, plugin
 from qgis_sdk.models import (
     CrsInput,
+    CrsParameter,
     LayerInput,
+    LayerParameter,
     Metres,
+    MetresParameter,
     VectorLayerInfo,
 )
-from qgis_sdk.providers import Provider, ProviderDescription, parameter_kinds
-from qgis_sdk.reference import BufferLayer, reference_provider
-
-
-@dataclass(frozen=True, slots=True)
-class Result:
-    output: VectorLayerInfo
-
-
-@dataclass(frozen=True, slots=True)
-class Request:
-    layer_id: Annotated[str, LayerInput()]
-    distance: Annotated[float, Metres()]
-    note: str = "note"
+from qgis_sdk.providers import Provider, ProviderDescription, declared_providers
+from qgis_sdk.reference import buffer_layer, reference_provider
 
 
 def _provider() -> Provider:
     return Provider(id="test", title="Test provider")
 
 
-def _run(self, inputs: Request) -> Result:
-    raise AssertionError("registration must not run anything")
+def _buffer(
+    ctx: AlgorithmContext, layer_id: LayerInput, distance: Metres, note: str = "n"
+) -> VectorLayerInfo:
+    raise AssertionError("declaration must not run anything")
+
+
+# -- what a declaration records ------------------------------------------------------
 
 
 def test_a_provider_describes_its_algorithms_with_qualified_ids() -> None:
     provider = _provider()
-
-    @provider.algorithm(id="buffer", title="Buffer", group="Geometry")
-    class Buffer:
-        run = _run
+    provider.algorithm(id="buffer", title="Buffer", group="Geometry")(_buffer)
 
     description = provider.describe()
 
@@ -59,46 +52,75 @@ def test_a_provider_describes_its_algorithms_with_qualified_ids() -> None:
     }
 
 
-def test_registration_attaches_the_metadata_describe_needs() -> None:
+def test_declaration_attaches_the_metadata_describe_needs() -> None:
     provider = _provider()
 
     @provider.algorithm(id="plain", title="Plain")
-    class Plain:
-        run = _run
+    def plain(ctx: AlgorithmContext) -> VectorLayerInfo: ...
 
-    assert describe_algorithm(Plain).id == "plain"
-    assert provider.algorithms == (Plain,)
-    assert provider.class_for("plain") is Plain
+    assert describe_algorithm(plain).id == "plain"
+    assert describe_algorithm(plain).provider_id == "test"
+    assert provider.algorithms == (plain,)
+    assert provider.function_for("plain") is plain
+    assert repr(provider) == "Provider(id='test', title='Test provider')"
+
+
+def test_the_derived_id_is_the_plain_function_name() -> None:
+    provider = _provider()
+
+    @provider.algorithm
+    def smooth_geometries(ctx: AlgorithmContext) -> VectorLayerInfo: ...
+
+    @provider.algorithm(group="Geometry")
+    def buffer(ctx: AlgorithmContext) -> VectorLayerInfo: ...
+
+    described = [describe_algorithm(function) for function in provider.algorithms]
+
+    # The provider is the namespace, so the toolbox shows ``test:buffer`` and
+    # not a hashed suffix the way a cross-module ``@job`` id needs one.
+    assert [item.id for item in described] == ["smooth_geometries", "buffer"]
+    assert [item.title for item in described] == ["Smooth geometries", "Buffer"]
+    assert [item.qualified_id for item in described] == [
+        "test:smooth_geometries",
+        "test:buffer",
+    ]
 
 
 def test_a_duplicate_id_is_refused() -> None:
     provider = _provider()
 
     @provider.algorithm(id="once", title="Once")
-    class Once:
-        run = _run
+    def once(ctx: AlgorithmContext) -> VectorLayerInfo: ...
 
     with pytest.raises(QgisSdkDeclarationError, match="duplicate algorithm id"):
 
         @provider.algorithm(id="once", title="Again")
-        class Again:
-            run = _run
+        def again(ctx: AlgorithmContext) -> VectorLayerInfo: ...
+
+    assert provider.algorithms == (once,)
 
 
-def test_a_class_cannot_be_registered_on_two_providers() -> None:
+def test_a_function_cannot_be_declared_on_two_providers() -> None:
     provider = _provider()
 
     @provider.algorithm(id="mine", title="Mine")
-    class Mine:
-        run = _run
+    def mine(ctx: AlgorithmContext) -> VectorLayerInfo: ...
 
     with pytest.raises(QgisSdkDeclarationError, match="already declared"):
-        _provider().algorithm(id="mine", title="Mine")(Mine)
+        _provider().algorithm(id="mine", title="Mine")(mine)
 
 
-def test_decorating_a_non_class_is_refused() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="requires a class"):
-        _provider().algorithm(id="fn", title="Fn")(lambda: None)
+def test_the_class_form_is_refused_with_the_way_forward() -> None:
+    class Buffer:
+        def run(self, inputs: object) -> VectorLayerInfo: ...
+
+    with pytest.raises(QgisSdkDeclarationError, match="class form was removed"):
+        _provider().algorithm(id="buffer", title="Buffer")(Buffer)
+
+
+def test_decorating_a_non_function_is_refused() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="requires a function"):
+        _provider().algorithm(id="obj", title="Obj")(object())  # type: ignore[arg-type]
 
 
 def test_an_empty_group_is_refused() -> None:
@@ -112,105 +134,130 @@ def test_the_provider_uses_the_shared_id_grammar(bad_id: str) -> None:
         Provider(id=bad_id, title="Bad")
 
 
-def test_a_request_without_run_is_refused_at_registration() -> None:
+def test_an_explicit_bad_id_is_refused_before_the_function_exists() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="Invalid declaration id"):
+        _provider().algorithm(id="9bad")
+
+
+# -- the shape a declaration must have -----------------------------------------------
+
+
+def test_a_missing_leading_context_parameter_is_refused() -> None:
     provider = _provider()
 
-    with pytest.raises(QgisSdkDeclarationError, match="needs its own run method"):
+    with pytest.raises(QgisSdkDeclarationError, match="first parameter must be the"):
 
-        @provider.algorithm(id="norun", title="No run")
-        class NoRun:
-            pass
+        @provider.algorithm
+        def no_context(layer_id: LayerInput) -> VectorLayerInfo: ...
+
+    with pytest.raises(QgisSdkDeclarationError, match="first parameter must be the"):
+
+        @provider.algorithm
+        def wrong_context(ctx: JobContext, layer_id: LayerInput) -> VectorLayerInfo: ...
+
+    with pytest.raises(QgisSdkDeclarationError, match="first parameter must be the"):
+
+        @provider.algorithm
+        def nothing() -> VectorLayerInfo: ...
 
     assert provider.algorithms == ()
 
 
-def test_a_refused_registration_leaves_the_class_undeclared() -> None:
-    """A half-declared class would describe but never be registered."""
+def test_a_coroutine_or_generator_is_refused() -> None:
     provider = _provider()
-    # The wire schema accepts a variadic tuple; a QGIS parameter list does not,
-    # so this refuses one step later - still at registration, never at run time.
-    Unrepresentable = make_dataclass("Unrepresentable", [("names", tuple[str, ...])])
-    Bad = type(
-        "Bad",
-        (),
-        {"run": lambda self, inputs: Result(output=None), "__annotations__": {}},
-    )
-    Bad.run.__annotations__ = {"inputs": Unrepresentable, "return": Result}
 
-    with pytest.raises(QgisSdkDeclarationError, match="cannot express"):
-        provider.algorithm(id="bad", title="Bad")(Bad)
+    with pytest.raises(QgisSdkDeclarationError, match="plain synchronous function"):
 
-    assert provider.algorithms == ()
-    # The marker was removed again, so a fixed class can still be registered.
-    Good = type("Good", (), {"run": _run})
-    assert _provider().algorithm(id="good", title="Good")(Good) is Good
+        @provider.algorithm
+        async def later(ctx: AlgorithmContext) -> VectorLayerInfo: ...
+
+    with pytest.raises(QgisSdkDeclarationError, match="plain synchronous function"):
+
+        @provider.algorithm
+        def stream(ctx: AlgorithmContext) -> VectorLayerInfo:
+            yield  # type: ignore[misc]
 
 
-def test_an_unrepresentable_field_names_the_field_and_the_markers() -> None:
-    @dataclass(frozen=True, slots=True)
-    class Nested:
-        inner: list[str]
+def test_an_unannotated_input_or_result_is_refused() -> None:
+    provider = _provider()
+
+    with pytest.raises(QgisSdkDeclarationError, match="every input must be annotated"):
+
+        @provider.algorithm
+        def bare(ctx: AlgorithmContext, value) -> VectorLayerInfo: ...
+
+    with pytest.raises(QgisSdkDeclarationError, match="must declare its result"):
+
+        @provider.algorithm
+        def silent(ctx: AlgorithmContext, value: str): ...
+
+
+def test_a_result_that_is_not_the_produced_layer_is_refused() -> None:
+    provider = _provider()
+
+    with pytest.raises(QgisSdkDeclarationError, match="returns the VectorLayerInfo"):
+
+        @provider.algorithm
+        def count(ctx: AlgorithmContext) -> int: ...
+
+
+def test_an_input_outside_the_parameter_kinds_is_refused_naming_it() -> None:
+    provider = _provider()
+
+    def nested(ctx: AlgorithmContext, inner: list[str]) -> VectorLayerInfo: ...
 
     with pytest.raises(QgisSdkDeclarationError) as error:
-        parameter_kinds(Nested)
+        provider.algorithm(nested)
 
-    assert "Nested.inner" in str(error.value)
+    assert "algorithm test:nested.inner" in str(error.value)
     assert "use Annotated markers" in str(error.value)
+    # The refused function keeps no marker: it neither describes nor registers.
+    assert provider.algorithms == ()
+    with pytest.raises(QgisSdkDeclarationError, match="requires a function with"):
+        describe_algorithm(nested)
+
+
+def test_a_literal_input_is_refused_rather_than_guessed() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="cannot express"):
+
+        @_provider().algorithm
+        def mode(ctx: AlgorithmContext, mode: Literal["a", "b"]) -> VectorLayerInfo: ...
+
+
+def test_a_variadic_input_is_refused() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="variadic"):
+
+        @_provider().algorithm
+        def many(ctx: AlgorithmContext, *values: str) -> VectorLayerInfo: ...
 
 
 @pytest.mark.parametrize(
     ("annotation", "message"),
     [
-        (Annotated[int, LayerInput()], "must be a str layer id"),
-        (Annotated[int, CrsInput()], "must be a str authority code"),
-        (Annotated[str, Metres()], "must be a number"),
+        (Annotated[int, LayerParameter()], "must be a str layer id"),
+        (Annotated[int, CrsParameter()], "must be a str authority code"),
+        (Annotated[str, MetresParameter()], "must be a number"),
         (Annotated[str, "unknown"], "unknown parameter marker"),
     ],
 )
 def test_a_marker_that_does_not_fit_its_type_is_refused(annotation, message) -> None:
-    Wrong = make_dataclass("Wrong", [("value", annotation)])
-
     with pytest.raises(QgisSdkDeclarationError, match=message):
-        parameter_kinds(Wrong)
+        parameter_kind("test.value", annotation)
 
 
-def test_primitives_map_to_their_own_kinds() -> None:
-    @dataclass(frozen=True, slots=True)
-    class Primitives:
-        text: str
-        number: float
-        count: int
-        flag: bool
-
-    assert parameter_kinds(Primitives) == (
-        ("text", "string"),
-        ("number", "number"),
-        ("count", "integer"),
-        ("flag", "boolean"),
-    )
+def test_primitives_and_aliases_map_to_their_own_kinds() -> None:
+    assert [
+        parameter_kind("p", annotation)
+        for annotation in (str, float, int, bool, LayerInput, CrsInput, Metres)
+    ] == ["string", "number", "integer", "boolean", "layer", "crs", "metres"]
+    assert parameter_kind("p", Annotated[int, MetresParameter()]) == "metres"
 
 
-def test_a_literal_field_is_refused_rather_than_guessed() -> None:
-    @dataclass(frozen=True, slots=True)
-    class WithLiteral:
-        mode: Literal["a", "b"]
-
-    with pytest.raises(QgisSdkDeclarationError, match="cannot express"):
-        parameter_kinds(WithLiteral)
-
-
-def test_an_annotated_field_still_describes_its_stored_type() -> None:
-    from qgis_sdk.declarations import _schema
-
-    schema = _schema(Request, "request", result=False)
+def test_an_annotated_input_still_describes_its_stored_type() -> None:
+    schema = describe_algorithm(buffer_layer).inputs_schema
 
     assert schema["properties"]["layer_id"] == {"type": "string"}
-    assert schema["properties"]["distance"] == {"type": "number"}
-
-
-def test_parameter_kinds_requires_a_dataclass_type() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="must be a dataclass type"):
-        parameter_kinds("not a type")
+    assert schema["properties"]["distance_metres"] == {"type": "number"}
 
 
 def test_a_provider_reports_its_own_id_and_title() -> None:
@@ -219,19 +266,54 @@ def test_a_provider_reports_its_own_id_and_title() -> None:
     assert (provider.id, provider.title) == ("shown", "Shown provider")
 
 
-def test_asking_for_an_unregistered_algorithm_names_the_provider() -> None:
+def test_asking_for_an_undeclared_algorithm_names_the_provider() -> None:
     with pytest.raises(QgisSdkDeclarationError, match="test: no algorithm 'ghost'"):
-        _provider().class_for("ghost")
+        _provider().function_for("ghost")
 
 
-def test_the_reference_provider_registers_the_workflow_operations() -> None:
+def test_the_reference_provider_declares_the_workflow_operations() -> None:
     described = reference_provider.describe()
 
     assert reference_provider.id == "reference"
-    assert [item.description.id for item in described.algorithms] == [
-        "buffer",
-        "centroid",
-    ]
-    algorithms = reference_provider.algorithms
-    assert algorithms[0] is BufferLayer
-    assert describe_algorithm(algorithms[1]).inputs_type.__name__ == "CentroidRequest"
+    assert [item.id for item in described.algorithms] == ["buffer", "centroid"]
+    assert reference_provider.algorithms[0] is buffer_layer
+
+
+# -- providers = [...] on a plugin class ---------------------------------------------
+
+
+def test_a_plugin_lists_the_providers_it_owns() -> None:
+    tools = Provider(id="tools", title="Tools")
+
+    @plugin
+    class WithProviders:
+        providers = [tools, reference_provider]  # noqa: RUF012 - the list form
+
+    @plugin
+    class Without:
+        pass
+
+    assert declared_providers(WithProviders) == (tools, reference_provider)
+    assert declared_providers(Without) == ()
+
+
+@pytest.mark.parametrize(
+    "listed",
+    [reference_provider, "reference", [reference_provider, "tools"], {"a": 1}],
+)
+def test_anything_but_a_list_of_providers_is_refused_naming_the_class(listed) -> None:
+    @plugin
+    class Wrong:
+        providers = listed
+
+    with pytest.raises(QgisSdkDeclarationError, match="Wrong.providers must be a list"):
+        declared_providers(Wrong)
+
+
+def test_a_provider_listed_twice_is_refused_by_id() -> None:
+    @plugin
+    class Twice:
+        providers = (reference_provider, reference_provider)
+
+    with pytest.raises(QgisSdkDeclarationError, match="'reference' is listed twice"):
+        declared_providers(Twice)

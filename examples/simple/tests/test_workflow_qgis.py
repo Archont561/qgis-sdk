@@ -143,3 +143,29 @@ def test_the_workflow_class_refuses_an_unknown_layer_and_a_silent_overwrite(
 
     assert export.driver == "GeoJSON"
     assert destination.read_text(encoding="utf-8") != "mine"
+
+
+def test_the_plugins_provider_is_in_the_toolbox_only_while_it_runs(
+    qgis_app: Any,
+) -> None:
+    """``providers = [reference_provider]`` is the whole registration step."""
+    from qgis.core import QgsApplication
+
+    def advertised() -> list[str]:
+        registry = QgsApplication.processingRegistry()
+        return sorted(
+            algorithm.id()
+            for algorithm in registry.algorithms()
+            if algorithm.provider() is not None
+            and algorithm.provider().id() == "reference"
+        )
+
+    plugin = simple.classFactory(None)
+    assert advertised() == []
+    plugin.initGui()
+    try:
+        assert advertised() == ["reference:buffer", "reference:centroid"]
+        assert plugin.runtime.registered_providers == ("reference",)
+    finally:
+        plugin.unload()
+    assert advertised() == []

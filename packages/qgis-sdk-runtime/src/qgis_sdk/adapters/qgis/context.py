@@ -22,6 +22,7 @@ from .algorithms import NativeAlgorithms
 from .layers import NativeLayers
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
+from .processing import NativeProcessing
 from .project import NativeProject
 from .settings import NativeSettings
 from .styles import NativeStyles
@@ -51,11 +52,14 @@ def native_plugin_context(
     and the other services still work. ``notifications`` defaults to the QGIS message log;
     a plugin passes its own to reach the message bar. ``working_directory``
     is where Processing outputs land; left out, the service owns a temporary
-    directory and removes it with the scope.
+    directory and removes it with the scope. ``processing`` is the registry
+    ``PluginRuntime.start()`` advertises the plugin's ``providers`` with.
     """
     scope.ensure_open()
     layers = NativeLayers(scope)
     transport = NativeNetworkTransport(scope)
+    project = NativeProject(layers, scope)
+    algorithms = NativeAlgorithms(layers, scope, working_directory=working_directory)
     return PluginContext(
         notifications=(
             notifications if notifications is not None else NativeNotifications(scope)
@@ -64,9 +68,12 @@ def native_plugin_context(
         desktop=None if iface is None else IfaceDesktopAccess(iface),
         network=NetworkClient(transport, scope),
         layers=layers,
-        project=NativeProject(layers, scope),
+        project=project,
         settings=NativeSettings(scope, prefix=settings_prefix),
         styles=NativeStyles(layers, scope),
-        algorithms=NativeAlgorithms(layers, scope, working_directory=working_directory),
+        algorithms=algorithms,
         workers=ThreadPoolWorkers(scope),
+        processing=NativeProcessing(
+            layers=layers, algorithms=algorithms, project=project, scope=scope
+        ),
     )

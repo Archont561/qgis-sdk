@@ -50,7 +50,7 @@ class Metadata:
 
 
 def metadata(id: str, title: str) -> Metadata:
-    """Validate the id and title every ``@plugin``/``@algorithm``/``@job`` takes."""
+    """Validate the id and title every ``@plugin``/``@job``/``@provider.algorithm`` takes."""
     _validate_id(id)
     _validate_title(id, title)
     return Metadata(id, title)
@@ -160,7 +160,7 @@ def class_metadata(cls: type, id: str | None, title: str | None) -> Metadata:
 
 
 def function_metadata(function: Any, id: str | None, title: str | None) -> Metadata:
-    """The metadata a module-level function declaration (``@job``) carries.
+    """The metadata a module-level ``@job`` function declaration carries.
 
     Derived the way a class id is - snake_case name plus the module/qualname
     suffix - because a job id has to stay unique across modules the same way
@@ -242,7 +242,7 @@ def declare_class(
     id: str | None = None,
     title: str | None = None,
 ) -> Callable[[type[T]], type[T]]:
-    """Build the class decorator ``@plugin`` and ``@algorithm`` both are.
+    """Build a marker class decorator of the shape ``@plugin`` has.
 
     An omitted ``id`` or ``title`` is derived from the class once it is known
     (:func:`class_metadata`); a given one is validated right here.
@@ -728,58 +728,6 @@ def _describe_stream(
     )
 
 
-@dataclass(frozen=True)
-class RunSignature:
-    """What an ``@algorithm`` class declares through its ``run``."""
-
-    metadata: Metadata
-    inputs_type: Any
-    result_type: Any
-    inputs_schema: dict[str, Any]
-    result_schema: dict[str, Any]
-    asynchronous: bool
-
-
-def describe_run_method(cls: Any, attribute: str, kind: str) -> RunSignature:
-    """Inspect a ``run(self, inputs) -> Result`` class without constructing it.
-
-    ``kind`` is the noun the messages use (``"algorithm"``, ``"job"``); the
-    decorator and describer names follow from it. The schemas come from the
-    same generator the plugin declarations use, so a type the contract cannot
-    express fails here, at inspection time, rather than during a run.
-    """
-    declared = declared_metadata(cls, attribute, f"describe_{kind}", f"@{kind}")
-    run = vars(cls).get("run")
-    article = "an" if kind[:1] in "aeiou" else "a"
-    if not inspect.isfunction(run):
-        raise QgisSdkDeclarationError(
-            f"{declared.id}: {article} {kind} needs its own run method"
-        )
-    parameters = list(inspect.signature(run).parameters.values())
-    if len(parameters) != 2 or parameters[0].name != "self":
-        raise QgisSdkDeclarationError(
-            f"{declared.id}: run takes self and exactly one typed inputs argument"
-        )
-    # Resolved, not raw: a module using `from __future__ import annotations`
-    # hands us strings, and a forward reference has to be evaluated the same way
-    # a plugin action's annotations are.
-    hints = resolve_hints(run, f"{kind} {declared.id}")
-    inputs_type = hints.get(parameters[1].name, inspect.Parameter.empty)
-    result_type = hints.get("return", inspect.Signature.empty)
-    if inputs_type is inspect.Parameter.empty:
-        raise QgisSdkDeclarationError(f"{declared.id}: run inputs must be annotated")
-    if result_type is inspect.Signature.empty:
-        raise QgisSdkDeclarationError(f"{declared.id}: run must declare its result")
-    return RunSignature(
-        metadata=declared,
-        inputs_type=inputs_type,
-        result_type=result_type,
-        inputs_schema=schema_for(inputs_type, f"{declared.id}.inputs", result=False),
-        result_schema=schema_for(result_type, f"{declared.id}.result", result=True),
-        asynchronous=inspect.iscoroutinefunction(run),
-    )
-
-
 def type_name(annotation: Any) -> str:
     """The short name a message or a transport view uses for a type."""
     return getattr(annotation, "__name__", str(annotation))
@@ -801,7 +749,7 @@ def register_describer(
 
 
 def describe(cls: Any) -> Description:
-    """Describe whatever ``cls`` declares - plugin, algorithm or job.
+    """Describe whatever ``cls`` declares - a plugin class, a job or an algorithm.
 
     The narrow forms (``describe_plugin`` and friends) return the concrete type;
     this one answers for any decorated class or job function and returns the
@@ -813,8 +761,8 @@ def describe(cls: Any) -> Description:
         if attribute in vars(cls):
             return describer(cls)
     raise QgisSdkDeclarationError(
-        "describe requires a class declared with @plugin or @algorithm, "
-        "or a function declared with @job"
+        "describe requires a class declared with @plugin, or a function "
+        "declared with @job or @provider.algorithm"
     )
 
 

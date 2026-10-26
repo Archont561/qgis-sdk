@@ -19,7 +19,7 @@ a stub states that contract instead of hiding it behind a full plugin setup.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Literal
 
 import pytest
 
@@ -74,9 +74,9 @@ class FormDemo:
     @action(id="demo.marked", title="Marked fields")
     def marked(
         self,
-        layer_id: Annotated[str, LayerInput()],
-        working_crs: Annotated[str, CrsInput()],
-        distance: Annotated[float, Metres()],
+        layer_id: LayerInput,
+        working_crs: CrsInput,
+        distance: Metres,
     ) -> str:
         self.calls.append(
             {

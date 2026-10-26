@@ -8,21 +8,16 @@ and the bridge client spells it as a property, so it stays a plain identifier.
 """
 
 import hashlib
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin, stream
-from qgis_sdk.algorithms import algorithm, describe_algorithm
-from qgis_sdk.core import JobContext
+from qgis_sdk.algorithms import describe_algorithm
+from qgis_sdk.core import AlgorithmContext, JobContext
 from qgis_sdk.declarations import derive_id, derive_title
 from qgis_sdk.jobs import describe_job, job
+from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider
-
-
-@dataclass
-class Inputs:
-    count: int
 
 
 def suffix(cls: Any) -> str:
@@ -100,42 +95,32 @@ def test_a_stream_without_an_id_is_named_after_its_method() -> None:
     assert description.streams[0].title == "Tick"
 
 
-def test_algorithms_and_jobs_derive_their_ids_the_same_way() -> None:
-    @algorithm
-    class SmoothGeometries:
-        def run(self, inputs: int) -> int:
-            return inputs
+def test_jobs_derive_their_ids_with_a_suffix_and_provider_algorithms_without() -> None:
+    mine = Provider(id="mine", title="Mine")
+
+    @mine.algorithm
+    def smooth_geometries(ctx: AlgorithmContext) -> VectorLayerInfo:
+        raise AssertionError("never run")
+
+    @mine.algorithm(group="Geometry")
+    def buffer(ctx: AlgorithmContext) -> VectorLayerInfo:
+        raise AssertionError("never run")
 
     @job(title="Sum")
     def add_numbers(ctx: JobContext, value: int) -> int:
         return value
 
-    smooth = describe_algorithm(SmoothGeometries)
+    smooth = describe_algorithm(smooth_geometries)
     add = describe_job(add_numbers)
 
-    assert smooth.id == f"smooth_geometries_{suffix(SmoothGeometries)}"
-    assert smooth.title == "Smooth Geometries"
+    # A job id must stay unique across modules, so it carries the hash suffix;
+    # a provider algorithm is namespaced by its provider and keeps the plain
+    # name, which is what the toolbox shows as ``mine:buffer``.
+    assert (smooth.id, smooth.title) == ("smooth_geometries", "Smooth geometries")
+    assert describe_algorithm(buffer).qualified_id == "mine:buffer"
+    assert mine.function_for("buffer") is buffer
     assert add.id == f"add_numbers_{suffix(add_numbers)}"
     assert add.title == "Sum"
-
-
-def test_a_provider_algorithm_derives_its_id_from_the_class() -> None:
-    mine = Provider(id="mine", title="Mine")
-
-    @mine.algorithm
-    class Smooth:
-        def run(self, inputs: Inputs) -> int:
-            return inputs.count
-
-    @mine.algorithm(group="Geometry")
-    class Buffer:
-        def run(self, inputs: Inputs) -> int:
-            return inputs.count
-
-    ids = {describe_algorithm(cls).id for cls in mine.algorithms}
-
-    assert ids == {f"smooth_{suffix(Smooth)}", f"buffer_{suffix(Buffer)}"}
-    assert mine.class_for(f"buffer_{suffix(Buffer)}") is Buffer
 
 
 def test_an_explicit_invalid_id_is_still_refused_before_the_class_exists() -> None:

@@ -1,4 +1,4 @@
-"""The shared describer surface behind ``@plugin``, ``@algorithm`` and ``@job`` (TASK-49).
+"""The shared describer surface behind ``@plugin``, ``@job`` and ``@provider.algorithm`` (TASK-49).
 
 Author classes stay plain (decision-6, decision-10): nothing here adds a base
 class or a method to them. What is shared lives on the declaration side - one
@@ -12,7 +12,7 @@ import json
 from dataclasses import dataclass
 
 import pytest
-from qgis_sdk.algorithms import AlgorithmDescription, algorithm, describe_algorithm
+from qgis_sdk.algorithms import AlgorithmDescription, describe_algorithm
 from qgis_sdk.core import AlgorithmContext, JobContext
 from qgis_sdk.declarations import (
     Description,
@@ -26,6 +26,7 @@ from qgis_sdk.declarations import (
     plugin,
 )
 from qgis_sdk.jobs import JobDescription, describe_job, job
+from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider, ProviderDescription
 
 
@@ -46,15 +47,6 @@ class Plugin:
         return value
 
 
-@algorithm(id="describe.algorithm", title="An algorithm")
-class Algorithm:
-    def __init__(self, ctx: AlgorithmContext) -> None:
-        pass
-
-    def run(self, inputs: Inputs) -> Result:
-        return Result(inputs.value)
-
-
 @job(id="describe.job", title="A job")
 async def echo_job(ctx: JobContext, value: int) -> Result:
     return Result(value)
@@ -64,12 +56,8 @@ provider = Provider(id="describe.provider", title="A provider")
 
 
 @provider.algorithm(id="registered", title="Registered")
-class Registered:
-    def __init__(self, ctx: AlgorithmContext) -> None:
-        pass
-
-    def run(self, inputs: Inputs) -> Result:
-        return Result(inputs.value)
+def registered(ctx: AlgorithmContext, value: int) -> VectorLayerInfo:
+    raise AssertionError("describe must not call an algorithm")
 
 
 # -- describe(): one entry point, dispatching on the decorator marker ---------------
@@ -80,7 +68,7 @@ class Registered:
     [
         pytest.param(Plugin, PluginDescription, describe_plugin, id="plugin"),
         pytest.param(
-            Algorithm, AlgorithmDescription, describe_algorithm, id="algorithm"
+            registered, AlgorithmDescription, describe_algorithm, id="algorithm"
         ),
         pytest.param(echo_job, JobDescription, describe_job, id="job"),
     ],
@@ -95,9 +83,9 @@ def test_describe_dispatches_to_the_narrow_describer(
 
 
 def test_describe_refuses_an_undecorated_class_a_function_and_a_non_class() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="@plugin or @algorithm"):
+    with pytest.raises(QgisSdkDeclarationError, match="class declared with @plugin"):
         describe(Inputs)
-    with pytest.raises(QgisSdkDeclarationError, match="function declared with @job"):
+    with pytest.raises(QgisSdkDeclarationError, match="@job or @provider.algorithm"):
         describe(lambda ctx: None)
     with pytest.raises(QgisSdkDeclarationError, match="requires a class or a function"):
         describe(object())  # type: ignore[arg-type]
@@ -110,7 +98,7 @@ def test_describe_refuses_an_undecorated_class_a_function_and_a_non_class() -> N
     "described",
     [
         pytest.param(describe_plugin(Plugin), id="plugin"),
-        pytest.param(describe_algorithm(Algorithm), id="algorithm"),
+        pytest.param(describe_algorithm(registered), id="algorithm"),
         pytest.param(describe_job(echo_job), id="job"),
         pytest.param(provider.describe(), id="provider"),
     ],
@@ -162,12 +150,10 @@ def test_declare_class_attaches_metadata_once_and_only_to_classes() -> None:
 
 
 def test_a_subclass_does_not_inherit_the_marker_as_its_own_declaration() -> None:
-    class Child(Algorithm):
+    class Child(Plugin):
         pass
 
-    with pytest.raises(
-        QgisSdkDeclarationError, match="requires a class with @algorithm"
-    ):
-        describe_algorithm(Child)
-    with pytest.raises(QgisSdkDeclarationError, match="@plugin or @algorithm"):
+    with pytest.raises(QgisSdkDeclarationError, match="requires a class with @plugin"):
+        describe_plugin(Child)
+    with pytest.raises(QgisSdkDeclarationError, match="class declared with @plugin"):
         describe(Child)

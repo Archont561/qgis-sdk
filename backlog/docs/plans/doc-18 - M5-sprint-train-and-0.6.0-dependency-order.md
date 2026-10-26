@@ -12,8 +12,12 @@ body, not in task fields ([doc-10](../doc-10%20-%20Backlog-conventions-vocabular
 
 **Baseline measured on 2026-10-26** at `56e074e` (after PR #90, the last
 m-5 slice that landed): Python suite 1484 passed / 42 skipped,
-`tests/scripts` 235 passed (`test_backlog.py` 15 after this plan). Bun and
-coverage figures are re-measured at the start of sprint 1 and recorded here.
+`tests/scripts` 235 passed (`test_backlog.py` 15 after this plan).
+**Re-measured at the start of sprint 1 (2026-10-26, `8c82212`):** Python
+suite 1484 passed / 42 skipped, `tests/scripts` 241 passed, Bun
+`test-reference-web` 4 passed, `@archont561/qgis-sdk` typecheck clean.
+After sprint 1: Python suite 1505 passed / 43 skipped, native services
+harness 134 passed.
 
 ## 1. Where m-5 starts from
 
@@ -49,7 +53,7 @@ What 0.5.0 did **not** do, because this milestone has to finish it:
 One pull request per sprint, because the session is bound to one branch;
 commits inside keep the slices reviewable.
 
-- **Sprint 1: TASK-63**, with the TASK-62 closure (Done, four ACs, "merged
+- **Sprint 1 (done 2026-10-26): TASK-63**, with the TASK-62 closure (Done, four ACs, "merged
   #90 → `56e074e`") as the first commit. `Provider(id, title)`,
   `@provider.algorithm(title=, group=)` on `def f(ctx: AlgorithmContext,
   layer: LayerInput, ...)`, `providers = [tools]` on the plugin class
@@ -100,4 +104,5 @@ commits inside keep the slices reviewable.
   native-compute research (0.8.0; since re-pointed to agent access, the
   research is m-8 at 0.9.0, since 2026-10-26 m-12 at 1.1.0); TASK-32 rewritten, TASK-71 created,
   TASK-10 moved ([m-6](../../milestones/m-6%20-%200.7.0-%E2%80%94-ui-toolkit-parameter-kinds%2C-curated-compon.md), [m-7](../../milestones/m-7%20-%200.8.0-%E2%80%94-agent-access-loopback-transport%2C-mcp-serve.md)).
-- Pending: the TASK-62 closure (sprint 1, first commit).
+- Done in sprint 1 (2026-10-26): the TASK-62 closure (Done, four ACs) and
+  TASK-63 (Done, four ACs) on one pull request.

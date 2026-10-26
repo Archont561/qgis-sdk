@@ -11,6 +11,7 @@ because they implement its service protocols and must version with them
 from .fakes import (
     FakeAlgorithms,
     FakeLayers,
+    FakeProcessing,
     FakeProject,
     FakeSettings,
     FakeStyles,
@@ -28,6 +29,7 @@ __all__ = [
     "FakeAlgorithms",
     "FakeLayers",
     "FakeNetworkTransport",
+    "FakeProcessing",
     "FakeProject",
     "FakeSettings",
     "FakeStyles",

@@ -6,12 +6,17 @@ import inspect
 from collections.abc import Callable, Mapping
 from enum import StrEnum
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from qgis_sdk.declarations import PluginDescription, describe_plugin
 from qgis_sdk.models import QgisSdkError, QgisSdkScopeClosedError
+from qgis_sdk.services import ProviderRegistration
 
 from .contexts import PluginContext
 from .scope import QuiesceOutcome
+
+if TYPE_CHECKING:
+    from qgis_sdk.providers import Provider
 
 PluginFactory = Callable[[PluginContext], object]
 """Construct a plugin instance from the context supplied by the runtime."""
@@ -52,6 +57,12 @@ class PluginRuntime:
     explicit factory still receives the context and can supply custom
     dependencies. Declarations are validated at construction time, but no
     author code runs until :meth:`start`.
+
+    The providers the class lists in ``providers = [...]`` (decision-42) are
+    validated here too. :meth:`start` registers them with the host's
+    Processing registry when the context carries ``processing``; over a
+    context without one the same class registers nothing. :meth:`unload`
+    removes them again, and a failed start removes whatever it had registered.
     """
 
     def __init__(
@@ -65,12 +76,14 @@ class PluginRuntime:
         self._context = context
         self._instance_factory = instance_factory
         self._description = describe_plugin(plugin_class)
+        self._providers = _declared_providers(plugin_class)
         if context.scope.closed:
             raise QgisSdkScopeClosedError()
         self._state = PluginRuntimeState.NEW
         self._instance: object | None = None
         self._actions: Mapping[str, Callable[..., object]] = _EMPTY_ACTIONS
         self._streams: Mapping[str, Callable[..., object]] = _EMPTY_ACTIONS
+        self._registrations: tuple[ProviderRegistration, ...] = ()
 
     @property
     def state(self) -> PluginRuntimeState:
@@ -97,6 +110,23 @@ class PluginRuntime:
         """Return declared stream factories bound to the instance, keyed by id."""
         return self._streams
 
+    @property
+    def providers(self) -> tuple[Provider, ...]:
+        """Return the providers the class lists, whether or not a host shows them."""
+        return self._providers
+
+    @property
+    def registered_providers(self) -> tuple[str, ...]:
+        """Return the ids of the providers the host currently advertises.
+
+        Empty over a context without ``processing``, before ``start()`` and
+        after ``unload()``; registration is all-or-nothing, so while running
+        it is either every listed provider or none.
+        """
+        if not self._registrations:
+            return ()
+        return tuple(provider.id for provider in self._providers)
+
     def start(self) -> object:
         """Construct and bind the plugin once, or raise a typed lifecycle error."""
         if self._state is not PluginRuntimeState.NEW:
@@ -116,6 +146,7 @@ class PluginRuntime:
                 )
             actions = self._bind(instance, self._description.actions, "action")
             streams = self._bind(instance, self._description.streams, "stream")
+            self._register_providers()
         except BaseException as error:
             cleanup_error = self._discard_after_failed_start()
             if cleanup_error is not None:
@@ -161,7 +192,36 @@ class PluginRuntime:
         self._actions = _EMPTY_ACTIONS
         self._streams = _EMPTY_ACTIONS
         self._unbind_context()
-        self._context.scope.close()
+        try:
+            self._unregister_providers()
+        finally:
+            self._context.scope.close()
+
+    def _register_providers(self) -> None:
+        """Advertise the listed providers through ``ctx.processing``, if any.
+
+        Registration is all-or-nothing: a host that refuses one provider (an
+        id another plugin already holds) gets the ones before it removed again
+        before the refusal propagates, so a failed start advertises nothing.
+        """
+        if not self._providers or not self._context.has("processing"):
+            return
+        processing = self._context.processing
+        registered: list[ProviderRegistration] = []
+        try:
+            for provider in self._providers:
+                registered.append(processing.register_provider(provider))
+        except BaseException:
+            self._registrations = tuple(registered)
+            self._unregister_providers()
+            raise
+        self._registrations = tuple(registered)
+
+    def _unregister_providers(self) -> None:
+        """Remove every registration this runtime made, last first."""
+        registrations, self._registrations = self._registrations, ()
+        for registration in reversed(registrations):
+            registration.unregister()
 
     def _bind_context(self) -> None:
         """Make ``plugin_class.ctx`` this runtime's context.
@@ -232,7 +292,19 @@ class PluginRuntime:
         self._streams = _EMPTY_ACTIONS
         self._unbind_context()
         try:
+            self._unregister_providers()
             self._context.scope.close()
         except BaseException as cleanup_error:  # noqa: BLE001 - preserve cleanup evidence
             return cleanup_error
         return None
+
+
+def _declared_providers(plugin_class: type) -> tuple[Provider, ...]:
+    """Validate ``providers = [...]`` without importing the providers module eagerly.
+
+    ``qgis_sdk.providers`` imports this package, so the lookup is deferred to
+    construction time; the module is pure and always importable.
+    """
+    from qgis_sdk.providers import declared_providers
+
+    return declared_providers(plugin_class)
