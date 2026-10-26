@@ -1,7 +1,7 @@
 """Native-only: one call assembles every curated service into a ``PluginContext``.
 
-``native_plugin_context`` is what a generated plugin's ``build_context`` calls
-when QGIS handed it an ``iface``. The assertions are about wiring that review
+``native_plugin_context`` is what ``host()`` calls for a plugin when a
+``QgsApplication`` is running (decision-43). The assertions are about wiring that review
 cannot see: that the project service reads the layers service's registrations,
 that ``HostServices.from_context`` wraps the same instances, and that closing
 the one scope closes every service at once.

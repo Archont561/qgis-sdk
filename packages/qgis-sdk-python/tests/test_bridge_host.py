@@ -23,6 +23,7 @@ from qgis_sdk.bridge.host import (
     HOST_OPERATIONS,
     MAX_PAGE,
     HostServices,
+    granted_operations,
     host_description,
     host_grants,
     register_host_operations,
@@ -258,6 +259,23 @@ def test_nothing_on_the_wire_takes_a_filesystem_path() -> None:
         properties = operation.request.get("properties", {})
         assert "path" not in properties, operation.id
         assert "source" not in properties, operation.id
+
+
+def test_a_grant_selects_its_operations_and_an_id_selects_one() -> None:
+    """``[tool.qgis-sdk.web] grants`` (decision-43) lists grants or operation ids."""
+    assert granted_operations(["layers.read"]) == ("layers.list", "layers.get")
+    assert granted_operations(["project.layer_ids"]) == ("project.layer_ids",)
+    assert granted_operations(["project.layer_ids", "layers.read", "layers.get"]) == (
+        "layers.list",
+        "layers.get",
+        "project.layer_ids",
+    )  # declaration order, no duplicates
+    assert granted_operations([]) == ()
+
+
+def test_an_unknown_grant_is_refused_by_name() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="unknown host grant 'layers.nope'"):
+        granted_operations(["layers.read", "layers.nope"])
 
 
 def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
