@@ -36,14 +36,16 @@ npm install @archont561/qgis-sdk
 The unscoped name `qgis-sdk` is an alias published from the same tag: it
 depends on `@archont561/qgis-sdk` at the exact same version and re-exports
 every entry (`qgis-sdk`, `qgis-sdk/bridge`, `qgis-sdk/host`, `qgis-sdk/react`,
-`qgis-sdk/testing`). Use whichever name reads better; the surface is one.
+`qgis-sdk/vue`, `qgis-sdk/svelte`, `qgis-sdk/testing`). Use whichever name
+reads better; the surface is one.
 
 ## Exports
 
 The root is the import a page needs: `QgisSdk`, the schema types, the
-transport client, the error root and the version 1 plugin-description
-contract. Everything under `./bridge` is also exported from the root; the
-subpath stays for code that already uses it.
+transport client, the error root, the version 1 plugin-description contract
+and the [stores](#stores-the-framework-free-core). Everything under `./bridge`
+is also exported from the root; the subpath stays for code that already uses
+it.
 
 ```ts
 import {
@@ -87,9 +89,34 @@ import {
 - **Version 1 plugin descriptions:** `parsePluginDescription(raw)` validates and freezes `PluginDescription` payloads (`schema_version: 1`) produced by Python's `describe_plugin(cls).to_json()`. `qgis-sdk bridge generate` is the build-time reader of the same payload; a page only needs this one to render operations it did not generate a client for.
 - **Structured SDK errors:** every error this package raises extends `QgisSdkError` and carries a stable wire `code` (`"sdk_error"`, `"invalid_declaration"`, `"contract_validation_failed"`, `"no_web_channel"`, the transport's refusal codes, and the code of a remote fault on `QgisSdkBridgeRemoteError`). Match on the code, not on the class name; a Python-side error such as `scope_closed` or `unsupported_capability` reaches a page as a `QgisSdkBridgeRemoteError` with that code, so the package carries no idle mirror class for it ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)).
 
+- **Stores:** `OperationStore`, `StreamStore`, `FormStore`/`formStore`,
+  `HostQueryStore`/`layersQuery`/`layerFieldsQuery`, the `Store<T>` shape,
+  their state types, `schemaFields`, `labelFor`, `stableKey` and
+  `QgisSdkStoreError` (`"store_error"`), as documented under
+  [Stores](#stores-the-framework-free-core).
+
 What the root does **not** carry, and why: `./host` is generated and large, so
-it is opt-in; `./react` needs the optional `react` peer; `./testing` is a
-development dependency. The package exports no internal helper.
+it is opt-in; `./react`, `./vue` and `./svelte` each need their optional peer;
+`./testing` is a development dependency. The package exports no internal
+helper.
+
+### Which entry for which page
+
+| Tier | Page | Entry points | Scaffold (`qgis-sdk new --web`) |
+| --- | --- | --- | --- |
+| 1 | Vanilla TypeScript | root (`QgisSdk` + stores) | `--web vanilla`: `formStore` + `layersQuery` page |
+| 1 | React | root + `./react` | `--web react`: `useForm` + `useHostQuery` page |
+| 2 | Vue 3 | root + `./vue` | none; wire it per [Vue bindings](#vue-bindings) |
+| 2 | Svelte 5 | root + `./svelte` | none; wire it per [Svelte bindings](#svelte-bindings) |
+
+Tier 1 is what the scaffold generates, the opt-in `QGIS_SDK_SCAFFOLD_WEB`
+harness builds and QGIS loads in CI. Tier 2 ships the adapter with its own
+test project and the wiring below, and is covered by the same behaviour suite
+as the core and the React hooks (`tests/store-behaviour.ts`); it has no
+scaffold template ([decision-47](../../decisions/decision-47%20-%20Build-web-UI-on-a-framework-free-store-core-with-per-framework-adapters-and-ship-components-as-qgis-sdk-ui.md)).
+Every adapter is one thin subscription layer over the stores: the behaviour
+lives in the root, so a page can switch framework (or drop it) without
+changing what the host sees.
 
 ## Transport client
 
@@ -295,15 +322,93 @@ schema module is the current form. It stays for one minor; the scaffold's
 ([TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md)).
 A page on the legacy client keeps working unchanged.
 
+## Stores: the framework-free core
+
+A page's state is in four stores exported from the root, each a
+`Store<T>`: `getSnapshot()` returns a stable, frozen snapshot and
+`subscribe(listener)` calls the listener once synchronously and on every
+change, returning an unsubscribe. Both are bound methods, so they can be
+handed to `useSyncExternalStore`, a Svelte `$store` or a plain
+`addEventListener`-style page unchanged. The stores import no framework and
+no browser global; they are what the three adapters and the scaffold's vanilla
+page are built on.
+
+```ts
+import { QgisSdk, formStore, layersQuery } from "@archont561/qgis-sdk";
+import schema from "./bridge.schema";
+
+const qgis = QgisSdk.fromBridgeSchema(schema);
+
+// A form over the declared `buffer` action: fields from the request schema.
+const buffer = formStore(qgis, "buffer", { initial: { distance_metres: 500 } });
+for (const field of buffer.fields) {
+	// field.name, field.label ("Distance metres"), field.kind ("metres"),
+	// field.required, field.choices, field.details ({ minimum, maximum, ... })
+}
+buffer.set("distance_metres", "750"); // strings are coerced per kind
+buffer.subscribe((state) => {
+	// state.values, state.issues, state.errors (first code per field),
+	// state.valid, state.dirty, state.submitted, state.submission
+});
+await buffer.submit(); // validates first; an invalid form never calls the host
+
+// A layer picker over the curated host surface, grant first.
+const layers = layersQuery(qgis);
+layers.subscribe((state) => {
+	// idle | loading | ok (value: VectorLayerInfo[]) | error | refused
+});
+void layers.refresh();
+```
+
+- **`OperationStore(operation)`** - one declared operation as state:
+  `idle | pending | ok (value) | error (error)`. `run(input)` resolves with
+  the value or `undefined` (failed, aborted or superseded; the state carries
+  the error, so the promise never rejects into an event handler); only the
+  latest run can change the state. `abort()`, `reset()`.
+- **`StreamStore(open, handlers?)`** - one subscription that follows the
+  *content* of its input (`setInput(value)`, keyed on `stableKey`; `null`
+  closes it): `idle | opening | open | ended | failed`. `setHandlers` swaps
+  the callbacks without reopening; `close()` sends one unsubscribe even before
+  the host has acknowledged the open.
+- **`FormStore` / `formStore(qgis, actionId, { initial })`** - the typed form
+  for one declared action, built from its request schema with
+  `schemaFields(schema)`: a `FormField` per property with the parameter kind
+  the Python side marked (`"x-qgis-sdk"`, [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md)),
+  a `labelFor` label, `required`, `nullable`, `choices` and `details`.
+  `set(name, value)` coerces strings per kind (numbers, booleans, integers)
+  and validates with `validateAgainstSchema`; `setValues`, `reset()`,
+  `submit()` (validates, marks `submitted`, then runs the operation),
+  `abort()`, `dispose()`, `field(name)`. The declared dialect has no
+  defaults, so starting values come from `initial`.
+- **`HostQueryStore(qgis, hostOperationId, loader)`** - reads the curated
+  host surface after the handshake. When `qgis.host.granted` lacks the
+  operation the query needs it settles on `refused` (with the operation id
+  and a message) **without a call**, so a page can say "add `layers.read` to
+  the page's grants" instead of surfacing a `not_authorized` fault.
+  `layersQuery(qgis, { pageSize? })` follows `layers.list` to the last page;
+  `layerFieldsQuery(qgis, layerId)` reads `layers.get` for a `field` input
+  whose `of` names a layer input. Both need the `layers.read` grant, which
+  the scaffold's `[tool.qgis-sdk.web] grants` now lists.
+
+A `QgisSdkStoreError` (`"store_error"`) is raised for misuse: a form over an
+action the schema does not declare, or a field the form does not have. The
+behaviour suite in `tests/store-behaviour.ts` runs the same ten expectations
+against the core and against each adapter's driver, so an adapter cannot
+drift from the stores.
+
 ## React bindings
 
 `./react` is an optional entry point ([decision-18](../../decisions/decision-18%20-%20Ship-a-framework-neutral-bridge-and-explicit-web-scaffolding-choices.md)):
 it is the only subpath that imports React, `react` is an optional peer, and
 the root, `./bridge` and `./host` stay free of any framework or browser global
-(`tests/surface.test.ts` bundles them and fails on a stray `react`). The
-bindings add no second client. A `BridgeProvider` shares the `QgisSdk` a
-vanilla page builds (or, for the legacy client, its `BridgeClient`), and the
-hooks take the instance's methods, so the typed contract is the generated one.
+(`tests/surface.test.ts` bundles every entry and fails on a stray framework;
+`tests/consumer/isolation.ts` walks `dist/` after every build and fails when
+`./react` reaches `vue` or `svelte`, or the other way round). The bindings add
+no second client and no behaviour of their own: every hook is
+`useSyncExternalStore` over one of the [stores](#stores-the-framework-free-core).
+A `BridgeProvider` shares the `QgisSdk` a vanilla page builds (or, for the
+legacy client, its `BridgeClient`), and the hooks take the instance's methods,
+so the typed contract is the generated one.
 
 ```ts
 import { QgisSdk } from "@archont561/qgis-sdk";
@@ -334,6 +439,27 @@ function Sites() {
 `useOperations(createOperations)` remains for the 0.3.0 generated client and
 is memoised per provider client, as before.
 
+The form and the layer picker, as the React scaffold renders them:
+
+```tsx
+import { layersQuery } from "@archont561/qgis-sdk";
+import { useForm, useHostQuery, useQgisSdk } from "@archont561/qgis-sdk/react";
+
+function BufferForm() {
+	const qgis = useQgisSdk<Operations, Streams>();
+	const [state, form] = useForm(qgis, "buffer", { initial: { distance_metres: 500 } });
+	const [layers] = useHostQuery(useMemo(() => layersQuery(qgis), [qgis]));
+	// form.fields -> one <input> per declared field; form.set / form.submit
+	// layers.status === "refused" -> tell the author which grant is missing
+}
+```
+
+- **`useStore(store)`** subscribes a component to any `Store<T>`.
+- **`useForm(qgis, actionId, options?)`** returns `[FormState, FormStore]`;
+  the store is created once per `(qgis, actionId)` and aborted on unmount.
+- **`useHostQuery(store, { auto? })`** returns `[HostQueryState, store]` and
+  refreshes once on mount unless `auto: false`.
+
 - **`useOperation(fn)`** returns `[state, run, { abort, reset }]`. `run(input)`
   resolves with the value, or with `undefined` when the call failed, was aborted
   or was superseded - the state carries the error, so the promise never rejects
@@ -352,6 +478,63 @@ is memoised per provider client, as before.
   transport; a closed client sends no unsubscribe, the view going away is what
   disposes its subscriptions host-side ([decision-23](../../decisions/decision-23%20-%20Adapt-Tauri-invocation-resource-and-testing-patterns-to-QWebChannel.md)).
   Unmounting a component under a live provider does send one.
+
+## Vue bindings
+
+`./vue` needs the optional `vue` peer (3.5 or later) and imports nothing else
+of the framework family. It is the same stores through Vue's reactivity:
+
+```ts
+import { QgisSdk, layersQuery } from "@archont561/qgis-sdk";
+import { provideQgisSdk, useForm, useHostQuery, useOperation, useQgisSdk, useStream } from "@archont561/qgis-sdk/vue";
+
+// In the root component's setup():
+provideQgisSdk(QgisSdk.fromBridgeSchema(schema));
+
+// In any descendant's setup():
+const qgis = useQgisSdk<Operations, Streams>();
+const summary = useOperation(qgis.sites.summary); // { state, run, abort, reset, store }
+const watch = useStream(qgis.sites.watch, () => input.value, { onEvent }); // input: Ref<I | null>
+const { state, form } = useForm(qgis, "buffer", { initial: { distance_metres: 500 } });
+const { state: layers, query } = useHostQuery(layersQuery(qgis));
+```
+
+Every `state` is a read-only `ShallowRef` (`useStore(store)` gives one for any
+store); `useStream` takes a `MaybeRefOrGetter<I | null>` and follows it with
+`watch(..., { immediate: true })`; disposing the effect scope (unmounting)
+aborts the operations and closes the streams the component opened.
+`provideQgisSdk` outside `setup()` and `useQgisSdk` without a provider raise
+`QgisSdkBridgeVueError` (`"vue_binding"`). `QGIS_SDK_KEY` is the injection
+key, for a page that prefers `provide`/`inject` by hand.
+
+## Svelte bindings
+
+`./svelte` needs the optional `svelte` peer (5 or later). The stores already
+satisfy Svelte's store contract, so a component reads them as `$store`; the
+adapter adds the context and the `onDestroy` wiring:
+
+```svelte
+<script lang="ts">
+	import { layersQuery } from "@archont561/qgis-sdk";
+	import { form, getQgisSdk, hostQuery, operation, stream } from "@archont561/qgis-sdk/svelte";
+
+	// The root component called setQgisSdk(QgisSdk.fromBridgeSchema(schema)).
+	const qgis = getQgisSdk<Operations, Streams>();
+	const summary = operation(qgis.sites.summary); // aborted on destroy
+	const watch = stream(qgis.sites.watch, { onEvent }); // watch.setInput(...)
+	const buffer = form(qgis, "buffer", { initial: { distance_metres: 500 } });
+	const layers = hostQuery(layersQuery(qgis)); // refreshed once, closed on destroy
+</script>
+
+{#if $layers.status === "refused"}<p>{$layers.message}</p>{/if}
+{#each buffer.fields as field}<label>{field.label} <input on:input={(e) => buffer.set(field.name, e.currentTarget.value)} /></label>{/each}
+<p>{$buffer.valid ? "" : Object.values($buffer.errors).join(", ")}</p>
+```
+
+`toRune(store)` returns `{ current }` backed by `$state` for a runes-mode
+component that prefers it to `$store`. `setQgisSdk`/`getQgisSdk` outside
+component initialisation raise `QgisSdkBridgeSvelteError`
+(`"svelte_binding"`); `QGIS_SDK_CONTEXT` is the context key.
 
 ## Testing against a scripted host
 
@@ -411,6 +594,17 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   the two apart in reports and never cite a mocked run as native behaviour.
 
 ## Next minor (unreleased) migration notes
+
+**Stores and two more adapters (TASK-69, decision-47).** The root now exports
+the four stores; `./react` is rewritten over them with the same exported names
+and types (`react.test.ts` passes unchanged) plus `useStore`, `useForm` and
+`useHostQuery`; `./vue` and `./svelte` are new subpaths behind optional peers.
+A `./react`-only consumer's bundle gains no Vue or Svelte code. The scaffold's
+web templates render a form from the declaration and a layer picker over
+`layers.list`, so `qgis-sdk new --web` now writes
+`grants = ["layers.read"]` into `[tool.qgis-sdk.web]`; an existing project
+that adopts `layersQuery` adds that grant by hand or sees the store's
+`refused` state.
 
 **Parameter kinds on the wire (TASK-68, decision-46 point 1).** A declared
 input the Python side marked (`LayerInput`, `FileInput(filters=)`,
