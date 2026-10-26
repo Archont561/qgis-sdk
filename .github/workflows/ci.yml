@@ -99,15 +99,22 @@ jobs:
         id: s19
         run: |
           python packages/qgis-sdk-python/scripts/generate_bridge_clients.py
-          # Both artifacts: the plugin client under tests, and the host module the
-          # package ships under src. A generator that stopped writing one of them
-          # shows up as an unexpected deletion, not as a stale byte comparison.
+          # All three artifacts: the plugin client and schema module under tests,
+          # and the host module the package ships under src. A generator that
+          # stopped writing one of them shows up as an unexpected deletion, not
+          # as a stale byte comparison.
           generated=$(git status --porcelain -- packages/qgis-sdk-typescript)
           if [ -n "$generated" ]; then
             git --no-pager diff -- packages/qgis-sdk-typescript
             echo "::error title=generated client is stale::Run \`python packages/qgis-sdk-python/scripts/generate_bridge_clients.py\` and commit the result."
             exit 1
           fi
+          # The reference page's schema module is generated the way a plugin
+          # author's is: by `bridge generate --check` from the project root
+          # (TASK-66 AC 1).
+          (cd examples/simple && python -m qgis_sdk_tools bridge generate \
+            --plugin simple.plugin:SimplePlugin \
+            --out web/src/bridge.schema.ts --check)
 
       # The default environment carries the QGIS feature, so this is the only
       # place the native layers actually execute against real Qt and QGIS: the

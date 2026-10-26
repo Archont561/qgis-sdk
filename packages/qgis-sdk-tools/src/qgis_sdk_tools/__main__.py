@@ -55,9 +55,12 @@ from qgis_sdk_tools.devtools.testrun import (
     plan_tests,
 )
 from qgis_sdk_tools.generate import (
+    DEFAULT_SCHEMA_PATH,
+    SCHEMA_SUFFIX,
     check_generated,
     describe_plugin_spec,
     generate_host_typescript,
+    generate_schema_typescript,
     generate_typescript,
     load_description,
     write_generated,
@@ -270,7 +273,11 @@ def bridge_generate(
         ),
     ] = False,
     out: Annotated[
-        Path | None, typer.Option(help="TypeScript module to write or check.")
+        Path | None,
+        typer.Option(
+            help="TypeScript module to write or check; a plugin defaults to "
+            "web/src/bridge.schema.ts."
+        ),
     ] = None,
     check: Annotated[
         bool, typer.Option(help="Fail when OUT differs from a fresh generation.")
@@ -279,13 +286,29 @@ def bridge_generate(
         bool, typer.Option("--print", help="Write the module to stdout instead.")
     ] = False,
 ) -> None:
-    """Turn one plugin description into a typed TypeScript client."""
+    """Turn one plugin description into its typed bridge.schema.ts module.
+
+    The module carries the declaration and its types; ``QgisSdk.fromBridgeSchema``
+    gives a page the typed calls and the runtime checks (decision-44). An ``--out``
+    whose name does not end in ``.schema.ts`` still renders the legacy
+    self-contained client, with a note, for one minor release.
+    """
     try:
         described, generator = _describe(plugin, description, host)
+        if out is None and not show and not host:
+            out = DEFAULT_SCHEMA_PATH
+        if out is not None and not host and not out.name.endswith(SCHEMA_SUFFIX):
+            generator = generate_typescript
+            typer.echo(
+                f"note: {out} is the legacy client module, kept for one minor "
+                f"release; name the output *{SCHEMA_SUFFIX} to generate the "
+                "schema module QgisSdk.fromBridgeSchema reads",
+                err=True,
+            )
         if show:
             typer.echo(generator(described), nl=False)
         elif out is None:
-            raise QgisSdkBridgeError("give --out, --check or --print")
+            raise QgisSdkBridgeError("give --out or --print")
         elif check:
             message = check_generated(out, described, generate=generator)
             if message is not None:
@@ -313,8 +336,8 @@ def _describe(
     if (plugin is None) == (description is None):
         raise QgisSdkBridgeError("give exactly one of --plugin or --description")
     if plugin is not None:
-        return describe_plugin_spec(plugin), generate_typescript
-    return load_description(description), generate_typescript
+        return describe_plugin_spec(plugin), generate_schema_typescript
+    return load_description(description), generate_schema_typescript
 
 
 @app.command("check")
