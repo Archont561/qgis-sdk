@@ -87,7 +87,22 @@ library can supply, and stop there.
 - Scheduled as the 0.7.0 UI-toolkit release
   ([m-6](../milestones/m-6%20-%200.7.0-%E2%80%94-ui-toolkit-declaration-kinds%2C-native-surfa.md)):
   points 1–2 are [TASK-68](../tasks/task-68%20-%20Add-file-directory-field-range-colour-and-enum-parameter-kinds-and-the-standard-native-surfaces.md),
-  points 3 and 5 are [TASK-69](../tasks/task-69%20-%20Add-headless-web-bindings-to-.-react-and-a-Storybook-over-the-bridge-harness.md),
-  point 4 is [TASK-70](../tasks/task-70%20-%20Add-themed-.-ui-defaults-seeded-from-the-QGIS-palette.md),
+  points 3 and 5 are [TASK-69](../tasks/task-69%20-%20Replace-the-react-internals-with-a-framework-free-store-core-and-add-vue-and-svelte-adapters.md),
+  point 4 is [TASK-70](../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md),
   and the gate is [TASK-32](../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release.md) together with the docs
   site ([TASK-43](../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)). Nothing here blocks 0.6.0.
+
+## Amendment (2026-10-26): web half re-shaped by decision-47
+
+[decision-47](../decisions/decision-47%20-%20Build-web-UI-on-a-framework-free-store-core-with-per-framework-adapters-and-ship-components-as-qgis-sdk-ui.md) changes points 3, 4 and 5 after two follow-up questions (should
+components live in the bridge; how to support Vue and Svelte alongside React
+and vanilla). Point 3 becomes a framework-free store core in the bridge root
+with `./react`, `./vue` and `./svelte` adapters - the names listed above
+survive as stores and as adapter bindings. Points 4 and 5 (themed `./ui`,
+Storybook) move out of the bridge into `@archont561/qgis-sdk-ui`, where the
+controls become web components with framework wrappers and the Storybook is
+`@storybook/web-components-vite`. Points 1 and 2 (parameter kinds, native
+surfaces) are untouched. Tasks: [TASK-68](../tasks/task-68%20-%20Add-file-directory-field-range-colour-and-enum-parameter-kinds-and-the-standard-native-surfaces.md) (points 1–2), [TASK-69](../tasks/task-69%20-%20Replace-the-react-internals-with-a-framework-free-store-core-and-add-vue-and-svelte-adapters.md) (store
+core and adapters), [TASK-70](../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md) (`qgis-sdk-ui`), [TASK-72](../tasks/task-72%20-%20Promote-Vue-and-Svelte-to-Tier-1-with-scaffold-templates-and-harness-coverage.md) (Tier 1
+promotion of Vue and Svelte, unscheduled).
+
