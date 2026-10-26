@@ -19,12 +19,14 @@ from release import parse_versionrc
 
 @pytest.fixture(autouse=True)
 def _no_repository_alias_manifest(tmp_path, monkeypatch):
-    """Point the optional alias manifest at nothing unless a test opts in.
+    """Point the optional bridge followers at nothing unless a test opts in.
 
     Tests that monkeypatch ``_BRIDGE_PACKAGE`` to a fixture at one version must
-    not be compared against the repository's real ``qgis-sdk`` alias at another.
+    not be compared against the repository's real ``qgis-sdk`` alias or the
+    scaffold's bridge pin at another.
     """
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "absent-alias.json")
+    monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "absent-web.py")
 
 
 SAMPLE_VERSIONRC = """\
