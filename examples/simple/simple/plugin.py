@@ -2,7 +2,8 @@
 
 Five declared actions carry the whole workflow - open the fixture, read the
 selection, buffer in an explicit projected CRS, export, choose where exports
-go - and nothing else is in this file: no Qt import, no QGIS import, no widget.
+go - and one line lists the Processing provider the plugin owns; nothing else is
+in this file: no Qt import, no QGIS import, no widget.
 The native dialog QGIS shows for an action and the page in ``web/`` are two
 front ends over the same ``runtime.actions``, which is what "equivalent native
 and web controls" means here.
@@ -15,7 +16,6 @@ the actions, where its fixture is and where its exports go.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
 
 from qgis_sdk import action, plugin
 from qgis_sdk.adapters.desktop import create_class_factory
@@ -28,6 +28,7 @@ from qgis_sdk.models import (
     VectorExport,
     VectorLayerInfo,
 )
+from qgis_sdk.reference import reference_provider
 
 from . import webview
 from .workflow import LocalGisWorkflow
@@ -63,6 +64,12 @@ class SimplePlugin:
 
     ctx: PluginContext
 
+    #: The reference algorithms appear in the toolbox as ``reference:buffer``
+    #: and ``reference:centroid`` while the plugin runs inside QGIS; over the
+    #: fakes the same line registers nothing (decision-42). A tuple, because a
+    #: mutable class attribute is what Ruff's RUF012 flags.
+    providers = (reference_provider,)
+
     @property
     def workflow(self) -> LocalGisWorkflow:
         return LocalGisWorkflow(self.ctx)
@@ -73,16 +80,16 @@ class SimplePlugin:
         return self.workflow.open_dataset(FIXTURE)
 
     @action(id="selected_features", title="Selected features")
-    def selected_features(self, layer_id: Annotated[str, LayerInput()]) -> list[int]:
+    def selected_features(self, layer_id: LayerInput) -> list[int]:
         """Read the host's selection on a layer; this plugin never sets one."""
         return sorted(self.workflow.selected_features(layer_id))
 
     @action(id="buffer", title="Buffer in a projected CRS")
     def buffer(
         self,
-        layer_id: Annotated[str, LayerInput()],
-        distance_metres: Annotated[float, Metres()],
-        working_crs: Annotated[str, CrsInput()],
+        layer_id: LayerInput,
+        distance_metres: Metres,
+        working_crs: CrsInput,
     ) -> VectorLayerInfo:
         """Buffer a layer by metres inside ``working_crs``; style and present it."""
         return self.workflow.buffer(layer_id, distance_metres, working_crs)
@@ -90,7 +97,7 @@ class SimplePlugin:
     @action(id="export_layer", title="Export a layer")
     def export_layer(
         self,
-        layer_id: Annotated[str, LayerInput()],
+        layer_id: LayerInput,
         file_name: str,
         overwrite: bool = False,
     ) -> VectorExport:

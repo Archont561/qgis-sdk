@@ -24,6 +24,7 @@ from qgis_sdk.services import (
     Layers,
     Network,
     Notifications,
+    Processing,
     Progress,
     Project,
     Settings,
@@ -119,11 +120,13 @@ class PluginContext(_Context):
     Beside notifications and the owned scope it carries the curated services
     (``desktop``, ``network``, ``layers``, ``project``, ``settings``,
     ``styles``, ``algorithms``, ``workers``), exactly the Protocols the
-    web-view host surface wraps (decision-27). A host that builds the bridge
-    from this context (``HostServices.from_context``) hands both sides the same
-    instances, so a Python handler and a page read one project. Each service
-    is a :class:`Capability`: reading one the host did not provide fails by
-    name (decision-39).
+    web-view host surface wraps (decision-27), plus ``processing``, the
+    host-side registry ``PluginRuntime`` advertises the plugin's providers
+    with (decision-42). A host that builds the bridge from this context
+    (``HostServices.from_context``) hands both sides the same instances, so a
+    Python handler and a page read one project. Each service is a
+    :class:`Capability`: reading one the host did not provide fails by name
+    (decision-39).
     """
 
     __slots__ = (
@@ -131,6 +134,7 @@ class PluginContext(_Context):
         "_desktop",
         "_layers",
         "_network",
+        "_processing",
         "_project",
         "_settings",
         "_styles",
@@ -148,6 +152,7 @@ class PluginContext(_Context):
         "styles",
         "algorithms",
         "workers",
+        "processing",
     )
 
     notifications: Notifications
@@ -160,6 +165,7 @@ class PluginContext(_Context):
     styles: Capability[Styles] = Capability()
     algorithms: Capability[Algorithms] = Capability()
     workers: Capability[Workers] = Capability()
+    processing: Capability[Processing] = Capability()
 
     def __init__(
         self,
@@ -173,6 +179,7 @@ class PluginContext(_Context):
         styles: Styles | None = None,
         algorithms: Algorithms | None = None,
         workers: Workers | None = None,
+        processing: Processing | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -185,6 +192,7 @@ class PluginContext(_Context):
             _styles=styles,
             _algorithms=algorithms,
             _workers=workers,
+            _processing=processing,
         )
 
 
@@ -215,20 +223,32 @@ class UiContext(_Context):
 class AlgorithmContext(_Context):
     """Execution-only capabilities for one Processing invocation.
 
-    Built fresh for each invocation and thrown away afterwards (decision-11), so
-    an author class can hold it as ``self.ctx`` without carrying state from one
-    run into the next. It is not a ``PluginContext``: no ``iface``, no dialogs,
-    no GUI notifications - only what one execution legitimately needs.
+    Built fresh for each invocation by :func:`qgis_sdk.algorithms.invoke` and
+    thrown away afterwards (decision-11), and passed to the
+    ``@provider.algorithm`` function as its first argument (decision-42), so
+    no state carries from one run into the next. It is not a
+    ``PluginContext``: no ``iface``, no dialogs, no GUI notifications - only
+    what one execution legitimately needs. ``project`` is a capability so an
+    algorithm that composes another through ``invoke`` can still add the
+    result to the project when its host has one; ``network`` likewise.
     """
 
-    __slots__ = ("_network", "algorithms", "cancellation", "progress", "scope")
+    __slots__ = (
+        "_network",
+        "_project",
+        "algorithms",
+        "cancellation",
+        "progress",
+        "scope",
+    )
 
-    _capability_names = ("network",)
+    _capability_names = ("project", "network")
 
     progress: Progress
     cancellation: Cancellation
     scope: ResourceScope
     algorithms: Algorithms
+    project: Capability[Project] = Capability()
     network: Capability[Network] = Capability()
 
     def __init__(
@@ -237,6 +257,7 @@ class AlgorithmContext(_Context):
         cancellation: Cancellation,
         scope: ResourceScope,
         algorithms: Algorithms,
+        project: Project | None = None,
         network: Network | None = None,
     ) -> None:
         self._assemble(
@@ -244,6 +265,7 @@ class AlgorithmContext(_Context):
             cancellation=cancellation,
             scope=scope,
             algorithms=algorithms,
+            _project=project,
             _network=network,
         )
 
@@ -257,19 +279,31 @@ class JobContext(_Context):
     is the attempt's own: it closes when the attempt settles or the plugin
     unloads, not when the owning view is disposed, because closing it under a
     worker that has not acknowledged cancellation would be exactly the
-    teardown decision-21 forbids. ``workers`` and ``network`` are capabilities:
-    ``await ctx.workers.offload(work)`` on a host without a pool fails by name.
+    teardown decision-21 forbids. ``workers``, ``network``, ``algorithms`` and
+    ``project`` are capabilities: ``await ctx.workers.offload(work)`` on a host
+    without a pool fails by name, and so does ``invoke(buffer, ctx, ...)`` on
+    a host without Processing (decision-42).
     """
 
-    __slots__ = ("_network", "_workers", "cancellation", "progress", "scope")
+    __slots__ = (
+        "_algorithms",
+        "_network",
+        "_project",
+        "_workers",
+        "cancellation",
+        "progress",
+        "scope",
+    )
 
-    _capability_names = ("workers", "network")
+    _capability_names = ("workers", "network", "algorithms", "project")
 
     progress: Progress
     cancellation: Cancellation
     scope: ResourceScope
     workers: Capability[Workers] = Capability()
     network: Capability[Network] = Capability()
+    algorithms: Capability[Algorithms] = Capability()
+    project: Capability[Project] = Capability()
 
     def __init__(
         self,
@@ -278,6 +312,8 @@ class JobContext(_Context):
         scope: ResourceScope,
         workers: Workers | None = None,
         network: Network | None = None,
+        algorithms: Algorithms | None = None,
+        project: Project | None = None,
     ) -> None:
         self._assemble(
             progress=progress,
@@ -285,4 +321,6 @@ class JobContext(_Context):
             scope=scope,
             _workers=workers,
             _network=network,
+            _algorithms=algorithms,
+            _project=project,
         )

@@ -53,7 +53,14 @@ from .network import (
     NetworkRequest,
     Response,
 )
-from .parameters import CrsInput, LayerInput, Metres
+from .parameters import (
+    CrsInput,
+    CrsParameter,
+    LayerInput,
+    LayerParameter,
+    Metres,
+    MetresParameter,
+)
 from .styles import StyleSpec
 
 __all__ = [
@@ -65,11 +72,14 @@ __all__ = [
     "BufferRequest",
     "CentroidRequest",
     "CrsInput",
+    "CrsParameter",
     "GeometryType",
     "Headers",
     "LayerInput",
+    "LayerParameter",
     "Method",
     "Metres",
+    "MetresParameter",
     "NetworkRequest",
     "QgisSdkAlgorithmCancelledError",
     "QgisSdkAlgorithmRejectedError",

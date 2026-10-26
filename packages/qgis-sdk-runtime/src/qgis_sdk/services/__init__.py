@@ -11,6 +11,7 @@ from .contracts import (
 )
 from .layers import Layers
 from .network import BlockingNetwork, Deliver, Network, NetworkTransport, Params
+from .processing import Processing, ProviderRegistration
 from .project import Project
 from .settings import Settings
 from .styles import Styles
@@ -26,8 +27,10 @@ __all__ = [
     "NetworkTransport",
     "Notifications",
     "Params",
+    "Processing",
     "Progress",
     "Project",
+    "ProviderRegistration",
     "Settings",
     "Styles",
     "ViewControl",

@@ -1,143 +1,71 @@
 """A provider owns a set of algorithms, the way an app owns its routes.
 
-Declaring one is the whole setup step:
+Declaring one is the whole setup step (decision-42):
 
 ```python
-provider = Provider(id="reference", title="Reference plugin")
+tools = Provider(id="field_tools", title="Field tools")
 
 
-@provider.algorithm(id="buffer", title="Buffer", group="Geometry")
-class BufferLayer:
-    def run(self, inputs: BufferRequest) -> BufferResult: ...
+@tools.algorithm(title="Buffer in a projected CRS", group="Geometry")
+def buffer(
+    ctx: AlgorithmContext, layer: LayerInput, distance: Metres, crs: CrsInput
+) -> VectorLayerInfo: ...
 ```
 
-Registration is validated when it happens, not when the algorithm first runs: the
-class has to describe (one typed ``run``, a representable request), every request
-field has to map to a host parameter, and the id has to be unique inside the
-provider. A mistake therefore fails at import time, which is where a plugin author
-can still see it.
+Registration is validated when it happens, not when the algorithm first runs:
+the function has to take the ``AlgorithmContext`` first, every input has to map
+to a host parameter kind, the result has to be the produced layer, and the id
+has to be unique inside the provider. A mistake therefore fails at import time,
+which is where a plugin author can still see it.
 
-The provider is also what makes an algorithm *visible*: the QGIS adapter turns a
-provider into a ``QgsProcessingProvider`` and each registration into a
-``QgsProcessingAlgorithm``, so ``provider:algorithm`` appears in the toolbox. This
-module stays QGIS-free; only the adapter knows about the toolbox.
+A ``@plugin`` class lists the providers it owns in ``providers = [tools]``.
+``PluginRuntime.start()`` registers them with the host's Processing registry
+when the context carries one (``ctx.processing``), so ``field_tools:buffer``
+appears in the toolbox, the modeler and ``processing.run``; ``unload()``
+removes them. Outside QGIS the same class registers nothing. This module stays
+QGIS-free; only the adapter knows about the toolbox.
 """
 
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass, fields
-from typing import Annotated, Any, TypeVar, get_args, get_origin
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 from qgis_sdk.algorithms import (
-    _ALGORITHM_ATTRIBUTE,
+    ALGORITHM_ATTRIBUTE,
+    CRS_PARAMETER,
+    LAYER_PARAMETER,
+    METRES_PARAMETER,
+    AlgorithmDeclaration,
     AlgorithmDescription,
-    describe_algorithm,
+    describe_declared_algorithm,
 )
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     canonical_json,
-    class_metadata,
-    mark_class,
+    derive_id,
+    derive_title,
+    mark_function,
     metadata,
-    resolve_hints,
     validate_given,
 )
-from qgis_sdk.models import CrsInput, LayerInput, Metres
 
 __all__ = [
+    "CRS_PARAMETER",
     "LAYER_PARAMETER",
     "METRES_PARAMETER",
+    "PROVIDERS_ATTRIBUTE",
     "Provider",
     "ProviderDescription",
-    "RegisteredAlgorithm",
-    "parameter_kinds",
+    "declared_providers",
 ]
 
-T = TypeVar("T")
+T = TypeVar("T", bound=Callable[..., Any])
 
-LAYER_PARAMETER = "layer"
-"""Kind of a field the host fills with a vector layer."""
-
-METRES_PARAMETER = "metres"
-"""Kind of a field that is a distance in metres."""
-
-_PRIMITIVE_KINDS: dict[Any, str] = {
-    str: "string",
-    bool: "boolean",
-    int: "integer",
-    float: "number",
-}
-_SUPPORTED = "layer, crs, metres, string, integer, number or boolean"
-
-
-def _refuse(owner: str, name: str, detail: str) -> QgisSdkDeclarationError:
-    return QgisSdkDeclarationError(
-        f"{owner}.{name}: {detail}; use Annotated markers ({_SUPPORTED})"
-    )
-
-
-def _kind(owner: str, name: str, annotation: Any) -> str:
-    """Map one annotated field onto a host parameter kind, or refuse it."""
-    base, markers = annotation, ()
-    if get_origin(annotation) is Annotated:
-        base, *markers = get_args(annotation)
-    for marker in markers:
-        if isinstance(marker, LayerInput):
-            if base is not str:
-                raise _refuse(owner, name, "a layer field must be a str layer id")
-            return LAYER_PARAMETER
-        if isinstance(marker, CrsInput):
-            if base is not str:
-                raise _refuse(owner, name, "a CRS field must be a str authority code")
-            return "crs"
-        if isinstance(marker, Metres):
-            if base not in (float, int):
-                raise _refuse(owner, name, "a metres field must be a number")
-            return METRES_PARAMETER
-        raise _refuse(owner, name, f"unknown parameter marker {marker!r}")
-    kind = _PRIMITIVE_KINDS.get(base)
-    if kind is None:
-        raise _refuse(owner, name, f"cannot express {base!r} as a host parameter")
-    return kind
-
-
-def parameter_kinds(inputs_type: Any) -> tuple[tuple[str, str], ...]:
-    """Return ``(field name, kind)`` for a request dataclass, in field order.
-
-    This is the whole host-parameter contract: a field is either a marked layer,
-    a marked CRS, a marked distance in metres, or a plain primitive. Anything else
-    is refused here so that no adapter has to invent a widget at run time.
-    """
-    if not inspect.isclass(inputs_type):
-        raise QgisSdkDeclarationError(
-            f"request {inputs_type!r} must be a dataclass type to become parameters"
-        )
-    hints = resolve_hints(inputs_type, f"{inputs_type.__name__} request")
-    return tuple(
-        (
-            field.name,
-            _kind(inputs_type.__name__, field.name, hints.get(field.name, field.type)),
-        )
-        for field in fields(inputs_type)
-    )
-
-
-@dataclass(frozen=True)
-class RegisteredAlgorithm:
-    """One algorithm as its provider knows it: description, group, parameters."""
-
-    description: AlgorithmDescription
-    group: str | None
-    parameters: tuple[tuple[str, str], ...]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return the transport view, including the request's parameter kinds."""
-        return {
-            **self.description.to_dict(),
-            "group": self.group,
-            "parameters": {name: kind for name, kind in self.parameters},
-        }
+PROVIDERS_ATTRIBUTE = "providers"
+"""The class attribute a ``@plugin`` class lists its providers in."""
 
 
 @dataclass(frozen=True)
@@ -146,7 +74,7 @@ class ProviderDescription:
 
     id: str
     title: str
-    algorithms: tuple[RegisteredAlgorithm, ...]
+    algorithms: tuple[AlgorithmDescription, ...]
     schema_version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
@@ -155,13 +83,7 @@ class ProviderDescription:
             "schema_version": self.schema_version,
             "id": self.id,
             "title": self.title,
-            "algorithms": [
-                {
-                    **registered.to_dict(),
-                    "qualified_id": f"{self.id}:{registered.description.id}",
-                }
-                for registered in self.algorithms
-            ],
+            "algorithms": [described.to_dict() for described in self.algorithms],
         }
 
     def to_json(self) -> str:
@@ -170,14 +92,14 @@ class ProviderDescription:
 
 
 class Provider:
-    """A named collection of algorithms, registered at definition time."""
+    """A named collection of algorithm functions, registered at definition time."""
 
     def __init__(self, *, id: str, title: str) -> None:
         declared = metadata(id, title)
         self._id = declared.id
         self._title = declared.title
-        self._registered: dict[str, RegisteredAlgorithm] = {}
-        self._classes: dict[str, type] = {}
+        self._described: dict[str, AlgorithmDescription] = {}
+        self._functions: dict[str, Callable[..., Any]] = {}
 
     @property
     def id(self) -> str:
@@ -189,76 +111,140 @@ class Provider:
         """Return the human-readable provider title."""
         return self._title
 
+    def __repr__(self) -> str:
+        return f"Provider(id={self._id!r}, title={self._title!r})"
+
     def algorithm(
         self,
-        cls: type[T] | None = None,
+        function: T | None = None,
         /,
         *,
         id: str | None = None,
         title: str | None = None,
         group: str | None = None,
     ) -> Any:
-        """Register a decorated-by-this-call algorithm class on the provider.
+        """Declare ``function`` as one of this provider's algorithms.
 
-        The class is described immediately, so a missing ``run``, an
-        uninspectable request or a field no host could render all fail here
-        rather than during the first execution. ``@provider.algorithm`` alone
-        derives the id and title from the class name, as ``@algorithm`` does.
+        The function is described immediately, so a missing context
+        parameter, an input no host could render or a result that is not a
+        layer all fail here rather than during the first execution. Nothing is
+        wrapped or injected: a test calls the function with a fake context.
+
+        ``@provider.algorithm`` alone derives the id and title from the
+        function name. The derived id is the plain snake_case name - the
+        provider is its namespace and refuses a duplicate - so the toolbox
+        shows ``field_tools:buffer`` rather than a hashed suffix.
         """
-
         validate_given(id, title)
         if group is not None and (not isinstance(group, str) or not group.strip()):
             raise QgisSdkDeclarationError(
                 f"{id if id is not None else 'algorithm'}: group must be a nonempty string"
             )
 
-        def decorate(cls: type[T]) -> type[T]:
-            if not inspect.isclass(cls):
-                raise QgisSdkDeclarationError("@provider.algorithm requires a class")
-            declared = class_metadata(cls, id, title)
-            if declared.id in self._registered:
+        def decorate(function: T) -> T:
+            if inspect.isclass(function):
+                raise QgisSdkDeclarationError(
+                    "@provider.algorithm declares a function, not a class: write "
+                    "`@provider.algorithm def name(ctx: AlgorithmContext, ...) -> "
+                    "VectorLayerInfo` (the class form was removed; see the 0.6.0 "
+                    "migration notes)"
+                )
+            if not inspect.isfunction(function):
+                raise QgisSdkDeclarationError("@provider.algorithm requires a function")
+            declared = self._declaration(function, id, title, group)
+            if declared.id in self._described:
                 raise QgisSdkDeclarationError(
                     f"{self._id}: duplicate algorithm id {declared.id!r}"
                 )
-            if _ALGORITHM_ATTRIBUTE in vars(cls):
+            if ALGORITHM_ATTRIBUTE in vars(function):
                 raise QgisSdkDeclarationError(
-                    f"{declared.id}: already declared; register it on one provider"
+                    f"{declared.qualified_id}: already declared; "
+                    "declare a function on one provider"
                 )
-            mark_class(cls, _ALGORITHM_ATTRIBUTE, declared, "@provider.algorithm")
-            try:
-                described = describe_algorithm(cls)
-                parameters = parameter_kinds(described.inputs_type)
-            except QgisSdkDeclarationError:
-                # Leave the class as it was: a refused registration must not
-                # half-declare an algorithm that describe_algorithm would accept.
-                delattr(cls, _ALGORITHM_ATTRIBUTE)
-                raise
-            self._registered[declared.id] = RegisteredAlgorithm(
-                described, group, parameters
+            # Described before it is marked: a refused function keeps no marker,
+            # so it cannot describe as an algorithm while registered nowhere.
+            described = describe_declared_algorithm(function, declared)
+            mark_function(
+                function, ALGORITHM_ATTRIBUTE, declared, "@provider.algorithm"
             )
-            self._classes[declared.id] = cls
-            return cls
+            self._described[declared.id] = described
+            self._functions[declared.id] = function
+            return function
 
-        if cls is None:
+        if function is None:
             return decorate
-        return decorate(cls)
+        return decorate(function)
+
+    def _declaration(
+        self,
+        function: Callable[..., Any],
+        id: str | None,
+        title: str | None,
+        group: str | None,
+    ) -> AlgorithmDeclaration:
+        name = getattr(function, "__name__", None)
+        if id is None:
+            if not isinstance(name, str):
+                raise QgisSdkDeclarationError(
+                    f"{self._id}: cannot derive an id without a name; pass id= explicitly"
+                )
+            id = derive_id(name)
+        if title is None:
+            if not isinstance(name, str):
+                raise QgisSdkDeclarationError(
+                    f"{id}: cannot derive a title without a name; pass title= explicitly"
+                )
+            title = derive_title(name)
+        validated = metadata(id, title)
+        return AlgorithmDeclaration(
+            id=validated.id, title=validated.title, provider_id=self._id, group=group
+        )
 
     @property
-    def algorithms(self) -> tuple[type, ...]:
-        """Return the registered classes in registration order."""
-        return tuple(self._classes.values())
+    def algorithms(self) -> tuple[Callable[..., Any], ...]:
+        """Return the declared functions in declaration order."""
+        return tuple(self._functions.values())
 
-    def class_for(self, algorithm_id: str) -> type:
-        """Return the class registered under ``algorithm_id``."""
+    def function_for(self, algorithm_id: str) -> Callable[..., Any]:
+        """Return the function declared under ``algorithm_id``."""
         try:
-            return self._classes[algorithm_id]
+            return self._functions[algorithm_id]
         except KeyError:
             raise QgisSdkDeclarationError(
                 f"{self._id}: no algorithm {algorithm_id!r} is registered"
             ) from None
 
     def describe(self) -> ProviderDescription:
-        """Return the provider's structure without constructing an algorithm."""
+        """Return the provider's structure without calling an algorithm."""
         return ProviderDescription(
-            id=self._id, title=self._title, algorithms=tuple(self._registered.values())
+            id=self._id, title=self._title, algorithms=tuple(self._described.values())
         )
+
+
+def declared_providers(plugin_class: type) -> tuple[Provider, ...]:
+    """Return the providers a ``@plugin`` class lists, validated.
+
+    ``providers`` is optional; when present it is a list or tuple of
+    :class:`Provider` instances with distinct ids. Anything else is refused
+    naming the class, so a typo (``providers = tools``) fails when the runtime
+    is built rather than registering nothing in silence.
+    """
+    listed = getattr(plugin_class, PROVIDERS_ATTRIBUTE, None)
+    if listed is None:
+        return ()
+    name = getattr(plugin_class, "__name__", repr(plugin_class))
+    if not isinstance(listed, (list, tuple)) or not all(
+        isinstance(provider, Provider) for provider in listed
+    ):
+        raise QgisSdkDeclarationError(
+            f"{name}.{PROVIDERS_ATTRIBUTE} must be a list of Provider instances"
+        )
+    seen: dict[str, Provider] = {}
+    for provider in listed:
+        if provider.id in seen:
+            raise QgisSdkDeclarationError(
+                f"{name}.{PROVIDERS_ATTRIBUTE}: provider id {provider.id!r} is "
+                "listed twice"
+            )
+        seen[provider.id] = provider
+    return tuple(listed)

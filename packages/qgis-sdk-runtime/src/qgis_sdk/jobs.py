@@ -66,7 +66,7 @@ from qgis_sdk.models import (
     QgisSdkJobWaitRefusedError,
     QgisSdkScopeClosedError,
 )
-from qgis_sdk.services import Network, Workers
+from qgis_sdk.services import Algorithms, Network, Project, Workers
 
 __all__ = [
     "BoundJob",
@@ -594,6 +594,8 @@ async def _run_attempt(
         scope=attempt.scope,
         workers=attempt.runtime.workers,
         network=attempt.runtime.network,
+        algorithms=attempt.runtime.algorithms,
+        project=attempt.runtime.project,
     )
     outcome = function(context, **arguments)
     if inspect.isawaitable(outcome):
@@ -765,6 +767,8 @@ class _Runtime:
     scheduler: StepScheduler
     workers: Workers | None
     network: Network | None
+    algorithms: Algorithms | None
+    project: Project | None
     gui_thread: Callable[[], bool]
     on_fault: Callable[[JobFault], None] | None
     attempts: dict[str, _Attempt] = field(default_factory=dict)
@@ -825,7 +829,9 @@ class JobService:
 
     ``gui_thread`` answers "is the calling thread the GUI thread?" for
     :meth:`JobHandle.get`; the default says yes for the interpreter's main
-    thread, which is where QGIS runs its GUI.
+    thread, which is where QGIS runs its GUI. ``workers``, ``network``,
+    ``algorithms`` and ``project`` become the matching capabilities of every
+    ``JobContext`` this service builds; a host passes the ones it has.
     """
 
     def __init__(
@@ -834,6 +840,8 @@ class JobService:
         *,
         workers: Workers | None = None,
         network: Network | None = None,
+        algorithms: Algorithms | None = None,
+        project: Project | None = None,
         gui_thread: Callable[[], bool] | None = None,
         on_fault: Callable[[JobFault], None] | None = None,
         max_steps_per_job: int | None = None,
@@ -849,6 +857,8 @@ class JobService:
             scheduler=scheduler,
             workers=workers,
             network=network,
+            algorithms=algorithms,
+            project=project,
             gui_thread=gui_thread if gui_thread is not None else _main_thread,
             on_fault=on_fault,
         )

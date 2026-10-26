@@ -34,7 +34,12 @@ from qgis.gui import QgsMapLayerComboBox, QgsProjectionSelectionWidget
 
 from qgis_sdk.core import PluginRuntime
 from qgis_sdk.declarations import ActionDescription
-from qgis_sdk.models import CrsInput, LayerInput, Metres, QgisSdkFormError
+from qgis_sdk.models import (
+    CrsParameter,
+    LayerParameter,
+    MetresParameter,
+    QgisSdkFormError,
+)
 from qgis_sdk.ui import FieldSpec, coerce_values, form_fields
 
 __all__ = ["DeclaredFormDialog", "NativeForms"]
@@ -178,11 +183,11 @@ def _marker_of(hint: Any) -> str | None:
     if get_origin(hint) is not Annotated:
         return None
     for extra in get_args(hint)[1:]:
-        if isinstance(extra, LayerInput):
+        if isinstance(extra, LayerParameter):
             return "layer"
-        if isinstance(extra, CrsInput):
+        if isinstance(extra, CrsParameter):
             return "crs"
-        if isinstance(extra, Metres):
+        if isinstance(extra, MetresParameter):
             return "metres"
     return None
 

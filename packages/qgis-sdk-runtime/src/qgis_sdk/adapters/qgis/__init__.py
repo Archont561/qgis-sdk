@@ -14,7 +14,7 @@ from .context import IfaceDesktopAccess, native_plugin_context
 from .layers import NativeLayers
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
-from .processing import NativeProcessingProvider, register_provider
+from .processing import NativeProcessing, NativeProcessingProvider
 from .project import NativeProject
 from .settings import NativeSettings
 from .styles import NativeStyles
@@ -26,11 +26,11 @@ __all__ = [
     "NativeLayers",
     "NativeNetworkTransport",
     "NativeNotifications",
+    "NativeProcessing",
     "NativeProcessingProvider",
     "NativeProject",
     "NativeSettings",
     "NativeStyles",
     "ThreadPoolWorkers",
     "native_plugin_context",
-    "register_provider",
 ]

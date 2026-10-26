@@ -202,7 +202,7 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
         "test", "--target", "qgis", "-q", "-p", "no:faulthandler", cwd=project
     )
     assert native.returncode == 0, native.stdout + native.stderr
-    assert "4 passed" in native.stdout
+    assert "5 passed" in native.stdout
 
 
 def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:

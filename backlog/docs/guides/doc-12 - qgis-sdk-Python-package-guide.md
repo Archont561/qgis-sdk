@@ -13,7 +13,7 @@ moved it here, where it is the source the documentation site
 will render. The headings dropped the task tags they carried in the README;
 the records that landed each surface are TASK-2 (declarations), TASK-11 (pure
 contract layer), TASK-24 (runtime and Desktop adapter), TASK-3 (native forms),
-TASK-14 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
+TASK-14 and TASK-63 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
 (bridge host side, generated client, host surface), TASK-17 and decision-28
 (generated client and streams), TASK-5 and decision-4 (networking), TASK-1
 (scaffold), TASK-27 and TASK-28 (release
@@ -125,8 +125,8 @@ class, constructor rewrite, host imports or runtime registration is required.
 
 ### Ids and titles default from the name
 
-Every declaration decorator (`@plugin`, `@action`, `@stream`, `@algorithm`,
-`@job`, `@provider.algorithm`) takes `id=` and `title=` as optional keywords and
+Every declaration decorator (`@plugin`, `@action`, `@stream`, `@job`,
+`@provider.algorithm`) takes `id=` and `title=` as optional keywords and
 derives whichever is missing from the decorated name
 ([decision-30](../../decisions/decision-30%20-%20Derive-declaration-ids-and-titles-from-names-deterministically-never-randomly.md)),
 so the class and method decorators also work bare:
@@ -141,13 +141,16 @@ class FieldTools:
     def count_layers(self) -> int: ...
 ```
 
-- A **class** id is the snake_case class name plus `_` and six hex digits of
-  `sha256("<module>.<qualname>")`. The suffix keeps two plugins, algorithms or
-  jobs that share a class name apart without being random: the same class in
-  the same module derives the same id on every import, so generated clients and
-  the contract fingerprint stay valid until the class itself is renamed or
-  moved. Pin `id=` before publishing a contract you do not want to track the
-  class name.
+- A **class** id (`@plugin`) and a **job** id (`@job`) is the snake_case name
+  plus `_` and six hex digits of `sha256("<module>.<qualname>")`. The suffix
+  keeps two plugins or jobs that share a name apart without being random: the
+  same class in the same module derives the same id on every import, so
+  generated clients and the contract fingerprint stay valid until the class
+  itself is renamed or moved. Pin `id=` before publishing a contract you do
+  not want to track the class name.
+- A **provider algorithm** id (`@provider.algorithm`) is the plain snake_case
+  function name, without a suffix: the provider is its namespace and refuses a
+  duplicate, and the toolbox shows `field_tools:buffer` rather than a hash.
 - A **method** id (action, stream) is the plain method name, without a suffix:
   it is already unique inside its class, and the TypeScript client spells it as
   a property (`client.list_layers(...)`), so it stays an identifier. Leading
@@ -166,7 +169,7 @@ annotations resolve normally; function-local forward-reference names are not
 reconstructed from vanished local scopes.
 
 `describe_algorithm` and `describe_job` follow the same rules, and
-`qgis_sdk.declarations.describe(cls)` picks the right one from the class's
+`qgis_sdk.declarations.describe(target)` picks the right one from the
 decorator marker when a tool does not know which kind it holds. All four
 descriptions share the `Description` protocol, so one `to_json()` canonical form
 (sorted keys, compact separators, no NaN) feeds the bridge generator's
@@ -222,16 +225,16 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(cls)` dispatches on the `@plugin`/`@algorithm`/`@job` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class (TASK-2, TASK-49) |
-| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError` |
+| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class (TASK-2, TASK-49) |
+| `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter` |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
-| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, and `Workers` protocols; implementations are supplied by the host or by tests |
+| `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
-| `algorithms` | `@algorithm`, `describe_algorithm`, `invoke`, and `AlgorithmResult`; request and result schemas come from the same generator the plugin declarations use (TASK-14) |
+| `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use (TASK-14, TASK-63) |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery (TASK-15) |
-| `providers` | `Provider` and `@provider.algorithm` registration, plus `parameter_kinds` - which host parameter each request field deserves (TASK-39) |
-| `reference` | `BufferLayer` and `CentroidLayer`, the two operations the reference workflow runs (decision-19) |
+| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists (TASK-39, TASK-63) |
+| `reference` | `buffer_layer` and `centroid_layer` on `reference_provider`, the two operations the reference workflow runs (decision-19) |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
@@ -261,7 +264,9 @@ except QgisSdkUnsupportedCapabilityError as error:
 `PluginContext` is plugin-lifetime state. Beside `notifications` and `scope` it
 carries the curated services as *capabilities* — `layers`, `project`,
 `settings`, `styles`, `algorithms`, `workers`, plus `desktop` and `network` —
-the very Protocols the web-view host surface wraps (decision-27, decision-32).
+the very Protocols the web-view host surface wraps (decision-27, decision-32),
+and `processing`, the host-side registry the runtime advertises the plugin's
+`providers` with (decision-42).
 A capability is a plain attribute typed as the service: reading one the host
 did not supply raises `QgisSdkUnsupportedCapabilityError(capability=<name>)`
 instead of handing back `None`, and every one of them refuses on a closed
@@ -412,7 +417,6 @@ code. `qgis_sdk.ui` turns that description into renderable fields, and
 validated values:
 
 ```python
-from typing import Annotated
 from qgis_sdk import action, plugin
 from qgis_sdk.adapters.qgis import NativeForms
 from qgis_sdk.models import LayerInput
@@ -420,7 +424,7 @@ from qgis_sdk.models import LayerInput
 @plugin(id="demo:forms", title="Form demo")
 class Demo:
     @action(id="demo:buffer", title="Buffer layer")
-    def buffer(self, layer_id: Annotated[str, LayerInput()], distance: float) -> str:
+    def buffer(self, layer_id: LayerInput, distance: float) -> str:
         return layer_id
 
 forms = NativeForms(runtime)          # needs a started runtime
@@ -436,10 +440,10 @@ and the expected type, and the submitted value is never echoed because a field
 can hold a path or a credential. Optional fields that were not submitted are
 absent from the result, so the handler's own defaults apply.
 
-Widget selection follows `models.parameters`: an `Annotated[str, LayerInput()]`
-becomes a vector-layer combo box, `CrsInput()` a CRS selector, `Metres()` a
-spin box labelled in metres, a `Literal` a combo box, and the rest the obvious
-primitive widget.
+Widget selection follows `models.parameters`: a `LayerInput` (that is,
+`Annotated[str, LayerParameter()]`) becomes a vector-layer combo box, `CrsInput`
+a CRS selector, `Metres` a spin box labelled in metres, a `Literal` a combo
+box, and the rest the obvious primitive widget.
 
 The escape hatch is not a second API: `PluginRuntime.actions` is keyed by action
 id and holds ordinary bound methods, so conventional PyQt code can build its own
@@ -448,89 +452,122 @@ directly - with the same validation.
 
 ## Processing algorithms and safe outputs
 
-`qgis_sdk.algorithms` is the authoring surface decision-11 settled on: one decorated plain class per algorithm, one typed `run(inputs) -> Result` entry point, and a constructor-injected `AlgorithmContext`. Describing an algorithm never constructs it, and every invocation constructs a **fresh** author instance and a **fresh** context over a child scope that is closed again when the invocation ends:
+`qgis_sdk.algorithms` is the authoring surface
+[decision-42](../../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md)
+settled on: an algorithm is a plain function declared on a `Provider`, the
+same shape as a `@job`. Its first parameter is the `AlgorithmContext` the
+runtime injects, the remaining parameters are typed keyword inputs, and it
+returns the `VectorLayerInfo` of the layer it produced. Describing one never
+calls it, and every invocation builds a **fresh** context over a child scope
+that is closed again when the invocation ends:
 
 ```python
-from pathlib import Path
-
 from qgis_sdk.algorithms import describe_algorithm, invoke
-from qgis_sdk.core import ResourceScope
-from qgis_sdk.models import BufferRequest
-from qgis_sdk.reference import BufferLayer
+from qgis_sdk.core import AlgorithmContext
+from qgis_sdk.models import BufferRequest, CrsInput, LayerInput, Metres, VectorLayerInfo
+from qgis_sdk.providers import Provider
 
-print(describe_algorithm(BufferLayer).to_dict()["inputs"]["schema"]["required"])
-# ['layer_id', 'distance_metres', 'working_crs']
+tools = Provider(id="field_tools", title="Field tools")
 
-scope = ResourceScope()
-result = invoke(
-    BufferLayer,
-    BufferRequest(layer_id=source_id, distance_metres=500.0, working_crs="EPSG:3857"),
-    algorithms=algorithms,  # qgis_sdk.services.Algorithms
-    project=project,        # qgis_sdk.services.Project
-    scope=scope,
-)
-# invoke already added result.output to the project - after success only.
+
+@tools.algorithm(title="Buffer in a projected CRS", group="Geometry")
+def buffer(
+    ctx: AlgorithmContext, layer_id: LayerInput, distance: Metres, crs: CrsInput
+) -> VectorLayerInfo:
+    return ctx.algorithms.execute(
+        BufferRequest(layer_id=layer_id, distance_metres=distance, working_crs=crs)
+    )
+
+
+described = describe_algorithm(buffer)
+print(described.qualified_id, described.kinds, described.required)
+# field_tools:buffer {'layer_id': 'layer', 'distance': 'metres', 'crs': 'crs'} ('layer_id', 'distance', 'crs')
 ```
 
-The request schemas come from the same `qgis_sdk.declarations` generator that describes plugin actions, so an algorithm's inputs are held to one documented typing subset and are bridge-eligible for TASK-17.
+`invoke(function, ctx, **inputs)` runs one from the context the caller already
+holds - the `PluginContext` of an action, the `JobContext` of a job, or the
+`AlgorithmContext` of another algorithm. It reads `algorithms`, `project` and
+`scope` from that context, builds the invocation's own `AlgorithmContext`, and
+adds the output to `ctx.project` after success:
 
-**Non-destructive by construction (decision-19).** `Algorithms.execute` writes a *new* output and opens it as a layer the runtime owns; no method edits the source dataset. A run that fails deletes its own temporary directory before re-raising, so no partial output survives a failure, and the intermediate reprojection a buffer needs is scaffolding that never outlives the run either. `invoke` adds the output to the project only after the operation succeeded, the result matched its declared type *and* cancellation was not requested in between; a failure or cancellation at any point leaves the project as it was.
+```python
+# inside an @action on a @plugin class
+output = invoke(
+    buffer, self.ctx, layer_id=source_id, distance=500.0, crs="EPSG:3857"
+)
+# invoke already added `output` to the project - after success only.
+```
+
+`progress=` and `cancellation=` left out are inherited from a job or algorithm
+context (so a job's cancellation reaches the algorithm it runs); a plugin
+context has neither, and the call runs silently and uncancelled.
+`add_to_project=False` is for a caller that owns the destination itself: the
+Processing bridge hands the layer to a feature sink, and the reference workflow
+styles the output before presenting it. A context without the service a call
+needs refuses by name (`QgisSdkUnsupportedCapabilityError("algorithms")`)
+before anything runs.
+
+Nothing is injected at decoration time, so a unit test needs no runner: call
+`buffer(fake_context, layer_id=..., distance=..., crs=...)` with an
+`AlgorithmContext` built over the `qgis_sdk.testing` fakes.
+
+The input schemas come from the same `qgis_sdk.declarations` generator that
+describes plugin actions, so an algorithm's inputs are held to one documented
+typing subset. `AlgorithmDescription` carries `parameters`, `required`,
+`annotations`, `kinds` (input name to host parameter kind), `inputs_schema`,
+`result_type` / `result_schema`, `group`, `provider_id` and `qualified_id`;
+`to_dict()["inputs"]` is the object schema itself.
+
+**Non-destructive by construction (decision-19).** `Algorithms.execute` writes a *new* output and opens it as a layer the runtime owns; no method edits the source dataset. A run that fails deletes its own temporary directory before re-raising, so no partial output survives a failure, and the intermediate reprojection a buffer needs is scaffolding that never outlives the run either. `invoke` adds the output to the project only after the function returned, the result matched its declared type *and* cancellation was not requested in between; a failure or cancellation at any point leaves the project as it was.
 
 **Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
 
-Two honest limits of this slice: cancellation is observed at phase boundaries (before the operation, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm class on its own is described and invoked directly - grouping comes from a provider, below.
+Two honest limits of this slice: cancellation is observed at phase boundaries (before the function runs, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm's result is a vector layer - other layer kinds arrive with the services that produce them.
 
 ## Providers: algorithms in the QGIS Processing toolbox
 
-An algorithm class is useful on its own; a provider is what makes it *visible*. Declare one object, register algorithms on it the way a route is registered on an app, and give it to the QGIS adapter:
+A provider is both the namespace an algorithm is declared in and what makes it
+*visible*. A `@plugin` class lists the providers it owns, and the runtime does
+the rest:
 
 ```python
-from dataclasses import dataclass
-from typing import Annotated
-
-from qgis_sdk.models import LayerInput, Metres, VectorLayerInfo
-from qgis_sdk.providers import Provider
-
-mine = Provider(id="my.plugin", title="My plugin")
+from qgis_sdk import plugin
+from qgis_sdk.core import PluginContext
 
 
-@dataclass(frozen=True, slots=True)
-class SmoothRequest:
-    layer_id: Annotated[str, LayerInput()]      # a layer picker in the dialog
-    tolerance: Annotated[float, Metres()]       # a spin box labelled in metres
+@plugin(id="field_tools", title="Field tools")
+class FieldTools:
+    ctx: PluginContext
 
-
-@dataclass(frozen=True, slots=True)
-class SmoothResult:
-    output: VectorLayerInfo
-
-
-@mine.algorithm(id="smooth", title="Smooth geometries", group="Geometry")
-class Smooth:
-    def __init__(self, ctx):  # AlgorithmContext, fresh per invocation
-        self.ctx = ctx
-
-    def run(self, inputs: SmoothRequest) -> SmoothResult:
-        ...
+    providers = [tools]  # a tuple also works; Ruff's RUF012 prefers one
 ```
 
-```python
-from qgis_sdk.adapters.qgis import register_provider
+While the plugin runs inside QGIS, `PluginRuntime.start()` registers every
+listed provider with `QgsApplication.processingRegistry()` through the
+context's `processing` capability (the native context built by
+`native_plugin_context` carries it), so `field_tools:buffer` appears in the
+toolbox, the modeler and `processing.run(...)`; `unload()` removes them again,
+and a start that fails removes whatever it had registered. Over the fakes or a
+standalone Qt host the context has no `processing`, and the same class
+registers nothing. Two plugins that list providers with the same id are
+refused by name when the second one starts. `runtime.providers` and
+`runtime.registered_providers` tell a host or a test what is listed and what is
+currently advertised; `describe_plugin` does not change, because a provider is
+a host-side registration rather than a page-callable operation.
 
-bridge = register_provider(
-    mine, layers=layers, algorithms=algorithms, project=project, scope=scope
-)
-# "my.plugin:smooth" is now in the toolbox, the modeler and `processing.run`
-bridge.unregister()  # ...if the plugin unloads
-```
+Declaration is validated **when it happens**: the function must take the
+`AlgorithmContext` first, every input must map to a host parameter kind, the
+result must be the produced `VectorLayerInfo`, and the id must be unique inside
+the provider. A mistake fails at import time, not on the first run, and a
+refused function keeps no marker. `providers = ...` that is not a list or tuple
+of `Provider` instances, or lists one id twice, is refused when the
+`PluginRuntime` is built.
 
-Registration is validated **when it happens**: the class must describe, every request field must map to a host parameter, and the id must be unique inside the provider. A mistake fails at import time, not on the first run.
+`Annotated` markers say what an input *means* to the host while the wire schema keeps describing the stored value. `LayerInput` makes an input a vector-layer picker (the picked layer is opened through the same `Layers` service, so it arrives as an owned layer id), `CrsInput` makes it a CRS chooser, and `Metres` gives a distance a metre-labelled, non-negative spin box. The aliases are `Annotated[str, LayerParameter()]`, `Annotated[str, CrsParameter()]` and `Annotated[float, MetresParameter()]`; spell the long form when you want a bound (`Annotated[float, MetresParameter(minimum=1.0)]`) - it describes identically. Plain `str`/`int`/`float`/`bool` inputs become text, integer, double and boolean parameters. Anything else - a dataclass, a list, a `Literal` - is refused at declaration with the input name and the supported kinds.
 
-`Annotated` markers say what a field *means* to the host while the wire schema keeps describing the stored value: `LayerInput()` makes a field a vector-layer picker (the picked layer is opened through the same `Layers` service, so it arrives as an owned layer id), `CrsInput()` makes it a CRS chooser, and `Metres()` gives a distance a metre-labelled, non-negative spin box. Plain `str`/`int`/`float`/`bool` fields become text, integer, double and boolean parameters. Anything else - a nested dataclass, a list, a `Literal` - is refused at registration with the field name and the supported kinds.
+The bridge builds an `AlgorithmContext` over the dialog's feedback and calls the function through the same `invoke` an action uses, then copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
 
-The bridge copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
-
-`providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge is only importable where PyQGIS exists.
+`providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge (`qgis_sdk.adapters.qgis.NativeProcessing`) is only importable where PyQGIS exists. `qgis_sdk.testing.FakeProcessing` is the registry double for a pure test of the lifecycle.
 
 ## WebEngine bridge, host side
 
@@ -1344,7 +1381,59 @@ in 0.5.
   schema itself, not `{"type": ...}`). `result_type` / `result_schema` are
   unchanged. `describe(fn)` answers for a `@job` function; the refusal for an
   undecorated class now reads "describe requires a class declared with
-  @plugin or @algorithm, or a function declared with @job".
+  @plugin, or a function declared with @job or @provider.algorithm".
+
+Algorithms follow the same move
+([decision-42](../../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md);
+TASK-63). Every rename, in one list:
+
+- **`@provider.algorithm` decorates a function, not a class.** `run(self,
+  inputs: Request) -> Result` becomes `def name(ctx: AlgorithmContext,
+  **typed inputs) -> VectorLayerInfo`; the request dataclass's fields become
+  the keyword parameters and the result dataclass's `output` becomes the
+  return value. The class form is refused with a message naming the change.
+  The bare `@algorithm` decorator and `qgis_sdk.algorithms.algorithm` are
+  gone: a provider is the only container. A derived algorithm id is now the
+  plain function name (no hash suffix); pass `id=` to keep an old suffixed id.
+- **`invoke(Class, Request, algorithms=, project=, scope=, ...)`** becomes
+  **`invoke(function, ctx, **inputs)`**: pass the `PluginContext`,
+  `JobContext` or `AlgorithmContext` you hold instead of its three services,
+  and the inputs as keywords. It returns the `VectorLayerInfo` directly;
+  `AlgorithmResult` and `result.output` are gone. `progress=`,
+  `cancellation=` and `add_to_project=` keep their meaning; left out, progress
+  and cancellation now come from a job or algorithm context.
+- **`register_provider(...)` / `bridge.unregister()` leave the plugin.** Delete
+  those lines from `initGui`/`unload` and add `providers = [tools]` to the
+  `@plugin` class; `PluginRuntime.start()`/`unload()` register and remove them
+  through the new `processing` capability of `PluginContext`
+  (`native_plugin_context` supplies `NativeProcessing`; `qgis_sdk.testing`
+  gains `FakeProcessing`). `register_provider` is no longer exported from
+  `qgis_sdk.adapters.qgis`.
+- **`LayerInput`, `CrsInput`, `Metres` are annotation aliases.**
+  `Annotated[str, LayerInput()]` becomes `LayerInput` (or `Annotated[str,
+  LayerParameter()]`), `Annotated[str, CrsInput()]` becomes `CrsInput`
+  (`CrsParameter`), `Annotated[float, Metres()]` becomes `Metres`
+  (`MetresParameter`); a bound moves to `Annotated[float,
+  MetresParameter(minimum=..., maximum=...)]`. This applies to `@action`
+  parameters too - `qgis_sdk.ui` and `NativeForms` read the new markers.
+- **`AlgorithmDescription` describes a signature.** `inputs_type` is gone;
+  `parameters`, `required`, `annotations` and `kinds` describe the inputs,
+  `inputs_schema` is their object schema, and `group`, `provider_id` and
+  `qualified_id` are on the description. `ProviderDescription.algorithms` is
+  a tuple of `AlgorithmDescription` (`RegisteredAlgorithm` is gone), and
+  `Provider.class_for` is `Provider.function_for`. `parameter_kinds(dataclass)`
+  is `qgis_sdk.algorithms.parameter_kind(path, annotation)`;
+  `LAYER_PARAMETER`, `CRS_PARAMETER`, `METRES_PARAMETER` live there too.
+- **`qgis_sdk.reference`** exports `buffer_layer` and `centroid_layer` (on
+  `reference_provider`) instead of `BufferLayer`/`BufferResult`/
+  `CentroidLayer`/`CentroidResult`; the qualified ids `reference:buffer` and
+  `reference:centroid` do not change.
+- **Contexts gain capabilities, additively.** `JobContext` carries
+  `algorithms` and `project` (`JobService(..., algorithms=, project=)`),
+  `AlgorithmContext` carries `project`, and `PluginContext` carries
+  `processing`; all are optional constructor keywords that refuse by name
+  when a host leaves them out. The wire contract, `describe_plugin` output
+  and `HOST_FINGERPRINT` do not move.
 
 `qgis-sdk-tools` 0.6.0 changes one thing in what `qgis-sdk bridge generate`
 emits ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)):
@@ -1483,7 +1572,7 @@ landing order.
   fresh per invocation/attempt and still arrive through the constructor
   (decision-11, decision-13).
 - **Declaration ids and titles are optional.** `@plugin`, `@action`, `@stream`,
-  `@algorithm`, `@job` and `@provider.algorithm` derive a missing `id=` /
+  `@algorithm` (removed again in 0.6.0), `@job` and `@provider.algorithm` derive a missing `id=` /
   `title=` from the decorated name (see "Ids and titles default from the name")
   and the class and method decorators accept the bare form. Existing explicit
   declarations are unchanged; `events=` is now the only required keyword of

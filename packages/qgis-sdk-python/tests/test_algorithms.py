@@ -1,45 +1,40 @@
-"""The authoring surface: inspect without constructing, run with a fresh context."""
+"""The authoring surface: inspect a function without calling it, run it with a fresh context."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import pytest
-from qgis_sdk.algorithms import (
-    AlgorithmDescription,
-    AlgorithmResult,
-    algorithm,
-    describe_algorithm,
-    invoke,
-)
-from qgis_sdk.core import AlgorithmContext, ResourceScope
-from qgis_sdk.declarations import QgisSdkDeclarationError
+from qgis_sdk.algorithms import AlgorithmDescription, describe_algorithm, invoke
+from qgis_sdk.core import AlgorithmContext, JobContext, PluginContext, ResourceScope
+from qgis_sdk.declarations import QgisSdkDeclarationError, describe
 from qgis_sdk.models import (
     BufferRequest,
     CentroidRequest,
+    CrsInput,
+    LayerInput,
+    LayerParameter,
+    Metres,
+    MetresParameter,
     QgisSdkAlgorithmCancelledError,
     QgisSdkAlgorithmRejectedError,
     QgisSdkScopeClosedError,
+    QgisSdkUnsupportedCapabilityError,
     VectorLayerInfo,
 )
-from qgis_sdk.reference import BufferLayer, BufferResult, CentroidLayer, CentroidResult
-from qgis_sdk.testing import FakeAlgorithms, FakeLayers, FakeProject
-
-
-@dataclass(frozen=True, slots=True)
-class Request:
-    value: str
-
-
-@dataclass(frozen=True, slots=True)
-class Result:
-    output: VectorLayerInfo
+from qgis_sdk.providers import Provider
+from qgis_sdk.reference import buffer_layer, centroid_layer, reference_provider
+from qgis_sdk.testing import (
+    FakeAlgorithms,
+    FakeLayers,
+    FakeProject,
+    RecordingNotifications,
+)
 
 
 class Clock:
-    """A cancellation signal a test can flip, including from inside ``run``."""
+    """A cancellation signal a test can flip, including from inside the function."""
 
     def __init__(self, cancelled: bool = False) -> None:
         self.cancelled = cancelled
@@ -89,227 +84,336 @@ def _declared(
     return algorithms, layers, FakeProject(layers, scope), scope
 
 
-def test_describing_an_algorithm_never_constructs_it() -> None:
-    constructions: list[AlgorithmContext] = []
+def _plugin_context(
+    algorithms: FakeAlgorithms, project: FakeProject, scope: ResourceScope
+) -> PluginContext:
+    return PluginContext(
+        notifications=RecordingNotifications(scope),
+        scope=scope,
+        algorithms=algorithms,
+        project=project,
+    )
 
-    @algorithm(id="test.observe", title="Observe")
-    class Observed:
-        def __init__(self, ctx: AlgorithmContext) -> None:
-            constructions.append(ctx)
 
-        def run(self, inputs: Request) -> Result:
-            raise AssertionError("describe_algorithm must not call run")
+def _provider() -> Provider:
+    return Provider(id="test", title="Test provider")
 
-    description = describe_algorithm(Observed)
 
-    assert (description.id, description.title) == ("test.observe", "Observe")
-    assert constructions == []
+BUFFER = {"layer_id": "layer-1", "distance_metres": 10.0, "working_crs": "EPSG:3857"}
+
+
+# -- describe_algorithm: inputs, kinds, required names, result ---------------------
+
+
+def test_describing_an_algorithm_never_calls_it() -> None:
+    calls: list[Any] = []
+    provider = _provider()
+
+    @provider.algorithm(id="observe", title="Observe")
+    def observe(ctx: AlgorithmContext, value: str, count: int = 1) -> VectorLayerInfo:
+        calls.append(ctx)
+        raise AssertionError("describe_algorithm must not call the function")
+
+    description = describe_algorithm(observe)
+
+    assert isinstance(description, AlgorithmDescription)
+    assert (description.id, description.title) == ("observe", "Observe")
+    assert description.qualified_id == "test:observe"
+    assert calls == []
+    assert description.parameters == ("value", "count")
+    assert description.required == ("value",)
+    assert description.kinds == {"value": "string", "count": "integer"}
+    assert description.annotations == {"value": str, "count": int}
+    assert description.result_type is VectorLayerInfo
     assert description.inputs_schema["required"] == ["value"]
-    assert description.inputs_schema["properties"]["value"] == {"type": "string"}
+    assert description.inputs_schema["properties"]["count"]["type"] == "integer"
+    assert description.result_schema["required"][0] == "id"
 
 
-def test_the_description_names_its_types_for_a_generator() -> None:
-    description = describe_algorithm(BufferLayer)
+def test_the_reference_algorithms_report_their_kinds_and_qualified_ids() -> None:
+    buffer = describe_algorithm(buffer_layer)
 
-    payload = description.to_dict()
-    assert payload["schema_version"] == 1
-    assert payload["inputs"]["type"] == "BufferRequest"
-    assert payload["result"]["type"] == "BufferResult"
-    # The working CRS is required by the generated contract, not just by prose:
-    # a bridge client cannot omit it and let the adapter guess.
-    assert "working_crs" in payload["inputs"]["schema"]["required"]
+    assert buffer.id == "buffer"
+    assert buffer.group == "Geometry"
+    assert buffer.kinds == {
+        "layer_id": "layer",
+        "distance_metres": "metres",
+        "working_crs": "crs",
+    }
+    assert buffer.required == ("layer_id", "distance_metres", "working_crs")
+    assert describe_algorithm(centroid_layer).kinds == {"layer_id": "layer"}
+    qualified = [
+        algorithm["qualified_id"]
+        for algorithm in reference_provider.describe().to_dict()["algorithms"]
+    ]
+    assert qualified == ["reference:buffer", "reference:centroid"]
 
 
-def test_a_description_can_be_json_encoded() -> None:
+def test_the_description_serialises_without_live_types() -> None:
     import json
 
-    encoded = json.dumps(describe_algorithm(CentroidLayer).to_dict())
+    payload = describe_algorithm(buffer_layer).to_dict()
 
-    assert '"centroid"' in encoded
+    assert payload["schema_version"] == 1
+    assert payload["provider"] == "reference"
+    assert payload["parameters"] == {
+        "layer_id": "layer",
+        "distance_metres": "metres",
+        "working_crs": "crs",
+    }
+    # The working CRS is required by the generated contract, not just by prose.
+    assert "working_crs" in payload["inputs"]["required"]
+    assert payload["result"]["type"] == "VectorLayerInfo"
+    assert '"centroid"' in json.dumps(describe_algorithm(centroid_layer).to_dict())
+
+
+def test_the_alias_and_the_explicit_annotated_form_describe_identically() -> None:
+    provider = _provider()
+
+    @provider.algorithm
+    def aliased(
+        ctx: AlgorithmContext, layer: LayerInput, distance: Metres, crs: CrsInput
+    ) -> VectorLayerInfo: ...
+
+    @provider.algorithm
+    def explicit(
+        ctx: AlgorithmContext,
+        layer: Annotated[str, LayerParameter()],
+        distance: Annotated[float, MetresParameter()],
+        crs: CrsInput,
+    ) -> VectorLayerInfo: ...
+
+    first, second = describe_algorithm(aliased), describe_algorithm(explicit)
+
+    assert (
+        first.kinds
+        == second.kinds
+        == {
+            "layer": "layer",
+            "distance": "metres",
+            "crs": "crs",
+        }
+    )
+    assert first.inputs_schema == second.inputs_schema
+    assert first.annotations == second.annotations
+
+
+def test_a_bounded_distance_keeps_the_metres_kind() -> None:
+    provider = _provider()
+
+    @provider.algorithm
+    def bounded(
+        ctx: AlgorithmContext,
+        distance: Annotated[float, MetresParameter(minimum=1.0, maximum=50.0)],
+    ) -> VectorLayerInfo: ...
+
+    assert describe_algorithm(bounded).kinds == {"distance": "metres"}
+
+
+def test_describe_dispatches_to_the_algorithm_describer() -> None:
+    assert describe(buffer_layer) == describe_algorithm(buffer_layer)
 
 
 @pytest.mark.parametrize(
     ("build", "message"),
     [
-        (lambda: describe_algorithm(type("Bare", (), {})), "requires a class with"),
-        (
-            lambda: describe_algorithm(
-                type("HandSet", (), {"__qgis_sdk_algorithm__": object()})
-            ),
-            "requires a class with",
-        ),
+        (lambda: describe_algorithm(lambda ctx: None), "requires a function with"),
+        (lambda: describe_algorithm(type("Bare", (), {})), "requires a function with"),
     ],
 )
-def test_an_undecorated_class_is_refused(build, message) -> None:
+def test_an_undeclared_target_is_refused(build, message) -> None:
     with pytest.raises(QgisSdkDeclarationError, match=message):
         build()
 
 
-def test_a_decorated_class_without_run_is_refused() -> None:
-    cls = algorithm(id="test.norun", title="No run")(type("NoRun", (), {}))
+def test_a_hand_set_marker_is_refused() -> None:
+    def forged(ctx: AlgorithmContext) -> VectorLayerInfo: ...
 
-    with pytest.raises(QgisSdkDeclarationError, match="needs its own run method"):
-        describe_algorithm(cls)
+    forged.__qgis_sdk_algorithm__ = object()  # type: ignore[attr-defined]
 
-
-def test_a_duplicate_declaration_is_refused() -> None:
-    @algorithm(id="test.once", title="Once")
-    class Once:
-        def run(self, inputs: Request) -> Result: ...
-
-    with pytest.raises(QgisSdkDeclarationError, match="duplicate"):
-        algorithm(id="test.once", title="Once")(Once)
+    with pytest.raises(QgisSdkDeclarationError, match="requires a function with"):
+        describe_algorithm(forged)
 
 
-def test_decorating_a_non_class_is_refused() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="requires a class"):
-        algorithm(id="test.fn", title="Fn")(lambda: None)
+def test_an_algorithm_description_is_not_mutable() -> None:
+    from dataclasses import FrozenInstanceError
+
+    description = describe_algorithm(buffer_layer)
+
+    with pytest.raises(FrozenInstanceError):
+        description.id = "other"  # type: ignore[misc]
 
 
-@pytest.mark.parametrize(
-    ("run", "message"),
-    [
-        (lambda self: None, "exactly one typed inputs"),
-        (lambda self, a, b: None, "exactly one typed inputs"),
-        (lambda not_self, inputs: None, "exactly one typed inputs"),
-    ],
-)
-def test_a_run_with_the_wrong_shape_is_refused(run, message) -> None:
-    cls = algorithm(id="test.shape", title="Shape")(type("Shape", (), {"run": run}))
-
-    with pytest.raises(QgisSdkDeclarationError, match=message):
-        describe_algorithm(cls)
+# -- invoke: one runner from any context ---------------------------------------------
 
 
-def _unannotated_inputs(self, inputs):
-    return None
+def test_each_invocation_gets_a_fresh_context_over_a_child_scope() -> None:
+    seen: list[AlgorithmContext] = []
+    provider = _provider()
 
-
-def _unannotated_result(self, inputs: Request):
-    return None
-
-
-@pytest.mark.parametrize(
-    ("run", "message"),
-    [
-        (_unannotated_inputs, "inputs must be annotated"),
-        (_unannotated_result, "must declare its result"),
-    ],
-)
-def test_run_must_annotate_both_sides(run, message) -> None:
-    cls = algorithm(id="test.hints", title="Hints")(type("Hints", (), {"run": run}))
-
-    with pytest.raises(QgisSdkDeclarationError, match=message):
-        describe_algorithm(cls)
-
-
-def test_an_annotation_outside_the_contract_subset_is_refused_at_inspection() -> None:
-    def run(self, inputs: dict) -> Result: ...
-
-    cls = algorithm(id="test.subset", title="Subset")(type("Subset", (), {"run": run}))
-
-    with pytest.raises(QgisSdkDeclarationError, match="unsupported annotation"):
-        describe_algorithm(cls)
-
-
-def test_each_invocation_gets_a_fresh_instance_and_a_fresh_context() -> None:
-    seen: list[tuple[object, AlgorithmContext]] = []
-
-    @algorithm(id="test.fresh", title="Fresh")
-    class Fresh:
-        def __init__(self, ctx: AlgorithmContext) -> None:
-            self.ctx = ctx
-
-        def run(self, inputs: Request) -> Result:
-            seen.append((self, self.ctx))
-            return Result(
-                output=self.ctx.algorithms.execute(
-                    BufferRequest(
-                        layer_id="layer-1",
-                        distance_metres=1.0,
-                        working_crs="EPSG:3857",
-                    )
-                )
-            )
+    @provider.algorithm
+    def fresh(ctx: AlgorithmContext, value: str) -> VectorLayerInfo:
+        seen.append(ctx)
+        # The caller's own services, under a scope of this invocation's own.
+        assert (ctx.algorithms, ctx.project) == (algorithms, project)
+        return ctx.algorithms.execute(CentroidRequest(layer_id="layer-1"))
 
     algorithms, _, project, scope = _declared()
+    ctx = _plugin_context(algorithms, project, scope)
     for _ in range(2):
-        invoke(
-            Fresh,
-            Request(value="x"),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
-        )
+        invoke(fresh, ctx, value="x")
     scope.close()
 
     first, second = seen
-    assert first[0] is not second[0], "the author instance must not be reused"
-    assert first[1] is not second[1], "the context must not be reused"
-    assert first[1].scope is not second[1].scope
-    assert (first[1].scope.closed, second[1].scope.closed) == (True, True)
-
-
-def _output() -> VectorLayerInfo:
-    """A standalone description, for tests that inspect the result only."""
-    return VectorLayerInfo(
-        id="layer-1",
-        name="buffer",
-        geometry_type="polygon",
-        field_names=("id",),
-        crs="EPSG:3857",
-    )
+    assert first is not second, "the context must not be reused"
+    assert first.scope is not second.scope
+    assert first.scope is not scope
+    assert (first.scope.closed, second.scope.closed) == (True, True)
 
 
 def test_a_successful_invocation_adds_the_output_to_the_project() -> None:
     algorithms, _, project, scope = _declared()
 
-    result = invoke(
-        BufferLayer,
-        BufferRequest(
-            layer_id="layer-1", distance_metres=10.0, working_crs="EPSG:3857"
-        ),
+    output = invoke(buffer_layer, _plugin_context(algorithms, project, scope), **BUFFER)
+
+    assert isinstance(output, VectorLayerInfo)
+    assert project.layer_ids() == (output.id,)
+    assert algorithms.requests == [BufferRequest(**BUFFER)]
+
+
+def test_add_to_project_false_leaves_presentation_to_the_caller() -> None:
+    algorithms, _, project, scope = _declared()
+    ctx = _plugin_context(algorithms, project, scope)
+
+    output = invoke(centroid_layer, ctx, add_to_project=False, layer_id="layer-1")
+
+    assert output.geometry_type == "point"
+    assert project.layer_ids() == ()
+
+
+def test_invoke_runs_from_a_job_context() -> None:
+    algorithms, _, project, scope = _declared()
+    seen: list[AlgorithmContext] = []
+    provider = _provider()
+
+    @provider.algorithm
+    def observe(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:
+        seen.append(ctx)
+        return ctx.algorithms.execute(CentroidRequest(layer_id=layer_id))
+
+    progress, clock = Silent(), Clock()
+    ctx = JobContext(
+        progress=progress,
+        cancellation=clock,
+        scope=scope,
         algorithms=algorithms,
         project=project,
-        scope=scope,
     )
 
-    assert isinstance(result, AlgorithmResult)
-    assert project.layer_ids() == (result.output.id,)
-    assert algorithms.requests == [
-        BufferRequest(layer_id="layer-1", distance_metres=10.0, working_crs="EPSG:3857")
-    ]
+    output = invoke(observe, ctx, layer_id="layer-1")
+
+    assert project.layer_ids() == (output.id,)
+    # Left out, progress and cancellation are the job's own.
+    assert (seen[0].progress, seen[0].cancellation) == (progress, clock)
+    assert seen[0].scope is not scope
 
 
-def test_the_default_services_are_used_when_none_are_supplied() -> None:
+def test_invoke_runs_from_an_algorithm_context_for_composition() -> None:
+    algorithms, _, project, scope = _declared()
+    provider = _provider()
+    inner_contexts: list[AlgorithmContext] = []
+
+    @provider.algorithm
+    def inner(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:
+        inner_contexts.append(ctx)
+        return ctx.algorithms.execute(CentroidRequest(layer_id=layer_id))
+
+    @provider.algorithm
+    def outer(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:
+        return invoke(inner, ctx, add_to_project=False, layer_id=layer_id)
+
+    output = invoke(
+        outer, _plugin_context(algorithms, project, scope), layer_id="layer-1"
+    )
+
+    assert project.layer_ids() == (output.id,)
+    assert inner_contexts[0].scope.closed
+    assert algorithms.requests == [CentroidRequest(layer_id="layer-1")]
+
+
+def test_a_job_context_without_processing_refuses_by_name() -> None:
+    scope = ResourceScope()
+    ctx = JobContext(progress=Silent(), cancellation=Clock(), scope=scope)
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError, match="algorithms"):
+        invoke(centroid_layer, ctx, layer_id="layer-1")
+
+
+def test_adding_to_a_project_the_context_lacks_refuses_before_anything_runs() -> None:
+    algorithms, _, _project, scope = _declared()
+    ctx = PluginContext(
+        notifications=RecordingNotifications(scope), scope=scope, algorithms=algorithms
+    )
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError, match="project"):
+        invoke(centroid_layer, ctx, layer_id="layer-1")
+
+    assert algorithms.requests == []
+
+
+def test_something_other_than_a_context_is_refused_with_the_new_shape() -> None:
+    with pytest.raises(QgisSdkDeclarationError, match="PluginContext, JobContext"):
+        invoke(buffer_layer, BufferRequest(**BUFFER))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("inputs", "reason"),
+    [
+        ({"layer_id": "layer-1", "distance_metres": 1.0}, "working_crs is required"),
+        ({**BUFFER, "extra": 1}, "unknown input 'extra'"),
+        ({**BUFFER, "distance_metres": "far"}, "distance_metres must be a number"),
+        ({**BUFFER, "layer_id": 3}, "layer_id must be a str layer id"),
+        ({**BUFFER, "distance_metres": True}, "distance_metres must be a number"),
+    ],
+)
+def test_inputs_of_the_wrong_shape_are_refused_before_anything_runs(
+    inputs, reason
+) -> None:
     algorithms, _, project, scope = _declared()
 
-    result = invoke(
-        CentroidLayer,
-        CentroidRequest(layer_id="layer-1"),
-        algorithms=algorithms,
-        project=project,
-        scope=scope,
-    )
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as error:
+        invoke(buffer_layer, _plugin_context(algorithms, project, scope), **inputs)
 
-    assert result.output.geometry_type == "point"
-    assert project.layer_ids() == (result.output.id,)
+    assert error.value.request == "buffer"
+    assert any(reason in item for item in error.value.reasons)
+    assert (algorithms.requests, project.layer_ids()) == ([], ())
 
 
-def test_inputs_of_the_wrong_type_are_refused_before_anything_runs() -> None:
+def test_a_refusal_reports_every_reason_at_once() -> None:
     algorithms, _, project, scope = _declared()
 
     with pytest.raises(QgisSdkAlgorithmRejectedError) as error:
         invoke(
-            BufferLayer,
-            CentroidRequest(layer_id="layer-1"),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
+            buffer_layer,
+            _plugin_context(algorithms, project, scope),
+            layer_id=1,
+            extra=True,
         )
 
-    assert error.value.request == "buffer"
-    assert "BufferRequest" in error.value.reasons[0]
+    assert len(error.value.reasons) == 4
+
+
+def test_the_function_still_has_the_last_word_on_the_values() -> None:
+    algorithms, _, project, scope = _declared()
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as error:
+        invoke(
+            buffer_layer,
+            _plugin_context(algorithms, project, scope),
+            **{**BUFFER, "working_crs": "  "},
+        )
+
+    assert "working_crs is required" in error.value.reasons[0]
     assert (algorithms.requests, project.layer_ids()) == ([], ())
 
 
@@ -318,14 +422,10 @@ def test_cancellation_before_the_operation_starts_runs_nothing() -> None:
 
     with pytest.raises(QgisSdkAlgorithmCancelledError) as error:
         invoke(
-            BufferLayer,
-            BufferRequest(
-                layer_id="layer-1", distance_metres=1.0, working_crs="EPSG:3857"
-            ),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
+            buffer_layer,
+            _plugin_context(algorithms, project, scope),
             cancellation=Clock(cancelled=True),
+            **BUFFER,
         )
 
     assert error.value.algorithm_id == "buffer"
@@ -335,30 +435,21 @@ def test_cancellation_before_the_operation_starts_runs_nothing() -> None:
 def test_cancellation_after_the_operation_keeps_the_output_out_of_the_project() -> None:
     algorithms, _, project, scope = _declared()
     clock = Clock()
+    provider = _provider()
 
-    @algorithm(id="test.cancel", title="Cancel")
-    class CancelAfter:
-        def __init__(self, ctx: AlgorithmContext) -> None:
-            self.ctx = ctx
-
-        def run(self, inputs: Request) -> Result:
-            self.ctx.algorithms.execute(
-                BufferRequest(
-                    layer_id="layer-1", distance_metres=1.0, working_crs="EPSG:3857"
-                )
-            )
-            clock.cancelled = True
-            return Result(output=_output())
+    @provider.algorithm
+    def cancel_after(ctx: AlgorithmContext, value: str) -> VectorLayerInfo:
+        output = ctx.algorithms.execute(CentroidRequest(layer_id="layer-1"))
+        clock.cancelled = True
+        return output
 
     with pytest.raises(QgisSdkAlgorithmCancelledError):
         invoke(
-            CancelAfter,
-            Request(value="x"),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
+            cancel_after,
+            _plugin_context(algorithms, project, scope),
             cancellation=clock,
             progress=Silent(),
+            value="x",
         )
 
     assert project.layer_ids() == ()
@@ -366,23 +457,14 @@ def test_cancellation_after_the_operation_keeps_the_output_out_of_the_project() 
 
 def test_a_failing_algorithm_leaves_the_project_untouched() -> None:
     algorithms, _, project, scope = _declared()
+    provider = _provider()
 
-    @algorithm(id="test.fail", title="Fail")
-    class Failing:
-        def __init__(self, ctx: AlgorithmContext) -> None:
-            self.ctx = ctx
-
-        def run(self, inputs: Request) -> Result:
-            raise QgisSdkValidationIssueError("boom")
+    @provider.algorithm
+    def failing(ctx: AlgorithmContext, value: str) -> VectorLayerInfo:
+        raise QgisSdkValidationIssueError("boom")
 
     with pytest.raises(QgisSdkValidationIssueError):
-        invoke(
-            Failing,
-            Request(value="x"),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
-        )
+        invoke(failing, _plugin_context(algorithms, project, scope), value="x")
 
     assert project.layer_ids() == ()
 
@@ -393,81 +475,62 @@ class QgisSdkValidationIssueError(Exception):
 
 def test_a_result_of_the_wrong_type_is_refused_and_not_added() -> None:
     algorithms, _, project, scope = _declared()
+    provider = _provider()
 
-    @algorithm(id="test.wrong", title="Wrong")
-    class Wrong:
-        def __init__(self, ctx: AlgorithmContext) -> None:
-            self.ctx = ctx
-
-        def run(self, inputs: Request) -> Result:
-            return "not a result"  # type: ignore[return-value]
+    @provider.algorithm
+    def wrong(ctx: AlgorithmContext, value: str) -> VectorLayerInfo:
+        return "not a layer"  # type: ignore[return-value]
 
     with pytest.raises(QgisSdkDeclarationError, match="not the declared"):
-        invoke(
-            Wrong,
-            Request(value="x"),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
-        )
+        invoke(wrong, _plugin_context(algorithms, project, scope), value="x")
 
     assert project.layer_ids() == ()
 
 
 def test_invoking_after_the_owner_scope_closed_is_refused() -> None:
     algorithms, _, project, scope = _declared()
+    ctx = _plugin_context(algorithms, project, scope)
     scope.close()
 
     with pytest.raises(QgisSdkScopeClosedError):
-        invoke(
-            BufferLayer,
-            BufferRequest(
-                layer_id="layer-1", distance_metres=1.0, working_crs="EPSG:3857"
-            ),
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
-        )
+        invoke(buffer_layer, ctx, **BUFFER)
 
 
-def test_the_description_keeps_the_annotations_it_checked() -> None:
-    description = describe_algorithm(BufferLayer)
+def test_progress_is_handed_to_the_context_unchanged() -> None:
+    seen: list[Any] = []
+    provider = _provider()
 
-    assert isinstance(description, AlgorithmDescription)
-    assert (description.inputs_type, description.result_type) == (
-        BufferRequest,
-        BufferResult,
-    )
-    assert description.result_schema["required"] == ["output"]
+    @provider.algorithm
+    def reporting(ctx: AlgorithmContext, value: str) -> VectorLayerInfo:
+        seen.append(ctx.progress)
+        return ctx.algorithms.execute(CentroidRequest(layer_id="layer-1"))
 
-
-def test_a_reference_algorithm_only_binds_request_to_result() -> None:
     algorithms, _, project, scope = _declared()
-
-    result = invoke(
-        CentroidLayer,
-        CentroidRequest(layer_id="layer-1"),
-        algorithms=algorithms,
-        project=project,
-        scope=scope,
+    progress = Silent()
+    invoke(
+        reporting,
+        _plugin_context(algorithms, project, scope),
+        progress=progress,
+        value="x",
     )
 
-    assert isinstance(result.output, VectorLayerInfo)
+    assert seen == [progress]
+
+
+def test_a_function_can_be_called_directly_with_a_fake_context() -> None:
+    """Nothing is injected at decoration: a unit test needs no runner at all."""
+    algorithms, _, _project, scope = _declared()
+    ctx = AlgorithmContext(
+        progress=Silent(), cancellation=Clock(), scope=scope, algorithms=algorithms
+    )
+
+    output = centroid_layer(ctx, layer_id="layer-1")
+
+    assert output.geometry_type == "point"
     assert algorithms.requests == [CentroidRequest(layer_id="layer-1")]
 
 
-def test_the_reference_classes_carry_their_provider_scoped_ids() -> None:
-    from qgis_sdk.reference import reference_provider
-
-    assert describe_algorithm(BufferLayer).id == "buffer"
-    assert describe_algorithm(CentroidLayer).id == "centroid"
-    # The id a host registers is the provider's, not the class's own.
-    qualified = [
-        algorithm["qualified_id"]
-        for algorithm in reference_provider.describe().to_dict()["algorithms"]
-    ]
-    assert qualified == ["reference:buffer", "reference:centroid"]
-    assert describe_algorithm(CentroidLayer).result_type is CentroidResult
+# -- the request models the reference functions build ------------------------------
 
 
 @pytest.mark.parametrize(
@@ -506,7 +569,7 @@ def test_a_request_without_its_explicit_values_is_refused(build, message) -> Non
     assert error.value.request in {"buffer", "centroid"}
 
 
-def test_a_refusal_reports_every_reason_at_once() -> None:
+def test_a_request_refusal_reports_every_reason_at_once() -> None:
     with pytest.raises(QgisSdkAlgorithmRejectedError) as error:
         BufferRequest(layer_id="", distance_metres=-1.0, working_crs="")
 
@@ -519,6 +582,8 @@ def test_the_working_crs_cannot_be_omitted_positionally_by_accident() -> None:
 
 
 def test_an_unknown_request_type_is_refused_by_the_fake() -> None:
+    from dataclasses import dataclass
+
     algorithms, _, _, _scope = _declared()
 
     @dataclass(frozen=True, slots=True)
@@ -535,40 +600,3 @@ def test_the_fake_refuses_after_its_scope_closed() -> None:
 
     with pytest.raises(QgisSdkScopeClosedError):
         algorithms.execute(CentroidRequest(layer_id="layer-1"))
-
-
-def test_an_algorithm_description_is_not_mutable() -> None:
-    from dataclasses import FrozenInstanceError
-
-    description = describe_algorithm(BufferLayer)
-
-    with pytest.raises(FrozenInstanceError):
-        description.id = "other"  # type: ignore[misc]
-
-
-def test_progress_is_handed_to_the_context_unchanged() -> None:
-    seen: list[Any] = []
-
-    @algorithm(id="test.progress", title="Progress")
-    class Reporting:
-        def __init__(self, ctx: AlgorithmContext) -> None:
-            self.ctx = ctx
-
-        def run(self, inputs: Request) -> Result:
-            seen.append(self.ctx.progress)
-            return Result(
-                output=self.ctx.algorithms.execute(CentroidRequest(layer_id="layer-1"))
-            )
-
-    algorithms, _, project, scope = _declared()
-    progress = Silent()
-    invoke(
-        Reporting,
-        Request(value="x"),
-        algorithms=algorithms,
-        project=project,
-        scope=scope,
-        progress=progress,
-    )
-
-    assert seen == [progress]

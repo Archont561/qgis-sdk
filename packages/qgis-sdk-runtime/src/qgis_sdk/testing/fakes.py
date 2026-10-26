@@ -11,9 +11,11 @@ from __future__ import annotations
 import shutil
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
+from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import (
     AlgorithmRequest,
     GeometryType,
@@ -26,9 +28,13 @@ from qgis_sdk.models import (
 from qgis_sdk.resources import require_style
 from qgis_sdk.services import Layers
 
+if TYPE_CHECKING:
+    from qgis_sdk.providers import Provider
+
 __all__ = [
     "FakeAlgorithms",
     "FakeLayers",
+    "FakeProcessing",
     "FakeProject",
     "FakeSettings",
     "FakeStyles",
@@ -288,3 +294,59 @@ class RecordingNotifications:
         """Record an informational message."""
         self._scope.ensure_open()
         self.messages.append(message)
+
+
+class FakeProviderRegistration:
+    """One provider a :class:`FakeProcessing` currently advertises."""
+
+    def __init__(self, registry: FakeProcessing, provider: Provider) -> None:
+        self._registry = registry
+        self.provider = provider
+
+    def unregister(self) -> None:
+        """Take the provider down; a second call is a safe no-op."""
+        self._registry._remove(self.provider.id, self)
+
+
+class FakeProcessing:
+    """A ``Processing`` registry that records what a host would advertise.
+
+    It holds no toolbox, so it proves only the contract ``PluginRuntime``
+    relies on: ``register_provider`` records the provider under its id,
+    refuses a second registration of the same id by name - the way the QGIS
+    registry refuses a duplicate provider - and ``unregister`` on the returned
+    registration removes it again. ``registered`` is the ids currently held,
+    in registration order; ``events`` is the full history a test can assert
+    ordering against.
+    """
+
+    def __init__(self, scope: ResourceScope) -> None:
+        self._scope = scope
+        self._live: dict[str, FakeProviderRegistration] = {}
+        self.events: list[tuple[str, str]] = []
+
+    @property
+    def registered(self) -> tuple[str, ...]:
+        """The ids of the providers currently advertised."""
+        return tuple(self._live)
+
+    def provider(self, provider_id: str) -> Provider:
+        """Return the provider advertised under ``provider_id``."""
+        return self._live[provider_id].provider
+
+    def register_provider(self, provider: Provider) -> FakeProviderRegistration:
+        """Advertise ``provider``, refusing an id that is already live."""
+        self._scope.ensure_open()
+        if provider.id in self._live:
+            raise QgisSdkDeclarationError(
+                f"provider {provider.id!r} is already registered with the host"
+            )
+        registration = FakeProviderRegistration(self, provider)
+        self._live[provider.id] = registration
+        self.events.append(("register", provider.id))
+        return registration
+
+    def _remove(self, provider_id: str, registration: FakeProviderRegistration) -> None:
+        if self._live.get(provider_id) is registration:
+            del self._live[provider_id]
+            self.events.append(("unregister", provider_id))

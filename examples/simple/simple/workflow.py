@@ -27,8 +27,8 @@ from pathlib import Path
 
 from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
-from qgis_sdk.models import BufferRequest, VectorExport, VectorLayerInfo
-from qgis_sdk.reference import BufferLayer
+from qgis_sdk.models import VectorExport, VectorLayerInfo
+from qgis_sdk.reference import buffer_layer
 from qgis_sdk.services import Cancellation, Progress
 
 __all__ = ["LocalGisWorkflow"]
@@ -64,28 +64,21 @@ class LocalGisWorkflow:
     ) -> VectorLayerInfo:
         """Buffer a layer in metres inside ``working_crs``; style, then present.
 
-        The request itself refuses an empty CRS, and the native service refuses
-        a geographic or non-metre one, before anything is written.
+        The algorithm's request refuses an empty CRS, and the native service
+        refuses a geographic or non-metre one, before anything is written.
         """
-        request = BufferRequest(
+        output = invoke(
+            buffer_layer,
+            self.ctx,
+            progress=progress,
+            cancellation=cancellation,
+            add_to_project=False,
             layer_id=layer_id,
             distance_metres=distance_metres,
             working_crs=working_crs,
         )
-        project = self.ctx.project
-        result = invoke(
-            BufferLayer,
-            request,
-            algorithms=self.ctx.algorithms,
-            project=project,
-            scope=self.ctx.scope,
-            progress=progress,
-            cancellation=cancellation,
-            add_to_project=False,
-        )
-        output = result.output
         self.ctx.styles.apply_style(output.id, self.OUTPUT_STYLE)
-        project.add_layer(output.id)
+        self.ctx.project.add_layer(output.id)
         return output
 
     def export(
