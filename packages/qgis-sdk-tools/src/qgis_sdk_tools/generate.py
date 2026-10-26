@@ -343,6 +343,34 @@ def generate_typescript(description: Any) -> str:
     return generator.render()
 
 
+DEFAULT_SDK_IMPORT = "@archont561/qgis-sdk"
+"""Where a generated schema module imports ``defineBridgeSchema`` from."""
+
+SCHEMA_SUFFIX = ".schema.ts"
+"""The file name suffix that selects the schema module over the legacy client."""
+
+DEFAULT_SCHEMA_PATH = Path("web/src/bridge.schema.ts")
+"""Where ``qgis-sdk bridge generate`` writes when ``--out`` is not given."""
+
+SDK_MEMBERS = frozenset({"client", "host", "schema", "ready", "close"})
+"""Names ``QgisSdk`` keeps for itself; an operation id cannot shadow one."""
+
+
+def generate_schema_typescript(
+    description: Any, *, sdk_import: str = DEFAULT_SDK_IMPORT
+) -> str:
+    """Render a plugin's ``bridge.schema.ts`` for ``description`` (decision-44).
+
+    The module carries the declaration and its types and nothing else: no
+    validators, no client, one import of ``defineBridgeSchema`` from
+    ``sdk_import``. ``QgisSdk.fromBridgeSchema`` validates against the
+    declaration at run time, so a page gets both the types and the checks
+    from one file that is only ever regenerated.
+    """
+    described = _as_mapping(description)
+    return _Generator(described).render_schema(sdk_import=sdk_import)
+
+
 def generate_host_typescript(description: Any = None) -> str:
     """Render the curated host module shipped inside the npm package."""
     if description is None:
@@ -776,6 +804,114 @@ class _Generator:
             lines.append("")
         lines.extend(self._render_operations())
         return "\n".join(lines).rstrip("\n") + "\n"
+
+    def render_schema(self, *, sdk_import: str) -> str:
+        """Render the schema module: types plus the declaration, no code."""
+        described = self._description
+        shadowed = sorted(self._ids & SDK_MEMBERS)
+        if shadowed:
+            raise QgisSdkBridgeError(
+                f"operation id {shadowed[0]!r} shadows a QgisSdk member; "
+                f"rename the action (reserved: {', '.join(sorted(SDK_MEMBERS))})"
+            )
+        plugin_id = described.get("id", "")
+        lines = [
+            GENERATED_MARKER,
+            *(
+                line.format(id=described.get("id", "unknown plugin"))
+                for line in PLUGIN_SURFACE.header
+            ),
+            "",
+            (
+                "import { type BridgeSchema, defineBridgeSchema } "
+                f"from {json.dumps(sdk_import)};"
+            ),
+            "",
+            f"export const PLUGIN_ID = {json.dumps(plugin_id)};",
+            f'export const CONTRACT_FINGERPRINT = "{contract_fingerprint(described)}";',
+            (
+                "export const PLUGIN_DESCRIPTION_SCHEMA_VERSION = "
+                f"{int(described.get('schema_version', 1))};"
+            ),
+            "",
+            "/** Every declared operation id, so a name can be checked, not guessed. */",
+            "export const OPERATIONS = [",
+            *(f'\t"{operation}",' for operation in sorted(self._ids)),
+            "] as const;",
+            "",
+            "export type OperationId = (typeof OPERATIONS)[number];",
+            "",
+        ]
+        for name, schema in sorted(self._objects):
+            lines.extend(_interface_lines(schema, name, self))
+            lines.append("")
+        for stream in self._streams:
+            lines.extend(self._event_union_lines(stream))
+            lines.append("")
+        lines.extend(self._schema_map_lines())
+        lines.extend(
+            [
+                "/** The declaration `describe_plugin` emitted, carrying the types above. */",
+                (
+                    "const schema: BridgeSchema<Operations, Streams> = "
+                    "defineBridgeSchema<Operations, Streams>({"
+                ),
+                *_json_lines(_sorted_declaration(described)),
+                "});",
+                "",
+                "export default schema;",
+            ]
+        )
+        return "\n".join(lines).rstrip("\n") + "\n"
+
+    def _event_union_lines(self, stream: _Stream) -> list[str]:
+        """Render the event union of one stream, without a predicate."""
+        lines = [
+            f"/** One event of `{stream.id}`, narrowed by its kind. */",
+            f"export type {stream.event_type} =",
+        ]
+        for kind, schema in stream.events:
+            payload = self._type_name(schema, f"{stream.base}{_pascal(kind)}")
+            lines.append(
+                f"\t| {{ readonly kind: {json.dumps(kind)}; readonly payload: {payload} }}"
+            )
+        lines[-1] += ";"
+        return lines
+
+    def _schema_map_lines(self) -> list[str]:
+        """Render ``Operations`` and ``Streams``, keyed by the full operation id."""
+        lines = [
+            "/** The declared actions by id: what goes in and what comes back. */",
+        ]
+        if self._actions:
+            lines.append("export interface Operations {")
+            for action in self._actions:
+                request = self._type_name(action.request, f"{action.base}Request")
+                result = self._type_name(action.result, f"{action.base}Result")
+                lines.append(
+                    f"\treadonly {_quote(action.id)}: {{ readonly request: {request}; "
+                    f"readonly result: {result} }};"
+                )
+            lines.append("}")
+        else:
+            lines.append("export type Operations = Record<never, never>;")
+        lines.append("")
+        lines.append(
+            "/** The declared streams by id: what goes in and the events that come out. */"
+        )
+        if self._streams:
+            lines.append("export interface Streams {")
+            for stream in self._streams:
+                request = self._type_name(stream.request, f"{stream.base}Request")
+                lines.append(
+                    f"\treadonly {_quote(stream.id)}: {{ readonly request: {request}; "
+                    f"readonly event: {stream.event_type} }};"
+                )
+            lines.append("}")
+        else:
+            lines.append("export type Streams = Record<never, never>;")
+        lines.append("")
+        return lines
 
     def _subscribe_lines(self) -> list[str]:
         """Require ``subscribe`` of the client only when a stream needs it."""
@@ -1305,6 +1441,27 @@ def _check_supported(schema: Any, *, path: str) -> None:
         _check_supported(schema["items"], path=f"{path}[]")
     for branch in schema.get("anyOf", []) or []:
         _check_supported(branch, path=path)
+
+
+def _sorted_declaration(described: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the declaration with its actions and streams in id order.
+
+    The embedded JSON is what ``QgisSdk`` validates against, so it is the
+    declaration as given; only the order of the two lists is normalised so the
+    module stays byte-identical whatever order a host enumerated them in.
+    """
+    ordered = dict(described)
+    for key in ("actions", "streams"):
+        if isinstance(ordered.get(key), list):
+            ordered[key] = sorted(ordered[key], key=lambda item: str(item["id"]))
+    return ordered
+
+
+def _json_lines(value: Mapping[str, Any]) -> list[str]:
+    """Render the body of ``value`` as tab-indented JSON, braces left to the caller."""
+    text = json.dumps(value, indent="\t", ensure_ascii=False, allow_nan=False)
+    inner = text.splitlines()[1:-1]
+    return list(inner)
 
 
 def _pascal(value: str) -> str:

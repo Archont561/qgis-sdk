@@ -12,6 +12,7 @@ import {
 	QgisSdkBridgeRemoteError,
 	QgisSdkBridgeTimeoutError,
 } from "../src/bridge";
+import { HOST_OPERATIONS, HOST_SCHEMA_VERSION } from "../src/generated/host";
 import {
 	createBridgeHarness,
 	fault,
@@ -26,6 +27,7 @@ import {
 	type SitesWatchEvent,
 	type SitesWatchRequest,
 } from "./contracts/generated/clients/sites";
+import schema from "./contracts/generated/clients/sites.schema";
 
 type Op = "sites.summary" | "sites.watch" | "sites.refresh";
 
@@ -301,6 +303,38 @@ test("the harness refuses an envelope that is not the protocol it fakes", () => 
 	expect(() =>
 		harness.send({ protocol: 1, call_id: "c1", kind: "dance" }),
 	).toThrow(QgisSdkBridgeHarnessError);
+});
+
+test("the handshake is answered from the schema and the grants, without an expectation", async () => {
+	const untyped = createBridgeHarness();
+	const bare = new BridgeClient(untyped);
+	const plain = (await bare.handshake()) as Record<string, unknown>;
+	expect(plain.plugin).toBeNull();
+	expect(plain.host_schema_version).toBe(HOST_SCHEMA_VERSION);
+	expect(
+		(plain.operations as { id: string }[]).map((operation) => operation.id),
+	).toEqual([...HOST_OPERATIONS]);
+	expect(untyped.calls).toEqual([
+		{ callId: "c1", kind: "handshake", operation: "" },
+	]);
+	untyped.assertSatisfied();
+	bare.close();
+
+	const harness = createBridgeHarness(schema, { granted: ["layers.get"] });
+	const client = new BridgeClient(harness);
+	const reply = (await client.handshake()) as Record<string, unknown>;
+	expect(reply.plugin).toBe(schema);
+	expect(
+		(reply.operations as { id: string }[]).map((operation) => operation.id),
+	).toEqual([
+		"sites.details",
+		"sites.refresh",
+		"sites.summary",
+		"sites.watch",
+		"layers.get",
+	]);
+	harness.assertSatisfied();
+	client.close();
 });
 
 test("listeners are counted so a test can see a client detach", () => {

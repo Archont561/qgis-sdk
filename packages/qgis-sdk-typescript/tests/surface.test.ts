@@ -3,6 +3,10 @@
  * decision-18): the root, `./bridge` and `./host` load no React, no test
  * utility and touch no browser global. Only `./react` depends on React and
  * only `./testing` is a harness, and both are optional entry points.
+ *
+ * One module of the root reads a browser global by design: `webchannel.ts`
+ * is the default transport (decision-44), and it reads `window.qt` only when
+ * `createWebChannelTransport` is called, never at import.
  */
 
 import { readFileSync } from "node:fs";
@@ -21,7 +25,13 @@ const NEUTRAL = [
 	"declarations.ts",
 	"errors.ts",
 	"internal.ts",
+	"qgis-sdk.ts",
+	"schema.ts",
+	"validate.ts",
+	"webchannel.ts",
 ];
+/** The default transport is allowed to read `window.qt` when called. */
+const TOUCHES_QT_ON_CALL = new Set(["webchannel.ts"]);
 const BROWSER_GLOBALS = /\b(window|document|navigator|localStorage|qt)\s*[.[]/;
 const IMPORT = /^\s*(?:import|export)\b[^;]*?\bfrom\s+["']([^"']+)["']/gm;
 
@@ -43,9 +53,26 @@ test("the neutral entry points import nothing outside themselves", () => {
 
 test("the neutral entry points reference no browser global", () => {
 	for (const file of NEUTRAL) {
+		if (TOUCHES_QT_ON_CALL.has(file)) {
+			continue;
+		}
 		const text = readFileSync(join(SRC, file), "utf8");
-		expect(text, file).not.toMatch(BROWSER_GLOBALS);
+		const code = text.replace(/\/\*[\s\S]*?\*\//g, "");
+		expect(code, file).not.toMatch(BROWSER_GLOBALS);
 	}
+});
+
+test("the default transport reads the Qt global inside functions only", () => {
+	const text = readFileSync(join(SRC, "webchannel.ts"), "utf8");
+	const code = text.replace(/\/\*[\s\S]*?\*\//g, "");
+	// Every mention of the page scope sits inside a function body (indented),
+	// so importing the module evaluates none of them.
+	const topLevel = code
+		.split("\n")
+		.filter((line) => /\b(globalThis|window)\b/.test(line))
+		.filter((line) => !line.startsWith("\t"));
+	expect(topLevel).toEqual([]);
+	expect(code).toMatch(/globalThis/);
 });
 
 test("bundling the neutral entry points pulls in no React and no harness", async () => {

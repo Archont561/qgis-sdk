@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Write the checked-in TypeScript the bridge package compiles, runs and ships.
 
-Two artifacts, one command:
+Three artifacts, one command:
 
 * the **plugin client** the tests exercise - generated from the sample plugin in
   ``tests/contract_sample/bridge_plugin.py``, checked in under ``tests`` because a
   real plugin generates its own into its own frontend;
+* the **plugin schema module** (``bridge.schema.ts``, decision-44) from the same
+  sample, importing ``defineBridgeSchema`` from the package source so the tests
+  can build a ``QgisSdk`` on it without an installed copy;
 * the **host client** - generated from the curated manifest in
   ``qgis_sdk.bridge.host`` and checked in under ``src/generated`` because it ships
   inside ``@archont561/qgis-sdk``, versioned with it (decision-27).
@@ -34,6 +37,10 @@ BRIDGE_PACKAGE = REPOSITORY_ROOT / "packages" / "qgis-sdk-typescript"
 PLUGIN_CLIENT_PATH = (
     BRIDGE_PACKAGE / "tests" / "contracts" / "generated" / "clients" / "sites.ts"
 )
+PLUGIN_SCHEMA_PATH = PLUGIN_CLIENT_PATH.with_name("sites.schema.ts")
+#: The package source, relative to ``PLUGIN_SCHEMA_PATH``; the tests compile the
+#: schema module against ``src`` rather than against a published build.
+PLUGIN_SCHEMA_SDK_IMPORT = "../../../../src/index"
 HOST_CLIENT_PATH = BRIDGE_PACKAGE / "src" / "generated" / "host.ts"
 
 sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-tools" / "src"))
@@ -46,9 +53,15 @@ from qgis_sdk.declarations import describe_plugin
 from qgis_sdk_tools.generate import (
     check_generated,
     generate_host_typescript,
+    generate_schema_typescript,
     generate_typescript,
     write_generated,
 )
+
+
+def generate_sample_schema(description: dict) -> str:
+    """Render the sample schema module against the package source."""
+    return generate_schema_typescript(description, sdk_import=PLUGIN_SCHEMA_SDK_IMPORT)
 
 
 def artifacts() -> list[tuple[Path, dict, object]]:
@@ -58,6 +71,11 @@ def artifacts() -> list[tuple[Path, dict, object]]:
             PLUGIN_CLIENT_PATH,
             describe_plugin(SitesPlugin).to_dict(),
             generate_typescript,
+        ),
+        (
+            PLUGIN_SCHEMA_PATH,
+            describe_plugin(SitesPlugin).to_dict(),
+            generate_sample_schema,
         ),
         (HOST_CLIENT_PATH, host_description(), generate_host_typescript),
     ]

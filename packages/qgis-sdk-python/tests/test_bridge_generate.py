@@ -24,11 +24,15 @@ from qgis_sdk.declarations import describe_plugin
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk_tools.__main__ import app
 from qgis_sdk_tools.generate import (
+    DEFAULT_SCHEMA_PATH,
+    DEFAULT_SDK_IMPORT,
     GENERATED_MARKER,
+    SDK_MEMBERS,
     check_generated,
     contract_fingerprint,
     describe_plugin_spec,
     generate_host_typescript,
+    generate_schema_typescript,
     generate_typescript,
     load_description,
     write_generated,
@@ -273,7 +277,9 @@ def test_the_cli_describes_a_plugin_class_from_the_working_directory(
         ],
     )
     assert result.exit_code == 0, result.output
+    # A name that is not *.schema.ts selects the legacy client, with a note.
     assert target.read_text(encoding="utf-8") == generate_typescript(SAMPLE)
+    assert "legacy client module" in result.output
 
 
 def test_the_cli_needs_a_single_source(tmp_path: Path) -> None:
@@ -296,18 +302,31 @@ def test_the_cli_needs_a_single_source(tmp_path: Path) -> None:
     assert "exactly one of" in neither.output
 
 
-def test_the_cli_needs_a_target(tmp_path: Path) -> None:
+def test_the_cli_writes_the_schema_module_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without --out a plugin lands in web/src/bridge.schema.ts (decision-44)."""
     described = tmp_path / "description.json"
     described.write_text(json.dumps(SAMPLE), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
     result = runner.invoke(app, ["bridge", "generate", "--description", str(described)])
+    assert result.exit_code == 0, result.output
+    assert DEFAULT_SCHEMA_PATH == Path("web/src/bridge.schema.ts")
+    written = tmp_path / DEFAULT_SCHEMA_PATH
+    assert written.read_text(encoding="utf-8") == generate_schema_typescript(SAMPLE)
+    assert "legacy" not in result.output
+
+
+def test_the_cli_still_needs_a_target_for_the_host_surface() -> None:
+    result = runner.invoke(app, ["bridge", "generate", "--host"])
     assert result.exit_code == 1
-    assert "give --out, --check or --print" in result.output
+    assert "give --out or --print" in result.output
 
 
 def test_the_cli_round_trips_a_description_file(tmp_path: Path) -> None:
     described = tmp_path / "description.json"
     described.write_text(json.dumps(SAMPLE), encoding="utf-8")
-    target = tmp_path / "sites.ts"
+    target = tmp_path / "sites.schema.ts"
 
     wrote = runner.invoke(
         app,
@@ -315,7 +334,7 @@ def test_the_cli_round_trips_a_description_file(tmp_path: Path) -> None:
     )
     assert wrote.exit_code == 0, wrote.output
     assert wrote.output.strip() == f"wrote {target}"
-    assert target.read_text(encoding="utf-8") == generate_typescript(SAMPLE)
+    assert target.read_text(encoding="utf-8") == generate_schema_typescript(SAMPLE)
 
     fresh = runner.invoke(
         app,
@@ -356,8 +375,133 @@ def test_the_cli_prints_the_module_without_writing(tmp_path: Path) -> None:
         app, ["bridge", "generate", "--description", str(described), "--print"]
     )
     assert result.exit_code == 0, result.output
-    assert result.output == generate_typescript(SAMPLE)
+    assert result.output == generate_schema_typescript(SAMPLE)
     assert list(tmp_path.iterdir()) == [described]
+
+
+def test_the_legacy_client_keeps_working_under_its_old_name(tmp_path: Path) -> None:
+    """``--out web/src/bridge.ts`` renders what 0.3.0 rendered, plus a note.
+
+    The scaffold pins the released bridge, so its templates switch with the
+    ts-v0.4.0 stamp (TASK-65); until then its ``bindings`` script must pass.
+    """
+    described = tmp_path / "description.json"
+    described.write_text(json.dumps(SAMPLE), encoding="utf-8")
+    target = tmp_path / "web" / "src" / "bridge.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text(generate_typescript(SAMPLE), encoding="utf-8")
+
+    checked = runner.invoke(
+        app,
+        [
+            "bridge",
+            "generate",
+            "--description",
+            str(described),
+            "--out",
+            str(target),
+            "--check",
+        ],
+    )
+    assert checked.exit_code == 0, checked.output
+    assert "is up to date" in checked.output
+    assert "legacy client module" in checked.output
+    assert "*.schema.ts" in checked.output
+
+
+# -- the schema module (decision-44) -----------------------------------------
+
+_EMPTY = {"type": "object", "properties": {}, "additionalProperties": False}
+
+
+def _embedded_declaration(module: str) -> dict[str, Any]:
+    """Return the JSON ``defineBridgeSchema`` is called with."""
+    head = "defineBridgeSchema<Operations, Streams>("
+    start = module.index(head) + len(head)
+    end = module.index("\n});\n", start) + 2
+    return json.loads(module[start:end])
+
+
+def test_the_schema_module_is_the_declaration_and_its_types_and_nothing_else() -> None:
+    generated = generate_schema_typescript(SAMPLE)
+    assert generated.startswith(GENERATED_MARKER + "\n")
+    # One import: the definer, and its type (erased) for the explicit annotation.
+    assert (
+        "import { type BridgeSchema, defineBridgeSchema } "
+        f'from "{DEFAULT_SDK_IMPORT}";'
+    ) in generated
+    assert generated.count("import ") == 1
+    assert 'export const PLUGIN_ID = "org.example.sites";' in generated
+    assert f'export const CONTRACT_FINGERPRINT = "{contract_fingerprint(SAMPLE)}";' in (
+        generated
+    )
+    assert "export const PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1;" in generated
+    assert "export default schema;" in generated
+    # No validator, no client, no error class: the SDK validates at run time.
+    assert "function " not in generated
+    assert "class " not in generated
+    assert "createOperations" not in generated
+    assert "BridgeClientLike" not in generated
+    assert _embedded_declaration(generated) == SAMPLE
+
+
+def test_the_schema_module_keys_operations_and_streams_by_full_id() -> None:
+    generated = generate_schema_typescript(SAMPLE)
+    assert "export interface Operations {" in generated
+    assert (
+        '\treadonly "sites.details": { readonly request: SitesDetailsRequest; '
+        "readonly result: SitesDetailsResult };"
+    ) in generated
+    assert "export interface Streams {" in generated
+    assert (
+        '\treadonly "sites.watch": { readonly request: SitesWatchRequest; '
+        "readonly event: SitesWatchEvent };"
+    ) in generated
+    assert "export type SitesWatchEvent =" in generated
+    assert "export interface SitesSummaryRequest {" in generated
+    assert "export const OPERATIONS = [" in generated
+    assert "export type OperationId = (typeof OPERATIONS)[number];" in generated
+
+
+def test_the_schema_module_is_deterministic_and_order_independent() -> None:
+    assert generate_schema_typescript(SAMPLE) == generate_schema_typescript(SAMPLE)
+    assert generate_schema_typescript(_actions(reverse=True)) == (
+        generate_schema_typescript(_actions())
+    )
+
+
+def test_the_schema_module_imports_from_where_it_is_told() -> None:
+    generated = generate_schema_typescript(SAMPLE, sdk_import="../../src/index")
+    assert 'defineBridgeSchema } from "../../src/index";' in generated
+    assert DEFAULT_SDK_IMPORT not in generated
+
+
+def test_the_schema_module_closes_an_empty_map_rather_than_leaving_it_open() -> None:
+    generated = generate_schema_typescript(_description(streams=[]))
+    assert "export type Streams = Record<never, never>;" in generated
+    assert "export interface Streams" not in generated
+    assert "export interface Operations {" in generated
+
+
+def test_the_schema_module_refuses_an_id_that_shadows_a_sdk_member() -> None:
+    for member in sorted(SDK_MEMBERS):
+        described = _single(member, request=_EMPTY, result={"type": "null"})
+        with pytest.raises(QgisSdkBridgeError, match="shadows a QgisSdk member"):
+            generate_schema_typescript(described)
+    # A dotted id is never a member name, so it is fine.
+    generate_schema_typescript(_single("tools.close", request=_EMPTY, result=_EMPTY))
+
+
+def test_the_checked_in_schema_module_is_current() -> None:
+    script = _generator()
+    message = check_generated(
+        script.PLUGIN_SCHEMA_PATH, SAMPLE, generate=script.generate_sample_schema
+    )
+    assert message is None, (
+        f"{message}; run `python packages/qgis-sdk-python/scripts/generate_bridge_clients.py`"
+    )
+    text = script.PLUGIN_SCHEMA_PATH.read_text(encoding="utf-8")
+    assert f'from "{script.PLUGIN_SCHEMA_SDK_IMPORT}"' in text
 
 
 def test_describe_plugin_spec_reports_a_bad_spec() -> None:

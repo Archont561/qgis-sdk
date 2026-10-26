@@ -25,7 +25,7 @@ from qgis_sdk.environment import dev_server
 ASSETS = Path(__file__).resolve().parent / "web"  # `bun run build` in web/ writes it
 INDEX = ASSETS / "index.html"
 VIEW_ID = "simple.main"
-CHANNEL_OBJECT = "bridge"  # the name web/src/transport.ts looks up
+CHANNEL_OBJECT = "bridge"  # the default name QgisSdk.fromBridgeSchema connects to
 TITLE = "Simple"
 
 

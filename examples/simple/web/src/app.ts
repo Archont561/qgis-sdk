@@ -1,10 +1,15 @@
-import type { PluginOperations } from "./bridge";
+import type { QgisSdk } from "@archont561/qgis-sdk";
+import type { Operations, Streams } from "./bridge.schema";
+
+/** The SDK this page is written against: the plugin's declared operations. */
+export type SimpleSdk = QgisSdk<Operations, Streams>;
 
 /**
  * The reference workflow as a page. Every control calls one declared action
- * through the generated client, and the page keeps only what the host told
- * it: the source layer it opened and the last output it produced. No path is
- * typed here - an export names a file inside the directory the host chose.
+ * through the SDK built on the generated schema, and the page keeps only what
+ * the host told it: the source layer it opened and the last output it
+ * produced. No path is typed here - an export names a file inside the
+ * directory the host chose.
  */
 const PAGE = `
 	<h1>Simple</h1>
@@ -38,11 +43,8 @@ export interface AppState {
 	outputId: string | null;
 }
 
-/** Render the page into `root`; every button goes through the generated client. */
-export function createApp(
-	root: HTMLElement,
-	operations: PluginOperations,
-): AppState {
+/** Render the page into `root`; every button goes through the SDK. */
+export function createApp(root: HTMLElement, qgis: SimpleSdk): AppState {
 	root.innerHTML = PAGE;
 	const state: AppState = { sourceId: null, outputId: null };
 	const error = element(root, "error");
@@ -59,14 +61,14 @@ export function createApp(
 	};
 
 	run("open", async () => {
-		const layer = await operations.open_fixture();
+		const layer = await qgis.open_fixture();
 		state.sourceId = layer.id;
 		element(root, "source").textContent =
 			`${layer.name} (${layer.geometry_type}, ${layer.crs ?? "no CRS"})`;
 	});
 
 	run("selection", async () => {
-		const ids = await operations.selected_features({
+		const ids = await qgis.selected_features({
 			layer_id: required(state.sourceId, "open the dataset first"),
 		});
 		element(root, "selection-result").textContent =
@@ -74,7 +76,7 @@ export function createApp(
 	});
 
 	run("buffer", async () => {
-		const output = await operations.buffer({
+		const output = await qgis.buffer({
 			layer_id: required(state.sourceId, "open the dataset first"),
 			distance_metres: Number(input(root, "distance").value),
 			working_crs: input(root, "crs").value,
@@ -86,11 +88,11 @@ export function createApp(
 
 	run("choose-directory", async () => {
 		element(root, "directory").textContent =
-			await operations.choose_export_directory();
+			await qgis.choose_export_directory();
 	});
 
 	run("export", async () => {
-		const exported = await operations.export_layer({
+		const exported = await qgis.export_layer({
 			layer_id: required(state.outputId, "run the buffer first"),
 			file_name: input(root, "file-name").value,
 			overwrite: input(root, "overwrite").checked,

@@ -18,6 +18,7 @@ import {
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { BridgeClient } from "../src/bridge";
+import { QgisSdk } from "../src/qgis-sdk";
 import {
 	BridgeProvider,
 	type OperationState,
@@ -26,6 +27,7 @@ import {
 	useBridgeClient,
 	useOperation,
 	useOperations,
+	useQgisSdk,
 	useStream,
 } from "../src/react";
 import {
@@ -38,6 +40,10 @@ import {
 	type SitesSummaryResult,
 	type SitesWatchEvent,
 } from "./contracts/generated/clients/sites";
+import schema, {
+	type Operations,
+	type Streams,
+} from "./contracts/generated/clients/sites.schema";
 
 type Op = "sites.summary" | "sites.watch";
 
@@ -123,11 +129,12 @@ test("useBridgeClient outside a provider is a typed error, not undefined", async
 	expect(seen).toEqual([]);
 });
 
-test("a provider needs exactly one of client or transport", async ({
+test("a provider needs exactly one of qgis, client or transport", async ({
 	mount,
 }) => {
 	const harness = createBridgeHarness<Op>();
 	const client = new BridgeClient(harness);
+	const qgis = QgisSdk.fromBridgeSchema(schema, { client });
 	await quietly(async () => {
 		await expect(
 			mount.render(createElement(BridgeProvider, {})),
@@ -137,8 +144,119 @@ test("a provider needs exactly one of client or transport", async ({
 				createElement(BridgeProvider, { client, transport: harness }),
 			),
 		).rejects.toThrow(/exactly one/);
+		await expect(
+			mount.render(createElement(BridgeProvider, { qgis, client })),
+		).rejects.toThrow(/exactly one/);
 	});
 	client.close();
+});
+
+// -- a QgisSdk instance (TASK-66 AC #3) ---------------------------------------
+
+test("a provider given a QgisSdk shares it, its client, and never closes it", async ({
+	mount,
+}) => {
+	const harness = createBridgeHarness(schema);
+	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
+	const seenSdk: unknown[] = [];
+	const seenClients: BridgeClient[] = [];
+	function SdkProbe(): ReactElement {
+		seenSdk.push(useQgisSdk<Operations, Streams>());
+		seenClients.push(useBridgeClient());
+		return createElement("i");
+	}
+	await mount.render(
+		createElement(BridgeProvider, { qgis }, createElement(SdkProbe)),
+	);
+	expect(seenSdk).toEqual([qgis]);
+	expect(seenClients).toEqual([qgis.client]);
+	await mount.unmount();
+	expect(qgis.client.isClosed).toBe(false);
+	expect(harness.listeners).toBe(1);
+	qgis.close();
+	expect(harness.listeners).toBe(0);
+});
+
+test("useQgisSdk under a provider given only a client is a typed error", async ({
+	mount,
+}) => {
+	const harness = createBridgeHarness(schema);
+	const client = new BridgeClient(harness);
+	function SdkProbe(): ReactElement {
+		useQgisSdk();
+		return createElement("i");
+	}
+	await quietly(async () => {
+		await expect(
+			mount.render(
+				createElement(BridgeProvider, { client }, createElement(SdkProbe)),
+			),
+		).rejects.toThrow(/given a qgis instance/);
+	});
+	client.close();
+});
+
+test("useOperation and useStream take the methods of a QgisSdk as they are", async ({
+	mount,
+}) => {
+	const harness = createBridgeHarness(schema);
+	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
+	harness.expectInvoke("sites.summary", (payload) => ({
+		total: 2,
+		largest: payload.layer_id,
+		mode: "fast",
+	}));
+	let stream: ScriptedStream | undefined;
+	harness.expectSubscribe("sites.watch", (_payload, s) => {
+		stream = s;
+	});
+	const states: OperationState<SitesSummaryResult>[] = [];
+	const streamStates: StreamState<SitesWatchEvent>[] = [];
+	let run: ((input: { layer_id: string }) => Promise<unknown>) | null = null;
+	function View(): ReactElement {
+		const sdk = useQgisSdk<Operations, Streams>();
+		const [state, start] = useOperation(sdk["sites.summary"]);
+		states.push(state);
+		run = start;
+		streamStates.push(useStream(sdk["sites.watch"], { layer_id: "sites" }));
+		return createElement("i");
+	}
+	await mount.render(
+		createElement(BridgeProvider, { qgis }, createElement(View)),
+	);
+	await flush();
+	expect(streamStates.at(-1)?.status).toBe("open");
+	await act(async () => {
+		await run?.({ layer_id: "sites" });
+		await harness.settled();
+	});
+	const last = states.at(-1);
+	expect(last?.status === "ok" && last.value).toEqual({
+		total: 2,
+		largest: "sites",
+		mode: "fast",
+	});
+	await act(async () => {
+		stream?.emit("data", { change: "added", count: 2, layer_id: "sites" });
+		await harness.settled();
+	});
+	expect(streamStates.at(-1)?.lastEvent).toEqual({
+		kind: "data",
+		payload: { change: "added", count: 2, layer_id: "sites" },
+	});
+	// A request outside the schema is the SDK's contract error, as state.
+	await act(async () => {
+		await run?.({ layer_id: 1 as never });
+	});
+	const refused = states.at(-1);
+	expect(refused?.status === "error" && refused.error).toMatchObject({
+		code: "contract_validation_failed",
+	});
+	await mount.unmount();
+	await harness.settled();
+	expect(harness.openSubscriptions).toEqual([]);
+	harness.assertSatisfied();
+	qgis.close();
 });
 
 test("a remounted child sees the same client and the transport keeps one listener", async ({

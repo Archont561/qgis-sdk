@@ -171,7 +171,7 @@ def test_the_example_keeps_the_scaffold_layout(project: Path) -> None:
         f"{PLUGIN}/metadata.txt",
         f"{PLUGIN}/data/points.geojson",
         f"{PLUGIN}/web/index.html",
-        "web/src/bridge.ts",
+        "web/src/bridge.schema.ts",
         "tests/conftest.py",
     ):
         assert (project / relative).is_file(), relative
@@ -188,7 +188,7 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
         "--plugin",
         f"{PLUGIN}.plugin:SimplePlugin",
         "--out",
-        "web/src/bridge.ts",
+        "web/src/bridge.schema.ts",
         "--check",
         cwd=project,
     )
