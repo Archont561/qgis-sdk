@@ -98,6 +98,6 @@ commits inside keep the slices reviewable.
   left `proposed` with their promotion conditions named.
 - m-6 re-pointed to the UI toolkit (0.7.0) and m-7 created for the deferred
   native-compute research (0.8.0; since re-pointed to agent access, the
-  research is m-8 at 0.9.0, since 2026-10-26 m-11 at 1.1.0); TASK-32 rewritten, TASK-71 created,
+  research is m-8 at 0.9.0, since 2026-10-26 m-12 at 1.1.0); TASK-32 rewritten, TASK-71 created,
   TASK-10 moved ([m-6](../../milestones/m-6%20-%200.7.0-%E2%80%94-ui-toolkit-parameter-kinds%2C-curated-compon.md), [m-7](../../milestones/m-7%20-%200.8.0-%E2%80%94-agent-access-loopback-transport%2C-mcp-serve.md)).
 - Pending: the TASK-62 closure (sprint 1, first commit).

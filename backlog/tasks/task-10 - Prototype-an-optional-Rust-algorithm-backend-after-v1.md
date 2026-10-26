@@ -4,9 +4,9 @@ title: Prototype an optional Rust algorithm backend after v1
 status: To Do
 assignee: []
 created_date: 2026-10-15 23:06
-updated_date: '2026-10-26T10:08:00Z'
+updated_date: '2026-10-26T11:10:00Z'
 labels: []
-milestone: m-11
+milestone: m-12
 dependencies:
   - TASK-9
 priority: low
@@ -34,5 +34,5 @@ Moved from m-6 to m-7 (0.8.0) on 2026-10-26: 0.7.0 became the UI toolkit release
 
 Moved from m-7 to m-8 (0.9.0) on 2026-10-26: 0.8.0 became the agent-access release (decision-49).
 
-Moved to m-11 (1.1.0, post-1.0) on 2026-10-26: hosts, services II and layer coverage take 0.9.0-0.11.0 (decisions 52-54); the title always said after v1.
+Moved to m-11, then m-12 when 1.0.0 took m-11 (1.1.0, post-1.0) on 2026-10-26: hosts, services II and layer coverage take 0.9.0-0.11.0 (decisions 52-54); the title always said after v1.
 <!-- SECTION:NOTES:END -->

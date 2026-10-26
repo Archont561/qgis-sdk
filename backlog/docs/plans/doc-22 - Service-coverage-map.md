@@ -44,6 +44,9 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only) | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | planned |
 | Symbology | renderers, symbols, labelling, style manager, QML/SLD both ways | [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md) | 0.11.0 | planned |
 | Processing breadth | `list/describe`, every output kind, `run_model`, `batch` | [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md) | 0.11.0 | planned |
+| Large payloads | `BlobRef`, `qgis.host.blob`, bounded pages, stream `ack` (decision-59) | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) | 0.10.0 | planned |
+| Log | `ctx.log` debug/info/warning/error, correlation ids, agent log stream (decision-63) | [TASK-106](../../tasks/task-106%20-%20Add-ctx.log-crash-capture-into-it-the-Report-a-problem-surface-and-qgis-sdk-diagnose-with-no-telemetry.md) (minimum in [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md)) | 1.0.0 | planned |
+| i18n | `qgis.host.i18n` locale and strings (decision-60) | [TASK-103](../../tasks/task-103%20-%20Add-i18n-through-Qt-catalogues-shared-with-the-page-and-the-accessibility-rule-UI005.md) | 1.0.0 | planned |
 | Grant vocabulary | `<service>.<operation>` across web, agent, console; `check --grants` | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) | 0.10.0 | planned |
 
 ## Out of scope by decision
@@ -55,3 +58,16 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Mobile (QField) | not a host | decision-52 |
 | Server deployment (FCGI, containers) | operator concern | decision-52 |
 | Whole-window UI tree walks | `iface` proxy by the back door | decision-51 |
+
+## Deferred without a task
+
+Named so they are not forgotten; each needs its own decision before work
+starts.
+
+| Area | Note |
+| --- | --- |
+| Map tools beyond point/line/polygon capture (identify, snapping, custom cursors) | `@tool` of decision-54 covers capture only; `ctx.desktop` remains the escape hatch |
+| 3D map views | no service; `ctx.desktop` only |
+| Processing model designer integration | models run (TASK-94); authoring them is QGIS's UI |
+| Native installers for standalone apps | conda recipe is the input ([decision-58](../../decisions/decision-58%20-%20Publish-plugins-to-the-official-QGIS-repository-from-the-tools-and-ship-standalone-apps-as-conda-packages.md)) |
+| macOS QGIS row | unqualified until a leg exists ([decision-57](../../decisions/decision-57%20-%20Support-QGIS-4-LTR-and-latest-on-Linux-and-Windows-with-a-native-CI-leg-per-row-and-keep-QGIS-3-out-of-scope.md)) |

@@ -4,12 +4,12 @@ title: Prepare and qualify 1.1.0 release (tentative deferred target, post-1.0)
 status: To Do
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-26T10:11:00Z'
+updated_date: '2026-10-26T11:13:00Z'
 labels: []
-milestone: m-11
+milestone: m-12
 dependencies:
   - TASK-10
-  - TASK-95
+  - TASK-107
 priority: low
 type: chore
 ordinal: 71000

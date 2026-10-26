@@ -56,7 +56,7 @@ Rewritten on 2026-10-26: this task kept its id and the 0.7.0 number but changed 
 author: qgis-sdk agent
 created: 2026-10-24 19:10
 ---
-AC #5 was added on 2026-10-24 to carry the bridge obligation the then-m-6, now [m-11](../milestones/m-11%20-%201.1.0-%E2%80%94-deferred-native-compute-feasibility-(tenta.md) already states: a native backend changes what runs behind Python, not what crosses `QWebChannel`, so this milestone expects no bridge release at all - and the milestone requires that expectation to be re-checked rather than repeated. Deferred or not, the gate has to be able to say "nothing crossed" with evidence. No criterion had been checked.
+AC #5 was added on 2026-10-24 to carry the bridge obligation the then-m-6, now [m-12](../milestones/m-12%20-%201.1.0-%E2%80%94-deferred-native-compute-feasibility-(tenta.md) already states: a native backend changes what runs behind Python, not what crosses `QWebChannel`, so this milestone expects no bridge release at all - and the milestone requires that expectation to be re-checked rather than repeated. Deferred or not, the gate has to be able to say "nothing crossed" with evidence. No criterion had been checked.
 ---
 
 created: 2026-10-21 21:56

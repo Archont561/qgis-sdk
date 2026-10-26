@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T11:01:00Z'
+updated_date: '2026-10-26T11:13:00Z'
 labels: []
 milestone: m-6
 dependencies:
@@ -26,4 +27,11 @@ decision-55 points 2, 3, 5 and 7. @on(name).changed|clicked|toggled|edited and @
 - [ ] #1 @on and @subscribe connect after build() and disconnect with the scope on a hand-built tree and on a ui= tree, the methods remain callable directly with a fake ctx, a slot calling UiContext.actions runs on the GUI thread, and a running job from RunsJobs is cancelled when the dialog closes (pure + qgis native tests).
 - [ ] #2 Every container, feedback and button component builds natively and under the fake with shared contract tests; Custom wraps an arbitrary QWidget; a plain QWidget subclass taking ctx is accepted as a surface; ui_snapshot of a surface built under the fake lists semantic nodes without Qt installed (pure tests) and matches the native tree's ids (native tests).
 - [ ] #3 check reports UI002 for an @on name missing from a .ui tree and UI004 for a module-level qgis.PyQt import; the echo of a view's own call is flagged on the stream event; doc-12 documents wiring, mixins, containers, Custom and the pure-PyQt path; the example's results panel is a Dock built from these components.
+- [ ] #4 LogView shows ctx.log records: a minimal ctx.log (info/warning/error with fields) exists from this task so the component has a defined source; the full service, crash capture and diagnose follow in TASK-106 (decision-63).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-26: AC 4 added - minimal ctx.log as LogView's source (decision-63).
+<!-- SECTION:NOTES:END -->

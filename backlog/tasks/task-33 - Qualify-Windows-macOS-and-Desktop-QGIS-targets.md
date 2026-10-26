@@ -1,10 +1,10 @@
 ---
 id: TASK-33
-title: 'Qualify Windows, macOS and Desktop QGIS targets'
+title: Qualify Windows, macOS and Desktop QGIS targets
 status: In Progress
 assignee: []
-created_date: '2026-10-17 16:06'
-updated_date: '2026-10-25 18:51'
+created_date: 2026-10-17 16:06
+updated_date: '2026-10-26T11:13:00Z'
 labels: []
 milestone: m-0
 dependencies: []
@@ -56,6 +56,8 @@ Created at the TASK-23 closeout (2026-10-17) so the targets the Linux sandbox ca
 - The status stays In Progress per doc-10, which forbids inventing a "blocked" status: a task keeps its status and its blocker is named. Closing it as Done would claim two criteria that have not been demonstrated.
 
 TASK-22 (0.5.0, 2026-10-25) adds a Windows blocker row for the reference workflow: doc-14 'Reference plugin through the toolchain' records the Linux x86-64 row (QGIS 4.2.3, Python 3.14.8, Qt 6.11.2, Chromium 140.0.7339.225) and leaves the Windows row blocked - no host, no QGIS-provisioning CI runner. When a Windows QGIS 4 host exists, run QGIS_SDK_REFERENCE=1 pytest packages/qgis-sdk-python/tests/test_reference_example_native.py (needs Bun) and fill that row.
+
+2026-10-26: decision-57 gives AC 1 its mechanism - the native.yml Windows QGIS leg (TASK-99) qualifies the Windows row; this task's rows are closed by that evidence or keep their blocker.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

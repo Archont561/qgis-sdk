@@ -22,23 +22,24 @@ table for 0.10.0 is `ctx.desktop.iface` today. Authority is three dialects.
 | Task | Declared dependencies | Startable |
 | --- | --- | --- |
 | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) grant vocabulary + coverage map | TASK-76, TASK-73 | after 0.8.0 |
-| [TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md) features + expressions | TASK-84 | after 84 |
+| [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) large payloads by reference | TASK-84, TASK-74 | after 84 |
+| [TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md) features + expressions | TASK-84, TASK-102 | after 102 |
 | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) canvas | TASK-84, TASK-81 (app window) | after 84 |
 | [TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md) rasters | TASK-84 | after 84 |
 | [TASK-88](../../tasks/task-88%20-%20Extend-the-project-service-CRS-read-write-and-save-variables-custom-properties-bookmarks-and-the-layer-tree.md) project full | TASK-84 | after 84 |
 | [TASK-89](../../tasks/task-89%20-%20Add-layouts-and-atlas-list-template-load-export-to-PDF-PNG-and-SVG-as-jobs-atlas-iteration-with-progress.md) layouts + atlas | TASK-84 | after 84 |
-| [TASK-90](../../tasks/task-90%20-%20Prepare-and-qualify-0.10.0-release.md) 0.10.0 gate | TASK-83, 85–89 | release gate |
+| [TASK-90](../../tasks/task-90%20-%20Prepare-and-qualify-0.10.0-release.md) 0.10.0 gate | TASK-83, 85–89 (102 through 86) | release gate |
 
 ## 3. Sprint train
 
 - **Sprint 1: TASK-84.** One vocabulary, console grants, `check --grants`,
   doc-22 as the enforced source of truth. Small; first because every later
   sprint fills the map.
-- **Sprint 2: TASK-86.** Features, geometry models, paging, editing
-  sessions, expressions. First real service because it settles the
-  wire-model questions (geometry encodings, binary payloads, page bounds)
-  that rasters and layouts reuse; the answers are written into decision-54's
-  status review.
+- **Sprint 2: TASK-102, then TASK-86 in the same pull request.** `BlobRef`,
+  `qgis.host.blob`, bounded pages and stream `ack` (decision-59, measured
+  in a real view), then features, geometry models, paging, editing
+  sessions and expressions on top of them. First because rasters and
+  layouts reuse the answers.
 - **Sprint 3: TASK-85.** Canvas on Desktop and in the app window, `@tool`
   capture, the extent stream.
 - **Sprint 4: TASK-87 with TASK-88.** Kinded `LayerInfo` and rasters; the
