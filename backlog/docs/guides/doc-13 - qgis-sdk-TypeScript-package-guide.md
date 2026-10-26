@@ -13,8 +13,9 @@ moved it here as the source for the documentation site
 Status at the time of writing: `0.3.0` is the released version (the first
 under this name; packages version independently,
 [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
-`main` carries the unreleased root-entry change described below and in the
-0.4.0 migration notes, which is what the next tag ships. Through `0.2.0` the package was published as
+`main` carries the unreleased root-entry change and the `QgisSdk` entry point
+described below and in the 0.4.0 migration notes, which is what the next tag
+ships. Through `0.2.0` the package was published as
 `@archont561/qgis-sdk-bridge`; it is `@archont561/qgis-sdk` from `0.3.0` on
 ([decision-33](../../decisions/decision-33%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md)).
 Migration notes are at the end of this guide.
@@ -38,32 +39,52 @@ every entry (`qgis-sdk`, `qgis-sdk/bridge`, `qgis-sdk/host`, `qgis-sdk/react`,
 
 ## Exports
 
-The root is the import a page needs: the transport client, the error root and
-the version 1 plugin-description contract. Everything under `./bridge` is also
-exported from the root; the subpath stays for code that already uses it.
+The root is the import a page needs: `QgisSdk`, the schema types, the
+transport client, the error root and the version 1 plugin-description
+contract. Everything under `./bridge` is also exported from the root; the
+subpath stays for code that already uses it.
 
 ```ts
 import {
 	BridgeClient,
+	type BridgeSchema,
 	MAX_SAFE_INTEGER,
 	MIN_SAFE_INTEGER,
 	PLUGIN_DESCRIPTION_SCHEMA_VERSION,
+	QgisSdk,
 	QgisSdkBridgeRemoteError,
+	QgisSdkContractError,
 	QgisSdkContractValidationError,
 	QgisSdkDeclarationError,
 	QgisSdkError,
 	QgisSdkValidationIssue,
+	QgisSdkWebChannelError,
+	createWebChannelTransport,
+	defineBridgeSchema,
+	insideQgis,
 	isSafeJsonInteger,
 	parsePluginDescription,
+	validateAgainstSchema,
 } from "@archont561/qgis-sdk";
 ```
 
+- **`QgisSdk`:** `QgisSdk.fromBridgeSchema(schema)` builds the page's typed
+  handle on the plugin from its generated schema module, as documented under
+  [The schema module and `QgisSdk`](#the-schema-module-and-qgissdk). The
+  same name is the instance type: `QgisSdk<Operations, Streams>`.
+- **Schema types:** `BridgeSchema<O, S>`, `OperationsOf<S>`, `StreamsOf<S>`
+  and `defineBridgeSchema(...)`, the one import a generated schema module
+  makes.
+- **Default transport:** `insideQgis()` and
+  `createWebChannelTransport(objectName)` are what `QgisSdk` uses when no
+  `transport` is given; a page that builds its own `BridgeClient` can use them
+  directly instead of hand-writing the `QWebChannel` glue.
 - **Transport client:** `BridgeClient`, its options, frames, the parsers and
   the seven `QgisSdkBridge*Error` classes, as documented under
   [Transport client](#transport-client).
 - **Safe integer bounds:** `MAX_SAFE_INTEGER` (`9007199254740991`), `MIN_SAFE_INTEGER` (`-9007199254740991`), and `isSafeJsonInteger(value)` mirror `qgis_sdk.models.MAX_SAFE_INTEGER` and `SafeJsonInteger`.
 - **Version 1 plugin descriptions:** `parsePluginDescription(raw)` validates and freezes `PluginDescription` payloads (`schema_version: 1`) produced by Python's `describe_plugin(cls).to_json()`. `qgis-sdk bridge generate` is the build-time reader of the same payload; a page only needs this one to render operations it did not generate a client for.
-- **Structured SDK errors:** every error this package raises extends `QgisSdkError` and carries a stable wire `code` (`"sdk_error"`, `"invalid_declaration"`, `"contract_validation_failed"`, the transport's refusal codes, and the code of a remote fault on `QgisSdkBridgeRemoteError`). Match on the code, not on the class name; a Python-side error such as `scope_closed` or `unsupported_capability` reaches a page as a `QgisSdkBridgeRemoteError` with that code, so the package carries no idle mirror class for it ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)).
+- **Structured SDK errors:** every error this package raises extends `QgisSdkError` and carries a stable wire `code` (`"sdk_error"`, `"invalid_declaration"`, `"contract_validation_failed"`, `"no_web_channel"`, the transport's refusal codes, and the code of a remote fault on `QgisSdkBridgeRemoteError`). Match on the code, not on the class name; a Python-side error such as `scope_closed` or `unsupported_capability` reaches a page as a `QgisSdkBridgeRemoteError` with that code, so the package carries no idle mirror class for it ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)).
 
 What the root does **not** carry, and why: `./host` is generated and large, so
 it is opt-in; `./react` needs the optional `react` peer; `./testing` is a
@@ -151,55 +172,102 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   handshake advertises the same version, so a page can tell what it is talking to
   before its first call.
 
-## Generated clients
+## The schema module and `QgisSdk`
 
 `client.invoke<T>(...)` is a transport, not a type guarantee: `T` is asserted by
-hand at the call site. For operations, generate the client from the plugin's own
-declarations instead:
+hand at the call site. For operations, generate the plugin's **schema module**
+from its own declarations and build a `QgisSdk` on it
+([decision-44](../../decisions/decision-44%20-%20Generate-a-typed-bridge-schema-module-and-build-the-client-from-it-at-runtime.md)):
 
 ```console
-$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin --out web/src/bridge.ts
+$ qgis-sdk bridge generate --plugin my_plugin.plugin:MyPlugin
+wrote web/src/bridge.schema.ts
 ```
 
-The module imports nothing from this package
-([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)):
-it resolves under either npm name and does not pin the page to the SDK version
-the generator ran with. It exports the declared value types, `OPERATIONS` and
-`OperationId`, one validator per type, and a nested operation map:
+The module is data, not code. It exports the declared value types, `OPERATIONS`
+and `OperationId`, one `Operations` interface (request and result per action),
+one `Streams` interface (request and event union per stream), and as its
+default export the parsed plugin description typed by both:
 
 ```ts
-import { createOperations, type PluginOperations } from "./bridge";
+import { type BridgeSchema, defineBridgeSchema } from "@archont561/qgis-sdk";
 
-const operations: PluginOperations = createOperations(client);
-const summary = await operations.sites.summary({ layer_id: "sites" });
+export interface Operations {
+	readonly "sites.summary": { readonly request: SitesSummaryRequest; readonly result: SitesSummaryResult };
+	// ...
+}
+export interface Streams {
+	readonly "sites.watch": { readonly request: SitesWatchRequest; readonly event: SitesWatchEvent };
+}
+const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations, Streams>({ /* description */ });
+export default schema;
 ```
 
-- **Compile time.** An operation the plugin did not declare is not a member of the
-  map, and a misspelled or mistyped argument is a type error - including an
-  unknown property inside a nested object.
-- **Runtime.** The same generated module validates what it sends (strict: unknown
-  arguments are refused before the transport is touched) and what comes back
-  (lenient: a field a newer host added is tolerated, a missing one is a
-  `QgisSdkContractError` naming the operation). Because the module is
-  import-free the class extends `Error`, not `QgisSdkError`; it carries the
-  same `code: "contract_validation_failed"` as the host's error, which is what
-  a page should match on.
-- **Owned by CI.** The file is generated source, never edited by hand: the plugin's
-  CI regenerates it and fails when the checked-in copy differs. `CONTRACT_FINGERPRINT`
-  identifies the wire contract the file was built from.
+`defineBridgeSchema` is the module's only import. It parses and freezes the
+description exactly as `parsePluginDescription` does and pins the two type
+parameters; there is no generated validator, because the SDK validates at run
+time from the schemas the description already carries. A page then needs
+three statements:
+
+```ts
+import { QgisSdk } from "@archont561/qgis-sdk";
+import schema from "./bridge.schema";
+
+const qgis = QgisSdk.fromBridgeSchema(schema);
+const summary = await qgis["sites.summary"]({ layer_id: "sites" });
+```
+
+- **Transport.** Without options `fromBridgeSchema` connects to the
+  `QWebChannel` object named `"bridge"`, which is what the Python runtime
+  registers on the view. Outside a QGIS web view it throws
+  `QgisSdkWebChannelError` (`code: "no_web_channel"`) synchronously, so the
+  page can say why instead of waiting on a channel that never comes. Pass
+  `{ transport }` to use another wire (the test harness below), `{ client }` to
+  share a `BridgeClient` the page already owns (then `close()` leaves it
+  alone), `{ channelObject }` for another registered name, `{ timeoutMs }` for
+  the per-call timeout of an owned client.
+- **Compile time.** Every declared operation is a method keyed by its id, so
+  `qgis["sites.summary"]` for a dotted id and `qgis.open_fixture()` for a plain
+  one. An operation the plugin did not declare is not a member, and a
+  misspelled or mistyped argument is a type error - including an unknown
+  property inside a nested object. An action whose request declares no
+  fields takes no argument.
+- **Runtime.** The method validates what it sends (strict: unknown arguments
+  are refused before the transport is touched) and what comes back (lenient:
+  a field a newer host added is tolerated, a missing or mistyped one is
+  refused). Both refusals are `QgisSdkContractError` (`code:
+  "contract_validation_failed"`) naming the operation, the direction
+  (`request`, `result` or `event`) and the issues, each with a path.
+  Primitives, `list`/`tuple`, unions, `Literal` and nested dataclasses are
+  checked; a reply the schema cannot describe never reaches the page.
 - **Streams are operations too (decision-28).** A method the plugin marked with
   `@stream(id="sites.watch", events={"data": SiteChange, "progress": ScanProgress})`
-  becomes a member that takes the request, the handlers and returns the same
-  `StreamHandle` as `client.subscribe`. The module generates one type per
-  declared event kind and a discriminated `SitesWatchEvent` union, so
-  `onEvent` narrows on `event.kind`; a frame whose payload does not match the
-  declared schema ends the subscription with an `error` terminal instead of
-  reaching the handler. The frame envelope - `seq`, `gap`, `close()` - stays in
-  this package's kernel, and a module with no declared stream renders no
-  stream support at all.
+  becomes `qgis["sites.watch"](request, { onEvent, onTerminal }, options)`,
+  returning the same `StreamHandle` as `client.subscribe`. `onEvent` narrows
+  on `event.kind`; a frame whose kind the plugin did not declare, or whose
+  payload does not match, ends the subscription with an `error` terminal
+  instead of reaching the handler. The frame envelope - `seq`, `gap`,
+  `close()` - stays in this package's kernel.
+- **`qgis.host`** is the typed host surface of
+  [Host namespaces](#host-namespaces) on the same client - `layers`,
+  `project`, `settings`, `notifications`, `styles`, `files` and the
+  `network.fetch` stream - plus `granted`, the host operation ids the
+  handshake advertised for this view. A call outside the grants is refused by
+  the host with its own failure code; the SDK does not pre-empt it.
+- **`qgis.ready`** resolves once the handshake answered; it rejects with the
+  host's `QgisSdkBridgeRemoteError` when the host refused the handshake and
+  with `QgisSdkBridgeProtocolError` when the reply is not a handshake;
+  `qgis.client` is the `BridgeClient` underneath for what no method covers;
+  `qgis.schema` is the module the instance was built from. A plugin may not
+  declare an operation named like one of these members
+  (`QgisSdkDeclarationError`).
+- **Owned by CI.** The file is generated source, never edited by hand: the
+  plugin's CI runs `qgis-sdk bridge generate --check` and fails when the
+  checked-in copy differs. `CONTRACT_FINGERPRINT` identifies the wire contract
+  the file was built from.
 
 ```ts
-const handle = await operations.sites.watch(
+const handle = await qgis["sites.watch"](
 	{ layer_id: "sites" },
 	{
 		onEvent: (event) => {
@@ -210,37 +278,54 @@ const handle = await operations.sites.watch(
 );
 ```
 
+### The 0.3.0 generated client
+
+`qgis-sdk bridge generate --out web/src/bridge.ts` still renders what `0.3.0`
+rendered - the import-free module with `createOperations(client)`,
+`PluginOperations` and one validator per type - and prints a note that the
+schema module is the current form. It stays for one minor; the scaffold's
+`web/` template moves to the schema module when the clean project lands
+([TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md)).
+A page on the legacy client keeps working unchanged.
+
 ## React bindings
 
 `./react` is an optional entry point ([decision-18](../../decisions/decision-18%20-%20Ship-a-framework-neutral-bridge-and-explicit-web-scaffolding-choices.md)):
 it is the only subpath that imports React, `react` is an optional peer, and
 the root, `./bridge` and `./host` stay free of any framework or browser global
 (`tests/surface.test.ts` bundles them and fails on a stray `react`). The
-bindings add no second client. A `BridgeProvider` shares the same `BridgeClient`
-a vanilla page builds, and the hooks take the members a generated module already
-exports, so the typed contract is the generated one.
+bindings add no second client. A `BridgeProvider` shares the `QgisSdk` a
+vanilla page builds (or, for the legacy client, its `BridgeClient`), and the
+hooks take the instance's methods, so the typed contract is the generated one.
 
 ```ts
-import { BridgeProvider, useOperation, useOperations, useStream } from "@archont561/qgis-sdk/react";
-import { createOperations } from "./bridge";
+import { QgisSdk } from "@archont561/qgis-sdk";
+import { BridgeProvider, useOperation, useQgisSdk, useStream } from "@archont561/qgis-sdk/react";
+import schema, { type Operations, type Streams } from "./bridge.schema";
+
+const qgis = QgisSdk.fromBridgeSchema(schema);
 
 function App() {
-	// Owns a client for `transport` and closes it on unmount. Pass `client`
-	// instead to share one the page already owns; the provider then never
-	// closes it. Exactly one of the two is required.
-	return createElement(BridgeProvider, { transport }, createElement(Sites));
+	// Shares the instance the page owns; the provider never closes it. Pass
+	// `transport` instead to let the provider own a client it closes on
+	// unmount, or `client` to share a bare BridgeClient. Exactly one of the
+	// three is required.
+	return createElement(BridgeProvider, { qgis }, createElement(Sites));
 }
 
 function Sites() {
-	const operations = useOperations(createOperations); // memoised per client
-	const [summary, loadSummary] = useOperation(operations.sites.summary);
-	const watch = useStream(operations.sites.watch, { layer_id: "sites" }, {
+	const qgis = useQgisSdk<Operations, Streams>();
+	const [summary, loadSummary] = useOperation(qgis["sites.summary"]);
+	const watch = useStream(qgis["sites.watch"], { layer_id: "sites" }, {
 		onEvent: (event) => { if (event.kind === "data") render(event.payload.change); },
 	});
 	// summary.status: idle | pending | ok (value) | error (error)
 	// watch.status:   idle | opening | open | ended (terminal) | failed (error)
 }
 ```
+
+`useOperations(createOperations)` remains for the 0.3.0 generated client and
+is memoised per provider client, as before.
 
 - **`useOperation(fn)`** returns `[state, run, { abort, reset }]`. `run(input)`
   resolves with the value, or with `undefined` when the call failed, was aborted
@@ -263,21 +348,21 @@ function Sites() {
 
 ## Testing against a scripted host
 
-`./testing` is a `WireTransport` a test hands to its own `BridgeClient`, so the
-page's real client, the generated module's validation and the React bindings
-all run unchanged against a host the test scripts. Nothing global is mutated:
-two harnesses are two hosts, and a test can prove nothing crosses between
-their clients.
+`./testing` is a `WireTransport` a test hands to `QgisSdk.fromBridgeSchema`
+(or to its own `BridgeClient`), so the page's real client, the SDK's contract
+validation and the React bindings all run unchanged against a host the test
+scripts. Nothing global is mutated: two harnesses are two hosts, and a test
+can prove nothing crosses between their clients.
 
 ```ts
-import { BridgeClient } from "@archont561/qgis-sdk/bridge";
+import { QgisSdk } from "@archont561/qgis-sdk";
 import { SILENCE, createBridgeHarness, fault } from "@archont561/qgis-sdk/testing";
-import { type OperationId, createOperations } from "./bridge";
+import schema from "./bridge.schema";
 
-const harness = createBridgeHarness<OperationId>();
-const operations = createOperations(new BridgeClient(harness));
+const harness = createBridgeHarness(schema); // expectations typed by the schema
+const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
 
-harness.expectInvoke<SitesSummaryRequest, SitesSummaryResult>("sites.summary", (payload) => ({ total: 1, largest: payload.layer_id, mode: "fast" }));
+harness.expectInvoke("sites.summary", (payload) => ({ total: 1, largest: payload.layer_id, mode: "fast" }));
 harness.expectInvoke("sites.summary", () => fault("forbidden", "not yours"));
 harness.expectInvoke("sites.summary", () => SILENCE); // the client's own timeout speaks
 harness.expectSubscribe("sites.watch", (_payload, stream) => {
@@ -286,10 +371,20 @@ harness.expectSubscribe("sites.watch", (_payload, stream) => {
 	stream.end({ kind: "complete" });
 });
 
-await operations.sites.summary({ layer_id: "sites" });
-harness.calls;      // every envelope the client sent, in order
+await qgis["sites.summary"]({ layer_id: "sites" });
+harness.calls;      // every envelope the client sent, in order; the handshake first
 harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscriptions, handler throws
 ```
+
+- **Handshake.** A harness built on a schema answers the SDK's handshake by
+  itself, from the schema and `HOST_OPERATIONS`; `createBridgeHarness(schema,
+  { granted: ["layers.list"] })` narrows what `qgis.host.granted` reports, for
+  tests of a page under a restricted host. The handshake is recorded in
+  `harness.calls` with `kind: "handshake"`; filter it out when asserting the
+  operations a page made.
+- **Untyped form.** `createBridgeHarness<OperationId>()` without a schema is
+  what the 0.3.0 generated client and bare `BridgeClient` tests use;
+  `expectInvoke<Req, Res>` then takes the types by hand.
 
 - Expectations are consumed FIFO per operation. A call no expectation covers is
   answered with the `unexpected_call` failure code and remembered; a handler
@@ -359,6 +454,58 @@ on `main`, paired with Python `0.6.0`. Neither the transport protocol (`1`),
 the plugin-description contract (`1`), `HOST_SCHEMA_VERSION` nor
 `HOST_FINGERPRINT` moves: what crosses `QWebChannel` is identical.
 
+- **`QgisSdk.fromBridgeSchema(schema)` replaces the generated client
+  ([decision-44](../../decisions/decision-44%20-%20Generate-a-typed-bridge-schema-module-and-build-the-client-from-it-at-runtime.md)).**
+  `qgis-sdk bridge generate` now writes `web/src/bridge.schema.ts`, a module
+  with types and the parsed description and no validators; the SDK validates
+  at run time. The hand-written `QWebChannel` glue the 0.3.0 scaffold put in
+  `web/src/transport.ts` is in the package. The reference example's
+  `main.ts`, before and after:
+
+  ```ts
+  // 0.3.0
+  import { BridgeClient } from "@archont561/qgis-sdk/bridge";
+  import { createApp } from "./app";
+  import { createOperations } from "./bridge";
+  import { connectWebChannel, insideQgis } from "./transport";
+
+  if (insideQgis()) {
+  	connectWebChannel().then(
+  		(transport) => createApp(root, createOperations(new BridgeClient(transport))),
+  		(failure: unknown) => { root.textContent = String(failure); },
+  	);
+  } else {
+  	root.textContent = "Open this page from QGIS.";
+  }
+  ```
+
+  ```ts
+  // 0.4.0
+  import { QgisSdk } from "@archont561/qgis-sdk";
+  import { createApp } from "./app";
+  import schema from "./bridge.schema";
+
+  const qgis = QgisSdk.fromBridgeSchema(schema);
+  createApp(root, qgis);
+  ```
+
+  Methods are keyed by the declared id (`qgis.open_fixture()`,
+  `qgis["sites.summary"](...)`) rather than nested by dot
+  (`operations.sites.summary(...)`). Point the `bindings` script at
+  `--out web/src/bridge.schema.ts --check`, delete `transport.ts` and the
+  old `bridge.ts`, and pass the instance where `createOperations(client)`
+  was passed; in tests, `createBridgeHarness(schema)` plus
+  `QgisSdk.fromBridgeSchema(schema, { transport: harness })`. The
+  `--out web/src/bridge.ts` form keeps rendering the 0.3.0 client for one
+  minor with a deprecation note; the scaffold's template follows under
+  TASK-65.
+- **The handshake answers from the dispatcher.** A page's first envelope may
+  be `kind: "handshake"`; a Python `0.6.0` host answers it with the protocol,
+  generation, plugin description and the host operation ids this view may
+  call. Protocol `1` is unchanged: a `0.5.0` host refuses the same envelope
+  with `invalid_message`, so `qgis.ready` rejects with that
+  `QgisSdkBridgeRemoteError` and `qgis.host.granted` stays empty; the
+  declared methods still work against it.
 - **The root re-exports `./bridge`.** `import { BridgeClient } from
   "@archont561/qgis-sdk"` works; the `./bridge` subpath is unchanged and
   remains the import of existing code. `./host`, `./react` and `./testing`

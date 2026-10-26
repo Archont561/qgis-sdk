@@ -62,14 +62,19 @@ commits inside keep the slices reviewable.
   Pure tests, the Processing registration under `QgisApplication`
   (`QGIS_SDK_REFERENCE=1`), doc-12's 0.6.0 note. The example's algorithms
   migrate here because the runtime refuses the class form afterwards.
-- **Sprint 2: TASK-66.** `bridge generate` emits `web/src/bridge.schema.ts`
+- **Sprint 2 (implemented 2026-10-26, Done on merge): TASK-66.** `bridge generate` emits `web/src/bridge.schema.ts`
   (typed interfaces, `defineBridgeSchema`, `CONTRACT_FINGERPRINT`);
   `QgisSdk.fromBridgeSchema(schema, options?)` in the root with a method per
   action, a handle per stream, `host` typed from the package manifest with
   `host.granted`, `client`, `close()` and the default QWebChannel transport;
   per-plugin validators and `transport.ts` retire. Bridge 0.4.0 pending the
-  gate; wire and `HOST_FINGERPRINT` unchanged and shown so. Can swap with
-  sprint 1 if the Python slice stalls.
+  gate; wire and `HOST_FINGERPRINT` unchanged and shown so. Landed as
+  designed, plus one Python-side piece the design implied: the dispatcher
+  answers `kind: "handshake"` (protocol, generation, plugin description,
+  granted host ids) so `host.granted` has a source. The example's
+  `web/package.json` runs one release ahead of the scaffold in its `bindings`
+  script until sprint 4 moves the template; `test_reference_example.py`
+  spells the exception out.
 - **Sprint 3: TASK-64.** `[tool.qgis-sdk] plugin = "pkg.module:Class"`;
   `build` and `dev` render `metadata.txt`, bind `classFactory` through
   `qgis_sdk.adapters.desktop.host(spec)`, own the page view, and register

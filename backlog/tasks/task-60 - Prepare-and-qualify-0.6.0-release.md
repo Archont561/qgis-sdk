@@ -46,4 +46,6 @@ decision-41 (TASK-62): release.py stamp --scope typescript now also rewrites SDK
 decisions 42/43 (TASK-63..65) join 0.6.0: function-form algorithms on plugin-owned providers and the generated host artifacts are further 0.x breaking changes of the same minor, so the doc-12 0.6.0 migration note must cover them before this gate runs.
 
 decision-44 (TASK-66) adds QgisSdk.fromBridgeSchema and the typed bridge.schema.ts to the bridge 0.4.0 delta; decision-45 (TASK-67) adds Desktop bindings and surfaces to the Python 0.6.0 delta. Both are wire-neutral; AC #5's fingerprint evidence still applies unchanged.
+
+TASK-66 landed (sprint 2): bridge 0.4.0 carries QgisSdk.fromBridgeSchema, the schema types, the default QWebChannel transport, the schema-driven validator, QgisSdkContractError and QgisSdkWebChannelError in the root, BridgeProvider's qgis prop and useQgisSdk, and the schema-typed harness; Python 0.6.0 carries the dispatcher's handshake answer (kind: "handshake"). Protocol 1, HOST_SCHEMA_VERSION 1 and HOST_FINGERPRINT are unchanged (the host generator's --check is green). The gate's doc-13 check covers the 0.4.0 migration note's before/after main.ts; AC #5's statement that bridge 0.4.0 ran against the 0.6.0 runtime now also means the handshake was answered by a real dispatcher (test_reference_example_native.py, QGIS_SDK_REFERENCE=1).
 <!-- SECTION:NOTES:END -->
