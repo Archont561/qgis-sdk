@@ -10,6 +10,7 @@
 			"!!**/tests/contracts/generated",
 			"!!**/tests/contracts/pydantic/generated",
 			"!!examples/*/web/src/bridge.ts",
+			"!!examples/*/web/src/bridge.schema.ts",
 			"!!**/.pixi",
 			"!!**/.bun",
 			"!!**/.npm",
