@@ -6,7 +6,7 @@
  * vanilla page would build, through a provider that is handed a `QgisSdk`
  * (and leaves it alone), is handed a client (same), or owns a client built on
  * a transport (and closes it on unmount). The hooks take the methods a
- * `QgisSdk` already has - `qgis["sites.summary"]`, `qgis["sites.watch"]` - so
+ * `QgisSdk` already has - `qgis.sites.summary`, `qgis.sites.watch` - so
  * the typed contract is the generated one, not a React copy of it.
  *
  * What the hooks add is lifetime: a call aborted when its component unmounts,

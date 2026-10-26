@@ -44,7 +44,7 @@ import importlib
 import json
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -353,7 +353,40 @@ DEFAULT_SCHEMA_PATH = Path("web/src/bridge.schema.ts")
 """Where ``qgis-sdk bridge generate`` writes when ``--out`` is not given."""
 
 SDK_MEMBERS = frozenset({"client", "host", "schema", "ready", "close"})
-"""Names ``QgisSdk`` keeps for itself; an operation id cannot shadow one."""
+"""Names ``QgisSdk`` keeps for itself; an operation id cannot start with one."""
+
+
+def _check_sdk_tree(ids: Iterable[str]) -> None:
+    """Refuse ids ``QgisSdk.fromBridgeSchema`` would refuse, at generation time.
+
+    The SDK nests methods under the segments of their ids (``sites.summary``
+    is ``qgis.sites.summary``), so an id may not start with a member of the
+    instance, may not have an empty segment, and may not be a prefix of
+    another id: ``sites`` cannot be a method and hold ``sites.summary``.
+    """
+    ordered = sorted(ids)
+    for id in ordered:
+        segments = id.split(".")
+        if segments[0] in SDK_MEMBERS:
+            raise QgisSdkBridgeError(
+                f"operation id {id!r} shadows a QgisSdk member; "
+                f"rename the action (reserved: {', '.join(sorted(SDK_MEMBERS))})"
+            )
+        if "" in segments:
+            raise QgisSdkBridgeError(
+                f"operation id {id!r} has an empty segment; QgisSdk nests "
+                "methods by the dots in an id"
+            )
+    for index, id in enumerate(ordered):
+        prefix = id + "."
+        extended = next(
+            (other for other in ordered[index + 1 :] if other.startswith(prefix)), None
+        )
+        if extended is not None:
+            raise QgisSdkBridgeError(
+                f"operation id {id!r} is a prefix of {extended!r}; QgisSdk cannot "
+                f"make {id!r} both a method and the namespace of the other"
+            )
 
 
 def generate_schema_typescript(
@@ -808,12 +841,7 @@ class _Generator:
     def render_schema(self, *, sdk_import: str) -> str:
         """Render the schema module: types plus the declaration, no code."""
         described = self._description
-        shadowed = sorted(self._ids & SDK_MEMBERS)
-        if shadowed:
-            raise QgisSdkBridgeError(
-                f"operation id {shadowed[0]!r} shadows a QgisSdk member; "
-                f"rename the action (reserved: {', '.join(sorted(SDK_MEMBERS))})"
-            )
+        _check_sdk_tree(self._ids)
         plugin_id = described.get("id", "")
         lines = [
             GENERATED_MARKER,

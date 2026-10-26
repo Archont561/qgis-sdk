@@ -71,10 +71,10 @@ commits inside keep the slices reviewable.
   gate; wire and `HOST_FINGERPRINT` unchanged and shown so. Landed as
   designed, plus one Python-side piece the design implied: the dispatcher
   answers `kind: "handshake"` (protocol, generation, plugin description,
-  granted host ids) so `host.granted` has a source. The example's
-  `web/package.json` runs one release ahead of the scaffold in its `bindings`
-  script until sprint 4 moves the template; `test_reference_example.py`
-  spells the exception out.
+  granted host ids) so `host.granted` has a source. A follow-up in the same sprint nested the
+  methods by the dots in their ids (`qgis.sites.summary`, decision-44 status
+  review) and moved the scaffold's `web/` templates onto the schema module,
+  so the example equals the scaffold again (decision-41 status review).
 - **Sprint 3: TASK-64.** `[tool.qgis-sdk] plugin = "pkg.module:Class"`;
   `build` and `dev` render `metadata.txt`, bind `classFactory` through
   `qgis_sdk.adapters.desktop.host(spec)`, own the page view, and register
@@ -84,7 +84,8 @@ commits inside keep the slices reviewable.
   `QGIS_SDK_DEVTOOLS=1` harnesses re-run.
 - **Sprint 4: TASK-65.** The scaffold drops `webview.py`, `metadata.txt` and
   `classFactory`; the reference plugin in `examples/simple` migrates onto
-  the generated artifacts and the schema module; doc-12/doc-13 and the
+  the generated artifacts (the `web/` templates already write the schema
+  module page since sprint 2's follow-up); doc-12/doc-13 and the
   guides describe the clean project; `QGIS_SDK_SCAFFOLD_DESKTOP=1`,
   `QGIS_SDK_SCAFFOLD_WEB=1` and `test-reference-example` pass.
 - **Sprint 5: TASK-67.** `@toolbar`/`@menu`/`@shortcut` stacked on `@action`,

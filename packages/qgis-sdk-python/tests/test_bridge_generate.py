@@ -484,12 +484,39 @@ def test_the_schema_module_closes_an_empty_map_rather_than_leaving_it_open() -> 
 
 
 def test_the_schema_module_refuses_an_id_that_shadows_a_sdk_member() -> None:
+    """QgisSdk nests by dots, so the first segment is what must not collide."""
     for member in sorted(SDK_MEMBERS):
-        described = _single(member, request=_EMPTY, result={"type": "null"})
-        with pytest.raises(QgisSdkBridgeError, match="shadows a QgisSdk member"):
-            generate_schema_typescript(described)
-    # A dotted id is never a member name, so it is fine.
+        for id in (member, f"{member}.list"):
+            described = _single(id, request=_EMPTY, result={"type": "null"})
+            with pytest.raises(QgisSdkBridgeError, match="shadows a QgisSdk member"):
+                generate_schema_typescript(described)
+    # A member name below the first segment is fine: `qgis.tools.close`.
     generate_schema_typescript(_single("tools.close", request=_EMPTY, result=_EMPTY))
+
+
+def test_the_schema_module_refuses_an_id_that_is_a_prefix_of_another() -> None:
+    """`sites` cannot be both a method and the namespace holding `sites.summary`."""
+    for ids in (("sites", "sites.summary"), ("a.b", "a.b.c")):
+        with pytest.raises(QgisSdkBridgeError, match="is a prefix of"):
+            generate_schema_typescript(_many(*ids))
+    # Siblings and a shared prefix that is not itself an id are fine.
+    generate_schema_typescript(_many("sites.summary", "sites.details", "sites_all"))
+
+
+def test_the_schema_module_refuses_an_empty_id_segment() -> None:
+    with pytest.raises(QgisSdkBridgeError, match="empty segment"):
+        generate_schema_typescript(
+            _single("sites..summary", request=_EMPTY, result=_EMPTY)
+        )
+
+
+def _many(*ids: str) -> dict[str, Any]:
+    described = _single(ids[0], request=_EMPTY, result=_EMPTY)
+    for id in ids[1:]:
+        described["actions"].append(
+            dict(_single(id, request=_EMPTY, result=_EMPTY)["actions"][0])
+        )
+    return described
 
 
 def test_the_checked_in_schema_module_is_current() -> None:

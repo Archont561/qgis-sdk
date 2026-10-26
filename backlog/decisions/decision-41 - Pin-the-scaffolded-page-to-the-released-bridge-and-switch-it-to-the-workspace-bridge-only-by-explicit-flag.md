@@ -65,11 +65,27 @@ workspace and `file:<tarball>` anywhere.
   pin can no longer lag or lead. `ts-v0.4.0` (TASK-60) is the first stamp
   that does so.
 - Pages generated for users keep installing from the registry with an exact,
-  qualified version. The templates still import `@archont561/qgis-sdk/bridge`
-  until the pin names a release that ships the root barrel of decision-40.
+  qualified version. *(Status review below: the templates moved to the root
+  barrel and `QgisSdk` with the package source; the pin follows at the stamp.)*
 - The root `bun.lock` carries the example's Vite, Vitest and happy-dom
   pins; `bun install --frozen-lockfile` covers them. Running the example's
   page now starts with `bun install` at the repository root.
 - A fourth kind of in-repository consumer (a second example, a docs site
   page) chooses between `workspace:*` and a packed tarball by whether it
   lives inside the workspace; neither needs new scaffold code.
+
+## Status review (2026-10-26): templates follow the source, the pin follows the stamp
+
+The consequence above predicted that the templates would keep importing
+`@archont561/qgis-sdk/bridge` until the pin named a release with the root
+barrel. TASK-66 took the other reading, and this decision's mechanics are
+what make it safe: the templates are qualified against the checkout's bridge
+through the `file:<tarball>` and `workspace:*` paths of point 4, the pin is
+owned by `release.py stamp --scope typescript` (point 1), and the TASK-60 gate
+stamps tools `0.6.0` and bridge `0.4.0` in one commit. So the templates now
+write the three-statement page of decision-44 while `SDK_NPM_VERSION` still
+says `0.3.0`; a `qgis-sdk new --web` from an unreleased `main` is a
+pre-release page against a pre-release pin, like every other artifact on
+`main` between gates, and a released tools version never scaffolds against a
+bridge it was not qualified beside. Points 1-4 and the consequences other than
+the one marked stand.

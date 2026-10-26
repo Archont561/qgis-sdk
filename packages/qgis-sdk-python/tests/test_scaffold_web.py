@@ -42,8 +42,7 @@ WEB_COMMON = [
     "web/.gitignore",
     "web/index.html",
     "web/package.json",
-    "web/src/bridge.ts",
-    "web/src/transport.ts",
+    "web/src/bridge.schema.ts",
     "web/tsconfig.json",
     "web/vite.config.ts",
 ]
@@ -161,7 +160,7 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
         "build": "vite build",
         "test": "vitest run",
         "typecheck": "tsc --noEmit",
-        "bindings": "cd .. && qgis-sdk bridge generate --plugin field_tools.plugin:FieldToolsPlugin --out web/src/bridge.ts --check",
+        "bindings": "cd .. && qgis-sdk bridge generate --plugin field_tools.plugin:FieldToolsPlugin --out web/src/bridge.schema.ts --check",
     }
     pinned = {**package["dependencies"], **package["devDependencies"]}
     for name, version in pinned.items():
@@ -242,7 +241,7 @@ def test_the_checked_in_bindings_are_what_bridge_generate_renders(
             "--plugin",
             "field_tools.plugin:FieldToolsPlugin",
             "--out",
-            "web/src/bridge.ts",
+            "web/src/bridge.schema.ts",
             "--check",
         ],
         cwd=project,
@@ -256,35 +255,50 @@ def test_the_checked_in_bindings_are_what_bridge_generate_renders(
     assert "up to date" in result.stdout
 
 
-def test_the_transport_speaks_qwebchannel_and_knows_when_it_is_not_inside_qgis() -> (
-    None
-):
-    transport = content_of(
-        plan_scaffold(options(web="vanilla")), "web/src/transport.ts"
+def test_the_schema_module_is_generated_from_the_template_plugin() -> None:
+    """The page's only generated file is the schema module of decision-44."""
+    plan = plan_scaffold(options(web="vanilla"))
+    schema = content_of(plan, "web/src/bridge.schema.ts")
+
+    assert 'from "@archont561/qgis-sdk"' in schema
+    assert "defineBridgeSchema<Operations, Streams>" in schema
+    assert "export default schema;" in schema
+    assert "createOperations" not in schema and "validate" not in schema.lower()
+    assert not any(
+        file.path in ("web/src/transport.ts", "web/src/bridge.ts") for file in plan
     )
 
-    assert 'from "@archont561/qgis-sdk/bridge"' in transport
-    assert "window.qt" in transport and "QWebChannel" in transport
-    assert "export function insideQgis" in transport
-    assert "export function connectWebChannel" in transport
+
+def test_the_vanilla_page_is_three_statements_on_the_sdk() -> None:
+    plan = plan_scaffold(options(web="vanilla"))
+    main = content_of(plan, "web/src/main.ts")
+    app = content_of(plan, "web/src/app.ts")
+    test = content_of(plan, "web/src/app.test.ts")
+
+    assert 'import { QgisSdk } from "@archont561/qgis-sdk";' in main
+    assert 'import schema from "./bridge.schema";' in main
+    assert "QgisSdk.fromBridgeSchema(schema)" in main
+    assert "connectWebChannel" not in main and "BridgeClient" not in main
+    assert "qgis.ping(" in app and "qgis.project_layers()" in app
+    assert "createBridgeHarness(schema)" in test
+    assert "QgisSdk.fromBridgeSchema(schema, { transport: harness })" in test
 
 
-def test_the_react_page_uses_the_sdk_bindings_over_the_generated_operations() -> None:
+def test_the_react_page_shares_the_sdk_through_the_provider() -> None:
     plan = plan_scaffold(options(web="react"))
+    main = content_of(plan, "web/src/main.tsx")
     app = content_of(plan, "web/src/App.tsx")
     test = content_of(plan, "web/src/App.test.tsx")
 
+    assert "QgisSdk.fromBridgeSchema(schema)" in main
+    assert "<BridgeProvider qgis={qgis}>" in main
     assert 'from "@archont561/qgis-sdk/react"' in app
-    assert "useOperations(createOperations)" in app
+    assert "useQgisSdk<Operations, Streams>()" in app
+    assert "useOperation(qgis.ping)" in app
+    assert "useOperations" not in app and "createOperations" not in app
     assert 'from "@archont561/qgis-sdk/testing"' in test
-    assert "createBridgeHarness" in test
-
-
-def test_the_vanilla_page_tests_against_the_scripted_host() -> None:
-    plan = plan_scaffold(options(web="vanilla"))
-
-    assert "createBridgeHarness" in content_of(plan, "web/src/app.test.ts")
-    assert "connectWebChannel" in content_of(plan, "web/src/main.ts")
+    assert "createBridgeHarness(schema)" in test
+    assert "<BridgeProvider qgis={qgis}>" in test
 
 
 # -- the Python half -----------------------------------------------------------

@@ -10,5 +10,5 @@
 		}
 	},
 	"include": ["src/**/*.ts", "tests/**/*.ts"],
-	"exclude": ["dist", "node_modules", "coverage"]
+	"exclude": ["dist", "node_modules", "coverage", "tests/consumer"]
 }

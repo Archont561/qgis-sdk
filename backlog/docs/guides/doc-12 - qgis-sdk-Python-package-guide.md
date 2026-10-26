@@ -624,16 +624,22 @@ reply = dispatcher.dispatch(binding, request)     # never raises
   in and out; `qgis_sdk.adapters.webchannel.create_channel_object` wraps it in
   the `QObject` a `QWebChannel` registers, importing Qt only when asked.
 
-### Generated TypeScript client
+### Generated TypeScript schema module
 
-The declarations a plugin already writes are the only source of its client. One
-command renders the value types, the operation map, the runtime validators and
-`createOperations(client)` from them - no QGIS, no Qt, no handler ever runs:
+The declarations a plugin already writes are the only source of the page's
+types. One command renders the value types, an `Operations` and a `Streams`
+interface and the parsed description as `web/src/bridge.schema.ts` - no QGIS,
+no Qt, no handler ever runs - and the page builds its `QgisSdk` on it
+([decision-44](../../decisions/decision-44%20-%20Generate-a-typed-bridge-schema-module-and-build-the-client-from-it-at-runtime.md);
+the TypeScript side is in [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)):
 
 ```console
-$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin --out web/src/bridge.ts
-wrote web/src/bridge.ts
+$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin
+wrote web/src/bridge.schema.ts
 ```
+
+`--out web/src/bridge.ts` still renders the 0.3.0 client - validators and
+`createOperations(client)` - for one minor, with a note.
 
 - **Deterministic.** The same declarations produce the same bytes, so the file is
   reviewed and committed like source, and CI regenerates it and fails on any
@@ -643,9 +649,13 @@ wrote web/src/bridge.ts
   description a host already shipped, for a frontend with no Python at hand.
 - **Closed subset.** A schema outside the declaration subset (`$ref`, an object
   inside a union) fails the build instead of emitting `any`.
-- **Strict in, lenient out.** A generated validator refuses unknown arguments and
-  accepts a response that gained a field, so a newer host does not break an older
-  view.
+- **Strict in, lenient out.** The SDK refuses unknown arguments and accepts a
+  response that gained a field, so a newer host does not break an older view;
+  the generator emits no validator of its own.
+- **Ids are the method tree.** `QgisSdk` nests methods by the dots in an id
+  (`sites.summary` is `qgis.sites.summary`), so the generator refuses an id
+  that is a prefix of another declared id and one whose first segment is a
+  `QgisSdk` member (`client`, `host`, `schema`, `ready`, `close`).
 - **Streams come from the same declarations (decision-28).** `@stream(id=...,
   events={"data": SiteChange, "progress": ScanProgress})` marks a method that
   returns an iterator of `StreamEvent`s; its request schema is bound like an
@@ -653,8 +663,7 @@ wrote web/src/bridge.ts
   registers the stream under its id in the same namespace as the actions, the
   host advertises the event schemas in the handshake and refuses to emit an
   event the stream did not declare (the subscription ends with `error`), and the
-  generated client exposes `operations.sites.watch(input, handlers)` with a
-  typed event union. The frame envelope (`seq`, `gap`) is not generated: it is
+  page calls `qgis.sites.watch(input, handlers)` with a typed event union. The frame envelope (`seq`, `gap`) is not generated: it is
   the protocol's, owned by the TypeScript kernel.
 
 ### Host surface
@@ -1031,10 +1040,10 @@ What the web plan adds:
   manager, never Bunup), `vite.config.ts` (`base: "./"`
   for `file:` pages, output into `<plugin>/web`, Chromium target of the
   oldest supported QGIS), `tsconfig.json`, `index.html` (loads Qt's
-  `qwebchannel.js`), `src/transport.ts` (the QWebChannel `WireTransport`),
-  `src/bridge.ts` (the typed client rendered from the plugin's declarations
-  and checked in - `<pm> run bindings` is the CI drift check), the page
-  (`main.ts`/`app.ts` or `main.tsx`/`App.tsx`) and a Vitest test against
+  `qwebchannel.js`), `src/bridge.schema.ts` (the schema module rendered from
+  the plugin's declarations and checked in - `<pm> run bindings` is the CI
+  drift check), the page (`main.ts`/`app.ts` or `main.tsx`/`App.tsx`, three
+  statements on `QgisSdk.fromBridgeSchema`) and a Vitest test against
   `@archont561/qgis-sdk/testing`.
 - `<plugin>/webview.py` - opens the built page in a `QWebEngineView` behind
   `BrowserPolicy(asset_roots=(<plugin>/web,))` and a `Dispatcher` built from

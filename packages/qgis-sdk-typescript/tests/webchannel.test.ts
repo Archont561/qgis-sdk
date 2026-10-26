@@ -203,6 +203,6 @@ test("a three-statement page connects with no options at all", ({
 	const bridge = fakeObject();
 	installQt({ bridge });
 	const qgis = QgisSdk.fromBridgeSchema(schema);
-	expect(typeof qgis["sites.summary"]).toBe("function");
+	expect(typeof qgis.sites.summary).toBe("function");
 	qgis.close();
 });

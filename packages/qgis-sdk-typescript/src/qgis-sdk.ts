@@ -6,14 +6,15 @@
  * ```ts
  * import schema from "./bridge.schema";
  * const qgis = QgisSdk.fromBridgeSchema(schema);
- * await qgis["sites.summary"]({ layer_id });
+ * await qgis.sites.summary({ layer_id });
  * ```
  *
  * The schema is the generated `bridge.schema.ts`: the plugin description plus
  * its `Operations` and `Streams` types. From the description the SDK builds
- * one method per declared action and stream, named by its full id, and checks
- * every argument, reply and event against the declared schemas with the same
- * rules the host applies (`validate.ts`). From the types it gives those
+ * one method per declared action and stream, nested under the segments of its
+ * id (`sites.summary` is `qgis.sites.summary`, `buffer` is `qgis.buffer`),
+ * and checks every argument, reply and event against the declared schemas
+ * with the same rules the host applies (`validate.ts`). From the types it gives those
  * methods their signatures, so a wrong argument shape or an unknown operation
  * is a compile error and a value outside the schema at run time is a
  * {@link QgisSdkContractError}.
@@ -119,18 +120,47 @@ export interface QgisSdkCore<O = OperationMap, S = StreamMap> {
 	close(): void;
 }
 
-/** A page's handle on QGIS: the core, plus one method per declared operation. */
-export type QgisSdk<O = OperationMap, S = StreamMap> = QgisSdkCore<O, S> & {
-	readonly [K in keyof O]: O[K] extends OperationShape
-		? OperationMethod<O[K]>
-		: never;
-} & {
-	readonly [K in keyof S]: S[K] extends StreamShape
-		? StreamMethod<S[K]>
-		: never;
+/** The first segment of a dotted id, or the whole id when it has none. */
+type Head<K extends string> = K extends `${infer H}.${string}` ? H : K;
+
+/** The members of `M` under one head, keyed by the rest of their ids. */
+type Under<M, H extends string> = {
+	[K in keyof M & string as K extends `${H}.${infer Rest}`
+		? Rest
+		: never]: M[K];
 };
 
-/** Names {@link QgisSdkCore} keeps; a declared id may not shadow one. */
+/**
+ * The declared actions as a tree: a plain id is a method, a dotted id nests
+ * one object per segment. An id that is both a leaf and a prefix of another
+ * is refused at run time, so the type need not say what it would mean.
+ */
+export type OperationTree<O> = {
+	readonly [H in Head<keyof O & string>]: H extends keyof O
+		? O[H] extends OperationShape
+			? OperationMethod<O[H]>
+			: never
+		: OperationTree<Under<O, H>>;
+};
+
+/** The declared streams as the same tree, with a stream method at each leaf. */
+export type StreamTree<S> = {
+	readonly [H in Head<keyof S & string>]: H extends keyof S
+		? S[H] extends StreamShape
+			? StreamMethod<S[H]>
+			: never
+		: StreamTree<Under<S, H>>;
+};
+
+/**
+ * A page's handle on QGIS: the core, plus one method per declared operation
+ * nested under the segments of its id.
+ */
+export type QgisSdk<O = OperationMap, S = StreamMap> = QgisSdkCore<O, S> &
+	OperationTree<O> &
+	StreamTree<S>;
+
+/** Names {@link QgisSdkCore} keeps; a declared id may not start with one. */
 export const QGIS_SDK_MEMBERS: readonly string[] = Object.freeze([
 	"client",
 	"host",
@@ -328,25 +358,70 @@ function build<O, S>(
 			}
 		},
 	};
+	const namespaces: Record<string, unknown>[] = [];
 	for (const action of schema.actions) {
-		claim(members, action.id);
-		members[action.id] = operationMethod(client, action);
+		place(members, namespaces, action.id, operationMethod(client, action));
 	}
 	for (const stream of schema.streams) {
-		claim(members, stream.id);
-		members[stream.id] = streamMethod(client, stream);
+		place(members, namespaces, stream.id, streamMethod(client, stream));
+	}
+	for (const namespace of namespaces) {
+		Object.freeze(namespace);
 	}
 	return Object.freeze(members) as unknown as QgisSdk<O, S>;
 }
 
-function claim(members: Record<string, unknown>, id: string): void {
-	if (QGIS_SDK_MEMBERS.includes(id)) {
+/**
+ * Put one method where its id says: `a.b.c` becomes `members.a.b.c`, building
+ * the objects on the way. Two ids cannot both be honest when one is a prefix
+ * of the other - `sites` cannot be a method and hold `sites.summary` - and a
+ * first segment that is a core member would hide it, so both are refused.
+ */
+function place(
+	members: Record<string, unknown>,
+	namespaces: Record<string, unknown>[],
+	id: string,
+	method: unknown,
+): void {
+	const segments = id.split(".");
+	if (segments.some((segment) => segment === "")) {
 		throw new QgisSdkDeclarationError(
-			`${id}: an operation id may not shadow a QgisSdk member (${QGIS_SDK_MEMBERS.join(", ")})`,
+			`${id}: an operation id may not have an empty segment`,
 		);
 	}
-	if (Object.hasOwn(members, id)) {
-		throw new QgisSdkDeclarationError(`${id}: duplicate operation id`);
+	const head = segments[0] as string;
+	if (QGIS_SDK_MEMBERS.includes(head)) {
+		throw new QgisSdkDeclarationError(
+			`${id}: an operation id may not start with a QgisSdk member (${QGIS_SDK_MEMBERS.join(", ")})`,
+		);
+	}
+	let node = members;
+	for (const [index, segment] of segments.entries()) {
+		const prefix = segments.slice(0, index + 1).join(".");
+		const existing = node[segment];
+		if (index === segments.length - 1) {
+			if (existing !== undefined) {
+				throw new QgisSdkDeclarationError(
+					typeof existing === "function"
+						? `${id}: duplicate operation id`
+						: `${id}: an operation id may not be a prefix of another declared id`,
+				);
+			}
+			node[segment] = method;
+			return;
+		}
+		if (existing === undefined) {
+			const namespace: Record<string, unknown> = {};
+			namespaces.push(namespace);
+			node[segment] = namespace;
+			node = namespace;
+		} else if (typeof existing === "function") {
+			throw new QgisSdkDeclarationError(
+				`${id}: ${prefix} is already an operation id; an id may not extend another`,
+			);
+		} else {
+			node = existing as Record<string, unknown>;
+		}
 	}
 }
 
