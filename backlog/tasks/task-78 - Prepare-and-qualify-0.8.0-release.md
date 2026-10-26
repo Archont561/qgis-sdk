@@ -4,6 +4,7 @@ title: Prepare and qualify 0.8.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
+updated_date: '2026-10-26T10:02:00Z'
 labels: []
 milestone: m-7
 dependencies:
@@ -11,6 +12,7 @@ dependencies:
   - TASK-74
   - TASK-75
   - TASK-76
+  - TASK-79
 type: chore
 ordinal: 78000
 ---

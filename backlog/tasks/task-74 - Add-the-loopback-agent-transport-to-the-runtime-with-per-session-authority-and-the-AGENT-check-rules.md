@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
+updated_date: '2026-10-26T10:01:00Z'
 labels: []
 milestone: m-7
 dependencies:
@@ -26,4 +27,12 @@ decision-49 points 1 and 6. qgis_sdk.agent: a stdlib http.server thread bound to
 - [ ] #1 The bridge test vectors pass over the loopback transport unchanged; a wrong or missing token, a foreign Origin or a non-loopback bind attempt is refused (pure tests with a scripted HTTP client, no Qt); every dispatch runs on the GUI thread and a stream delivers ordered SSE frames (qgis native tests).
 - [ ] #2 An action or host operation outside the agent allowlist is refused by the dispatcher with the structured code, a plugin reload fails in-flight calls with the host-reloaded error, and a session's handles and subscriptions die with its disconnect (pure + native tests).
 - [ ] #3 check reports AGENT001-003 with remediations on fixture projects; HOST_FINGERPRINT, HOST_SCHEMA_VERSION and BRIDGE_PROTOCOL_VERSION are unchanged and shown so; the runtime manifest still declares no dependencies.
+- [ ] #4 A per-call deadline: an envelope the GUI thread has not picked up within the configured seconds (default 10, [tool.qgis-sdk.agent] deadline) fails with QgisSdkHostBusyError and the queued work is withdrawn so it cannot run after the caller gave up (pure tests with a stalled fake event loop).
+- [ ] #5 Agent envelopes dispatch strictly one at a time per runtime: a handler that spins a nested event loop cannot let a second agent envelope dispatch inside it, mirroring ChannelTransport's receiving guard (pure test with a re-entrant fake handler, native test with QDialog.exec).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-26: AC 4 and 5 added after the threading discussion (host-busy deadline, re-entrancy guard).
+<!-- SECTION:NOTES:END -->
