@@ -25,6 +25,7 @@ from qgis_sdk.bindings import BindingsDescription, describe_bindings
 from qgis_sdk.core import PluginContext, PluginFactory, PluginRuntime, ResourceScope
 from qgis_sdk.declarations import describe_plugin
 from qgis_sdk.models import QgisSdkError
+from qgis_sdk.services import Notification, NotificationsBase
 
 if TYPE_CHECKING:
     from qgis_sdk.adapters.surfaces import DesktopBindings, SurfaceHost
@@ -125,17 +126,46 @@ def create_class_factory(
 # -- host(): the generated classFactory ------------------------------------------
 
 
-class MessageBarNotifications:
-    """Informational messages on the QGIS message bar; dropped without ``iface``."""
+class MessageBarNotifications(NotificationsBase):
+    """Messages on the QGIS message bar at their level; dropped without ``iface``.
+
+    A ``with_action`` button is a ``QPushButton`` on the bar item that runs
+    the plugin's action through what :meth:`bind_actions` was given - the
+    host binds ``runtime.actions`` once the plugin has started.
+    """
 
     def __init__(self, iface: object | None, title: str) -> None:
         self._iface = iface
         self._title = title
+        self._dispatch: list[Callable[..., object] | None] = [None]
 
-    def info(self, message: str) -> None:
+    def bind_actions(self, dispatch: Callable[..., object] | None) -> None:
+        """Route button presses to ``dispatch(action_id, **arguments)``."""
+        self._dispatch[0] = dispatch
+
+    def _deliver(self, notification: Notification) -> None:
         if self._iface is None:
             return
-        self._iface.messageBar().pushInfo(self._title, message)  # type: ignore[attr-defined]
+        from qgis.PyQt.QtWidgets import QPushButton
+
+        from qgis_sdk.adapters.qgis.notifications import LEVEL_MAP
+
+        bar = self._iface.messageBar()  # type: ignore[attr-defined]
+        item = bar.createMessage(self._title, notification.message)
+        action = notification.action
+        if action is not None:
+            button = QPushButton(action.label, item)
+            button.setObjectName(f"notifications/{action.action_id}")
+            dispatch = self._dispatch
+
+            def press(_checked: bool = False) -> None:
+                if dispatch[0] is None:
+                    return
+                dispatch[0](action.action_id, **action.arguments)
+
+            button.clicked.connect(press)
+            item.layout().addWidget(button)
+        bar.pushWidget(item, LEVEL_MAP[notification.level])
 
 
 def qgis_is_running() -> bool:
@@ -303,6 +333,7 @@ class DesktopHost:
     def initGui(self) -> None:
         """Start the plugin, place its bindings; with a page, add its button."""
         self._adapter.initGui()
+        _bind_notification_actions(self.context, self.runtime)
         if self._surfaces is not None and self._desktop_bindings is not None:
             self._surfaces.attach(self.runtime, self.context)
             self._desktop_bindings.install(self.runtime)
@@ -352,7 +383,25 @@ class DesktopHost:
 
             remove_toolbar_action(self._iface, self._action)
             self._action = None
+        _bind_notification_actions(self.context, None)
         self._adapter.unload()
+
+
+def _bind_notification_actions(
+    context: PluginContext, runtime: PluginRuntime | None
+) -> None:
+    """Route ``with_action`` buttons to the running plugin's handlers, or nowhere."""
+    bind = getattr(context.notifications, "bind_actions", None)
+    if bind is None:
+        return
+    if runtime is None:
+        bind(None)
+        return
+
+    def dispatch(action_id: str, **arguments: Any) -> object:
+        return runtime.actions[action_id](**arguments)
+
+    bind(dispatch)
 
 
 def _with_ui(factory: ContextFactory, surfaces: SurfaceHost) -> ContextFactory:

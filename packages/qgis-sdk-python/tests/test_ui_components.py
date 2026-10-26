@@ -102,12 +102,16 @@ def test_the_widget_is_only_there_once_mounted() -> None:
 
 
 def test_a_component_attaches_to_one_context_once() -> None:
+    """Re-attaching to the same context is a no-op (a container attaches its
+    children); a second context is refused."""
     scope = ResourceScope()
     ctx = UiContext(RecordingNotifications(scope), FakeViewControl(), scope)
+    other = UiContext(RecordingNotifications(scope), FakeViewControl(), scope)
     component = Text("note").attach(ctx)
 
+    assert component.attach(ctx) is component
     with pytest.raises(QgisSdkUiError, match="already attached"):
-        component.attach(ctx)
+        component.attach(other)
 
 
 def _make(cls: type[Component], name: str = "field") -> Component:

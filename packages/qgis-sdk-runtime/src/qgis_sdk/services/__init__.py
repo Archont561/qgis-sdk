@@ -13,12 +13,20 @@ from .contracts import (
 from .files import Files
 from .layers import Layers
 from .network import BlockingNetwork, Deliver, Network, NetworkTransport, Params
+from .notifications import (
+    LEVELS,
+    Notification,
+    NotificationAction,
+    NotificationLevel,
+    NotificationsBase,
+)
 from .processing import Processing, ProviderRegistration
 from .project import Project
 from .settings import Settings
 from .styles import Styles
 
 __all__ = [
+    "LEVELS",
     "Algorithms",
     "BlockingNetwork",
     "Cancellation",
@@ -28,7 +36,11 @@ __all__ = [
     "Layers",
     "Network",
     "NetworkTransport",
+    "Notification",
+    "NotificationAction",
+    "NotificationLevel",
     "Notifications",
+    "NotificationsBase",
     "Params",
     "Processing",
     "Progress",

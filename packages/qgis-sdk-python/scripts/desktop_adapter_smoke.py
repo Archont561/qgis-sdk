@@ -99,9 +99,25 @@ from dataclasses import dataclass
 
 from qgis_sdk import action, plugin
 from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.ui import Button, Column, Dialog, Form
 
 OBSERVED: dict[str, object] = {{}}
 """What the host handed the plugin, so the probe can inspect it after construction."""
+
+
+class PingDialog(Dialog):
+    """The ``ping`` action as a ``Form`` plus one button; no Qt in author code."""
+
+    title = "Ping"
+
+    def build(self):
+        self.form = Form.for_action(self.ctx, "ping", initial=self.initial)
+        run = Button("run", "Ping")
+        run.clicked(self.submit)
+        return Column("ping_dialog", [self.form, run])
+
+    def submit(self) -> None:
+        OBSERVED["form_result"] = self.form.submit()
 
 
 class MessageBarNotifications:
@@ -138,6 +154,7 @@ class LifecycleProbe:
 
     ctx: PluginContext
     context_factory = staticmethod(build_context)
+    surfaces = (PingDialog,)
 
     def __init__(self) -> None:
         OBSERVED["context"] = self.ctx
@@ -177,6 +194,7 @@ payload = {
     "runtime_running": False,
     "message_bar_received": False,
     "action_result": None,
+    "form_submitted": False,
     "unloaded": False,
     "runtime_stopped": False,
     "scope_released": False,
@@ -192,6 +210,7 @@ EVIDENCE = (
     "started",
     "runtime_running",
     "message_bar_received",
+    "form_submitted",
     "unloaded",
     "runtime_stopped",
     "scope_released",
@@ -247,6 +266,14 @@ try:
     payload["message_bar_received"] = len(bar.children()) > before
 
     payload["action_result"] = adapter.runtime.actions["ping"](request["ping_value"])
+
+    # The Form-built dialog: opened by the host, submitted through its button.
+    from qgis.PyQt.QtWidgets import QPushButton
+
+    dialog = context.ui.open(module.PingDialog, initial={"value": request["ping_value"]})
+    window = dialog.form.widget.window()
+    window.findChild(QPushButton, "buttons/run").click()
+    payload["form_submitted"] = module.OBSERVED.get("form_result") == request["ping_value"]
     payload["unloaded"] = bool(
         qgis.utils.unloadPlugin(plugin) and not qgis.utils.isPluginLoaded(plugin)
     )
@@ -276,6 +303,7 @@ REPORT_FIELDS: Final = (
     "runtime_running",
     "message_bar_received",
     "action_result",
+    "form_submitted",
     "unloaded",
     "runtime_stopped",
     "scope_released",
@@ -290,6 +318,7 @@ EVIDENCE_FIELDS: Final = (
     "started",
     "runtime_running",
     "message_bar_received",
+    "form_submitted",
     "unloaded",
     "runtime_stopped",
     "scope_released",
@@ -311,6 +340,7 @@ class DesktopAdapterReport:
     runtime_running: bool
     message_bar_received: bool
     action_result: int | None
+    form_submitted: bool
     unloaded: bool
     runtime_stopped: bool
     scope_released: bool
@@ -337,6 +367,7 @@ class DesktopAdapterReport:
             runtime_running=False,
             message_bar_received=False,
             action_result=None,
+            form_submitted=False,
             unloaded=False,
             runtime_stopped=False,
             scope_released=False,

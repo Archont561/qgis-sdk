@@ -75,6 +75,14 @@ class ViewActions:
         """The action ids this plugin declares, sorted."""
         return tuple(action.id for action in self._description.actions)
 
+    def describe(self, action_id: str) -> ActionDescription:
+        """The declared description of ``action_id``: its title and request schema.
+
+        What ``Form.for_action`` builds its inputs from; an unknown id is
+        refused naming the ids the plugin has.
+        """
+        return self._find(action_id)
+
     def running(self, action_id: str) -> bool:
         """Whether ``action_id`` is still running from this view."""
         pending = self._running.get(action_id)

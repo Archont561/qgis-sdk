@@ -3,13 +3,19 @@
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol, TypeVar
 
+from .notifications import Notifications
+
+__all__ = [
+    "Cancellation",
+    "DesktopAccess",
+    "Notifications",
+    "Progress",
+    "Ui",
+    "ViewControl",
+    "Workers",
+]
+
 T_co = TypeVar("T_co", covariant=True)
-
-
-class Notifications(Protocol):
-    """Publish an informational message through the chosen runtime."""
-
-    def info(self, message: str) -> None: ...
 
 
 class Cancellation(Protocol):

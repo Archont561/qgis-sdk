@@ -297,6 +297,7 @@ pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smok
   "action_result": 7,
   "actions_detached": true,
   "error": null,
+  "form_submitted": true,
   "iface_is_host": true,
   "message_bar_received": true,
   "native_context_matches": true,
@@ -314,7 +315,9 @@ QGIS provides no interface object, `iface_is_host` requires the adapter to hold 
 same object as `qgis.utils.iface`, `native_context_matches` requires
 `ctx.desktop` to hand that live object back through the typed escape hatch, and
 `message_bar_received` requires the notifications service to add a real widget to QGIS's
-own bar. `scope_released` and `actions_detached` are the runtime's side of the same
+own bar, and `form_submitted` requires the fixture's `Form.for_action` dialog, opened
+through `ctx.ui`, to reach the `ping` handler when its `buttons/run` button is clicked.
+`scope_released` and `actions_detached` are the runtime's side of the same
 cycle: the owned scope closed and no stale callable survived `unload()`.
 
 QGIS's module cache is deliberately not asserted. `unloadPlugin` drops only the modules
@@ -577,8 +580,8 @@ the bundled `data/points.geojson`, read the selection, buffer through
 Processing in an explicit projected CRS into a new layer styled with the
 packaged `reference/polygon-output` QML before it is presented, and export
 that layer to a bare file name inside a directory a native folder picker
-chose. Its five actions sit behind both the native dialogs `NativeForms`
-renders and the vanilla page in `web/`, through `QgisSdk` on the generated
+chose. Its five actions sit behind both the native `BufferDialog` built from
+`Form.for_action` and the vanilla page in `web/`, through `QgisSdk` on the generated
 `web/src/bridge.schema.ts`. The project was written by `qgis-sdk new` and keeps that
 layout, so the example doubles as the proof that the commands compose.
 

@@ -2,14 +2,15 @@
 
 Five declared actions carry the whole workflow - open the fixture, read the
 selection, buffer in an explicit projected CRS, export, choose where exports
-go - and one line lists the Processing provider the plugin owns
-(:mod:`.algorithms`); nothing else is in this file: no Qt import, no QGIS
-import, no widget, no ``classFactory``. ``pyproject.toml`` names this class
-under ``[tool.qgis-sdk] plugin``; ``qgis-sdk build`` and ``qgis-sdk dev`` bind
+go - one line lists the Processing provider the plugin owns
+(:mod:`.algorithms`) and one the native window it opens (:mod:`.surfaces`);
+nothing else is in this file: no Qt import, no QGIS import, no widget, no
+``classFactory``. ``pyproject.toml`` names this class under
+``[tool.qgis-sdk] plugin``; ``qgis-sdk build`` and ``qgis-sdk dev`` bind
 QGIS's entry to it and open the page in ``web/`` as a dock (decision-43). The
-native dialog QGIS shows for an action and that page are two front ends over
-the same ``runtime.actions``, which is what "equivalent native and web
-controls" means here.
+``BufferDialog`` built from ``Form.for_action`` and that page are two front
+ends over the same ``runtime.actions``, which is what "equivalent native and
+web controls" means here.
 
 The work itself is :class:`.workflow.LocalGisWorkflow`, the plugin's own
 chain over the SDK services; this file adds what only a plugin declares -
@@ -31,7 +32,7 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 
-from . import algorithms, dialogs
+from . import algorithms, dialogs, surfaces
 from .workflow import LocalGisWorkflow
 
 PLUGIN_ID = "simple"
@@ -58,6 +59,9 @@ class SimplePlugin:
     #: the same line registers nothing (decision-42). A tuple, because a
     #: mutable class attribute is what Ruff's RUF012 flags.
     providers = (algorithms.provider,)
+    #: The native windows: ``BufferDialog`` sits in Plugins > Simple and submits
+    #: the ``buffer`` action through a ``Form`` built from its declaration.
+    surfaces = surfaces.surfaces
 
     @property
     def workflow(self) -> LocalGisWorkflow:

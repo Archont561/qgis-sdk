@@ -122,6 +122,10 @@ class SurfaceTools:
     @action
     def open_buffer(self) -> None:
         self.ctx.ui.open(BufferDialog, initial={"distance": 5})
+
+    @action
+    def notify(self) -> None:
+        self.ctx.notifications.with_action("Count", "count").success("Done")
 """
 
 UI = """
@@ -381,6 +385,52 @@ def test_a_job_submitting_action_reports_on_the_message_bar(
         if any("Start sum finished" in text for text in texts):
             break
     assert any("Start sum finished" in text for text in texts), texts
+
+
+def test_a_notification_button_runs_the_plugin_action_through_the_host(
+    desktop: Any, modules: tuple[Any, Any]
+) -> None:
+    plugin_module, _ = modules
+    notifications = desktop.context.notifications
+
+    desktop.runtime.actions["notify"]()
+    record = notifications.records[-1]
+
+    assert (record.level, record.message, record.action.label) == (
+        "success",
+        "Done",
+        "Count",
+    )
+    assert notifications.press() == 1
+    assert plugin_module.CALLS == ["count"]
+
+
+def test_the_message_bar_shows_each_level_and_a_pressable_button(
+    qgis_app: Any, iface: FakeIface
+) -> None:
+    from qgis.core import Qgis
+    from qgis.PyQt.QtWidgets import QPushButton
+    from qgis_sdk.adapters.desktop import MessageBarNotifications
+
+    pressed: list[tuple[str, dict[str, Any]]] = []
+    notifications = MessageBarNotifications(iface, "Surface tools")
+    notifications.bind_actions(lambda action_id, **kw: pressed.append((action_id, kw)))
+
+    notifications.warning("Careful")
+    notifications.with_action("Undo", "undo", layer_id="L1").critical("Broken")
+    pump(qgis_app)
+
+    items = {item.text(): item for item in iface.bar.items()}
+    assert items["Careful"].level() == Qgis.MessageLevel.Warning
+    assert items["Broken"].level() == Qgis.MessageLevel.Critical
+    button = items["Broken"].findChild(QPushButton, "notifications/undo")
+    button.click()
+    assert pressed == [("undo", {"layer_id": "L1"})]
+
+    notifications.bind_actions(None)
+    button.click()
+    assert len(pressed) == 1
+    MessageBarNotifications(None, "x").with_action("A", "b").info("dropped")
 
 
 # -- surfaces -------------------------------------------------------------------------

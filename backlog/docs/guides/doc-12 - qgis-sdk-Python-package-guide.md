@@ -458,55 +458,79 @@ adapter never serialises `iface`.
 
 The headless harnesses and the real-Desktop evidence for this adapter are in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md).
 
-## Native forms and handler dispatch
+## Forms: an action's inputs as a window
 
-A declared action already describes its inputs as JSON Schema and its handler as a
-*binding name*, never a callable, so nothing in the description can carry Python
-code. `qgis_sdk.ui` turns that description into renderable fields, and
-`qgis_sdk.adapters.qgis.NativeForms` builds the Qt dialog and dispatches the
-validated values:
+A declared action already describes its inputs as JSON Schema and its handler
+as a *binding name*, never a callable, so nothing in the description can carry
+Python code. `qgis_sdk.ui.Form` turns that description into the catalogue's
+input components and submits them through the view's `ctx.actions`; the
+plugin never imports Qt for it:
 
 ```python
-from qgis_sdk import action, plugin
-from qgis_sdk.adapters.qgis import NativeForms
-from qgis_sdk.models import LayerInput
+from qgis_sdk import menu
+from qgis_sdk.ui import Button, Column, Dialog, Form
 
-@plugin(id="demo:forms", title="Form demo")
-class Demo:
-    @action(id="demo:buffer", title="Buffer layer")
-    def buffer(self, layer_id: LayerInput, distance: float) -> str:
-        return layer_id
 
-forms = NativeForms(runtime)          # needs a started runtime
-result = forms.run("demo:buffer")     # dialog, coercion, handler; None when cancelled
+@menu("Plugins/Demo")
+class BufferDialog(Dialog):
+    def build(self):
+        self.form = Form.for_action(self.ctx, "buffer", initial=self.initial)
+        run = Button("run", "Buffer")
+        run.clicked(self.run)
+        return Column("buffer_dialog", [self.form, run])
+
+    def run(self) -> None:
+        output = self.form.submit()          # coerced, through ctx.actions
+        self.ctx.notifications.success(f"Buffered into {output.name}")
+        self.ctx.view.request_close()
 ```
 
-The split is deliberate. `form_fields` maps a schema (plus the author's
-`Annotated` markers) to a widget *family* - text, integer, number, metres, layer,
-CRS, boolean, choice - and refuses anything else, so the adapter never has to
-guess a widget at run time. `coerce_values` is strict in the other direction:
-`"3"` becomes `3` for an integer field, `"three"` is refused with the field name
-and the expected type, and the submitted value is never echoed because a field
-can hold a path or a credential. Optional fields that were not submitted are
-absent from the result, so the handler's own defaults apply.
+Three constructors build the same tree. `Form.for_action(ctx, action_id,
+initial=)` reads the action's description from `ctx.actions.describe(...)`,
+builds one input per field, attaches the form to the context and applies
+`initial` (an unknown name is refused). `Form.from_schema(schema |
+ActionDescription, action_id=, initial=)` does the same from a request schema
+- a page's generated one, say - without a context; attach it yourself.
+`Form(fields=[Text("name", required=True), ...], action_id=)` takes the inputs
+an author placed by hand. The field-to-input rule is `qgis_sdk.ui.input_for`
+over the kept `form_fields`/`schema_fields` rule: text -> `Text`, integer ->
+`Number(integer=True)`, number -> `Number`, metres -> `Distance`, boolean ->
+`Toggle`, layer -> `LayerPicker`, crs -> `CrsPicker`, choice -> `Choice`,
+field -> `FieldPicker(of=<the sibling layer input>)` (a `FieldInput(of=)`
+whose layer is not in the same schema is refused), range -> `Number(range=)`,
+colour -> `Colour`, file -> `FileInput(filters=)`, directory ->
+`DirectoryInput`. Required fields (`spec.required`) are marked on the input
+and `*` on the row label.
 
-Widget selection follows `models.parameters`: a `LayerInput` (that is,
-`Annotated[str, LayerParameter()]`) becomes a vector-layer combo box, `CrsInput`
-a CRS selector, `Metres` a spin box labelled in metres, a `Literal` a combo
-box, `FieldInput(of=)` a `QgsFieldComboBox` that follows the layer picker it
-belongs to, `Range` a bounded spin box, `Colour()` a `QgsColorButton`, and the
-rest the obvious primitive widget. `form_fields` reads the kind from the
-`x-qgis-sdk` annotation on the action's schema, so a form built from a page's
-schema and one built from the signature agree; `FieldSpec.details` carries the
-bounds, the parent input or the picker filters a widget needs. `FileInput` and
-`DirectoryInput` fields are refused by `DeclaredFormDialog` by name: minting
-their `FileRef` needs the host authority, which the `Form` helper of 0.7.0
-carries and this dialog does not.
+A form is a `Component`: `fields` (display order), `field(name)`, `values()`
+(every field's model value), `set_values(mapping)` (an unknown name refused
+before any change), `changed(listener)` called with `(name, value)` after any
+field changes, `snapshot()` with its `fields`, `attach(ctx)`/`mount()`/
+`dispose()`. `submit()` refuses an empty required field by name first
+(`QgisSdkFormError`), then calls `ctx.actions.call(action_id, **values)` -
+the same coercion a page or a button goes through - leaving out fields whose
+value is `None` so the handler's defaults apply; a form built without an
+action, or not attached, refuses with `QgisSdkUiError`. Mounted, a form is a
+`QWidget` with a `QFormLayout` of labelled rows and *no buttons*: place a
+`Button` (`buttons/<name>`, `clicked(listener)`, `click()`) next to it inside
+a `Column(name, [...])`, the one container of this slice; `Column.find(name)`
+walks the tree. The widget's `objectName` is the form's `name` (`form` by
+default), its fields' `form/<field>`.
 
-The escape hatch is not a second API: `PluginRuntime.actions` is keyed by action
-id and holds ordinary bound methods, so conventional PyQt code can build its own
-dialog and call `NativeForms.dispatch(action_id, values)` - or the handler
-directly - with the same validation.
+Under the fakes a form is state: build the surface, assign `ctx` and
+`initial`, call `build()`, `set_values`, `click()` the button and assert on
+`RecordingNotifications.records` and `FakeViewControl.close_requests` - the
+example's `test_the_buffer_dialog_is_the_buffer_action_as_a_form` does
+exactly that. `coerce_values` stays strict in the other direction: `"3"`
+becomes `3` for an integer field, `"three"` is refused with the field name and
+the expected type, and the submitted value is never echoed because a field can
+hold a path or a credential.
+
+The escape hatch is not a second API: `PluginRuntime.actions` is keyed by
+action id and holds ordinary bound methods, so conventional PyQt code can
+build its own dialog and call `self.ctx.actions.<id>(...)` with the same
+validation - name every interactive widget (`UI001`), because the snapshots
+agents read and the tests that drive a window find widgets by `objectName`.
 
 ## Desktop bindings and native surfaces
 
@@ -667,9 +691,11 @@ class PickLayer(Dialog):
         return self.layer
 ```
 
-Composing several components into one widget is still plain PyQt until
-`Form` lands (68c): `attach(self.ctx)` each, `mount()` each and lay the
-widgets out yourself.
+`Input` is the base of the eleven; `Component` above it is what `Button`,
+`Column` and `Form` share (`attach` reaches every child, `dispose` disposes
+them). Every input accepts `required=`; `Form` sets it from the schema. To
+compose components, return a `Column(name, [form, button])` from `build()`
+or `mount(parent)` each into a layout of your own.
 
 **Files.** `FileInput.set_path(path)` / `DirectoryInput.set_path(path)` mint
 a `FileRef` through `ctx.files` and make it the value - this is what the
@@ -689,6 +715,31 @@ service lands (TASK-77). Note the names `FileInput`, `DirectoryInput` and
 `Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
 handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
 surface shows); import the one you mean, or alias.
+
+### `ctx.notifications`
+
+Four levels and one button (decision-55 point 3). `info`, `success`,
+`warning` and `critical` take a message; `with_action(label, action_id,
+**arguments)` returns the same service with a button attached, and pressing
+it runs that declared action with those arguments through the plugin's own
+`runtime.actions`:
+
+```python
+self.ctx.notifications.with_action("Undo", "undo_buffer", layer_id=output.id).success(
+    f"Buffered into {output.name}"
+)
+```
+
+On the Desktop the message lands on the QGIS message bar at its level with a
+`QPushButton` named `notifications/<action_id>`; headless (`NativeNotifications`)
+it goes to the message log with the label written after the message; under
+`RecordingNotifications` every text is in `messages`, every
+`Notification(level, message, action)` in `records`, and `press(index=-1)`
+runs the button once `bind_actions(...)` named the dispatcher (the Desktop
+host binds it at `initGui`). The wire keeps `notifications.info` only: a page
+draws its own buttons over `actions.call`, and levelled feedback for pages
+arrives with the bridge store slice (TASK-69) so `HOST_FINGERPRINT` does not
+move mid-train.
 
 ### `ctx.files`
 
@@ -1310,7 +1361,7 @@ toolbox entry `<plugin>:buffer`. It combines with `--web`.
 calls `self.ctx.ui.open(PingDialog, initial={"value": 7})`; the dialog's
 button calls `self.ctx.actions.ping(value=...)`. `tests/test_plugin.py`
 gains a test that runs the action under `FakeUi` and asserts what was
-opened. The README gets a "Native UI" section naming `UI003` and `ICON001`.
+opened. The README gets a "Native UI" section naming `UI001`, `UI003` and `ICON001`, and points at `Form.for_action` as the Qt-free way to build the same window.
 It combines with `--algorithm` and `--web`; the `QGIS_SDK_DEVTOOLS=1`
 harness scaffolds this variant so `qgis-sdk dev` inside real QGIS Desktop
 proves the toolbar action opens the dialog and an edit to `ui.py` is what
@@ -1398,6 +1449,7 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | `GRANT001` | `[tool.qgis-sdk.web] grants` names something that is neither a host grant (`layers.read`, selecting every operation that needs it) nor a host operation id (`project.layer_ids`); see `qgis_sdk.bridge.host.granted_operations`. |
 | `VERSION003` (warning) | `pyproject.toml` declares no `qgis-sdk-runtime` (or `qgis-sdk`) requirement; `build` ships the installed runtime and says so in the NOTICE. |
 | `VERSION004` | The installed `qgis-sdk-runtime` does not satisfy the project's requirement. The finding names both and the `pip install` line; the tools never install. |
+| `UI001` | A method of a `Dialog`/`Dock` subclass constructs an interactive Qt or QGIS widget (`QPushButton`, `QLineEdit`, `QSpinBox`, `QgsMapLayerComboBox`, ... - `qgis_sdk_tools.check.ui.INTERACTIVE_WIDGETS`) and never calls `setObjectName` on the name holding it; a constructor passed straight to `addWidget` is flagged too. Name it, or use a `qgis_sdk.ui` component, which names its widget (`form/<field>`, `buttons/<name>`). |
 | `UI003` | A method carrying `@toolbar`/`@menu`/`@shortcut` and `@action` takes inputs beyond `self`; a button collects nothing. Drop the inputs, or bind a surface that collects them and calls `self.ctx.actions.<id>(...)`. |
 | `ICON001` | `@toolbar(icon="...")` names something that is not a file under `<package>/icons/` (a bare file name is required). |
 | `SYNTAX001` | A file does not parse. |
@@ -1752,9 +1804,47 @@ published for the bridge, and no `ts-v*` tag exists.
   Processing parameter; refusal messages keep their `action '<id>': field
   <name> expects ...` shape.
 
-Still to land in 0.7.0 from the same task (slice 68c): the `Form` helper
-replacing `NativeForms`/`DeclaredFormDialog` (which still refuses file and
-directory fields by name), notification levels and `with_action`.
+**`Form`, `Button`, `Column`; `NativeForms` and `DeclaredFormDialog`
+removed (TASK-68, slice 68c).** See *Forms: an action's inputs as a window*.
+
+- `qgis_sdk.adapters.qgis.ui` is gone: `NativeForms(runtime)`,
+  `.fields(id)`, `.render(id)`, `.run(id)`, `.dispatch(id, values)` and
+  `DeclaredFormDialog`. Migration, line by line:
+
+  | 0.6 | 0.7 |
+  |---|---|
+  | `NativeForms(runtime).fields("buffer")` | `Form.for_action(ctx, "buffer").fields` (components; `form_fields(description)` still gives the `FieldSpec`s) |
+  | `dialog = forms.render("buffer")`; `dialog.widget("layer_id")` | `form = Form.for_action(self.ctx, "buffer")` inside a `Dialog.build()`; `form.field("layer_id").widget` after mount |
+  | `dialog.values()` | `form.values()` |
+  | `forms.dispatch("buffer", values)` | `form.submit()` (or `self.ctx.actions.buffer(**values)`) |
+  | `forms.run("buffer")` (modal, `None` on cancel) | a `Dialog` subclass returning `Column([form, Button])`, opened by a binding or `ctx.ui.open`; add your own cancel `Button` calling `self.ctx.view.request_close()` |
+
+  A form carries the view's authority, so `FileInput`/`DirectoryInput`
+  fields, which the 0.6 dialog refused by name, now render and submit
+  `FileRef`s.
+- `qgis_sdk.ui` exports `Form`, `Button`, `Column`, `Input`, `input_for`,
+  `schema_fields`, `ViewActions`, `ActionCall`. `Component` is now the
+  identity/lifecycle base shared with containers; the eleven inputs subclass
+  `Input` and accept `required=`. `Component.attach(ctx)` with the *same*
+  context is a no-op (a container attaches its children); a second context
+  is still refused.
+- `ViewActions.describe(action_id)` is public: the declared description a
+  form builds from.
+- `form_fields` refusals name their owner (`action 'x': field ...`) as
+  before; `schema_fields(schema, owner=)` is the same rule for a bare
+  schema (`form: field ...`).
+- `ctx.notifications` gained `success`, `warning`, `critical` and
+  `with_action(label, action_id, **arguments)`; `info` is unchanged. A
+  hand-written `Notifications` double with `info` only keeps working for
+  code that calls `info`; subclass `qgis_sdk.services.NotificationsBase`
+  and implement `_deliver(notification)` to get all four plus the button.
+  `RecordingNotifications.messages` is unchanged; `records`, `press()` and
+  `bind_actions()` are new. `NativeNotifications(sink=)` now receives a
+  `Notification`, not a string. `MessageBarNotifications` pushes at the
+  level and grows `bind_actions`, which `DesktopHost.initGui` calls.
+- `qgis-sdk check` reports `UI001`; the scaffold's `PingDialog` already
+  names its widgets. The desktop-adapter qualification fixture gained a
+  `Form`-built dialog and the `form_submitted` stage.
 
 ## 0.6.0 migration notes
 

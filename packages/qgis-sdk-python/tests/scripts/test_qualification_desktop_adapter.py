@@ -147,6 +147,7 @@ def test_the_fixture_imports_only_the_public_sdk_api() -> None:
         "dataclasses",
         "qgis_sdk",
         "qgis_sdk.core",
+        "qgis_sdk.ui",
     }
     # The host binding is the __init__'s business, as `qgis-sdk build` stages it.
     init = ast.parse(FIXTURE_FILES["__init__.py"])
@@ -224,6 +225,7 @@ def test_real_qgis_desktop_qualifies_the_adapter_lifecycle() -> None:
     assert payload["iface_is_host"] is True
     assert payload["native_context_matches"] is True
     assert payload["message_bar_received"] is True
+    assert payload["form_submitted"] is True
     assert payload["scope_released"] is True
     assert payload["actions_detached"] is True
     assert payload["runtime_running"] is True
