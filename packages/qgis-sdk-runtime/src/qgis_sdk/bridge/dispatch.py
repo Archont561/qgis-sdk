@@ -333,10 +333,10 @@ class Dispatcher:
     ) -> dict[str, Any]:
         """Answer one call with a reply, never with an exception.
 
-        ``kind`` selects the call: an invocation by default, a subscription or
-        its disposal otherwise. The three share the same refusals, so a
-        subscription can never be opened through a path an invocation cannot
-        take.
+        ``kind`` selects the call: an invocation by default, a subscription,
+        its disposal, a release or a handshake otherwise. They share the same
+        refusals, so a subscription can never be opened through a path an
+        invocation cannot take.
         """
         call_id = peek_call_id(raw) or ""
         kind = raw.get("kind", "invoke") if isinstance(raw, Mapping) else "invoke"
@@ -346,6 +346,8 @@ class Dispatcher:
             return self._unsubscribe(binding, raw)
         if kind == "release":
             return self._release(binding, raw)
+        if kind == "handshake":
+            return self._handshake_reply(binding, call_id)
         if kind != "invoke":
             return failure(
                 call_id,
@@ -602,6 +604,34 @@ class Dispatcher:
             Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
         )
         return success(call_id, {"subscription_id": subscription.id, "disposed": True})
+
+    def _handshake_reply(self, binding: ViewBinding, call_id: str) -> dict[str, Any]:
+        """Answer ``kind: "handshake"`` for a view the host already bound.
+
+        A page connected through QWebChannel never minted its own binding - the
+        adapter did, before the first message - so it asks for the contract
+        with a call instead. The reply is the one :meth:`handshake` builds,
+        narrowed to the operations this view is authorized to call: what it
+        lists is exactly what ``qgis.host.granted`` may show (TASK-66 AC #5).
+        """
+        if binding.generation != self._generation:
+            return failure(
+                call_id,
+                BridgeErrorCode.STALE_GENERATION,
+                "This view belongs to a runtime generation that no longer exists",
+            )
+        reply = {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "generation": binding.generation,
+            "plugin": self._description,
+            "host_schema_version": HOST_SCHEMA_VERSION,
+            "operations": [
+                operation.to_dict()
+                for operation in self.operations()
+                if self._is_authorized(binding, operation.id)
+            ],
+        }
+        return success(call_id, to_wire(reply))
 
     def track(self, binding: ViewBinding, kind: HandleKind, handle_id: str) -> Handle:
         """Record a handle the view now holds, so it can be released later."""

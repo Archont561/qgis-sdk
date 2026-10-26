@@ -88,6 +88,68 @@ def test_handshake_binds_the_view_and_advertises_the_contract() -> None:
     assert json.loads(json.dumps(reply)) == reply
 
 
+def test_a_view_can_ask_for_the_handshake_over_the_wire() -> None:
+    """``kind: "handshake"`` answers a bound view with the advertised contract.
+
+    A page that connects through QWebChannel is bound by the host before it
+    says anything, so it needs a call - not a second binding - to learn what
+    this view may use (TASK-66 AC #5).
+    """
+    host = Host()
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+
+    reply = host.dispatcher.dispatch(
+        binding,
+        {"protocol": BRIDGE_PROTOCOL_VERSION, "call_id": "hello", "kind": "handshake"},
+    )
+
+    assert reply["ok"] is True
+    assert reply["call_id"] == "hello"
+    value = reply["value"]
+    assert value["protocol"] == BRIDGE_PROTOCOL_VERSION
+    assert value["generation"] == 0
+    assert value["plugin"]["id"] == "demo.plugin"
+    assert value["host_schema_version"] >= 1
+    assert [operation["id"] for operation in value["operations"]] == [
+        "demo.echo",
+        "demo.fails",
+    ]
+    assert json.loads(json.dumps(reply)) == reply
+
+
+def test_the_wire_handshake_advertises_only_what_the_view_may_call() -> None:
+    dispatcher = Dispatcher(
+        description={"schema_version": 1, "id": "demo.plugin", "actions": []},
+        authorize=lambda binding, operation: operation == "demo.echo",
+    )
+    dispatcher.register(ECHO, lambda payload: payload)
+    dispatcher.register(FAILS, lambda payload: payload)
+    binding = dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+
+    reply = dispatcher.dispatch(
+        binding,
+        {"protocol": BRIDGE_PROTOCOL_VERSION, "call_id": "hello", "kind": "handshake"},
+    )
+
+    assert [operation["id"] for operation in reply["value"]["operations"]] == [
+        "demo.echo"
+    ]
+
+
+def test_the_wire_handshake_refuses_a_stale_generation() -> None:
+    host = Host()
+    binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+    host.dispatcher.advance_generation()
+
+    reply = host.dispatcher.dispatch(
+        binding,
+        {"protocol": BRIDGE_PROTOCOL_VERSION, "call_id": "hello", "kind": "handshake"},
+    )
+
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == BridgeErrorCode.STALE_GENERATION.value
+
+
 def test_an_allowlisted_operation_runs_and_returns_its_value() -> None:
     host = Host()
     binding = host.dispatcher.bind(view_id="view-1", origin="qgis://desktop")
