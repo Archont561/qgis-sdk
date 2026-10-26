@@ -93,6 +93,14 @@ class ScaffoldOptions:
     ``buffer`` function (decision-42) - lists it on the plugin class and
     exposes it as an action, with a starter test over the SDK fakes.
     """
+    ui: str | None = None
+    """``"native"`` for a bound Dialog in pure PyQt (decision-55), else ``None``.
+
+    ``--ui native`` adds ``<plugin>/ui.py`` with one ``Dialog`` subclass whose
+    ``build()`` is plain PyQt, lists it in ``surfaces``, binds it to the
+    Plugins menu, binds one no-input action to the toolbar that opens it,
+    and adds a starter test over ``FakeUi``.
+    """
 
     @classmethod
     def resolve(
@@ -109,6 +117,7 @@ class ScaffoldOptions:
         package_manager: str | None = None,
         sdk_dependency: str | None = None,
         algorithm: bool = False,
+        ui: str | None = None,
     ) -> ScaffoldOptions:
         """Check what the caller chose and derive what it left out.
 
@@ -128,7 +137,22 @@ class ScaffoldOptions:
             email=_text(email, "email"),
             web=_web(web, placement, package_manager, sdk_dependency),
             algorithm=bool(algorithm),
+            ui=_ui(ui),
         )
+
+
+UI_KINDS = ("native",)
+
+
+def _ui(ui: str | None) -> str | None:
+    if ui is None:
+        return None
+    if ui not in UI_KINDS:
+        raise QgisSdkScaffoldError(
+            f"--ui must be one of {', '.join(UI_KINDS)}, got {ui!r} "
+            "(a web page is --web <framework>)"
+        )
+    return ui
 
 
 def _web(

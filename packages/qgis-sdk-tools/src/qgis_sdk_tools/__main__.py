@@ -122,6 +122,13 @@ def new(
             help="Start with a Processing provider and one function algorithm.",
         ),
     ] = False,
+    ui: Annotated[
+        str | None,
+        typer.Option(
+            "--ui",
+            help="native: a bound Dialog in pure PyQt plus a toolbar action opening it.",
+        ),
+    ] = None,
     web: Annotated[
         str | None,
         typer.Option(help="Add a web UI: vanilla or react (a terminal is asked)."),
@@ -186,6 +193,7 @@ def new(
             package_manager=answers.package_manager,
             sdk_dependency=sdk_dependency,
             algorithm=algorithm,
+            ui=ui,
         )
         root = runtime.resolve(target)
         _report(runtime, options, root, dry_run=dry_run, force=force)
@@ -699,11 +707,14 @@ def _resolve(
     package_manager: str | None,
     sdk_dependency: str | None = None,
     algorithm: bool = False,
+    ui: str | None = None,
 ) -> ScaffoldOptions:
     """Pass only what the caller chose, so the API keeps its own defaults."""
     given: dict[str, object] = {"plugin": plugin or target.name}
     if algorithm:
         given["algorithm"] = True
+    if ui is not None:
+        given["ui"] = ui
     for key, value in (
         ("title", title),
         ("author", author),

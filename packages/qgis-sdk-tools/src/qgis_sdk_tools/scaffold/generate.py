@@ -23,16 +23,16 @@ PLUGIN_MODULE = '''"""{title}: a minimal qgis-sdk plugin."""
 
 from __future__ import annotations
 
-from qgis_sdk import action, plugin
+from qgis_sdk import action, plugin{ui_names}
 {algorithm_imports}from qgis_sdk.core import PluginContext
-{algorithm_models}
+{algorithm_models}{ui_imports}
 
 @plugin(id="{plugin}", title="{title}")
 class {class_name}Plugin:
     """Declared actions only: no Qt imports and no framework glue to memorise."""
 
     ctx: PluginContext  # bound by the runtime while the plugin is loaded
-{algorithm_providers}
+{algorithm_providers}{ui_surfaces}
     @action(id="ping", title="Ping")
     def ping(self, value: int) -> int:
         """Return the value unchanged so a caller can prove the round trip."""
@@ -42,7 +42,75 @@ class {class_name}Plugin:
     def project_layers(self) -> list[str]:
         """The same project service a web view reaches as ``host.project``."""
         return list(self.ctx.project.layer_ids())
-{algorithm_action}'''
+{algorithm_action}{ui_action}'''
+
+UI_IMPORTS = """
+from .ui import PingDialog
+"""
+
+UI_SURFACES = """
+    #: The surfaces this plugin shows (decision-55); ``ctx.ui.open`` and the
+    #: bindings on the classes reach exactly these.
+    surfaces = (PingDialog,)
+"""
+
+UI_ACTION = '''
+    @toolbar(text="{title}")
+    @action(id="open_ping", title="Open ping")
+    def open_ping(self) -> None:
+        """A bound, no-input action: the toolbar button opens the dialog."""
+        self.ctx.ui.open(PingDialog, initial={{"value": 7}})
+'''
+
+UI_MODULE = '''"""{title}: native surfaces, plain classes built in pure PyQt (decision-55).
+
+The host constructs a ``Dialog`` per opening, binds ``self.ctx`` (a
+``UiContext``: ``actions``, ``view``, ``notifications``) and ``self.initial``
+on the instance, then calls ``build()`` for the widget to show and disposes
+the scope when the window closes. Qt is imported inside ``build()`` so the
+module stays importable by the pure tests and ``describe_bindings``.
+"""
+
+from __future__ import annotations
+
+from qgis_sdk import menu
+from qgis_sdk.ui import Dialog
+
+
+@menu("Plugins/{title}")
+class PingDialog(Dialog):
+    """Ask for a number and show what the ``ping`` action answers."""
+
+    title = "{title}: ping"
+
+    def build(self):  # a QWidget; Qt is not imported at module level
+        from qgis.PyQt.QtWidgets import (
+            QLabel,
+            QPushButton,
+            QSpinBox,
+            QVBoxLayout,
+            QWidget,
+        )
+
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        self.value = QSpinBox(widget)
+        self.value.setObjectName("value")
+        self.value.setValue(int(self.initial.get("value", 0)))
+        self.answer = QLabel("", widget)
+        self.answer.setObjectName("answer")
+        button = QPushButton("Ping", widget)
+        button.setObjectName("ping")
+        button.clicked.connect(self.ping)
+        layout.addWidget(self.value)
+        layout.addWidget(button)
+        layout.addWidget(self.answer)
+        return widget
+
+    def ping(self) -> None:
+        """Call the plugin's own action through the validated, view-scoped path."""
+        self.answer.setText(str(self.ctx.actions.ping(value=self.value.value())))
+'''
 
 ALGORITHM_IMPORTS = """from qgis_sdk.algorithms import invoke
 """
@@ -153,7 +221,36 @@ def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
             plugin.runtime.actions["project_layers"]()
     finally:
         plugin.unload()
-{algorithm_test}'''
+{algorithm_test}{ui_test}'''
+
+UI_TEST = """
+
+def test_the_bound_action_opens_the_dialog_under_the_fake_ui() -> None:
+    from qgis_sdk import describe_bindings
+    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+    from qgis_sdk.testing import FakeUi, RecordingNotifications
+
+    from {plugin}.ui import PingDialog
+
+    bindings = describe_bindings({class_name}Plugin)
+    assert [entry.id for entry in bindings.entries] == ["ping_dialog", "open_ping"]
+    assert bindings.typed_without_surface == ()
+
+    scope = ResourceScope()
+    ui = FakeUi(scope, plugin_class={class_name}Plugin)
+    context = PluginContext(
+        notifications=RecordingNotifications(scope), scope=scope, ui=ui
+    )
+    runtime = PluginRuntime({class_name}Plugin, context)
+    runtime.start()
+    try:
+        runtime.actions["open_ping"]()
+    finally:
+        runtime.unload()
+
+    assert [opened.surface for opened in ui.opened] == [PingDialog]
+    assert dict(ui.opened[0].initial) == {{"value": 7}}
+"""
 
 ALGORITHM_TEST = '''
 
@@ -296,6 +393,12 @@ def plan_scaffold(options: ScaffoldOptions) -> tuple[GeneratedFile, ...]:
                 f"{options.plugin}/algorithms.py", _algorithms_module(options)
             )
         )
+    if options.ui == "native":
+        values.append(
+            GeneratedFile(
+                f"{options.plugin}/ui.py", UI_MODULE.format(title=options.title)
+            )
+        )
     return tuple(sorted(values, key=lambda file: file.path))
 
 
@@ -365,6 +468,10 @@ def _plugin_module(options: ScaffoldOptions) -> str:
             else ""
         ),
         algorithm_action=ALGORITHM_ACTION if options.algorithm else "",
+        ui_names=", toolbar" if options.ui else "",
+        ui_imports=UI_IMPORTS if options.ui else "",
+        ui_surfaces=UI_SURFACES if options.ui else "",
+        ui_action=UI_ACTION.format(title=options.title) if options.ui else "",
     )
 
 
@@ -374,7 +481,9 @@ def _algorithms_module(options: ScaffoldOptions) -> str:
 
 def _starter_test(options: ScaffoldOptions) -> str:
     action_ids = sorted(
-        ["ping", "project_layers"] + (["buffer"] if options.algorithm else [])
+        ["ping", "project_layers"]
+        + (["buffer"] if options.algorithm else [])
+        + (["open_ping"] if options.ui else [])
     )
     return STARTER_TEST.format(
         title=options.title,
@@ -382,6 +491,13 @@ def _starter_test(options: ScaffoldOptions) -> str:
         action_ids=", ".join(f'"{identifier}"' for identifier in action_ids),
         algorithm_test=(
             ALGORITHM_TEST.format(plugin=options.plugin) if options.algorithm else ""
+        ),
+        ui_test=(
+            UI_TEST.format(
+                plugin=options.plugin, class_name=_class_name(options.plugin)
+            )
+            if options.ui
+            else ""
         ),
         class_name=_class_name(options.plugin),
         host_arguments=(
@@ -470,7 +586,28 @@ pytest -q                        # the same suite, your way
 Arguments the command does not know go to pytest (`qgis-sdk test -x -k ping`).
 A native target whose QGIS cannot be found fails; one whose tests all skipped
 fails too.
-{_algorithm_readme(options)}{_web_readme(options)}"""
+{_algorithm_readme(options)}{_ui_readme(options)}{_web_readme(options)}"""
+
+
+def _ui_readme(options: ScaffoldOptions) -> str:
+    if options.ui != "native":
+        return ""
+    plugin = options.plugin
+    return f"""
+## Native UI
+
+`{plugin}/ui.py` holds `PingDialog`, a `Dialog` subclass whose `build()` is
+plain PyQt and the only place Qt is imported; `@menu("Plugins/...")` on the
+class puts it in the Plugins menu, `plugin.py` lists it in `surfaces` and
+binds the no-input `open_ping` action to the toolbar, which calls
+`self.ctx.ui.open(PingDialog, initial=...)`. Inside the dialog `self.ctx` is
+a `UiContext`: `self.ctx.actions.ping(...)` dispatches the plugin's own action
+with validation, `self.ctx.view.request_close()` closes the window. A bound
+action with inputs is refused by `qgis-sdk check` (`UI003`): give it a surface
+that collects them. `@toolbar(icon="name.svg")` names a file under
+`{plugin}/icons/` (`ICON001` when it is missing). The starter test drives the
+action under `qgis_sdk.testing.FakeUi` without QGIS.
+"""
 
 
 def _algorithm_readme(options: ScaffoldOptions) -> str:

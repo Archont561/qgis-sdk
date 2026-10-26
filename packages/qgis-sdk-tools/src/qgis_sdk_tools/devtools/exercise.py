@@ -6,7 +6,8 @@ keyboard: the steps below are the acceptance criteria in order, each
 recorded under a stable key, and QGIS quits with the report's verdict.
 
 The full exercise edits the scaffold's ``ping`` action between reloads, so it
-only fits a project that declares one. Any other project - the reference
+only fits a project that declares one; with ``--ui native``'s ``ui.py`` it
+also edits the dialog and opens it from its bound action after the reload. Any other project - the reference
 plugin, a user's own - gets :func:`run_smoke`: start, one reload, the view
 when there is a web UI, unload; the report says ``"smoke": true``.
 """
@@ -146,6 +147,27 @@ def run_exercise(session: DevSession, path: Path) -> None:
                 )
                 ticker.stop()  # type: ignore[attr-defined]
 
+        # TASK-67: a surface edited between reloads is what the next opening
+        # builds; the bound action stays on the toolbar across revisions.
+        ui_source = package / "ui.py"
+        report["surface"] = None
+        if (
+            ui_source.is_file()
+            and "open_ping" in qgis.utils.plugins[plugin].runtime.actions
+        ):
+            before_edit = _surface_round(qgis.utils.plugins[plugin], session, plugin)
+            original = edit(ui_source, 'QLabel("", widget)', 'QLabel("edited", widget)')
+            try:
+                reloaded = coordinator.reload().outcome == "reloaded"
+                after_edit = _surface_round(qgis.utils.plugins[plugin], session, plugin)
+            finally:
+                ui_source.write_text(original, encoding="utf-8")
+            report["surface"] = {
+                "before": before_edit,
+                "reloaded": reloaded,
+                "after": after_edit,
+            }
+
         report["revision"] = coordinator.revision
         if session.request.get("web"):
             held = qgis.utils.plugins[plugin]
@@ -159,6 +181,36 @@ def run_exercise(session: DevSession, path: Path) -> None:
     Path(path).write_text(json.dumps(report), encoding="utf-8")
     sys.__stderr__.flush() if sys.__stderr__ else None
     os._exit(0 if report["error"] is None else 1)
+
+
+def _surface_round(held: Any, session: DevSession, plugin: str) -> dict[str, Any]:
+    """Open the scaffold's dialog through its bound action, use it, close it.
+
+    Everything is read off the author's instance (``answer``, ``ping``), so
+    this needs no Qt import: the host built the widget, bound ``ctx`` and
+    disposes the view when the window closes.
+    """
+    surfaces = held.surfaces
+    held.runtime.actions["open_ping"]()
+    session.pump(0.1)
+    (record,) = surfaces.dialogs
+    surface = record.surface
+    shown = bool(record.widget.isVisible())
+    initial = surface.answer.text()
+    surface.ping()
+    answer = surface.answer.text()
+    record.widget.close()
+    session.pump(0.1)
+    return {
+        "placed": any(
+            action.objectName() == f"{plugin}.open_ping"
+            for action in held.desktop_bindings.placed
+        ),
+        "shown": shown,
+        "initial": initial,
+        "answer": answer,
+        "closed": record.closed and surfaces.dialogs == (),
+    }
 
 
 def _stuck_job(runtime: Any, gate: threading.Event) -> Any:

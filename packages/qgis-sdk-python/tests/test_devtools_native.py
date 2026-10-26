@@ -18,7 +18,9 @@ What it proves, each through the command line a user would type:
   teardown, coalesces a burst of requests, and reloads on a saved edit
   (TASK-21); ``dev --mode standalone`` runs the plugin without Desktop;
 * with a web UI, ``dev`` serves the page from Vite inside QGIS with hot
-  module replacement, and the bridge answers after the page updated.
+  module replacement, and the bridge answers after the page updated;
+* with ``--ui native``, the bound toolbar action opens the dialog, an edit
+  to ``ui.py`` is what the next opening builds after a reload (TASK-67).
 """
 
 from __future__ import annotations
@@ -110,7 +112,7 @@ def _cli(
 @pytest.fixture(scope="module")
 def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("devtools") / "field_tools"
-    write_scaffold(ScaffoldOptions.resolve("field_tools"), root)
+    write_scaffold(ScaffoldOptions.resolve("field_tools", ui="native"), root)
     (root / "tests" / "test_native.py").write_text(NATIVE_TESTS, encoding="utf-8")
     return root
 
@@ -120,20 +122,20 @@ class TestTestCommand:
         result = _cli("test", "-q", cwd=project)
 
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "3 passed, 2 deselected" in result.stdout
+        assert "4 passed, 2 deselected" in result.stdout
 
     def test_qgis_runs_under_a_headless_application(self, project: Path) -> None:
         result = _cli("test", "--target", "qgis", "-q", cwd=project)
 
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "1 passed, 4 deselected" in result.stdout
+        assert "1 passed, 5 deselected" in result.stdout
         assert "target qgis:" in result.stderr
 
     def test_desktop_runs_inside_the_binary_with_iface(self, project: Path) -> None:
         result = _cli("test", "--target", "desktop", "-q", cwd=project)
 
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "1 passed, 4 deselected" in result.stdout
+        assert "1 passed, 5 deselected" in result.stdout
         assert "target desktop:" in result.stderr
         # Test profiles are temporary; only the generated host package stays.
         assert [p.name for p in (Path(project) / ".qgis-sdk").iterdir()] == ["dev"]
@@ -183,6 +185,18 @@ class TestDevCommand:
         assert result.returncode == 0, result.stdout + result.stderr
         report = json.loads(report_path.read_text(encoding="utf-8"))
         blockers = report.pop("stuck_blockers")
+        # TASK-67: the dialog edited between reloads is what the next opening
+        # builds, from the same toolbar action, with the view disposed on close.
+        surface = report.pop("surface")
+        assert surface["reloaded"] is True
+        assert surface["before"] == {
+            "placed": True,
+            "shown": True,
+            "initial": "",
+            "answer": "7",
+            "closed": True,
+        }
+        assert surface["after"] == {**surface["before"], "initial": "edited"}
         assert report == {
             "started": True,
             "error": None,
@@ -199,7 +213,7 @@ class TestDevCommand:
             "coalesced": True,
             "watch_reloaded": True,
             "ping_after_watched_edit": 2001,
-            "revision": 8,
+            "revision": 9,
             "unloaded": True,
         }
         # decision-21: the refusal names the work that could not reach a safe point.
@@ -209,7 +223,7 @@ class TestDevCommand:
         assert "reload refused, revision 2 keeps running" in result.stderr
         assert "restart `qgis-sdk dev`" in result.stderr
         assert "field_tools is disabled until a Reload succeeds" in result.stderr
-        assert "field_tools running (revision 8)" in result.stderr
+        assert "field_tools running (revision 9)" in result.stderr
         assert (project / ".qgis-sdk" / "profiles" / "dev").is_dir()
         assert "1000" not in (project / "field_tools" / "plugin.py").read_text()
 
