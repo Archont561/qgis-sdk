@@ -94,3 +94,39 @@ component `qgis-declared-form` is `qgis-form`, and the set grows to the names
 listed there (`DirectoryInput`, `Distance`, `Choice`, `LogView`,
 `RunButton`). The store core, the adapters and the package split are
 unchanged.
+
+## Amendment (2026-10-26, implementation choices for `qgis-sdk-ui`)
+
+1. **Lit, in light DOM.** The components are authored with Lit (`lit` is
+   the package's only runtime dependency, caret-pinned, an *evolving*
+   detail under decision-56: consumers see custom elements, not Lit),
+   written in the `static properties` form so plain TypeScript and bunup
+   compile them like the bridge. `createRenderRoot()` returns the element:
+   **no Shadow DOM**. The page is the plugin's own, so encapsulation buys
+   little, while light DOM gives ordinary labels, focus order, form
+   participation and consumer CSS. `<slot>` is therefore unavailable; the
+   catalogue is leaf components, and `Form`/`Panel` compose by properties.
+   One `StoreController` (a ReactiveController over the store contract)
+   joins the decision-47 stores to Lit's update cycle; components hold no
+   bridge logic. React wrapper through `@lit/react`; Vue and Svelte
+   wrappers are typed thin shims (props, events, the `isCustomElement`
+   note); no generated-wrapper toolchain. Stencil is declined: its value is
+   compiler-generated wrappers and types, its price a second build system
+   in a workspace with a settled one.
+2. **UnoCSS as the authoring tool, compiled CSS as the product.** Templates
+   use UnoCSS utilities from `preset-mini` with the `qs-` prefix and
+   `preflights: false`; the package build runs UnoCSS over its own sources
+   and ships `dist/style.css`, which a consumer imports with no UnoCSS of
+   their own. The theme maps colours, spacing and type to `var(--qgis-sdk-*)`,
+   so the palette `host()` seeds at page open still switches at runtime.
+   No inline `style=`. Semantic hooks are `data-part="label|control|error"`
+   for consumer overrides and `data-qgis-sdk="<name>"` as the stable id
+   (the web twin of `objectName`, decision-51). An optional
+   `@archont561/qgis-sdk-ui/uno` preset exports the theme and shortcuts for
+   pages that use UnoCSS; the scaffold offers the Vite plugin as a question
+   defaulting to off. Storybook keeps the `web-components-vite` builder
+   with the UnoCSS plugin in its own config only.
+3. **Consequence.** A component is a widget for pages the plugin owns, not
+   a drop-in for arbitrary hosts; doc-13 says so. TASK-70 gains ACs for the
+   no-UnoCSS consumer path, the prefix collision test, the CSS size budget
+   and light-DOM accessibility.

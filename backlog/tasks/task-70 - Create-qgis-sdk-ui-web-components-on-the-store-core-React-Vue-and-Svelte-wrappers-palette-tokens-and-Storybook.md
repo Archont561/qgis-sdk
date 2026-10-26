@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-26T09:06:00Z'
+updated_date: '2026-10-26T11:26:00Z'
 labels: []
 milestone: m-6
 dependencies:
@@ -28,4 +28,13 @@ decision-47 points 3 and 5 (absorbing decision-46 points 4 and 5 and decision-16
 - [ ] #2 Inside QGIS the page's --qgis-sdk-* variables match the running palette (webengine test reading computed styles) and fall back to documented defaults without a host; a Storybook theme switcher shows the QGIS light and dark palettes; bun run storybook serves and the static build lands in the docs site pipeline.
 - [ ] #3 release.py stamp/verify-versions/plan know the ui scope and refuse a UI release whose bridge peer range excludes the workspace bridge (tests/scripts); npm pack of qgis-sdk-ui contains dist, README and LICENSE only; the Tier 1 templates opt in through one import and the scaffold-web harness passes.
 - [ ] #4 decision-16 is promoted with a status review naming the palette tokens as the theme surface; doc-13 documents the components, wrappers and variables; the package README follows decision-29.
+- [ ] #5 Components are Lit light-DOM elements (no shadow root) with lit as the only dependency in npm pack's tree; the React wrapper uses @lit/react; a page with its own Tailwind/Uno classes renders next to the components without collisions because every shipped utility is qs- prefixed and no preflight is emitted (bun tests + a collision fixture).
+- [ ] #6 dist/style.css is compiled from the package's own sources by UnoCSS preset-mini, stays within the documented size budget, binds to --qgis-sdk-* tokens so palette switching needs no rebuild, and a consumer without UnoCSS (the vanilla template) renders correctly from it; the optional /uno preset builds the same tokens in a consumer that opts in (scaffold-web harness).
+- [ ] #7 Every component carries data-qgis-sdk ids and data-part hooks, labels are associated with controls in light DOM, and keyboard focus order follows declaration (Storybook a11y addon + portable-story tests).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-26: ACs 5-7 added - Lit light DOM, UnoCSS compiled to style.css, data-part/data-qgis-sdk hooks (decision-47 amendment).
+<!-- SECTION:NOTES:END -->
