@@ -91,14 +91,21 @@ def test_request_document_names_every_input_the_probe_reads() -> None:
     }
 
 
-def test_the_expected_metadata_matches_what_the_scaffold_writes() -> None:
-    """The harness asserts against the generator's own output, not a copy."""
-    from qgis_sdk_tools.scaffold import ScaffoldOptions, plan_scaffold
+def test_the_expected_metadata_matches_what_build_renders(tmp_path: Path) -> None:
+    """The harness asserts against the generator's own output, not a copy.
 
-    plan = plan_scaffold(ScaffoldOptions.resolve("demo_tools"))
-    generated = next(
-        file.content for file in plan if file.path == "demo_tools/metadata.txt"
-    )
+    The scaffold writes no metadata.txt (decision-43); ``build`` renders it
+    from pyproject.toml, so the rendering is what the expectation is checked
+    against.
+    """
+    from qgis_sdk_tools.artifacts import introspect_plugin, render_metadata
+    from qgis_sdk_tools.project import require_project
+    from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
+
+    project = tmp_path / "demo_tools"
+    write_scaffold(ScaffoldOptions.resolve("demo_tools"), project)
+    config = require_project(project)
+    generated = render_metadata(config, introspect_plugin(config))
 
     fields = ini_fields(generated)
     assert expected_metadata("Demo Tools") == {

@@ -176,3 +176,49 @@ def test_qgis_app_without_pyqgis_fails_in_the_qgis_target(tmp_path: Path) -> Non
     assert result.returncode == 1
     assert "PyQGIS is not importable" in result.stdout
     assert "--qgis-prefix" in result.stdout
+
+
+def test_the_desktop_target_imports_the_plugin_the_way_qgis_loads_it(
+    tmp_path: Path,
+) -> None:
+    """decision-43: the host package on QGIS_PLUGINPATH shadows the bare source.
+
+    pytest puts the project root first on ``sys.path``; in the desktop target
+    the generated host package must win, or ``qgis.utils.loadPlugin`` would
+    import the source package, which has no ``classFactory``.
+    """
+    source = tmp_path / "field_tools"
+    source.mkdir()
+    (source / "__init__.py").write_text("WHERE = 'source'\n", encoding="utf-8")
+    host = tmp_path / ".qgis-sdk" / "dev" / "host" / "field_tools"
+    host.mkdir(parents=True)
+    (host / "__init__.py").write_text("WHERE = 'host'\n", encoding="utf-8")
+    (tmp_path / "conftest.py").write_text(
+        "import field_tools\nSEEN = field_tools.WHERE\n", encoding="utf-8"
+    )
+    write_tests(
+        tmp_path,
+        "import conftest\nimport field_tools\n\n"
+        "def test_a():\n    print('WHERE', field_tools.WHERE, conftest.SEEN)\n",
+    )
+    (tmp_path / "pytest.ini").write_text("[pytest]\npythonpath = .\n", encoding="utf-8")
+    os.environ.pop("QGIS_PLUGINPATH", None)
+
+    plain = run_pytest(tmp_path, "-s")
+    assert plain.returncode == 0, plain.stdout + plain.stderr
+    assert "WHERE source source" in plain.stdout
+
+    desktop_env = {**os.environ, "QGIS_PLUGINPATH": str(host.parent)}
+    desktop = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", PLUGIN, "-q", "-s", "--no-header"],
+        cwd=tmp_path,
+        env={
+            **{k: v for k, v in desktop_env.items() if k != "PYTEST_ADDOPTS"},
+            "PYTHONPATH": layers.source_path(),
+            TARGET_ENV: "desktop",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert "WHERE host host" in desktop.stdout, desktop.stdout + desktop.stderr

@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import layers
@@ -32,13 +33,11 @@ PLAIN_FILES = [
     ".gitignore",
     "README.md",
     "field_tools/__init__.py",
-    "field_tools/metadata.txt",
     "field_tools/plugin.py",
     "pyproject.toml",
-    "tests/test_plugin_smoke.py",
+    "tests/test_plugin.py",
 ]
 WEB_COMMON = [
-    "field_tools/webview.py",
     "web/.gitignore",
     "web/index.html",
     "web/package.json",
@@ -122,7 +121,7 @@ def test_a_package_named_like_a_project_directory_is_refused(name: str) -> None:
 # -- the plan ----------------------------------------------------------------
 
 
-def test_the_vanilla_plan_adds_the_web_app_and_the_view_module() -> None:
+def test_the_vanilla_plan_adds_the_web_app_and_nothing_python() -> None:
     paths = [file.path for file in plan_scaffold(options(web="vanilla"))]
 
     assert paths == sorted(PLAIN_FILES + WEB_COMMON + VANILLA_ONLY)
@@ -160,7 +159,7 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
         "build": "vite build",
         "test": "vitest run",
         "typecheck": "tsc --noEmit",
-        "bindings": "cd .. && qgis-sdk bridge generate --plugin field_tools.plugin:FieldToolsPlugin --out web/src/bridge.schema.ts --check",
+        "bindings": "cd .. && qgis-sdk bridge generate --out web/src/bridge.schema.ts --check",
     }
     pinned = {**package["dependencies"], **package["devDependencies"]}
     for name, version in pinned.items():
@@ -238,8 +237,6 @@ def test_the_checked_in_bindings_are_what_bridge_generate_renders(
             "qgis_sdk_tools",
             "bridge",
             "generate",
-            "--plugin",
-            "field_tools.plugin:FieldToolsPlugin",
             "--out",
             "web/src/bridge.schema.ts",
             "--check",
@@ -305,18 +302,38 @@ def test_the_react_page_shares_the_sdk_through_the_provider() -> None:
 
 
 @pytest.mark.parametrize("placement", ["dialog", "dock"])
-def test_the_plugin_opens_the_view_from_a_toolbar_action(placement: str) -> None:
+def test_the_page_is_declared_in_pyproject_not_in_a_view_module(
+    placement: str,
+) -> None:
+    """decision-43: the host opens the page; the author writes no Qt."""
     plan = plan_scaffold(options(web="vanilla", placement=placement))
     plugin = content_of(plan, "field_tools/plugin.py")
-    view = content_of(plan, "field_tools/webview.py")
+    manifest = tomllib.loads(content_of(plan, "pyproject.toml"))
 
-    assert f'placement="{placement}"' in plugin
-    assert "def classFactory(iface" in plugin
-    assert "from . import webview" in plugin
-    assert "create_restricted_page" in view and "create_channel_object" in view
-    assert "Dispatcher.from_runtime" in view
-    assert "asset_roots=(ASSETS,)" in view
-    assert "QDockWidget" in view and "QDialog" in view
+    assert manifest["tool"]["qgis-sdk"]["web"] == {
+        "placement": placement,
+        "grants": [],
+    }
+    assert plugin == content_of(plan_scaffold(options()), "field_tools/plugin.py")
+    assert "webview" not in plugin and "classFactory" not in plugin
+    assert "[tool.qgis-sdk.web]" not in content_of(
+        plan_scaffold(options()), "pyproject.toml"
+    )
+
+
+def test_the_starter_tests_open_the_page_the_way_build_binds_it(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "field_tools"
+    write_scaffold(options(web="vanilla", placement="dock"), project)
+    test = (project / "tests" / "test_plugin.py").read_text(encoding="utf-8")
+
+    assert (
+        'classFactory = host("field_tools.plugin:FieldToolsPlugin", placement="dock")'
+        in test
+    )
+    gitignore = (project / ".gitignore").read_text(encoding="utf-8")
+    assert ".qgis-sdk/" in gitignore  # the dev host package lives there
 
 
 @pytest.mark.parametrize("framework", ["vanilla", "react"])
@@ -384,6 +401,8 @@ def test_install_and_script_commands_per_manager() -> None:
 def test_every_generated_web_file_ends_with_exactly_one_newline() -> None:
     for framework in ("vanilla", "react"):
         for file in plan_scaffold(options(web=framework)):
+            if file.content == "":  # the package marker, appended to by `build`
+                continue
             assert file.content.endswith("\n"), file.path
             assert not file.content.endswith("\n\n"), file.path
 

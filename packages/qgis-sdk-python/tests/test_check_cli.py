@@ -81,7 +81,7 @@ def test_check_reports_each_problem_and_fails(tmp_path: Path) -> None:
     (target / "survey_helper" / "dialog.py").write_text(
         "from qgis.PyQt.QtWidgets import QDialog\n"
     )
-    (target / "survey_helper" / "metadata.txt").unlink()
+    (target / "survey_helper" / "metadata.txt").write_text("[general]\nname=X\n")
     runtime = FakeCliRuntime(cwd=tmp_path)
 
     result = invoke(runtime, "check", "survey_helper")
@@ -99,7 +99,7 @@ def test_check_reports_each_problem_and_fails(tmp_path: Path) -> None:
 
 def test_check_json_is_the_report_serialization(tmp_path: Path) -> None:
     target = scaffolded(tmp_path)
-    (target / "survey_helper" / "metadata.txt").unlink()
+    (target / "survey_helper" / "metadata.txt").write_text("[general]\nname=X\n")
     runtime = FakeCliRuntime(cwd=tmp_path)
 
     result = invoke(runtime, "check", "survey_helper", "--json")

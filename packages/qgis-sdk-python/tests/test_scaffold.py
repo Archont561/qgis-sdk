@@ -1,13 +1,22 @@
-"""The public scaffold contract: one validated plan, written without surprises."""
+"""The public scaffold contract: one validated plan, written without surprises.
+
+Since decision-43 the plan is the author's project only: no ``metadata.txt``,
+no ``classFactory`` and no view module. What QGIS needs is derived from
+``pyproject.toml`` by ``build``/``dev`` (TASK-64), so the tests here pin that
+derivation against the generated manifest instead of generated files.
+"""
 
 import ast
 import configparser
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import layers
 import pytest
+from qgis_sdk_tools.artifacts import introspect_plugin, render_metadata
+from qgis_sdk_tools.project import require_project
 from qgis_sdk_tools.scaffold import (
     GeneratedFile,
     QgisSdkScaffoldError,
@@ -78,9 +87,11 @@ def test_options_trim_the_text_they_are_given() -> None:
     )
 
     plan = plan_scaffold(options)
-    assert (
-        ini_fields(content_of(plan, "demo_tools/metadata.txt"))["name"] == "Field Tools"
-    )
+    manifest = tomllib.loads(content_of(plan, "pyproject.toml"))
+    assert manifest["project"]["authors"] == [
+        {"name": "Ana", "email": "ana@example.invalid"}
+    ]
+    assert manifest["project"]["description"].startswith("Field Tools:")
     assert '@plugin(id="demo_tools", title="Field Tools")' in content_of(
         plan, "demo_tools/plugin.py"
     )
@@ -116,21 +127,49 @@ def test_plan_is_deterministic_and_lists_the_minimal_project_layout() -> None:
         ".gitignore",
         "README.md",
         "demo_tools/__init__.py",
-        "demo_tools/metadata.txt",
         "demo_tools/plugin.py",
         "pyproject.toml",
-        "tests/test_plugin_smoke.py",
+        "tests/test_plugin.py",
     ]
 
 
-def test_metadata_carries_exactly_the_fields_qgis_reads() -> None:
+def test_the_manifest_declares_the_plugin_class_and_qgis_facts() -> None:
     plan = plan_scaffold(
         ScaffoldOptions.resolve(
             "demo_tools", author="Ada", email="ada@example.test", version="1.2.3"
         )
     )
 
-    fields = ini_fields(content_of(plan, "demo_tools/metadata.txt"))
+    manifest = tomllib.loads(content_of(plan, "pyproject.toml"))
+
+    assert manifest["project"]["name"] == "demo-tools"
+    assert manifest["project"]["version"] == "1.2.3"
+    assert manifest["project"]["dependencies"] == ["qgis-sdk-runtime>=0.5,<0.6"]
+    assert manifest["dependency-groups"] == {"dev": ["qgis-sdk-tools>=0.5,<0.6"]}
+    assert manifest["tool"]["qgis-sdk"] == {
+        "plugin": "demo_tools.plugin:DemoToolsPlugin",
+        "qgis-minimum-version": "4.0",
+        "experimental": True,
+    }
+    assert manifest["tool"]["pytest"]["ini_options"]["addopts"] == (
+        "-p qgis_sdk_tools.pytest_plugin"
+    )
+
+
+def test_metadata_rendered_from_the_manifest_carries_the_fields_qgis_reads(
+    tmp_path: Path,
+) -> None:
+    """The ZIP's metadata.txt is derived, so the derivation is what the plan pins."""
+    project = tmp_path / "project"
+    write_scaffold(
+        ScaffoldOptions.resolve(
+            "demo_tools", author="Ada", email="ada@example.test", version="1.2.3"
+        ),
+        project,
+    )
+    config = require_project(project)
+
+    fields = ini_fields(render_metadata(config, introspect_plugin(config)))
 
     assert set(fields) == {
         "about",
@@ -148,48 +187,15 @@ def test_metadata_carries_exactly_the_fields_qgis_reads() -> None:
     assert fields["qgisMinimumVersion"] == "4.0"
     assert fields["author"] == "Ada"
     assert fields["email"] == "ada@example.test"
+    assert fields["hasProcessingProvider"] == "no"
+    assert not (project / "demo_tools" / "metadata.txt").exists()
 
 
-def test_the_entry_point_exposes_class_factory_for_qgis_to_call() -> None:
-    entry = content_of(
-        plan_scaffold(ScaffoldOptions.resolve("demo_tools")), "demo_tools/__init__.py"
-    )
+def test_the_package_init_is_empty_because_build_appends_the_entry_point() -> None:
+    plan = plan_scaffold(ScaffoldOptions.resolve("demo_tools"))
 
-    assert [
-        alias.name
-        for node in ast.parse(entry).body
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-    ] == ["classFactory"]
-    assert "from .plugin import classFactory" in entry
-
-
-def test_generated_notifications_use_the_method_qgis_actually_exposes(
-    tmp_path: Path,
-) -> None:
-    """A host that hands out its bar by method must not be read as an attribute.
-
-    QGIS exposes the message bar through ``messageBar()``, which only a real Desktop
-    run makes obvious; a bare attribute lookup would raise there and stay silent
-    without a host, so both halves are pinned here.
-    """
-    project = tmp_path / "project"
-    write_scaffold(ScaffoldOptions.resolve("demo_tools"), project)
-
-    statement = (
-        "import types;"
-        "from demo_tools.plugin import MessageBarNotifications;"
-        "pushed = [];"
-        "bar = types.SimpleNamespace(pushInfo=lambda *a: pushed.append(a));"
-        "iface = types.SimpleNamespace(messageBar=lambda: bar);"
-        "MessageBarNotifications(iface).info('ready');"
-        "MessageBarNotifications(None).info('ignored');"
-        "print(pushed)"
-    )
-    result = run_generated_project(project, statement)
-
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "[('Demo Tools', 'ready')]"
+    assert content_of(plan, "demo_tools/__init__.py") == ""
+    assert "classFactory" not in content_of(plan, "demo_tools/plugin.py")
 
 
 def test_generated_python_is_parsable_and_uses_the_sdk_framework_explicitly() -> None:
@@ -200,8 +206,8 @@ def test_generated_python_is_parsable_and_uses_the_sdk_framework_explicitly() ->
     ast.parse(module)
     assert "@plugin(id=" in module
     assert "@action(id=" in module
-    assert "classFactory = create_class_factory(" in module
-    assert "PluginContext" in module
+    assert "ctx: PluginContext" in module
+    assert "import qgis" not in module
 
 
 def test_readme_names_both_modes_and_their_one_real_difference() -> None:
@@ -224,8 +230,8 @@ def test_the_generated_project_runs_in_a_bare_interpreter_without_qgis(
 
     result = run_generated_project(
         project,
-        "import demo_tools;"
-        "plugin = demo_tools.classFactory(None);"
+        "from qgis_sdk.adapters.desktop import host;"
+        "plugin = host('demo_tools.plugin:DemoToolsPlugin')(None);"
         "plugin.initGui();"
         "print(plugin.runtime.state.value);"
         "print(plugin.runtime.actions['ping'](7));"
@@ -246,13 +252,35 @@ def test_instantiating_the_generated_project_loads_no_native_module(
 
     result = run_generated_project(
         project,
-        "import sys, demo_tools;"
-        "demo_tools.classFactory(None);"
+        "import sys;"
+        "from qgis_sdk.adapters.desktop import host;"
+        "host('demo_tools.plugin:DemoToolsPlugin')(None);"
         "print('qgis' in sys.modules, 'PyQt6' in sys.modules)",
     )
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "False False"
+
+
+def test_the_starter_tests_pass_in_a_bare_interpreter(tmp_path: Path) -> None:
+    """The scaffold's own tests are the first thing an author runs."""
+    project = tmp_path / "project"
+    write_scaffold(ScaffoldOptions.resolve("demo_tools"), project)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={
+            "PATH": "",
+            "PYTHONPATH": ":".join(map(str, layers.SOURCE_ROOTS)),
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "3 passed" in result.stdout
 
 
 def test_no_generated_python_file_names_a_native_import() -> None:
@@ -276,6 +304,8 @@ def test_every_generated_file_ends_with_exactly_one_newline() -> None:
 
     assert plan
     for file in plan:
+        if file.content == "":  # the package marker, appended to by `build`
+            continue
         assert file.content.endswith("\n"), file.path
         assert not file.content.endswith("\n\n"), file.path
         assert "\r" not in file.content, file.path
@@ -322,5 +352,5 @@ def test_a_missing_target_directory_is_created(tmp_path: Path) -> None:
         ScaffoldOptions.resolve("demo_tools"), tmp_path / "deep" / "nested"
     )
 
-    assert len(written) == 7
+    assert len(written) == 6
     assert all(path.is_file() for path in written)

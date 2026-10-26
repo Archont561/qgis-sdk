@@ -118,7 +118,7 @@ def test_flags_write_the_web_plan_without_asking_or_installing(tmp_path: Path) -
     assert (tmp_path / "field_tools" / "web" / "package.json").is_file()
     assert (
         'placement="dock"'
-        in (tmp_path / "field_tools/field_tools/plugin.py").read_text()
+        in (tmp_path / "field_tools/tests/test_plugin.py").read_text()
     )
 
 
@@ -257,7 +257,7 @@ def test_an_interactive_terminal_is_asked_and_the_answers_become_the_plan(
     assert runtime.processes == [(("bun", "install"), tmp_path / "field_tools" / "web")]
     assert (
         'placement="dock"'
-        in (tmp_path / "field_tools/field_tools/plugin.py").read_text()
+        in (tmp_path / "field_tools/tests/test_plugin.py").read_text()
     )
 
 

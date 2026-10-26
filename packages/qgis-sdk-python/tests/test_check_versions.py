@@ -15,17 +15,29 @@ from qgis_sdk_tools.check.versions import (
     requirement_admits_range,
     supported_runtime_range,
 )
-from test_check_project import METADATA, codes
+from test_check_project import PYPROJECT, codes
+
+#: The [project]/[tool.qgis-sdk] tables without a runtime requirement, so a
+#: test writes exactly the dependency lines it is about.
+BASE = PYPROJECT.replace('dependencies = ["qgis-sdk-runtime>=0.1,<99"]\n', "")
+
+
+AUTHORS = 'authors = [{ name = "Jane", email = "jane@example.org" }]\n'
 
 
 def project(tmp_path: Path) -> Path:
     root = tmp_path / "field_tools"
     package = root / "field_tools"
     package.mkdir(parents=True)
-    (package / "__init__.py").write_text("from .plugin import classFactory\n")
+    (package / "__init__.py").write_text("")
     (package / "plugin.py").write_text("import os\n")
-    (package / "metadata.txt").write_text(METADATA)
+    (root / "pyproject.toml").write_text(BASE)
     return root
+
+
+def declare(root: Path, lines: str) -> None:
+    """Write the project manifest with ``lines`` inside ``[project]``."""
+    (root / "pyproject.toml").write_text(BASE.replace(AUTHORS, AUTHORS + lines))
 
 
 @pytest.fixture
@@ -89,15 +101,12 @@ def test_a_runtime_pin_outside_the_supported_range_is_reported(
     tmp_path: Path, supported: RuntimeRange
 ) -> None:
     root = project(tmp_path)
-    (root / "pyproject.toml").write_text(
-        '[project]\nname = "field-tools"\nversion = "0"\n'
-        'dependencies = ["qgis-sdk-runtime==0.4.0"]\n'
-    )
+    declare(root, 'dependencies = ["qgis-sdk-runtime==0.4.0"]\n')
 
     report = check_project(root)
 
-    assert codes(report) == ["VERSION001"]
-    finding = report.diagnostics[0]
+    assert "VERSION001" in codes(report)
+    finding = next(d for d in report.diagnostics if d.rule == "VERSION001")
     assert finding.path == Path("pyproject.toml")
     assert "qgis-sdk-runtime==0.4.0" in finding.message
     assert ">=0.5.0,<0.6" in finding.message
@@ -109,14 +118,16 @@ def test_the_kit_and_extras_and_dependency_groups_count_as_runtime_pins(
 ) -> None:
     root = project(tmp_path)
     (root / "pyproject.toml").write_text(
-        "[project]\n"
-        'name = "field-tools"\nversion = "0"\n'
-        'dependencies = ["qgis-sdk[controlled-deployment]==0.3.0", "typer"]\n'
-        "[project.optional-dependencies]\n"
-        'dev = ["qgis-sdk-runtime>=0.4,<0.5"]\n'
-        "[dependency-groups]\n"
-        'test = ["qgis-sdk-runtime>=0.5.1", {include-group = "other"}]\n'
-        "other = []\n"
+        BASE.replace(
+            AUTHORS,
+            AUTHORS
+            + 'dependencies = ["qgis-sdk[controlled-deployment]==0.3.0", "typer"]\n'
+            "[project.optional-dependencies]\n"
+            'dev = ["qgis-sdk-runtime>=0.4,<0.5"]\n'
+            "[dependency-groups]\n"
+            'test = ["qgis-sdk-runtime>=0.5.1", {include-group = "other"}]\n'
+            "other = []\n",
+        )
     )
 
     report = check_project(root)
@@ -133,10 +144,7 @@ def test_a_pin_inside_the_range_and_no_pin_at_all_pass(
     root = project(tmp_path)
     assert "VERSION001" not in codes(check_project(root))
 
-    (root / "pyproject.toml").write_text(
-        '[project]\nname = "field-tools"\nversion = "0"\n'
-        'dependencies = ["qgis-sdk-runtime>=0.5.0,<0.6"]\n'
-    )
+    declare(root, 'dependencies = ["qgis-sdk-runtime>=0.5.0,<0.6"]\n')
     assert "VERSION001" not in codes(check_project(root))
 
 
@@ -145,11 +153,114 @@ def test_an_unknown_range_skips_the_rule_rather_than_guessing(
 ) -> None:
     monkeypatch.setattr(versions_module, "supported_runtime_range", lambda: None)
     root = project(tmp_path)
-    (root / "pyproject.toml").write_text(
-        '[project]\nname = "x"\nversion = "0"\ndependencies = ["qgis-sdk-runtime==0.0.1"]\n'
-    )
+    declare(root, 'dependencies = ["qgis-sdk-runtime==0.0.1"]\n')
 
     assert "VERSION001" not in codes(check_project(root))
+
+
+# --- VERSION003/VERSION004: the project's own requirement vs the installed runtime
+
+
+@pytest.fixture
+def installed(monkeypatch: pytest.MonkeyPatch) -> str:
+    monkeypatch.setattr(versions_module, "installed_runtime_version", lambda: "0.5.2")
+    return "0.5.2"
+
+
+@pytest.mark.parametrize(
+    ("specifier", "version", "admits"),
+    [
+        (">=0.5,<0.6", "0.5.2", True),
+        (">=0.5,<0.6", "0.6.0", False),
+        (">=0.5,<0.6", "0.4.9", False),
+        ("==0.5.2", "0.5.2", True),
+        ("==0.5.*", "0.5.9", True),
+        ("==0.5.*", "0.6.0", False),
+        ("!=0.5.2", "0.5.2", False),
+        ("!=0.5.*", "0.6.1", True),
+        ("~=0.5.1", "0.5.9", True),
+        ("~=0.5.1", "0.6.0", False),
+        (">0.5.2", "0.5.2", False),
+        ("<=0.5.2", "0.5.2", True),
+        ("", "1.2.3", True),
+        (">=0.5", "not-a-version", True),
+        ("@@@", "0.5.2", True),
+    ],
+)
+def test_requirement_admits_version(specifier: str, version: str, admits: bool) -> None:
+    assert versions_module.requirement_admits_version(specifier, version) is admits
+
+
+def test_the_installed_runtime_version_is_known_here() -> None:
+    # Installed or from the checkout: the tools always know which runtime ships.
+    version = versions_module.installed_runtime_version()
+    assert version is not None
+    assert version.count(".") >= 1
+
+
+def test_no_runtime_requirement_is_version003_as_a_warning(
+    tmp_path: Path, installed: str
+) -> None:
+    root = project(tmp_path)
+
+    report = check_project(root)
+
+    (finding,) = [d for d in report.diagnostics if d.rule == "VERSION003"]
+    assert finding.severity == "warning"
+    assert report.ok
+    assert finding.path == Path("pyproject.toml")
+    assert installed in finding.message
+    assert "qgis-sdk-runtime>=0.5,<0.6" in finding.remediation
+    assert "VERSION004" not in codes(report)
+
+
+def test_an_installed_runtime_outside_the_requirement_is_version004(
+    tmp_path: Path, installed: str, supported: RuntimeRange
+) -> None:
+    root = project(tmp_path)
+    declare(root, 'dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]\n')
+
+    report = check_project(root)
+
+    (finding,) = [d for d in report.diagnostics if d.rule == "VERSION004"]
+    assert finding.severity == "error"
+    assert not report.ok
+    assert "qgis-sdk-runtime>=0.6,<0.7" in finding.message
+    assert installed in finding.message
+    assert 'pip install "qgis-sdk-runtime>=0.6,<0.7"' in finding.remediation
+    assert "VERSION003" not in codes(report)
+
+
+def test_a_satisfied_requirement_reports_neither(
+    tmp_path: Path, installed: str, supported: RuntimeRange
+) -> None:
+    root = project(tmp_path)
+    declare(root, 'dependencies = ["qgis-sdk-runtime>=0.5,<0.6"]\n')
+
+    found = codes(check_project(root))
+
+    assert "VERSION003" not in found
+    assert "VERSION004" not in found
+
+
+def test_resolve_runtime_pairs_the_requirement_with_the_installed_version(
+    tmp_path: Path, installed: str
+) -> None:
+    root = project(tmp_path)
+    declare(
+        root, 'dependencies = ["typer", "qgis-sdk>=0.5,<0.6; python_version > \'3\'"]\n'
+    )
+
+    resolution = versions_module.resolve_runtime(root)
+
+    assert resolution.requirement == "qgis-sdk>=0.5,<0.6"
+    assert resolution.specifier == ">=0.5,<0.6"
+    assert resolution.installed == installed
+    assert resolution.satisfied
+
+    bare = versions_module.resolve_runtime(tmp_path / "nowhere")
+    assert bare.requirement is None
+    assert bare.satisfied
 
 
 def _generated_client(root: Path, *, description: int, host: int | None = None) -> Path:
