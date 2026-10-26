@@ -3,10 +3,10 @@ id: TASK-69
 title: >-
   Replace the ./react internals with a framework-free store core and add ./vue
   and ./svelte adapters
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-26T09:06:00Z'
+updated_date: '2026-10-26 21:09'
 labels: []
 milestone: m-6
 dependencies:

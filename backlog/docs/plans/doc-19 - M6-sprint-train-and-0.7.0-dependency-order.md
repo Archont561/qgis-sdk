@@ -27,7 +27,7 @@ sprint 2 is TASK-69. TASK-68 lands in slices, each a pull request:
 | --- | --- | --- |
 | 68a | kind registry; the six kinds through describer, wire (`x-qgis-sdk`), `form_fields`, declared-form dialog (field/range/colour), Processing (all six, picker refs minted through a `HostAuthority`), dispatcher (`FileRef` inputs); `FileRef` in `models`, `grant_directory`; doc-12/13 notes | done (PR #101) |
 | 68b | the eleven catalogue input components on `qgis_sdk.ui` with fake renderings and stable `objectName`s; `ctx.files` resolution of a `FileRef` from plugin code; the desktop adapter sharing one authority with Processing | done (PR #102) |
-| 68c | `Form.for_action`/`from_schema`/`fields` with `Button`/`Column`; `NativeForms`/`DeclaredFormDialog` removed with the doc-12 migration; notification levels and `with_action`; UI001 in `check`; the example's buffer dialog from `Form`; desktop harness `form_submitted` stage | in review (this branch) |
+| 68c | `Form.for_action`/`from_schema`/`fields` with `Button`/`Column`; `NativeForms`/`DeclaredFormDialog` removed with the doc-12 migration; notification levels and `with_action`; UI001 in `check`; the example's buffer dialog from `Form`; desktop harness `form_submitted` stage | done (PR #103) |
 
 ## 1. Where m-6 starts from
 
