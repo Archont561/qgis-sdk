@@ -1336,6 +1336,17 @@ in 0.5.
   undecorated class now reads "describe requires a class declared with
   @plugin or @algorithm, or a function declared with @job".
 
+`qgis-sdk-tools` 0.6.0 changes one thing in what `qgis-sdk bridge generate`
+emits ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)):
+
+- **The generated contract error is `QgisSdkContractError`** (was
+  `ContractError`). It still extends `Error` - the module stays import-free -
+  and now carries `code: "contract_validation_failed"` next to `operation`.
+  Regenerate the client (CI fails on the stale file anyway) and rename the
+  class in `catch` clauses, or match on `error.code`. The bridge package this
+  release pairs with is `@archont561/qgis-sdk` 0.4.0, whose own notes are in
+  [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md#040-migration-notes).
+
 ## 0.5.0 migration notes
 
 0.5.0 splits the one `qgis-sdk` wheel into three
