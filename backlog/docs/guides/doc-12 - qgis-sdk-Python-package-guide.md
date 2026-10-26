@@ -287,9 +287,9 @@ register_host_operations(dispatcher, services) # instances the plugin's handlers
 for `network.fetch` unless a `network=` is passed, and an `authority=` for file
 refs and grants. Inside QGIS, `qgis_sdk.adapters.qgis.native_plugin_context(scope,
 settings_prefix=..., iface=iface)` assembles every PyQGIS-backed service into one
-context owned by that scope; the scaffold's `build_context` calls it whenever a
+context owned by that scope; `host()`'s `default_context` calls it whenever a
 `QgsApplication` is running and falls back to a notifications-only context in a
-bare interpreter, which is what its starter tests exercise.
+bare interpreter, which is what the scaffold's starter tests exercise.
 
 Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities, refused by name on access when the host lacks them; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
 
@@ -387,23 +387,72 @@ A runtime that is not running refuses with `the plugin is not running
 (state new)`. Nothing here kills a thread or closes a scope: the host
 decides whether to `unload()`.
 
-## Desktop lifecycle adapter
+## Desktop host: `host()` and the project manifest
 
-A QGIS plugin package can expose the adapter through its normal entry point:
+Since 0.6.0 a plugin project carries no `metadata.txt`, no `classFactory`
+and no view module
+([decision-43](../../decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md);
+TASK-64). `pyproject.toml` names the class and the tools derive what QGIS
+needs from it:
 
-```python
-from qgis_sdk.adapters.desktop import create_class_factory
+```toml
+[project]
+name = "field-tools"
+version = "0.1.0"
+description = "Field Tools: a minimal qgis-sdk plugin."
+authors = [{ name = "Ada", email = "ada@example.test" }]
+dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]   # the runtime `build` resolves
 
-classFactory = create_class_factory(Tools, context_factory=build_context)
+[tool.qgis-sdk]
+plugin = "field_tools.plugin:FieldToolsPlugin"  # the class QGIS runs
+qgis-minimum-version = "4.0"
+experimental = true
+# qgis-prefix = "/path/to/qgis"                 # where `test`/`dev` find QGIS
+
+[tool.qgis-sdk.metadata]                        # optional, passed through
+homepage = "https://example.org/field-tools"
+
+[tool.qgis-sdk.web]                             # optional: the page in web/
+placement = "dock"                              # dock | dialog
+grants = ["layers.read", "project.layer_ids"]   # host grants or operation ids
 ```
 
-`build_context(iface)` returns the typed `PluginContext` for that host,
-including any `DesktopAccess` service — in a Desktop host, usually
-`native_plugin_context(...)` from `qgis_sdk.adapters.qgis` (see above). The adapter imports neither QGIS nor Qt,
-never serializes `iface`, calls `runtime.start()` from `initGui()` and
-`runtime.unload()` from `unload()`. Repeated `unload()` calls are safe. It is
-lifecycle glue, not a complete plugin template: plugin metadata, native action
-registration, menus and dialogs remain the caller's or later tasks' work.
+`qgis_sdk.adapters.desktop.host(spec, *, placement=None, grants=())` is the
+runtime half - the `classFactory` QGIS calls:
+
+```python
+from qgis_sdk.adapters.desktop import host
+
+classFactory = host("field_tools.plugin:FieldToolsPlugin", placement="dock")
+```
+
+It resolves the class (a typo fails by name, with `QgisSdkHostError`),
+validates it with `describe_plugin`, and returns a factory. The
+`DesktopHost` it makes starts the runtime from `initGui()`, registers the
+class's `providers` with Processing, and unloads everything from `unload()`
+(safe to repeat). The context comes from one of two places: a
+`context_factory(iface)` class attribute on the plugin class when the author
+wants to assemble services; otherwise `default_context`, which is
+`native_plugin_context(iface, ...)` whenever a `QgsApplication` is running
+and a bare `PluginContext` (messages dropped, settings scoped by plugin id)
+when none is - so the same factory runs the starter tests without QGIS, and
+`ctx.desktop` is refused by name there instead of inventing a host.
+
+With a `placement`, `initGui()` adds one toolbar button and `show_view()`
+opens the built page from `<package>/web/index.html` in a `QWebEngineView`
+as a `QDockWidget` or `QDialog` (view id `<plugin id>.main`), with a
+`Dispatcher` over the running runtime and the curated host operations the
+`grants` select - a grant such as `layers.read` selects every operation that
+needs it, an operation id selects one (`granted_operations`, then
+`register_host_operations(only=...)`): no grants, no host operation on the
+channel at all. `qgis-sdk dev` serves the same page from
+Vite when it has started one (`QGIS_SDK_DEV_SERVER`). `host.view` is the
+widget while it is open, `None` after `unload()`.
+
+`create_class_factory(Tools, context_factory=...)` and
+`DesktopLifecycleAdapter` remain for a plugin that supplies its own entry
+point; `host()` is built on them. Neither imports Qt at module level; the
+adapter never serialises `iface`.
 
 The headless harnesses and the real-Desktop evidence for this adapter are in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md).
 
@@ -980,19 +1029,21 @@ pixi run -e default python -m qgis_sdk_tools new /tmp/demo   # from workspace so
 plugin name must be a lowercase Python identifier that neither QGIS nor the
 standard library already owns, and the version fields must be dot-separated
 digits. The result is an in-memory plan written with LF endings, so the same
-options always produce the same bytes: `README.md`, `pyproject.toml`,
-`<plugin>/__init__.py`, `<plugin>/metadata.txt`, `<plugin>/plugin.py` and
-`tests/test_plugin_smoke.py`. There is no template directory to keep in sync;
+options always produce the same bytes: `.gitignore`, `README.md`,
+`pyproject.toml`, `<plugin>/__init__.py` (empty), `<plugin>/plugin.py` and
+`tests/test_plugin.py`. There is no template directory to keep in sync;
 `--dry-run` prints the plan without touching disk, and an existing file is refused
 unless `--force` is passed.
 
-`<plugin>/__init__.py` exposes only `classFactory`, because that is the one name
-QGIS calls. `<plugin>/plugin.py` carries the whole design in plain view - one
-`@plugin` class, one `@action`, a `build_context` that hands the host `iface` to
-the SDK exactly once, and `classFactory` produced by
-`qgis_sdk.adapters.desktop.create_class_factory` - and imports no Qt or QGIS
-module. `metadata.txt` carries the nine fields QGIS reads, and tests pin that the
-generated project imports nothing native.
+There is no `metadata.txt` and no `classFactory` in the project (decision-43):
+`pyproject.toml` carries `[project]` (name, version, description, authors, the
+`qgis-sdk-runtime` requirement) and `[tool.qgis-sdk]` (`plugin`,
+`qgis-minimum-version`, `experimental`); `build` renders `metadata.txt` from
+them and `build`/`dev` bind `classFactory` through `host()`. `<plugin>/plugin.py`
+is one `@plugin` class with two `@action`s and a `ctx: PluginContext`
+annotation, and imports no Qt or QGIS module. `tests/test_plugin.py` runs
+`host("<plugin>.plugin:<Class>")(None)` through start, action and unload
+without QGIS. Tests pin that the generated project imports nothing native.
 
 ### Choosing Desktop or standalone Qt mode
 
@@ -1002,7 +1053,7 @@ The README the scaffold writes teaches both modes; they differ in one thing, whe
 | Mode | How it runs | What the SDK sees |
 | :-- | :-- | :-- |
 | Desktop | copy `<plugin>/` into a profile's `python/plugins/` and enable it under Plugins, Manage and Install Plugins, or launch `qgis --profiles-path <dir> --profile <name>` | `iface` is present, so `context.desktop` succeeds and messages reach the real message bar |
-| Standalone Qt | call `build_context(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so reading `context.desktop` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
+| Standalone Qt | call `host("<plugin>.plugin:<Class>")(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so reading `context.desktop` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
 
 The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
@@ -1045,13 +1096,10 @@ What the web plan adds:
   drift check), the page (`main.ts`/`app.ts` or `main.tsx`/`App.tsx`, three
   statements on `QgisSdk.fromBridgeSchema`) and a Vitest test against
   `@archont561/qgis-sdk/testing`.
-- `<plugin>/webview.py` - opens the built page in a `QWebEngineView` behind
-  `BrowserPolicy(asset_roots=(<plugin>/web,))` and a `Dispatcher` built from
-  the running `PluginRuntime`, as a `QDialog` or a `QDockWidget`; Qt is
-  imported inside the functions, so `qgis-sdk check` stays clean with no
-  native exemption and the starter tests still run without QGIS.
-- `<plugin>/plugin.py` - `classFactory` returns a small wrapper around the
-  SDK lifecycle that adds one toolbar button opening the view.
+- `[tool.qgis-sdk.web]` in `pyproject.toml` - `placement` and an empty
+  `grants` list. No Python is added: `host()` opens the built page (see
+  *Desktop host* above), and the starter test binds `classFactory` with the
+  same placement.
 
 Installing is opt-in: `--install` (or answering `yes`) runs the manager's
 install in `web/` after every file is written. A failure keeps the project and
@@ -1083,10 +1131,16 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | Rule | Meaning |
 | :-- | :-- |
 | `QGIS001` | `qgis`, `PyQt5/6` or `PySide2/6` is imported when the module loads: module scope, a class body, a `try`, a `with` or a module-level `if` all count. Imports inside a function and under `if TYPE_CHECKING:` are fine. |
-| `ARCH001` | `qgis_sdk.adapters.qgis` (the PyQGIS-backed adapters) is imported when a pure module loads; reach it inside the function that runs in QGIS, as the scaffold's `build_context` does. |
-| `META001` / `META002` / `META003` | A plugin package has no `metadata.txt`, lacks a required key (`name`, `description`, `about`, `version`, `qgisMinimumVersion`, `author`, `email`), or has no `[general]` section. |
+| `ARCH001` | `qgis_sdk.adapters.qgis` (the PyQGIS-backed adapters) is imported when a pure module loads; let `host()` build the context, or reach the adapter inside the function that runs in QGIS. |
 | `PROJECT001` | No directory with an `__init__.py` under the root (other than `tests/`). |
-| `CONFIG001` | `[tool.qgis-sdk.check]` in `pyproject.toml` is malformed. |
+| `PROJECT002` | No `pyproject.toml`, or no `[tool.qgis-sdk] plugin = "<package>.plugin:<Class>"` in it; `build` and `dev` derive `metadata.txt` and `classFactory` from that line (decision-43). |
+| `CONFIG001` | `[tool.qgis-sdk]`, `[tool.qgis-sdk.check]`, `[tool.qgis-sdk.web]` or `[tool.qgis-sdk.metadata]` in `pyproject.toml` is malformed (`plugin` not `pkg.module:Class`, `placement` not `dock`/`dialog`, `grants` not a list of strings, a passthrough value that is not a scalar). |
+| `META001` | The plugin package has a hand-written `metadata.txt`; `build` renders it, so delete the file (or move extra keys under `[tool.qgis-sdk.metadata]`). |
+| `META002` | `pyproject.toml` lacks a key `metadata.txt` needs: `[project] name`, `version`, `description`, `authors[0].name`/`.email`, or `[tool.qgis-sdk] qgis-minimum-version`. |
+| `ENTRY002` | A module of the plugin package defines or imports `classFactory`; `build` and `dev` bind it through `host()`. |
+| `GRANT001` | `[tool.qgis-sdk.web] grants` names something that is neither a host grant (`layers.read`, selecting every operation that needs it) nor a host operation id (`project.layer_ids`); see `qgis_sdk.bridge.host.granted_operations`. |
+| `VERSION003` (warning) | `pyproject.toml` declares no `qgis-sdk-runtime` (or `qgis-sdk`) requirement; `build` ships the installed runtime and says so in the NOTICE. |
+| `VERSION004` | The installed `qgis-sdk-runtime` does not satisfy the project's requirement. The finding names both and the `pip install` line; the tools never install. |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
 | `VERSION002` | A TypeScript file starting with `// Generated by qgis-sdk. Do not edit.` declares a `PLUGIN_DESCRIPTION_SCHEMA_VERSION` or `HOST_SCHEMA_VERSION` other than the one this release generates; regenerate with `qgis-sdk bridge generate`. `node_modules` is never read. |
@@ -1143,14 +1197,19 @@ unit tests assert on; the commands print the notes to stderr before running.
 - **desktop** (default) starts the located QGIS Desktop binary with
   `--profiles-path <root>/.qgis-sdk --profile dev`, so the profile is the
   project's own and survives between runs (`.gitignore`d by the scaffold),
-  and puts the project root on `QGIS_PLUGINPATH`, which is how QGIS finds and
-  imports `<plugin>/` in place: no copy, no symlink, no `sys.path` edit. The
+  and puts the generated **host package** on `QGIS_PLUGINPATH`:
+  `<root>/.qgis-sdk/dev/host/<plugin>/` holds the rendered `metadata.txt`
+  and an `__init__.py` that extends its `__path__` to the source package,
+  runs the author's `__init__.py` and binds `classFactory = host(...)` -
+  so QGIS imports the sources in place (no copy, no symlink) and the
+  project tree is never written to. The host package is static for one
+  run: a `pyproject.toml` change means restarting `dev`. The
   SDK's own packages join that process's `PYTHONPATH`, so the bootstrap
   (`qgis_sdk_tools.devtools.bootstrap`, running the policy in
   `.devtools.reloader`) imports inside QGIS's interpreter
   whichever Python runs the CLI. It enables the plugin, installs a
   **Reload** toolbar action (Ctrl+Shift+R), watches `<plugin>/` for saved
-  `*.py` and `metadata.txt` changes (polling every 500 ms; `web/` and caches
+  `*.py` changes (polling every 500 ms; `web/` and caches
   excluded - the page is Vite's business) and reports to the terminal.
   `--no-watch` leaves reloads to the button.
 
@@ -1158,8 +1217,9 @@ unit tests assert on; the commands print the notes to stderr before running.
 
   1. **Preflight** without touching the running revision: every module of
      the package compiles and `check_project` finds nothing QGIS would
-     refuse (`SYNTAX*`, `META*`, `PROJECT*`, `CONFIG*` errors inside the
-     package); `QGIS001`/`ARCH001` only warn, findings in `tests/` never
+     refuse (`SYNTAX*` errors inside the package; `PROJECT*`, `CONFIG*`,
+     `META*`, `GRANT*`, `VERSION*` errors on `pyproject.toml`);
+     `QGIS001`/`ARCH001` only warn, findings in `tests/` never
      block. A problem is *refused* - `reload refused, revision N keeps
      running: ...` - and nothing is unloaded.
   2. **Quiesce** through `PluginRuntime.quiesce()`: owned jobs are
@@ -1168,8 +1228,9 @@ unit tests assert on; the commands print the notes to stderr before running.
      revision exactly as it was and says that finishing or cancelling the
      work, or restarting `qgis-sdk dev`, is the way out. No thread is
      killed, nothing unsaved is discarded.
-  3. **Replace**: unload (drops the package's modules), then load and start
-     the current source. A failure after teardown cannot be undone: the
+  3. **Replace**: unload (drops every `<plugin>.*` module, including those
+     the host package reached through its extended path), then load and
+     start the current source. A failure after teardown cannot be undone: the
      partially imported modules are dropped, the plugin stays *disabled*,
      and the message bar and terminal say so until a Reload succeeds.
 
@@ -1179,15 +1240,16 @@ unit tests assert on; the commands print the notes to stderr before running.
   number in its report. Old-generation work cannot deliver into the new
   revision because the old scope is closed on unload (subscriptions
   disposed, late worker reports counted as dropped).
-- **standalone** runs `classFactory(None)` + `initGui()` in a bare
-  `QgsApplication` under the QGIS Python. It is the documented reduced mode:
-  no `iface`, no plugin lifecycle hooks beyond the two calls, no reload;
-  close the window to stop.
+- **standalone** runs the host package's `classFactory(None)` +
+  `initGui()` - `host()` with no `iface` - in a bare `QgsApplication` under
+  the QGIS Python. It is the documented reduced mode: no `iface`, no plugin
+  lifecycle hooks beyond the two calls, no reload; close the window to stop.
 - **web**: when the project has `web/` with installed dependencies, the
   command starts the project's Vite dev server (`<manager> run dev --host
   127.0.0.1 --port N --strictPort`) on loopback, waits for the port, and
   hands its origin to the QGIS process as `QGIS_SDK_DEV_SERVER`. The
-  generated `webview.py` reads that variable, loads the page from the origin
+  runtime's view (`qgis_sdk.adapters.webview`, opened by `host()`) reads that
+  variable, loads the page from the origin
   and grants it in `BrowserPolicy(origins=...)`; the bridge binding carries
   the same origin, so hot module replacement works and the bridge keeps
   answering across updates. A built plugin never sees the variable and
@@ -1195,18 +1257,23 @@ unit tests assert on; the commands print the notes to stderr before running.
   server that does not answer within 60 s stops the command with exit 2.
 
 Both modes exit with the QGIS process's code; QGIS not found is exit 2 with
-the discovery report, a directory without a plugin package is exit 2.
+the discovery report, a directory without `[tool.qgis-sdk] plugin` is exit 2
+(`PROJECT002`). `qgis-sdk test --target desktop` stages the same host
+package, and its pytest plugin makes `import <plugin>` resolve to it inside
+the Desktop run, so a desktop test loads the plugin exactly as QGIS does.
 
 ## Building an installable ZIP: `qgis-sdk build`
 
 `qgis-sdk build [PATH] [--out DIR] [--no-web] [--json]` writes
-`dist/<plugin>-<version>.zip` (version from `metadata.txt`) for Plugins >
+`dist/<plugin>-<version>.zip` (version from `[project] version`) for Plugins >
 Manage and Install Plugins > *Install from ZIP* (decision-8: the command is
 argument parsing over `qgis_sdk_tools.bundle.build_plugin`). In order:
 
 1. **Validate.** `check_project` runs first - the same rules and output as
-   `qgis-sdk check` - plus build-only rules: `ENTRY001` when
-   `<plugin>/__init__.py` neither defines nor imports `classFactory`;
+   `qgis-sdk check`, so a project without `[tool.qgis-sdk] plugin`
+   (`PROJECT002`), with a hand-written `metadata.txt` (`META001`) or
+   `classFactory` (`ENTRY002`), or whose installed runtime misses its
+   requirement (`VERSION004`) is refused - plus build-only rules:
    `DEP001` for a top-level import that neither the standard library,
    QGIS/Qt (`qgis`, `PyQt5/6`, `PySide2/6`, `osgeo`, `processing`), the SDK
    runtime nor the plugin provides, and for any `qgis_sdk_tools` import;
@@ -1223,9 +1290,18 @@ argument parsing over `qgis_sdk_tools.bundle.build_plugin`). In order:
 3. **Stage and archive.** The plugin package is copied without
    `__pycache__`, `*.pyc`, `tests/`, `.qgis-sdk/`, `.pytest_cache/`,
    `node_modules/` (the project's `web/` sources and `tests/` sit outside
-   the package and were never candidates). The runtime `qgis_sdk` - every
+   the package and were never candidates). Into the staged copy only -
+   the source tree is untouched - go the two artifacts QGIS needs
+   (decision-43): `metadata.txt`, rendered from `pyproject.toml` with every
+   key QGIS requires plus `hasProcessingProvider` from the class's
+   `providers` and the `[tool.qgis-sdk.metadata]` passthrough; and, appended
+   to `<plugin>/__init__.py`, `classFactory = host("<spec>", placement=...,
+   grants=...)` importing `host` from the vendored runtime. The plugin
+   class is imported once, in isolation, to read its title and providers
+   (an import error is a plain build error). The runtime `qgis_sdk` - every
    module except `qgis_sdk.testing` - is copied to
-   `<plugin>/_vendor/qgis_sdk` with a `NOTICE` (runtime version, MIT), and
+   `<plugin>/_vendor/qgis_sdk` with a `NOTICE` (the requirement the project
+   declared and the runtime version resolved from it, MIT), and
    every absolute `qgis_sdk` import in the copy *and* in the plugin's own
    sources is rewritten to `<plugin>._vendor.qgis_sdk` (decision-35,
    decision-3: the plugin runs in a QGIS without qgis-sdk and coexists with
@@ -1236,9 +1312,16 @@ argument parsing over `qgis_sdk_tools.bundle.build_plugin`). In order:
    gives the same bytes.
 
 `BuildResult` carries the archive path, plugin, version, file list, the
-combined `CheckReport`, the vendored runtime version, the web outcome
+combined `CheckReport`, the vendored runtime version and the requirement it
+was resolved from (`None` under `VERSION003`), the web outcome
 (`none` / `built` / `prebuilt`) and the declared externals; `--json` prints
 its `to_json()`.
+
+The runtime is **resolved, never installed**: `build` reads the project's
+`qgis-sdk-runtime` (or `qgis-sdk`) requirement and ships the installed
+runtime when it satisfies it. A mismatch is `VERSION004` and the build is
+refused with the `pip install` line to run; no requirement is `VERSION003`
+(a warning) and the installed runtime ships with that fact in the NOTICE.
 
 ### CLI runtime
 
@@ -1350,6 +1433,30 @@ published for the bridge, and no `ts-v*` tag exists.
   and `--scope typescript --version 0.2.0`.
 
 ## 0.6.0 migration notes
+
+**Project shape (decision-43; TASK-64).** A 0.6 project carries no
+`metadata.txt`, `classFactory` or `webview.py`; `qgis-sdk check` reports the
+old files as `META001`/`ENTRY002`. To migrate a 0.5 project:
+
+1. Delete `<plugin>/metadata.txt` and `<plugin>/webview.py`; remove
+   `classFactory`, the `build_context`/notifications glue and the desktop
+   wrapper class from `<plugin>/plugin.py` and the `from .plugin import
+   classFactory` line from `<plugin>/__init__.py`. What remains is the
+   `@plugin` class (plus your own modules).
+2. Add to `pyproject.toml`: `[project]` `name`, `version`, `description`,
+   `authors` and `dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]`;
+   `[tool.qgis-sdk] plugin = "<package>.plugin:<Class>"`,
+   `qgis-minimum-version`, `experimental`; any extra `metadata.txt` keys
+   under `[tool.qgis-sdk.metadata]`; with a page, `[tool.qgis-sdk.web]
+   placement = "dock" | "dialog"` and `grants = [...]` naming the host
+   operations the page calls (the former `webview.py` registered them all;
+   list the ones you use - `qgis-sdk check` names an unknown id).
+3. In the project's own tests, bind the entry point the way `build` does:
+   `classFactory = host("<package>.plugin:<Class>", placement=...)` from
+   `qgis_sdk.adapters.desktop`.
+
+`qgis-sdk build` and `qgis-sdk dev` then produce `metadata.txt` and
+`classFactory` themselves; see *Desktop host* above.
 
 0.6.0 of `qgis-sdk-runtime` changes how a job is written
 ([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md);

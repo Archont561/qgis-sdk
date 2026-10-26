@@ -43,8 +43,8 @@ What 0.5.0 did **not** do, because this milestone has to finish it:
 | --- | --- | --- | --- |
 | [TASK-63](../../tasks/task-63%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md) function algorithms | TASK-59 ✓ | To Do | **yes** |
 | [TASK-66](../../tasks/task-66%20-%20Generate-the-typed-bridge-schema-module-and-add-QgisSdk.fromBridgeSchema.md) typed schema module + `fromBridgeSchema` | TASK-61 ✓ | To Do | **yes** (independent of 63) |
-| [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | To Do | after 63 |
-| [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration | TASK-64 | To Do | after 64 |
+| [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | Implemented (sprint 3) | after 63 |
+| [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration (re-sliced, see sprint 4) | TASK-64 | To Do | after 64 |
 | [TASK-67](../../tasks/task-67%20-%20Bind-actions-and-Dialog-Dock-surfaces-to-the-Desktop-with-toolbar-menu-shortcut-ctx.ui.open-and-UiContext.actions.md) desktop bindings + surfaces | TASK-64 | To Do | after 64 |
 | [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) 0.6.0 gate | TASK-31 ✓, 58 ✓, 59 ✓, 61 ✓, 62, 63–67 | To Do | release gate |
 
@@ -75,19 +75,41 @@ commits inside keep the slices reviewable.
   methods by the dots in their ids (`qgis.sites.summary`, decision-44 status
   review) and moved the scaffold's `web/` templates onto the schema module,
   so the example equals the scaffold again (decision-41 status review).
-- **Sprint 3: TASK-64.** `[tool.qgis-sdk] plugin = "pkg.module:Class"`;
-  `build` and `dev` render `metadata.txt`, bind `classFactory` through
-  `qgis_sdk.adapters.desktop.host(spec)`, own the page view, and register
-  the host operations named by `[tool.qgis-sdk.web] grants`; `dev` stages
-  into `.qgis-sdk/dev/host/<plugin>/`; `check` gains META001/ENTRY002 and
-  the unknown-grant finding. Opt-in `QGIS_SDK_BUILD_INSTALL=1` and
-  `QGIS_SDK_DEVTOOLS=1` harnesses re-run.
-- **Sprint 4: TASK-65.** The scaffold drops `webview.py`, `metadata.txt` and
-  `classFactory`; the reference plugin in `examples/simple` migrates onto
-  the generated artifacts (the `web/` templates already write the schema
-  module page since sprint 2's follow-up); doc-12/doc-13 and the
-  guides describe the clean project; `QGIS_SDK_SCAFFOLD_DESKTOP=1`,
-  `QGIS_SDK_SCAFFOLD_WEB=1` and `test-reference-example` pass.
+- **Sprint 3 (implemented 2026-10-26, Done on merge): TASK-64.**
+  `[tool.qgis-sdk] plugin = "pkg.module:Class"`; `build` and `dev` render
+  `metadata.txt`, bind `classFactory` through
+  `qgis_sdk.adapters.desktop.host(spec)`, own the page view
+  (`qgis_sdk.adapters.webview`), and register the host operations the
+  `[tool.qgis-sdk.web] grants` select (grant names or operation ids,
+  `granted_operations`); `dev` and `test --target desktop` stage into
+  `.qgis-sdk/dev/host/<plugin>/`; `check` gains PROJECT002, CONFIG001,
+  META001/META002 (now over `pyproject.toml`), ENTRY002 and GRANT001. The
+  sprint absorbed both halves TASK-65 held that the new `build` could not do
+  without: the runtime is resolved from the project's own `qgis-sdk-runtime`
+  requirement (VERSION003 warning, VERSION004 refusal, the ZIP notice records
+  requirement and resolved version, nothing is ever installed) and the
+  scaffold already writes the clean project (`pyproject.toml` with
+  `[tool.qgis-sdk]`, empty `__init__.py`, `plugin.py`, `tests/test_plugin.py`,
+  optional `web/`), because the old templates would not have passed the new
+  `check`. `examples/simple` migrated the same way (`webview.py`,
+  `metadata.txt`, `classFactory`, `build_context`, `MessageBarNotifications`
+  gone; `dialogs.py` holds its two file dialogs). Opt-in
+  `QGIS_SDK_BUILD_INSTALL=1`, `QGIS_SDK_DEVTOOLS=1`, `QGIS_SDK_SCAFFOLD_WEB=1`,
+  `QGIS_SDK_SCAFFOLD_DESKTOP=1`, `QGIS_SDK_HEADLESS_LIFECYCLE=1`,
+  `QGIS_SDK_DESKTOP_ADAPTER=1` and `QGIS_SDK_REFERENCE=1` harnesses re-run
+  green. decision-43 and decision-12 carry dated status reviews.
+- **Sprint 4: TASK-65, re-sliced.** What sprint 3 left for it: the scaffold's
+  and the example's `qgis-sdk-runtime>=0.5,<0.6` / `qgis-sdk-tools>=0.5,<0.6`
+  windows must be moved by `release.py stamp` (today the scaffold derives
+  them from the installed runtime, the example and the tests pin the literal),
+  so the gate stamps them with the 0.6.0 version; doc-13 and the remaining
+  guides that still describe the four generated files; the
+  `QGIS_SDK_PLUGIN_COEXISTENCE=1` harness and
+  `scripts/plugin_coexistence_smoke.py` moved from `create_class_factory` onto
+  `host()` (both still run on the retained `create_class_factory`); and the
+  scaffold-vs-example equality test extended to the Python side
+  (`pyproject.toml` shape, `tests/`), not only `web/package.json`. If that is
+  all it is, it folds into the TASK-67 sprint as the first commit.
 - **Sprint 5: TASK-67.** `@toolbar`/`@menu`/`@shortcut` stacked on `@action`,
   and on `Dialog`/`Dock` surface classes, `surfaces = [...]`,
   `describe_bindings(cls)` outside `describe_plugin`, the trigger rule (no
