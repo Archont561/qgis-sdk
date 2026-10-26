@@ -4,7 +4,7 @@ title: Generate metadata.txt, classFactory and the page view in build and dev
 status: To Do
 assignee: []
 created_date: '2026-10-26T08:27:00Z'
-updated_date: '2026-10-26T08:48:00Z'
+updated_date: '2026-10-26T09:23:00Z'
 labels: []
 milestone: m-5
 dependencies:
@@ -26,4 +26,11 @@ decision-43. pyproject.toml [tool.qgis-sdk] plugin = "pkg.module:Class" is the s
 - [ ] #3 qgis-sdk dev loads the source plugin through the generated host package: edit, reload and unload work as before (QGIS_SDK_HEADLESS_LIFECYCLE / QGIS_SDK_DESKTOP_ADAPTER harnesses and the reloader tests), dev --mode standalone and test --target desktop go through host(), and the dev host directory is gitignored by the scaffold.
 - [ ] #4 doc-12 documents [tool.qgis-sdk], the generated artifacts, the check rules and the migration (delete four files, add the TOML); decision-12 gets a status review naming the runtime page view as the first owned surface.
 - [ ] #5 [tool.qgis-sdk.web] grants = [...] selects the curated host operations host() registers on the page's dispatcher via register_host_operations(only=); no grants registers none; an unknown grant is a check finding; the webengine test calls a granted and a non-granted host operation from the page.
+- [ ] #6 build and dev resolve the runtime from the project's own requirement on qgis-sdk-runtime / qgis-sdk (decision-43 amendment): the importable runtime must satisfy the declared specifier or the command refuses with VERSION004 naming declared vs. installed; a project with no declaration gets VERSION003 and builds against the installed runtime; the ZIP notice records the requirement and the resolved version; the tools never install anything (pure tests on fake metadata, build-install harness).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-10-26: AC 6 added - runtime autodetected from the project's dependencies, never from a dedicated field.
+<!-- SECTION:NOTES:END -->

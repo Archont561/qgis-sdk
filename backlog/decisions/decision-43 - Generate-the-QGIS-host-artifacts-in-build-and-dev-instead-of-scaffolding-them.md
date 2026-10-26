@@ -103,3 +103,39 @@ are the moment the host-specific shape is actually needed.
 - The bundle still vendors the runtime, so an installed plugin needs no
   `qgis-sdk` on the host; `metadata.txt` in the ZIP is byte-identical between
   `build` and `dev` for the same source.
+
+## Amendment (2026-10-26): the runtime is detected from the project's dependencies
+
+Owner's ruling after the question "does `build` ask for the runtime?": it
+does not, and it must not grow a `[tool.qgis-sdk] runtime = ...` field
+either. **The project's ordinary dependency declaration is the source of
+truth**, and the tools detect the runtime from it:
+
+- `qgis-sdk new` writes `[project] dependencies = ["qgis-sdk-runtime>=X.Y,<X.Y+1"]`
+  with the range derived from the runtime installed where `new` runs
+  (`importlib.metadata`), never from a template literal, plus
+  `[dependency-groups] dev = ["qgis-sdk-tools>=X.Y,<X.Y+1"]` so a fresh
+  clone can `pip install --group dev` and get the matching `qgis-sdk`
+  command. A bare checkout with no installed distribution writes the
+  checkout's own version.
+- `check` already reads every requirement string in `[project]
+  dependencies`, `optional-dependencies` and `dependency-groups`
+  (VERSION001, TASK-9). It gains VERSION003: the project declares no
+  `qgis-sdk-runtime` (or `qgis-sdk`) requirement at all, with the
+  remediation naming the line to add; a 0.5 project migrating therefore gets
+  told once.
+- `build` and `dev` resolve the runtime by that requirement: the `qgis_sdk`
+  importable next to the tools must satisfy the declared specifier, otherwise
+  the command refuses with VERSION004 (declared vs. installed, and the
+  `pip install` line that would satisfy it) instead of silently vendoring a
+  runtime the author did not ask for. The tools never install anything
+  themselves. The ZIP notice records both the declared requirement and the
+  resolved version. A project with no declaration builds against the
+  installed runtime, with VERSION003 in the build output, so existing
+  projects keep building.
+- The vendoring itself is unchanged: the resolved runtime is copied under
+  `<plugin>/_vendor/qgis_sdk`; the end user's QGIS installs nothing.
+
+Carried by TASK-65 (scaffold lines) and TASK-64 (resolution and the two
+rules).
+
