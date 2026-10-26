@@ -47,7 +47,7 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bunup",
+		"build": "bunup && tsc -p tsconfig.dist.json",
 		"test": "bun test",
 		"coverage": "bun --cwd=../.. --config=bunfig.toml test --coverage packages/qgis-sdk-typescript/tests",
 		"typecheck": "tsc --noEmit",

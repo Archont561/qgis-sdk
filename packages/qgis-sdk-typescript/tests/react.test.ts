@@ -215,10 +215,10 @@ test("useOperation and useStream take the methods of a QgisSdk as they are", asy
 	let run: ((input: { layer_id: string }) => Promise<unknown>) | null = null;
 	function View(): ReactElement {
 		const sdk = useQgisSdk<Operations, Streams>();
-		const [state, start] = useOperation(sdk["sites.summary"]);
+		const [state, start] = useOperation(sdk.sites.summary);
 		states.push(state);
 		run = start;
-		streamStates.push(useStream(sdk["sites.watch"], { layer_id: "sites" }));
+		streamStates.push(useStream(sdk.sites.watch, { layer_id: "sites" }));
 		return createElement("i");
 	}
 	await mount.render(

@@ -31,13 +31,13 @@ const qgis = QgisSdk.fromBridgeSchema(schema, {
 	transport: createBridgeHarness(schema),
 });
 
-// A declared action is a method named by its id; the result is the declared one.
-const summary: Promise<SitesSummaryResult> = qgis["sites.summary"]({
+// A declared action nests under the segments of its id; the result is the declared one.
+const summary: Promise<SitesSummaryResult> = qgis.sites.summary({
 	layer_id: "sites",
 });
 void summary;
 async function total(): Promise<number> {
-	const result = await qgis["sites.summary"]({
+	const result = await qgis.sites.summary({
 		layer_id: "sites",
 		mode: "exact",
 	});
@@ -46,39 +46,43 @@ async function total(): Promise<number> {
 void total;
 
 // An empty request may be omitted; a nonempty one may not.
-void qgis["sites.refresh"]();
+void qgis.sites.refresh();
 // @ts-expect-error `layer_id` is required by the declaration.
-void qgis["sites.summary"]();
+void qgis.sites.summary();
 // @ts-expect-error `layer_id` is required by the declaration.
-void qgis["sites.details"]({ options: { limit: 1 } });
+void qgis.sites.details({ options: { limit: 1 } });
 
 // A wrong argument shape is a compile error.
 // @ts-expect-error The request is an object, not a layer id.
-void qgis["sites.summary"]("sites");
-void qgis["sites.summary"]({
+void qgis.sites.summary("sites");
+void qgis.sites.summary({
 	layer_id: "sites",
 	// @ts-expect-error `guess` is not a declared argument.
 	guess: true,
 });
 // @ts-expect-error `mode` is a Literal of two values.
-void qgis["sites.summary"]({ layer_id: "sites", mode: "slow" });
+void qgis.sites.summary({ layer_id: "sites", mode: "slow" });
 // @ts-expect-error `limit` is an integer, not a string.
-void qgis["sites.details"]({ layer_id: "sites", options: { limit: "1" } });
+void qgis.sites.details({ layer_id: "sites", options: { limit: "1" } });
 
-// An unknown operation is not a member.
+// An unknown operation is not a member, and neither is the flat id.
 // @ts-expect-error `sites.relfresh` is not declared.
-void qgis["sites.relfresh"];
+void qgis.sites.relfresh;
+// @ts-expect-error `maps` is not a namespace of any declared id.
+void qgis.maps;
+// @ts-expect-error the flat id is not a member; the method nests under `sites`.
+void qgis["sites.summary"];
 
 // A result is read as declared, not as `unknown`.
 async function wrongField(): Promise<void> {
-	const result = await qgis["sites.summary"]({ layer_id: "sites" });
+	const result = await qgis.sites.summary({ layer_id: "sites" });
 	// @ts-expect-error `largest_site` is not a declared result field.
 	void result.largest_site;
 }
 void wrongField;
 
 // A stream takes its request and typed handlers, and resolves with a handle.
-const watching: Promise<StreamHandle> = qgis["sites.watch"](
+const watching: Promise<StreamHandle> = qgis.sites.watch(
 	{ layer_id: "sites" },
 	{
 		onEvent: (event: SitesWatchEvent) => {
@@ -94,8 +98,8 @@ const watching: Promise<StreamHandle> = qgis["sites.watch"](
 );
 void watching;
 // @ts-expect-error A stream needs its handlers.
-void qgis["sites.watch"]({ layer_id: "sites" });
-void qgis["sites.watch"](
+void qgis.sites.watch({ layer_id: "sites" });
+void qgis.sites.watch(
 	{ layer_id: "sites" },
 	{
 		// @ts-expect-error `state` is not an event `sites.watch` declares.

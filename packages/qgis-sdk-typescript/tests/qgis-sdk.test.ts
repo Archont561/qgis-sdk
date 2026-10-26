@@ -2,8 +2,8 @@
  * `QgisSdk.fromBridgeSchema` (TASK-66 AC #2, #3 and #5), on the schema module
  * generated from the sample plugin and the scripted harness as its transport.
  *
- * What is proven: one method per declared operation, named by id and checked
- * against the declaration on both sides; the host surface on the same client
+ * What is proven: one method per declared operation, nested under the
+ * segments of its id and checked against the declaration on both sides; the host surface on the same client
  * with `granted` read from the handshake; ownership of the client. What is
  * not: a QWebChannel - that is `webchannel.test.ts`, against a fake channel.
  */
@@ -63,20 +63,95 @@ test("defineBridgeSchema refuses what parsePluginDescription refuses", () => {
 	);
 });
 
-test("an instance has one method per declared operation and the core members", () => {
+test("an instance nests one method per declared operation under its dotted id", () => {
 	const harness = createBridgeHarness(schema);
 	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
+	// Every id here is `sites.<leaf>`, so the instance has the core members
+	// and one namespace; the namespace has one method per leaf.
 	expect(Object.keys(qgis).sort()).toEqual(
-		[...QGIS_SDK_MEMBERS, ...OPERATIONS].sort(),
+		[...QGIS_SDK_MEMBERS, "sites"].sort(),
 	);
-	expect(typeof qgis["sites.summary"]).toBe("function");
-	expect(typeof qgis["sites.watch"]).toBe("function");
+	expect(Object.keys(qgis.sites).sort()).toEqual(
+		OPERATIONS.map((id) => id.slice("sites.".length)).sort(),
+	);
+	expect(typeof qgis.sites.summary).toBe("function");
+	expect(typeof qgis.sites.watch).toBe("function");
 	expect(qgis.schema).toBe(schema);
 	expect(qgis.client).toBeInstanceOf(BridgeClient);
 	expect(Object.isFrozen(qgis)).toBe(true);
-	expect("sites.relfresh" in qgis).toBe(false);
+	expect(Object.isFrozen(qgis.sites)).toBe(true);
+	expect("sites.summary" in qgis).toBe(false);
+	expect("relfresh" in qgis.sites).toBe(false);
 	qgis.close();
 });
+
+test("a plain id is a method on the instance, a deeper id nests further", () => {
+	const mixed = defineBridgeSchema({
+		schema_version: 1,
+		id: "demo",
+		title: "Demo",
+		actions: [
+			describeAction("ping"),
+			describeAction("tools.measure.length"),
+			describeAction("tools.measure.area"),
+			describeAction("tools.reset"),
+		],
+	});
+	const qgis = QgisSdk.fromBridgeSchema(mixed, {
+		transport: createBridgeHarness(mixed),
+	});
+	const members = qgis as unknown as Record<string, unknown>;
+	expect(typeof members.ping).toBe("function");
+	const tools = members.tools as Record<string, unknown>;
+	const measure = tools.measure as Record<string, unknown>;
+	expect(Object.keys(tools).sort()).toEqual(["measure", "reset"]);
+	expect(Object.keys(measure).sort()).toEqual(["area", "length"]);
+	expect(typeof measure.length).toBe("function");
+	expect(Object.isFrozen(measure)).toBe(true);
+	qgis.close();
+});
+
+test("an id may not be both an operation and a namespace of other ids", () => {
+	for (const ids of [
+		["sites", "sites.summary"],
+		["sites.summary", "sites"],
+		["a.b.c", "a.b"],
+	]) {
+		const colliding = defineBridgeSchema({
+			schema_version: 1,
+			id: "demo",
+			title: "Demo",
+			actions: ids.map((id) => describeAction(id)),
+		});
+		expect(() =>
+			QgisSdk.fromBridgeSchema(colliding, {
+				transport: createBridgeHarness(),
+			}),
+		).toThrow(QgisSdkDeclarationError);
+	}
+});
+
+test("an id with an empty segment is refused before anything is built", () => {
+	const empty = defineBridgeSchema({
+		schema_version: 1,
+		id: "demo",
+		title: "Demo",
+		actions: [describeAction("sites..summary")],
+	});
+	expect(() =>
+		QgisSdk.fromBridgeSchema(empty, { transport: createBridgeHarness() }),
+	).toThrow(QgisSdkDeclarationError);
+});
+
+function describeAction(id: string) {
+	return {
+		id,
+		title: id,
+		handler: "run",
+		request: { type: "object", properties: {}, additionalProperties: false },
+		result: { type: "null" },
+	};
+}
 
 test("a call sends the declared id with the checked request and returns the checked result", async () => {
 	const harness = createBridgeHarness(schema);
@@ -85,7 +160,7 @@ test("a call sends the declared id with the checked request and returns the chec
 		expect(payload).toEqual({ layer_id: "sites", mode: "fast" });
 		return SUMMARY;
 	});
-	const result = await qgis["sites.summary"]({
+	const result = await qgis.sites.summary({
 		layer_id: "sites",
 		mode: "fast",
 	});
@@ -105,7 +180,7 @@ test("an empty request may be omitted and is sent as an empty object", async () 
 		expect(payload).toEqual({});
 		return SUMMARY;
 	});
-	await qgis["sites.refresh"]();
+	await qgis.sites.refresh();
 	harness.assertSatisfied();
 	qgis.close();
 });
@@ -124,7 +199,7 @@ test("a request outside the schema never reaches the transport", async () => {
 		null,
 	];
 	for (const request of bad) {
-		const failure = await qgis["sites.summary"](request as never).then(
+		const failure = await qgis.sites.summary(request as never).then(
 			() => null,
 			(error: unknown) => error,
 		);
@@ -136,19 +211,21 @@ test("a request outside the schema never reaches the transport", async () => {
 		expect(error.issues.length).toBeGreaterThan(0);
 	}
 	// A nested dataclass is checked by path.
-	const nested = await qgis["sites.details"]({
-		layer_id: "sites",
-		options: { limit: "1" } as never,
-	}).then(
-		() => null,
-		(error: unknown) => error as QgisSdkContractError,
-	);
+	const nested = await qgis.sites
+		.details({
+			layer_id: "sites",
+			options: { limit: "1" } as never,
+		})
+		.then(
+			() => null,
+			(error: unknown) => error as QgisSdkContractError,
+		);
 	expect(nested?.issues.map((issue) => issue.path)).toEqual([
 		["options", "limit"],
 	]);
 	// `X | None` and Literal are accepted as declared.
 	harness.expectInvoke("sites.summary", () => SUMMARY);
-	await qgis["sites.summary"]({
+	await qgis.sites.summary({
 		layer_id: "sites",
 		label: null,
 		mode: "exact",
@@ -164,7 +241,7 @@ test("a reply outside the schema is a result contract error, extra fields are no
 	const harness = createBridgeHarness(schema);
 	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
 	harness.expectInvoke("sites.summary", () => ({ total: "3" }) as never);
-	const failure = await qgis["sites.summary"]({ layer_id: "sites" }).then(
+	const failure = await qgis.sites.summary({ layer_id: "sites" }).then(
 		() => null,
 		(error: unknown) => error as QgisSdkContractError,
 	);
@@ -177,7 +254,7 @@ test("a reply outside the schema is a result contract error, extra fields are no
 		"sites.summary",
 		() => ({ ...SUMMARY, since: "0.5.0" }) as never,
 	);
-	const extended: unknown = await qgis["sites.summary"]({ layer_id: "sites" });
+	const extended: unknown = await qgis.sites.summary({ layer_id: "sites" });
 	expect(extended).toEqual({ ...SUMMARY, since: "0.5.0" });
 	harness.assertSatisfied();
 	qgis.close();
@@ -189,7 +266,7 @@ test("a host failure surfaces as the remote error with its code", async () => {
 	harness.expectInvoke("sites.summary", () =>
 		fault("operation_failed", "no such layer"),
 	);
-	const failure = await qgis["sites.summary"]({ layer_id: "x" }).then(
+	const failure = await qgis.sites.summary({ layer_id: "x" }).then(
 		() => null,
 		(error: unknown) => error,
 	);
@@ -221,7 +298,7 @@ test("a stream delivers declared events typed by kind and ends once", async () =
 		},
 		onTerminal: (terminal) => terminals.push(terminal.kind),
 	};
-	const handle = await qgis["sites.watch"](
+	const handle = await qgis.sites.watch(
 		{ layer_id: "sites", every_ms: 10 },
 		handlers,
 	);
@@ -249,7 +326,7 @@ test("an event outside the declared events ends the stream with an error termina
 	});
 	const terminals: { kind: string; message?: string }[] = [];
 	const events: unknown[] = [];
-	const handle = await qgis["sites.watch"](
+	const handle = await qgis.sites.watch(
 		{ layer_id: "sites" },
 		{
 			onEvent: (event) => events.push(event),
@@ -276,7 +353,7 @@ test("an event outside the declared events ends the stream with an error termina
 test("a stream request is checked before anything is sent", async () => {
 	const harness = createBridgeHarness(schema);
 	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
-	const failure = await qgis["sites.watch"]({ layer_id: 1 } as never, {}).then(
+	const failure = await qgis.sites.watch({ layer_id: 1 } as never, {}).then(
 		() => null,
 		(error: unknown) => error,
 	);
@@ -402,30 +479,20 @@ test("outside a QGIS web view the default transport refuses synchronously", () =
 	);
 });
 
-test("an operation id that shadows a core member is refused", () => {
+test("an operation id whose first segment is a core member is refused", () => {
 	for (const member of QGIS_SDK_MEMBERS) {
-		const shadowing = defineBridgeSchema({
-			schema_version: 1,
-			id: "demo",
-			title: "Demo",
-			actions: [
-				{
-					id: member,
-					title: member,
-					handler: "run",
-					request: {
-						type: "object",
-						properties: {},
-						additionalProperties: false,
-					},
-					result: { type: "null" },
-				},
-			],
-		});
-		expect(() =>
-			QgisSdk.fromBridgeSchema(shadowing, {
-				transport: createBridgeHarness(),
-			}),
-		).toThrow(QgisSdkDeclarationError);
+		for (const id of [member, `${member}.list`]) {
+			const shadowing = defineBridgeSchema({
+				schema_version: 1,
+				id: "demo",
+				title: "Demo",
+				actions: [describeAction(id)],
+			});
+			expect(() =>
+				QgisSdk.fromBridgeSchema(shadowing, {
+					transport: createBridgeHarness(),
+				}),
+			).toThrow(QgisSdkDeclarationError);
+		}
 	}
 });
