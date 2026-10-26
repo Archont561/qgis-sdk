@@ -12,7 +12,7 @@ name: release
 # `v*` is an alignment release that stamps everything at one version. What
 # ties a pair together is the plugin-description contract version, which
 # `release-verify-versions` checks across the Python declarations and the
-# bridge index on every release. Each Python distribution is published by its
+# bridge declarations on every release. Each Python distribution is published by its
 # own step from its own directory (dist/pypi/<runtime|tools|kit>), so a
 # failure names the wheel it belongs to.
 #
