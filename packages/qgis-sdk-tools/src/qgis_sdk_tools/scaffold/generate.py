@@ -380,9 +380,10 @@ def _web_readme(options: ScaffoldOptions) -> str:
 
 `web/` is a Vite app ({framework}) that QGIS shows as a {web.placement}: the
 {options.title!r} toolbar button opens it. The page talks to the plugin through
-the typed client in `web/src/bridge.ts`, generated from the declarations in
-`{plugin}/plugin.py` and checked in. Run `{run.format(script="bindings")}` in CI
-(it runs `qgis-sdk bridge generate --check`) so the file cannot drift from them.
+`QgisSdk` built on `web/src/bridge.schema.ts`, generated from the declarations
+in `{plugin}/plugin.py` and checked in. Run `{run.format(script="bindings")}` in
+CI (it runs `qgis-sdk bridge generate --check`) so the file cannot drift from
+them.
 
 ```sh
 cd web

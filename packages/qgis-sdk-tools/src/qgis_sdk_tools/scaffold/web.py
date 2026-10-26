@@ -3,8 +3,9 @@
 Everything here is text with a few validated values in it. The templates are
 controlled (decision-18): every npm dependency is pinned to the exact version
 this SDK release was qualified with, the Chromium target is the one the
-oldest supported QGIS ships, and the page's typed client is rendered from the
-plugin's own declarations so the checked-in bindings cannot drift from them.
+oldest supported QGIS ships, and the page's schema module is rendered from
+the plugin's own declarations so the checked-in bindings cannot drift from
+them; the page builds its `QgisSdk` on that module (decision-44).
 Bunup is the workspace's library tooling and never an application's: a Bun
 project gets Vite and Vitest like the others.
 """
@@ -16,7 +17,7 @@ from typing import Final
 
 from qgis_sdk.declarations import action, describe_plugin, plugin
 
-from qgis_sdk_tools.generate import generate_typescript
+from qgis_sdk_tools.generate import generate_schema_typescript
 
 from .options import PackageManager, ScaffoldOptions, WebOptions
 
@@ -110,10 +111,9 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
         ("web/index.html", _index_html(options, web)),
         ("web/.gitignore", "node_modules/\n"),
         (
-            "web/src/bridge.ts",
-            generate_typescript(describe_plugin(template_plugin_class(options))),
+            "web/src/bridge.schema.ts",
+            generate_schema_typescript(describe_plugin(template_plugin_class(options))),
         ),
-        ("web/src/transport.ts", TRANSPORT),
         (f"{options.plugin}/webview.py", _webview(options)),
     ]
     if web.framework == "react":
@@ -137,7 +137,7 @@ def bindings_command(options: ScaffoldOptions) -> str:
     return (
         "qgis-sdk bridge generate "
         f"--plugin {options.plugin}.plugin:{class_name}Plugin "
-        "--out web/src/bridge.ts --check"
+        "--out web/src/bridge.schema.ts --check"
     )
 
 
@@ -244,95 +244,33 @@ def _index_html(options: ScaffoldOptions, web: WebOptions) -> str:
     )
 
 
-TRANSPORT = """/**
- * The wire between this page and the plugin: Qt's WebChannel, nothing else.
- *
- * QGIS registers one object named "bridge" on the channel (see webview.py). Its
- * `receive` slot takes a JSON envelope; its `message` signal carries every
- * reply and stream frame back. Vitest never sees this file: the tests hand the
- * same client a scripted host from `@archont561/qgis-sdk/testing` instead.
- */
-
-import type { WireTransport } from "@archont561/qgis-sdk/bridge";
-
-interface ChannelObject {
-	receive(text: string): void;
-	readonly message: {
-		connect(listener: (text: string) => void): void;
-		disconnect(listener: (text: string) => void): void;
-	};
-}
-
-interface Channel {
-	readonly objects: Readonly<Record<string, ChannelObject | undefined>>;
-}
-
-declare global {
-	interface Window {
-		qt?: { readonly webChannelTransport: unknown };
-		QWebChannel?: new (transport: unknown, ready: (channel: Channel) => void) => unknown;
-	}
-}
-
-/** True inside a QGIS web view, where Qt injected its transport and script. */
-export function insideQgis(): boolean {
-	return (
-		typeof window !== "undefined" &&
-		window.qt !== undefined &&
-		typeof window.QWebChannel === "function"
-	);
-}
-
-/** Resolve a transport once the channel is ready; reject outside QGIS. */
-export function connectWebChannel(objectName = "bridge"): Promise<WireTransport> {
-	return new Promise((resolve, reject) => {
-		if (!insideQgis() || window.qt === undefined || window.QWebChannel === undefined) {
-			reject(new Error("not inside a QGIS web view: window.qt is missing"));
-			return;
-		}
-		new window.QWebChannel(window.qt.webChannelTransport, (channel) => {
-			const object = channel.objects[objectName];
-			if (object === undefined) {
-				reject(new Error(`the host registered no "${objectName}" channel object`));
-				return;
-			}
-			resolve({
-				send: (message) => object.receive(JSON.stringify(message)),
-				subscribe: (listener) => {
-					const forward = (text: string) => listener(JSON.parse(text));
-					object.message.connect(forward);
-					return () => object.message.disconnect(forward);
-				},
-			});
-		});
-	});
-}
-"""
-
-VANILLA_MAIN = """import { BridgeClient } from "@archont561/qgis-sdk/bridge";
+VANILLA_MAIN = """import { QgisSdk } from "@archont561/qgis-sdk";
 import { createApp } from "./app";
-import { createOperations } from "./bridge";
-import { connectWebChannel, insideQgis } from "./transport";
+import schema from "./bridge.schema";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (root === null) {
 	throw new Error("index.html has no #app element");
 }
 
-if (insideQgis()) {
-	connectWebChannel().then(
-		(transport) => createApp(root, createOperations(new BridgeClient(transport))),
-		(failure: unknown) => {
-			root.textContent = failure instanceof Error ? failure.message : String(failure);
-		},
-	);
-} else {
+// Three statements connect the page: the generated schema, the SDK built on
+// it, the app. Outside a QGIS web view the SDK refuses at once, with the
+// reason, instead of waiting for a channel that never comes.
+try {
+	createApp(root, QgisSdk.fromBridgeSchema(schema));
+} catch (failure: unknown) {
 	root.textContent =
-		"Open this page from QGIS: outside a QGIS web view there is no host to talk to.";
+		failure instanceof Error
+			? `${failure.message}. Open this page from QGIS: outside a QGIS web view there is no host to talk to.`
+			: String(failure);
 }
 """
 
-VANILLA_APP = """import type { PluginOperations } from "./bridge";
+VANILLA_APP = """import type { QgisSdk } from "@archont561/qgis-sdk";
+import type { Operations, Streams } from "./bridge.schema";
+
+/** The SDK this page is written against: the plugin's declared operations. */
+export type PluginSdk = QgisSdk<Operations, Streams>;
 
 const PAGE = `
 	<h1>{title}</h1>
@@ -345,8 +283,8 @@ const PAGE = `
 	<p id="error" role="alert"></p>
 `;
 
-/** Render the page into `root`; every button goes through the generated client. */
-export function createApp(root: HTMLElement, operations: PluginOperations): void {
+/** Render the page into `root`; every button goes through the SDK. */
+export function createApp(root: HTMLElement, qgis: PluginSdk): void {
 	root.innerHTML = PAGE;
 	const pingResult = element(root, "ping-result");
 	const layerList = element(root, "layer-list");
@@ -356,7 +294,7 @@ export function createApp(root: HTMLElement, operations: PluginOperations): void
 	element(root, "ping").addEventListener("click", async () => {
 		pings += 1;
 		try {
-			pingResult.textContent = String(await operations.ping({ value: pings }));
+			pingResult.textContent = String(await qgis.ping({ value: pings }));
 		} catch (failure: unknown) {
 			error.textContent = describe(failure);
 		}
@@ -364,7 +302,7 @@ export function createApp(root: HTMLElement, operations: PluginOperations): void
 
 	element(root, "layers").addEventListener("click", async () => {
 		try {
-			const ids = await operations.project_layers();
+			const ids = await qgis.project_layers();
 			layerList.replaceChildren(
 				...ids.map((id) => {
 					const item = document.createElement("li");
@@ -396,11 +334,11 @@ VANILLA_TEST = """/**
  * touches a QWebEngineView; that proof lives in the plugin's Python tests.
  */
 
-import { BridgeClient } from "@archont561/qgis-sdk/bridge";
+import { QgisSdk } from "@archont561/qgis-sdk";
 import { createBridgeHarness, fault } from "@archont561/qgis-sdk/testing";
 import { expect, test } from "vitest";
 import { createApp } from "./app";
-import { createOperations, type OperationId, type PingRequest } from "./bridge";
+import schema from "./bridge.schema";
 
 async function until(check: () => boolean): Promise<void> {
 	for (let attempt = 0; attempt < 100 && !check(); attempt += 1) {
@@ -408,12 +346,17 @@ async function until(check: () => boolean): Promise<void> {
 	}
 }
 
+/** The operations the page called, handshake aside. */
+function operations(harness: { readonly calls: readonly { kind: string; operation: string }[] }) {
+	return harness.calls.filter((call) => call.kind !== "handshake").map((call) => call.operation);
+}
+
 test("the ping button shows what the host answered", async () => {
-	const harness = createBridgeHarness<OperationId>();
-	const client = new BridgeClient(harness);
+	const harness = createBridgeHarness(schema);
+	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
 	const root = document.createElement("div");
-	createApp(root, createOperations(client));
-	harness.expectInvoke<PingRequest, number>("ping", (payload) => payload.value * 10);
+	createApp(root, qgis);
+	harness.expectInvoke("ping", (payload) => payload.value * 10);
 
 	root.querySelector<HTMLButtonElement>("#ping")?.click();
 	await harness.settled();
@@ -421,16 +364,16 @@ test("the ping button shows what the host answered", async () => {
 	await until(() => result?.textContent === "10");
 
 	expect(result?.textContent).toBe("10");
-	expect(harness.calls.map((call) => call.operation)).toEqual(["ping"]);
+	expect(operations(harness)).toEqual(["ping"]);
 	harness.assertSatisfied();
-	client.close();
+	qgis.close();
 });
 
 test("a refusal lands in the error line instead of a rejected promise", async () => {
-	const harness = createBridgeHarness<OperationId>();
-	const client = new BridgeClient(harness);
+	const harness = createBridgeHarness(schema);
+	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
 	const root = document.createElement("div");
-	createApp(root, createOperations(client));
+	createApp(root, qgis);
 	harness.expectInvoke("project_layers", () => fault("forbidden", "not yours"));
 
 	root.querySelector<HTMLButtonElement>("#layers")?.click();
@@ -440,51 +383,51 @@ test("a refusal lands in the error line instead of a rejected promise", async ()
 
 	expect(error?.textContent).toContain("not yours");
 	harness.assertSatisfied();
-	client.close();
+	qgis.close();
 });
 """
 
-REACT_MAIN = """import { BridgeProvider } from "@archont561/qgis-sdk/react";
+REACT_MAIN = """import { QgisSdk } from "@archont561/qgis-sdk";
+import { BridgeProvider } from "@archont561/qgis-sdk/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { connectWebChannel, insideQgis } from "./transport";
+import schema from "./bridge.schema";
 
 const root = document.querySelector<HTMLElement>("#app");
 if (root === null) {
 	throw new Error("index.html has no #app element");
 }
 
-if (insideQgis()) {
-	connectWebChannel().then(
-		(transport) => {
-			createRoot(root).render(
-				<StrictMode>
-					<BridgeProvider transport={transport}>
-						<App />
-					</BridgeProvider>
-				</StrictMode>,
-			);
-		},
-		(failure: unknown) => {
-			root.textContent = failure instanceof Error ? failure.message : String(failure);
-		},
+// Three statements connect the page: the generated schema, the SDK built on
+// it, the app under a provider that shares it. Outside a QGIS web view the
+// SDK refuses at once, with the reason.
+try {
+	const qgis = QgisSdk.fromBridgeSchema(schema);
+	createRoot(root).render(
+		<StrictMode>
+			<BridgeProvider qgis={qgis}>
+				<App />
+			</BridgeProvider>
+		</StrictMode>,
 	);
-} else {
+} catch (failure: unknown) {
 	root.textContent =
-		"Open this page from QGIS: outside a QGIS web view there is no host to talk to.";
+		failure instanceof Error
+			? `${failure.message}. Open this page from QGIS: outside a QGIS web view there is no host to talk to.`
+			: String(failure);
 }
 """
 
-REACT_APP = """import { useOperation, useOperations } from "@archont561/qgis-sdk/react";
+REACT_APP = """import { useOperation, useQgisSdk } from "@archont561/qgis-sdk/react";
 import { useState } from "react";
-import { createOperations } from "./bridge";
+import type { Operations, Streams } from "./bridge.schema";
 
 /** The page: two declared operations, driven through the SDK's hooks. */
 export function App() {
-	const operations = useOperations(createOperations);
-	const [ping, runPing] = useOperation(operations.ping);
-	const [layers, loadLayers] = useOperation(operations.project_layers);
+	const qgis = useQgisSdk<Operations, Streams>();
+	const [ping, runPing] = useOperation(qgis.ping);
+	const [layers, loadLayers] = useOperation(qgis.project_layers);
 	const [count, setCount] = useState(0);
 
 	return (
@@ -533,24 +476,26 @@ REACT_TEST = """/**
  * touches a QWebEngineView; that proof lives in the plugin's Python tests.
  */
 
+import { QgisSdk } from "@archont561/qgis-sdk";
 import { BridgeProvider } from "@archont561/qgis-sdk/react";
 import { createBridgeHarness } from "@archont561/qgis-sdk/testing";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, test } from "vitest";
 import { App } from "./App";
-import type { OperationId, PingRequest } from "./bridge";
+import schema from "./bridge.schema";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 test("the ping button shows what the host answered", async () => {
-	const harness = createBridgeHarness<OperationId>();
-	harness.expectInvoke<PingRequest, number>("ping", (payload) => payload.value * 10);
+	const harness = createBridgeHarness(schema);
+	const qgis = QgisSdk.fromBridgeSchema(schema, { transport: harness });
+	harness.expectInvoke("ping", (payload) => payload.value * 10);
 	const container = document.createElement("div");
 	const root = createRoot(container);
 	await act(async () => {
 		root.render(
-			<BridgeProvider transport={harness}>
+			<BridgeProvider qgis={qgis}>
 				<App />
 			</BridgeProvider>,
 		);
@@ -564,11 +509,13 @@ test("the ping button shows what the host answered", async () => {
 	});
 
 	expect(container.querySelector("output")?.textContent).toBe("10");
-	expect(harness.calls.map((call) => call.operation)).toEqual(["ping"]);
+	const operations = harness.calls.filter((call) => call.kind !== "handshake");
+	expect(operations.map((call) => call.operation)).toEqual(["ping"]);
 	harness.assertSatisfied();
 	await act(async () => {
 		root.unmount();
 	});
+	qgis.close();
 });
 """
 
@@ -599,7 +546,7 @@ from qgis_sdk.environment import dev_server
 ASSETS = Path(__file__).resolve().parent / "web"  # `{build}` in web/ writes it
 INDEX = ASSETS / "index.html"
 VIEW_ID = "{plugin}.main"
-CHANNEL_OBJECT = "bridge"  # the name web/src/transport.ts looks up
+CHANNEL_OBJECT = "bridge"  # the default name QgisSdk.fromBridgeSchema connects to
 TITLE = "{title}"
 
 
