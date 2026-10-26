@@ -5,7 +5,7 @@
  * the scope teardown each composable relies on.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { QgisSdk } from "../src/qgis-sdk";
 import {
 	type FormState,
@@ -25,7 +25,9 @@ import {
 	type FormOperations,
 	formSchema,
 } from "./store-behaviour";
-import { container } from "./support/dom";
+import { container, install, uninstall } from "./support/dom";
+
+install();
 
 // Vue's DOM renderer reads `document` when its module is evaluated, and Bun
 // evaluates a package import before a relative one whatever the source order;
@@ -155,6 +157,8 @@ const vue: Driver = {
 	},
 	settle,
 };
+
+afterAll(uninstall);
 
 describeStoreBehaviour("vue", vue);
 

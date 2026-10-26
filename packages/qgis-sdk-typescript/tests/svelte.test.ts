@@ -10,7 +10,7 @@
  * client ones. Both happen before the dynamic imports that need them.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { plugin } from "bun";
 import { compile } from "svelte/compiler";
 import { QgisSdk } from "../src/qgis-sdk";
@@ -32,7 +32,9 @@ import {
 	describeStoreBehaviour,
 	formSchema,
 } from "./store-behaviour";
-import { container } from "./support/dom";
+import { container, install, uninstall } from "./support/dom";
+
+install();
 
 plugin({
 	name: "svelte-fixtures",
@@ -169,6 +171,8 @@ const svelte: Driver = {
 	},
 	settle: tick,
 };
+
+afterAll(uninstall);
 
 describeStoreBehaviour("svelte", svelte);
 
