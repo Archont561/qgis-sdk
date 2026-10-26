@@ -3,10 +3,10 @@ id: TASK-67
 title: >-
   Bind actions and Dialog/Dock surfaces to the Desktop with @toolbar, @menu,
   @shortcut; ctx.ui.open and UiContext.actions
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T08:41:00Z'
-updated_date: '2026-10-26 17:59'
+updated_date: '2026-10-26 18:14'
 labels: []
 milestone: m-5
 dependencies:
@@ -36,4 +36,6 @@ decision-45 points 1, 2, 5 and decision-55 points 1, 2 and 7 (UI003). Stackable 
 2026-10-26: rewritten for decision-55 - no generated dialog on trigger (UI003), bindings also on Dialog/Dock surface classes, surfaces registry, ctx.ui.open, UiContext.actions.
 
 2026-10-26 (sprint 5, session branch arena/0d0c6f3e-qgis-sdk): runtime half in feat(runtime) ea7693e - qgis_sdk.bindings (@toolbar/@menu/@shortcut on @action and Dialog/Dock, describe_bindings, refusals), qgis_sdk.ui.{surfaces,actions} (Dialog/Dock, ViewActions with view authority and re-entry refusal), UiContext.actions/settings, PluginContext.ui capability, qgis_sdk.adapters.surfaces (SurfaceHost + DesktopBindings: QAction per binding, trigger rule, dialog per opening, one dock with settings-restored visibility, JobHandle progress on the bar), qgis_sdk.testing.FakeUi/FakeViewControl, resources.icon_path. Tools half in feat(tools): check UI003/ICON001 (check/ui.py), qgis-sdk new --ui native (ui.py PingDialog, surfaces tuple, open_ping toolbar action, FakeUi starter test, README section), dev --exercise opens/edits/reloads the dialog. Evidence: pure (test_bindings, test_ui_context, test_check_ui, test_scaffold_ui), QgsApplication (test_surfaces_native 10, test_desktop_host_native), real Desktop (QGIS_SDK_DEVTOOLS=1 test_devtools_native 7 passed: toolbar action placed, dialog shown, answer 7, closed; after edit initial text 'edited', revision 9). HOST_FINGERPRINT unchanged. Desktop harness evidence is the devtools exercise rather than scripts/desktop_adapter_smoke.py, which builds its own context and does not go through host(). Full Python suite 1650/43, tests/scripts 248, ruff clean. Docs: doc-12 'Desktop bindings and native surfaces', '--ui native' starter, UI003/ICON001 rows, 0.6.0 migration bullet; decision-12 -> superseded (by decision-55), decisions 45/55 status reviews. Done after merge + CI.
+
+Merged #98 -> main 2763cad (2026-10-26); main CI run 40374825948 green (checks, macOS, Windows). ACs 1-5 verified on the merged tree: see the sprint-5 note above. Closure recorded by the 0.6.0 gate sprint.
 <!-- SECTION:NOTES:END -->

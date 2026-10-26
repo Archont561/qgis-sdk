@@ -818,6 +818,113 @@ nothing is inferred from CI.
   placeholders of the runtime and the tools (and the kit's own `0.0.0`) on
   PyPI are now superseded and should be yanked by the owner.
 
+## 0.6.0 release gate (TASK-60, 2026-10-26): gate run, not yet stamped
+
+What was run on `main` `2763cad` (the TASK-67 merge, PR #98) on Linux
+x86-64 with QGIS 4.2.3 (Qt 6.11.2), CPython 3.14.8 in the locked Pixi
+environment and CPython 3.11.2 for the clean install, Bun 1.4.2. Every line
+is a command that ran here; nothing is inferred from CI. The tree is
+**unstamped**: manifests still say 0.5.0 / 0.3.0, so artifact names below
+carry 0.5.0. Stamping, tagging and publishing wait for an explicit
+"Release 0.6.0".
+
+- **Required work.** TASK-58, 59, 61, 62, 63, 64, 65, 66 and 67 are Done
+  (PRs #84–#98, each green on `checks`, macOS and Windows; #98's `main` run
+  40374825948 green). Open targets stay blockers, not promises: Windows and
+  macOS QGIS rows remain `unqualified` (TASK-33), the display-server Desktop
+  GUI row is a blocker, decision-15 and decision-19 gaps are out of this
+  release.
+- **Scope.** `release.py plan --scope python --bump minor` from
+  `python-v0.5.0` plans `python-v0.6.0`: five breaking changes (`feat(jobs)!`
+  1ba9add, `feat(core)!` 43411d8, `feat(tools)` 9286234, `feat(runtime)!`
+  4664769, `refactor(runtime)!` 56bae76) and fourteen features through
+  `a8e4879`. `plan --scope typescript --bump minor` from `ts-v0.3.0` plans
+  `ts-v0.4.0`: two breaking (ee95800, 9286234), four features (e1135a1,
+  a4ca6e1, d922226, 9286234), one fix (d48c341); `git diff ts-v0.3.0..main`
+  touches 13 bridge source files (+1637/−385). `verify-versions` on the
+  unstamped tree agrees on 0.5.0 for runtime, tools and kit, 0.3.0 for
+  `package.json`, the alias manifest, the alias dependency and the scaffold
+  pin, contract version 1 on both sides. The changelog file the planner
+  writes into the repository root was removed again.
+- **Migration note completeness (AC 1).** An AST diff of module-level
+  public names between `python-v0.5.0` and `main` under `qgis_sdk`: removed
+  modules `qgis_sdk.reference(.algorithms)`; removed names
+  `algorithms.{algorithm, AlgorithmResult}`, `providers.{RegisteredAlgorithm,
+  parameter_kinds, LAYER_PARAMETER, METRES_PARAMETER}`,
+  `declarations.{RunSignature, describe_run_method}`. All are named in
+  doc-12's 0.6.0 note (the two inspectors were added by this gate; they were
+  never in `__all__`). Added modules: `adapters.{surfaces, webview}`,
+  `bindings`, `services.processing`, `testing.ui`,
+  `ui.{actions, form_fields, surfaces}`. Tools removals (`check_entry_point`,
+  `RUNTIME_DISTRIBUTIONS`, `WATCHED_FILES`, the scaffold `*_CLASS_FACTORY`,
+  `TRANSPORT`, `WEBVIEW`) are internal to the command.
+- **Static gate.** `lint-python`, `format-python-check` (280 files),
+  `test-release-tool` (248), `lint-github-actions`, `typecheck`,
+  `biome-check` (64 files), `generate_bridge_clients.py --check` (up to
+  date): all clean.
+- **Suites.** `bun run test` 5/5 tasks (bridge 234, alias 10, example page
+  5, Python 1675 passed / 43 skipped including `tests/scripts`); `bun run
+  coverage` Python 95.58%, bridge 98.55% lines (gate 90%); `tests/scripts`
+  248 passed (the standalone run).
+- **Opt-in harnesses, one process per file, all passed:** lifecycle 5,
+  desktop adapter 22, coexistence 23, scaffold desktop 10, native services
+  smoke 7, Qt scheduler 11, headless WebEngine 9, `tests/services` 134,
+  scaffold web 8, devtools 9 (now including the `--ui native` dialog opened
+  from its toolbar action before and after an edit, TASK-67), built ZIP in a
+  clean profile 1, reference example through the toolchain 5. `qgis-sdk
+  check examples/simple`: 9 files, no problems; `qgis-sdk test` on the
+  example 17 pure, `--target qgis` 5 native; `test-reference-example` 5,
+  `test-reference-web` 5.
+- **A 0.5-style project under the 0.6 `check` (AC 3).** `qgis-sdk new
+  legacy_tools --web vanilla` run from a `python-v0.5.0` worktree (so the
+  project carries `metadata.txt`, `webview.py`, `classFactory`, `bridge.ts`
+  and `transport.ts`), then today's `check`: `ENTRY002` on `__init__.py`,
+  `META001` on `metadata.txt`, `PROJECT002` (no `[tool.qgis-sdk] plugin`)
+  and `VERSION003` (no runtime requirement), `checked 4 files: 4 problems`,
+  exit 1 - the API changes reported by name, no crash, each with the
+  decision-43 remediation.
+- **Build and clean install (unstamped).** `build-python --scope python`
+  + `verify-python` (twine) pass on the three wheels (kit
+  `d50b898c…fa18`, runtime `565bf3d0…f159`, tools `0d60ebd6…d7a1`, all
+  named 0.5.0 until the stamp). A fresh CPython 3.11.2 `venv` with only the
+  three wheels and `typer` from PyPI: `pip check` clean; 60 of 62 `qgis_sdk`
+  modules import without `qgis` or `PyQt6` entering `sys.modules`, the two
+  that do not are the documented optional edges (`adapters.pydantic_types`
+  without pydantic, `adapters.qgis` without QGIS). From the installed
+  package: `qgis-sdk new ft/field_tools --ui native`, `check` (`4 files:
+  no problems`), `test` (4 passed, the `FakeUi` starter included),
+  `targets` (the host lands on the CPython 3.11 QGIS-free row), `build`
+  (78 files, web: none). The unpacked ZIP imports `field_tools.plugin` and
+  `field_tools.ui` under `python -S` with the SDK absent, resolving
+  `field_tools._vendor.qgis_sdk` and no top-level `qgis_sdk`; the generated
+  `__init__.py` binds `classFactory = host(...)` and `metadata.txt`
+  carries `hasProcessingProvider=no` for a project without providers.
+- **The bridge pair (AC 5, evidence so far).** `HOST_FINGERPRINT`
+  `sha256:f96bdf10…7d6f`, `HOST_SCHEMA_VERSION 1` and
+  `BRIDGE_PROTOCOL_VERSION 1` are byte-identical at `ts-v0.3.0`,
+  `python-v0.5.0` and `main`. The bridge delta since `ts-v0.3.0` is the
+  root barrel, the prefixed generated errors, `bridge.schema.ts` +
+  `QgisSdk.fromBridgeSchema`, nested ids and the consumer type check
+  (doc-13's 0.4.0 note). Bridge 0.4.0 from this tree ran against the 0.6.0
+  runtime from this tree inside a real `QWebEngineView` in the reference
+  harness (`QGIS_SDK_REFERENCE=1`, 5 passed: the handshake answered by the
+  real dispatcher) and in the scaffold web harness (8 passed). The stamp
+  `ts-v0.4.0` will move `package.json`, the alias and the scaffold pin
+  together (decision-41); not done here.
+- **Licences.** As for 0.5.0: MIT `LICENSE` in each wheel
+  (`dist-info/licenses`), `NOTICE` under `_vendor` in the built ZIP;
+  `DEP001` still refuses third-party code inside a plugin.
+- **Not run here.** The Conda build: `bun run build` succeeds for the
+  bridge and the alias and fails at `qgis-sdk-python#build:conda` because
+  conda-forge repodata is unreachable from the sandbox; `release.yml`
+  builds the three outputs before any upload, and an `-rc.1` rehearsal can
+  prove it again on request.
+- **Approval.** None yet. This section records the gate run only; the
+  stamp (`release.py stamp --scope python --version 0.6.0` and `--scope
+  typescript --version 0.4.0`), the tags `python-v0.6.0` + `ts-v0.4.0` on
+  one merge commit and the publish happen only on an explicit
+  "Release 0.6.0", with a pause for "Merge" on the stamp pull request.
+
 ## Split release pipeline rehearsal (TASK-57 AC 3)
 
 The pipeline for three distributions landed with PR #78 (`60c1dc2`):

@@ -1657,6 +1657,9 @@ TASK-63). Every rename, in one list:
   The bare `@algorithm` decorator and `qgis_sdk.algorithms.algorithm` are
   gone: a provider is the only container. A derived algorithm id is now the
   plain function name (no hash suffix); pass `id=` to keep an old suffixed id.
+  The class-form inspectors `declarations.RunSignature` /
+  `describe_run_method` (never in `__all__`) went with it; `describe(fn)` is
+  the one inspector.
 - **`invoke(Class, Request, algorithms=, project=, scope=, ...)`** becomes
   **`invoke(function, ctx, **inputs)`**: pass the `PluginContext`,
   `JobContext` or `AlgorithmContext` you hold instead of its three services,
