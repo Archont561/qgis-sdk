@@ -112,8 +112,8 @@ jobs:
           # The reference page's schema module is generated the way a plugin
           # author's is: by `bridge generate --check` from the project root
           # (TASK-66 AC 1).
-          (cd examples/simple && python -m qgis_sdk_tools bridge generate \
-            --plugin simple.plugin:SimplePlugin \
+          (cd examples/simple && pixi run -e default python -m qgis_sdk_tools \
+            bridge generate --plugin simple.plugin:SimplePlugin \
             --out web/src/bridge.schema.ts --check)
 
       # The default environment carries the QGIS feature, so this is the only
