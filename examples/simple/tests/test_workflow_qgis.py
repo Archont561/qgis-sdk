@@ -2,9 +2,9 @@
 
 What only QGIS can prove: Processing buffered in metres, the output file is new
 and the fixture is byte-identical afterwards, the packaged style landed on the
-output's renderer, the export is a real OGR file, and the native dialog QGIS
-renders for the ``buffer`` action dispatches the very same handler the page
-calls - native and web are two front ends over one ``runtime.actions``.
+output's renderer, the export is a real OGR file, and the ``BufferDialog``
+the host opens for the ``buffer`` action dispatches the very same handler the
+page calls - native and web are two front ends over one ``runtime.actions``.
 """
 
 from __future__ import annotations
@@ -87,24 +87,34 @@ def test_a_geographic_working_crs_is_refused_and_nothing_is_added(
 
 
 def test_the_native_dialog_and_a_direct_call_dispatch_the_same_handler(
-    desktop: Any,
+    desktop: Any, qgis_app: Any
 ) -> None:
-    from qgis_sdk.adapters.qgis.ui import NativeForms
+    """``BufferDialog`` opened by the host is the ``buffer`` action's ``Form``
+    mounted as QGIS widgets; its button submits to the same handler."""
+    from qgis.PyQt.QtWidgets import QPushButton, QWidget
+    from qgis_sdk.ui import Form
+    from simple.surfaces import BufferDialog
 
-    forms = NativeForms(desktop.runtime)
     source = desktop.runtime.actions["open_fixture"]()
 
-    assert [f.widget for f in forms.fields("buffer")] == ["layer", "metres", "crs"]
-    dialog = forms.render("buffer")
-    dialog.widget("layer_id").setLayer(_qgs_layer(source.id))
-    dialog.widget("distance_metres").setValue(250.0)
-    dialog.widget("working_crs").setCrs(_crs(WORKING_CRS))
+    dialog = desktop.runtime.instance.ctx.ui.open(
+        BufferDialog, initial={"distance_metres": 250}
+    )
+    form: Form = dialog.form
+    window = form.widget.window()
+    assert [f.kind for f in form.fields] == ["layer", "metres", "crs"]
+    assert isinstance(window.findChild(QWidget, "form"), QWidget)
+    form.field("layer_id").widget.setLayer(_qgs_layer(source.id))
+    form.field("working_crs").widget.setCrs(_crs(WORKING_CRS))
 
-    output = forms.dispatch("buffer", dialog.values())
+    window.findChild(QPushButton, "buttons/run").click()
+    qgis_app.processEvents()
 
-    assert output.geometry_type == "polygon"
-    assert output.crs == WORKING_CRS
-    assert {source.id, output.id} <= set(_project_ids())
+    output_id = next(layer_id for layer_id in _project_ids() if layer_id != source.id)
+    output = _qgs_layer(output_id)
+    assert output.geometryType().name.lower().startswith("polygon")
+    assert output.crs().authid() == WORKING_CRS
+    assert {source.id, output_id} <= set(_project_ids())
 
 
 def _crs(authid: str) -> Any:

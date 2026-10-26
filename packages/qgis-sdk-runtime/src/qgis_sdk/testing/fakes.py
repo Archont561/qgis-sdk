@@ -9,7 +9,7 @@ observes and no more.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,7 +26,7 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 from qgis_sdk.resources import require_style
-from qgis_sdk.services import Layers
+from qgis_sdk.services import Layers, Notification, NotificationsBase
 
 if TYPE_CHECKING:
     from qgis_sdk.providers import Provider
@@ -283,17 +283,40 @@ class FakeStyles:
         return tuple(self._applied.get(layer_id, ()))
 
 
-class RecordingNotifications:
-    """A ``Notifications`` backend that records the messages it was given."""
+class RecordingNotifications(NotificationsBase):
+    """A ``Notifications`` backend that records what it was given.
+
+    ``messages`` is every message text in order, whatever its level - the
+    assertion most tests want; ``records`` keeps the level and the button
+    ``with_action`` attached, so a test can press it with :meth:`press`.
+    """
 
     def __init__(self, scope: ResourceScope) -> None:
         self._scope = scope
         self.messages: list[str] = []
+        self.records: list[Notification] = []
+        self._dispatch: list[Callable[..., object] | None] = [None]
 
-    def info(self, message: str) -> None:
-        """Record an informational message."""
+    def bind_actions(self, dispatch: Callable[..., object]) -> None:
+        """Make :meth:`press` run ``dispatch(action_id, **arguments)``."""
+        self._dispatch[0] = dispatch
+
+    def press(self, index: int = -1) -> object:
+        """Press the button of the ``index``-th record, as the user would."""
+        record = self.records[index]
+        if record.action is None:
+            raise ValueError(f"notification {record.message!r} carries no action")
+        dispatch = self._dispatch[0]
+        if dispatch is None:
+            raise ValueError(
+                "no actions bound: call bind_actions(runtime.actions...) first"
+            )
+        return dispatch(record.action.action_id, **record.action.arguments)
+
+    def _deliver(self, notification: Notification) -> None:
         self._scope.ensure_open()
-        self.messages.append(message)
+        self.messages.append(notification.message)
+        self.records.append(notification)
 
 
 class FakeProviderRegistration:

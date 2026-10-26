@@ -46,14 +46,17 @@ if TYPE_CHECKING:
     from qgis_sdk.core.contexts import UiContext
 
 __all__ = [
+    "Button",
     "Choice",
     "Colour",
+    "Column",
     "Component",
     "CrsPicker",
     "DirectoryInput",
     "Distance",
     "FieldPicker",
     "FileInput",
+    "Input",
     "LayerPicker",
     "Number",
     "Option",
@@ -95,49 +98,37 @@ class NativeRendering(Protocol):
 
 
 class Component:
-    """One input of the catalogue: a named, typed value with a widget on demand.
+    """One node of a surface: a named thing with a widget on demand.
 
-    Subclasses set ``kind`` (a name from ``parameter_kinds()``) and build the
-    :class:`FieldSpec` that validates ``set_value``. ``name`` is what the
-    field is called in the handler's signature and in ``objectName``
-    (``form/<name>``), which is how a test or an agent selects the widget.
+    ``name`` is what the node is called in ``objectName`` (``form/<name>``
+    for an :class:`Input`, ``buttons/<name>`` for a :class:`Button`, the
+    bare name for a container), which is how a test or an agent selects the
+    widget. ``attach(ctx)`` binds it to a surface's :class:`UiContext`,
+    ``mount()`` builds the widget, ``snapshot()`` is its node in a UI
+    snapshot (decision-51).
     """
 
-    kind: ClassVar[str]
+    #: ``objectName`` prefix; a container uses its bare name.
+    prefix: ClassVar[str] = ""
 
-    def __init__(
-        self,
-        name: str,
-        *,
-        label: str | None = None,
-        value: object = None,
-    ) -> None:
+    def __init__(self, name: str, *, label: str | None = None) -> None:
         if not name or not name.replace("_", "").isalnum():
             raise QgisSdkUiError(
-                f"{type(self).__name__} needs a field name "
+                f"{type(self).__name__} needs a name "
                 f"(letters, digits, underscores), got {name!r}"
             )
         self.name = name
         self.label = label if label is not None else label_for(name)
         self._ctx: UiContext | None = None
         self._native: NativeRendering | None = None
-        self._listeners: list[Listener] = []
         self._syncing = False
-        self._value: object = self._default()
-        if value is not None:
-            self.set_value(value)
 
     # -- identity -------------------------------------------------------------------
 
     @property
     def object_name(self) -> str:
-        """The ``objectName`` of the widget: ``form/<name>``."""
-        return f"form/{self.name}"
-
-    @property
-    def spec(self) -> FieldSpec:
-        """The field specification ``set_value`` validates against."""
-        return self._spec()
+        """The ``objectName`` of the widget: ``<prefix>/<name>`` or the name."""
+        return f"{self.prefix}/{self.name}" if self.prefix else self.name
 
     @property
     def ctx(self) -> UiContext | None:
@@ -158,19 +149,27 @@ class Component:
             raise QgisSdkUiError(f"{self._describe()} is not mounted")
         return self._native.widget
 
+    def children(self) -> tuple[Component, ...]:
+        """The components this one contains, in layout order."""
+        return ()
+
     # -- lifecycle ------------------------------------------------------------------
 
     def attach(self, ctx: UiContext) -> Component:
-        """Bind the component to a surface's context; returns ``self``.
+        """Bind the component (and its children) to a surface's context.
 
         Pickers list through the context's services from here on and a
         ``FileInput`` can mint refs. The context's scope closing detaches
-        the component and drops every listener.
+        the component and drops every listener. Returns ``self``.
         """
         if self._ctx is not None:
+            if self._ctx is ctx:
+                return self
             raise QgisSdkUiError(f"{self._describe()} is already attached")
         self._ctx = ctx
         ctx.scope.on_close(self.dispose)
+        for child in self.children():
+            child.attach(ctx)
         self._attached()
         return self
 
@@ -192,7 +191,7 @@ class Component:
         rendering.widget.setObjectName(self.object_name)
         self._syncing = True
         try:
-            rendering.apply(self._value)
+            rendering.apply(self._state())
         finally:
             self._syncing = False
         self._native = rendering
@@ -203,9 +202,83 @@ class Component:
         if self._native is not None:
             self._native.dispose()
             self._native = None
-        self._listeners.clear()
+        for child in self.children():
+            child.dispose()
         self._ctx = None
         self._detached()
+
+    def snapshot(self) -> dict[str, Any]:
+        """The semantic node of this component in a UI snapshot (decision-51)."""
+        return {
+            "type": type(self).__name__,
+            "name": self.name,
+            "label": self.label,
+            "objectName": self.object_name,
+        }
+
+    # -- for subclasses -------------------------------------------------------------
+
+    def _state(self) -> object:
+        """What ``mount`` writes into the fresh widget."""
+        return None
+
+    def _from_widget(self, value: object) -> None:
+        """Hook: the widget reported ``value`` under the user."""
+
+    def _attached(self) -> None:
+        """Hook: the context is bound."""
+
+    def _detached(self) -> None:
+        """Hook: the context is gone."""
+
+    def _describe(self) -> str:
+        return f"{type(self).__name__} {self.name!r}"
+
+    def _require_ctx(self, capability: str) -> Any:
+        if self._ctx is None:
+            raise QgisSdkUiError(
+                f"{self._describe()} must be attached to a surface context "
+                f"before it can use {capability}"
+            )
+        if not self._ctx.has(capability):
+            raise QgisSdkUiError(
+                f"{self._describe()} needs ctx.{capability}, which this host "
+                "does not provide"
+            )
+        return getattr(self._ctx, capability)
+
+
+class Input(Component):
+    """A component that holds one value: the catalogue's eleven inputs.
+
+    Subclasses set ``kind`` (a name from ``parameter_kinds()``) and build the
+    :class:`FieldSpec` that validates ``set_value``. ``name`` is the
+    handler's parameter name; ``required`` marks a field a form refuses to
+    submit empty.
+    """
+
+    prefix = "form"
+    kind: ClassVar[str]
+
+    def __init__(
+        self,
+        name: str,
+        *,
+        label: str | None = None,
+        value: object = None,
+        required: bool = False,
+    ) -> None:
+        super().__init__(name, label=label)
+        self.required = required
+        self._listeners: list[Listener] = []
+        self._value: object = self._default()
+        if value is not None:
+            self.set_value(value)
+
+    @property
+    def spec(self) -> FieldSpec:
+        """The field specification ``set_value`` validates against."""
+        return self._spec()
 
     # -- value ----------------------------------------------------------------------
 
@@ -237,17 +310,17 @@ class Component:
         """Re-read what the component lists; a value no longer listed becomes ``None``."""
         self._refreshed()
 
+    def dispose(self) -> None:
+        super().dispose()
+        self._listeners.clear()
+
     def snapshot(self) -> dict[str, Any]:
-        """The semantic node of this component in a UI snapshot (decision-51)."""
         value = self._value
-        node: dict[str, Any] = {
-            "type": type(self).__name__,
-            "name": self.name,
-            "label": self.label,
-            "objectName": self.object_name,
-            "kind": self.kind,
-            "value": value.to_wire() if isinstance(value, FileRef) else value,
-        }
+        node = super().snapshot()
+        node["kind"] = self.kind
+        node["value"] = value.to_wire() if isinstance(value, FileRef) else value
+        if self.required:
+            node["required"] = True
         node.update(self._details())
         return node
 
@@ -273,17 +346,11 @@ class Component:
         """A subclass's rule beyond the field spec's; returns the value to commit."""
         return value
 
-    def _attached(self) -> None:
-        """Hook: the context is bound."""
-
-    def _detached(self) -> None:
-        """Hook: the context is gone."""
-
     def _refreshed(self) -> None:
         """Hook: re-list and reconcile the value."""
 
-    def _describe(self) -> str:
-        return f"{type(self).__name__} {self.name!r}"
+    def _state(self) -> object:
+        return self._value
 
     def _commit(self, value: object) -> None:
         """Write ``value`` to the widget, store it and notify when it changed."""
@@ -308,24 +375,11 @@ class Component:
             return
         self._store(value)
 
-    def _require_ctx(self, capability: str) -> Any:
-        if self._ctx is None:
-            raise QgisSdkUiError(
-                f"{self._describe()} must be attached to a surface context "
-                f"before it can use {capability}"
-            )
-        if not self._ctx.has(capability):
-            raise QgisSdkUiError(
-                f"{self._describe()} needs ctx.{capability}, which this host "
-                "does not provide"
-            )
-        return getattr(self._ctx, capability)
-
 
 # -- plain values --------------------------------------------------------------------
 
 
-class Text(Component):
+class Text(Input):
     """A line of text; the value is a ``str`` (``""`` when empty)."""
 
     kind = "text"
@@ -334,7 +388,7 @@ class Text(Component):
         return ""
 
 
-class Toggle(Component):
+class Toggle(Input):
     """A check box; the value is a ``bool``."""
 
     kind = "boolean"
@@ -343,7 +397,7 @@ class Toggle(Component):
         return False
 
 
-class Number(Component):
+class Number(Input):
     """A number, bounded when ``range=(low, high)`` is given.
 
     An integral range (or ``integer=True``) stores an ``int`` and renders a
@@ -360,6 +414,7 @@ class Number(Component):
         integer: bool | None = None,
         label: str | None = None,
         value: object = None,
+        required: bool = False,
     ) -> None:
         if range is not None:
             low, high = range
@@ -377,7 +432,7 @@ class Number(Component):
         self.range = range
         self.step = step
         self.integer = bool(integer)
-        super().__init__(name, label=label, value=value)
+        super().__init__(name, label=label, value=value, required=required)
 
     @property
     def kind(self) -> str:  # type: ignore[override]
@@ -398,7 +453,7 @@ class Number(Component):
         return details
 
 
-class Distance(Component):
+class Distance(Input):
     """A distance in metres, 0 or more; the value is a ``float``."""
 
     kind = "metres"
@@ -407,7 +462,7 @@ class Distance(Component):
         return 0.0
 
 
-class Choice(Component):
+class Choice(Input):
     """One of ``options``; the value is the chosen string, the first by default."""
 
     kind = "choice"
@@ -419,11 +474,12 @@ class Choice(Component):
         options: Sequence[str],
         label: str | None = None,
         value: object = None,
+        required: bool = False,
     ) -> None:
         self.options = tuple(options)
         if not self.options:
             raise QgisSdkUiError(f"Choice {name!r} needs at least one option")
-        super().__init__(name, label=label, value=value)
+        super().__init__(name, label=label, value=value, required=required)
 
     def _default(self) -> object:
         return self.options[0]
@@ -441,7 +497,7 @@ class Choice(Component):
         return {"options": list(self.options)}
 
 
-class Colour(Component):
+class Colour(Input):
     """A colour as ``#rrggbb`` or, with ``alpha`` (the default), ``#rrggbbaa``."""
 
     kind = "colour"
@@ -453,9 +509,10 @@ class Colour(Component):
         alpha: bool = True,
         label: str | None = None,
         value: object = None,
+        required: bool = False,
     ) -> None:
         self.alpha = alpha
-        super().__init__(name, label=label, value=value)
+        super().__init__(name, label=label, value=value, required=required)
 
     def _default(self) -> object:
         return "#000000ff" if self.alpha else "#000000"
@@ -476,7 +533,7 @@ class Colour(Component):
 # -- pickers --------------------------------------------------------------------------
 
 
-class _Picker(Component):
+class _Picker(Input):
     """A component that chooses among listed options; the value is an id or ``None``."""
 
     def options(self) -> tuple[Option, ...]:
@@ -519,13 +576,14 @@ class LayerPicker(_Picker):
         kind: Literal["vector", "raster", "any"] = "vector",
         label: str | None = None,
         value: object = None,
+        required: bool = False,
     ) -> None:
         if kind not in ("vector", "raster", "any"):
             raise QgisSdkUiError(
                 f"LayerPicker {name!r}: kind must be vector, raster or any, got {kind!r}"
             )
         self.layer_kind = kind
-        super().__init__(name, label=label, value=value)
+        super().__init__(name, label=label, value=value, required=required)
 
     def _list(self) -> tuple[Option, ...]:
         ctx = self._ctx
@@ -579,12 +637,13 @@ class FieldPicker(_Picker):
         of: LayerPicker,
         label: str | None = None,
         value: object = None,
+        required: bool = False,
     ) -> None:
         if not isinstance(of, LayerPicker):
             raise QgisSdkUiError(f"FieldPicker {name!r}: of= must be a LayerPicker")
         self.of = of
         self._unfollow = of.changed(lambda _layer: self.refresh())
-        super().__init__(name, label=label, value=value)
+        super().__init__(name, label=label, value=value, required=required)
 
     def _list(self) -> tuple[Option, ...]:
         ctx = self._ctx
@@ -627,7 +686,7 @@ class FieldPicker(_Picker):
         return node
 
 
-class CrsPicker(Component):
+class CrsPicker(Input):
     """A coordinate reference system; the value is its authority id (``EPSG:4326``) or ``None``."""
 
     kind = "crs"
@@ -647,7 +706,7 @@ class CrsPicker(Component):
 # -- files ----------------------------------------------------------------------------
 
 
-class _RefInput(Component):
+class _RefInput(Input):
     """A path chosen by the user, held as the ``FileRef`` ``ctx.files`` minted."""
 
     def set_path(self, path: str | PathLike[str]) -> None:
@@ -693,7 +752,7 @@ class _RefInput(Component):
         except (QgisSdkFormError, QgisSdkUiError) as error:
             ctx = self._ctx
             if ctx is not None:
-                ctx.notifications.info(f"{self._describe()}: {error}")
+                ctx.notifications.warning(f"{self._describe()}: {error}")
 
 
 class FileInput(_RefInput):
@@ -711,9 +770,10 @@ class FileInput(_RefInput):
         filters: Sequence[str] = (),
         label: str | None = None,
         value: object = None,
+        required: bool = False,
     ) -> None:
         self.filters = tuple(filters)
-        super().__init__(name, label=label, value=value)
+        super().__init__(name, label=label, value=value, required=required)
 
     def _grant(self, files: Any, path: Path) -> FileRef:
         return files.grant_file(path)
@@ -729,3 +789,87 @@ class DirectoryInput(_RefInput):
 
     def _grant(self, files: Any, path: Path) -> FileRef:
         return files.grant_directory(path)
+
+
+# -- buttons and containers -------------------------------------------------------------
+
+
+class Button(Component):
+    """A push button; ``clicked(listener)`` subscribes, ``click()`` presses it.
+
+    ``text`` is the caption (the label by default). The widget's
+    ``objectName`` is ``buttons/<name>``.
+    """
+
+    prefix = "buttons"
+
+    def __init__(
+        self, name: str, text: str | None = None, *, label: str | None = None
+    ) -> None:
+        super().__init__(name, label=label if label is not None else text)
+        self.text = text if text is not None else self.label
+        self._listeners: list[Callable[[], None]] = []
+
+    def clicked(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Call ``listener()`` on each press; returns the unsubscribe."""
+        self._listeners.append(listener)
+
+        def unsubscribe() -> None:
+            if listener in self._listeners:
+                self._listeners.remove(listener)
+
+        return unsubscribe
+
+    def click(self) -> None:
+        """Press the button: the fake's way to drive what the user would."""
+        for listener in tuple(self._listeners):
+            listener()
+
+    def dispose(self) -> None:
+        super().dispose()
+        self._listeners.clear()
+
+    def snapshot(self) -> dict[str, Any]:
+        node = super().snapshot()
+        node["text"] = self.text
+        return node
+
+    def _from_widget(self, value: object) -> None:
+        self.click()
+
+
+class Column(Component):
+    """Components stacked top to bottom; the plain container of the catalogue."""
+
+    def __init__(
+        self, name: str, children: Sequence[Component], *, label: str | None = None
+    ) -> None:
+        super().__init__(name, label=label)
+        self._children = tuple(children)
+        seen: set[str] = set()
+        for child in self._children:
+            if child.object_name in seen:
+                raise QgisSdkUiError(
+                    f"{self._describe()}: two children named {child.object_name!r}"
+                )
+            seen.add(child.object_name)
+
+    def children(self) -> tuple[Component, ...]:
+        return self._children
+
+    def find(self, name: str) -> Component:
+        """The child (at any depth) whose ``name`` matches, or a refusal by name."""
+        for child in self._children:
+            if child.name == name:
+                return child
+            if isinstance(child, Column):
+                try:
+                    return child.find(name)
+                except QgisSdkUiError:
+                    continue
+        raise QgisSdkUiError(f"{self._describe()} has no child named {name!r}")
+
+    def snapshot(self) -> dict[str, Any]:
+        node = super().snapshot()
+        node["children"] = [child.snapshot() for child in self._children]
+        return node

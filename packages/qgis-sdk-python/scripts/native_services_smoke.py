@@ -219,12 +219,16 @@ def _run_services(prefix: Path) -> NativeServicesReport:
     project = NativeProject(layers, scope)
     settings = NativeSettings(scope, prefix=SETTINGS_PREFIX)
     styles = NativeStyles(layers, scope)
-    delivered: list[str] = []
-    notifications = NativeNotifications(scope, sink=delivered.append)
+    delivered: list[tuple[str, str]] = []
+    notifications = NativeNotifications(
+        scope, sink=lambda n: delivered.append((n.level, n.message))
+    )
     # The default sink writes to the QGIS message log, which QGIS swallows from
-    # Python's stdout, so this run proves it executes without raising rather than
-    # claiming to read the log back.
-    NativeNotifications(scope).info("default message-log sink")
+    # Python's stdout, so this run proves it executes at every level without
+    # raising rather than claiming to read the log back.
+    log = NativeNotifications(scope)
+    log.info("default message-log sink")
+    log.with_action("Retry", "retry").warning("default message-log sink, levelled")
 
     info = layers.open_vector(FIXTURE_DATASET)
     project.add_layer(info.id)
@@ -248,7 +252,11 @@ def _run_services(prefix: Path) -> NativeServicesReport:
     settings.set(SETTINGS_KEY, SETTINGS_VALUE)
     settings_round_trip = settings.get(SETTINGS_KEY) == SETTINGS_VALUE
     notifications.info(NOTIFICATION)
-    notification_delivered = delivered == [NOTIFICATION]
+    notifications.success(NOTIFICATION)
+    notification_delivered = delivered == [
+        ("info", NOTIFICATION),
+        ("success", NOTIFICATION),
+    ]
 
     scope.close()
     try:

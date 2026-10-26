@@ -28,7 +28,14 @@ from typing import Any
 from qgis_sdk.declarations import WIRE_KIND_KEYWORD, ActionDescription
 from qgis_sdk.models import COLOUR_PATTERN, FileRef, QgisSdkFormError, parameter_kinds
 
-__all__ = ["FieldSpec", "coerce_value", "coerce_values", "form_fields", "label_for"]
+__all__ = [
+    "FieldSpec",
+    "coerce_value",
+    "coerce_values",
+    "form_fields",
+    "label_for",
+    "schema_fields",
+]
 
 #: JSON Schema type -> the widget family a host should use.
 _PRIMITIVE_WIDGETS: dict[str, str] = {
@@ -97,13 +104,27 @@ def form_fields(
     overrides the annotation. Unknown marker names are refused rather than
     ignored: a typo in a widget hint should not quietly render a text box.
     """
-    schema = action.request
+    return schema_fields(action.request, owner=f"action {action.id!r}", markers=markers)
+
+
+def schema_fields(
+    schema: Mapping[str, Any],
+    *,
+    owner: str = "form",
+    markers: Mapping[str, str] | None = None,
+) -> tuple[FieldSpec, ...]:
+    """Describe every property of a request ``schema`` in declaration order.
+
+    The rule behind :func:`form_fields`, for a caller holding a schema rather
+    than an action: a page's generated schema, or ``Form.from_schema``.
+    ``owner`` names the schema in refusals.
+    """
     required = set(schema.get("required", ()))
     specs = []
     for name, subschema in schema.get("properties", {}).items():
         specs.append(
             _field(
-                action.id,
+                owner,
                 name,
                 subschema,
                 required=name in required,
@@ -144,7 +165,7 @@ def coerce_values(
 
 
 def _field(
-    action_id: str,
+    owner: str,
     name: str,
     subschema: Mapping[str, Any],
     *,
@@ -156,7 +177,7 @@ def _field(
     intent = concrete.get(WIRE_KIND_KEYWORD) or {}
     if marker is None and intent.get("kind") in _MARKER_WIDGETS:
         marker = intent["kind"]
-    widget = _widget_for(action_id, name, concrete, marker)
+    widget = _widget_for(owner, name, concrete, marker)
     choices: tuple[Any, ...] = ()
     if widget == "choice":
         choices = tuple(concrete["enum"])
@@ -193,14 +214,14 @@ def _concrete(subschema: Mapping[str, Any]) -> tuple[Mapping[str, Any], bool]:
 
 
 def _widget_for(
-    action_id: str, name: str, subschema: Mapping[str, Any], marker: str | None
+    owner: str, name: str, subschema: Mapping[str, Any], marker: str | None
 ) -> str:
     """Pick the widget family for a concrete schema, or refuse the field."""
     if marker is not None:
         widget = _MARKER_WIDGETS.get(marker)
         if widget is None:
             raise QgisSdkFormError(
-                f"action {action_id!r}: field {name} has unknown widget marker "
+                f"{owner}: field {name} has unknown widget marker "
                 f"{marker!r}; use one of {', '.join(_MARKER_WIDGETS)}"
             )
         return widget
@@ -209,7 +230,7 @@ def _widget_for(
     widget = _PRIMITIVE_WIDGETS.get(str(subschema.get("type")))
     if widget is None:
         raise QgisSdkFormError(
-            f"action {action_id!r}: field {name} has no widget for schema "
+            f"{owner}: field {name} has no widget for schema "
             f"{subschema!r}; declare a primitive, an enum or a marker"
         )
     return widget

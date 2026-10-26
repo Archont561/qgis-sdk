@@ -1,59 +1,66 @@
-"""Native form rendering and handler dispatch (TASK-3, acceptance criteria 1-3).
+"""``Form`` mounted under a ``QgsApplication`` (TASK-68 AC 3, 4).
 
-Skips unless Qt and the QGIS gui bindings are importable, which is the honest
-split: the widget mapping itself is pinned by ``test_ui.py`` in the QGIS-free
-suite, and this file only proves the mechanical half - a spec becomes a concrete
-widget, a submitted value is read back, and the declared handler runs with
-coerced arguments.
+Skips unless Qt and the QGIS gui bindings are importable. The tree itself
+is pinned by ``test_ui_form.py`` in the QGIS-free suite; this file proves
+the widget half - a form mounts as labelled rows of the catalogue's QGIS
+widgets, each found by its ``objectName``, a user's edits reach ``values()``
+and ``submit()`` runs the declared handler with coerced arguments - and that
+a ``Dialog`` returning ``Column([Form, Button])`` is what the host shows.
 
-The imports are guarded rather than left to ``importorskip`` because a *broken*
-Qt install raises ``ImportError`` from inside the module (a missing ``libGL`` is
-the usual one, and it says so), and a collection error there would take the whole
-run down instead of reporting what this machine lacks.
-
-The runtime here is a stub rather than ``PluginRuntime``. The adapter reads
-exactly three attributes from it (``description``, ``actions``, ``instance``), so
-a stub states that contract instead of hiding it behind a full plugin setup.
+The imports are guarded rather than left to ``importorskip`` because a
+*broken* Qt install raises ``ImportError`` from inside the module (a missing
+``libGL`` is the usual one, and it says so).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from pathlib import Path
 from typing import Literal
 
 import pytest
+from qgis_sdk.core import PluginRuntime, ResourceScope, UiContext
+from qgis_sdk.declarations import action, plugin
+from qgis_sdk.models import (
+    Colour as ColourInput,
+)
+from qgis_sdk.models import (
+    CrsInput,
+    FieldInput,
+    FileInput,
+    LayerInput,
+    Metres,
+    QgisSdkFormError,
+    Range,
+)
+from qgis_sdk.testing import FakeViewControl, RecordingNotifications
+from qgis_sdk.ui import Button, Column, Form, ViewActions
 
 # The qgis layer: the pickers read QgsProject.instance(), so a bare QApplication
 # is not enough. The environment and bindings path come from tests/conftest.py.
 pytestmark = pytest.mark.qgis
 
 try:
-    from PyQt6.QtWidgets import (
-        QCheckBox,
-        QComboBox,
-        QDialog,
-        QDoubleSpinBox,
-        QLineEdit,
-        QSpinBox,
-    )
+    from qgis.core import QgsProject
     from qgis.gui import (
         QgsColorButton,
         QgsFieldComboBox,
+        QgsFileWidget,
         QgsMapLayerComboBox,
         QgsProjectionSelectionWidget,
     )
-    from qgis_sdk.adapters.qgis import ui as native_ui
-    from qgis_sdk.declarations import action, describe_plugin, plugin
-    from qgis_sdk.models import (
-        Colour,
-        CrsInput,
-        FieldInput,
-        FileInput,
-        LayerInput,
-        Metres,
-        QgisSdkFormError,
-        Range,
+    from qgis.PyQt.QtGui import QColor
+    from qgis.PyQt.QtWidgets import (
+        QCheckBox,
+        QComboBox,
+        QDoubleSpinBox,
+        QFormLayout,
+        QLineEdit,
+        QPushButton,
+        QSpinBox,
+        QWidget,
     )
+    from qgis_sdk.adapters.qgis import native_plugin_context
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native forms need Qt and QGIS: {error}", allow_module_level=True)
 
@@ -62,10 +69,9 @@ except ImportError as error:  # pragma: no cover - depends on the host
 class FormDemo:
     """One action per widget family, with the handler recording what it got."""
 
-    def __init__(self, calls):
-        self.calls = calls
+    calls: list[dict] = []  # noqa: RUF012 - reset by the fixture
 
-    @action(id="demo.plain", title="Plain fields")
+    @action(id="plain", title="Plain fields")
     def plain(
         self,
         name: str,
@@ -74,7 +80,7 @@ class FormDemo:
         enabled: bool,
         mode: Literal["fast", "safe"],
     ) -> str:
-        self.calls.append(
+        FormDemo.calls.append(
             {
                 "name": name,
                 "count": count,
@@ -85,182 +91,198 @@ class FormDemo:
         )
         return name
 
-    @action(id="demo.marked", title="Marked fields")
+    @action(id="marked", title="Marked fields")
     def marked(
-        self,
-        layer_id: LayerInput,
-        working_crs: CrsInput,
-        distance: Metres,
+        self, layer_id: LayerInput, working_crs: CrsInput, distance: Metres
     ) -> str:
-        self.calls.append(
-            {
-                "layer_id": layer_id,
-                "working_crs": working_crs,
-                "distance": distance,
-            }
+        FormDemo.calls.append(
+            {"layer_id": layer_id, "working_crs": working_crs, "distance": distance}
         )
         return layer_id
 
-    @action(id="demo.kinds", title="New kinds")
+    @action(id="kinds", title="New kinds")
     def kinds(
         self,
         layer: LayerInput,
         attribute: FieldInput(of="layer"),
         weight: Range(0.0, 1.0),
-        fill: Colour(),
+        fill: ColourInput(),
     ) -> str:
-        self.calls.append(
+        FormDemo.calls.append(
             {"layer": layer, "attribute": attribute, "weight": weight, "fill": fill}
         )
         return attribute
 
-    @action(id="demo.file", title="A file")
+    @action(id="file", title="A file")
     def file(self, source: FileInput(filters=("*.csv",))) -> str:
+        FormDemo.calls.append({"source": source})
         return source.name
 
 
-@dataclass
-class _StubRuntime:
-    """The three attributes ``NativeForms`` reads, and nothing else."""
-
-    description: object
-    actions: dict = field(default_factory=dict)
-    instance: object | None = None
+GEOJSON = """{"type": "FeatureCollection", "features": [{"type": "Feature",
+"properties": {"name": "a", "kind": "b"}, "geometry": {"type": "Point",
+"coordinates": [21.0, 52.2]}}]}"""
 
 
-@pytest.fixture(scope="module")
-def app(qgis_app):
-    """The session's one application, with QGIS initialised (``tests/layers.py``)."""
-    return qgis_app
-
-
-@pytest.fixture()
-def forms(app):
-    calls: list[dict] = []
-    instance = FormDemo(calls)
-    runtime = _StubRuntime(
-        description=describe_plugin(FormDemo),
-        actions={},
-        instance=instance,
+@pytest.fixture
+def ctx(qgis_app, tmp_path: Path) -> Iterator[UiContext]:
+    """A view context over the native services, with one layer in the project."""
+    FormDemo.calls.clear()
+    scope = ResourceScope()
+    notifications = RecordingNotifications(scope)
+    context = native_plugin_context(
+        scope, settings_prefix="demo.forms", notifications=notifications
     )
-    runtime.actions = {
-        description.id: getattr(instance, description.handler)
-        for description in runtime.description.actions
-    }
-    return native_ui.NativeForms(runtime), calls
+    dataset = tmp_path / "sites.geojson"
+    dataset.write_text(GEOJSON, encoding="utf-8")
+    context.project.add_layer(context.layers.open_vector(dataset).id)
+    runtime = PluginRuntime(FormDemo, context)
+    runtime.start()
+    yield UiContext(
+        notifications,
+        FakeViewControl(),
+        scope.child(),
+        actions=ViewActions(runtime, view_id="test"),
+        layers=context.layers,
+        project=context.project,
+        files=context.files,
+    )
+    runtime.unload()
+    QgsProject.instance().removeAllMapLayers()
 
 
-def test_each_primitive_family_renders_as_its_own_widget(forms) -> None:
-    native, _ = forms
-
-    dialog = native.render("demo.plain")
-
-    assert isinstance(dialog.widget("name"), QLineEdit)
-    assert isinstance(dialog.widget("count"), QSpinBox)
-    assert isinstance(dialog.widget("ratio"), QDoubleSpinBox)
-    assert isinstance(dialog.widget("enabled"), QCheckBox)
-    assert isinstance(dialog.widget("mode"), QComboBox)
+def _row_labels(widget: QWidget) -> list[str]:
+    layout = widget.layout()
+    assert isinstance(layout, QFormLayout)
+    return [
+        layout.itemAt(row, QFormLayout.ItemRole.LabelRole).widget().text()
+        for row in range(layout.rowCount())
+    ]
 
 
-def test_a_marker_renders_a_qgis_picker_and_a_metre_spin_box(forms) -> None:
-    native, _ = forms
+def test_a_form_mounts_as_labelled_rows_of_the_catalogue_widgets(
+    ctx: UiContext,
+) -> None:
+    form = Form.for_action(ctx, "plain")
 
-    dialog = native.render("demo.marked")
+    widget = form.mount()
 
-    assert isinstance(dialog.widget("layer_id"), QgsMapLayerComboBox)
-    assert isinstance(dialog.widget("working_crs"), QgsProjectionSelectionWidget)
-    assert isinstance(dialog.widget("distance"), QDoubleSpinBox)
-    assert dialog.widget("distance").suffix() == " m"
+    assert widget.objectName() == "form"
+    assert _row_labels(widget) == [
+        "Name *",
+        "Count *",
+        "Ratio *",
+        "Enabled *",
+        "Mode *",
+    ]
+    assert isinstance(widget.findChild(QLineEdit, "form/name"), QLineEdit)
+    assert isinstance(widget.findChild(QSpinBox, "form/count"), QSpinBox)
+    assert isinstance(widget.findChild(QDoubleSpinBox, "form/ratio"), QDoubleSpinBox)
+    assert isinstance(widget.findChild(QCheckBox, "form/enabled"), QCheckBox)
+    assert isinstance(widget.findChild(QComboBox, "form/mode"), QComboBox)
+    assert form.field("name").widget is widget.findChild(QLineEdit, "form/name")
 
 
-def test_field_range_and_colour_render_their_qgis_widgets(forms) -> None:
-    native, _ = forms
+def test_markers_and_the_new_kinds_mount_the_qgis_widgets(ctx: UiContext) -> None:
+    marked = Form.for_action(ctx, "marked")
+    kinds = Form.for_action(ctx, "kinds")
+    file = Form.for_action(ctx, "file")
 
-    dialog = native.render("demo.kinds")
+    for form in (marked, kinds, file):
+        form.mount()
 
-    picker = dialog.widget("attribute")
+    assert isinstance(marked.field("layer_id").widget, QgsMapLayerComboBox)
+    assert isinstance(marked.field("working_crs").widget, QgsProjectionSelectionWidget)
+    assert marked.field("distance").widget.suffix() == " m"
+    picker = kinds.field("attribute").widget
     assert isinstance(picker, QgsFieldComboBox)
-    weight = dialog.widget("weight")
-    assert isinstance(weight, QDoubleSpinBox)
+    weight = kinds.field("weight").widget
     assert (weight.minimum(), weight.maximum()) == (0.0, 1.0)
-    assert isinstance(dialog.widget("fill"), QgsColorButton)
-    assert dialog.widget("fill").allowOpacity() is True
+    assert isinstance(kinds.field("fill").widget, QgsColorButton)
+    assert kinds.field("fill").widget.allowOpacity() is True
+    assert isinstance(file.field("source").widget, QgsFileWidget)
+    assert file.field("source").widget.filter() == "CSV (*.csv)"
+
     # The field picker follows the layer picker it belongs to.
-    assert picker.layer() is dialog.widget("layer").currentLayer()
+    (layer_id,) = ctx.project.layer_ids()
+    kinds.field("layer").set_value(layer_id)
+    assert picker.layer() is QgsProject.instance().mapLayer(layer_id)
+    assert [o.id for o in kinds.field("attribute").options()] == ["name", "kind"]
 
 
-def test_a_colour_is_read_back_in_the_wire_spelling(forms) -> None:
-    """Qt names a colour #AARRGGBB; the kind stores #RRGGBBAA."""
-    from PyQt6.QtGui import QColor
+def test_edits_in_the_widgets_are_submitted_coerced_to_the_handler(
+    ctx: UiContext,
+) -> None:
+    form = Form.for_action(ctx, "plain")
+    widget = form.mount()
 
-    native, _ = forms
-    dialog = native.render("demo.kinds")
-    dialog.widget("fill").setColor(QColor(255, 0, 16, 128))
-    dialog.widget("weight").setValue(0.5)
+    widget.findChild(QLineEdit, "form/name").setText("  buffer ")
+    widget.findChild(QSpinBox, "form/count").setValue(3)
+    widget.findChild(QDoubleSpinBox, "form/ratio").setValue(1.5)
+    widget.findChild(QCheckBox, "form/enabled").setChecked(True)
+    widget.findChild(QComboBox, "form/mode").setCurrentIndex(1)
 
-    spec = next(spec for spec in native.fields("demo.kinds") if spec.name == "fill")
-    weight = next(spec for spec in native.fields("demo.kinds") if spec.name == "weight")
-
-    assert native_ui._read(spec, dialog.widget("fill")) == "#ff001080"
-    assert native_ui._read(weight, dialog.widget("weight")) == 0.5
-
-
-def test_file_fields_wait_for_the_form_component(forms) -> None:
-    """Minting a FileRef needs the host authority the ``Form`` helper carries."""
-    native, _ = forms
-
-    with pytest.raises(QgisSdkFormError, match="FileInput component"):
-        native.render("demo.file")
-
-
-def test_submitted_values_are_coerced_and_dispatched_to_the_handler(forms) -> None:
-    native, calls = forms
-    dialog = native.render("demo.plain")
-    dialog.widget("name").setText("  buffer ")
-    dialog.widget("count").setValue(3)
-    dialog.widget("ratio").setValue(1.5)
-    dialog.widget("enabled").setChecked(True)
-    dialog.widget("mode").setCurrentIndex(1)
-
-    result = native.dispatch("demo.plain", dialog.values())
-
-    assert result == "buffer"
-    assert calls == [
+    assert form.values()["name"] == "  buffer "
+    assert form.submit() == "buffer"
+    assert FormDemo.calls == [
         {"name": "buffer", "count": 3, "ratio": 1.5, "enabled": True, "mode": "safe"}
     ]
 
 
-def test_run_dispatches_only_when_the_dialog_is_accepted(forms, monkeypatch) -> None:
-    native, calls = forms
-    dialog = native.render("demo.plain")
-    dialog.widget("name").setText("kept")
-    dialog.widget("mode").setCurrentIndex(1)
-    monkeypatch.setattr(native, "render", lambda action_id: dialog)
-    monkeypatch.setattr(
-        native_ui.DeclaredFormDialog, "exec", lambda self: QDialog.DialogCode.Rejected
-    )
+def test_a_colour_and_a_file_picked_in_their_widgets_reach_the_handler(
+    ctx: UiContext, tmp_path: Path
+) -> None:
+    kinds = Form.for_action(ctx, "kinds")
+    kinds.mount()
+    (layer_id,) = ctx.project.layer_ids()
+    kinds.field("layer").widget.setLayer(QgsProject.instance().mapLayer(layer_id))
+    kinds.field("attribute").widget.setField("kind")
+    kinds.field("weight").widget.setValue(0.5)
+    kinds.field("fill").widget.setColor(QColor(255, 0, 16, 128))
 
-    assert native.run("demo.plain") is None
-    assert calls == []
+    assert kinds.submit() == "kind"
+    assert FormDemo.calls[-1] == {
+        "layer": layer_id,
+        "attribute": "kind",
+        "weight": 0.5,
+        "fill": "#ff001080",
+    }
 
-    monkeypatch.setattr(
-        native_ui.DeclaredFormDialog, "exec", lambda self: QDialog.DialogCode.Accepted
-    )
+    source = tmp_path / "rows.csv"
+    source.write_text("a\n", encoding="utf-8")
+    file = Form.for_action(ctx, "file")
+    file.mount()
+    file.field("source").widget.setFilePath(str(source))
 
-    assert native.run("demo.plain") == "kept"
-    assert calls[-1]["name"] == "kept"
-
-
-def test_an_unknown_action_is_refused(forms) -> None:
-    native, _ = forms
-
-    with pytest.raises(QgisSdkFormError, match="declares no action"):
-        native.render("demo.missing")
+    assert file.submit() == "rows.csv"
+    assert ctx.files.resolve(FormDemo.calls[-1]["source"]) == source.resolve()
 
 
-def test_markers_need_a_running_plugin(forms) -> None:
-    native, _ = forms
-    native._runtime.instance = None
+def test_an_empty_required_field_is_refused_before_the_handler_runs(
+    ctx: UiContext,
+) -> None:
+    form = Form.for_action(ctx, "marked")
+    form.mount()
 
-    with pytest.raises(QgisSdkFormError, match="running plugin"):
-        native.fields("demo.marked")
+    with pytest.raises(QgisSdkFormError, match="layer_id, working_crs are required"):
+        form.submit()
+    assert FormDemo.calls == []
+
+
+def test_a_column_of_form_and_button_is_one_widget_tree(ctx: UiContext) -> None:
+    form = Form.for_action(ctx, "plain", initial={"name": "x", "count": 1})
+    run = Button("run", "Run")
+    results: list[object] = []
+    run.clicked(lambda: results.append(form.submit()))
+    column = Column("dialog", [form, run]).attach(ctx)
+
+    widget = column.mount()
+    widget.findChild(QPushButton, "buttons/run").click()
+
+    assert widget.objectName() == "dialog"
+    assert widget.findChild(QWidget, "form") is form.widget
+    assert results == ["x"]
+    assert FormDemo.calls[0]["name"] == "x"
+
+    ctx.scope.close()
+    assert not run.mounted and not form.mounted

@@ -123,3 +123,52 @@ def test_a_file_name_that_is_a_path_is_refused(
 def test_choosing_a_directory_needs_the_desktop(fake_host: FakeHost) -> None:
     with pytest.raises(QgisSdkUnsupportedCapabilityError):
         fake_host.runtime.actions["choose_export_directory"]()
+
+
+def test_the_buffer_dialog_is_the_buffer_action_as_a_form(fake_host: FakeHost) -> None:
+    """``BufferDialog.build()`` returns a ``Column`` of the action's ``Form`` and
+    one button; pressing it submits through ``ctx.actions`` and closes."""
+    from qgis_sdk.core import UiContext
+    from qgis_sdk.testing import FakeViewControl
+    from qgis_sdk.ui import ViewActions
+    from simple.surfaces import BufferDialog
+
+    source = fake_host.runtime.actions["open_fixture"]()
+    view = FakeViewControl()
+    dialog = BufferDialog()
+    dialog.ctx = UiContext(
+        fake_host.notifications,
+        view,
+        fake_host.runtime.instance.ctx.scope.child(),
+        actions=ViewActions(fake_host.runtime, view_id="test"),
+        layers=fake_host.layers,
+        project=fake_host.project,
+    )
+    dialog.initial = {"distance_metres": 250}
+
+    column = dialog.build()
+    snapshot = column.snapshot()
+    form, run = column.children()
+
+    assert [f["objectName"] for f in snapshot["children"][0]["fields"]] == [
+        "form/layer_id",
+        "form/distance_metres",
+        "form/working_crs",
+    ]
+    assert snapshot["children"][1]["objectName"] == "buttons/run"
+    assert form.values()["distance_metres"] == 250.0
+
+    run.click()  # nothing chosen yet: a warning, the window stays
+    assert fake_host.notifications.records[-1].level == "warning"
+    assert "layer_id, working_crs are required" in fake_host.notifications.messages[-1]
+    assert view.close_requests == 0
+
+    form.set_values({"layer_id": source.id, "working_crs": WORKING_CRS})
+    run.click()
+
+    assert fake_host.notifications.records[-1].level == "success"
+    assert view.close_requests == 1
+    output = next(
+        layer for layer in fake_host.project.layer_ids() if layer != source.id
+    )
+    assert fake_host.layers.layer(output).crs == WORKING_CRS

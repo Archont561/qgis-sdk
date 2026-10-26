@@ -34,15 +34,20 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFormLayout,
     QLineEdit,
+    QPushButton,
     QSpinBox,
+    QVBoxLayout,
     QWidget,
 )
 
 from qgis_sdk.models import QgisSdkFormError, QgisSdkUiError
 from qgis_sdk.ui.components import (
+    Button,
     Choice,
     Colour,
+    Column,
     Component,
     CrsPicker,
     DirectoryInput,
@@ -55,12 +60,13 @@ from qgis_sdk.ui.components import (
     Text,
     Toggle,
 )
+from qgis_sdk.ui.form import Form
 
 from .processing import _qt_filter
 
 __all__ = ["Rendering", "mount"]
 
-#: Spin-box bounds (see ``adapters/qgis/ui.py``): wide enough never to clip a
+#: Spin-box bounds: wide enough never to clip a
 #: value the wire accepts, finite so the widget does not overflow.
 _INT_MIN, _INT_MAX = -(2**31), 2**31 - 1
 _REAL_MAX = 1e15
@@ -316,7 +322,43 @@ def _file(
     return rendering
 
 
+# -- buttons and containers ------------------------------------------------------------------
+
+
+def _button(
+    component: Button, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    button = QPushButton(component.text, parent)
+    rendering = Rendering(button, lambda value: None)
+    _connect(rendering, button.clicked, lambda _checked=False: on_change(None))
+    return rendering
+
+
+def _column(
+    component: Column, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    widget = QWidget(parent)
+    layout = QVBoxLayout(widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    for child in component.children():
+        layout.addWidget(child.mount(widget))
+    return Rendering(widget, lambda value: None)
+
+
+def _form(component: Form, parent: QWidget | None, on_change: OnChange) -> Rendering:
+    widget = QWidget(parent)
+    layout = QFormLayout(widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    for entry in component.fields:
+        label = f"{entry.label} *" if entry.required else entry.label
+        layout.addRow(label, entry.mount(widget))
+    return Rendering(widget, lambda value: None)
+
+
 _BUILDERS: tuple[tuple[type[Component], Callable[..., Rendering]], ...] = (
+    (Button, _button),
+    (Column, _column),
+    (Form, _form),
     (Text, _text),
     (Toggle, _toggle),
     (Number, _number),

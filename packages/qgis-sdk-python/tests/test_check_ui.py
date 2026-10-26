@@ -1,4 +1,4 @@
-"""UI003 and ICON001: Desktop bindings ``check`` refuses before QGIS does (TASK-67)."""
+"""UI001, UI003 and ICON001: native UI ``check`` refuses before QGIS does (TASK-67/68)."""
 
 from __future__ import annotations
 
@@ -117,6 +117,46 @@ def test_a_missing_icon_is_icon001_on_actions_and_surfaces(tmp_path: Path) -> No
     assert findings(source, icons=("present.svg",), tmp_path=tmp_path) == [
         "ICON001:10:@toolbar icon 'missing.svg' is not a file under pkg/icons/",
         "ICON001:15:@toolbar icon '../escape.svg' is not a file under pkg/icons/",
+    ]
+
+
+def test_an_unnamed_interactive_widget_in_a_surface_is_ui001(tmp_path: Path) -> None:
+    source = """
+        from qgis_sdk.ui import Dialog as Window, Form
+
+
+        class Buffer(Window):
+            def build(self):
+                from qgis.PyQt.QtWidgets import QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget
+
+                widget = QWidget()
+                layout = QVBoxLayout(widget)
+                self.name = QLineEdit(widget)
+                self.name.setObjectName("form/name")
+                count = QSpinBox(widget)
+                layout.addWidget(QLabel("Count"))
+                layout.addWidget(count)
+                layout.addWidget(QPushButton("Run", widget))
+                self.form = Form.for_action(self.ctx, "buffer")
+                return widget
+
+            def helper(self):
+                from qgis import gui
+
+                picker = gui.QgsMapLayerComboBox()
+                picker.setObjectName("form/layer")
+                return picker
+
+
+        class NotASurface:
+            def build(self):
+                from qgis.PyQt.QtWidgets import QSpinBox
+
+                return QSpinBox()
+        """
+    assert findings(source, tmp_path=tmp_path) == [
+        "UI001:13:count (QSpinBox) in Buffer.build() has no objectName",
+        "UI001:16:an unassigned QPushButton in Buffer.build() has no objectName",
     ]
 
 

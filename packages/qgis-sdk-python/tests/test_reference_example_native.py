@@ -194,7 +194,7 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
 
     pure = _cli("test", "-q", "-p", "no:faulthandler", cwd=project)
     assert pure.returncode == 0, pure.stdout + pure.stderr
-    assert "17 passed" in pure.stdout
+    assert "18 passed" in pure.stdout
 
     native = _cli(
         "test", "--target", "qgis", "-q", "-p", "no:faulthandler", cwd=project
@@ -248,7 +248,7 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
     qgis_app: Any, project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from qgis.core import QgsProject
-    from qgis_sdk.adapters.qgis.ui import NativeForms
+    from qgis.PyQt.QtWidgets import QPushButton
 
     monkeypatch.syspath_prepend(str(project))
     _forget(PLUGIN)
@@ -303,12 +303,19 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
         assert web_output.renderer().symbol().symbolLayer(0).layerType() == "SimpleFill"
 
         # The native dialog for the same action, dispatched to the same handler.
-        forms = NativeForms(desktop.runtime)
-        dialog = forms.render("buffer")
-        dialog.widget("layer_id").setLayer(source_layer)
-        dialog.widget("distance_metres").setValue(500.0)
-        dialog.widget("working_crs").setCrs(web_output.crs())
-        native_output = forms.dispatch("buffer", dialog.values())
+        surfaces_module = importlib.import_module(f"{PLUGIN}.surfaces")
+        dialog = desktop.runtime.instance.ctx.ui.open(surfaces_module.BufferDialog)
+        dialog.form.field("layer_id").widget.setLayer(source_layer)
+        dialog.form.field("distance_metres").widget.setValue(500.0)
+        dialog.form.field("working_crs").widget.setCrs(web_output.crs())
+        dialog.form.widget.window().findChild(QPushButton, "buttons/run").click()
+        qgis_app.processEvents()
+        native_output = next(
+            layer
+            for layer in QgsProject.instance().mapLayers().values()
+            if layer not in (source_layer, web_output)
+        )
+        native_output = desktop.runtime.instance.ctx.layers.layer(native_output.id())
 
         native_layer = QgsProject.instance().mapLayer(native_output.id)
         assert native_output.geometry_type == "polygon"

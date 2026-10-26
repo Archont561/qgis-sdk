@@ -597,16 +597,21 @@ def _ui_readme(options: ScaffoldOptions) -> str:
 ## Native UI
 
 `{plugin}/ui.py` holds `PingDialog`, a `Dialog` subclass whose `build()` is
-plain PyQt and the only place Qt is imported; `@menu("Plugins/...")` on the
-class puts it in the Plugins menu, `plugin.py` lists it in `surfaces` and
-binds the no-input `open_ping` action to the toolbar, which calls
-`self.ctx.ui.open(PingDialog, initial=...)`. Inside the dialog `self.ctx` is
-a `UiContext`: `self.ctx.actions.ping(...)` dispatches the plugin's own action
-with validation, `self.ctx.view.request_close()` closes the window. A bound
-action with inputs is refused by `qgis-sdk check` (`UI003`): give it a surface
-that collects them. `@toolbar(icon="name.svg")` names a file under
-`{plugin}/icons/` (`ICON001` when it is missing). The starter test drives the
-action under `qgis_sdk.testing.FakeUi` without QGIS.
+plain PyQt and the only place Qt is imported - the escape hatch, kept as the
+starter so nothing is hidden; `Form.for_action(self.ctx, "ping")` plus a
+`qgis_sdk.ui.Button` builds the same window from the action's declaration
+without touching Qt (see the `simple` example's `surfaces.py`).
+`@menu("Plugins/...")` on the class puts it in the Plugins menu, `plugin.py`
+lists it in `surfaces` and binds the no-input `open_ping` action to the
+toolbar, which calls `self.ctx.ui.open(PingDialog, initial=...)`. Inside the
+dialog `self.ctx` is a `UiContext`: `self.ctx.actions.ping(...)` dispatches
+the plugin's own action with validation, `self.ctx.view.request_close()`
+closes the window. `qgis-sdk check` reads the surfaces: every interactive
+widget a `build()` constructs needs `setObjectName` (`UI001`; the catalogue's
+components name theirs), a bound action with inputs needs a surface that
+collects them (`UI003`), and `@toolbar(icon="name.svg")` names a file under
+`{plugin}/icons/` (`ICON001`). The starter test drives the action under
+`qgis_sdk.testing.FakeUi` without QGIS.
 """
 
 

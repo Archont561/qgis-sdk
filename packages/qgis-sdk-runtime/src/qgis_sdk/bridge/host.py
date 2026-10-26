@@ -340,6 +340,12 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
 
 #: Protocol methods deliberately absent from the wire, with the reason. A method
 #: missing from both this mapping and :data:`HOST_OPERATIONS` is a test failure.
+_NOTIFICATION_LEVELS_DEFERRED = (
+    "a level on the message bar; `notifications.info` stays the one wire operation "
+    "until the bridge store slice (TASK-69) adds levelled feedback without moving "
+    "HOST_FINGERPRINT in the middle of the 0.7.0 train"
+)
+
 DEFERRED_HOST_METHODS: Mapping[str, str] = {
     "Layers.selection": (
         "returns every selected feature id; unbounded, and needs the paging the "
@@ -353,6 +359,14 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
         "(the reference plugin's `export_layer`)"
     ),
     "Settings.set": "mutates persisted state; arrives with the mutation slice",
+    "Notifications.success": _NOTIFICATION_LEVELS_DEFERRED,
+    "Notifications.warning": _NOTIFICATION_LEVELS_DEFERRED,
+    "Notifications.critical": _NOTIFICATION_LEVELS_DEFERRED,
+    "Notifications.with_action": (
+        "attaches a button that runs a plugin action; a page draws its own "
+        "buttons over `actions.call` (decision-55), and a host-side button a page "
+        "can press needs the bridge store slice (TASK-69) to carry it"
+    ),
     "Algorithms.execute": (
         "long-running; needs the job and stream surface (TASK-15, TASK-14), not a "
         "request that times out into an unknown outcome"
