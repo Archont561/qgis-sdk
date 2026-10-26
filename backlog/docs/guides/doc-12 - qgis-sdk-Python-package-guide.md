@@ -608,8 +608,104 @@ plugin_class=...)` stands in for the service: `ctx.ui.open(...)` records an
 and `FakeViewControl` records `request_close`. `qgis-sdk new --ui native`
 writes this shape with a passing starter test; `qgis-sdk check` adds `UI003`
 and `ICON001` (a `@toolbar` icon that is not a file under `<package>/icons/`).
-Catalogue components, `Form`, `@on`/`@subscribe` and `.ui` loading are
-later tasks (decision-55); until then `build()` is plain PyQt.
+`Form`, `@on`/`@subscribe` and `.ui` loading are later slices of TASK-68
+(decision-55); `build()` may return plain PyQt or one catalogue component.
+
+### Input components
+
+`qgis_sdk.ui` ships the eleven input components of the catalogue
+(decision-55 point 3). Each is *state first, widget second*: it holds a
+model value without Qt - a layer id, a field name, a CRS authority id, a
+`FileRef`, a number, a `str`, a `bool`, a colour string - and `mount()`
+builds the QGIS widget that mirrors it. Importing `qgis_sdk.ui` loads no
+Qt; the Qt half lives in `qgis_sdk.adapters.qgis.components` and is looked
+up by name when a component is mounted.
+
+| Component | Value | Native widget |
+|---|---|---|
+| `LayerPicker(name, kind="vector"\|"raster"\|"any")` | layer id or `None` | `QgsMapLayerComboBox` (follows the project) |
+| `FieldPicker(name, of=<LayerPicker>)` | field name or `None` | `QgsFieldComboBox` (follows `of`) |
+| `CrsPicker(name)` | `"EPSG:4326"` or `None` | `QgsProjectionSelectionWidget` |
+| `FileInput(name, filters=("*.csv",))` | file `FileRef` or `None` | `QgsFileWidget` |
+| `DirectoryInput(name)` | directory `FileRef` or `None` | `QgsFileWidget` (directory mode) |
+| `Distance(name)` | `float` metres, 0 or more | `QDoubleSpinBox` with ` m` |
+| `Number(name, range=(low, high), step=, integer=)` | `int` for an integral range, else `float` | `QSpinBox`/`QDoubleSpinBox` |
+| `Text(name)` | `str` | `QLineEdit` |
+| `Toggle(name)` | `bool` | `QCheckBox` |
+| `Choice(name, options=(...))` | one of the options (the first by default) | `QComboBox` |
+| `Colour(name, alpha=True)` | `#rrggbbaa` (`#rrggbb` when `alpha=False`) | `QgsColorButton` |
+
+Every component has `name` (the handler's parameter name), `label`,
+`object_name` (`form/<name>`, set on the widget so a test or an agent
+selects it by path), `value()`, `set_value(value)`, `changed(listener)`
+returning the unsubscribe, `refresh()`, `snapshot()` (the semantic node of
+decision-51: `type`, `name`, `label`, `objectName`, `kind`, `value` and the
+component's details such as `minimum`/`maximum`, `options`, `filters`, `of`)
+and `spec` (the `FieldSpec` it validates with). `set_value` refuses what a
+declared form refuses, with the same words (`QgisSdkFormError` from
+`qgis_sdk.ui.coerce_value`), and a refused value changes nothing. Pickers
+add `options()` -> `(Option(id, label), ...)`; a `LayerPicker` refuses an id
+the project does not hold and a `FieldPicker` a name its layer lacks.
+
+**Attach, then mount.** `component.attach(self.ctx)` binds it to the
+surface's `UiContext` (once; a second context is refused): pickers list from
+`ctx.project`/`ctx.layers`, `FileInput`/`DirectoryInput` mint through
+`ctx.files`, and when the context's scope closes every listener is dropped
+and the widget disconnected. `mount(parent=None)` builds the widget and
+returns it (`.widget` afterwards; idempotent); without QGIS it refuses by
+name. When `build()` returns a component the host attaches and mounts it
+for you:
+
+```python
+from qgis_sdk.ui import Dialog, LayerPicker
+
+
+class PickLayer(Dialog):
+    def build(self):
+        self.layer = LayerPicker("layer")
+        self.layer.changed(lambda layer_id: self.ctx.notifications.info(str(layer_id)))
+        return self.layer
+```
+
+Composing several components into one widget is still plain PyQt until
+`Form` lands (68c): `attach(self.ctx)` each, `mount()` each and lay the
+widgets out yourself.
+
+**Files.** `FileInput.set_path(path)` / `DirectoryInput.set_path(path)` mint
+a `FileRef` through `ctx.files` and make it the value - this is what the
+native file widget does when the user picks - so a handler receives a ref,
+never a path (decision-20), and `ctx.files.resolve(ref)` is how it reaches
+the file (see *`ctx.files`* below). `set_value(ref)` accepts a ref `ctx.files`
+can resolve and refuses a stranger; `path()` is the resolved path of the
+current ref.
+
+**Under the fake.** A pure test attaches a component to a `UiContext` built
+over `FakeLayers`/`FakeProject`/`FakeFiles` and never mounts it; the same
+contract tests the runtime runs natively (`tests/ui_component_contract.py`)
+pass against that state. `LayerPicker.refresh()` re-reads the project under
+the fake (natively `QgsMapLayerComboBox` follows the project on its own);
+`kind="raster"` lists nothing under the fake until the all-layer-types
+service lands (TASK-77). Note the names `FileInput`, `DirectoryInput` and
+`Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
+handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
+surface shows); import the one you mean, or alias.
+
+### `ctx.files`
+
+`ctx.files` is the plugin's door from a `FileRef` to the filesystem, and the
+one place its own code mints refs: `grant_file(path, operations=("read",),
+overwrite=False)`, `grant_directory(path)` and `resolve(ref, operation="read")
+-> Path`. It is backed by the runtime's one `HostAuthority` (decision-20),
+the same instance the Processing toolbox mints picker refs through and the
+WebEngine host (`HostServices.from_context`) grants a page's refs with, so a
+ref a handler received from any of them resolves here - and only here: a
+forged ref, a ref minted for another view, a read ref asked to write or a
+ref whose grant has expired is refused (`QgisSdkUnknownHandleError`,
+`QgisSdkGrantRefusedError`, ...). Closing the plugin's scope revokes what the
+service minted. `qgis_sdk.testing.FakeFiles(scope)` is the same class over a
+private authority (there is no simpler rule to fake); `granted` lists its
+live refs. `UiContext` carries `files`, `layers` and `project` as well, so a
+surface's components reach them without the plugin context.
 
 ## Processing algorithms and safe outputs
 
@@ -1632,11 +1728,33 @@ published for the bridge, and no `ts-v*` tag exists.
   call and a form use to refuse a value; `parameter_kind` keeps its name and
   now delegates to `qgis_sdk.declarations.resolve_kind`.
 
-Still to land in 0.7.0 from the same task: the catalogue input components
-(`LayerPicker`, `FieldPicker`, `CrsPicker`, `FileInput`, `DirectoryInput`,
-`Distance`, `Number`, `Text`, `Toggle`, `Choice`, `Colour`), the `Form`
-helper replacing `NativeForms`/`DeclaredFormDialog`, `ctx.files` resolution
-of a `FileRef` from plugin code, notification levels and `with_action`.
+**Input components and `ctx.files` (TASK-68, slice 68b).**
+
+- `qgis_sdk.ui` exports the eleven input components (`LayerPicker`,
+  `FieldPicker`, `CrsPicker`, `FileInput`, `DirectoryInput`, `Distance`,
+  `Number`, `Text`, `Toggle`, `Choice`, `Colour`), `Component`, `Option`
+  and `coerce_value`; see *Input components* above. `Surface.build()` may
+  return a component; the host attaches and mounts it.
+- `PluginContext` gained the `files` capability (`qgis_sdk.services.Files`,
+  implemented by `qgis_sdk.files.FilesService`); `UiContext` gained `files`,
+  `layers` and `project`. A context that lacks them refuses by name as
+  before, and `has("layers")` on a `UiContext` is now a real probe rather
+  than a `ValueError`.
+- The Desktop host builds one `HostAuthority` per runtime and hands it to
+  Processing (`NativeProcessing(authority=)`), to `ctx.files` and - through
+  `HostServices.from_context`, which now defaults to the context's
+  `files.authority` - to the WebEngine host. A host that built its own
+  `HostServices(authority=...)` keeps it; pass none to share.
+- `qgis_sdk.testing.FakeFiles`.
+- Form coercion (`coerce_values`, and so `UiContext.actions`, the declared
+  form dialog and the bridge) now refuses a negative `Metres` value
+  ("a distance of 0 or more metres"), matching the spin box and the
+  Processing parameter; refusal messages keep their `action '<id>': field
+  <name> expects ...` shape.
+
+Still to land in 0.7.0 from the same task (slice 68c): the `Form` helper
+replacing `NativeForms`/`DeclaredFormDialog` (which still refuses file and
+directory fields by name), notification levels and `with_action`.
 
 ## 0.6.0 migration notes
 
