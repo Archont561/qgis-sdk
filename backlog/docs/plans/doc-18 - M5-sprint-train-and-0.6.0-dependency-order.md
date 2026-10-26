@@ -46,7 +46,7 @@ What 0.5.0 did **not** do, because this milestone has to finish it:
 | [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | Done (#96) | after 63 |
 | [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration (re-sliced, see sprint 4) | TASK-64 | Done (#97) | after 64 |
 | [TASK-67](../../tasks/task-67%20-%20Bind-actions-and-Dialog-Dock-surfaces-to-the-Desktop-with-toolbar-menu-shortcut-ctx.ui.open-and-UiContext.actions.md) desktop bindings + surfaces | TASK-64 | Done (#98) | after 64 |
-| [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) 0.6.0 gate | TASK-31 ✓, 58 ✓, 59 ✓, 61 ✓, 62 ✓, 63–67 ✓ | In Progress (gate run 2026-10-26, awaiting "Release 0.6.0") | release gate |
+| [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) 0.6.0 gate | TASK-31 ✓, 58 ✓, 59 ✓, 61 ✓, 62 ✓, 63–67 ✓ | Done (released 2026-10-26: `python-v0.6.0` + `ts-v0.4.0` on `0adb47a`) | release gate |
 
 ## 3. Sprint train
 
@@ -131,8 +131,10 @@ commits inside keep the slices reviewable.
   `2763cad` (doc-14 "0.6.0 release gate"): static gate, suites, coverage,
   twelve opt-in harnesses, the 0.5-style project under `check`, build +
   clean install on CPython 3.11.2, fingerprints unchanged since
-  `ts-v0.3.0`; TASK-67 closed Done (#98). Stamp, tags and publish wait for
-  the authorization.
+  `ts-v0.3.0`; TASK-67 closed Done (#98). Authorised the same day
+  ("release"): stamp PR #100 → `0adb47a`, tags `python-v0.6.0` +
+  `ts-v0.4.0` on it, both `release.yml` runs green, PyPI hashes equal to
+  the locally built wheels. **m-5 is closed**; m-6 ([doc-19](doc-19%20-%20M6-sprint-train-and-0.7.0-dependency-order.md)) opens with TASK-68.
 
 ## 4. Hygiene done at sprint start
 

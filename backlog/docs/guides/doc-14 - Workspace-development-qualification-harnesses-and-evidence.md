@@ -946,8 +946,31 @@ carry 0.5.0. Stamping, tagging and publishing wait for an explicit
   new --ui native --web vanilla` writes `qgis-sdk-runtime>=0.6,<0.7`,
   `qgis-sdk-tools>=0.6,<0.7` and `"@archont561/qgis-sdk": "0.4.0"`, and
   `check` is clean.
-- **Released afterwards.** Recorded once the tags' `release.yml` runs
-  have finished (see the TASK-60 notes).
+- **Released afterwards.** PR #100 merged as `0adb47a`; the annotated tags
+  `python-v0.6.0` and `ts-v0.4.0` (release notes in the annotations) on
+  that one commit ran `release.yml` twice: 40381881731 (`build`, `conda`,
+  `pypi`, `github-release` succeeded; `npm`, `github-packages` skipped) and
+  40381881508 (`build`, `npm`, `github-packages`, `github-release`
+  succeeded; `conda`, `pypi` skipped). PyPI serves `qgis-sdk 0.6.0`
+  (`b6861c99…04f4`), `qgis-sdk-runtime 0.6.0` (`8d5143c4…4cb3`) and
+  `qgis-sdk-tools 0.6.0` (`10894bf4…842f`) - the same hashes as the wheels
+  built here before the merge, so the build is reproducible; `pip install
+  qgis-sdk==0.6.0` from the index into a fresh CPython 3.11.2 venv (about
+  four minutes after upload, once the simple index caught up with the JSON
+  API) resolves runtime and tools at 0.6.0 with `pip check` clean, and
+  `qgis-sdk targets` / `new --ui native` / `check` run from the installed
+  package. npm serves `@archont561/qgis-sdk@0.4.0` and the alias
+  `qgis-sdk@0.4.0` as `latest`; `bun add` of both resolves the alias to the
+  scoped package's objects, `QgisSdk.fromBridgeSchema` is callable and
+  `@archont561/qgis-sdk/host` exports the unchanged `HOST_FINGERPRINT`. The
+  GitHub Releases carry three wheels, `qgis-sdk-0.6.0-pyh38154c1_0.conda`,
+  `qgis-sdk-runtime-0.6.0-pyh4616a5c_0.conda`,
+  `qgis-sdk-tools-0.6.0-pyh4616a5c_0.conda` and `SHA256SUMS` (Python), the
+  two tarballs and `SHA256SUMS` (TypeScript). prefix.dev uploads succeeded
+  per the job log; that channel and the release-asset CDN are not reachable
+  from the sandbox, so they are attested by the runs only. Still open for
+  the owner: yank the `0.0.0` placeholders of the runtime and the tools on
+  PyPI, deprecate the `0.0.0-stage` npm versions.
 
 ## Split release pipeline rehearsal (TASK-57 AC 3)
 
