@@ -16,7 +16,7 @@ body, not in task fields ([doc-10](../doc-10%20-%20Backlog-conventions-vocabular
 
 Expected from 0.6.0: the generated host (`host()`, grants in pyproject,
 `register_host_operations(only=)`) and the generated schema module. Expected
-from 0.7.0: the standard surfaces and `LogPanel`, the console session
+from 0.7.0: the catalogue and `LogView`, the console session
 (decision-48). What is missing, and what this milestone adds ([decision-49](../../decisions/decision-49%20-%20Expose-the-runtime-to-agents-over-a-loopback-transport-with-the-MCP-server-in-the-tools-for-developers-and-users-alike.md)):
 
 | Gap | Owner |
@@ -52,7 +52,7 @@ from 0.7.0: the standard surfaces and `LogPanel`, the console session
 - **Sprint 3: TASK-76.** `enabled`/`actions`/`grants`/annotations baked by
   `build`; the Agent access surface and menu binding rendered only when
   enabled; consent list, ask-each-time, URL, Copy client config (`uvx` and
-  `pipx` forms), Rotate token, indicator, `LogPanel` audit, first-connection
+  `pipx` forms), Rotate token, indicator, `LogView` audit, first-connection
   notice; the build-install harness proving a disabled plugin has no
   listening code; the `uvx` route rehearsed once against an index and
   recorded in doc-14. **TASK-79** rides as a second series: the snapshot

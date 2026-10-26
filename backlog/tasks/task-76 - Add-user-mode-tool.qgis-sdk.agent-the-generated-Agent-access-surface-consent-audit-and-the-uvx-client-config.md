@@ -18,7 +18,7 @@ ordinal: 76000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-decision-49 point 4. [tool.qgis-sdk.agent] enabled/actions/grants/annotations baked by build; build renders the Agent access standard surface bound to the plugin menu only when enabled: off by default per plugin and profile, consent list (author allowlist intersected with user ticks, destructive tools optionally ask each time), URL, Copy client config (uvx --from 'qgis-sdk-tools[mcp]' qgis-sdk mcp --connect ... --token-file ..., and the pipx form), Rotate token, active-session indicator, every call in the LogPanel, message-bar notice on first connection. One endpoint per plugin. A plugin without enabled = true carries no listening code.
+decision-49 point 4. [tool.qgis-sdk.agent] enabled/actions/grants/annotations baked by build; build renders the Agent access Dialog surface (decision-55) bound to the plugin menu only when enabled: off by default per plugin and profile, consent list (author allowlist intersected with user ticks, destructive tools optionally ask each time), URL, Copy client config (uvx --from 'qgis-sdk-tools[mcp]' qgis-sdk mcp --connect ... --token-file ..., and the pipx form), Rotate token, active-session indicator, every call in the LogView, message-bar notice on first connection. One endpoint per plugin. A plugin without enabled = true carries no listening code.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

@@ -22,7 +22,7 @@ the author to say which hosts a plugin targets.
    ["desktop", "server", "app"]` (default `["desktop"]`). The same class,
    actions, jobs, streams and providers run on every declared host; a
    capability a host lacks refuses by name (decision-39). `check` gains
-   `HOST001` (a Desktop-only declaration - `@toolbar`, `@menu`, `dialog=`,
+   `HOST001` (a Desktop-only declaration - `@toolbar`, `@menu`, a `Dialog`/`Dock` surface,
    web view - on a plugin whose hosts exclude Desktop and that has no
    Desktop host at all is fine; on a server-only plugin it is a finding) and
    `HOST002` (a server declaration on a plugin without the server host).
@@ -46,7 +46,7 @@ the author to say which hosts a plugin targets.
    context without an `iface`, starts the runtime, and - with `gui=True` -
    provides a main window with a canvas so the `canvas` service of
    decision-54 and the Desktop-style bindings (`@toolbar`, `@menu`,
-   `dialog=`, `dock=`) attach to the app's own window. `qgis-sdk run`
+   `Dialog`/`Dock` surfaces) attach to the app's own window. `qgis-sdk run`
    discovers QGIS (the dev discovery) and launches the app with the right
    environment; `build --target app` produces a Python distribution with a
    console-script launcher rather than a plugin ZIP, with the same vendoring

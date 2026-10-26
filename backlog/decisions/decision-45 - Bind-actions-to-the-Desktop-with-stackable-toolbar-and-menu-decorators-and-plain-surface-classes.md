@@ -97,3 +97,14 @@ order the decorators were written in.
   action (always-visible panels). They need a surface that no action opens;
   if wanted, that is a `panels = [...]` class attribute in the style of
   `providers`, and a later amendment.
+
+## Amendment (2026-10-26, decision-55)
+
+Points 1, 2 and 5 stand. Point 3 is replaced by decision-55's trigger rule:
+a bound action with typed inputs no longer opens a generated form; it needs a
+surface of its own or is a `UI003` finding. Point 4 is replaced: there is no
+`dialog=`/`dock=` on `@action`; a surface is a `Dialog` or `Dock` subclass
+(or any `QWidget` class taking `ctx`) listed in `surfaces = [...]` on the
+plugin, and `@menu`/`@toolbar`/`@shortcut` mark surface classes as well as
+actions. `self.ctx` on a surface is an instance attribute bound by the runtime
+before `build()`. An action opens a surface only through `self.ctx.ui.open`.

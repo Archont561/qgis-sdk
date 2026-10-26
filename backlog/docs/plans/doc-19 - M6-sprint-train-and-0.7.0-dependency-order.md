@@ -24,7 +24,8 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
 
 | Gap | Owner |
 | --- | --- |
-| Seven widget families, no file/directory/field/range/colour/enum kinds; one Qt dialog, no progress dock or log panel; `ctx.notifications.info` only | **TASK-68** |
+| Seven widget families, no file/directory/field/range/colour/enum kinds; `NativeForms` is the only native UI the SDK offers; `ctx.notifications.info` only | **TASK-68** |
+| No way to wire a widget signal or a stream to a surface method without raw Qt bookkeeping; no containers, feedback or buttons; no fake rendering of surfaces; no `Custom` escape hatch (decision-55) | **TASK-96** |
 | `./react` hooks are React-shaped; no Vue or Svelte path; the vanilla template re-implements the hooks' logic by hand | **TASK-69** |
 | No components, no theme tokens, no Storybook; the page looks like a browser inside QGIS | **TASK-70** |
 | No docs site; guides live in the backlog; the Storybook build has nowhere to publish | **TASK-43** |
@@ -36,12 +37,13 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
 | Task | Declared dependencies | Language | Startable |
 | --- | --- | --- | --- |
 | [TASK-69](../../tasks/task-69%20-%20Replace-the-react-internals-with-a-framework-free-store-core-and-add-vue-and-svelte-adapters.md) store core + `./vue` + `./svelte` | TASK-66 | TypeScript | at milestone start |
-| [TASK-68](../../tasks/task-68%20-%20Add-file-directory-field-range-colour-and-enum-parameter-kinds-and-the-standard-native-surfaces.md) kinds + standard surfaces | TASK-67, TASK-63 | Python | at milestone start |
+| [TASK-68](../../tasks/task-68%20-%20Add-file-directory-field-range-colour-and-enum-parameter-kinds-the-catalogue-input-components-and-the-Form-helper.md) kinds + input components + `Form` | TASK-67, TASK-63 | Python | at milestone start |
+| [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md) wiring + mixins + containers + feedback + `Custom` | TASK-67, TASK-68 | Python | after 68 |
 | [TASK-73](../../tasks/task-73%20-%20Add-qgis_sdk.console-ConsoleSession-over-the-curated-services-PluginHandle-and-PluginRuntime.algorithms.md) `qgis_sdk.console` | TASK-63, TASK-64 | Python | at milestone start |
 | [TASK-77](../../tasks/task-77%20-%20Declare-externals-with-a-startup-probe-vendor-pure-Python-packages-in-build-and-bucket-imports-in-check.md) externals probe + pure-Python vendoring | TASK-64 | Python | at milestone start |
 | [TASK-70](../../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md) `qgis-sdk-ui` + `ui` release scope | TASK-69, TASK-64 | TypeScript + `release.py` | after 69 |
 | [TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md) docs site | — | Astro Starlight | any time; placed last so it publishes the Storybook build |
-| [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release.md) 0.7.0 gate | TASK-60, 68, 69, 70, 73, 77, 43 | — | release gate |
+| [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release.md) 0.7.0 gate | TASK-60, 68, 96, 69, 70, 73, 77, 43 | — | release gate |
 | [TASK-72](../../tasks/task-72%20-%20Promote-Vue-and-Svelte-to-Tier-1-with-scaffold-templates-and-harness-coverage.md) Vue/Svelte Tier 1 | TASK-69, TASK-70 | — | **unscheduled**, no milestone |
 
 ## 3. Sprint train
@@ -54,11 +56,12 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   behaviour suite run against the core and through each adapter; the Tier 1
   / Tier 2 table in doc-13 and the README. Bridge-only; no Python change.
 - **Sprint 2: TASK-68.** The six kinds end to end (marker, widget family,
-  Qt widget, Processing parameter, JSON-schema annotation; the describer
-  refuses a kind missing any of the four); `DeclaredForm`,
-  `JobProgressDock`, `LogPanel` through `dialog=`/`dock=`; `ctx.ui.form`;
-  notification levels and `with_action`; the example takes one new kind;
-  doc-12's 0.7.0 note. **TASK-73** rides in the same pull request as a
+  catalogue input, Processing parameter, JSON-schema annotation; the
+  describer refuses a kind missing any of the four); the eleven input
+  components wrapping QGIS widgets, model-valued, stream-refreshed, with
+  fake renderings; `Form.for_action`/`from_schema`/`fields`; `NativeForms`
+  removed with the migration in doc-12's 0.7.0 note; notification levels
+  and `with_action`; the example builds its buffer dialog from `Form`. **TASK-73** rides in the same pull request as a
   second commit series: `qgis_sdk.console.connect()`, `ConsoleSession`,
   `PluginHandle`, `DesktopLifecycleAdapter.console()`,
   `PluginRuntime.algorithms`, the dev recipe and the doc-12 console section.
@@ -66,15 +69,20 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   one: externals as tables with the startup probe in the generated
   `classFactory`, `metadata.txt` rendering, `vendor = [...]` with DEP003/
   DEP004, import buckets in `check`. Python-only; swaps with sprint 1 freely.
-- **Sprint 3: TASK-70.** `packages/qgis-sdk-ui` as a workspace member: the
-  six web components on the stores, `/react`, `/vue`, `/svelte` wrappers,
+- **Sprint 3: TASK-96.** `@on`/`@subscribe`/`ctx.on`, `on_accept`/`on_close`,
+  `ui=` loading, `RunsJobs`/`SubscribesStreams`/`AcceptCancel`, the
+  containers, feedback and button components, `Custom`, the QWidget-class
+  surface form, `ui_snapshot` under the fake, echo flag, UI002/UI004; the
+  example's results panel becomes a `Dock` built from the catalogue.
+- **Sprint 4: TASK-70.** `packages/qgis-sdk-ui` as a workspace member: the
+  web components named as the native catalogue on the stores, `/react`, `/vue`, `/svelte` wrappers,
   `--qgis-sdk-*` tokens seeded by `host()`, Storybook on
   `createBridgeHarness` with portable stories as fixtures, the `ui` scope in
   `release.py` (`stamp`, `verify-versions` peer-range check, `plan`),
   `files` whitelist, README per decision-29; the Tier 1 templates opt in
   through one import; decision-16 promoted. The webengine palette test
   needs a QGIS host (Linux CI has one).
-- **Sprint 4: TASK-43.** The Starlight site from the backlog guides with
+- **Sprint 5: TASK-43.** The Starlight site from the backlog guides with
   the Storybook static build mounted under it, deployed by a `docs.yml`
   workflow to GitHub Pages; the root README gains the docs badge and link
   and loses nothing else (decision-29).

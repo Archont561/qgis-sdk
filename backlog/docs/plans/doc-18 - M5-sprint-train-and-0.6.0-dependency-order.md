@@ -41,7 +41,7 @@ What 0.5.0 did **not** do, because this milestone has to finish it:
 | [TASK-66](../../tasks/task-66%20-%20Generate-the-typed-bridge-schema-module-and-add-QgisSdk.fromBridgeSchema.md) typed schema module + `fromBridgeSchema` | TASK-61 ✓ | To Do | **yes** (independent of 63) |
 | [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | To Do | after 63 |
 | [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration | TASK-64 | To Do | after 64 |
-| [TASK-67](../../tasks/task-67%20-%20Bind-actions-to-the-Desktop-with-toolbar-menu-shortcut-and-action-named-surfaces.md) desktop bindings + surfaces | TASK-64 | To Do | after 64 |
+| [TASK-67](../../tasks/task-67%20-%20Bind-actions-and-Dialog-Dock-surfaces-to-the-Desktop-with-toolbar-menu-shortcut-ctx.ui.open-and-UiContext.actions.md) desktop bindings + surfaces | TASK-64 | To Do | after 64 |
 | [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) 0.6.0 gate | TASK-31 ✓, 58 ✓, 59 ✓, 61 ✓, 62, 63–67 | To Do | release gate |
 
 ## 3. Sprint train
@@ -79,9 +79,11 @@ commits inside keep the slices reviewable.
   guides describe the clean project; `QGIS_SDK_SCAFFOLD_DESKTOP=1`,
   `QGIS_SDK_SCAFFOLD_WEB=1` and `test-reference-example` pass.
 - **Sprint 5: TASK-67.** `@toolbar`/`@menu`/`@shortcut` stacked on `@action`,
-  `describe_bindings(cls)` outside `describe_plugin`, the trigger rules (no
-  inputs → run; inputs → `NativeForms`; job → message bar; `dialog=`/`dock=`
-  → a plain surface class with `build() -> QWidget`), icons through
+  and on `Dialog`/`Dock` surface classes, `surfaces = [...]`,
+  `describe_bindings(cls)` outside `describe_plugin`, the trigger rule (no
+  inputs → run; job → message bar; typed inputs without a surface → UI003,
+  never a generated dialog; decision-55), `ctx.ui.open`,
+  `UiContext.actions`, icons through
   `qgis_sdk.resources`, `qgis-sdk new --ui native`; decision-12 promoted
   as narrowed. `QGIS_SDK_DESKTOP_ADAPTER=1` harness. **Separable:** if
   0.6.0 must ship earlier, this sprint moves to m-6 ahead of TASK-68.
@@ -97,5 +99,5 @@ commits inside keep the slices reviewable.
 - m-6 re-pointed to the UI toolkit (0.7.0) and m-7 created for the deferred
   native-compute research (0.8.0; since re-pointed to agent access, the
   research is m-8 at 0.9.0, since 2026-10-26 m-11 at 1.1.0); TASK-32 rewritten, TASK-71 created,
-  TASK-10 moved ([m-6](../../milestones/m-6%20-%200.7.0-%E2%80%94-ui-toolkit-declaration-kinds%2C-native-surfa.md), [m-7](../../milestones/m-7%20-%200.8.0-%E2%80%94-agent-access-loopback-transport%2C-mcp-serve.md)).
+  TASK-10 moved ([m-6](../../milestones/m-6%20-%200.7.0-%E2%80%94-ui-toolkit-parameter-kinds%2C-curated-compon.md), [m-7](../../milestones/m-7%20-%200.8.0-%E2%80%94-agent-access-loopback-transport%2C-mcp-serve.md)).
 - Pending: the TASK-62 closure (sprint 1, first commit).

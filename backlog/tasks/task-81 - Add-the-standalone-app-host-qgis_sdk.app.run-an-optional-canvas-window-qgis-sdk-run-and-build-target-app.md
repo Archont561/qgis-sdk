@@ -23,7 +23,7 @@ decision-52 points 1, 3, 4. qgis_sdk.app.run(PluginClass, gui=False|True, argv=)
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A plugin runs headless through qgis_sdk.app.run with every non-desktop service working and ctx.host == app, and with gui=True its @toolbar/@menu/dialog= bindings attach to the app window (qgis native tests, offscreen).
+- [ ] #1 A plugin runs headless through qgis_sdk.app.run with every non-desktop service working and ctx.host == app, and with gui=True its @toolbar/@menu bindings on actions and Dialog/Dock surfaces attach to the app window (qgis native tests, offscreen).
 - [ ] #2 qgis-sdk run starts the app from a scaffolded project with the discovered QGIS environment on Linux and Windows (devtools harness; Windows row recorded or blocked per TASK-33); build --target app produces an installable distribution whose launcher runs the app, with externals probed and pure-Python packages vendored (build-install harness).
 - [ ] #3 The reference example gains an app entry; doc-12 documents the app host, its lifecycle and the difference from a Desktop plugin; the bridge is unchanged and shown so.
 <!-- AC:END -->

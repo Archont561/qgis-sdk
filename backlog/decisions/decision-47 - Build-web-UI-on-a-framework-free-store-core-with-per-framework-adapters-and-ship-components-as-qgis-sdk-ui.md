@@ -86,3 +86,11 @@ adapters.
   Cost deferred: Vue and Svelte scaffold templates and their harness time.
 - Deliberately not included: a general widget library, SSR, a Storybook per
   framework, framework-native reimplementations of the components.
+
+## Amendment (2026-10-26, decision-55)
+
+Component names mirror the native catalogue of decision-55: the web
+component `qgis-declared-form` is `qgis-form`, and the set grows to the names
+listed there (`DirectoryInput`, `Distance`, `Choice`, `LogView`,
+`RunButton`). The store core, the adapters and the package split are
+unchanged.

@@ -25,5 +25,5 @@ decision-47 points 1, 2 and 5 (amending decision-46 point 3). The bridge root ex
 <!-- AC:BEGIN -->
 - [ ] #1 The four stores are typed end to end from the generated Operations/Streams and the host manifest, work against createBridgeHarness, and HostQueryStore exposes the refusal when the grant is absent; a behaviour test suite runs once against the core and once through each adapter and passes identically (bun tests).
 - [ ] #2 ./react keeps its exported names and types (existing react.test.ts passes unchanged), ./vue and ./svelte exist as subpaths with optional peers, each with its own Vitest project; a consumer that imports only ./react has no vue or svelte in its bundle (build output check); typecheck, Biome and coverage are green.
-- [ ] #3 The React and vanilla scaffold templates use the stores and DeclaredForm/LayerPicker bindings in place of the bare button; the scaffold-web harness passes; doc-13 documents the stores, the three adapters, the vanilla path and the Tier 1 / Tier 2 table.
+- [ ] #3 The React and vanilla scaffold templates use the stores and Form/LayerPicker bindings in place of the bare button; the scaffold-web harness passes; doc-13 documents the stores, the three adapters, the vanilla path and the Tier 1 / Tier 2 table.
 <!-- AC:END -->

@@ -57,12 +57,12 @@ core pins only `typer`.
 4. **User mode.** The author opts the plugin in with
    `[tool.qgis-sdk.agent] enabled = true`, `actions = [...]`, `grants =
    [...]` and per-action annotations, baked into the build. `build`
-   renders an **Agent access** surface (decision-45/46 standard surface)
+   renders an **Agent access** surface (a `Dialog` of decision-55)
    bound to the plugin's menu: off by default per plugin and profile; a
    consent list (author allowlist ∩ user ticks; destructive tools may be
    set to "ask each time"); URL, **Copy client config** and **Rotate
    token** buttons; an indicator while a session is active; every call in
-   the plugin's `LogPanel`; a message-bar notice on first connection. The
+   the plugin's `LogView`; a message-bar notice on first connection. The
    copied config launches the same tools server without touching QGIS's
    Python: `uvx --from "qgis-sdk-tools[mcp]" qgis-sdk mcp --connect
    <url> --token-file <path>` (or the `pipx` equivalent). One endpoint per

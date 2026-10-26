@@ -6,11 +6,13 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T10:01:00Z'
+updated_date: '2026-10-26T11:01:00Z'
 labels: []
 milestone: m-7
 dependencies:
   - TASK-75
   - TASK-68
+  - TASK-96
 type: enhancement
 ordinal: 79000
 ---
@@ -23,7 +25,7 @@ decision-51. qgis_sdk.ui.snapshot: JSON (canonical, diffable) + PNG of one or ev
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A DeclaredForm snapshot lists every declared field with stable ids, role, value, label and declared link, is byte-identical across two captures, and a custom surface with an unnamed widget yields UI001 (qgis native tests, offscreen).
+- [ ] #1 A Form snapshot lists every declared field with stable ids, role, value, label and declared link, with a semantic node per catalogue component in front of the Qt role, is byte-identical across two captures, and a custom surface with an unnamed widget yields UI001 (qgis native tests, offscreen).
 - [ ] #2 dev.ui.act fills a form and presses Run through QTest and the action runs with the typed values; a re-snapshot shows the new state; act is absent from a user-mode tools list (devtools harness, scripted MCP client).
 - [ ] #3 ui_snapshot(...).approve() writes JSON and PNG, a structural change fails with a readable diff, a pixel-only change does not; the snapshot never includes widgets outside the plugin's scope (native test with a second plugin loaded); doc-12 documents the format and the tools.
 <!-- AC:END -->

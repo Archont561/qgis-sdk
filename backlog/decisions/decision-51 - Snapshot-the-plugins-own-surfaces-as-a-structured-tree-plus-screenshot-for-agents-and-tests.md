@@ -62,3 +62,12 @@ the `dev.*` agent namespace of decision-49 and to tests.
 - Scheduled as TASK-79 in m-7 after TASK-75; the `objectName` rule is folded
   into TASK-68's generated surfaces so ids are stable from the first release
   of the surfaces.
+
+## Amendment (2026-10-26, decision-55)
+
+Surfaces are the `Dialog`/`Dock` classes of decision-55 rather than
+action-named classes; the snapshot tree gains a semantic node per catalogue
+component (`LayerPicker name=layer value=...`) in front of the Qt-role
+fallback, and `dev.ui.open` takes a surface class name from `surfaces =
+[...]`. The "no YAML authoring DSL" rule stands: the catalogue is Python
+classes composed in `build()`.
