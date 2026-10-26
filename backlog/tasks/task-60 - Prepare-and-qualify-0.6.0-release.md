@@ -3,15 +3,15 @@ id: TASK-60
 title: Prepare and qualify 0.6.0 release
 status: To Do
 assignee: []
-created_date: '2026-10-25 23:27'
-updated_date: '2026-10-26 07:50'
+created_date: 2026-10-25 23:27
+updated_date: '2026-10-26T08:28:00Z'
 labels: []
 milestone: m-5
 dependencies:
-  - TASK-58
-  - TASK-59
-  - TASK-31
-  - TASK-61
+  - TASK-62
+  - TASK-63
+  - TASK-64
+  - TASK-65
 priority: high
 type: chore
 ordinal: 60000
@@ -36,4 +36,6 @@ Explicit release gate, not evidence of release or permission to publish. 0.6.0 i
 
 <!-- SECTION:NOTES:BEGIN -->
 decision-41 (TASK-62): release.py stamp --scope typescript now also rewrites SDK_NPM_VERSION in qgis_sdk_tools/scaffold/web.py, so the ts-v0.4.0 stamp moves the scaffold's bridge pin to 0.4.0 in the same commit; verify-versions reports it as the scaffold pin. Once that pin names 0.4.0, the scaffold templates may import from the root barrel instead of ./bridge.
+
+decisions 42/43 (TASK-63..65) join 0.6.0: function-form algorithms on plugin-owned providers and the generated host artifacts are further 0.x breaking changes of the same minor, so the doc-12 0.6.0 migration note must cover them before this gate runs.
 <!-- SECTION:NOTES:END -->
