@@ -52,6 +52,13 @@ _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
 # it exists, and ignored when it does not.
 _ALIAS_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-alias/package.json"
 _ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
+# ``qgis-sdk new`` pins the bridge it was qualified with (decision-18); the pin
+# moves with every bridge release so a tools release offers the newest bridge
+# it knows (decision-41). Stamped and verified with the bridge whenever the
+# file exists, ignored when it does not.
+_SCAFFOLD_WEB = (
+    _REPO_ROOT / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
+)
 _PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
 _TS_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-typescript/src/declarations.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
@@ -1275,6 +1282,28 @@ def read_alias_versions(
     )
 
 
+_SCAFFOLD_PIN = re.compile(r'^(SDK_NPM_VERSION: Final = ")([^"\n]*)(")$', re.MULTILINE)
+
+
+def read_scaffold_pin(text: str) -> Version:
+    """Return the bridge version ``qgis-sdk new`` pins in ``scaffold/web.py``.
+
+    An exact version: ``Version.parse`` refuses a range, which is the point of
+    a controlled template.
+    """
+    match = _SCAFFOLD_PIN.search(text)
+    if match is None:
+        raise QgisSdkReleaseError("scaffold/web.py declares no SDK_NPM_VERSION pin")
+    return Version.parse(match.group(2))
+
+
+def stamp_scaffold_pin(text: str, version: Version) -> str:
+    """Move the scaffold's bridge pin to ``version``, touching nothing else."""
+    if _SCAFFOLD_PIN.search(text) is None:
+        raise QgisSdkReleaseError("scaffold/web.py declares no SDK_NPM_VERSION pin")
+    return _SCAFFOLD_PIN.sub(rf"\g<1>{version}\g<3>", text, count=1)
+
+
 @dataclass(frozen=True)
 class ManifestVersions:
     """The version each released manifest currently carries."""
@@ -1289,6 +1318,7 @@ class ManifestVersions:
     kit_pins: tuple[tuple[str, Version], ...] = ()
     recipe_runtime: Version | None = None
     recipe_tools: Version | None = None
+    scaffold_pin: Version | None = None
 
     def items(self) -> tuple[tuple[str, Version], ...]:
         """Return the labelled versions that exist, in reporting order."""
@@ -1312,6 +1342,8 @@ class ManifestVersions:
             found.append(("alias package.json", self.alias))
         if self.alias_dependency is not None:
             found.append(("alias dependency", self.alias_dependency))
+        if self.scaffold_pin is not None:
+            found.append(("scaffold pin", self.scaffold_pin))
         return tuple(found)
 
     def agreed(self) -> Version:
@@ -1335,11 +1367,14 @@ def manifest_versions(
     alias_text: str | None = None,
     runtime_text: str | None = None,
     tools_text: str | None = None,
+    scaffold_text: str | None = None,
 ) -> ManifestVersions:
     """Read all released manifests and return what each one carries.
 
     ``pyproject_text`` is the kit's; when the runtime's and the tools' are given
     too, their versions and the kit's pins on them join the Python scope.
+    ``scaffold_text`` is ``scaffold/web.py``, whose bridge pin joins the
+    TypeScript scope.
     """
     alias, alias_dependency = (
         read_alias_versions(alias_text) if alias_text is not None else (None, None)
@@ -1362,6 +1397,9 @@ def manifest_versions(
             read_recipe_context(recipe_text, "tools_version")
             if recipe_text is not None
             else None
+        ),
+        scaffold_pin=(
+            read_scaffold_pin(scaffold_text) if scaffold_text is not None else None
         ),
     )
 
@@ -1387,7 +1425,12 @@ _MANIFEST_GROUPS = {
     "tools": _TOOLS_MANIFESTS,
     "kit": _KIT_MANIFESTS,
 }
-_TYPESCRIPT_MANIFESTS = ("package.json", "alias package.json", "alias dependency")
+_TYPESCRIPT_MANIFESTS = (
+    "package.json",
+    "alias package.json",
+    "alias dependency",
+    "scaffold pin",
+)
 
 
 def scoped_manifest_versions(
@@ -1862,6 +1905,12 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
                 stamp_alias_package_json(alias_text, version), encoding="utf-8"
             )
             stamped.append(f"{_ALIAS_PACKAGE} (and its pin on {_ALIAS_DEPENDENCY})")
+        if _SCAFFOLD_WEB.is_file():
+            web_text = _SCAFFOLD_WEB.read_text(encoding="utf-8")
+            _SCAFFOLD_WEB.write_text(
+                stamp_scaffold_pin(web_text, version), encoding="utf-8"
+            )
+            stamped.append(f"{_SCAFFOLD_WEB} (the pin qgis-sdk new offers)")
     print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
     return 0
 
@@ -1883,6 +1932,9 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
         if _TOOLS_PYPROJECT.is_file()
         else None
     )
+    scaffold_text = (
+        _SCAFFOLD_WEB.read_text(encoding="utf-8") if _SCAFFOLD_WEB.is_file() else None
+    )
     versions = manifest_versions(
         _PYPROJECT.read_text(encoding="utf-8"),
         _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
@@ -1890,6 +1942,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
         alias_text,
         runtime_text,
         tools_text,
+        scaffold_text,
     )
     contract = contract_versions(
         _PY_DECLARATIONS.read_text(encoding="utf-8"),

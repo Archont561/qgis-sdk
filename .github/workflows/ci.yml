@@ -166,6 +166,13 @@ jobs:
         id: s20
         run: pixi run -e default test-reference-example
 
+      # The page is a member of the Bun workspace and depends on the bridge
+      # through `workspace:*`, so its Vitest suite runs against the checkout's
+      # `packages/qgis-sdk-typescript`, built first by turbo (decision-41).
+      - name: Test the reference page on the workspace bridge
+        id: s21
+        run: pixi run -e bun test-reference-web
+
       - name: Lint and format TypeScript
         id: s12
         run: pixi run -e bun biome-check

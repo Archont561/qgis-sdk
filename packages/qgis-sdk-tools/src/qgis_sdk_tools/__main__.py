@@ -73,7 +73,7 @@ from qgis_sdk_tools.scaffold.questionnaire import (
     WebAnswers,
     ask_web_questions,
 )
-from qgis_sdk_tools.scaffold.web import install_command
+from qgis_sdk_tools.scaffold.web import SDK_NPM_VERSION, install_command
 
 app = typer.Typer(
     add_completion=False,
@@ -124,6 +124,16 @@ def new(
         str | None,
         typer.Option(help="npm (default), pnpm or bun for the web UI."),
     ] = None,
+    sdk_dependency: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "What web/package.json depends on for @archont561/qgis-sdk: "
+                f"the latest release ({SDK_NPM_VERSION}) unless given; inside "
+                "the SDK repository pass file:<path to packages/qgis-sdk-typescript>."
+            ),
+        ),
+    ] = None,
     install: Annotated[
         bool | None,
         typer.Option(
@@ -149,6 +159,7 @@ def new(
             web=web,
             placement=placement,
             package_manager=package_manager,
+            sdk_dependency=sdk_dependency,
             install=install,
             no_input=no_input,
         )
@@ -163,6 +174,7 @@ def new(
             web=answers.web,
             placement=answers.placement,
             package_manager=answers.package_manager,
+            sdk_dependency=sdk_dependency,
         )
         root = runtime.resolve(target)
         _report(runtime, options, root, dry_run=dry_run, force=force)
@@ -179,11 +191,14 @@ def _web_answers(
     web: str | None,
     placement: str | None,
     package_manager: str | None,
+    sdk_dependency: str | None,
     install: bool | None,
     no_input: bool,
 ) -> WebAnswers:
     """Flags when any were given; the questionnaire on a terminal; else no web UI."""
-    flagged = any(value is not None for value in (web, placement, package_manager))
+    flagged = any(
+        value is not None for value in (web, placement, package_manager, sdk_dependency)
+    )
     if install and not flagged:
         raise QgisSdkScaffoldError("--install needs --web vanilla or --web react")
     if flagged or no_input or not runtime.interactive:
@@ -635,6 +650,7 @@ def _resolve(
     web: str | None,
     placement: str | None,
     package_manager: str | None,
+    sdk_dependency: str | None = None,
 ) -> ScaffoldOptions:
     """Pass only what the caller chose, so the API keeps its own defaults."""
     given = {"plugin": plugin or target.name}
@@ -647,6 +663,7 @@ def _resolve(
         ("web", web),
         ("placement", placement),
         ("package_manager", package_manager),
+        ("sdk_dependency", sdk_dependency),
     ):
         if value is not None:
             given[key] = value

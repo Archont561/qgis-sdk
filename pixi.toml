@@ -135,6 +135,11 @@ cmd = "bun run --filter '@archont561/qgis-sdk' typecheck"
 [feature.bun.tasks.turbo-test]
 cmd = "bun run test"
 
+# The reference page's Vitest suite on the workspace bridge: turbo builds
+# `@archont561/qgis-sdk` first, then runs `simple-web`'s tests (decision-41).
+[feature.bun.tasks.test-reference-web]
+cmd = "bun run test --filter simple-web"
+
 [environments]
 default = { features = ["python", "utils", "qgis"] }
 build = { features = ["python"] }

@@ -65,6 +65,14 @@ class WebOptions:
     framework: WebFramework
     placement: WebPlacement = DEFAULT_WEB_PLACEMENT
     package_manager: PackageManager = DEFAULT_PACKAGE_MANAGER
+    sdk_dependency: str | None = None
+    """What ``web/package.json`` depends on for ``@archont561/qgis-sdk``.
+
+    ``None`` is the exact release this scaffold is pinned to; a string is any
+    npm spec - inside this repository, ``file:<path to
+    packages/qgis-sdk-typescript>`` so the page runs on the workspace bridge
+    (decision-41).
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,12 +100,13 @@ class ScaffoldOptions:
         web: str | None = None,
         placement: str | None = None,
         package_manager: str | None = None,
+        sdk_dependency: str | None = None,
     ) -> ScaffoldOptions:
         """Check what the caller chose and derive what it left out.
 
         ``web`` names the framework (``vanilla`` or ``react``) or is ``None``
-        for a plugin without a page; ``placement`` and ``package_manager``
-        refine it and are refused on their own.
+        for a plugin without a page; ``placement``, ``package_manager`` and
+        ``sdk_dependency`` refine it and are refused on their own.
         """
         return cls(
             plugin=_package_name(plugin),
@@ -108,17 +117,21 @@ class ScaffoldOptions:
             ),
             author=_text(author, "author"),
             email=_text(email, "email"),
-            web=_web(web, placement, package_manager),
+            web=_web(web, placement, package_manager, sdk_dependency),
         )
 
 
 def _web(
-    framework: str | None, placement: str | None, package_manager: str | None
+    framework: str | None,
+    placement: str | None,
+    package_manager: str | None,
+    sdk_dependency: str | None = None,
 ) -> WebOptions | None:
     if framework is None:
         for label, value in (
             ("placement", placement),
             ("package manager", package_manager),
+            ("SDK dependency", sdk_dependency),
         ):
             if value is not None:
                 raise QgisSdkScaffoldError(
@@ -137,7 +150,24 @@ def _web(
             PACKAGE_MANAGERS,
             "package manager",
         ),
+        sdk_dependency=_dependency_spec(sdk_dependency),
     )
+
+
+def _dependency_spec(value: str | None) -> str | None:
+    """A version or any npm spec (``file:``, ``link:``, ``workspace:``, a URL).
+
+    The shape is npm's to judge; here only the obvious mistakes are refused: an
+    empty flag and whitespace, which no spec contains.
+    """
+    if value is None:
+        return None
+    if not value or value != value.strip() or any(ch.isspace() for ch in value):
+        raise QgisSdkScaffoldError(
+            "The SDK dependency must be a non-empty npm version or spec "
+            "without whitespace"
+        )
+    return value
 
 
 def _choice(value: str, choices: tuple[str, ...], label: str) -> str:

@@ -93,6 +93,18 @@ def test_the_web_choices_resolve_with_defaults_for_what_was_left_out() -> None:
         ),
         ({"placement": "dock"}, "A placement needs a web framework"),
         ({"package_manager": "bun"}, "A package manager needs a web framework"),
+        (
+            {"sdk_dependency": "file:../pkg"},
+            "A SDK dependency needs a web framework",
+        ),
+        (
+            {"web": "vanilla", "sdk_dependency": "  "},
+            "The SDK dependency must be a non-empty npm version or spec",
+        ),
+        (
+            {"web": "vanilla", "sdk_dependency": "file: ../pkg"},
+            "The SDK dependency must be a non-empty npm version or spec",
+        ),
     ],
 )
 def test_an_invalid_or_orphaned_web_choice_is_refused(
@@ -162,6 +174,31 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
     assert ("@vitejs/plugin-react" in package["devDependencies"]) is (
         framework == "react"
     )
+
+
+def test_an_explicit_sdk_dependency_replaces_the_pin_and_nothing_else() -> None:
+    """Inside this repository the page depends on the workspace bridge (decision-41)."""
+    spec = "file:../../../packages/qgis-sdk-typescript"
+    pinned = plan_scaffold(options(web="react", package_manager="bun"))
+    workspace = plan_scaffold(
+        options(web="react", package_manager="bun", sdk_dependency=spec)
+    )
+
+    package = json.loads(content_of(workspace, "web/package.json"))
+    assert package["dependencies"][SDK_NPM_PACKAGE] == spec
+    expected = json.loads(content_of(pinned, "web/package.json"))
+    expected["dependencies"][SDK_NPM_PACKAGE] = spec
+    assert package == expected
+    others = [
+        (file.path, file.content)
+        for file in workspace
+        if file.path != "web/package.json"
+    ]
+    assert others == [
+        (file.path, file.content) for file in pinned if file.path != "web/package.json"
+    ]
+    assert options(web="vanilla").web is not None
+    assert options(web="vanilla").web.sdk_dependency is None
 
 
 def test_vite_targets_the_qualified_chromium_and_builds_into_the_plugin_package() -> (

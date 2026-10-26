@@ -36,7 +36,13 @@ LF: Final = "\n"
 
 SDK_NPM_PACKAGE: Final = "@archont561/qgis-sdk"
 SDK_NPM_VERSION: Final = "0.3.0"
-"""The published bridge this scaffold is written against, pinned exactly."""
+"""The published bridge this scaffold is written against, pinned exactly.
+
+``scripts/release.py stamp --scope typescript`` moves it with every bridge
+release, so a tools release offers the newest bridge it was qualified with;
+``WebOptions.sdk_dependency`` replaces it for a page inside this repository
+(decision-41).
+"""
 
 # Qt WebEngine is Chromium: Qt 6.5 (the oldest Qt 6 LTS a QGIS 4 may ship)
 # carries Chromium 108. Raise this with qgisMinimumVersion, never above it.
@@ -137,7 +143,9 @@ def bindings_command(options: ScaffoldOptions) -> str:
 
 def _package_json(options: ScaffoldOptions, web: WebOptions) -> str:
     react = web.framework == "react"
-    dependencies: dict[str, str] = {SDK_NPM_PACKAGE: SDK_NPM_VERSION}
+    dependencies: dict[str, str] = {
+        SDK_NPM_PACKAGE: web.sdk_dependency or SDK_NPM_VERSION
+    }
     dev_dependencies = {
         name: WEB_TEMPLATE_VERSIONS[name]
         for name in ("happy-dom", "typescript", "vite", "vitest")

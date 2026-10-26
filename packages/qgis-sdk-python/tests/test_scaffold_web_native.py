@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import importlib
 import os
-import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
+import layers
 import pytest
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command, script_command
@@ -48,15 +48,9 @@ except ImportError as error:  # pragma: no cover - depends on the host
 DEADLINE = 30.0
 
 
-def _find(manager: str) -> str | None:
-    found = shutil.which(manager)
-    if found is not None:
-        return found
-    sibling = Path(sys.prefix).parent / "bun" / "bin" / manager
-    return str(sibling) if sibling.is_file() else None
-
-
-MANAGERS = {name: path for name in ("bun", "npm", "pnpm") if (path := _find(name))}
+MANAGERS = {
+    name: path for name in ("bun", "npm", "pnpm") if (path := layers.find_tool(name))
+}
 if not MANAGERS:
     pytest.skip(
         "no package manager (bun, npm, pnpm) is available", allow_module_level=True
@@ -88,15 +82,24 @@ def built_project(
     request: pytest.FixtureRequest,
     manager: str,
     tmp_path_factory: pytest.TempPathFactory,
+    workspace_bridge: str,
 ) -> tuple[Path, str]:
-    """Scaffold, install, run Vitest and tsc, build; return (root, framework)."""
+    """Scaffold, install, run Vitest and tsc, build; return (root, framework).
+
+    On the workspace bridge (decision-41): the templates are qualified against
+    the bridge this checkout ships, not the release the scaffold pins.
+    """
     framework = request.param
     placement = "dock" if framework == "react" else "dialog"
     plugin = f"{framework}_demo"
     root = tmp_path_factory.mktemp(manager) / plugin
     write_scaffold(
         ScaffoldOptions.resolve(
-            plugin, web=framework, placement=placement, package_manager=manager
+            plugin,
+            web=framework,
+            placement=placement,
+            package_manager=manager,
+            sdk_dependency=workspace_bridge,
         ),
         root,
     )

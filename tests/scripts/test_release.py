@@ -39,6 +39,7 @@ from release import (
     read_pyproject_version,
     read_python_contract_version,
     read_recipe_version,
+    read_scaffold_pin,
     read_typescript_contract_version,
     render_changelog,
     resolve_dry_run,
@@ -47,6 +48,7 @@ from release import (
     stamp_package_json,
     stamp_pyproject,
     stamp_recipe,
+    stamp_scaffold_pin,
     tag_for_version,
     twine_check,
     upload_asset,
@@ -157,6 +159,7 @@ def _python_manifests(
     monkeypatch.setattr(release, "_RECIPE", recipe)
     monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "no-alias.json")
+    monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "no-web.py")
     return {
         "pyproject": pyproject,
         "runtime": runtime,
@@ -2365,6 +2368,96 @@ def test_verify_versions_for_python_ignores_the_alias(tmp_path, monkeypatch):
     _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
 
     assert main(["verify-versions", "--scope", "python", "--version", "0.1.0"]) == 0
+
+
+SCAFFOLD_WEB_PY = (
+    'LF: Final = "\\n"\n'
+    "\n"
+    'SDK_NPM_PACKAGE: Final = "@archont561/qgis-sdk"\n'
+    'SDK_NPM_VERSION: Final = "0.1.0"\n'
+    '"""The published bridge this scaffold is written against, pinned exactly."""\n'
+)
+
+
+def test_read_scaffold_pin_returns_the_pinned_bridge_version():
+    assert read_scaffold_pin(SCAFFOLD_WEB_PY) == Version.parse("0.1.0")
+
+
+def test_read_scaffold_pin_refuses_a_missing_or_loose_pin():
+    with pytest.raises(QgisSdkReleaseError, match="SDK_NPM_VERSION"):
+        read_scaffold_pin('SDK_NPM_PACKAGE: Final = "@archont561/qgis-sdk"\n')
+    with pytest.raises(QgisSdkReleaseVersionError):
+        read_scaffold_pin(SCAFFOLD_WEB_PY.replace('"0.1.0"', '"^0.1.0"'))
+
+
+def test_stamp_scaffold_pin_rewrites_only_the_constant():
+    stamped = stamp_scaffold_pin(SCAFFOLD_WEB_PY, Version.parse("0.4.0"))
+
+    assert 'SDK_NPM_VERSION: Final = "0.4.0"\n' in stamped
+    assert stamped.replace('"0.4.0"', '"0.1.0"') == SCAFFOLD_WEB_PY
+    with pytest.raises(QgisSdkReleaseError, match="SDK_NPM_VERSION"):
+        stamp_scaffold_pin("nothing here\n", Version.parse("0.4.0"))
+
+
+def _scaffold_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", web_text=None):
+    files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
+    web = tmp_path / "web.py"
+    web.write_text(web_text or SCAFFOLD_WEB_PY, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_SCAFFOLD_WEB", web)
+    return files["package"], web
+
+
+def test_stamp_scope_typescript_moves_the_scaffold_pin_with_the_bridge(
+    tmp_path, monkeypatch
+):
+    """A tools release pins the newest bridge it was qualified with (decision-41)."""
+    package, web = _scaffold_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.3.0", "--scope", "typescript"]) == 0
+
+    assert json.loads(package.read_text())["version"] == "0.3.0"
+    assert 'SDK_NPM_VERSION: Final = "0.3.0"' in web.read_text()
+    assert main(["verify-versions", "--scope", "typescript", "--version", "0.3.0"]) == 0
+
+
+def test_stamp_scope_python_leaves_the_scaffold_pin_alone(tmp_path, monkeypatch):
+    _, web = _scaffold_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.9.0", "--scope", "python"]) == 0
+
+    assert 'SDK_NPM_VERSION: Final = "0.1.0"' in web.read_text()
+
+
+def test_verify_versions_names_a_scaffold_pin_that_lags(tmp_path, monkeypatch, capsys):
+    _scaffold_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
+
+    assert main(["verify-versions", "--scope", "typescript"]) == 1
+
+    out = capsys.readouterr().out
+    assert "scaffold pin=0.1.0" in out
+    assert "package.json=0.1.1" in out
+
+
+def test_verify_versions_for_python_ignores_the_scaffold_pin(tmp_path, monkeypatch):
+    _scaffold_manifests(tmp_path, monkeypatch, bridge_version="0.1.1")
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.1.0"]) == 0
+
+
+def test_the_repository_scaffold_pins_the_bridge_at_head(monkeypatch):
+    """The committed pin, not a fixture: `qgis-sdk new` offers the latest release."""
+    import release
+
+    root = Path(release.__file__).resolve().parent.parent
+    bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
+    web = root / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
+    monkeypatch.setattr(release, "_SCAFFOLD_WEB", web)
+
+    bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
+    assert read_scaffold_pin(web.read_text()) == bridge_version
+    assert main(["verify-versions", "--scope", "typescript"]) == 0
 
 
 def test_alias_changes_count_as_typescript():

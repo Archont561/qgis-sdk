@@ -978,11 +978,21 @@ qgis-sdk new field_tools --web react --placement dock --package-manager bun --in
 qgis-sdk new field_tools --no-input          # a plain plugin, as before
 ```
 
+`--sdk-dependency SPEC` replaces the one value a plugin inside this repository
+needs changed: what `web/package.json` depends on for `@archont561/qgis-sdk`.
+Without it the page gets the exact bridge release this `qgis-sdk-tools` was
+qualified with (`SDK_NPM_VERSION` in `scaffold/web.py`, moved by every bridge
+release through `release.py stamp --scope typescript`); with it, any npm spec
+you pass - the example plugin and the workspace harnesses use `workspace:*`
+and a `file:<tarball>` of the checkout's bridge respectively, never a guessed
+path (decision-41). Like `--placement`, it is refused without `--web`.
+
 What the web plan adds:
 
 - `web/` - a Vite app: `package.json` (every dependency pinned exactly,
-  `@archont561/qgis-sdk` at the version this release was qualified with; Vite
-  and Vitest for every manager, never Bunup), `vite.config.ts` (`base: "./"`
+  `@archont561/qgis-sdk` at the version this release was qualified with
+  unless `--sdk-dependency` says otherwise; Vite and Vitest for every
+  manager, never Bunup), `vite.config.ts` (`base: "./"`
   for `file:` pages, output into `<plugin>/web`, Chromium target of the
   oldest supported QGIS), `tsconfig.json`, `index.html` (loads Qt's
   `qwebchannel.js`), `src/transport.ts` (the QWebChannel `WireTransport`),

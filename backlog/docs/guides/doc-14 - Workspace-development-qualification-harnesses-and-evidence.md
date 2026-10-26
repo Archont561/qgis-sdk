@@ -475,7 +475,14 @@ unit tests prove the plan - file list, pins, `bridge generate --check` finding
 no drift in the checked-in client, `check` passing with no native exemption,
 the starter pytest passing - without a network. What they cannot prove is that
 the pinned toolchain resolves and that the built page works inside Chromium,
-so `tests/test_scaffold_web_native.py` is opt-in:
+so `tests/test_scaffold_web_native.py` is opt-in. It runs the generated page on
+the *workspace* bridge, not the pinned release: the session fixture
+`workspace_bridge` (`conftest.py`, `layers.pack_workspace_bridge`) builds
+`packages/qgis-sdk-typescript` and packs it with `bun pm pack`, and the
+scaffold receives that tarball through `sdk_dependency=` - the same
+`--sdk-dependency` flag the CLI exposes (decision-41). A tarball rather than
+the directory because Bun would try to install the directory's own
+`workspace:*` tooling, and because a tarball is exactly what a release ships.
 
 ```sh
 QGIS_SDK_SCAFFOLD_WEB=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_scaffold_web_native.py
@@ -584,15 +591,22 @@ a file name that is a path, and the ordering file: styled before presented,
 nothing presented on cancellation, an incompatible style or a host without
 Processing, the plugin's own scope). CI runs the example's `qgis-sdk test`
 and `qgis-sdk test --target qgis` on Linux through the `test-reference-example`
-Pixi task. The full native half is opt-in:
+Pixi task, and the page's Vitest suite on the workspace bridge through
+`test-reference-web` (`examples/*/web` are Bun workspace members; turbo builds
+`@archont561/qgis-sdk` before `simple-web`'s `test`). The full native half is
+opt-in:
 
 ```sh
 QGIS_SDK_REFERENCE=1 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/test_reference_example_native.py
 ```
 
 `tests/test_reference_example_native.py` runs `qgis-sdk new` with the
-example's options into a temporary directory, copies the example over it,
-then drives the command line: `check` (no problems), `bridge generate
+example's options into a temporary directory (`--sdk-dependency` pointing at
+the packed workspace bridge, see above), copies the example over it except
+`web/package.json` - the example's says `workspace:*`, which resolves only
+inside the repository's Bun workspace, and the pure
+`test_reference_example.py` proves it is otherwise byte-for-byte the
+scaffold's - then drives the command line: `check` (no problems), `bridge generate
 --check` (no drift), `test` (17 passed on the fakes), `test --target qgis`
 (4 passed: the end-to-end run with the fixture byte-identical afterwards, a
 geographic working CRS refused with nothing added, the native dialog and a
