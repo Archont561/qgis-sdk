@@ -1,4 +1,4 @@
-"""The operations the reference workflow runs (decision-19).
+"""The Processing algorithms this plugin owns (decision-19, decision-42).
 
 Two of them, deliberately: a distance operation that forces an explicit
 projected working CRS and metres, and a geometric one that needs neither. That
@@ -6,11 +6,12 @@ pair is what keeps "explicit units" from being a blanket rule the SDK applies
 to every possible operation - decision-19 requires a projected CRS *where the
 operation has a distance*, not everywhere.
 
-The functions are thin on purpose (decision-42). Request validation lives in
-the models, the conversion to Processing parameters lives in the native
-adapter, and this layer only binds typed inputs to the produced layer through
-the injected service. That is the mapping TASK-14 asks for, and it is why the
-same functions run against the in-memory double in a QGIS-free test.
+The functions are thin on purpose. Request validation lives in the SDK models,
+the conversion to Processing parameters lives in the SDK's native adapter, and
+this module only binds typed inputs to the produced layer through the injected
+service. That is why the same functions run against the in-memory double in a
+QGIS-free test, and why they live here rather than in the runtime: what a
+plugin computes is the plugin's.
 """
 
 from __future__ import annotations
@@ -26,13 +27,14 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.providers import Provider
 
-__all__ = ["buffer_layer", "centroid_layer", "reference_provider"]
+__all__ = ["buffer_layer", "centroid_layer", "provider"]
 
-# One provider owns the workflow's operations, the way one app owns its routes.
-reference_provider = Provider(id="reference", title="Reference plugin")
+#: One provider owns the plugin's operations, the way one app owns its routes;
+#: the toolbox shows them as ``simple:buffer`` and ``simple:centroid``.
+provider = Provider(id="simple", title="Simple")
 
 
-@reference_provider.algorithm(
+@provider.algorithm(
     id="buffer", title="Buffer a layer in an explicit working CRS", group="Geometry"
 )
 def buffer_layer(
@@ -55,7 +57,7 @@ def buffer_layer(
     )
 
 
-@reference_provider.algorithm(
+@provider.algorithm(
     id="centroid", title="Replace geometries with centroids", group="Geometry"
 )
 def centroid_layer(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:

@@ -3,9 +3,11 @@
 The smallest complete qgis-sdk plugin, and the local GIS workflow the SDK is
 qualified against (decision-19): open a bundled point dataset, read the
 host's selection, buffer it through Processing into a new styled layer, and
-export that layer to a file the user chose. `simple/workflow.py` is that chain over the SDK
-services - plugin code, not a runtime feature - and `plugin.py` declares it
-as actions. Native dialogs and the web page are two front ends over those
+export that layer to a file the user chose. `simple/algorithms.py` declares the
+two Processing algorithms the plugin owns (`simple:buffer`, `simple:centroid`),
+`simple/workflow.py` is that chain over the SDK services - plugin code, not a
+runtime feature - and `plugin.py` declares it as actions and lists the
+provider. Native dialogs and the web page are two front ends over those
 same actions; the page never names a path, and an export without a chosen
 directory is refused, not guessed.
 

@@ -31,7 +31,6 @@ LAYER_ORDER = {
     "providers": 2,
     "network": 2,
     "bridge": 2,
-    "reference": 3,
     "testing": 3,
 }
 LAYER_PATHS = {
@@ -40,7 +39,6 @@ LAYER_PATHS = {
     "core": SOURCE_ROOT / "core",
     "exports": SOURCE_ROOT / "exports.py",
     "jobs": SOURCE_ROOT / "jobs.py",
-    "reference": SOURCE_ROOT / "reference",
     "declarations": SOURCE_ROOT / "declarations.py",
     "environment": SOURCE_ROOT / "environment.py",
     "models": SOURCE_ROOT / "models",

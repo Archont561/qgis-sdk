@@ -18,7 +18,7 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 from qgis_sdk.providers import Provider, ProviderDescription, declared_providers
-from qgis_sdk.reference import buffer_layer, reference_provider
+from sample_algorithms import buffer_layer, sample_provider
 
 
 def _provider() -> Provider:
@@ -271,12 +271,12 @@ def test_asking_for_an_undeclared_algorithm_names_the_provider() -> None:
         _provider().function_for("ghost")
 
 
-def test_the_reference_provider_declares_the_workflow_operations() -> None:
-    described = reference_provider.describe()
+def test_the_sample_provider_declares_the_workflow_operations() -> None:
+    described = sample_provider.describe()
 
-    assert reference_provider.id == "reference"
+    assert sample_provider.id == "sample"
     assert [item.id for item in described.algorithms] == ["buffer", "centroid"]
-    assert reference_provider.algorithms[0] is buffer_layer
+    assert sample_provider.algorithms[0] is buffer_layer
 
 
 # -- providers = [...] on a plugin class ---------------------------------------------
@@ -287,19 +287,19 @@ def test_a_plugin_lists_the_providers_it_owns() -> None:
 
     @plugin
     class WithProviders:
-        providers = [tools, reference_provider]  # noqa: RUF012 - the list form
+        providers = [tools, sample_provider]  # noqa: RUF012 - the list form
 
     @plugin
     class Without:
         pass
 
-    assert declared_providers(WithProviders) == (tools, reference_provider)
+    assert declared_providers(WithProviders) == (tools, sample_provider)
     assert declared_providers(Without) == ()
 
 
 @pytest.mark.parametrize(
     "listed",
-    [reference_provider, "reference", [reference_provider, "tools"], {"a": 1}],
+    [sample_provider, "sample", [sample_provider, "tools"], {"a": 1}],
 )
 def test_anything_but_a_list_of_providers_is_refused_naming_the_class(listed) -> None:
     @plugin
@@ -313,7 +313,7 @@ def test_anything_but_a_list_of_providers_is_refused_naming_the_class(listed) ->
 def test_a_provider_listed_twice_is_refused_by_id() -> None:
     @plugin
     class Twice:
-        providers = (reference_provider, reference_provider)
+        providers = (sample_provider, sample_provider)
 
-    with pytest.raises(QgisSdkDeclarationError, match="'reference' is listed twice"):
+    with pytest.raises(QgisSdkDeclarationError, match="'sample' is listed twice"):
         declared_providers(Twice)
