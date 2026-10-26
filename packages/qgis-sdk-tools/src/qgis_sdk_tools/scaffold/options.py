@@ -86,6 +86,13 @@ class ScaffoldOptions:
     author: str
     email: str
     web: WebOptions | None = None
+    algorithm: bool = False
+    """Whether the project starts with a Processing provider and one algorithm.
+
+    ``--algorithm`` adds ``<plugin>/algorithms.py`` - a ``Provider`` with a
+    ``buffer`` function (decision-42) - lists it on the plugin class and
+    exposes it as an action, with a starter test over the SDK fakes.
+    """
 
     @classmethod
     def resolve(
@@ -101,12 +108,14 @@ class ScaffoldOptions:
         placement: str | None = None,
         package_manager: str | None = None,
         sdk_dependency: str | None = None,
+        algorithm: bool = False,
     ) -> ScaffoldOptions:
         """Check what the caller chose and derive what it left out.
 
         ``web`` names the framework (``vanilla`` or ``react``) or is ``None``
         for a plugin without a page; ``placement``, ``package_manager`` and
         ``sdk_dependency`` refine it and are refused on their own.
+        ``algorithm`` adds the Processing starter.
         """
         return cls(
             plugin=_package_name(plugin),
@@ -118,6 +127,7 @@ class ScaffoldOptions:
             author=_text(author, "author"),
             email=_text(email, "email"),
             web=_web(web, placement, package_manager, sdk_dependency),
+            algorithm=bool(algorithm),
         )
 
 

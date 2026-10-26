@@ -20,11 +20,11 @@ pip install qgis-sdk-tools      # the command alone, with the runtime it tested
 ## Example
 
 ```sh
-qgis-sdk new field_tools --title "Field Tools"
+qgis-sdk new field_tools --title "Field Tools"   # pyproject.toml + field_tools/plugin.py + tests/
 qgis-sdk check field_tools
 qgis-sdk test field_tools
 qgis-sdk dev field_tools
-qgis-sdk build field_tools
+qgis-sdk build field_tools   # the ZIP, with metadata.txt and classFactory rendered from pyproject.toml
 qgis-sdk targets    # the support matrix, and where this host stands in it
 ```
 
