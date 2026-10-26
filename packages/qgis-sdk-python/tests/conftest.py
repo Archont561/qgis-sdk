@@ -119,6 +119,20 @@ def webengine_profile(qt_app: Any) -> Any:
     return QWebEngineProfile(qt_app)
 
 
+@pytest.fixture(scope="session")
+def workspace_bridge(tmp_path_factory: pytest.TempPathFactory) -> str:
+    """``file:`` spec of the workspace bridge, built and packed once per session.
+
+    What the opt-in web harnesses hand to ``qgis-sdk new --sdk-dependency`` so
+    a generated page runs on this checkout's ``@archont561/qgis-sdk`` instead of
+    the release the scaffold pins (decision-41). Skips without bun.
+    """
+    bun = layers.find_tool("bun")
+    if bun is None:  # pragma: no cover - depends on the host
+        pytest.skip("packing the workspace bridge needs bun")
+    return layers.pack_workspace_bridge(tmp_path_factory.mktemp("bridge"), bun=bun)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _stop_the_application_after_the_session() -> Iterator[None]:
     """Exit QGIS exactly once, after the last test, if this session started it."""

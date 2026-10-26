@@ -65,15 +65,7 @@ SKIPPED = shutil.ignore_patterns(
 )
 
 
-def _bun() -> str | None:
-    found = shutil.which("bun")
-    if found is not None:
-        return found
-    sibling = Path(sys.prefix).parent / "bun" / "bin" / "bun"
-    return str(sibling) if sibling.is_file() else None
-
-
-BUN = _bun()
+BUN = layers.find_tool("bun")
 if BUN is None:
     pytest.skip("bun is not available for the page", allow_module_level=True)
 
@@ -111,7 +103,12 @@ def _bun_run(command: tuple[str, ...], cwd: Path) -> None:
 
 
 def _copy_tree(source: Path, target: Path) -> None:
-    """The example over the scaffold, leaving the plugin's built page out."""
+    """The example over the scaffold, leaving the plugin's built page out.
+
+    ``web/package.json`` stays the scaffold's: the example's says
+    ``workspace:*``, which only resolves inside this repository's Bun
+    workspace, while the scaffold here was given the packed bridge instead.
+    """
     for item in source.iterdir():
         if item.name in {"node_modules", "dist", ".qgis-sdk", "__pycache__"}:
             continue
@@ -119,7 +116,9 @@ def _copy_tree(source: Path, target: Path) -> None:
             ignore = (
                 SKIPPED
                 if item.name == PLUGIN
-                else shutil.ignore_patterns("node_modules", "dist", "__pycache__")
+                else shutil.ignore_patterns(
+                    "node_modules", "dist", "__pycache__", "package.json", "bun.lock"
+                )
             )
             shutil.copytree(item, target / item.name, dirs_exist_ok=True, ignore=ignore)
         else:
@@ -127,7 +126,7 @@ def _copy_tree(source: Path, target: Path) -> None:
 
 
 @pytest.fixture(scope="module")
-def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def project(tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str) -> Path:
     """``qgis-sdk new`` with the example's options, the example copied on top."""
     root = tmp_path_factory.mktemp("reference") / PLUGIN
     created = _cli(
@@ -145,6 +144,8 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "dock",
         "--package-manager",
         "bun",
+        "--sdk-dependency",
+        workspace_bridge,
         "--no-input",
         "--no-install",
         cwd=root.parent,

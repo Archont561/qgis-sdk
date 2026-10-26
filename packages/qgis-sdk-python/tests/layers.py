@@ -33,6 +33,8 @@ run of the whole suite start the same application.
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -54,6 +56,49 @@ trees; a child interpreter that should see the SDK from source puts both on
 def source_path(*extra: Path | str) -> str:
     """``PYTHONPATH`` value: ``extra`` first, then the two source roots."""
     return os.pathsep.join(str(item) for item in (*extra, *SOURCE_ROOTS))
+
+
+REPOSITORY_ROOT = PACKAGES_ROOT.parent
+BRIDGE_PACKAGE = PACKAGES_ROOT / "qgis-sdk-typescript"
+"""The workspace ``@archont561/qgis-sdk``, which in-repository pages run on."""
+
+
+def find_tool(name: str) -> str | None:
+    """``name`` on ``PATH``, else next to this interpreter's Pixi ``bun`` env."""
+    found = shutil.which(name)
+    if found is not None:
+        return found
+    sibling = Path(sys.prefix).parent / "bun" / "bin" / name
+    return str(sibling) if sibling.is_file() else None
+
+
+def pack_workspace_bridge(destination: Path, *, bun: str) -> str:
+    """Build and pack the workspace bridge; return its ``file:`` npm spec.
+
+    A tarball, not the directory: ``bun install`` would try to install the
+    directory's own ``workspace:*`` tooling, and a tarball is what a release
+    ships, so a page that passes on it passes on the published package too
+    (decision-41). Every manager (bun, npm, pnpm) accepts ``file:<tarball>``.
+    """
+    # bunup's shebang asks for ``bun`` on PATH, which a Pixi-only bun is not.
+    path = os.pathsep.join((str(Path(bun).parent), os.environ.get("PATH", "")))
+    env = {**os.environ, "NO_COLOR": "1", "CI": "1", "PATH": path}
+    destination.mkdir(parents=True, exist_ok=True)
+    for command, cwd in (
+        ((bun, "run", "--filter", "@archont561/qgis-sdk", "build"), REPOSITORY_ROOT),
+        ((bun, "pm", "pack", "--destination", str(destination)), BRIDGE_PACKAGE),
+    ):
+        result = subprocess.run(
+            command, cwd=cwd, env=env, capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"{' '.join(command)} in {cwd}:\n{result.stdout}\n{result.stderr}"
+            )
+    tarballs = sorted(destination.glob("*.tgz"))
+    if len(tarballs) != 1:
+        raise RuntimeError(f"expected one tarball in {destination}, found {tarballs}")
+    return f"file:{tarballs[0].as_posix()}"
 
 
 NATIVE_LAYERS = frozenset({"qt", "qgis", "webengine", "desktop"})

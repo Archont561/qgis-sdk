@@ -11,7 +11,7 @@
 		"bindings": "cd .. && qgis-sdk bridge generate --plugin simple.plugin:SimplePlugin --out web/src/bridge.ts --check"
 	},
 	"dependencies": {
-		"@archont561/qgis-sdk": "0.3.0"
+		"@archont561/qgis-sdk": "workspace:*"
 	},
 	"devDependencies": {
 		"happy-dom": "21.0.4",

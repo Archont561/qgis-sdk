@@ -16,10 +16,17 @@ bun) and keeps that layout, so every command works unchanged:
 qgis-sdk check                   # metadata, syntax, manifests
 qgis-sdk test                    # the workflow over the SDK fakes, no QGIS
 qgis-sdk test --target qgis      # real Processing, real OGR export, the native dialog
-cd web && bun install && bun run test && bun run build && cd ..
+bun install && bun run test --filter simple-web   # from the repository root
+cd web && bun run build && cd ..
 qgis-sdk dev                     # inside QGIS Desktop, reloading on save
 qgis-sdk build                   # dist/simple-<version>.zip
 ```
+
+One line differs from a scaffolded plugin: `web/package.json` depends on
+`@archont561/qgis-sdk` as `workspace:*`, so the page runs on this checkout's
+`packages/qgis-sdk-typescript` (turbo builds it first), where a plugin made
+outside the repository gets the exact bridge release the scaffold pins
+(decision-41; `qgis-sdk new --sdk-dependency` is the switch).
 
 `web/src/bridge.ts` is generated from the plugin's declarations (`bun run
 bindings` checks it). The workspace harness
