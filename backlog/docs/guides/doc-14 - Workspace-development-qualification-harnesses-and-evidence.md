@@ -818,7 +818,7 @@ nothing is inferred from CI.
   placeholders of the runtime and the tools (and the kit's own `0.0.0`) on
   PyPI are now superseded and should be yanked by the owner.
 
-## 0.6.0 release gate (TASK-60, 2026-10-26): gate run, not yet stamped
+## 0.6.0 release gate (TASK-60, 2026-10-26)
 
 What was run on `main` `2763cad` (the TASK-67 merge, PR #98) on Linux
 x86-64 with QGIS 4.2.3 (Qt 6.11.2), CPython 3.14.8 in the locked Pixi
@@ -919,11 +919,35 @@ carry 0.5.0. Stamping, tagging and publishing wait for an explicit
   conda-forge repodata is unreachable from the sandbox; `release.yml`
   builds the three outputs before any upload, and an `-rc.1` rehearsal can
   prove it again on request.
-- **Approval.** None yet. This section records the gate run only; the
-  stamp (`release.py stamp --scope python --version 0.6.0` and `--scope
-  typescript --version 0.4.0`), the tags `python-v0.6.0` + `ts-v0.4.0` on
-  one merge commit and the publish happen only on an explicit
-  "Release 0.6.0", with a pause for "Merge" on the stamp pull request.
+- **Approval.** Releasing 0.6.0 was authorised explicitly on 2026-10-26
+  ("release", chosen from gate-only / gate + stamp / full after the gate
+  record above was merged as #99 → `adc8fa0`), with a pause for "Merge" on
+  the stamp pull request; the two tags follow on its merge commit.
+- **Stamp and artifacts.** `release.py stamp --scope python --version
+  0.6.0` moved the kit, runtime and tools manifests, the kit's exact pins,
+  the tools' runtime range (`>=0.6.0,<0.7`), the recipe's three versions
+  and the example's windows (`>=0.6,<0.7`); `stamp --scope typescript
+  --version 0.4.0` moved `package.json`, the alias (and its pin on the
+  scoped package) and the scaffold pin `SDK_NPM_VERSION` (decision-41).
+  `verify-versions` agrees on 0.6.0 for all nine Python entries, 0.4.0 for
+  the four bridge entries, contract version 1. One test literal followed
+  the pin (`test_scaffold_web.py`, `0.3.0` → `0.4.0`). On the stamped tree:
+  the static gate clean, `bun run test` 5/5 (bridge 234, alias 10, page 5,
+  Python 1650 passed / 43 skipped), `tests/scripts` 248, reference example
+  5 + 5, harnesses scaffold web 8, reference 5, bundle 1, scaffold desktop
+  10. `build-python` + `verify-python` (twine) pass on
+  `qgis_sdk-0.6.0-py3-none-any.whl` (`b6861c99…04f4`, pins
+  `qgis-sdk-runtime==0.6.0` and `qgis-sdk-tools==0.6.0`),
+  `qgis_sdk_runtime-0.6.0-py3-none-any.whl` (`8d5143c4…4cb3`, 74 modules,
+  no dependency, MIT `LICENSE` in `dist-info/licenses`) and
+  `qgis_sdk_tools-0.6.0-py3-none-any.whl` (`10894bf4…842f`,
+  `qgis-sdk-runtime>=0.6.0,<0.7` and `typer==0.27.3`). A fresh CPython
+  3.11.2 `venv` with only the three wheels: `pip check` clean; `qgis-sdk
+  new --ui native --web vanilla` writes `qgis-sdk-runtime>=0.6,<0.7`,
+  `qgis-sdk-tools>=0.6,<0.7` and `"@archont561/qgis-sdk": "0.4.0"`, and
+  `check` is clean.
+- **Released afterwards.** Recorded once the tags' `release.yml` runs
+  have finished (see the TASK-60 notes).
 
 ## Split release pipeline rehearsal (TASK-57 AC 3)
 

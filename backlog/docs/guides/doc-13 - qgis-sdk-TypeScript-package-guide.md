@@ -10,12 +10,13 @@ The reference prose for `@archont561/qgis-sdk`. It used to live in
 `packages/qgis-sdk-typescript/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
 moved it here as the source for the documentation site
 ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)).
-Status at the time of writing: `0.3.0` is the released version (the first
-under this name; packages version independently,
+Status at the time of writing: `0.4.0` is the released version (`ts-v0.4.0`,
+tagged with `python-v0.6.0` on one merge commit as the 0.6.0 pair; packages
+version independently,
 [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
-`main` carries the unreleased root-entry change and the `QgisSdk` entry point
-described below and in the 0.4.0 migration notes, which is what the next tag
-ships. Through `0.2.0` the package was published as
+it carries the root-entry change and the `QgisSdk` entry point described
+below and in the 0.4.0 migration notes. `0.3.0` was the first version under
+this name. Through `0.2.0` the package was published as
 `@archont561/qgis-sdk-bridge`; it is `@archont561/qgis-sdk` from `0.3.0` on
 ([decision-33](../../decisions/decision-33%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md)).
 Migration notes are at the end of this guide.
