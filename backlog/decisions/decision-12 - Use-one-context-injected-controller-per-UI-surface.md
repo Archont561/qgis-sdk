@@ -2,7 +2,7 @@
 id: decision-12
 title: Use one context injected controller per UI surface
 date: '2026-10-16 08:05'
-status: proposed
+status: superseded
 ---
 ## Context
 
@@ -72,3 +72,28 @@ is touched by it.
 under a `QgsApplication`. When it is promoted, the Decision section should name
 the runtime page view as the reference implementation of "the runtime constructs
 and parents the outer container and owns cleanup".
+
+## Status review (2026-10-26, TASK-67): `superseded` by decision-55
+
+TASK-67 landed the surface half, in the form decision-55 fixed rather than
+the one proposed here: `Dialog`/`Dock` base classes in `qgis_sdk.ui`, listed
+on the plugin as `surfaces = (...)`, with `self.ctx: UiContext` and
+`self.initial` bound on the instance by the host before `build()` runs, and
+reached through `@toolbar`/`@menu`/`@shortcut` on the class or through
+`self.ctx.ui.open(Surface, initial=...)` from an action. The host
+(`qgis_sdk.adapters.surfaces.SurfaceHost`) constructs and parents the outer
+`QDialog`/`QDockWidget`, calls `on_close()`, closes the view's own
+`ResourceScope` and deletes the widget; a dialog is a fresh instance per
+opening, a dock one instance per runtime with hide distinct from dispose and
+visibility restored from `ctx.settings`; `ctx.view.request_close()` requests
+closure rather than deleting from inside a handler; unload disposes every
+owned view. `UiContext.actions` lets a surface call the plugin's actions with
+view authority (one call at a time per view). That is every lifecycle rule
+this decision proposed, satisfied.
+
+What this decision proposed and decision-55 withdrew is not implemented and
+will not be: no decorated controller class per surface, no constructor
+injection (the host assigns `ctx` on the instance), no declarative form
+specification returned from `build()` (components and `Form` are TASK-68),
+no close-veto protocol. The record stays as the origin of the lifecycle
+rules; decision-55 is the decision in force.

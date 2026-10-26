@@ -128,3 +128,16 @@ pure PyQt inside `build()` must stay possible.
   (wiring decorators, mixins, containers, feedback, `Custom`, fake
   rendering, UI002/UI004) in 0.7.0; TASK-69/70/72 adopt the names; TASK-79
   snapshots gain semantic nodes.
+
+## Status review (2026-10-26, TASK-67): surfaces and bindings landed, stays `accepted`
+
+The surface half is implemented: `qgis_sdk.ui.Dialog`/`Dock` base classes,
+`surfaces = (...)` on the plugin, instance `ctx`/`initial` bound before
+`build()`, `self.ctx.ui.open(Surface, initial=)`, `UiContext.actions` with
+view authority, bindings on surfaces, `qgis_sdk.testing.FakeUi`,
+`qgis-sdk new --ui native` (pure-PyQt `build()`), `UI003`/`ICON001`, and the
+host lifetimes (`qgis_sdk.adapters.surfaces`). Nothing is generated from an
+action: a bound typed action is a finding, never a form. Still open under
+this decision: the component catalogue and `Form` (TASK-68), wiring
+decorators, mixins, containers, feedback, `Custom`, fake rendering and
+`UI002`/`UI004` (TASK-96), `.ui` loading and the web mirror.
