@@ -15,9 +15,9 @@ from qgis_sdk.core import (
 )
 from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider
-from qgis_sdk.reference import reference_provider
 from qgis_sdk.testing import FakeProcessing, RecordingNotifications
 from qgis_sdk_tools.generate import contract_fingerprint
+from sample_algorithms import sample_provider
 
 
 def _context(scope: ResourceScope, processing: FakeProcessing | None) -> PluginContext:
@@ -40,19 +40,19 @@ def test_start_registers_every_listed_provider_and_unload_removes_them() -> None
 
     @plugin(id="owner", title="Owner")
     class Owner:
-        providers = (tools, reference_provider)
+        providers = (tools, sample_provider)
 
     scope = ResourceScope()
     processing = FakeProcessing(scope)
     runtime = PluginRuntime(Owner, _context(scope, processing))
 
-    assert runtime.providers == (tools, reference_provider)
+    assert runtime.providers == (tools, sample_provider)
     assert (processing.registered, runtime.registered_providers) == ((), ())
 
     runtime.start()
 
-    assert processing.registered == ("tools", "reference")
-    assert runtime.registered_providers == ("tools", "reference")
+    assert processing.registered == ("tools", "sample")
+    assert runtime.registered_providers == ("tools", "sample")
     assert processing.provider("tools") is tools
 
     runtime.unload()
@@ -60,8 +60,8 @@ def test_start_registers_every_listed_provider_and_unload_removes_them() -> None
     assert (processing.registered, runtime.registered_providers) == ((), ())
     assert processing.events == [
         ("register", "tools"),
-        ("register", "reference"),
-        ("unregister", "reference"),
+        ("register", "sample"),
+        ("unregister", "sample"),
         ("unregister", "tools"),
     ]
 
@@ -69,14 +69,14 @@ def test_start_registers_every_listed_provider_and_unload_removes_them() -> None
 def test_the_same_class_over_a_host_without_processing_registers_nothing() -> None:
     @plugin(id="owner", title="Owner")
     class Owner:
-        providers = (reference_provider,)
+        providers = (sample_provider,)
 
     runtime = PluginRuntime(Owner, _context(ResourceScope(), None))
 
     runtime.start()
 
     assert runtime.state is PluginRuntimeState.RUNNING
-    assert runtime.providers == (reference_provider,)
+    assert runtime.providers == (sample_provider,)
     assert runtime.registered_providers == ()
     runtime.unload()
 
@@ -127,7 +127,7 @@ def test_a_refused_start_removes_what_it_had_already_registered() -> None:
 def test_a_bad_providers_attribute_is_refused_when_the_runtime_is_built() -> None:
     @plugin(id="typo", title="Typo")
     class Typo:
-        providers = reference_provider
+        providers = sample_provider
 
     with pytest.raises(QgisSdkDeclarationError, match="Typo.providers must be a list"):
         PluginRuntime(Typo, _context(ResourceScope(), None))
@@ -161,7 +161,7 @@ def test_providers_do_not_change_the_plugin_description_or_the_host_contract() -
 
     @plugin(id="same", title="Same")
     class WithProviders:
-        providers = (reference_provider,)
+        providers = (sample_provider,)
 
         @action(id="ping", title="Ping")
         def ping(self) -> str:

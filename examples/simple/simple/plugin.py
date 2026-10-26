@@ -2,8 +2,8 @@
 
 Five declared actions carry the whole workflow - open the fixture, read the
 selection, buffer in an explicit projected CRS, export, choose where exports
-go - and one line lists the Processing provider the plugin owns; nothing else is
-in this file: no Qt import, no QGIS import, no widget.
+go - and one line lists the Processing provider the plugin owns
+(:mod:`.algorithms`); nothing else is in this file: no Qt import, no QGIS import, no widget.
 The native dialog QGIS shows for an action and the page in ``web/`` are two
 front ends over the same ``runtime.actions``, which is what "equivalent native
 and web controls" means here.
@@ -28,9 +28,8 @@ from qgis_sdk.models import (
     VectorExport,
     VectorLayerInfo,
 )
-from qgis_sdk.reference import reference_provider
 
-from . import webview
+from . import algorithms, webview
 from .workflow import LocalGisWorkflow
 
 PLUGIN_ID = "simple"
@@ -64,11 +63,11 @@ class SimplePlugin:
 
     ctx: PluginContext
 
-    #: The reference algorithms appear in the toolbox as ``reference:buffer``
-    #: and ``reference:centroid`` while the plugin runs inside QGIS; over the
-    #: fakes the same line registers nothing (decision-42). A tuple, because a
+    #: The plugin's algorithms appear in the toolbox as ``simple:buffer`` and
+    #: ``simple:centroid`` while the plugin runs inside QGIS; over the fakes
+    #: the same line registers nothing (decision-42). A tuple, because a
     #: mutable class attribute is what Ruff's RUF012 flags.
-    providers = (reference_provider,)
+    providers = (algorithms.provider,)
 
     @property
     def workflow(self) -> LocalGisWorkflow:

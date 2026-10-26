@@ -1,8 +1,8 @@
 """Real QGIS: a plugin's providers appear in Processing while it runs, and execute.
 
 This is the acceptance test for TASK-39 and TASK-63. A ``@plugin`` class lists
-``qgis_sdk.reference``'s provider; starting its runtime over the native context
-puts ``reference:buffer`` in ``QgsApplication.processingRegistry()``, running it
+the shared sample provider; starting its runtime over the native context
+puts ``sample:buffer`` in ``QgsApplication.processingRegistry()``, running it
 through ``processing.run`` the way a user or the modeler would goes through the
 same ``invoke`` an action uses, and unloading removes it again. Then the two
 things decision-19 cares about: the source is untouched and the produced layer
@@ -21,7 +21,7 @@ from qgis_sdk.algorithms import describe_algorithm
 from qgis_sdk.core import AlgorithmContext, PluginContext, PluginRuntime, ResourceScope
 from qgis_sdk.models import CentroidRequest, LayerInput, VectorLayerInfo
 from qgis_sdk.providers import Provider
-from qgis_sdk.reference import buffer_layer, reference_provider
+from sample_algorithms import buffer_layer, sample_provider
 
 pytestmark = pytest.mark.qgis
 
@@ -58,17 +58,17 @@ def _runtime(native_services: Services, plugin_class: type) -> PluginRuntime:
     return PluginRuntime(plugin_class, context)
 
 
-@plugin(id="reference_owner", title="Reference owner")
-class ReferenceOwner:
+@plugin(id="sample_owner", title="Sample owner")
+class SampleOwner:
     """The one line a plugin writes to put its algorithms in the toolbox."""
 
-    providers = (reference_provider,)
+    providers = (sample_provider,)
 
 
 @pytest.fixture
 def running(native_services: Services):
-    """Start a plugin that lists the reference provider; always unload it."""
-    runtime = _runtime(native_services, ReferenceOwner)
+    """Start a plugin that lists the sample provider; always unload it."""
+    runtime = _runtime(native_services, SampleOwner)
     runtime.start()
     try:
         yield runtime
@@ -88,30 +88,30 @@ def _algorithm_ids(provider_id: str) -> list[str]:
 
 
 def test_start_advertises_the_provider_with_both_algorithms(running) -> None:
-    assert running.registered_providers == ("reference",)
-    assert _algorithm_ids("reference") == ["reference:buffer", "reference:centroid"]
+    assert running.registered_providers == ("sample",)
+    assert _algorithm_ids("sample") == ["sample:buffer", "sample:centroid"]
 
 
 def test_unload_removes_the_algorithms_again(native_services: Services) -> None:
-    runtime = _runtime(native_services, ReferenceOwner)
+    runtime = _runtime(native_services, SampleOwner)
     runtime.start()
-    assert _algorithm_ids("reference")
+    assert _algorithm_ids("sample")
 
     runtime.unload()
 
-    assert _algorithm_ids("reference") == []
+    assert _algorithm_ids("sample") == []
     assert runtime.registered_providers == ()
 
 
 def test_the_registered_algorithm_reports_the_declared_metadata(running) -> None:
     from qgis.core import QgsApplication
 
-    algorithm = QgsApplication.processingRegistry().algorithmById("reference:buffer")
+    algorithm = QgsApplication.processingRegistry().algorithmById("sample:buffer")
 
     assert algorithm is not None
     assert algorithm.displayName() == "Buffer a layer in an explicit working CRS"
     assert algorithm.group() == "Geometry"
-    assert algorithm.provider().name() == "Reference plugin"
+    assert algorithm.provider().name() == "Sample tools"
 
 
 def test_the_algorithm_declares_no_threading_because_none_is_qualified(
@@ -119,7 +119,7 @@ def test_the_algorithm_declares_no_threading_because_none_is_qualified(
 ) -> None:
     from qgis.core import QgsApplication, QgsProcessingAlgorithm
 
-    algorithm = QgsApplication.processingRegistry().algorithmById("reference:buffer")
+    algorithm = QgsApplication.processingRegistry().algorithmById("sample:buffer")
 
     assert algorithm.flags() & QgsProcessingAlgorithm.FlagNoThreading
 
@@ -127,7 +127,7 @@ def test_the_algorithm_declares_no_threading_because_none_is_qualified(
 def test_the_parameters_follow_the_functions_inputs(running) -> None:
     from qgis.core import QgsApplication
 
-    algorithm = QgsApplication.processingRegistry().algorithmById("reference:buffer")
+    algorithm = QgsApplication.processingRegistry().algorithmById("sample:buffer")
     names = [parameter.name() for parameter in algorithm.parameterDefinitions()]
 
     assert names == ["layer_id", "distance_metres", "working_crs", "OUTPUT"]
@@ -148,7 +148,7 @@ def test_running_through_processing_writes_the_requested_output(
     before = _digest(native_services.dataset)
 
     result = processing.run(
-        "reference:buffer",
+        "sample:buffer",
         {
             "layer_id": str(native_services.dataset),
             "distance_metres": 250.0,
@@ -171,7 +171,7 @@ def test_a_run_does_not_add_its_output_to_the_project(
     from qgis import processing
 
     processing.run(
-        "reference:centroid",
+        "sample:centroid",
         {
             "layer_id": str(native_services.dataset),
             "OUTPUT": str(tmp_path / "centroid.gpkg"),
@@ -188,7 +188,7 @@ def test_a_refused_request_surfaces_as_a_processing_error(
 
     with pytest.raises(Exception) as error:
         processing.run(
-            "reference:buffer",
+            "sample:buffer",
             {
                 "layer_id": str(native_services.dataset),
                 "distance_metres": 250.0,
@@ -206,17 +206,17 @@ def test_a_second_plugin_with_the_same_provider_id_is_refused_by_name(
 ) -> None:
     from qgis_sdk.declarations import QgisSdkDeclarationError
 
-    twin = Provider(id="reference", title="Another reference")
+    twin = Provider(id="sample", title="Another sample")
 
     @plugin(id="twin", title="Twin")
     class Twin:
         providers = (twin,)
 
     other = _runtime(native_services, Twin)
-    with pytest.raises(QgisSdkDeclarationError, match="'reference' is already"):
+    with pytest.raises(QgisSdkDeclarationError, match="'sample' is already"):
         other.start()
 
-    assert _algorithm_ids("reference") == ["reference:buffer", "reference:centroid"]
+    assert _algorithm_ids("sample") == ["sample:buffer", "sample:centroid"]
 
 
 def test_the_toolbox_calls_the_function_through_the_same_context_type(
@@ -266,11 +266,11 @@ def test_a_plugin_over_a_context_without_processing_registers_nothing(
         scope=ResourceScope(),
         algorithms=native_services.algorithms,
     )
-    runtime = PluginRuntime(ReferenceOwner, context)
+    runtime = PluginRuntime(SampleOwner, context)
 
     runtime.start()
     try:
         assert runtime.registered_providers == ()
-        assert _algorithm_ids("reference") == []
+        assert _algorithm_ids("sample") == []
     finally:
         runtime.unload()

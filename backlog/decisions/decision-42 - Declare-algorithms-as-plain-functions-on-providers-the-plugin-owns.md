@@ -92,3 +92,15 @@ authoring surface still asks for a second form.
   `providers` (decision-43).
 - `AlgorithmContext` gains nothing; the function receives what the class
   held as `self.ctx`.
+
+## Status review 2026-10-26
+
+Point 5 amended after the sprint-1 merge (#92): `qgis_sdk.reference` is not
+rewritten but **removed**. The runtime ships services, the authoring surface
+and the native bridge; it ships no Processing algorithms of its own, because
+what a plugin computes is the plugin's. The two decision-19 operations now
+live in the example as `examples/simple/simple/algorithms.py`
+(`provider = Provider(id="simple", ...)`, `buffer_layer`, `centroid_layer`;
+toolbox ids `simple:buffer`, `simple:centroid`), and the runtime tests carry
+their own `tests/sample_algorithms.py`. `BufferRequest`, `CentroidRequest`
+and the native `Algorithms` service are unchanged. Status stays `accepted`.

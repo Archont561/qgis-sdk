@@ -4,7 +4,7 @@ title: Declare algorithms as plain functions on providers the plugin owns
 status: Done
 assignee: []
 created_date: '2026-10-26T08:27:00Z'
-updated_date: '2026-10-26 11:59'
+updated_date: '2026-10-26 12:20'
 labels: []
 milestone: m-5
 dependencies:
@@ -31,4 +31,6 @@ decision-42. Provider.algorithm decorates a plain function: AlgorithmContext fir
 
 <!-- SECTION:NOTES:BEGIN -->
 Shipped in the m-5 sprint 1 PR. Runtime: qgis_sdk.algorithms now exposes describe_algorithm / invoke(fn, ctx, **inputs) / parameter_kind / AlgorithmDescription (kinds, required, result_schema); qgis_sdk.providers gained ProviderDescription + declared_providers and Provider.algorithm validates at decoration (leading AlgorithmContext, parameter kinds, duplicate id, VectorLayerInfo result); LayerInput/CrsInput/Metres are Annotated aliases over LayerParameter/CrsParameter/MetresParameter. Lifecycle: @plugin classes list providers = [...], PluginRuntime.start()/unload() register and remove them through the new PluginContext.processing capability (services.Processing protocol, adapters.qgis.NativeProcessing, testing.FakeProcessing); duplicate provider ids are refused by name; describe_plugin output and HOST_FINGERPRINT sha256:f96bdf10... unchanged. Contexts: JobContext.algorithms/project, AlgorithmContext.project (JobService(algorithms=, project=)). Removed from the public API: the class form, bare @algorithm, invoke(Class, Request), AlgorithmResult, RegisteredAlgorithm, parameter_kinds, adapters.qgis.register_provider; qgis_sdk.reference is buffer_layer/centroid_layer on reference_provider (ids unchanged). doc-12 rewritten (algorithms, providers, module table, decorator list) with a full rename list in the 0.6.0 migration notes. Validation: Python suite 1505 passed / 43 skipped; QGIS_SDK_NATIVE_SERVICES=1 services 134 passed; test-reference-example 17 + 5 passed (new toolbox test); QGIS_SDK_REFERENCE / HEADLESS_LIFECYCLE / DESKTOP_ADAPTER / PLUGIN_COEXISTENCE / DEVTOOLS harnesses green; tests/scripts 241 passed; ruff check + format, biome, actionlint, typecheck, test-reference-web green.
+
+Follow-up (same day, after #92): qgis_sdk.reference removed from the runtime; the example owns its algorithms in examples/simple/simple/algorithms.py (provider id simple) and the runtime tests use tests/sample_algorithms.py. Recorded as a dated status review on decision-42; doc-12 migration notes updated.
 <!-- SECTION:NOTES:END -->

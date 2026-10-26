@@ -234,7 +234,6 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use (TASK-14, TASK-63) |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery (TASK-15) |
 | `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists (TASK-39, TASK-63) |
-| `reference` | `buffer_layer` and `centroid_layer` on `reference_provider`, the two operations the reference workflow runs (decision-19) |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
@@ -1295,7 +1294,8 @@ published for the bridge, and no `ts-v*` tag exists.
   fakes (`qgis_sdk.services`, `qgis_sdk.testing`), schema-driven native forms
   (`qgis_sdk.ui`, `adapters.qgis.NativeForms`, `DeclaredFormDialog`,
   `QgisSdkFormError`), class-based Processing algorithms with typed outputs
-  (`qgis_sdk.algorithms`, `qgis_sdk.reference.algorithms`) and their toolbox
+  (`qgis_sdk.algorithms`, `qgis_sdk.reference.algorithms` - the latter removed
+  again in 0.6.0) and their toolbox
   registration (`qgis_sdk.providers`).
 - **Unchanged:** the package-root `__all__` still exports exactly six names, and
   everything above is reachable through its documented submodule.
@@ -1424,10 +1424,15 @@ TASK-63). Every rename, in one list:
   `Provider.class_for` is `Provider.function_for`. `parameter_kinds(dataclass)`
   is `qgis_sdk.algorithms.parameter_kind(path, annotation)`;
   `LAYER_PARAMETER`, `CRS_PARAMETER`, `METRES_PARAMETER` live there too.
-- **`qgis_sdk.reference`** exports `buffer_layer` and `centroid_layer` (on
-  `reference_provider`) instead of `BufferLayer`/`BufferResult`/
-  `CentroidLayer`/`CentroidResult`; the qualified ids `reference:buffer` and
-  `reference:centroid` do not change.
+- **`qgis_sdk.reference` is gone.** `BufferLayer`/`BufferResult`/
+  `CentroidLayer`/`CentroidResult` have no runtime replacement: what a plugin
+  computes is the plugin's, so the two operations live in the example as
+  `examples/simple/simple/algorithms.py` (`provider = Provider(id="simple",
+  ...)`, `buffer_layer`, `centroid_layer`; toolbox ids `simple:buffer` and
+  `simple:centroid`). Copy that module into your plugin and rename the
+  provider; the request models `BufferRequest`/`CentroidRequest` and the
+  native service behind `ctx.algorithms.execute` are unchanged. The runtime
+  keeps no Processing algorithms of its own.
 - **Contexts gain capabilities, additively.** `JobContext` carries
   `algorithms` and `project` (`JobService(..., algorithms=, project=)`),
   `AlgorithmContext` carries `project`, and `PluginContext` carries

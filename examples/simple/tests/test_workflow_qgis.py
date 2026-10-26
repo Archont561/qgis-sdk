@@ -148,7 +148,7 @@ def test_the_workflow_class_refuses_an_unknown_layer_and_a_silent_overwrite(
 def test_the_plugins_provider_is_in_the_toolbox_only_while_it_runs(
     qgis_app: Any,
 ) -> None:
-    """``providers = [reference_provider]`` is the whole registration step."""
+    """``providers = (algorithms.provider,)`` is the whole registration step."""
     from qgis.core import QgsApplication
 
     def advertised() -> list[str]:
@@ -157,15 +157,15 @@ def test_the_plugins_provider_is_in_the_toolbox_only_while_it_runs(
             algorithm.id()
             for algorithm in registry.algorithms()
             if algorithm.provider() is not None
-            and algorithm.provider().id() == "reference"
+            and algorithm.provider().id() == "simple"
         )
 
     plugin = simple.classFactory(None)
     assert advertised() == []
     plugin.initGui()
     try:
-        assert advertised() == ["reference:buffer", "reference:centroid"]
-        assert plugin.runtime.registered_providers == ("reference",)
+        assert advertised() == ["simple:buffer", "simple:centroid"]
+        assert plugin.runtime.registered_providers == ("simple",)
     finally:
         plugin.unload()
     assert advertised() == []

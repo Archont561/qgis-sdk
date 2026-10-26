@@ -15,8 +15,8 @@ a cancellation or an incompatible style all leave the project exactly as it
 was, with the source untouched.
 
 This class lives in the plugin, not in ``qgis_sdk``: the runtime ships the
-services and the reference *algorithms*; what a plugin chains them into is the
-plugin's own code, and this file is the worked example of that. Nothing here
+services; the algorithms (:mod:`.algorithms`) and what a plugin chains them
+into are the plugin's own code, and this file is the worked example of that. Nothing here
 holds Qt or QGIS: the class is a consumer of the injected
 :class:`~qgis_sdk.core.PluginContext`.
 """
@@ -28,8 +28,9 @@ from pathlib import Path
 from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
 from qgis_sdk.models import VectorExport, VectorLayerInfo
-from qgis_sdk.reference import buffer_layer
 from qgis_sdk.services import Cancellation, Progress
+
+from .algorithms import buffer_layer
 
 __all__ = ["LocalGisWorkflow"]
 

@@ -24,13 +24,13 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 from qgis_sdk.providers import Provider
-from qgis_sdk.reference import buffer_layer, centroid_layer, reference_provider
 from qgis_sdk.testing import (
     FakeAlgorithms,
     FakeLayers,
     FakeProject,
     RecordingNotifications,
 )
+from sample_algorithms import buffer_layer, centroid_layer, sample_provider
 
 
 class Clock:
@@ -130,7 +130,7 @@ def test_describing_an_algorithm_never_calls_it() -> None:
     assert description.result_schema["required"][0] == "id"
 
 
-def test_the_reference_algorithms_report_their_kinds_and_qualified_ids() -> None:
+def test_the_sample_algorithms_report_their_kinds_and_qualified_ids() -> None:
     buffer = describe_algorithm(buffer_layer)
 
     assert buffer.id == "buffer"
@@ -144,9 +144,9 @@ def test_the_reference_algorithms_report_their_kinds_and_qualified_ids() -> None
     assert describe_algorithm(centroid_layer).kinds == {"layer_id": "layer"}
     qualified = [
         algorithm["qualified_id"]
-        for algorithm in reference_provider.describe().to_dict()["algorithms"]
+        for algorithm in sample_provider.describe().to_dict()["algorithms"]
     ]
-    assert qualified == ["reference:buffer", "reference:centroid"]
+    assert qualified == ["sample:buffer", "sample:centroid"]
 
 
 def test_the_description_serialises_without_live_types() -> None:
@@ -155,7 +155,7 @@ def test_the_description_serialises_without_live_types() -> None:
     payload = describe_algorithm(buffer_layer).to_dict()
 
     assert payload["schema_version"] == 1
-    assert payload["provider"] == "reference"
+    assert payload["provider"] == "sample"
     assert payload["parameters"] == {
         "layer_id": "layer",
         "distance_metres": "metres",
@@ -530,7 +530,7 @@ def test_a_function_can_be_called_directly_with_a_fake_context() -> None:
     assert algorithms.requests == [CentroidRequest(layer_id="layer-1")]
 
 
-# -- the request models the reference functions build ------------------------------
+# -- the request models the sample functions build ------------------------------
 
 
 @pytest.mark.parametrize(
