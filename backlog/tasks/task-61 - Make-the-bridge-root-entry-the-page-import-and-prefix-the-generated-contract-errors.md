@@ -3,10 +3,10 @@ id: TASK-61
 title: >-
   Make the bridge root entry the page import and prefix the generated contract
   errors
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26 06:56'
-updated_date: '2026-10-26 06:57'
+updated_date: '2026-10-26 07:49'
 labels: []
 milestone: m-5
 dependencies:
@@ -24,8 +24,14 @@ Ergonomic refactor of @archont561/qgis-sdk recorded in decision-40. The root ent
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 import { BridgeClient, QgisSdkError } from "@archont561/qgis-sdk" compiles and resolves the same bindings as ./bridge; a test pins the root export list to the union of ./errors, ./declarations and ./bridge and refuses isPlainRecord, STREAM_EVENT_KINDS, QgisSdkScopeClosedError and QgisSdkUnsupportedCapabilityError.
-- [ ] #2 ./host exports QgisSdkHostContractError extending QgisSdkError with code contract_validation_failed; a regenerated plugin client exports QgisSdkContractError extending Error with the same code and no import line; generate_bridge_clients.py --check and the example's bindings check pass; HOST_FINGERPRINT is unchanged.
-- [ ] #3 doc-13 Exports and 0.4.0 migration notes, doc-12 0.6.0 note, the package README and decision-40 describe the change; m-5, TASK-60 AC #5 and doc-4 record the paired bridge 0.4.0 release instead of a bystander bridge.
-- [ ] #4 Bun tests, typecheck, Biome, the Python suite and tests/scripts are green on the merge commit; no manifest version is bumped and no tag is created by this task.
+- [x] #1 import { BridgeClient, QgisSdkError } from "@archont561/qgis-sdk" compiles and resolves the same bindings as ./bridge; a test pins the root export list to the union of ./errors, ./declarations and ./bridge and refuses isPlainRecord, STREAM_EVENT_KINDS, QgisSdkScopeClosedError and QgisSdkUnsupportedCapabilityError.
+- [x] #2 ./host exports QgisSdkHostContractError extending QgisSdkError with code contract_validation_failed; a regenerated plugin client exports QgisSdkContractError extending Error with the same code and no import line; generate_bridge_clients.py --check and the example's bindings check pass; HOST_FINGERPRINT is unchanged.
+- [x] #3 doc-13 Exports and 0.4.0 migration notes, doc-12 0.6.0 note, the package README and decision-40 describe the change; m-5, TASK-60 AC #5 and doc-4 record the paired bridge 0.4.0 release instead of a bystander bridge.
+- [x] #4 Bun tests, typecheck, Biome, the Python suite and tests/scripts are green on the merge commit; no manifest version is bumped and no tag is created by this task.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Merged on PR #89 (merge commit 374e481); main CI run 40285051751 green. Root barrel, QgisSdkHostContractError / QgisSdkContractError, regenerated clients, doc-13/doc-12/README/decision-40/m-5/doc-4 updated; no manifest bumped, no tag - the ts-v0.4.0 stamp is TASK-60's.
+<!-- SECTION:NOTES:END -->
