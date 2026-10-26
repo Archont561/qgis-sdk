@@ -3,11 +3,17 @@
 Decision-8 fixes the boundaries: no imports of the project, no installs, no
 handler execution, no rewrites. ``build`` reuses this function rather than
 shelling out to the command.
+
+Rules owned here: ``PROJECT001`` (no package), ``META001`` (a hand-written
+``metadata.txt``; ``build``/``dev`` generate it), ``ENTRY002`` (a
+hand-written ``classFactory``; ``host()`` binds it), ``CONFIG001`` for
+``[tool.qgis-sdk.check]``. The ``pyproject.toml`` rules live in
+:mod:`qgis_sdk_tools.project`, the version rules in :mod:`.versions`.
 """
 
 from __future__ import annotations
 
-import configparser
+import ast
 import os
 import tomllib
 from collections.abc import Iterator, Sequence
@@ -15,7 +21,11 @@ from pathlib import Path
 
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
 from .imports import check_source
-from .versions import check_generated_clients, check_runtime_pins
+from .versions import (
+    check_generated_clients,
+    check_runtime_pins,
+    check_runtime_requirement,
+)
 
 __all__ = ["EXCLUDED_DIRECTORIES", "REQUIRED_METADATA_KEYS", "check_project"]
 
@@ -37,7 +47,8 @@ EXCLUDED_DIRECTORIES = frozenset(
         ".pytest_cache",
     }
 )
-# QGIS refuses to load a plugin whose metadata.txt lacks any of these.
+# QGIS refuses to load a plugin whose metadata.txt lacks any of these; ``build``
+# and ``dev`` render them all from pyproject.toml (``qgis_sdk_tools.project``).
 REQUIRED_METADATA_KEYS = (
     "name",
     "description",
@@ -66,9 +77,17 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
     diagnostics.extend(config_diagnostics)
     native = (*configured, *native_modules)
 
-    diagnostics.extend(_check_packages(root))
-    # What the project pins against what this release supports (decision-35).
+    packages = list(_check_packages(root))
+    diagnostics.extend(packages)
+    if not any(d.rule == "PROJECT001" for d in packages):
+        # The plugin class, the metadata.txt values and the page (decision-43).
+        from qgis_sdk_tools.project import load_project
+
+        diagnostics.extend(load_project(root)[1])
+    # What the project pins against what this release supports (decision-35),
+    # and whether the runtime this interpreter would ship is one it declares.
     diagnostics.extend(check_runtime_pins(root))
+    diagnostics.extend(check_runtime_requirement(root))
     diagnostics.extend(check_generated_clients(root))
 
     files = 0
@@ -112,62 +131,65 @@ def _check_packages(root: Path) -> Iterator[Diagnostic]:
         )
         return
     for package in packages:
-        yield from _check_metadata(root, package)
+        yield from _check_host_artifacts(root, package)
 
 
-def _check_metadata(root: Path, package: Path) -> Iterator[Diagnostic]:
+def _check_host_artifacts(root: Path, package: Path) -> Iterator[Diagnostic]:
+    """``META001``/``ENTRY002``: files ``build`` and ``dev`` generate, authored by hand."""
     metadata = package / "metadata.txt"
-    relative = metadata.relative_to(root)
-    if not metadata.is_file():
+    if metadata.is_file():
         yield Diagnostic(
             rule="META001",
-            path=relative,
+            path=metadata.relative_to(root),
             line=0,
             column=0,
-            message=f"`{package.name}` has no metadata.txt, so QGIS will not list it",
+            message=(
+                f"`{package.name}` carries a hand-written metadata.txt; `build` and "
+                "`dev` generate it from pyproject.toml"
+            ),
             remediation=(
-                "Add metadata.txt with a [general] section; `qgis-sdk new` writes "
-                "one with every required key."
+                "Delete the file. Move `version`, `description` and the author to "
+                "[project], `qgisMinimumVersion` to [tool.qgis-sdk] "
+                "qgis-minimum-version, and any other key to [tool.qgis-sdk.metadata] "
+                "(decision-43)."
             ),
         )
-        return
-    parser = configparser.ConfigParser(interpolation=None, strict=False)
-    parser.optionxform = str  # type: ignore[assignment]  # QGIS keys are case-sensitive
+    init = package / "__init__.py"
     try:
-        parser.read_string(metadata.read_text(encoding="utf-8"), source=str(relative))
-    except configparser.Error as error:
+        tree = ast.parse(init.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return  # the import rules report the file itself
+    bound = _class_factory_binding(tree)
+    if bound is not None:
         yield Diagnostic(
-            rule="META003",
-            path=relative,
-            line=0,
-            column=0,
-            message=f"metadata.txt has no [general] section ({error.__class__.__name__})",
-            remediation="Start the file with `[general]`; QGIS reads keys from that section only.",
+            rule="ENTRY002",
+            path=init.relative_to(root),
+            line=bound.lineno,
+            column=bound.col_offset + 1,
+            message=(
+                "__init__.py binds `classFactory`; `build` and `dev` bind it through "
+                "`qgis_sdk.adapters.desktop.host()`"
+            ),
+            remediation=(
+                "Delete the definition or import (and the Desktop wrapper it "
+                "points at); name the class in `[tool.qgis-sdk] plugin` instead."
+            ),
         )
-        return
-    if not parser.has_section("general"):
-        yield Diagnostic(
-            rule="META003",
-            path=relative,
-            line=0,
-            column=0,
-            message="metadata.txt has no [general] section",
-            remediation="Start the file with `[general]`; QGIS reads keys from that section only.",
-        )
-        return
-    for key in REQUIRED_METADATA_KEYS:
-        if not parser.get("general", key, fallback="").strip():
-            yield Diagnostic(
-                rule="META002",
-                path=relative,
-                line=0,
-                column=0,
-                message=f"metadata.txt lacks the required key `{key}`",
-                remediation=(
-                    "QGIS refuses to load a plugin without it; add the key under "
-                    "[general] (`qgis-sdk new` writes all required keys)."
-                ),
-            )
+
+
+def _class_factory_binding(tree: ast.Module) -> ast.stmt | None:
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            if node.name == "classFactory":
+                return node
+        elif isinstance(node, ast.ImportFrom):
+            if any((a.asname or a.name) == "classFactory" for a in node.names):
+                return node
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "classFactory":
+                    return node
+    return None
 
 
 def _configured_native_modules(root: Path) -> tuple[tuple[str, ...], list[Diagnostic]]:

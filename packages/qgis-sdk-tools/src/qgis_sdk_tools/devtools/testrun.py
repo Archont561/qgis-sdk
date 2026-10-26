@@ -16,7 +16,9 @@ Targets:
     ``qgis_app`` is a headless ``QgsApplication``;
 ``desktop``
     pytest inside the QGIS Desktop binary against a throwaway profile; tests
-    marked ``desktop``; ``qgis_iface`` is the real interface;
+    marked ``desktop``; ``qgis_iface`` is the real interface, and the
+    project's plugin is loadable by name through the same generated host
+    package ``qgis-sdk dev`` stages (decision-43);
 ``web``
     the project's Vitest through the manager its lockfile names.
 """
@@ -221,12 +223,13 @@ def _plan_desktop(
     )
     probe = workspace / PROBE_NAME
     probe.write_text(DESKTOP_PROBE, encoding="utf-8", newline="\n")
+    plugin_path = _stage_host_for_tests(root)
     process_env = install.environment(
         env, extra_paths=(root, *sdk_import_paths()), headless=headless, desktop=True
     )
     process_env[TARGET_ENV] = "desktop"
     process_env[REQUEST_ENV] = str(request)
-    process_env["QGIS_PLUGINPATH"] = str(root)
+    process_env["QGIS_PLUGINPATH"] = str(plugin_path)
     return TestPlan(
         target="desktop",
         argv=(
@@ -250,6 +253,20 @@ def _plan_desktop(
         ),
         workspace=workspace,
     )
+
+
+def _stage_host_for_tests(root: Path) -> Path:
+    """The generated host package for ``QGIS_PLUGINPATH``; the root when there is none.
+
+    A project without ``[tool.qgis-sdk] plugin`` still runs its desktop
+    tests - they may not load the plugin by name, and ``check`` says why.
+    """
+    from .dev import QgisSdkDevError, inspect_project, stage_host
+
+    try:
+        return stage_host(inspect_project(root))
+    except QgisSdkDevError:
+        return root
 
 
 def package_manager_for(web: Path) -> str:

@@ -11,6 +11,13 @@ Both rules read files only. The supported range comes from the installed
 ``qgis-sdk-tools`` metadata, or from the checkout's own manifest when the
 tools run from source; when neither is readable the rule is skipped, never
 guessed.
+
+``VERSION003``/``VERSION004`` (decision-43 amendment) read the project's own
+requirement on the runtime: ``build`` vendors the ``qgis_sdk`` this
+interpreter imports, so that copy must be one the project declares it works
+with. No declaration is a warning and the build uses what is installed;
+an installed runtime outside the declared specifier is an error with the
+``pip`` line that would fix it - the tools never install.
 """
 
 from __future__ import annotations
@@ -31,9 +38,14 @@ from .diagnostics import Diagnostic
 __all__ = [
     "RUNTIME_REQUIREMENT_NAMES",
     "RuntimeRange",
+    "RuntimeResolution",
     "check_generated_clients",
     "check_runtime_pins",
+    "check_runtime_requirement",
+    "installed_runtime_version",
     "requirement_admits_range",
+    "requirement_admits_version",
+    "resolve_runtime",
     "supported_runtime_range",
 ]
 
@@ -326,3 +338,193 @@ def check_generated_clients(root: Path) -> Iterator[Diagnostic]:
                     "release, or install the release that generated it."
                 ),
             )
+
+
+# --- VERSION003/VERSION004: the project's own runtime requirement -------------
+
+#: The distributions the runtime may be installed from, newest layout first.
+RUNTIME_DISTRIBUTIONS = (RUNTIME_DISTRIBUTION, "qgis-sdk")
+
+
+def installed_runtime_version() -> str | None:
+    """The version of the ``qgis_sdk`` this interpreter imports, or ``None``.
+
+    Distribution metadata first; from a source checkout, the runtime
+    package's own manifest. ``None`` when neither says.
+    """
+    for name in RUNTIME_DISTRIBUTIONS:
+        try:
+            return importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    try:
+        import qgis_sdk
+    except ImportError:  # pragma: no cover - the tools depend on the runtime
+        return None
+    manifest = Path(qgis_sdk.__file__).resolve().parents[2] / "pyproject.toml"
+    if not manifest.is_file():
+        return None
+    try:
+        data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    project = data.get("project") if isinstance(data, dict) else None
+    if not isinstance(project, dict) or project.get("name") != RUNTIME_DISTRIBUTION:
+        return None
+    version = project.get("version")
+    return version if isinstance(version, str) else None
+
+
+def requirement_admits_version(specifier: str, version: str) -> bool:
+    """Whether ``version`` satisfies ``specifier`` (release segments only).
+
+    The same arithmetic as :func:`requirement_admits_range`, on a point: an
+    unparsable clause counts as satisfied, ``!=`` is honoured here because a
+    point can be excluded exactly.
+    """
+    try:
+        point = _release(version)
+    except ValueError:
+        return True
+    for raw in specifier.split(","):
+        clause = raw.strip()
+        if not clause:
+            continue
+        match = _CLAUSE.match(clause)
+        if match is None:
+            return True
+        op, text = match.group("op"), match.group("version")
+        try:
+            if op in ("==", "===", "!=") and text.endswith(".*"):
+                prefix = _release(text[:-2])
+                same = _eq(point[: len(prefix)], prefix)
+                if (op == "!=") == same:
+                    return False
+                continue
+            wanted = _release(text)
+        except ValueError:
+            return True
+        if op in ("==", "==="):
+            ok = _eq(point, wanted)
+        elif op == "!=":
+            ok = not _eq(point, wanted)
+        elif op == ">=":
+            ok = not _lt(point, wanted)
+        elif op == ">":
+            ok = _lt(wanted, point)
+        elif op == "<=":
+            ok = not _lt(wanted, point)
+        elif op == "<":
+            ok = _lt(point, wanted)
+        else:  # "~="
+            ok = not _lt(point, wanted) and (
+                len(wanted) < 2 or _lt(point, _next_after_prefix(wanted[:-1]))
+            )
+        if not ok:
+            return False
+    return True
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeResolution:
+    """What the project asks of the runtime and what this interpreter has."""
+
+    requirement: str | None
+    """The declared requirement (``qgis-sdk-runtime>=0.6,<0.7``), or ``None``."""
+    installed: str | None
+    """The importable runtime's version, or ``None`` when nothing says."""
+
+    @property
+    def specifier(self) -> str:
+        if self.requirement is None:
+            return ""
+        match = _REQUIREMENT.match(self.requirement)
+        return "" if match is None else match.group("spec")
+
+    @property
+    def satisfied(self) -> bool:
+        """True unless a declared specifier excludes the installed version."""
+        if self.requirement is None or self.installed is None:
+            return True
+        return requirement_admits_version(self.specifier, self.installed)
+
+
+def resolve_runtime(root: Path) -> RuntimeResolution:
+    """Pair the project's runtime requirement with the installed runtime."""
+    requirement = None
+    pyproject = Path(root) / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError:
+            data = {}
+        for candidate in _requirement_strings(data):
+            match = _REQUIREMENT.match(candidate)
+            if match is None:
+                continue
+            name = match.group("name").lower().replace("_", "-")
+            if name in RUNTIME_REQUIREMENT_NAMES:
+                requirement = candidate.split(";", 1)[0].strip()
+                break
+    return RuntimeResolution(
+        requirement=requirement, installed=installed_runtime_version()
+    )
+
+
+def check_runtime_requirement(root: Path) -> Iterator[Diagnostic]:
+    """``VERSION003`` without a runtime requirement, ``VERSION004`` when unmet."""
+    if not (Path(root) / "pyproject.toml").is_file():
+        return
+    resolution = resolve_runtime(root)
+    if resolution.requirement is None:
+        installed = resolution.installed or "unknown"
+        yield Diagnostic(
+            rule="VERSION003",
+            path=Path("pyproject.toml"),
+            line=0,
+            column=0,
+            severity="warning",
+            message=(
+                f"declares no requirement on {RUNTIME_DISTRIBUTION}; `build` ships "
+                f"whatever this interpreter imports ({installed})"
+            ),
+            remediation=(
+                "Add it to [project] dependencies, for example "
+                f'`"{RUNTIME_DISTRIBUTION}>={_minor(installed)},<{_next_minor(installed)}"`, '
+                "so the vendored runtime is one the plugin was written for."
+            ),
+        )
+        return
+    if resolution.satisfied:
+        return
+    yield Diagnostic(
+        rule="VERSION004",
+        path=Path("pyproject.toml"),
+        line=0,
+        column=0,
+        message=(
+            f"declares `{resolution.requirement}` but the importable runtime is "
+            f"{resolution.installed}"
+        ),
+        remediation=(
+            f'Install a matching runtime (`pip install "{resolution.requirement}"`) '
+            "or move the requirement; qgis-sdk never installs on your behalf."
+        ),
+    )
+
+
+def _minor(version: str) -> str:
+    try:
+        release = _release(version)
+    except ValueError:
+        return "X.Y"
+    return ".".join(str(part) for part in (release + (0, 0))[:2])
+
+
+def _next_minor(version: str) -> str:
+    try:
+        release = _release(version)
+    except ValueError:
+        return "X.Y+1"
+    major, minor = (release + (0, 0))[:2]
+    return f"{major}.{minor + 1}"

@@ -1,11 +1,10 @@
 """Build-time findings on top of ``check_project``: entry point, dependencies, assets.
 
 Same :class:`Diagnostic` shape as ``check`` so the build prints one list.
+(``ENTRY001`` - no ``classFactory`` - retired with decision-43: the build
+binds it itself, and ``check`` reports a hand-written one as ``ENTRY002``.)
 Rules:
 
-``ENTRY001``
-    ``<plugin>/__init__.py`` does not define or import ``classFactory``;
-    QGIS calls exactly that name.
 ``DEP001``
     A plugin module imports a top-level package that neither the standard
     library, QGIS/Qt, the SDK runtime nor the plugin provides. The ZIP
@@ -76,30 +75,6 @@ def external_dependencies(root: Path) -> tuple[tuple[str, ...], list[Diagnostic]
             )
         ]
     return tuple(names), []
-
-
-def check_entry_point(root: Path, plugin: str) -> Iterator[Diagnostic]:
-    """``ENTRY001`` unless ``<plugin>/__init__.py`` binds ``classFactory``."""
-    init = root / plugin / "__init__.py"
-    relative = Path(plugin) / "__init__.py"
-    try:
-        tree = ast.parse(init.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError):
-        return  # check_project reports the file itself
-    if _binds_class_factory(tree):
-        return
-    yield Diagnostic(
-        rule="ENTRY001",
-        path=relative,
-        line=0,
-        column=0,
-        message="__init__.py does not define or import `classFactory`",
-        remediation=(
-            "QGIS imports `classFactory(iface)` from the package; add "
-            "`from .plugin import classFactory` (what `qgis-sdk new` writes) or "
-            "define it there."
-        ),
-    )
 
 
 def check_dependencies(
@@ -186,21 +161,6 @@ def check_web_assets(assets: Path, plugin: str) -> Iterator[Diagnostic]:
             "exists) or build it yourself before passing --no-web."
         ),
     )
-
-
-def _binds_class_factory(tree: ast.Module) -> bool:
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            if node.name == "classFactory":
-                return True
-        elif isinstance(node, ast.ImportFrom):
-            if any((a.asname or a.name) == "classFactory" for a in node.names):
-                return True
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "classFactory":
-                    return True
-    return False
 
 
 def _absolute_imports(node: ast.AST) -> Iterator[tuple[str, ast.stmt]]:

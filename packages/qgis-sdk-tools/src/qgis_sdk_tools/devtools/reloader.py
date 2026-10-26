@@ -51,7 +51,6 @@ WATCH_INTERVAL_MS: Final = 500
 ADVISORY_RULES: Final = frozenset({"QGIS001", "ARCH001"})
 #: Directories under the plugin package the watcher never looks into.
 UNWATCHED: Final = frozenset({"web", "__pycache__", "node_modules"})
-WATCHED_FILES: Final = ("metadata.txt",)
 
 
 class PluginHost(Protocol):
@@ -91,6 +90,11 @@ class ReloadReport:
         }
 
 
+#: Rule families raised on ``pyproject.toml`` that still concern the plugin:
+#: the host package is rendered from them (decision-43).
+PROJECT_RULES: Final = ("PROJECT", "CONFIG", "META", "GRANT", "VERSION")
+
+
 def preflight(root: Path, plugin: str) -> tuple[list[str], list[str]]:
     """Check the next revision before the running one is touched.
 
@@ -120,7 +124,7 @@ def preflight(root: Path, plugin: str) -> tuple[list[str], list[str]]:
             continue
         parts = finding.path.parts
         in_package = parts[:1] == (plugin,)
-        is_project_shape = finding.rule.startswith(("PROJECT", "CONFIG"))
+        is_project_shape = finding.rule.startswith(PROJECT_RULES)
         if not (in_package or is_project_shape):
             continue
         line = f"{finding.path.as_posix()}: {finding.rule} {finding.message}"
@@ -273,7 +277,8 @@ class ReloadCoordinator:
         host, plugin, root = self._host, self._plugin, self._root
         if not host.available(plugin):
             self._say(
-                f"{plugin} is not a plugin QGIS can see under {root} (metadata.txt?)"
+                f"{plugin} is not a plugin QGIS can see (the generated package under "
+                f"{root / '.qgis-sdk' / 'dev' / 'host'} is missing?)"
             )
             return False
         if not host.load(plugin):
@@ -304,7 +309,7 @@ class ReloadCoordinator:
 
 
 class SourceWatcher:
-    """Poll the plugin's Python sources and metadata for changes.
+    """Poll the plugin's Python sources for changes.
 
     Polling, not inotify: it is portable, cheap at plugin size, and runs on
     the GUI thread so a change can call straight into the coordinator. The
@@ -325,7 +330,7 @@ class SourceWatcher:
         for directory, dirnames, filenames in os.walk(self._package):
             dirnames[:] = [d for d in dirnames if d not in UNWATCHED]
             for filename in filenames:
-                if filename.endswith(".py") or filename in WATCHED_FILES:
+                if filename.endswith(".py"):
                     path = Path(directory) / filename
                     try:
                         stat = path.stat()

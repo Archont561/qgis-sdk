@@ -7,38 +7,47 @@
 2. The web page, when the project has one: run the project's own build
    script (never install anything) or ship a page already built.
 3. Stage the plugin package without caches, tests and tooling state, add
-   the runtime under ``<plugin>/_vendor/qgis_sdk`` with imports rewritten
-   (:mod:`.vendor`), and write a reproducible ZIP whose only root entry is
-   the plugin directory - what QGIS's *Install from ZIP* expects.
+   the host artifacts the source does not carry (decision-43): the
+   ``metadata.txt`` rendered from ``pyproject.toml`` and the
+   ``classFactory = host(...)`` line appended to ``<plugin>/__init__.py``;
+   add the runtime under ``<plugin>/_vendor/qgis_sdk`` with imports
+   rewritten (:mod:`.vendor`), and write a reproducible ZIP whose only root
+   entry is the plugin directory - what QGIS's *Install from ZIP* expects.
+
+The runtime that is vendored is the one this interpreter imports; the
+project's own requirement on it is checked (``VERSION003``/``VERSION004``)
+and recorded in the NOTICE, never installed.
 """
 
 from __future__ import annotations
 
-import configparser
 import os
 import shutil
 import stat
 import tempfile
 import time
 import zipfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
 
 from qgis_sdk.models import QgisSdkError
 
+from qgis_sdk_tools.artifacts import (
+    METADATA_FILE,
+    QgisSdkArtifactError,
+    class_factory_source,
+    introspect_plugin,
+    render_metadata,
+)
 from qgis_sdk_tools.check import CheckReport, Diagnostic, check_project
+from qgis_sdk_tools.check.versions import resolve_runtime
 from qgis_sdk_tools.devtools.dev import QgisSdkDevError, inspect_project
 from qgis_sdk_tools.devtools.testrun import package_manager_for
 from qgis_sdk_tools.scaffold.web import script_command
 
-from .validate import (
-    check_dependencies,
-    check_entry_point,
-    check_web_assets,
-    external_dependencies,
-)
+from .validate import check_dependencies, check_web_assets, external_dependencies
 from .vendor import (
     RUNTIME_PACKAGE,
     notice,
@@ -108,6 +117,7 @@ class BuildResult:
     runtime_version: str
     web: WebOutcome
     external: tuple[str, ...]
+    runtime_requirement: str | None = None
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -116,6 +126,7 @@ class BuildResult:
             "version": self.version,
             "files": len(self.files),
             "runtime_version": self.runtime_version,
+            "runtime_requirement": self.runtime_requirement,
             "web": self.web,
             "external": list(self.external),
             "report": self.report.to_json(),
@@ -140,6 +151,7 @@ def build_plugin(
     except QgisSdkDevError as error:
         raise QgisSdkBuildError(str(error)) from error
     root = project.root
+    config = project.config
     plugin = project.plugin
     package = root / plugin
     assets = package / "web"
@@ -148,7 +160,6 @@ def build_plugin(
     diagnostics = list(report.diagnostics)
     external, config_findings = external_dependencies(root)
     diagnostics.extend(config_findings)
-    diagnostics.extend(check_entry_point(root, plugin))
     diagnostics.extend(
         check_dependencies(root, plugin, _plugin_sources(package), external=external)
     )
@@ -167,17 +178,39 @@ def build_plugin(
     if not report.ok:
         raise QgisSdkBuildRefusedError(report.diagnostics)
 
-    version = _metadata_version(package / "metadata.txt")
+    try:
+        facts = introspect_plugin(config)
+    except QgisSdkArtifactError as error:
+        raise QgisSdkBuildError(str(error)) from error
+    version = config.version
     out = Path(out) if out is not None else root / OUTPUT_DIRECTORY
     out.mkdir(parents=True, exist_ok=True)
     archive = out / f"{plugin}-{version}.zip"
-    runtime = runtime_version()
+    resolution = resolve_runtime(root)
+    runtime = resolution.installed or runtime_version()
+    prefix = f"{plugin}.{VENDOR_PACKAGE}"
     with tempfile.TemporaryDirectory(prefix="qgis-sdk-build-") as staging:
         staged = Path(staging) / plugin
-        _stage_plugin(package, staged, prefix=f"{plugin}.{VENDOR_PACKAGE}")
-        _stage_runtime(staged / VENDOR_PACKAGE, prefix=f"{plugin}.{VENDOR_PACKAGE}")
+        _stage_plugin(
+            package,
+            staged,
+            prefix=prefix,
+            append={
+                "__init__.py": class_factory_source(
+                    config,
+                    runtime_package=f"{prefix}.{RUNTIME_PACKAGE}",
+                    by="qgis-sdk build",
+                )
+            },
+        )
+        (staged / METADATA_FILE).write_text(
+            render_metadata(config, facts), encoding="utf-8", newline="\n"
+        )
+        _stage_runtime(staged / VENDOR_PACKAGE, prefix=prefix)
         (staged / VENDOR_PACKAGE / "NOTICE").write_text(
-            notice(runtime), encoding="utf-8", newline="\n"
+            notice(runtime, requirement=resolution.requirement),
+            encoding="utf-8",
+            newline="\n",
         )
         files = _write_archive(archive, Path(staging), plugin)
     return BuildResult(
@@ -189,6 +222,7 @@ def build_plugin(
         runtime_version=runtime,
         web=web_outcome,
         external=external,
+        runtime_requirement=resolution.requirement,
     )
 
 
@@ -222,15 +256,20 @@ def _build_web(web: Path, run: RunProcess) -> None:
         )
 
 
-def _metadata_version(metadata: Path) -> str:
-    parser = configparser.ConfigParser(interpolation=None, strict=False)
-    parser.optionxform = str  # type: ignore[assignment]
-    parser.read_string(metadata.read_text(encoding="utf-8"))
-    return parser.get("general", "version").strip()
+def _stage_plugin(
+    package: Path,
+    staged: Path,
+    *,
+    prefix: str,
+    append: Mapping[str, str] | None = None,
+) -> None:
+    """Copy the plugin package, filtered, rewriting its ``qgis_sdk`` imports.
 
-
-def _stage_plugin(package: Path, staged: Path, *, prefix: str) -> None:
-    """Copy the plugin package, filtered, rewriting its ``qgis_sdk`` imports."""
+    ``append`` adds text to named files (``__init__.py`` gets the generated
+    ``classFactory``) before the rewrite, so a vendored import path applies
+    to the generated lines too. The source tree is never touched.
+    """
+    extra = dict(append or {})
     for directory, dirnames, filenames in os.walk(package):
         dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDED_DIRECTORIES)
         relative = Path(directory).relative_to(package)
@@ -241,13 +280,19 @@ def _stage_plugin(package: Path, staged: Path, *, prefix: str) -> None:
                 continue
             target = staged / relative / filename
             if source.suffix == ".py":
+                text = source.read_text(encoding="utf-8")
+                if relative == Path() and filename in extra:
+                    body = text.rstrip("\n")
+                    text = (body + "\n\n\n" if body else "") + extra.pop(filename)
                 target.write_text(
-                    rewrite_imports(source.read_text(encoding="utf-8"), prefix=prefix),
-                    encoding="utf-8",
-                    newline="\n",
+                    rewrite_imports(text, prefix=prefix), encoding="utf-8", newline="\n"
                 )
             else:
                 shutil.copyfile(source, target)
+    for filename, text in extra.items():  # a package without the file at all
+        (staged / filename).write_text(
+            rewrite_imports(text, prefix=prefix), encoding="utf-8", newline="\n"
+        )
 
 
 def _stage_runtime(vendor: Path, *, prefix: str) -> None:

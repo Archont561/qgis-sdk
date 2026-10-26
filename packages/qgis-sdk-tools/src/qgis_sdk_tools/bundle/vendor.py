@@ -14,19 +14,18 @@ resolve inside the copy.
 from __future__ import annotations
 
 import ast
-import importlib.metadata
 import re
 from pathlib import Path
 from typing import Final
 
 import qgis_sdk
 
+from qgis_sdk_tools.check.versions import installed_runtime_version
+
 RUNTIME_PACKAGE: Final = "qgis_sdk"
 #: Subpackages a built plugin never needs (fakes for tests; see decision-35).
 EXCLUDED_SUBPACKAGES: Final = frozenset({"testing"})
 EXCLUDED_NAMES: Final = frozenset({"__pycache__"})
-#: The distributions the runtime may be installed from, newest layout first.
-RUNTIME_DISTRIBUTIONS: Final = ("qgis-sdk-runtime", "qgis-sdk")
 
 _IMPORT_PREFIX = re.compile(r"(\bimport\s+)" + RUNTIME_PACKAGE + r"\b")
 _FROM_PREFIX = re.compile(r"(\bfrom\s+)" + RUNTIME_PACKAGE + r"\b")
@@ -38,13 +37,8 @@ def runtime_source() -> Path:
 
 
 def runtime_version() -> str:
-    """The runtime's distribution version, or ``unknown`` from a bare checkout."""
-    for name in RUNTIME_DISTRIBUTIONS:
-        try:
-            return importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            continue
-    return "unknown"
+    """The runtime's version - distribution or checkout manifest - or ``unknown``."""
+    return installed_runtime_version() or "unknown"
 
 
 def runtime_files() -> list[Path]:
@@ -125,13 +119,24 @@ def _is_runtime(name: str | None) -> bool:
     )
 
 
-def notice(version: str) -> str:
-    """The NOTICE placed next to the vendored copy."""
+def notice(version: str, *, requirement: str | None = None) -> str:
+    """The NOTICE placed next to the vendored copy.
+
+    ``requirement`` is what the project declared on the runtime; the notice
+    records it beside the version that was resolved, so an installed ZIP
+    says which runtime it carries and why (decision-43 amendment).
+    """
+    declared = (
+        f"The project declared `{requirement}`; "
+        if requirement is not None
+        else "The project declared no runtime requirement; "
+    )
     return (
         f"This directory contains qgis-sdk runtime {version}, copied by\n"
         "`qgis-sdk build` under a plugin-private import path so the plugin runs\n"
         "in a QGIS without qgis-sdk installed and coexists with plugins built\n"
         "against other versions.\n\n"
+        f"{declared}the copy is the runtime the build's interpreter imported.\n\n"
         "qgis-sdk is licensed under the MIT License;\n"
         "https://github.com/Archont561/qgis-sdk\n"
     )
