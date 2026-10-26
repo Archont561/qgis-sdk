@@ -7,5 +7,5 @@
 		"isolatedDeclarations": false,
 		"declaration": false
 	},
-	"include": ["tests/dist/**/*.ts"]
+	"include": ["tests/consumer/**/*.ts"]
 }
