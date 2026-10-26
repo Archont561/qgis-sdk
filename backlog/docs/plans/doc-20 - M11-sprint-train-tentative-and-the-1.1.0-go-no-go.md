@@ -1,14 +1,14 @@
 ---
 id: doc-20
-title: M8 sprint train (tentative) and the 0.9.0 go/no-go
+title: M11 sprint train (tentative) and the 1.1.0 go/no-go
 type: guide
 created_date: '2026-10-26 09:20'
 ---
-# M8 sprint train (tentative) and the 0.9.0 go/no-go
+# M11 sprint train (tentative) and the 1.1.0 go/no-go
 
-**Status:** Not started and not scheduled. [m-8](../../milestones/m-8%20-%200.9.0-%E2%80%94-deferred-native-compute-feasibility-(tenta.md) is a reservation for
-deferred research, re-pointed from 0.7.0 and then from 0.8.0 on 2026-10-26;
-nothing in it blocks 0.6.0, 0.7.0 or 0.8.0, and nothing in it may start without the go/no-go below.
+**Status:** Not started and not scheduled. [m-11](../../milestones/m-11%20-%201.1.0-%E2%80%94-deferred-native-compute-feasibility-(tenta.md) is a reservation for
+deferred research, re-pointed from 0.7.0, 0.8.0 and 0.9.0 on 2026-10-26 to sit after 1.0;
+nothing in it blocks any 0.x release, and nothing in it may start without the go/no-go below.
 Sprint membership lives here and in the milestone body, not in task fields
 ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
@@ -33,7 +33,7 @@ by the owner, that answers three questions in writing:
 | Task | Declared dependencies | State |
 | --- | --- | --- |
 | [TASK-10](../../tasks/task-10%20-%20Prototype-an-optional-Rust-algorithm-backend-after-v1.md) optional Rust backend prototype | TASK-22 ✓, TASK-31 ✓, renewed approval | To Do, deferred |
-| [TASK-71](../../tasks/task-71%20-%20Prepare-and-qualify-0.9.0-release-tentative-deferred-target.md) 0.9.0 gate (tentative) | TASK-10, TASK-78 | To Do, deferred |
+| [TASK-71](../../tasks/task-71%20-%20Prepare-and-qualify-1.1.0-release-tentative-deferred-target-post-1.0.md) 1.1.0 gate (tentative) | TASK-10, TASK-95 | To Do, deferred |
 
 ## 3. Sprint train (tentative)
 

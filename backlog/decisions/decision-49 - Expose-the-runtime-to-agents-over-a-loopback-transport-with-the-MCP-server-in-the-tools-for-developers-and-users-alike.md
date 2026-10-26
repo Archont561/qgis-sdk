@@ -90,6 +90,6 @@ core pins only `typer`.
   recorded as point 5.
 - Scheduled as its own release, 0.8.0 (m-7, re-pointed), after the UI
   toolkit whose surfaces user mode needs; the deferred native-compute
-  research moves to 0.9.0 (m-8). Tasks: TASK-74 (runtime transport and
+  research moves to 0.9.0 (m-8; later to 1.1.0 as m-11 by decision-52). Tasks: TASK-74 (runtime transport and
   checks), TASK-75 (tools MCP server and developer mode), TASK-76 (user
   mode), gate TASK-78.

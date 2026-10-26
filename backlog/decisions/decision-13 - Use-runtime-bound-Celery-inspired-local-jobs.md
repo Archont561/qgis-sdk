@@ -98,3 +98,11 @@ whose keyword parameters are the inputs, submitted as
 `ctx.jobs.bind(name).delay(**inputs)`. Everything else here - bound
 submission, typed handles, late-subscriber replay, no nested event loop,
 view-owned by default - is unchanged.
+
+## Status review (2026-10-26)
+
+Still accepted. decision-53 makes `QgsTaskManager` the native execution
+adapter for `offload()` steps, exactly the "distinct adapter" this decision
+reserved: the preparation / worker-safe work / application split, the
+`JobContext` and the Processing adapter rule are unchanged. `ThreadPoolWorkers`
+is retired from the native composition by TASK-82 (m-8); the pure fakes stay.

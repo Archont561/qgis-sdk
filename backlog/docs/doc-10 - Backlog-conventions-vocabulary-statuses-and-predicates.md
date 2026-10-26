@@ -219,7 +219,8 @@ document:
 
 - **Sprint / iteration** — lives in a plan document (`doc-9` for v2, `doc-16`
   for m-3, `doc-17` for m-4, `doc-18` for m-5, `doc-19` for m-6, `doc-21` for m-7,
-  `doc-20` for the tentative m-8) and in the milestone body's `## Sprint train` section. Per-task sprint fields cost 25 edits a sprint and are not
+  `doc-23` for m-8, `doc-24` for m-9, `doc-25` for m-10, `doc-20` for the
+  tentative m-11; `doc-22` is the service coverage map, not a sprint plan) and in the milestone body's `## Sprint train` section. Per-task sprint fields cost 25 edits a sprint and are not
   queryable by anything this project runs.
 - **Blocker** — a task stays in its status and its blocker is named in a comment
   with a date and a reason, as the GitHub Actions outage was recorded (`doc-8`).
