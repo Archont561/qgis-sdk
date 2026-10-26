@@ -4,6 +4,7 @@ title: Generate metadata.txt, classFactory and the page view in build and dev
 status: To Do
 assignee: []
 created_date: '2026-10-26T08:27:00Z'
+updated_date: '2026-10-26T08:48:00Z'
 labels: []
 milestone: m-5
 dependencies:
@@ -24,4 +25,5 @@ decision-43. pyproject.toml [tool.qgis-sdk] plugin = "pkg.module:Class" is the s
 - [ ] #2 host(spec) under a headless QgsApplication starts and unloads the plugin, registers its providers, and with [tool.qgis-sdk.web] opens the built page in a QWebEngineView as dock or dialog and answers a ping over QWebChannel (webengine test); without a QgsApplication it builds the bare context and refuses ctx.desktop by name.
 - [ ] #3 qgis-sdk dev loads the source plugin through the generated host package: edit, reload and unload work as before (QGIS_SDK_HEADLESS_LIFECYCLE / QGIS_SDK_DESKTOP_ADAPTER harnesses and the reloader tests), dev --mode standalone and test --target desktop go through host(), and the dev host directory is gitignored by the scaffold.
 - [ ] #4 doc-12 documents [tool.qgis-sdk], the generated artifacts, the check rules and the migration (delete four files, add the TOML); decision-12 gets a status review naming the runtime page view as the first owned surface.
+- [ ] #5 [tool.qgis-sdk.web] grants = [...] selects the curated host operations host() registers on the page's dispatcher via register_host_operations(only=); no grants registers none; an unknown grant is a check finding; the webengine test calls a granted and a non-granted host operation from the page.
 <!-- AC:END -->

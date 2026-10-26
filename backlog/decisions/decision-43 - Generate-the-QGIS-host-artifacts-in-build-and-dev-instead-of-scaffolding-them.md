@@ -37,6 +37,7 @@ are the moment the host-specific shape is actually needed.
 
    [tool.qgis-sdk.web]      # only with a page
    placement = "dock"
+   grants = ["project.read", "layers.read"]   # curated host operations the page may call
    ```
 
 2. **`metadata.txt` is rendered, never authored.** `build` and `dev` write it
@@ -55,7 +56,10 @@ are the moment the host-specific shape is actually needed.
    notifications when an `iface` exists), start the `PluginRuntime`, register
    the providers, and - when `[tool.qgis-sdk.web]` is present - add the toolbar
    action and open the page in a dialog or dock under the same
-   `BrowserPolicy`/`Dispatcher` wiring `webview.py` had. A plugin that needs a
+   `BrowserPolicy`/`Dispatcher` wiring `webview.py` had, with the curated
+   host operations whose grants `[tool.qgis-sdk.web] grants` lists registered
+   on that dispatcher (`register_host_operations(..., only=)`, decision-27);
+   an unknown grant is a `check` finding. A plugin that needs a
    different context declares `context_factory` as a class attribute.
    `build` appends `classFactory = host(...)` to the **staged** copy of
    `__init__.py`; `check` reports an authored `classFactory` (`ENTRY002`) so a

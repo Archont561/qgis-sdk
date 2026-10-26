@@ -63,12 +63,10 @@ against any schema.
 
    `fromBridgeSchema<O, S>(schema: BridgeSchema<O, S>, options?)` returns
    `QgisSdk<O, S>`: one method per action typed `(request: O[K]["request"],
-   options?) => Promise<O[K]["result"]>`, one handle per stream, plus
-   `client` (the underlying `BridgeClient`) and `close()`. Without
-   `options.transport` it connects the QWebChannel `WireTransport` the
-   template `transport.ts` built, so that file leaves the scaffold too. The
-   generated host module keeps its own shape; this decision is about plugin
-   clients.
+   options?) => Promise<O[K]["result"]>`, one handle per stream, **`host`**
+   (point 5), `client` (the underlying `BridgeClient`) and `close()`.
+   Without `options.transport` it connects the QWebChannel `WireTransport`
+   the template `transport.ts` built, so that file leaves the scaffold too.
 3. **Validation moves into the package, driven by the schema.** The package
    gains one generic validator for the declaration subset of decision-10
    (primitives, `list`/`tuple`, union, `Literal`, dataclass objects with
@@ -78,15 +76,29 @@ against any schema.
    the generated module imports nothing but the type helper. The schema's
    `schema_version` is checked by `parsePluginDescription` and
    `CONTRACT_FINGERPRINT` by the existing `bindings` drift check.
-4. **React and testing follow.** `BridgeProvider` accepts the `QgisSdk`
+5. **The curated host surface is on the same object.** `qgis.host` is the
+   decision-27 surface the package already ships under `./host` -
+   `qgis.host.layers.list()`, `qgis.host.project.layer_ids()`,
+   `qgis.host.files.export(...)`, `qgis.host.network.fetch(...)` as a stream -
+   typed from the package's own host manifest (`HOST_SCHEMA_VERSION`,
+   `HOST_FINGERPRINT`), so it needs no generation per plugin. What a page
+   may actually call is decided on the Python side: the host (decision-43)
+   registers exactly the operations whose grants `[tool.qgis-sdk.web]
+   grants = [...]` lists, through the existing `register_host_operations(...,
+   only=)`, and the handshake advertises that allowlist. A call outside the
+   grants fails as it does today, with the host's refusal, not a TypeScript
+   error; `qgis.host.granted` exposes the advertised ids so a page can hide
+   what it may not use. Default grants: none.
+6. **React and testing follow.** `BridgeProvider` accepts the `QgisSdk`
    instance (or the schema), `useOperation(qgis.buffer)` keeps its signature,
    and `@archont561/qgis-sdk/testing` scripts a host from the same schema so a
    Vitest suite is still network- and QGIS-free.
 
 ## Consequences
 
-- A page is three statements away from a typed bridge; the scaffold's
-  `main.ts`/`main.tsx` shrink accordingly and `transport.ts` disappears.
+- A page is three statements away from a typed bridge and the curated host;
+  the scaffold's `main.ts`/`main.tsx` shrink accordingly and `transport.ts`
+  disappears. The `./host` subpath stays for pages that assemble their own.
 - `@archont561/qgis-sdk` 0.4.0 (the m-5 pair) carries `QgisSdk`,
   `defineBridgeSchema`, `BridgeSchema`, the generic validator and
   `QgisSdkContractError` in the root; `BridgeClient`, `WireTransport` and the

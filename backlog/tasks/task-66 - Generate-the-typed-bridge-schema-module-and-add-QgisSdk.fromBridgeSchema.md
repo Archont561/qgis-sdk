@@ -4,6 +4,7 @@ title: Generate the typed bridge schema module and add QgisSdk.fromBridgeSchema
 status: To Do
 assignee: []
 created_date: '2026-10-26T08:41:00Z'
+updated_date: '2026-10-26T08:48:00Z'
 labels: []
 milestone: m-5
 dependencies:
@@ -24,4 +25,5 @@ decision-44. qgis-sdk bridge generate writes web/src/bridge.schema.ts: the reque
 - [ ] #2 QgisSdk.fromBridgeSchema(schema) is typed from the generated Operations/Streams: a wrong argument shape or an unknown operation is a tsc error (type-level test), and at runtime an argument or a reply outside the schema raises QgisSdkContractError with code contract_validation_failed; bun tests cover primitives, list/tuple, union, Literal and nested dataclass schemas.
 - [ ] #3 A page is three statements (import QgisSdk, import the schema, fromBridgeSchema) with the default QWebChannel transport; the React BridgeProvider and useOperation work on the instance; the testing host scripts from the schema; the TS suite, typecheck and Biome are green.
 - [ ] #4 doc-13 documents QgisSdk, the schema module and the 0.4.0 migration (before/after main.ts); TASK-60 and m-5 record QgisSdk in the bridge 0.4.0 delta; the scaffold templates switch under TASK-65 at the ts-v0.4.0 stamp per decision-41.
+- [ ] #5 QgisSdk.fromBridgeSchema(...).host is the typed decision-27 surface (layers, project, settings, notifications, styles, files, network.fetch as a stream) built from the package's host manifest; qgis.host.granted lists the ids the handshake advertised; a call outside the grants surfaces the host's refusal; bun tests cover a full and a narrowed grant set.
 <!-- AC:END -->
