@@ -267,6 +267,7 @@ def test_the_schema_module_is_generated_from_the_template_plugin() -> None:
 
 
 def test_the_vanilla_page_is_three_statements_on_the_sdk() -> None:
+    """TASK-69 AC #3: the page is the SDK's stores, no framework glue of its own."""
     plan = plan_scaffold(options(web="vanilla"))
     main = content_of(plan, "web/src/main.ts")
     app = content_of(plan, "web/src/app.ts")
@@ -276,9 +277,16 @@ def test_the_vanilla_page_is_three_statements_on_the_sdk() -> None:
     assert 'import schema from "./bridge.schema";' in main
     assert "QgisSdk.fromBridgeSchema(schema)" in main
     assert "connectWebChannel" not in main and "BridgeClient" not in main
-    assert "qgis.ping(" in app and "qgis.project_layers()" in app
+    # The form is built from the declaration and the picker from the host's
+    # layer list; the page subscribes to both stores directly.
+    assert 'formStore(qgis, "ping", { initial: { value: 1 } })' in app
+    assert "for (const field of ping.fields)" in app
+    assert "layersQuery(qgis)" in app
+    assert 'case "refused":' in app
+    assert "qgis.ping(" not in app and "qgis.project_layers()" not in app
     assert "createBridgeHarness(schema)" in test
     assert "QgisSdk.fromBridgeSchema(schema, { transport: harness })" in test
+    assert "createBridgeHarness(schema, { granted: [] })" in test
 
 
 def test_the_react_page_shares_the_sdk_through_the_provider() -> None:
@@ -291,11 +299,16 @@ def test_the_react_page_shares_the_sdk_through_the_provider() -> None:
     assert "<BridgeProvider qgis={qgis}>" in main
     assert 'from "@archont561/qgis-sdk/react"' in app
     assert "useQgisSdk<Operations, Streams>()" in app
-    assert "useOperation(qgis.ping)" in app
+    # The same two stores as the vanilla page, read through the hooks.
+    assert 'useForm(qgis, "ping", { initial: { value: 1 } })' in app
+    assert "useHostQuery(useMemo(() => layersQuery(qgis), [qgis]))" in app
+    assert "form.fields.map(" in app
+    assert 'layers.status === "refused"' in app
     assert "useOperations" not in app and "createOperations" not in app
     assert 'from "@archont561/qgis-sdk/testing"' in test
     assert "createBridgeHarness(schema)" in test
     assert "<BridgeProvider qgis={qgis}>" in test
+    assert "createBridgeHarness(schema, { granted: [] })" in test
 
 
 # -- the Python half -----------------------------------------------------------
@@ -312,7 +325,7 @@ def test_the_page_is_declared_in_pyproject_not_in_a_view_module(
 
     assert manifest["tool"]["qgis-sdk"]["web"] == {
         "placement": placement,
-        "grants": [],
+        "grants": ["layers.read"],  # the starter page's layer picker
     }
     assert plugin == content_of(plan_scaffold(options()), "field_tools/plugin.py")
     assert "webview" not in plugin and "classFactory" not in plugin

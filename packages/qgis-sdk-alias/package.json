@@ -27,6 +27,16 @@
 			"import": "./react.js",
 			"default": "./react.js"
 		},
+		"./vue": {
+			"types": "./vue.d.ts",
+			"import": "./vue.js",
+			"default": "./vue.js"
+		},
+		"./svelte": {
+			"types": "./svelte.d.ts",
+			"import": "./svelte.js",
+			"default": "./svelte.js"
+		},
 		"./testing": {
 			"types": "./testing.d.ts",
 			"import": "./testing.js",
@@ -54,10 +64,18 @@
 		"@archont561/qgis-sdk": "0.4.0"
 	},
 	"peerDependencies": {
-		"react": ">=18"
+		"react": ">=18",
+		"svelte": ">=5",
+		"vue": ">=3.4"
 	},
 	"peerDependenciesMeta": {
 		"react": {
+			"optional": true
+		},
+		"svelte": {
+			"optional": true
+		},
+		"vue": {
 			"optional": true
 		}
 	}

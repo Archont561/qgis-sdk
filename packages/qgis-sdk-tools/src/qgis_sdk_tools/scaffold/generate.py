@@ -350,9 +350,10 @@ WEB_TABLE = """
 [tool.qgis-sdk.web]
 # The page in web/: shown as a {placement}; `grants` lists the host grants
 # (`layers.read`) or operation ids (`project.layer_ids`) the page may use;
-# `qgis-sdk bridge generate --host` renders the catalogue.
+# `qgis-sdk bridge generate --host` renders the catalogue. The starter page's
+# layer picker reads `layers.list`, which `layers.read` covers.
 placement = "{placement}"
-grants = []
+grants = ["layers.read"]
 """
 
 GITIGNORE = """__pycache__/
@@ -665,10 +666,17 @@ runs the Vitest suite). Without the command, build before enabling the plugin:
 the SDK's page view loads `{plugin}/web/index.html` from disk and shows a hint
 until it exists. The page is confined to that directory and reaches no remote
 origin; `[tool.qgis-sdk.web]` in pyproject.toml chooses the placement and
-lists the curated host operations (`grants`) the page may call - none until
-you name them. A build never references the dev server. Dependencies are
-pinned to the versions this SDK release was qualified with; the Chromium
-target in `web/vite.config.ts` follows the oldest QGIS you support.
+lists the curated host operations (`grants`) the page may call - `layers.read`
+to start, for the layer picker. A build never references the dev server.
+Dependencies are pinned to the versions this SDK release was qualified with;
+the Chromium target in `web/vite.config.ts` follows the oldest QGIS you
+support.
+
+The starter page is two stores from the SDK, no framework glue of its own: a
+form over the declared `ping` action (`formStore`, fields from the schema,
+values validated before a call) and a layer picker over the host's layer list
+(`layersQuery`, which says so when the page was not granted it). The same
+stores drive `@archont561/qgis-sdk/react`, `/vue` and `/svelte`.
 """
 
 

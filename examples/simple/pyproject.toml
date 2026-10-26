@@ -30,9 +30,10 @@ about = "Open a bundled dataset, read the selection, buffer into a styled layer,
 [tool.qgis-sdk.web]
 # The page in web/: shown as a dock; `grants` lists the host grants
 # (`layers.read`) or operation ids (`project.layer_ids`) the page may use;
-# `qgis-sdk bridge generate --host` renders the catalogue.
+# `qgis-sdk bridge generate --host` renders the catalogue. The starter page's
+# layer picker reads `layers.list`, which `layers.read` covers.
 placement = "dock"
-grants = []
+grants = ["layers.read"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
