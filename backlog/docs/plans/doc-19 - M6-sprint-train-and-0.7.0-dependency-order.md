@@ -28,6 +28,7 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
 | `./react` hooks are React-shaped; no Vue or Svelte path; the vanilla template re-implements the hooks' logic by hand | **TASK-69** |
 | No components, no theme tokens, no Storybook; the page looks like a browser inside QGIS | **TASK-70** |
 | No docs site; guides live in the backlog; the Storybook build has nowhere to publish | **TASK-43** |
+| The QGIS Python console reaches a plugin only through `qgis.utils.plugins[name].runtime` and the vendored import path; no curated session (decision-48) | **TASK-73** |
 
 ## 2. Dependency read of the m-6 tasks
 
@@ -35,9 +36,10 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
 | --- | --- | --- | --- |
 | [TASK-69](../../tasks/task-69%20-%20Replace-the-react-internals-with-a-framework-free-store-core-and-add-vue-and-svelte-adapters.md) store core + `./vue` + `./svelte` | TASK-66 | TypeScript | at milestone start |
 | [TASK-68](../../tasks/task-68%20-%20Add-file-directory-field-range-colour-and-enum-parameter-kinds-and-the-standard-native-surfaces.md) kinds + standard surfaces | TASK-67, TASK-63 | Python | at milestone start |
+| [TASK-73](../../tasks/task-73%20-%20Add-qgis_sdk.console-ConsoleSession-over-the-curated-services-PluginHandle-and-PluginRuntime.algorithms.md) `qgis_sdk.console` | TASK-63, TASK-64 | Python | at milestone start |
 | [TASK-70](../../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md) `qgis-sdk-ui` + `ui` release scope | TASK-69, TASK-64 | TypeScript + `release.py` | after 69 |
 | [TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md) docs site | — | Astro Starlight | any time; placed last so it publishes the Storybook build |
-| [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release.md) 0.7.0 gate | TASK-60, 68, 69, 70, 43 | — | release gate |
+| [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release.md) 0.7.0 gate | TASK-60, 68, 69, 70, 73, 43 | — | release gate |
 | [TASK-72](../../tasks/task-72%20-%20Promote-Vue-and-Svelte-to-Tier-1-with-scaffold-templates-and-harness-coverage.md) Vue/Svelte Tier 1 | TASK-69, TASK-70 | — | **unscheduled**, no milestone |
 
 ## 3. Sprint train
@@ -54,7 +56,11 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   refuses a kind missing any of the four); `DeclaredForm`,
   `JobProgressDock`, `LogPanel` through `dialog=`/`dock=`; `ctx.ui.form`;
   notification levels and `with_action`; the example takes one new kind;
-  doc-12's 0.7.0 note. Python-only; swaps with sprint 1 freely.
+  doc-12's 0.7.0 note. **TASK-73** rides in the same pull request as a
+  second commit series: `qgis_sdk.console.connect()`, `ConsoleSession`,
+  `PluginHandle`, `DesktopLifecycleAdapter.console()`,
+  `PluginRuntime.algorithms`, the dev recipe and the doc-12 console section.
+  Python-only; swaps with sprint 1 freely.
 - **Sprint 3: TASK-70.** `packages/qgis-sdk-ui` as a workspace member: the
   six web components on the stores, `/react`, `/vue`, `/svelte` wrappers,
   `--qgis-sdk-*` tokens seeded by `host()`, Storybook on

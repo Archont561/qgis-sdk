@@ -4,7 +4,7 @@ title: Prepare and qualify 0.7.0 release
 status: To Do
 assignee: []
 created_date: 2026-10-16 12:02
-updated_date: '2026-10-26T09:06:00Z'
+updated_date: '2026-10-26T09:30:00Z'
 labels: []
 milestone: m-6
 dependencies:
@@ -12,6 +12,7 @@ dependencies:
   - TASK-68
   - TASK-69
   - TASK-70
+  - TASK-73
   - TASK-43
 references:
   - doc-8
