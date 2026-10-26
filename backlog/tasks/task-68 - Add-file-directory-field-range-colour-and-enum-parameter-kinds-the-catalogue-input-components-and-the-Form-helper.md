@@ -3,10 +3,10 @@ id: TASK-68
 title: >-
   Add file, directory, field, range, colour and enum parameter kinds, the
   catalogue input components and the Form helper
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-26T11:01:00Z'
+updated_date: '2026-10-26 19:39'
 labels: []
 milestone: m-6
 dependencies:
@@ -36,4 +36,6 @@ decision-46 point 1 and decision-55 points 3, 4 and 7 (UI001). Each new kind is 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-26: AC 4 added for decision-51 (stable objectNames).
 2026-10-26: rewritten for decision-55 - input components and Form helper instead of standard surfaces; NativeForms migration; containers, feedback, wiring moved to TASK-96.
+
+2026-10-26 (slice 68a, session branch arena/c8bb6905): the kind registry (qgis_sdk.models.parameter_kinds(), ParameterKind) and the six kinds end to end - FileInput(filters=), DirectoryInput(), FieldInput(of=), Range(min, max), Colour(), Literal choices - through declarations.resolve_kind (the describer refuses a marker on the wrong stored type, a FieldInput whose of= is not a layer input, a bare FileRef input, a Literal of non-strings), the wire ('x-qgis-sdk': {kind, filters|of|step|alpha}; Range adds minimum/maximum; accepted by the Python/TS validators and documented by the generator as @qgis-sdk-kind), form_fields (kind read from the schema annotation, FieldSpec.details, coercion to FileRef/bounded numbers/hex colours), DeclaredFormDialog (QgsFieldComboBox following its layer picker, bounded spin box, QgsColorButton; file/directory refused by name until Form carries the authority), the Processing bridge (QgsProcessingParameterFile/Field/Number/Color/Enum; picker paths minted as FileRefs through a HostAuthority the provider holds and revoked after the run; HostAuthority.grant_directory, FileRef.kind directory, HOST_FINGERPRINT sha256:af91deac...), the dispatcher (FileRef rebuilt for file/directory inputs), algorithms.input_refusal shared by invoke and forms. FileRef moved to qgis_sdk.models (bridge.authority re-exports). Evidence: Python 1644+ passed / 12 skipped (QGIS-free), services harness 135 incl. the new toolbox test running all six kinds, native forms 9, Bun 235, tests/scripts 248, harnesses REFERENCE 5 / SCAFFOLD_WEB 8 / DESKTOP_ADAPTER 22 / SCAFFOLD_DESKTOP 10, ruff/biome/typecheck clean; example bridge.schema.ts regenerated. AC 1 is met for the describer/wire/Processing faces except the catalogue input components (68b). Remaining: 68b input components + ctx.files + shared authority; 68c Form, NativeForms removal, notification levels, UI001, example dialog.
 <!-- SECTION:NOTES:END -->
