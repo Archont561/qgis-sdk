@@ -112,8 +112,38 @@ against any schema.
 - Because the scaffold pins the released bridge (decision-41), the templates
   switch to the three statements in the same release gate that stamps
   `ts-v0.4.0` (TASK-60); inside the repository the example switches on the
-  workspace bridge immediately.
+  workspace bridge immediately. *(Revised in the status review below: the
+  templates switched with the package source.)*
 - Type-level cost is bounded: no JSON-schema-to-type mapping in the package,
   because the generator still emits the interfaces. A `.json` import is not
   supported as a typed entry; it would compile untyped, which is exactly what
   the author did not want.
+
+## Status review (2026-10-26): method shape and the scaffold switch
+
+Two points settled while TASK-66 landed, recorded here because the decision
+text left them open.
+
+1. **Methods nest by the dots in the id.** The first implementation keyed
+   every method by its full id (`qgis["sites.summary"]`), which read as a
+   different library next to `qgis.host.layers.list(...)` and lost what the
+   0.3.0 client already offered. `QgisSdk<O, S>` is now a tree: a plain id is a
+   method on the instance (`qgis.buffer`), a dotted id nests one object per
+   segment (`qgis.sites.summary`, `qgis.tools.measure.area`). Two declaration
+   rules follow and are enforced twice - by `bridge generate` (so `bindings`
+   fails in the author's CI) and by `fromBridgeSchema` (`QgisSdkDeclarationError`):
+   an id may not be a prefix of another declared id, and an id's first segment
+   may not be a core member (`client`, `host`, `schema`, `ready`, `close`). The
+   wire still carries the flat id; the harness's `expectInvoke("sites.summary", …)`
+   is unchanged.
+2. **The scaffold templates switched with the package source, not at the
+   stamp.** The templates are written against `packages/qgis-sdk-typescript`
+   as checked out, which is what every in-repository harness installs
+   (decision-41, point 4); the user-facing pin `SDK_NPM_VERSION` still names
+   the released `0.3.0` until `release.py stamp --scope typescript` moves it
+   at the TASK-60 gate. Between the two, `main` is a pre-release state for the
+   scaffold exactly as it is for the package itself - the same gate stamps
+   both in one commit, and tools `0.6.0` and bridge `0.4.0` publish together.
+   Holding two template sets for that window would have cost more than it
+   protected; `test_reference_example.py` holds the example equal to the
+   scaffold again with no exception.

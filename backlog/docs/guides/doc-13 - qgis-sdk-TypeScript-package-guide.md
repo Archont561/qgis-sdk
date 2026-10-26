@@ -214,7 +214,7 @@ import { QgisSdk } from "@archont561/qgis-sdk";
 import schema from "./bridge.schema";
 
 const qgis = QgisSdk.fromBridgeSchema(schema);
-const summary = await qgis["sites.summary"]({ layer_id: "sites" });
+const summary = await qgis.sites.summary({ layer_id: "sites" });
 ```
 
 - **Transport.** Without options `fromBridgeSchema` connects to the
@@ -226,12 +226,18 @@ const summary = await qgis["sites.summary"]({ layer_id: "sites" });
   share a `BridgeClient` the page already owns (then `close()` leaves it
   alone), `{ channelObject }` for another registered name, `{ timeoutMs }` for
   the per-call timeout of an owned client.
-- **Compile time.** Every declared operation is a method keyed by its id, so
-  `qgis["sites.summary"]` for a dotted id and `qgis.open_fixture()` for a plain
-  one. An operation the plugin did not declare is not a member, and a
-  misspelled or mistyped argument is a type error - including an unknown
-  property inside a nested object. An action whose request declares no
-  fields takes no argument.
+- **Compile time.** Every declared operation is a method nested under the
+  segments of its id: `qgis.open_fixture()` for a plain id,
+  `qgis.sites.summary(...)` for `sites.summary`, `qgis.tools.measure.area(...)`
+  for a deeper one - the same shape as `qgis.host.layers.list(...)`. An
+  operation the plugin did not declare is not a member, and a misspelled or
+  mistyped argument is a type error - including an unknown property inside a
+  nested object. An action whose request declares no fields takes no
+  argument. Two rules follow from nesting, checked by `bridge generate` and
+  again by `fromBridgeSchema` (`QgisSdkDeclarationError`): an id may not be a
+  prefix of another (`sites` cannot be a method and hold `sites.summary`),
+  and an id's first segment may not be a core member (`client`, `host`,
+  `schema`, `ready`, `close`).
 - **Runtime.** The method validates what it sends (strict: unknown arguments
   are refused before the transport is touched) and what comes back (lenient:
   a field a newer host added is tolerated, a missing or mistyped one is
@@ -242,7 +248,7 @@ const summary = await qgis["sites.summary"]({ layer_id: "sites" });
   checked; a reply the schema cannot describe never reaches the page.
 - **Streams are operations too (decision-28).** A method the plugin marked with
   `@stream(id="sites.watch", events={"data": SiteChange, "progress": ScanProgress})`
-  becomes `qgis["sites.watch"](request, { onEvent, onTerminal }, options)`,
+  becomes `qgis.sites.watch(request, { onEvent, onTerminal }, options)`,
   returning the same `StreamHandle` as `client.subscribe`. `onEvent` narrows
   on `event.kind`; a frame whose kind the plugin did not declare, or whose
   payload does not match, ends the subscription with an `error` terminal
@@ -267,7 +273,7 @@ const summary = await qgis["sites.summary"]({ layer_id: "sites" });
   the file was built from.
 
 ```ts
-const handle = await qgis["sites.watch"](
+const handle = await qgis.sites.watch(
 	{ layer_id: "sites" },
 	{
 		onEvent: (event) => {
@@ -315,8 +321,8 @@ function App() {
 
 function Sites() {
 	const qgis = useQgisSdk<Operations, Streams>();
-	const [summary, loadSummary] = useOperation(qgis["sites.summary"]);
-	const watch = useStream(qgis["sites.watch"], { layer_id: "sites" }, {
+	const [summary, loadSummary] = useOperation(qgis.sites.summary);
+	const watch = useStream(qgis.sites.watch, { layer_id: "sites" }, {
 		onEvent: (event) => { if (event.kind === "data") render(event.payload.change); },
 	});
 	// summary.status: idle | pending | ok (value) | error (error)
@@ -371,7 +377,7 @@ harness.expectSubscribe("sites.watch", (_payload, stream) => {
 	stream.end({ kind: "complete" });
 });
 
-await qgis["sites.summary"]({ layer_id: "sites" });
+await qgis.sites.summary({ layer_id: "sites" });
 harness.calls;      // every envelope the client sent, in order; the handshake first
 harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscriptions, handler throws
 ```
@@ -489,16 +495,17 @@ the plugin-description contract (`1`), `HOST_SCHEMA_VERSION` nor
   createApp(root, qgis);
   ```
 
-  Methods are keyed by the declared id (`qgis.open_fixture()`,
-  `qgis["sites.summary"](...)`) rather than nested by dot
-  (`operations.sites.summary(...)`). Point the `bindings` script at
-  `--out web/src/bridge.schema.ts --check`, delete `transport.ts` and the
-  old `bridge.ts`, and pass the instance where `createOperations(client)`
-  was passed; in tests, `createBridgeHarness(schema)` plus
-  `QgisSdk.fromBridgeSchema(schema, { transport: harness })`. The
+  Methods nest by the dots in the declared id exactly as the 0.3.0 client's
+  did (`operations.sites.summary(...)` becomes `qgis.sites.summary(...)`,
+  `operations.buffer(...)` becomes `qgis.buffer(...)`). Point the `bindings`
+  script at `--out web/src/bridge.schema.ts --check`, delete `transport.ts`
+  and the old `bridge.ts`, and pass the instance where
+  `createOperations(client)` was passed; in tests, `createBridgeHarness(schema)`
+  plus `QgisSdk.fromBridgeSchema(schema, { transport: harness })`. The
   `--out web/src/bridge.ts` form keeps rendering the 0.3.0 client for one
-  minor with a deprecation note; the scaffold's template follows under
-  TASK-65.
+  minor with a deprecation note. `qgis-sdk new --web` from tools `0.6.0`
+  writes the three-statement page; its pinned bridge moves to `0.4.0` in the
+  same release stamp (decision-41).
 - **The handshake answers from the dispatcher.** A page's first envelope may
   be `kind: "handshake"`; a Python `0.6.0` host answers it with the protocol,
   generation, plugin description and the host operation ids this view may

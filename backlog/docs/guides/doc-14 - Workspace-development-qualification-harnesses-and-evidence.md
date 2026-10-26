@@ -574,8 +574,8 @@ Processing in an explicit projected CRS into a new layer styled with the
 packaged `reference/polygon-output` QML before it is presented, and export
 that layer to a bare file name inside a directory a native folder picker
 chose. Its five actions sit behind both the native dialogs `NativeForms`
-renders and the vanilla page in `web/`, through the generated
-`web/src/bridge.ts`. The project was written by `qgis-sdk new` and keeps that
+renders and the vanilla page in `web/`, through `QgisSdk` on the generated
+`web/src/bridge.schema.ts`. The project was written by `qgis-sdk new` and keeps that
 layout, so the example doubles as the proof that the commands compose.
 
 The workflow class (`simple/workflow.py`) is the plugin's own code:
