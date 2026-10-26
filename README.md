@@ -28,11 +28,11 @@ is documented, nothing is promised stable.
 
 ```sh
 pip install qgis-sdk
-qgis-sdk new my_tools --title "My Tools"   # a loadable plugin project (asks about a web UI)
+qgis-sdk new my_tools --title "My Tools"   # pyproject.toml + the plugin class (asks about a web UI)
 qgis-sdk check my_tools                    # QGIS-free project checks
 cd my_tools && qgis-sdk test               # pytest, QGIS-free by default (--target qgis|desktop)
 qgis-sdk dev                               # the plugin from source in a real QGIS, reload on save
-qgis-sdk build                             # dist/<plugin>-<version>.zip with the runtime vendored inside
+qgis-sdk build                             # dist/<plugin>-<version>.zip: metadata.txt, classFactory and the runtime added for you
 qgis-sdk targets                           # where the kit is qualified, and where this host stands
 ```
 
