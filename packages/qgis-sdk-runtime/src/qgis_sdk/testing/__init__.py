@@ -24,6 +24,7 @@ from .network import (
     QgisSdkNetworkFakeError,
     reply,
 )
+from .ui import FakeUi, FakeViewControl, OpenedSurface
 
 __all__ = [
     "FakeAlgorithms",
@@ -33,7 +34,10 @@ __all__ = [
     "FakeProject",
     "FakeSettings",
     "FakeStyles",
+    "FakeUi",
+    "FakeViewControl",
     "FakeWorkers",
+    "OpenedSurface",
     "PendingRequest",
     "QgisSdkNetworkFakeError",
     "RecordingNotifications",

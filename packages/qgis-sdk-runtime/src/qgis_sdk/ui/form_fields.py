@@ -25,8 +25,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .declarations import ActionDescription
-from .models import QgisSdkFormError
+from qgis_sdk.declarations import ActionDescription
+from qgis_sdk.models import QgisSdkFormError
 
 __all__ = ["FieldSpec", "coerce_values", "form_fields"]
 

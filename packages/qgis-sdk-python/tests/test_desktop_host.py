@@ -35,17 +35,30 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     (package / "plugin.py").write_text(
         textwrap.dedent(
             """
-            from qgis_sdk import action, plugin
+            from qgis_sdk import action, menu, plugin, toolbar
             from qgis_sdk.core import PluginContext, ResourceScope
+            from qgis_sdk.ui import Dialog
+
+
+            @menu("Plugins/Hosted tools")
+            class PingDialog(Dialog):
+                def build(self):
+                    raise AssertionError("never built without a GUI")
 
 
             @plugin(id="hosted", title="Hosted tools")
             class HostedPlugin:
                 ctx: PluginContext
+                surfaces = [PingDialog]
 
                 @action(id="ping", title="Ping")
                 def ping(self, value: int) -> int:
                     return value
+
+                @toolbar
+                @action(id="open_ping", title="Open ping")
+                def open_ping(self) -> None:
+                    self.ctx.ui.open(PingDialog)
 
                 @action(id="layers", title="Layers")
                 def layers(self) -> list[str]:
@@ -116,6 +129,24 @@ def test_host_returns_a_class_factory_that_runs_the_plugin_without_qgis(
         held.unload()
     assert held.runtime.state is PluginRuntimeState.STOPPED
     held.unload()  # repeat is safe
+
+
+def test_a_bare_interpreter_places_no_binding_and_refuses_ui_by_name(
+    project: Path,
+) -> None:
+    held = host(f"{PACKAGE}.plugin:HostedPlugin")(None)
+
+    assert [entry.id for entry in held.bindings.entries] == ["ping_dialog", "open_ping"]
+    assert held.surfaces is None
+    assert held.desktop_bindings is None
+    held.initGui()
+    try:
+        assert not held.context.has("ui")
+        with pytest.raises(QgisSdkUnsupportedCapabilityError) as refused:
+            held.runtime.actions["open_ping"]()
+        assert "ui" in str(refused.value)
+    finally:
+        held.unload()
 
 
 def test_the_bare_context_drops_messages_and_scopes_settings_by_plugin_id(

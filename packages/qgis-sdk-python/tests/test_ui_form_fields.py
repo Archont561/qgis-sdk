@@ -12,7 +12,7 @@ import json
 import pytest
 from qgis_sdk.declarations import ActionDescription, action, describe_plugin, plugin
 from qgis_sdk.models import QgisSdkFormError
-from qgis_sdk.ui import FieldSpec, _coerce, coerce_values, form_fields
+from qgis_sdk.ui.form_fields import FieldSpec, _coerce, coerce_values, form_fields
 
 
 def _action(properties, required=(), action_id="demo.run"):

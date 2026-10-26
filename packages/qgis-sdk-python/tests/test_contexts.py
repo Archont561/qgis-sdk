@@ -384,3 +384,23 @@ def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:
 
     with pytest.raises(QgisSdkScopeClosedError):
         _ = context.layers
+
+
+def test_with_services_adds_a_capability_over_the_same_scope() -> None:
+    scope = ResourceScope()
+    notifications = RecordingNotifications()
+    context = PluginContext(notifications=notifications, scope=scope, settings=object())
+    ui = object()
+
+    extended = context.with_services(ui=ui)
+
+    assert extended is not context
+    assert extended.scope is scope
+    assert extended.notifications is notifications
+    assert extended.ui is ui
+    assert extended.settings is context.settings
+    assert context.has("ui") is False
+    with pytest.raises(ValueError, match="already provides 'settings'"):
+        context.with_services(settings=object())
+    with pytest.raises(ValueError, match="no capability named 'iface'"):
+        context.with_services(iface=object())

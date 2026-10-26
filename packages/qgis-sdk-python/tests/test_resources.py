@@ -13,7 +13,13 @@ from qgis_sdk.models import (
     StyleSpec,
     VectorLayerInfo,
 )
-from qgis_sdk.resources import STYLE_CATALOG, STYLE_DIRECTORY, require_style, style_path
+from qgis_sdk.resources import (
+    STYLE_CATALOG,
+    STYLE_DIRECTORY,
+    icon_path,
+    require_style,
+    style_path,
+)
 
 PACKAGE_ROOT = layers.RUNTIME_SOURCE / "qgis_sdk"
 
@@ -147,3 +153,15 @@ def test_geometry_and_field_mismatches_are_both_reported() -> None:
     reasons = spec.incompatibilities(layer(geometry_type="line", field_names=("id",)))
 
     assert len(reasons) == 2
+
+
+def test_icon_path_resolves_inside_the_package_icons_directory(tmp_path: Path) -> None:
+    (tmp_path / "icons").mkdir()
+    (tmp_path / "icons" / "buffer.svg").write_text("<svg/>", encoding="utf-8")
+
+    assert icon_path(tmp_path, "buffer.svg") == tmp_path / "icons" / "buffer.svg"
+    with pytest.raises(QgisSdkPackagedResourceError, match="not in"):
+        icon_path(tmp_path, "missing.svg")
+    for escape in ("../buffer.svg", "icons/buffer.svg", "", ".."):
+        with pytest.raises(QgisSdkPackagedResourceError, match="file name"):
+            icon_path(tmp_path, escape)

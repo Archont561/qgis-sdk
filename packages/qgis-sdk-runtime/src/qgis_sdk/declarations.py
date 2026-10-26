@@ -290,6 +290,11 @@ def declared_metadata(
 
 
 PLUGIN_ATTRIBUTE = "__qgis_sdk_plugin__"
+#: An SDK class with this dict describes itself as an action *result* (the
+#: handle a job-submitting action returns); ``WIRE_VALUE_METHOD`` is how the
+#: dispatcher turns the instance into that JSON.
+WIRE_SCHEMA_ATTRIBUTE = "__qgis_sdk_schema__"
+WIRE_VALUE_METHOD = "__qgis_sdk_wire__"
 
 
 def plugin(
@@ -305,7 +310,57 @@ def plugin(
     ``FieldTools``) and the title (``Field Tools``); ``id=`` and ``title=``
     override either one.
     """
-    return class_decorator(PLUGIN_ATTRIBUTE, "@plugin", cls, id=id, title=title)
+    decorate = declare_class(PLUGIN_ATTRIBUTE, "@plugin", id=id, title=title)
+
+    def decorate_plugin(target: type[T]) -> type[T]:
+        decorate(target)
+        validate_plugin_bindings(target)
+        return target
+
+    if cls is None:
+        return decorate_plugin
+    return decorate_plugin(cls)
+
+
+BINDINGS_ATTRIBUTE = "__qgis_sdk_bindings__"
+BINDING_ORDER_ATTRIBUTE = "__qgis_sdk_binding_order__"
+
+
+def bindings_of(target: object) -> tuple[Any, ...]:
+    """The Desktop bindings declared on ``target`` itself (:mod:`qgis_sdk.bindings`).
+
+    Read from ``vars`` so a binding on a parent class is never the child's;
+    innermost decorator first, the way the source reads bottom-up.
+    """
+    if not hasattr(target, "__dict__"):
+        return ()
+    return tuple(vars(target).get(BINDINGS_ATTRIBUTE, ()))
+
+
+def refuse_bindings(target: Any, decorator: str) -> None:
+    """``@job``/``@stream`` applied over a binding: refuse with the way forward."""
+    if bindings_of(target):
+        raise QgisSdkDeclarationError(
+            f"{decorator} cannot carry a toolbar, menu or shortcut binding "
+            f"({target.__name__}); bind an @action instead"
+        )
+
+
+def validate_plugin_bindings(cls: type) -> None:
+    """Refuse a plain method that carries a binding, when the class is created.
+
+    Bindings stack on ``@action`` in any order, so a binding applied below
+    ``@action`` cannot tell yet; the plugin class is where both are known.
+    """
+    for name, member in vars(cls).items():
+        function = member.__func__ if isinstance(member, staticmethod) else member
+        if not inspect.isfunction(function) or not bindings_of(function):
+            continue
+        if not hasattr(function, "__qgis_sdk_action__"):
+            raise QgisSdkDeclarationError(
+                f"{cls.__name__}.{name} carries a binding but is not an @action; "
+                "add @action (bindings stack on it in any order)"
+            )
 
 
 def action(
@@ -375,6 +430,7 @@ def stream(
             raise QgisSdkDeclarationError("@stream requires an instance method")
         declared = method_metadata(method, id, title)
         _require_undeclared(method, declared.id, "@stream")
+        refuse_bindings(method, "@stream")
         method.__qgis_sdk_stream__ = _StreamMetadata(
             declared.id, declared.title, dict(events)
         )
@@ -556,6 +612,11 @@ def _schema(
         return _literal_schema(args, path)
     if inspect.isclass(annotation) and is_dataclass(annotation):
         return _dataclass_schema(annotation, path, result=result, stack=stack)
+    declared = getattr(annotation, WIRE_SCHEMA_ATTRIBUTE, None)
+    if result and inspect.isclass(annotation) and isinstance(declared, dict):
+        # An SDK value type that says how it crosses the wire (``JobHandle``):
+        # a result only - a caller cannot send one in.
+        return _json_copy(declared)
     raise QgisSdkDeclarationError(
         f"{path}: unsupported annotation {annotation!r}; use JSON primitives, "
         "list, tuple[X, ...], union, Literal or a dataclass"

@@ -25,6 +25,8 @@ LAYER_ORDER = {
     "services": 1,
     "resources": 1,
     "exports": 1,
+    "ui": 2,
+    "bindings": 2,
     "core": 2,
     "algorithms": 2,
     "jobs": 2,
@@ -35,6 +37,7 @@ LAYER_ORDER = {
 }
 LAYER_PATHS = {
     "algorithms": SOURCE_ROOT / "algorithms.py",
+    "bindings": SOURCE_ROOT / "bindings.py",
     "bridge": SOURCE_ROOT / "bridge",
     "core": SOURCE_ROOT / "core",
     "exports": SOURCE_ROOT / "exports.py",
@@ -47,6 +50,7 @@ LAYER_PATHS = {
     "services": SOURCE_ROOT / "services",
     "resources": SOURCE_ROOT / "resources",
     "testing": SOURCE_ROOT / "testing",
+    "ui": SOURCE_ROOT / "ui",
 }
 #: Third-party packages the tools tree is allowed to import; the runtime
 #: tree is allowed none. ``qgis`` is the host: the pytest plugin's fixtures
