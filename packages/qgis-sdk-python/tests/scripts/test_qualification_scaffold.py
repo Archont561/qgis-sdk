@@ -85,8 +85,12 @@ def test_request_document_names_every_input_the_probe_reads() -> None:
     assert document == {
         "plugin": "demo_tools",
         "plugins_root": str(plugins_root),
-        "metadata_keys": ["name", "qgisMinimumVersion"],
-        "expected_metadata": {"name": "Demo Tools", "qgisMinimumVersion": "4.0"},
+        "metadata_keys": ["name", "qgisMinimumVersion", "hasProcessingProvider"],
+        "expected_metadata": {
+            "name": "Demo Tools",
+            "qgisMinimumVersion": "4.0",
+            "hasProcessingProvider": "yes",
+        },
         "ping_value": 7,
     }
 
@@ -103,7 +107,7 @@ def test_the_expected_metadata_matches_what_build_renders(tmp_path: Path) -> Non
     from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
     project = tmp_path / "demo_tools"
-    write_scaffold(ScaffoldOptions.resolve("demo_tools"), project)
+    write_scaffold(ScaffoldOptions.resolve("demo_tools", algorithm=True), project)
     config = require_project(project)
     generated = render_metadata(config, introspect_plugin(config))
 
@@ -111,6 +115,7 @@ def test_the_expected_metadata_matches_what_build_renders(tmp_path: Path) -> Non
     assert expected_metadata("Demo Tools") == {
         "name": fields["name"],
         "qgisMinimumVersion": fields["qgisMinimumVersion"],
+        "hasProcessingProvider": fields["hasProcessingProvider"],
     }
 
 
@@ -139,6 +144,8 @@ def test_unavailable_reports_every_stage_as_false() -> None:
         "metadata_matches",
         "passed",
         "platform",
+        "provider_registered",
+        "provider_released",
         "runtime_running",
         "runtime_stopped",
         "plugin",
@@ -180,8 +187,10 @@ def test_real_qgis_desktop_loads_and_unloads_the_generated_plugin() -> None:
     assert payload["loaded"] is True
     assert payload["runtime_running"] is True
     assert payload["action_result"] == 7
+    assert payload["provider_registered"] is True
     assert payload["unloaded"] is True
     assert payload["runtime_stopped"] is True
+    assert payload["provider_released"] is True
     assert payload["error"] is None
     assert payload["platform"]
     assert payload["qgis_version"]

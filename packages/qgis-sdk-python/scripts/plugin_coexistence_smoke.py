@@ -13,9 +13,9 @@ profile and drives them through ``qgis.utils`` in the real Desktop application:
 * ``neighbor_pydantic_probe`` - a conventional QGIS plugin (no ``qgis_sdk``
   dependency) that imports ``pydantic`` and ``pydantic_core`` at startup and
   validates payloads with ``BaseModel``.
-* ``sdk_pydantic_probe`` - an SDK plugin built on
-  ``qgis_sdk.adapters.desktop.create_class_factory`` and
-  ``qgis_sdk.adapters.pydantic.PydanticContractAdapter`` (using
+* ``sdk_pydantic_probe`` - an SDK plugin bound through
+  ``qgis_sdk.adapters.desktop.host()`` (the line ``qgis-sdk build`` stages)
+  and ``qgis_sdk.adapters.pydantic.PydanticContractAdapter`` (using
   ``SafeJsonInteger``).
 
 Every stage is confirmed against the live Desktop host:
@@ -138,11 +138,15 @@ def classFactory(iface: object) -> NeighborPydanticPlugin:
     return NeighborPydanticPlugin(iface)
 '''
 
-SDK_INIT: Final = '''"""QGIS entry point for the SDK controlled-deployment coexistence fixture."""
+SDK_INIT: Final = f'''"""QGIS entry point for the SDK controlled-deployment coexistence fixture.
 
-from .plugin import classFactory
+The one line ``qgis-sdk build`` appends to a staged ``__init__.py``
+(decision-43): the runtime's ``host()`` is the ``classFactory``.
+"""
 
-__all__ = ["classFactory"]
+from qgis_sdk.adapters.desktop import host
+
+classFactory = host("{SDK_PLUGIN}.plugin:SdkPydanticProbe")
 '''
 
 SDK_METADATA: Final = """[general]
@@ -168,7 +172,6 @@ import pydantic
 from pydantic import ConfigDict
 
 from qgis_sdk import action, plugin
-from qgis_sdk.adapters.desktop import create_class_factory
 from qgis_sdk.adapters.pydantic import PydanticContractAdapter
 from qgis_sdk.adapters.pydantic_types import SafeJsonInteger
 from qgis_sdk.core import PluginContext, ResourceScope
@@ -212,11 +215,20 @@ class IfaceDesktopAccess:
     iface: object
 
 
+def build_context(iface: object) -> PluginContext:
+    return PluginContext(
+        notifications=NoopNotifications(),
+        scope=ResourceScope(),
+        desktop=None if iface is None else IfaceDesktopAccess(iface),
+    )
+
+
 @plugin(id="{SDK_ID}", title="{SDK_TITLE}")
 class SdkPydanticProbe:
     """Exercise PydanticContractAdapter inside a live Desktop plugin."""
 
     ctx: PluginContext
+    context_factory = staticmethod(build_context)
 
     def __init__(self) -> None:
         self.adapter = PydanticContractAdapter(
@@ -233,17 +245,6 @@ class SdkPydanticProbe:
     def ping(self, value: int) -> int:
         response = self.adapter.handle_json(json.dumps({{"count": value}}))
         return ProbeResultReader(**json.loads(response)).processed
-
-
-def build_context(iface: object) -> PluginContext:
-    return PluginContext(
-        notifications=NoopNotifications(),
-        scope=ResourceScope(),
-        desktop=None if iface is None else IfaceDesktopAccess(iface),
-    )
-
-
-classFactory = create_class_factory(SdkPydanticProbe, context_factory=build_context)
 '''
 
 NEIGHBOR_FILES: Final = {

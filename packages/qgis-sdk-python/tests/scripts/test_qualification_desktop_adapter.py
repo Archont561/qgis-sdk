@@ -146,9 +146,17 @@ def test_the_fixture_imports_only_the_public_sdk_api() -> None:
     assert imported - {"__future__"} == {
         "dataclasses",
         "qgis_sdk",
-        "qgis_sdk.adapters.desktop",
         "qgis_sdk.core",
     }
+    # The host binding is the __init__'s business, as `qgis-sdk build` stages it.
+    init = ast.parse(FIXTURE_FILES["__init__.py"])
+    assert {n.module for n in ast.walk(init) if isinstance(n, ast.ImportFrom)} == {
+        "qgis_sdk.adapters.desktop"
+    }
+    assert (
+        'host("sdk_lifecycle_probe.plugin:LifecycleProbe")'
+        in FIXTURE_FILES["__init__.py"]
+    )
     assert not any(
         name.split(".")[0] in {"qgis", "PyQt5", "PyQt6"} for name in imported
     )
