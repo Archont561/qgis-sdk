@@ -2,12 +2,12 @@
  * Thin React bindings over the bridge client (TASK-18, decision-18).
  *
  * This entry point is optional and is the only one that imports React. It adds
- * no second client: a component reaches the same `BridgeClient` a vanilla page
- * would build, through a provider that either owns one (and closes it on
- * unmount) or is handed one (and leaves it alone). The hooks take the
- * functions a generated module already exports - `operations.sites.summary`,
- * `operations.sites.watch` - so the typed contract is the generated one, not a
- * React copy of it.
+ * no second client: a component reaches the same `QgisSdk` or `BridgeClient` a
+ * vanilla page would build, through a provider that is handed a `QgisSdk`
+ * (and leaves it alone), is handed a client (same), or owns a client built on
+ * a transport (and closes it on unmount). The hooks take the methods a
+ * `QgisSdk` already has - `qgis["sites.summary"]`, `qgis["sites.watch"]` - so
+ * the typed contract is the generated one, not a React copy of it.
  *
  * What the hooks add is lifetime: a call aborted when its component unmounts,
  * a stale reply ignored, a stream closed on unmount or when its input changes,
@@ -34,6 +34,8 @@ import {
 } from "./bridge";
 import { QgisSdkError } from "./errors";
 import { isPlainRecord } from "./internal";
+import type { QgisSdk, QgisSdkCore } from "./qgis-sdk";
+import type { OperationMap, StreamMap } from "./schema";
 
 /** A hook or provider was used outside the shape it needs. */
 export class QgisSdkBridgeReactError extends QgisSdkError {
@@ -42,10 +44,20 @@ export class QgisSdkBridgeReactError extends QgisSdkError {
 	}
 }
 
-const ClientContext = createContext<BridgeClient | null>(null);
+interface Shared {
+	readonly client: BridgeClient;
+	readonly qgis: QgisSdkCore<unknown, unknown> | null;
+}
 
-/** Props for {@link BridgeProvider}: exactly one of `client` or `transport`. */
+const ClientContext = createContext<Shared | null>(null);
+
+/** Props for {@link BridgeProvider}: exactly one of `qgis`, `client` or `transport`. */
 export interface BridgeProviderProps {
+	/**
+	 * A `QgisSdk` the page built, whatever its schema; the provider shares it
+	 * and never closes it. `useQgisSdk` hands it back under the page's types.
+	 */
+	readonly qgis?: QgisSdkCore<unknown, unknown>;
 	/** A client the caller owns; the provider never closes it. */
 	readonly client?: BridgeClient;
 	/** A transport the provider builds and owns a client for. */
@@ -67,10 +79,13 @@ export interface BridgeProviderProps {
  * swap it, change the provider's `key`.
  */
 export function BridgeProvider(props: BridgeProviderProps): ReactElement {
-	const { client, transport, options, children } = props;
-	if ((client === undefined) === (transport === undefined)) {
+	const { qgis, client, transport, options, children } = props;
+	const given = [qgis, client, transport].filter(
+		(source) => source !== undefined,
+	).length;
+	if (given !== 1) {
 		throw new QgisSdkBridgeReactError(
-			"BridgeProvider needs exactly one of client or transport",
+			"BridgeProvider needs exactly one of qgis, client or transport",
 		);
 	}
 	const timeoutMs = options?.timeoutMs;
@@ -89,7 +104,13 @@ export function BridgeProvider(props: BridgeProviderProps): ReactElement {
 			setOwned((current) => (current === live ? null : current));
 		};
 	}, [transport, timeoutMs]);
-	const value = client ?? owned;
+	const value = useMemo((): Shared | null => {
+		if (qgis !== undefined) {
+			return { client: qgis.client, qgis };
+		}
+		const live = client ?? owned;
+		return live === null ? null : { client: live, qgis: null };
+	}, [qgis, client, owned]);
 	return createElement(
 		ClientContext.Provider,
 		{ value },
@@ -97,15 +118,35 @@ export function BridgeProvider(props: BridgeProviderProps): ReactElement {
 	);
 }
 
-/** The client of the nearest {@link BridgeProvider}. */
-export function useBridgeClient(): BridgeClient {
-	const client = useContext(ClientContext);
-	if (client === null) {
+function useShared(hook: string): Shared {
+	const shared = useContext(ClientContext);
+	if (shared === null) {
 		throw new QgisSdkBridgeReactError(
-			"useBridgeClient needs a BridgeProvider above it",
+			`${hook} needs a BridgeProvider above it`,
 		);
 	}
-	return client;
+	return shared;
+}
+
+/** The client of the nearest {@link BridgeProvider}. */
+export function useBridgeClient(): BridgeClient {
+	return useShared("useBridgeClient").client;
+}
+
+/**
+ * The `QgisSdk` of the nearest {@link BridgeProvider}.
+ *
+ * The type parameters name the generated `Operations` and `Streams`; they are
+ * the caller's claim, the same way the provider's `qgis` prop was the page's.
+ */
+export function useQgisSdk<O = OperationMap, S = StreamMap>(): QgisSdk<O, S> {
+	const shared = useShared("useQgisSdk");
+	if (shared.qgis === null) {
+		throw new QgisSdkBridgeReactError(
+			"useQgisSdk needs a BridgeProvider given a qgis instance",
+		);
+	}
+	return shared.qgis as unknown as QgisSdk<O, S>;
 }
 
 /**

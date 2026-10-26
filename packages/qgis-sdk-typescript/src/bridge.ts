@@ -516,6 +516,18 @@ export class BridgeClient {
 		);
 	}
 
+	/**
+	 * Ask the host for the handshake: the contract this view may use.
+	 *
+	 * The host bound the view before its first message, so this is a call, not
+	 * a binding. The value is what `Dispatcher.handshake` builds - protocol,
+	 * generation, the plugin description, the host schema version and the
+	 * operations this view is authorized for.
+	 */
+	public handshake(options: InvokeOptions = {}): Promise<unknown> {
+		return this.send({ kind: "handshake" }, options);
+	}
+
 	/** Subscriptions still open; a leak check for callers and tests. */
 	public get activeSubscriptions(): readonly string[] {
 		return [...this.subscriptions.keys()];

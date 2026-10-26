@@ -18,6 +18,10 @@ import * as bridge from "@/src/bridge";
 import * as declarations from "@/src/declarations";
 import * as errors from "@/src/errors";
 import { isPlainRecord } from "@/src/internal";
+import * as qgisSdk from "@/src/qgis-sdk";
+import * as schema from "@/src/schema";
+import * as validate from "@/src/validate";
+import * as webchannel from "@/src/webchannel";
 
 test("the bare @ alias and @/src both resolve the bridge entry point", () => {
 	expect(entry).toBe(source);
@@ -39,21 +43,27 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 		"QgisSdkBridgeSequenceError",
 		"QgisSdkBridgeStreamEndedError",
 		"QgisSdkBridgeTimeoutError",
+		"QgisSdkContractError",
 		"QgisSdkContractValidationError",
 		"QgisSdkDeclarationError",
 		"QgisSdkError",
+		"QgisSdkWebChannelError",
 	]);
 	for (const name of errorExports) {
 		expect(name.startsWith("QgisSdk")).toBe(true);
 	}
 });
 
-test("the root is the union of the error root, the declarations and the bridge", () => {
+test("the root is the union of the error root, the declarations, the bridge and the SDK", () => {
 	const names = (module: object): string[] => Object.keys(module).sort();
 	const expected = new Set([
 		...names(errors),
 		...names(declarations),
 		...names(bridge),
+		...names(qgisSdk),
+		...names(schema),
+		...names(validate),
+		...names(webchannel),
 	]);
 	expect(names(entry)).toEqual([...expected].sort());
 	// One import serves the common page: the client and the error family.

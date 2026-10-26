@@ -22,6 +22,12 @@ import type {
 	WireTransport,
 } from "./bridge";
 import { QgisSdkError } from "./errors";
+import {
+	HOST_OPERATIONS,
+	HOST_SCHEMA_VERSION,
+	type HostOperationId,
+} from "./generated/host";
+import type { BridgeSchema, OperationShape, StreamShape } from "./schema";
 
 const PROTOCOL = 1;
 const SUBSCRIPTION_CAPACITY = 64;
@@ -71,7 +77,8 @@ export type ScriptedReply<Res> =
 /** A message the client sent, as the harness recorded it. */
 export interface RecordedCall {
 	readonly callId: string;
-	readonly kind: "invoke" | "subscribe" | "unsubscribe";
+	readonly kind: "invoke" | "subscribe" | "unsubscribe" | "handshake";
+	/** Empty for a handshake, which names no operation. */
 	readonly operation: string;
 	readonly payload?: Readonly<Record<string, unknown>>;
 	readonly subscriptionId?: string;
@@ -96,6 +103,18 @@ export interface ScriptedStream {
 export interface SubscribeOptions {
 	/** Delay the acknowledgement until this promise settles. */
 	readonly ack?: () => Promise<void>;
+}
+
+/** Options for {@link createBridgeHarness}. */
+export interface HarnessOptions {
+	/**
+	 * The host operation ids the scripted handshake advertises; every curated
+	 * id by default. A narrowed list is how a test proves a page respects
+	 * `qgis.host.granted` (TASK-66 AC #5). A call outside it is still answered
+	 * by whatever the test scripted - typically `fault("not_authorized", ...)` -
+	 * because that refusal is the host's, not the harness's.
+	 */
+	readonly granted?: readonly HostOperationId[];
 }
 
 /**
@@ -163,7 +182,46 @@ export interface BridgeHarness<Op extends string = string>
 	assertSatisfied(): void;
 }
 
+/**
+ * The harness {@link createBridgeHarness} returns for a schema: the same
+ * harness, with `expectInvoke` and `expectSubscribe` typed by the schema's
+ * `Operations` and `Streams` - a payload is the declared request, a reply the
+ * declared result - and by the curated host ids, whose shapes the host module
+ * owns.
+ */
+export interface SchemaBridgeHarness<O, S>
+	extends Omit<
+		BridgeHarness<Extract<keyof O | keyof S, string> | HostOperationId>,
+		"expectInvoke" | "expectSubscribe"
+	> {
+	expectInvoke<K extends Extract<keyof O, string>>(
+		operation: K,
+		handler: (
+			payload: O[K] extends OperationShape ? O[K]["request"] : never,
+		) => ScriptedReply<O[K] extends OperationShape ? O[K]["result"] : never>,
+	): void;
+	expectInvoke<
+		Req extends object = Readonly<Record<string, unknown>>,
+		Res = unknown,
+	>(
+		operation: HostOperationId,
+		handler: (payload: Req) => ScriptedReply<Res>,
+	): void;
+	expectSubscribe<K extends Extract<keyof S, string>>(
+		operation: K,
+		script: SubscribeScript<S[K] extends StreamShape ? S[K]["request"] : never>,
+		options?: SubscribeOptions,
+	): void;
+	expectSubscribe<Req extends object = Readonly<Record<string, unknown>>>(
+		operation: HostOperationId,
+		script: SubscribeScript<Req>,
+		options?: SubscribeOptions,
+	): void;
+}
+
 class Harness<Op extends string> implements BridgeHarness<Op> {
+	private readonly granted: readonly HostOperationId[];
+	private readonly plugin: BridgeSchema | null;
 	private readonly listenerSet = new Set<(message: unknown) => void>();
 	private readonly expectations: Expectation[] = [];
 	private readonly recorded: RecordedCall[] = [];
@@ -173,6 +231,11 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 	private readonly outbox: unknown[] = [];
 	private draining: Promise<void> | null = null;
 	private streamCounter = 0;
+
+	public constructor(options: HarnessOptions, plugin: BridgeSchema | null) {
+		this.granted = Object.freeze([...(options.granted ?? HOST_OPERATIONS)]);
+		this.plugin = plugin;
+	}
 
 	public get calls(): readonly RecordedCall[] {
 		return [...this.recorded];
@@ -211,6 +274,10 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 		const envelope = this.parseEnvelope(message);
 		if (envelope.kind === "unsubscribe") {
 			this.closeFromPage(envelope);
+			return;
+		}
+		if (envelope.kind === "handshake") {
+			this.answerHandshake(envelope);
 			return;
 		}
 		const expectation = this.take(envelope.kind, envelope.operation);
@@ -287,6 +354,34 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 	}
 
 	// -- answering ---------------------------------------------------------------
+
+	/**
+	 * Answer the handshake the way `Dispatcher` does: the plugin description
+	 * the harness was built from (or none) and the advertised operation ids -
+	 * the plugin's, then the granted host ids. No expectation is consumed: a
+	 * handshake is the SDK's first message, not something a test scripts.
+	 */
+	private answerHandshake(call: RecordedCall): void {
+		const declared = [
+			...(this.plugin?.actions ?? []).map((action) => action.id),
+			...(this.plugin?.streams ?? []).map((stream) => stream.id),
+		];
+		this.deliver({
+			protocol: PROTOCOL,
+			call_id: call.callId,
+			ok: true,
+			value: {
+				protocol: PROTOCOL,
+				generation: 0,
+				plugin: this.plugin,
+				host_schema_version: HOST_SCHEMA_VERSION,
+				operations: [...declared, ...this.granted].map((id) => ({
+					id,
+					title: id,
+				})),
+			},
+		});
+	}
 
 	private answerInvoke(
 		call: RecordedCall,
@@ -525,6 +620,11 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 			this.recorded.push(call);
 			return call;
 		}
+		if (raw.kind === "handshake") {
+			const call: RecordedCall = { callId, kind: "handshake", operation: "" };
+			this.recorded.push(call);
+			return call;
+		}
 		if (raw.kind !== "invoke" && raw.kind !== "subscribe") {
 			throw new QgisSdkBridgeHarnessError(
 				`${callId}: ${String(raw.kind)} is not a bridge envelope kind`,
@@ -551,11 +651,30 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 }
 
 /**
- * Create a harness; `Op` narrows the operations a test may expect, typically
- * the generated module's `OperationId`.
+ * Create a harness.
+ *
+ * Given the generated `bridge.schema.ts` default export, the harness is typed
+ * by it: `expectInvoke("sites.summary", (payload) => ...)` sees the declared
+ * request and must answer with the declared result, and the handshake it
+ * answers advertises the schema's operations. Without one, `Op` narrows the
+ * operations a test may expect, typically a generated `OperationId`.
  */
-export function createBridgeHarness<
-	Op extends string = string,
->(): BridgeHarness<Op> {
-	return new Harness<Op>();
+export function createBridgeHarness<Op extends string = string>(
+	options?: HarnessOptions,
+): BridgeHarness<Op>;
+export function createBridgeHarness<O, S>(
+	schema: BridgeSchema<O, S>,
+	options?: HarnessOptions,
+): SchemaBridgeHarness<O, S>;
+export function createBridgeHarness(
+	first: HarnessOptions | BridgeSchema = {},
+	second: HarnessOptions = {},
+): BridgeHarness | SchemaBridgeHarness<unknown, unknown> {
+	if ("schema_version" in first) {
+		return new Harness<string>(second, first) as SchemaBridgeHarness<
+			unknown,
+			unknown
+		>;
+	}
+	return new Harness<string>(first, null);
 }
