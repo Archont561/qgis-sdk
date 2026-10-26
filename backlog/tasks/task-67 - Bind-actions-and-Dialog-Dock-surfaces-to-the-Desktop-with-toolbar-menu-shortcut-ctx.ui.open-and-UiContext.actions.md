@@ -3,10 +3,10 @@ id: TASK-67
 title: >-
   Bind actions and Dialog/Dock surfaces to the Desktop with @toolbar, @menu,
   @shortcut; ctx.ui.open and UiContext.actions
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26T08:41:00Z'
-updated_date: '2026-10-26T11:01:00Z'
+updated_date: '2026-10-26 17:27'
 labels: []
 milestone: m-5
 dependencies:
