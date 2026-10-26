@@ -115,6 +115,13 @@ def new(
         str | None,
         typer.Option(help="Lowest QGIS version allowed to load the plugin."),
     ] = None,
+    algorithm: Annotated[
+        bool,
+        typer.Option(
+            "--algorithm",
+            help="Start with a Processing provider and one function algorithm.",
+        ),
+    ] = False,
     web: Annotated[
         str | None,
         typer.Option(help="Add a web UI: vanilla or react (a terminal is asked)."),
@@ -178,6 +185,7 @@ def new(
             placement=answers.placement,
             package_manager=answers.package_manager,
             sdk_dependency=sdk_dependency,
+            algorithm=algorithm,
         )
         root = runtime.resolve(target)
         _report(runtime, options, root, dry_run=dry_run, force=force)
@@ -690,9 +698,12 @@ def _resolve(
     placement: str | None,
     package_manager: str | None,
     sdk_dependency: str | None = None,
+    algorithm: bool = False,
 ) -> ScaffoldOptions:
     """Pass only what the caller chose, so the API keeps its own defaults."""
-    given = {"plugin": plugin or target.name}
+    given: dict[str, object] = {"plugin": plugin or target.name}
+    if algorithm:
+        given["algorithm"] = True
     for key, value in (
         ("title", title),
         ("author", author),

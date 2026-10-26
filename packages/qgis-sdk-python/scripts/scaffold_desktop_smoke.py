@@ -56,7 +56,7 @@ DEFAULT_PLUGIN: Final = "scaffold_demo"
 EXPECTED_MINIMUM_VERSION: Final = "4.0"
 
 #: The metadata fields whose values the Desktop parser has to read back.
-METADATA_KEYS: Final = ("name", "qgisMinimumVersion")
+METADATA_KEYS: Final = ("name", "qgisMinimumVersion", "hasProcessingProvider")
 
 LIFECYCLE_PROBE: Final = '''"""Drive the generated plugin through the Desktop application's plugin machinery."""
 
@@ -79,8 +79,10 @@ payload = {
     "loaded": False,
     "runtime_running": False,
     "action_result": None,
+    "provider_registered": False,
     "unloaded": False,
     "runtime_stopped": False,
+    "provider_released": False,
     "error": None,
 }
 
@@ -95,9 +97,10 @@ def finish(code: int) -> None:
 
 try:
     import qgis.utils
-    from qgis.core import Qgis
+    from qgis.core import Qgis, QgsApplication
 
     payload["qgis_version"] = Qgis.QGIS_VERSION
+    registry = QgsApplication.processingRegistry()
 
     # Exactly the sequence QGIS's own startup loop and Plugins dialog use.
     found = dict(qgis.utils.findPlugins(request["plugins_root"]))
@@ -115,10 +118,14 @@ try:
         adapter = qgis.utils.plugins[plugin]
         payload["runtime_running"] = adapter.runtime.state.value == "running"
         payload["action_result"] = adapter.runtime.actions["ping"](request["ping_value"])
+        # `--algorithm`: the provider the plugin lists is in Processing while
+        # it runs and gone once it unloads (decision-42).
+        payload["provider_registered"] = registry.providerById(plugin) is not None
         payload["unloaded"] = bool(
             qgis.utils.unloadPlugin(plugin) and not qgis.utils.isPluginLoaded(plugin)
         )
         payload["runtime_stopped"] = adapter.runtime.state.value == "stopped"
+        payload["provider_released"] = registry.providerById(plugin) is None
 except BaseException as error:  # noqa: BLE001 - the report file is the only way out
     payload["error"] = f"{type(error).__name__}: {error}"
     finish(1)
@@ -136,8 +143,10 @@ REPORT_FIELDS: Final = (
     "loaded",
     "runtime_running",
     "action_result",
+    "provider_registered",
     "unloaded",
     "runtime_stopped",
+    "provider_released",
     "error",
 )
 
@@ -158,6 +167,8 @@ class DesktopScaffoldReport:
     unloaded: bool
     runtime_stopped: bool
     error: str | None = None
+    provider_registered: bool = False
+    provider_released: bool = False
 
     @property
     def passed(self) -> bool:
@@ -168,8 +179,10 @@ class DesktopScaffoldReport:
             and self.loaded
             and self.runtime_running
             and self.action_result == PING_VALUE
+            and self.provider_registered
             and self.unloaded
             and self.runtime_stopped
+            and self.provider_released
         )
 
     @classmethod
@@ -205,7 +218,11 @@ class DesktopScaffoldReport:
 
 def expected_metadata(title: str) -> dict[str, str]:
     """Return the metadata QGIS has to read back from the generated plugin."""
-    return {"name": title, "qgisMinimumVersion": EXPECTED_MINIMUM_VERSION}
+    return {
+        "name": title,
+        "qgisMinimumVersion": EXPECTED_MINIMUM_VERSION,
+        "hasProcessingProvider": "yes",
+    }
 
 
 def request_document(plugins_root: Path, plugin: str, title: str) -> str:
@@ -239,7 +256,8 @@ def _run_lifecycle(
     from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
     project = workspace / "project"
-    write_scaffold(ScaffoldOptions.resolve(plugin), project)
+    # The `--algorithm` starter, so the Desktop run also proves the provider.
+    write_scaffold(ScaffoldOptions.resolve(plugin, algorithm=True), project)
     built = build_plugin(project, out=workspace / "dist", run=_never_run)
     plugins_root = profile_plugin_dir(executable, prefix, workspace)
     plugins_root.mkdir(parents=True, exist_ok=True)

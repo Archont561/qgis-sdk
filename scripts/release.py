@@ -59,6 +59,11 @@ _ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
 _SCAFFOLD_WEB = (
     _REPO_ROOT / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
 )
+# The reference plugin declares the runtime and the tools the way a scaffolded
+# project does (decision-43 amendment): minor windows. They move with the kit
+# train (or the one side that releases) so the released tools still accept
+# the example; stamped and verified whenever the file exists.
+_EXAMPLE_PYPROJECT = _REPO_ROOT / "examples/simple/pyproject.toml"
 _PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
 _TS_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-typescript/src/declarations.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
@@ -67,6 +72,8 @@ __all__ = [
     "QgisSdkReleaseError",
     "QgisSdkReleaseVersionError",
     "__version__",
+    "read_example_windows",
+    "stamp_example_windows",
 ]
 
 __version__ = "0.1.0"
@@ -1158,6 +1165,57 @@ def stamp_tools_runtime_range(text: str, runtime: Version) -> str:
     return stamped
 
 
+_EXAMPLE_WINDOW = re.compile(r'"(qgis-sdk-(?:runtime|tools))>=([^,"]+),<([^"]+)"')
+
+
+def minor_window(version: Version) -> str:
+    """``>=0.6,<0.7`` for ``0.6.x``: what ``qgis-sdk new`` writes for an install."""
+    return f">={version.major}.{version.minor},<{next_minor(version)}"
+
+
+def read_example_windows(text: str) -> dict[str, tuple[Version, str]]:
+    """Read the example's ``qgis-sdk-runtime`` / ``qgis-sdk-tools`` windows.
+
+    Each is ``(lower, upper)`` with ``upper`` as ``major.minor``, like the
+    tools' tested range; a ``major.minor`` lower bound reads as ``.0``. Both
+    lines must be there: the example is the project the released tools are
+    qualified against.
+    """
+    found: dict[str, tuple[Version, str]] = {}
+    for match in _EXAMPLE_WINDOW.finditer(text):
+        name, lower, upper = match.groups()
+        if lower.count(".") == 1 and lower.replace(".", "").isdigit():
+            lower = f"{lower}.0"
+        found.setdefault(name, (Version.parse(lower), upper))
+    for name in ("qgis-sdk-runtime", "qgis-sdk-tools"):
+        if name not in found:
+            raise QgisSdkReleaseError(
+                f"the example pyproject.toml declares no {name}>=X,<Y window"
+            )
+    return found
+
+
+def stamp_example_windows(
+    text: str, *, runtime: Version | None = None, tools: Version | None = None
+) -> str:
+    """Move the example's dependency windows to the minor window of each release.
+
+    ``runtime`` moves the ``qgis-sdk-runtime`` line, ``tools`` the
+    ``qgis-sdk-tools`` line; a side that is not releasing keeps its window.
+    """
+    read_example_windows(text)
+    wanted = {"qgis-sdk-runtime": runtime, "qgis-sdk-tools": tools}
+
+    def rewrite(match: re.Match[str]) -> str:
+        name = match.group(1)
+        version = wanted[name]
+        if version is None:
+            return match.group(0)
+        return f'"{name}{minor_window(version)}"'
+
+    return _EXAMPLE_WINDOW.sub(rewrite, text)
+
+
 def stamp_package_json(text: str, version: Version) -> str:
     """Rewrite ``version`` in a package.json, preserving tab indentation."""
     data = json.loads(text)
@@ -1884,6 +1942,19 @@ def _stamp_python(scope: str, version: Version) -> list[str]:
     if recipe_text is not None and (kit or (split and (runtime or tools))):
         _RECIPE.write_text(recipe_text, encoding="utf-8")
         stamped.append(str(_RECIPE))
+    if _EXAMPLE_PYPROJECT.is_file() and (runtime or tools):
+        _EXAMPLE_PYPROJECT.write_text(
+            stamp_example_windows(
+                _EXAMPLE_PYPROJECT.read_text(encoding="utf-8"),
+                runtime=version if runtime else None,
+                tools=version if tools else None,
+            ),
+            encoding="utf-8",
+        )
+        moved = " and ".join(
+            name for name, on in (("runtime", runtime), ("tools", tools)) if on
+        )
+        stamped.append(f"{_EXAMPLE_PYPROJECT} ({moved} window {minor_window(version)})")
     return stamped
 
 
@@ -1999,6 +2070,29 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
                     "or release the kit with --scope python)"
                 )
             reported[scope]["runtime_range"] = f">={lower},<{upper}"
+        if scope in ("python", "runtime", "tools") and _EXAMPLE_PYPROJECT.is_file():
+            # The example is the project the released tools are qualified
+            # against; a window that excludes the release would make the
+            # stamped tools refuse it (VERSION004).
+            windows = read_example_windows(
+                _EXAMPLE_PYPROJECT.read_text(encoding="utf-8")
+            )
+            released = {
+                "qgis-sdk-runtime": versions.runtime if scope != "tools" else None,
+                "qgis-sdk-tools": versions.tools if scope != "runtime" else None,
+            }
+            for name, (lower, upper) in windows.items():
+                shipped = released[name]
+                if shipped is None or runtime_range_includes(lower, upper, shipped):
+                    continue
+                raise QgisSdkReleaseVersionError(
+                    f"examples/simple declares {name}>={lower},<{upper} but this "
+                    f"release ships {name} {shipped}; run stamp --scope {scope} "
+                    f"--version {shipped} so the example follows"
+                )
+            reported[scope]["example_windows"] = {
+                name: f">={lower},<{upper}" for name, (lower, upper) in windows.items()
+            }
     if getattr(args, "json", False):
         print(
             json.dumps(

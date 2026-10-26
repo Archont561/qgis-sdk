@@ -4,7 +4,7 @@ TASK-24 AC3 asks for "real Desktop startup/unload evidence with no fake fallback
 which the always-runnable ``desktop_lifecycle_smoke.py`` harness deliberately does not
 supply: it constructs the adapter inside a ``QgsApplication`` with ``iface=None`` and
 no event loop. This harness closes that gap by writing a small *fixture* plugin that
-uses ``qgis_sdk.adapters.desktop.create_class_factory`` and letting the Desktop
+is bound through ``qgis_sdk.adapters.desktop.host()`` and letting the Desktop
 application's own plugin manager start and unload it.
 
 The fixture is not the generated scaffold project. TASK-1 owns that evidence; this
@@ -66,11 +66,15 @@ FIXTURE_PLUGIN: Final = "sdk_lifecycle_probe"
 FIXTURE_TITLE: Final = "SDK lifecycle probe"
 FIXTURE_ID: Final = "sdk.lifecycle.probe"
 
-FIXTURE_INIT: Final = '''"""QGIS entry point for the SDK Desktop lifecycle fixture."""
+FIXTURE_INIT: Final = f'''"""QGIS entry point for the SDK Desktop lifecycle fixture.
 
-from .plugin import classFactory
+The one line ``qgis-sdk build`` appends to a staged ``__init__.py``
+(decision-43): the runtime's ``host()`` is the ``classFactory``.
+"""
 
-__all__ = ["classFactory"]
+from qgis_sdk.adapters.desktop import host
+
+classFactory = host("{FIXTURE_PLUGIN}.plugin:LifecycleProbe")
 '''
 
 FIXTURE_METADATA: Final = """[general]
@@ -94,7 +98,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qgis_sdk import action, plugin
-from qgis_sdk.adapters.desktop import create_class_factory
 from qgis_sdk.core import PluginContext, ResourceScope
 
 OBSERVED: dict[str, object] = {{}}
@@ -120,21 +123,6 @@ class IfaceDesktopAccess:
     iface: object
 
 
-@plugin(id="{FIXTURE_ID}", title="{FIXTURE_TITLE}")
-class LifecycleProbe:
-    """Record the context it was given and answer one round-trip action."""
-
-    ctx: PluginContext
-
-    def __init__(self) -> None:
-        OBSERVED["context"] = self.ctx
-
-    @action(id="ping", title="Ping")
-    def ping(self, value: int) -> int:
-        """Return the value unchanged so a caller can prove the round trip."""
-        return value
-
-
 def build_context(iface: object) -> PluginContext:
     """Give the plugin exactly the capabilities this host can offer."""
     return PluginContext(
@@ -144,7 +132,20 @@ def build_context(iface: object) -> PluginContext:
     )
 
 
-classFactory = create_class_factory(LifecycleProbe, context_factory=build_context)
+@plugin(id="{FIXTURE_ID}", title="{FIXTURE_TITLE}")
+class LifecycleProbe:
+    """Record the context it was given and answer one round-trip action."""
+
+    ctx: PluginContext
+    context_factory = staticmethod(build_context)
+
+    def __init__(self) -> None:
+        OBSERVED["context"] = self.ctx
+
+    @action(id="ping", title="Ping")
+    def ping(self, value: int) -> int:
+        """Return the value unchanged so a caller can prove the round trip."""
+        return value
 '''
 
 FIXTURE_FILES: Final = {

@@ -43,8 +43,8 @@ What 0.5.0 did **not** do, because this milestone has to finish it:
 | --- | --- | --- | --- |
 | [TASK-63](../../tasks/task-63%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md) function algorithms | TASK-59 ✓ | To Do | **yes** |
 | [TASK-66](../../tasks/task-66%20-%20Generate-the-typed-bridge-schema-module-and-add-QgisSdk.fromBridgeSchema.md) typed schema module + `fromBridgeSchema` | TASK-61 ✓ | To Do | **yes** (independent of 63) |
-| [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | Implemented (sprint 3) | after 63 |
-| [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration (re-sliced, see sprint 4) | TASK-64 | To Do | after 64 |
+| [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | Done (#96) | after 63 |
+| [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration (re-sliced, see sprint 4) | TASK-64 | Implemented (sprint 4) | after 64 |
 | [TASK-67](../../tasks/task-67%20-%20Bind-actions-and-Dialog-Dock-surfaces-to-the-Desktop-with-toolbar-menu-shortcut-ctx.ui.open-and-UiContext.actions.md) desktop bindings + surfaces | TASK-64 | To Do | after 64 |
 | [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) 0.6.0 gate | TASK-31 ✓, 58 ✓, 59 ✓, 61 ✓, 62, 63–67 | To Do | release gate |
 
@@ -98,18 +98,19 @@ commits inside keep the slices reviewable.
   `QGIS_SDK_SCAFFOLD_DESKTOP=1`, `QGIS_SDK_HEADLESS_LIFECYCLE=1`,
   `QGIS_SDK_DESKTOP_ADAPTER=1` and `QGIS_SDK_REFERENCE=1` harnesses re-run
   green. decision-43 and decision-12 carry dated status reviews.
-- **Sprint 4: TASK-65, re-sliced.** What sprint 3 left for it: the scaffold's
-  and the example's `qgis-sdk-runtime>=0.5,<0.6` / `qgis-sdk-tools>=0.5,<0.6`
-  windows must be moved by `release.py stamp` (today the scaffold derives
-  them from the installed runtime, the example and the tests pin the literal),
-  so the gate stamps them with the 0.6.0 version; doc-13 and the remaining
-  guides that still describe the four generated files; the
-  `QGIS_SDK_PLUGIN_COEXISTENCE=1` harness and
-  `scripts/plugin_coexistence_smoke.py` moved from `create_class_factory` onto
-  `host()` (both still run on the retained `create_class_factory`); and the
-  scaffold-vs-example equality test extended to the Python side
-  (`pyproject.toml` shape, `tests/`), not only `web/package.json`. If that is
-  all it is, it folds into the TASK-67 sprint as the first commit.
+- **Sprint 4 (implemented 2026-10-26, Done on merge): TASK-65, re-sliced.**
+  What sprint 3 left: `release.py stamp` moves the example's
+  `qgis-sdk-runtime` / `qgis-sdk-tools` minor windows with the kit (or the
+  one side releasing) and `verify-versions` refuses a release the window
+  excludes; the scaffold-vs-example equality test covers the Python side;
+  the Desktop-adapter and coexistence smokes bind through `host()`; README
+  quick start, package READMEs and doc-14 describe the clean project. The
+  task's own `--algorithm` starter landed too: `<plugin>/algorithms.py`
+  with the provider and `buffer_layer`, `providers = (...)` and a `buffer`
+  action, a fourth starter test over the fakes, and the
+  `QGIS_SDK_SCAFFOLD_DESKTOP=1` harness proving the provider's registration
+  and release in real Desktop. TASK-64 closed (Done, merged #96 →
+  `5caafb3`) as the first commit.
 - **Sprint 5: TASK-67.** `@toolbar`/`@menu`/`@shortcut` stacked on `@action`,
   and on `Dialog`/`Dock` surface classes, `surfaces = [...]`,
   `describe_bindings(cls)` outside `describe_plugin`, the trigger rule (no

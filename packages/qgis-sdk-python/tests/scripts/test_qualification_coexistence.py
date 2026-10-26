@@ -139,7 +139,6 @@ def test_a_wrong_action_result_voids_the_verdict() -> None:
                 "json",
                 "pydantic",
                 "qgis_sdk",
-                "qgis_sdk.adapters.desktop",
                 "qgis_sdk.adapters.pydantic",
                 "qgis_sdk.adapters.pydantic_types",
                 "qgis_sdk.core",
@@ -174,6 +173,10 @@ def test_both_fixtures_are_valid_plugins_with_explicit_imports(
     assert not any(
         name.split(".")[0] in {"qgis", "PyQt5", "PyQt6"} for name in imported
     )
+    if files is SDK_FILES:  # bound the way `qgis-sdk build` stages it (decision-43)
+        assert (
+            'host("sdk_pydantic_probe.plugin:SdkPydanticProbe")' in files["__init__.py"]
+        )
 
 
 def test_install_fixtures_writes_both_packages_with_lf_endings(

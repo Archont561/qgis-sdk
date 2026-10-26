@@ -46,10 +46,13 @@ class Tools:
 print(describe_plugin(Tools).to_json())
 ```
 
-`qgis-sdk new <directory>` writes a loadable plugin project built on the
-same API, with an optional Vite web UI (`--web vanilla|react`); `qgis-sdk
-check` reports what would stop one from loading in QGIS or from being tested
-without it. `qgis-sdk test` runs the project's pytest QGIS-free by default
+`qgis-sdk new <directory>` writes a plugin project built on the same API:
+`pyproject.toml` naming the class under `[tool.qgis-sdk]`, the package with
+`plugin.py`, a starter test and an optional Vite web UI (`--web
+vanilla|react|svelte|vue`). What QGIS's loader needs - `metadata.txt`, the
+`classFactory` - is rendered by `build` and `dev`, never written into the
+project. `qgis-sdk check` reports what would stop it from loading in QGIS or
+from being tested without it. `qgis-sdk test` runs the project's pytest QGIS-free by default
 (`--target qgis|desktop` for the native layers, arguments pass through) and
 `qgis-sdk dev` starts the plugin from source in a real QGIS Desktop with an
 isolated profile, reload on save and, for a web UI, Vite with hot module

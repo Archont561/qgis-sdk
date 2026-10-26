@@ -4,7 +4,9 @@
 
 Declarations on plain classes, the version 1 description contract, the scoped
 runtime with its services, local jobs, networking, the WebEngine bridge host
-side and the QGIS adapters. Standard library only: a plugin built with
+side and the QGIS adapters, including `qgis_sdk.adapters.desktop.host()` -
+the `classFactory` a built plugin binds, so a project carries the plugin and
+nothing of the host. Standard library only: a plugin built with
 `qgis-sdk build` carries a private copy and installs nothing.
 
 > Experimental `0.x`. Each `0.Y.0` carries migration notes; nothing is

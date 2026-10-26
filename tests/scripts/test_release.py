@@ -36,6 +36,7 @@ from release import (
     parse_versionrc,
     plan_base_tag,
     read_alias_versions,
+    read_example_windows,
     read_pyproject_version,
     read_python_contract_version,
     read_recipe_version,
@@ -45,6 +46,7 @@ from release import (
     resolve_dry_run,
     sort_tags,
     stamp_alias_package_json,
+    stamp_example_windows,
     stamp_package_json,
     stamp_pyproject,
     stamp_recipe,
@@ -94,6 +96,7 @@ def _the_real_manifests_stay_untouched():
         release._RECIPE,
         release._BRIDGE_PACKAGE,
         release._ALIAS_PACKAGE,
+        release._EXAMPLE_PYPROJECT,
     )
     before = {
         path: path.read_text(encoding="utf-8") for path in paths if path.is_file()
@@ -160,6 +163,7 @@ def _python_manifests(
     monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "no-alias.json")
     monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "no-web.py")
+    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECT", tmp_path / "no-example.toml")
     return {
         "pyproject": pyproject,
         "runtime": runtime,
@@ -2495,3 +2499,111 @@ def test_the_repository_alias_agrees_with_the_bridge(monkeypatch):
     bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
     assert read_alias_versions(alias.read_text()) == (bridge_version, bridge_version)
     assert main(["verify-versions", "--scope", "typescript"]) == 0
+
+
+EXAMPLE_PYPROJECT = (
+    "[project]\n"
+    'name = "simple"\n'
+    'version = "0.0.0"\n'
+    'dependencies = ["qgis-sdk-runtime>=0.1,<0.2"]\n'
+    "\n"
+    "[dependency-groups]\n"
+    'dev = ["qgis-sdk-tools>=0.1,<0.2"]\n'
+    "\n"
+    "[tool.qgis-sdk]\n"
+    'plugin = "simple.plugin:SimplePlugin"\n'
+)
+
+
+def test_read_example_windows_returns_both_minor_windows():
+    assert read_example_windows(EXAMPLE_PYPROJECT) == {
+        "qgis-sdk-runtime": (Version.parse("0.1.0"), "0.2"),
+        "qgis-sdk-tools": (Version.parse("0.1.0"), "0.2"),
+    }
+
+
+def test_read_example_windows_refuses_a_manifest_without_them():
+    with pytest.raises(QgisSdkReleaseError, match="qgis-sdk-runtime"):
+        read_example_windows('[project]\ndependencies = ["typer"]\n')
+
+
+def test_stamp_example_windows_moves_each_line_to_the_minor_window():
+    """The example declares what the scaffold would write for this release."""
+    stamped = stamp_example_windows(
+        EXAMPLE_PYPROJECT, runtime=Version.parse("0.6.0"), tools=Version.parse("0.6.0")
+    )
+
+    assert 'dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]' in stamped
+    assert 'dev = ["qgis-sdk-tools>=0.6,<0.7"]' in stamped
+    assert stamped.replace(">=0.6,<0.7", ">=0.1,<0.2") == EXAMPLE_PYPROJECT
+
+    only_runtime = stamp_example_windows(
+        EXAMPLE_PYPROJECT, runtime=Version.parse("0.1.4")
+    )
+    assert (
+        '"qgis-sdk-runtime>=0.1,<0.2"' in only_runtime
+    )  # the patch stays in the window
+    assert '"qgis-sdk-tools>=0.1,<0.2"' in only_runtime
+    pre = stamp_example_windows(EXAMPLE_PYPROJECT, tools=Version.parse("0.7.0-rc.1"))
+    assert '"qgis-sdk-tools>=0.7,<0.8"' in pre
+
+
+def _example_manifests(tmp_path, monkeypatch, text=None, **kwargs):
+    files = _python_manifests(tmp_path, monkeypatch, **kwargs)
+    example = tmp_path / "example-pyproject.toml"
+    example.write_text(text or EXAMPLE_PYPROJECT, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECT", example)
+    files["example"] = example
+    return files
+
+
+def test_stamp_scope_python_moves_the_example_windows_with_the_kit(
+    tmp_path, monkeypatch
+):
+    """``examples/simple`` is a project the released tools must accept (TASK-65)."""
+    files = _example_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.6.0", "--scope", "python"]) == 0
+
+    example = files["example"].read_text()
+    assert '"qgis-sdk-runtime>=0.6,<0.7"' in example
+    assert '"qgis-sdk-tools>=0.6,<0.7"' in example
+    assert 'version = "0.0.0"' in example  # the example's own version is not released
+    assert main(["verify-versions", "--scope", "python", "--version", "0.6.0"]) == 0
+
+
+def test_stamp_scope_runtime_and_tools_move_their_own_example_line(
+    tmp_path, monkeypatch
+):
+    files = _example_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "runtime"]) == 0
+    example = files["example"].read_text()
+    assert '"qgis-sdk-runtime>=0.2,<0.3"' in example
+    assert '"qgis-sdk-tools>=0.1,<0.2"' in example
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "tools"]) == 0
+    example = files["example"].read_text()
+    assert '"qgis-sdk-tools>=0.2,<0.3"' in example
+
+
+def test_verify_versions_names_an_example_window_that_excludes_the_release(
+    tmp_path, monkeypatch, capsys
+):
+    """A stamped release whose example still declares the old window is refused."""
+    _example_manifests(tmp_path, monkeypatch, python_version="0.6.0")
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.6.0"]) == 1
+
+    out = capsys.readouterr().out
+    assert "examples/simple" in out
+    assert "qgis-sdk-runtime>=0.1.0,<0.2" in out
+    assert "stamp --scope python --version 0.6.0" in out
+
+
+def test_verify_versions_passes_without_an_example_manifest(tmp_path, monkeypatch):
+    _python_manifests(tmp_path, monkeypatch)
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.1.0"]) == 0

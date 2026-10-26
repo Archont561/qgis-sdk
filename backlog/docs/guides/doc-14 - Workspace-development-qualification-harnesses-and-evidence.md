@@ -280,10 +280,13 @@ QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk-py
 ### Real Desktop startup and unload evidence
 
 `scripts/desktop_adapter_smoke.py` supplies the evidence that harness cannot: it writes
-a small fixture plugin that uses `create_class_factory`, installs it into a clean
-throwaway profile, and lets the **QGIS Desktop application's own plugin manager** load,
-start and unload it. The fixture belongs to this harness rather than to the scaffolded
-project, so the adapter contract is proven without depending on `qgis_sdk.scaffold`.
+a small fixture plugin whose `__init__.py` is the one line `qgis-sdk build` stages
+(`classFactory = host("<pkg>.plugin:<Class>")`, decision-43) with its own
+`context_factory`, installs it into a clean throwaway profile, and lets the **QGIS
+Desktop application's own plugin manager** load, start and unload it. The fixture
+belongs to this harness rather than to the scaffolded project, so the host contract
+is proven without depending on the scaffold; `scripts/plugin_coexistence_smoke.py`
+binds its SDK plugin the same way.
 
 ```sh
 pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smoke.py
@@ -446,7 +449,8 @@ A standalone run cannot prove QGIS accepts the package, so
 the plugin package into a clean throwaway profile, and runs the **QGIS Desktop
 binary** so that QGIS's own plugin machinery - `qgis.utils.findPlugins`,
 `loadPlugin`, `startPlugin`, `unloadPlugin` - discovers it, parses its
-`metadata.txt` with QGIS's own parser, calls `classFactory(iface)` and `initGui()`,
+`metadata.txt` (rendered by `build` from `pyproject.toml`) with QGIS's own parser,
+calls the staged `classFactory(iface)` - `host()` - and `initGui()`,
 invokes the declared action and unloads it, with the SDK reporting `running` and
 then `stopped`:
 

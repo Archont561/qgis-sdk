@@ -24,15 +24,15 @@ PLUGIN_MODULE = '''"""{title}: a minimal qgis-sdk plugin."""
 from __future__ import annotations
 
 from qgis_sdk import action, plugin
-from qgis_sdk.core import PluginContext
-
+{algorithm_imports}from qgis_sdk.core import PluginContext
+{algorithm_models}
 
 @plugin(id="{plugin}", title="{title}")
 class {class_name}Plugin:
     """Declared actions only: no Qt imports and no framework glue to memorise."""
 
     ctx: PluginContext  # bound by the runtime while the plugin is loaded
-
+{algorithm_providers}
     @action(id="ping", title="Ping")
     def ping(self, value: int) -> int:
         """Return the value unchanged so a caller can prove the round trip."""
@@ -42,6 +42,72 @@ class {class_name}Plugin:
     def project_layers(self) -> list[str]:
         """The same project service a web view reaches as ``host.project``."""
         return list(self.ctx.project.layer_ids())
+{algorithm_action}'''
+
+ALGORITHM_IMPORTS = """from qgis_sdk.algorithms import invoke
+"""
+
+ALGORITHM_MODELS = """from qgis_sdk.models import CrsInput, LayerInput, Metres, VectorLayerInfo
+
+from . import algorithms
+"""
+
+ALGORITHM_PROVIDERS = """
+    #: The Processing provider this plugin owns; the toolbox shows its
+    #: algorithms as ``{plugin}:<id>`` while the plugin is loaded.
+    providers = (algorithms.provider,)
+"""
+
+ALGORITHM_ACTION = '''
+    @action(id="buffer", title="Buffer a layer")
+    def buffer(
+        self,
+        layer_id: LayerInput,
+        distance_metres: Metres,
+        working_crs: CrsInput,
+    ) -> VectorLayerInfo:
+        """Run the same algorithm the toolbox offers, from a native or web surface."""
+        return invoke(
+            algorithms.buffer_layer,
+            self.ctx,
+            layer_id=layer_id,
+            distance_metres=distance_metres,
+            working_crs=working_crs,
+        )
+'''
+
+ALGORITHMS_MODULE = '''"""The Processing algorithms {title} owns (decision-42).
+
+One provider, one function. The function binds typed inputs to the produced
+layer through the injected ``ctx.algorithms``; request validation and the
+Processing call belong to the SDK, so the same function runs against the
+in-memory fake in a QGIS-free test and against Processing inside QGIS.
+"""
+
+from __future__ import annotations
+
+from qgis_sdk.core import AlgorithmContext
+from qgis_sdk.models import BufferRequest, CrsInput, LayerInput, Metres, VectorLayerInfo
+from qgis_sdk.providers import Provider
+
+provider = Provider(id="{plugin}", title="{title}")
+
+
+@provider.algorithm(id="buffer", title="Buffer a layer in an explicit working CRS")
+def buffer_layer(
+    ctx: AlgorithmContext,
+    layer_id: LayerInput,
+    distance_metres: Metres,
+    working_crs: CrsInput,
+) -> VectorLayerInfo:
+    """Buffer ``layer_id`` by ``distance_metres`` inside the projected ``working_crs``."""
+    return ctx.algorithms.execute(
+        BufferRequest(
+            layer_id=layer_id,
+            distance_metres=distance_metres,
+            working_crs=working_crs,
+        )
+    )
 '''
 
 STARTER_TEST = '''"""Smoke tests for {title}. They need no QGIS install and no display.
@@ -74,7 +140,7 @@ def test_the_plugin_starts_and_unloads_without_a_host() -> None:
 def test_declared_actions_are_the_plugins_public_surface() -> None:
     description = describe_plugin({class_name}Plugin)
 
-    assert [action.id for action in description.actions] == ["ping", "project_layers"]
+    assert [action.id for action in description.actions] == [{action_ids}]
 
 
 def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
@@ -87,6 +153,60 @@ def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
             plugin.runtime.actions["project_layers"]()
     finally:
         plugin.unload()
+{algorithm_test}'''
+
+ALGORITHM_TEST = '''
+
+def test_the_buffer_algorithm_asks_processing_for_exactly_the_request(tmp_path) -> None:
+    """The SDK fakes stand in for Processing: what was asked, and what came back."""
+    from qgis_sdk.algorithms import invoke
+    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.models import BufferRequest
+    from qgis_sdk.testing import (
+        FakeAlgorithms,
+        FakeLayers,
+        FakeProject,
+        RecordingNotifications,
+    )
+
+    from {plugin}.algorithms import buffer_layer, provider
+
+    scope = ResourceScope()
+    layers = FakeLayers(scope)
+    layers.register(
+        tmp_path / "points.gpkg", name="points", geometry_type="point", field_names=("id",)
+    )
+    algorithms = FakeAlgorithms(layers, scope)
+    algorithms.declare_output(
+        BufferRequest,
+        tmp_path / "buffer.gpkg",
+        name="buffer",
+        geometry_type="polygon",
+        field_names=("id",),
+        crs="EPSG:3857",
+    )
+    project = FakeProject(layers, scope)
+    ctx = PluginContext(
+        notifications=RecordingNotifications(scope),
+        scope=scope,
+        layers=layers,
+        project=project,
+        algorithms=algorithms,
+    )
+    source = layers.open_vector(tmp_path / "points.gpkg")
+
+    output = invoke(
+        buffer_layer, ctx, layer_id=source.id, distance_metres=25.0, working_crs="EPSG:3857"
+    )
+
+    assert provider.algorithms == (buffer_layer,)
+    assert output.name == "buffer" and output.geometry_type == "polygon"
+    (request,) = algorithms.requests
+    assert request == BufferRequest(
+        layer_id=source.id, distance_metres=25.0, working_crs="EPSG:3857"
+    )
+    assert project.layer_ids() == (output.id,)
+    scope.close()
 '''
 
 PYPROJECT = """# Generated by `qgis-sdk new`. The project is the plugin: `qgis-sdk dev` runs
@@ -170,6 +290,12 @@ def plan_scaffold(options: ScaffoldOptions) -> tuple[GeneratedFile, ...]:
         GeneratedFile("tests/test_plugin.py", _starter_test(options)),
         *(GeneratedFile(path, content) for path, content in plan_web(options)),
     ]
+    if options.algorithm:
+        values.append(
+            GeneratedFile(
+                f"{options.plugin}/algorithms.py", _algorithms_module(options)
+            )
+        )
     return tuple(sorted(values, key=lambda file: file.path))
 
 
@@ -231,13 +357,32 @@ def _plugin_module(options: ScaffoldOptions) -> str:
         title=options.title,
         plugin=options.plugin,
         class_name=_class_name(options.plugin),
+        algorithm_imports=ALGORITHM_IMPORTS if options.algorithm else "",
+        algorithm_models=ALGORITHM_MODELS if options.algorithm else "",
+        algorithm_providers=(
+            ALGORITHM_PROVIDERS.format(plugin=options.plugin)
+            if options.algorithm
+            else ""
+        ),
+        algorithm_action=ALGORITHM_ACTION if options.algorithm else "",
     )
 
 
+def _algorithms_module(options: ScaffoldOptions) -> str:
+    return ALGORITHMS_MODULE.format(title=options.title, plugin=options.plugin)
+
+
 def _starter_test(options: ScaffoldOptions) -> str:
+    action_ids = sorted(
+        ["ping", "project_layers"] + (["buffer"] if options.algorithm else [])
+    )
     return STARTER_TEST.format(
         title=options.title,
         plugin=options.plugin,
+        action_ids=", ".join(f'"{identifier}"' for identifier in action_ids),
+        algorithm_test=(
+            ALGORITHM_TEST.format(plugin=options.plugin) if options.algorithm else ""
+        ),
         class_name=_class_name(options.plugin),
         host_arguments=(
             "" if options.web is None else f', placement="{options.web.placement}"'
@@ -256,7 +401,7 @@ def _readme(options: ScaffoldOptions) -> str:
 
 A minimal [qgis-sdk](https://pypi.org/project/qgis-sdk/) plugin generated by
 `qgis-sdk new`. `{plugin}/plugin.py` holds the whole design: one `@plugin`
-class with two `@action`s, and nothing else - no Qt or QGIS import, no
+class with its `@action`s, and nothing else - no Qt or QGIS import, no
 `classFactory`, no `metadata.txt`. `pyproject.toml` names the class
 (`[tool.qgis-sdk] plugin`) and the few facts QGIS needs; `qgis-sdk build` and
 `qgis-sdk dev` derive the QGIS entry from them. Replace the generated author
@@ -325,7 +470,25 @@ pytest -q                        # the same suite, your way
 Arguments the command does not know go to pytest (`qgis-sdk test -x -k ping`).
 A native target whose QGIS cannot be found fails; one whose tests all skipped
 fails too.
-{_web_readme(options)}"""
+{_algorithm_readme(options)}{_web_readme(options)}"""
+
+
+def _algorithm_readme(options: ScaffoldOptions) -> str:
+    if not options.algorithm:
+        return ""
+    plugin = options.plugin
+    return f"""
+## Processing
+
+`{plugin}/algorithms.py` holds the Processing provider the plugin owns and one
+function algorithm, `buffer_layer`; `plugin.py` lists the provider
+(`providers = (algorithms.provider,)`) and exposes the same operation as the
+`buffer` action. While the plugin is loaded the toolbox shows it as
+`{plugin}:buffer`, with parameters derived from the function's typed inputs;
+`metadata.txt` gets `hasProcessingProvider=yes` from the same declaration.
+Add an algorithm by adding a decorated function; the starter test in
+`tests/test_plugin.py` shows how the SDK fakes stand in for Processing.
+"""
 
 
 def _web_readme(options: ScaffoldOptions) -> str:

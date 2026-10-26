@@ -17,6 +17,7 @@ from pathlib import Path
 import layers
 import pytest
 from qgis_sdk_tools.artifacts import introspect_plugin, render_metadata
+from qgis_sdk_tools.check.versions import installed_runtime_version
 from qgis_sdk_tools.project import require_project
 from qgis_sdk_tools.scaffold import (
     GeneratedFile,
@@ -25,6 +26,7 @@ from qgis_sdk_tools.scaffold import (
     plan_scaffold,
     write_scaffold,
 )
+from qgis_sdk_tools.scaffold.generate import sdk_requirements
 
 
 def content_of(plan: tuple[GeneratedFile, ...], path: str) -> str:
@@ -145,8 +147,9 @@ def test_the_manifest_declares_the_plugin_class_and_qgis_facts() -> None:
 
     assert manifest["project"]["name"] == "demo-tools"
     assert manifest["project"]["version"] == "1.2.3"
-    assert manifest["project"]["dependencies"] == ["qgis-sdk-runtime>=0.5,<0.6"]
-    assert manifest["dependency-groups"] == {"dev": ["qgis-sdk-tools>=0.5,<0.6"]}
+    runtime_line, tools_line = sdk_requirements()
+    assert manifest["project"]["dependencies"] == [runtime_line]
+    assert manifest["dependency-groups"] == {"dev": [tools_line]}
     assert manifest["tool"]["qgis-sdk"] == {
         "plugin": "demo_tools.plugin:DemoToolsPlugin",
         "qgis-minimum-version": "4.0",
@@ -357,3 +360,15 @@ def test_a_missing_target_directory_is_created(tmp_path: Path) -> None:
 
     assert len(written) == 6
     assert all(path.is_file() for path in written)
+
+
+def test_the_sdk_requirements_follow_the_installed_runtime_minor() -> None:
+    """decision-43 amendment: the window comes from the install, not a template."""
+    runtime_line, tools_line = sdk_requirements()
+    installed = installed_runtime_version()
+
+    assert installed is not None
+    major, minor = (int(part) for part in installed.split(".")[:2])
+    window = f">={major}.{minor},<{major}.{minor + 1}"
+    assert runtime_line == f"qgis-sdk-runtime{window}"
+    assert tools_line == f"qgis-sdk-tools{window}"

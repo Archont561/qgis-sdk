@@ -1059,6 +1059,24 @@ The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
 unload through the SDK runtime with no QGIS installation at all.
 
+### Processing starter: `--algorithm`
+
+`qgis-sdk new --algorithm` adds `<plugin>/algorithms.py` - one
+`Provider(id="<plugin>", title=...)` and one function algorithm,
+`buffer_layer(ctx: AlgorithmContext, layer_id: LayerInput, distance_metres:
+Metres, working_crs: CrsInput) -> VectorLayerInfo`, the same shape as
+`examples/simple` (decision-42) - lists it on the class
+(`providers = (algorithms.provider,)`) and exposes the same operation as a
+`buffer` action through `invoke(algorithms.buffer_layer, self.ctx, ...)`.
+`tests/test_plugin.py` gains a fourth test that runs the function over
+`FakeLayers`/`FakeAlgorithms`/`FakeProject` and asserts the exact
+`BufferRequest` Processing would have received. `build` renders
+`hasProcessingProvider=yes` from the declaration, and the
+`QGIS_SDK_SCAFFOLD_DESKTOP=1` harness scaffolds this variant so real QGIS
+Desktop proves the provider is in `processingRegistry()` while the plugin runs
+and gone after unload. The README gets a "Processing" section naming the
+toolbox entry `<plugin>:buffer`. It combines with `--web`.
+
 ### Web UI: vanilla or React, dialog or dock
 
 `new` can add a page (decision-18). On a terminal it asks four questions -
@@ -1350,6 +1368,14 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
   in the selected scope. `qgis-sdk` and `@archont561/qgis-sdk` both shipped
   `0.1.0`/`0.1.1` because they were built together; they version independently from
   0.2.0 onward, so the 0.2.0 Python release leaves the bridge at `0.1.1`.
+  A Python-scope stamp also moves `examples/simple/pyproject.toml`'s
+  `qgis-sdk-runtime>=X.Y,<X.Y+1` / `qgis-sdk-tools>=X.Y,<X.Y+1` windows to the
+  released minor (the `runtime` and `tools` scopes move their own line), and
+  `verify-versions` refuses a release the example's window excludes - the
+  example is the project the released tools are qualified against, and a stale
+  window would be VERSION004 on it. The scaffold derives the same windows from
+  the installed distributions at `new` time, so nothing in the templates is
+  stamped.
 - **Independent protocol versions:** `PluginDescription.schema_version = 1`
   (`PLUGIN_DESCRIPTION_SCHEMA_VERSION` in `qgis_sdk.declarations`) and future
   WebEngine IPC protocol versions are versioned independently of the package

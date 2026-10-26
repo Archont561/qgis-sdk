@@ -1,10 +1,10 @@
 ---
 id: TASK-64
 title: 'Generate metadata.txt, classFactory and the page view in build and dev'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-26T08:27:00Z'
-updated_date: '2026-10-26 14:52'
+updated_date: '2026-10-26 16:35'
 labels: []
 milestone: m-5
 dependencies:
@@ -35,4 +35,6 @@ decision-43. pyproject.toml [tool.qgis-sdk] plugin = "pkg.module:Class" is the s
 2026-10-26: AC 6 added - runtime autodetected from the project's dependencies, never from a dedicated field.
 
 Implemented 2026-10-26 (sprint 3 of doc-18), Done on merge. Runtime: qgis_sdk.adapters.desktop rewritten around resolve_plugin_spec (builtin __import__ so QGIS's module tracking sees it), DesktopHost, host(spec, *, placement, grants), default_context (native under QgsApplication, bare otherwise, MessageBarNotifications with an iface), QgisSdkHostError; create_class_factory retained. New qgis_sdk.adapters.webview.open_view/close_view/add_toolbar_action/dev_server own the QWebEngineView over BrowserPolicy + Dispatcher + QWebChannel ('bridge' object), as a QDialog or a QDockWidget named by the view id. qgis_sdk.bridge.host.granted_operations resolves grant names (layers.read) or operation ids (project.layer_ids) to the ids register_host_operations(only=) takes. Tools: qgis_sdk_tools.project (ProjectConfig/WebConfig, load_project/require_project; PROJECT002, CONFIG001, META002, GRANT001), qgis_sdk_tools.artifacts (introspect_plugin, render_metadata, class_factory_source, render_dev_host_init, write_dev_host under .qgis-sdk/dev/host/<plugin>/), check.project META001/ENTRY002, check.versions VERSION003/VERSION004, bundle stages metadata.txt + appends classFactory = host(...) to the staged __init__.py and records requirement + resolved runtime in the NOTICE; dev / dev --mode standalone / test --target desktop go through the host package (pytest plugin _HostFirst finder). Scaffold writes the clean project (pyproject with [tool.qgis-sdk], empty __init__.py, plugin.py, tests/test_plugin.py, optional web/; runtime/tools windows from importlib.metadata); examples/simple migrated (metadata.txt, webview.py, classFactory, build_context, MessageBarNotifications removed; dialogs.py added). Evidence: Python suite 1579 passed / 43 skipped; tests/scripts 241; opt-in harnesses REFERENCE 5, DEVTOOLS 9, SCAFFOLD_WEB 8, SCAFFOLD_DESKTOP 10, HEADLESS_LIFECYCLE 5, DESKTOP_ADAPTER 22, BUILD_INSTALL 1; new tests test_desktop_host.py (13 pure) and test_desktop_host_native.py (4 webengine: ping, granted vs non-granted host op, dock/dialog, unload). Docs: doc-12 (Desktop host, scaffold, check rules, dev, build, 0.6.0 'Project shape' migration), decision-43 and decision-12 status reviews, doc-18 sprint 3/4 re-slice. Left to TASK-65: release.py stamp moving the example's literal >=0.5,<0.6 windows, doc-13 and the remaining guides, coexistence harness onto host(), Python-side scaffold-vs-example equality test.
+
+Closed 2026-10-26: merged #96 → 5caafb3 (CI green on Linux, macOS, Windows). Validation after merge: the sprint-4 branch re-ran the Python suite, tests/scripts and the DESKTOP_ADAPTER / COEXISTENCE / SCAFFOLD_DESKTOP harnesses on top of it.
 <!-- SECTION:NOTES:END -->
