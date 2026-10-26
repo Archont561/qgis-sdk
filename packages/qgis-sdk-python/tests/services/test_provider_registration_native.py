@@ -13,13 +13,23 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 from qgis_sdk import plugin
 from qgis_sdk.algorithms import describe_algorithm
 from qgis_sdk.core import AlgorithmContext, PluginContext, PluginRuntime, ResourceScope
-from qgis_sdk.models import CentroidRequest, LayerInput, VectorLayerInfo
+from qgis_sdk.models import (
+    CentroidRequest,
+    Colour,
+    DirectoryInput,
+    FieldInput,
+    FileInput,
+    FileRef,
+    LayerInput,
+    Range,
+    VectorLayerInfo,
+)
 from qgis_sdk.providers import Provider
 from sample_algorithms import buffer_layer, sample_provider
 
@@ -256,6 +266,104 @@ def test_the_toolbox_calls_the_function_through_the_same_context_type(
     assert seen[0].algorithms is native_services.algorithms
     assert seen[0].scope.closed
     assert _algorithm_ids("usertest") == []
+
+
+def test_the_new_kinds_become_their_processing_parameters_and_values(
+    running, native_services: Services, tmp_path: Path
+) -> None:
+    """TASK-68: file, directory, field, range, colour and enum through the toolbox."""
+    from qgis import processing
+    from qgis.core import (
+        QgsApplication,
+        QgsProcessingParameterColor,
+        QgsProcessingParameterEnum,
+        QgsProcessingParameterField,
+        QgsProcessingParameterFile,
+        QgsProcessingParameterNumber,
+        QgsVectorLayer,
+    )
+
+    seen: dict[str, object] = {}
+    provider = Provider(id="kinds", title="Kinds provider")
+
+    @provider.algorithm(id="classify", title="Classify")
+    def classify(
+        ctx: AlgorithmContext,
+        layer_id: LayerInput,
+        attribute: FieldInput(of="layer_id"),
+        table: FileInput(filters=("*.csv",)),
+        folder: DirectoryInput(),
+        weight: Range(0.0, 1.0),
+        fill: Colour(),
+        mode: Literal["fast", "safe"],
+    ) -> VectorLayerInfo:
+        seen.update(
+            attribute=attribute,
+            table=table,
+            folder=folder,
+            weight=weight,
+            fill=fill,
+            mode=mode,
+        )
+        return ctx.algorithms.execute(CentroidRequest(layer_id))
+
+    @plugin(id="kinds_owner", title="Kinds owner")
+    class KindsOwner:
+        providers = (provider,)
+
+    table = tmp_path / "lookup.csv"
+    table.write_text("a,b\n")
+    runtime = _runtime(native_services, KindsOwner)
+    runtime.start()
+    try:
+        algorithm = QgsApplication.processingRegistry().algorithmById("kinds:classify")
+        definitions = {d.name(): d for d in algorithm.parameterDefinitions()}
+        assert isinstance(definitions["attribute"], QgsProcessingParameterField)
+        assert definitions["attribute"].parentLayerParameterName() == "layer_id"
+        assert isinstance(definitions["table"], QgsProcessingParameterFile)
+        assert (
+            definitions["table"].behavior() == QgsProcessingParameterFile.Behavior.File
+        )
+        assert definitions["table"].fileFilter() == "CSV (*.csv)"
+        assert isinstance(definitions["folder"], QgsProcessingParameterFile)
+        assert (
+            definitions["folder"].behavior()
+            == QgsProcessingParameterFile.Behavior.Folder
+        )
+        assert isinstance(definitions["weight"], QgsProcessingParameterNumber)
+        assert (definitions["weight"].minimum(), definitions["weight"].maximum()) == (
+            0.0,
+            1.0,
+        )
+        assert isinstance(definitions["fill"], QgsProcessingParameterColor)
+        assert isinstance(definitions["mode"], QgsProcessingParameterEnum)
+        assert definitions["mode"].options() == ["fast", "safe"]
+
+        result = processing.run(
+            "kinds:classify",
+            {
+                "layer_id": str(native_services.dataset),
+                "attribute": "value",
+                "table": str(table),
+                "folder": str(tmp_path),
+                "weight": 0.25,
+                "fill": "#ff001080",
+                "mode": 1,
+                "OUTPUT": str(tmp_path / "classified.gpkg"),
+            },
+        )
+        assert QgsVectorLayer(result["OUTPUT"], "x", "ogr").featureCount() == 3
+    finally:
+        runtime.unload()
+
+    assert seen["attribute"] == "value"
+    assert isinstance(seen["table"], FileRef)
+    assert (seen["table"].kind, seen["table"].name) == ("file", "lookup.csv")
+    assert isinstance(seen["folder"], FileRef)
+    assert (seen["folder"].kind, seen["folder"].name) == ("directory", tmp_path.name)
+    assert seen["weight"] == 0.25
+    assert seen["fill"] == "#ff001080"
+    assert seen["mode"] == "safe"
 
 
 def test_a_plugin_over_a_context_without_processing_registers_nothing(

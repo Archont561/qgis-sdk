@@ -43,16 +43,17 @@ from qgis_sdk.declarations import (
     object_schema,
     register_describer,
     resolve_hints,
+    resolve_kind,
     schema_for,
     type_name,
 )
 from qgis_sdk.models import (
-    CrsParameter,
-    LayerParameter,
-    MetresParameter,
+    COLOUR_PATTERN,
     QgisSdkAlgorithmCancelledError,
     QgisSdkAlgorithmRejectedError,
+    RangeParameter,
     VectorLayerInfo,
+    parameter_kinds,
 )
 from qgis_sdk.services import Cancellation, Progress
 
@@ -64,6 +65,7 @@ __all__ = [
     "AlgorithmDeclaration",
     "AlgorithmDescription",
     "describe_algorithm",
+    "input_refusal",
     "invoke",
     "parameter_kind",
 ]
@@ -80,23 +82,6 @@ CRS_PARAMETER = "crs"
 METRES_PARAMETER = "metres"
 """Kind of an input that is a distance in metres."""
 
-_PRIMITIVE_KINDS: dict[Any, str] = {
-    str: "string",
-    bool: "boolean",
-    int: "integer",
-    float: "number",
-}
-_SUPPORTED = "layer, crs, metres, string, integer, number or boolean"
-_EXPECTED_VALUE: dict[str, tuple[str, tuple[type, ...]]] = {
-    LAYER_PARAMETER: ("a str layer id", (str,)),
-    CRS_PARAMETER: ("a str authority code", (str,)),
-    METRES_PARAMETER: ("a number of metres", (int, float)),
-    "string": ("a str", (str,)),
-    "integer": ("an int", (int,)),
-    "number": ("a number", (int, float)),
-    "boolean": ("a bool", (bool,)),
-}
-
 
 @dataclass(frozen=True)
 class AlgorithmDeclaration(Metadata):
@@ -111,40 +96,14 @@ class AlgorithmDeclaration(Metadata):
         return f"{self.provider_id}:{self.id}"
 
 
-def _refuse(path: str, detail: str) -> QgisSdkDeclarationError:
-    return QgisSdkDeclarationError(
-        f"{path}: {detail}; use Annotated markers ({_SUPPORTED})"
-    )
-
-
 def parameter_kind(path: str, annotation: Any) -> str:
-    """Map one input annotation onto a host parameter kind, or refuse it.
+    """Map one input annotation onto a host parameter kind name, or refuse it.
 
-    ``LayerInput`` and ``Annotated[str, LayerParameter()]`` are the same
-    annotation, so they map to the same kind; a marker on a type it does not
-    fit (``Annotated[int, LayerParameter()]``) is refused with ``path`` named.
+    The rule is :func:`qgis_sdk.declarations.resolve_kind`; this returns the
+    name a Processing adapter and a form switch on.
     """
-    base, markers = annotation, ()
-    if get_origin(annotation) is Annotated:
-        base, *markers = get_args(annotation)
-    for marker in markers:
-        if isinstance(marker, LayerParameter):
-            if base is not str:
-                raise _refuse(path, "a layer input must be a str layer id")
-            return LAYER_PARAMETER
-        if isinstance(marker, CrsParameter):
-            if base is not str:
-                raise _refuse(path, "a CRS input must be a str authority code")
-            return CRS_PARAMETER
-        if isinstance(marker, MetresParameter):
-            if base not in (float, int):
-                raise _refuse(path, "a metres input must be a number")
-            return METRES_PARAMETER
-        raise _refuse(path, f"unknown parameter marker {marker!r}")
-    kind = _PRIMITIVE_KINDS.get(base)
-    if kind is None:
-        raise _refuse(path, f"cannot express {base!r} as a host parameter")
-    return kind
+    kind, _marker = resolve_kind(path, annotation)
+    return kind.name
 
 
 @dataclass(frozen=True)
@@ -316,17 +275,50 @@ def _check_inputs(description: AlgorithmDescription, inputs: dict[str, Any]) -> 
         f"{name} is required" for name in description.required if name not in inputs
     )
     for name, value in inputs.items():
-        kind = description.kinds.get(name)
-        if kind is None:
+        kind_name = description.kinds.get(name)
+        if kind_name is None:
             continue
-        expected, accepted = _EXPECTED_VALUE[kind]
-        # bool is an int to Python but not to a spin box.
-        if not isinstance(value, accepted) or (
-            isinstance(value, bool) and bool not in accepted
-        ):
-            reasons.append(f"{name} must be {expected}, not {type_name(type(value))}")
+        reason = input_refusal(
+            name, parameter_kinds()[kind_name], description.annotations[name], value
+        )
+        if reason is not None:
+            reasons.append(reason)
     if reasons:
         raise QgisSdkAlgorithmRejectedError(description.id, reasons)
+
+
+def input_refusal(name: str, kind: Any, annotation: Any, value: Any) -> str | None:
+    """Say why ``value`` is not what ``kind`` hands a handler, or ``None``.
+
+    Shared by :func:`invoke` and the form coercion, so a toolbox run, a page
+    call and a native form refuse the same values with the same words.
+    """
+    # bool is an int to Python but not to a spin box.
+    if not isinstance(value, kind.accepted) or (
+        isinstance(value, bool) and bool not in kind.accepted
+    ):
+        return f"{name} must be {kind.expected}, not {type_name(type(value))}"
+    if kind.name in ("file", "directory") and value.kind != kind.name:
+        return f"{name} must be a {kind.name} FileRef, not a {value.kind} FileRef"
+    if kind.name == "range":
+        bounds = _range_of(annotation)
+        if bounds is not None and not (bounds.minimum <= value <= bounds.maximum):
+            return f"{name} must be between {bounds.minimum} and {bounds.maximum}"
+    if kind.name == "colour" and not COLOUR_PATTERN.match(value):
+        return f"{name} must be a #RRGGBB or #RRGGBBAA colour"
+    if kind.name == "enum":
+        choices = get_args(annotation)
+        if value not in choices:
+            return f"{name} must be one of {', '.join(choices)}"
+    return None
+
+
+def _range_of(annotation: Any) -> RangeParameter | None:
+    if get_origin(annotation) is not Annotated:
+        return None
+    return next(
+        (m for m in get_args(annotation)[1:] if isinstance(m, RangeParameter)), None
+    )
 
 
 _CONTEXTS = (PluginContext, JobContext, AlgorithmContext)

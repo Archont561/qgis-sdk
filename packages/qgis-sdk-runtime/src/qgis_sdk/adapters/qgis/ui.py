@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
+from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -30,16 +31,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 from qgis.core import QgsMapLayerProxyModel
-from qgis.gui import QgsMapLayerComboBox, QgsProjectionSelectionWidget
+from qgis.gui import (
+    QgsColorButton,
+    QgsFieldComboBox,
+    QgsMapLayerComboBox,
+    QgsProjectionSelectionWidget,
+)
 
 from qgis_sdk.core import PluginRuntime
 from qgis_sdk.declarations import ActionDescription
-from qgis_sdk.models import (
-    CrsParameter,
-    LayerParameter,
-    MetresParameter,
-    QgisSdkFormError,
-)
+from qgis_sdk.models import QgisSdkFormError, parameter_kinds
 from qgis_sdk.ui import FieldSpec, coerce_values, form_fields
 
 __all__ = ["DeclaredFormDialog", "NativeForms"]
@@ -155,6 +156,11 @@ class DeclaredFormDialog(QDialog):
             self._widgets[spec.name] = widget
             label = f"{spec.label} *" if spec.required else spec.label
             layout.addRow(label, widget)
+        for spec in specs:
+            if spec.widget == "field":
+                _follow_layer(
+                    self._widgets[spec.name], self._widgets[spec.details["of"]]
+                )
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
             parent=self,
@@ -179,17 +185,23 @@ class DeclaredFormDialog(QDialog):
 
 
 def _marker_of(hint: Any) -> str | None:
-    """Return the widget marker name carried by an ``Annotated`` hint."""
+    """Return the kind name of the SDK marker carried by an ``Annotated`` hint."""
     if get_origin(hint) is not Annotated:
         return None
+    markers = {
+        kind.marker: name for name, kind in parameter_kinds().items() if kind.marker
+    }
     for extra in get_args(hint)[1:]:
-        if isinstance(extra, LayerParameter):
-            return "layer"
-        if isinstance(extra, CrsParameter):
-            return "crs"
-        if isinstance(extra, MetresParameter):
-            return "metres"
+        name = markers.get(type(extra))
+        if name is not None:
+            return name
     return None
+
+
+def _follow_layer(picker: QgsFieldComboBox, source: QgsMapLayerComboBox) -> None:
+    """Keep a field picker on the layer its ``of`` picker currently shows."""
+    picker.setLayer(source.currentLayer())
+    source.layerChanged.connect(picker.setLayer)
 
 
 def _widget_for(spec: FieldSpec, parent: QWidget) -> QWidget:
@@ -224,6 +236,31 @@ def _widget_for(spec: FieldSpec, parent: QWidget) -> QWidget:
         for choice in spec.choices:
             combo.addItem(str(choice), choice)
         return combo
+    if spec.widget == "field":
+        return QgsFieldComboBox(parent)
+    if spec.widget == "range":
+        low, high = spec.details["minimum"], spec.details["maximum"]
+        if isinstance(low, int) and isinstance(high, int):
+            box = QSpinBox(parent)
+            box.setRange(low, high)
+        else:
+            box = QDoubleSpinBox(parent)
+            box.setDecimals(6)
+            box.setRange(float(low), float(high))
+        step = spec.details.get("step")
+        if step is not None:
+            box.setSingleStep(step)
+        return box
+    if spec.widget == "colour":
+        button = QgsColorButton(parent)
+        button.setAllowOpacity(spec.details.get("alpha", True))
+        return button
+    if spec.widget in ("file", "directory"):
+        raise QgisSdkFormError(
+            f"field {spec.name!r}: a {spec.widget} input is rendered by the "
+            "FileInput component of the Form helper, which mints the FileRef; "
+            "the declared-form dialog cannot grant file authority"
+        )
     raise QgisSdkFormError(
         f"action {spec.name!r}: no widget for family {spec.widget!r}"
     )
@@ -244,6 +281,24 @@ def _read(spec: FieldSpec, widget: QWidget) -> object:
         return widget.crs().authid()
     if spec.widget == "choice":
         return widget.currentData()
+    if spec.widget == "field":
+        return widget.currentField()
+    if spec.widget == "range":
+        return widget.value()
+    if spec.widget == "colour":
+        colour: QColor = widget.color()
+        spelling = (
+            QColor.NameFormat.HexArgb
+            if widget.allowOpacity()
+            else QColor.NameFormat.HexRgb
+        )
+        named = colour.name(spelling)
+        # Qt spells alpha first (#AARRGGBB); the wire spells it last.
+        return (
+            f"#{named[3:]}{named[1:3]}"
+            if spelling is QColor.NameFormat.HexArgb
+            else named
+        )
     raise QgisSdkFormError(
         f"action {spec.name!r}: no reader for widget family {spec.widget!r}"
     )

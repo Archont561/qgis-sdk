@@ -110,6 +110,9 @@ const KNOWN_KEYWORDS: ReadonlySet<string> = new Set([
 	"pattern",
 	"title",
 	"description",
+	// The input kind a describer annotated (`{ kind: "layer" }`); forms and
+	// pages read it, validation reads past it.
+	"x-qgis-sdk",
 ]);
 
 type Path = readonly (string | number)[];

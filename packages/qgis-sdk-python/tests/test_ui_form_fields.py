@@ -245,6 +245,7 @@ def test_a_field_spec_serializes_for_a_host() -> None:
         "required": True,
         "nullable": False,
         "choices": ["a"],
+        "details": {},
     }
 
 

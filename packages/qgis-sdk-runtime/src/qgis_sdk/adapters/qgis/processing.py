@@ -30,8 +30,9 @@ thread it was qualified on instead of claiming a safety it cannot show.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, get_args, get_origin
 
+from PyQt6.QtGui import QColor
 from qgis.core import (
     QgsApplication,
     QgsFeature,
@@ -41,8 +42,12 @@ from qgis.core import (
     QgsProcessingException,
     QgsProcessingFeedback,
     QgsProcessingParameterBoolean,
+    QgsProcessingParameterColor,
     QgsProcessingParameterCrs,
+    QgsProcessingParameterEnum,
     QgsProcessingParameterFeatureSink,
+    QgsProcessingParameterField,
+    QgsProcessingParameterFile,
     QgsProcessingParameterNumber,
     QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
@@ -56,8 +61,18 @@ from qgis_sdk.algorithms import (
     AlgorithmDescription,
     invoke,
 )
+from qgis_sdk.bridge.authority import HostAuthority
+from qgis_sdk.bridge.dispatch import ViewBinding
 from qgis_sdk.core import AlgorithmContext, ResourceScope
 from qgis_sdk.declarations import QgisSdkDeclarationError
+from qgis_sdk.models import (
+    ColourParameter,
+    FieldParameter,
+    FileParameter,
+    MetresParameter,
+    RangeParameter,
+    parameter_kinds,
+)
 from qgis_sdk.providers import Provider
 
 from .algorithms import NativeAlgorithms, _processing
@@ -89,32 +104,105 @@ class _FeedbackCancellation:
         return self._feedback.isCanceled()
 
 
-def _parameter(kind: str, name: str) -> Any:
+#: The Processing parameter classes the kind registry names, by class name.
+#: A kind naming a class absent here fails the registry test, not a toolbox.
+_PARAMETER_CLASSES: dict[str, type] = {
+    cls.__name__: cls
+    for cls in (
+        QgsProcessingParameterBoolean,
+        QgsProcessingParameterColor,
+        QgsProcessingParameterCrs,
+        QgsProcessingParameterEnum,
+        QgsProcessingParameterField,
+        QgsProcessingParameterFile,
+        QgsProcessingParameterNumber,
+        QgsProcessingParameterString,
+        QgsProcessingParameterVectorLayer,
+    )
+}
+
+
+def _marker(annotation: Any, marker_type: type) -> Any:
+    if get_origin(annotation) is not Annotated:
+        return None
+    return next(
+        (m for m in get_args(annotation)[1:] if isinstance(m, marker_type)), None
+    )
+
+
+def _parameter(kind: str, name: str, annotation: Any = None) -> Any:
     """Build the Processing parameter a declared kind deserves."""
+    cls = _PARAMETER_CLASSES[parameter_kinds()[kind].processing]
     if kind == LAYER_PARAMETER:
-        return QgsProcessingParameterVectorLayer(name, name)
+        return cls(name, name)
     if kind == METRES_PARAMETER:
-        return QgsProcessingParameterNumber(
+        metres = _marker(annotation, MetresParameter) or MetresParameter()
+        parameter = cls(
             name,
             f"{name} (metres)",
             type=QgsProcessingParameterNumber.Double,
-            minValue=0.0,
+            minValue=metres.minimum,
         )
+        if metres.maximum is not None:
+            parameter.setMaximum(metres.maximum)
+        return parameter
     if kind == CRS_PARAMETER:
-        return QgsProcessingParameterCrs(name, name)
+        return cls(name, name)
+    if kind == "file":
+        filters = (_marker(annotation, FileParameter) or FileParameter()).filters
+        return cls(
+            name,
+            name,
+            behavior=QgsProcessingParameterFile.Behavior.File,
+            fileFilter=";;".join(_qt_filter(glob) for glob in filters),
+        )
+    if kind == "directory":
+        return cls(name, name, behavior=QgsProcessingParameterFile.Behavior.Folder)
+    if kind == "field":
+        return cls(name, name, parentLayerParameterName=_field_parent(annotation))
+    if kind == "range":
+        bounds = _marker(annotation, RangeParameter)
+        integral = isinstance(bounds.minimum, int) and isinstance(bounds.maximum, int)
+        return cls(
+            name,
+            name,
+            type=QgsProcessingParameterNumber.Integer
+            if integral
+            else QgsProcessingParameterNumber.Double,
+            minValue=bounds.minimum,
+            maxValue=bounds.maximum,
+        )
+    if kind == "colour":
+        colour = _marker(annotation, ColourParameter) or ColourParameter()
+        return cls(name, name, opacityEnabled=colour.alpha)
+    if kind == "enum":
+        return cls(name, name, options=list(get_args(annotation)))
     if kind == "string":
-        return QgsProcessingParameterString(name, name)
+        return cls(name, name)
     if kind == "integer":
-        return QgsProcessingParameterNumber(
-            name, name, type=QgsProcessingParameterNumber.Integer
-        )
+        return cls(name, name, type=QgsProcessingParameterNumber.Integer)
     if kind == "number":
-        return QgsProcessingParameterNumber(
-            name, name, type=QgsProcessingParameterNumber.Double
-        )
+        return cls(name, name, type=QgsProcessingParameterNumber.Double)
     if kind == "boolean":
-        return QgsProcessingParameterBoolean(name, name)
+        return cls(name, name)
     raise QgisSdkDeclarationError(f"unsupported parameter kind {kind!r}")
+
+
+def _qt_filter(glob: str) -> str:
+    """Spell one author glob the way a Qt file dialog lists it: ``CSV (*.csv)``."""
+    stem, dot, extension = glob.rpartition(".")
+    label = extension.upper() if stem == "*" and dot else glob
+    return f"{label} ({glob})"
+
+
+def _field_parent(annotation: Any) -> str:
+    return _marker(annotation, FieldParameter).of
+
+
+def _hex_rgba(colour: QColor, *, alpha: bool) -> str:
+    """Spell a QColor the way the colour kind stores it: ``#RRGGBBAA``."""
+    rgb = colour.name(QColor.NameFormat.HexRgb)
+    return f"{rgb}{colour.alpha():02x}" if alpha else rgb
 
 
 class _BridgeAlgorithm(QgsProcessingAlgorithm):
@@ -146,7 +234,9 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
 
     def initAlgorithm(self, config: dict | None = None) -> None:
         for name, kind in self._description.kinds.items():
-            self.addParameter(_parameter(kind, name))
+            self.addParameter(
+                _parameter(kind, name, self._description.annotations[name])
+            )
         self.addParameter(QgsProcessingParameterFeatureSink(OUTPUT_PARAMETER, "Output"))
 
     def flags(self) -> QgsProcessingAlgorithm.Flag:
@@ -168,8 +258,9 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
         context type and the same ordering an action or a job gets, so the
         toolbox cannot behave differently from the plugin's own call.
         """
+        minted: list[str] = []
         values = {
-            name: self._value(name, kind, parameters, context)
+            name: self._value(name, kind, parameters, context, minted)
             for name, kind in self._description.kinds.items()
         }
         scope = self._bridge.scope.child()
@@ -189,12 +280,54 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
             )
         finally:
             scope.close()
+            # The refs minted for this run were the dialog's picker results;
+            # they expire with the run, like a view's refs with the view.
+            for ref_id in minted:
+                self._bridge.authority.revoke(ref_id)
         return {OUTPUT_PARAMETER: self._copy_to_sink(result.id, parameters, context)}
 
     def _value(
-        self, name: str, kind: str, parameters: dict, context: QgsProcessingContext
+        self,
+        name: str,
+        kind: str,
+        parameters: dict,
+        context: QgsProcessingContext,
+        minted: list[str],
     ) -> Any:
-        """Turn one Processing parameter value into the input's keyword value."""
+        """Turn one Processing parameter value into the input's keyword value.
+
+        A file or directory picked in the dialog is a native picker result, so
+        it is granted through the host authority (decision-20) and the handler
+        receives the ``FileRef``, never the path the dialog held.
+        """
+        if kind in ("file", "directory"):
+            path = self.parameterAsFile(parameters, name, context)
+            if not path:
+                raise QgsProcessingException(f"{name} requires a {kind}")
+            authority, binding = self._bridge.authority, self._bridge.binding
+            if kind == "file":
+                ref = authority.grant_file(binding, path, source="picker")
+            else:
+                ref = authority.grant_directory(binding, path, source="picker")
+            minted.append(ref.id)
+            return ref
+        if kind == "field":
+            return self.parameterAsString(parameters, name, context)
+        if kind == "range":
+            annotation = self._description.annotations[name]
+            bounds = _marker(annotation, RangeParameter)
+            if isinstance(bounds.minimum, int) and isinstance(bounds.maximum, int):
+                return self.parameterAsInt(parameters, name, context)
+            return self.parameterAsDouble(parameters, name, context)
+        if kind == "colour":
+            colour = _marker(self._description.annotations[name], ColourParameter)
+            return _hex_rgba(
+                self.parameterAsColor(parameters, name, context),
+                alpha=colour is None or colour.alpha,
+            )
+        if kind == "enum":
+            options = get_args(self._description.annotations[name])
+            return options[self.parameterAsEnum(parameters, name, context)]
         if kind == LAYER_PARAMETER:
             layer = self.parameterAsVectorLayer(parameters, name, context)
             if layer is None:
@@ -251,6 +384,7 @@ class NativeProcessingProvider(QgsProcessingProvider):
         algorithms: NativeAlgorithms,
         project: NativeProject,
         scope: ResourceScope,
+        authority: HostAuthority | None = None,
     ) -> None:
         super().__init__()
         self._provider = provider
@@ -258,6 +392,15 @@ class NativeProcessingProvider(QgsProcessingProvider):
         self.algorithms = algorithms
         self.project = project
         self.scope = scope
+        #: Mints the refs for files a Processing dialog picked; a host that
+        #: shares one authority with its views passes it in, so the refs a
+        #: handler receives resolve wherever the runtime resolves refs.
+        self.authority = authority if authority is not None else HostAuthority()
+        self.binding = ViewBinding(
+            view_id=f"processing:{provider.id}",
+            origin="qgis://processing",
+            generation=0,
+        )
 
     @property
     def provider_id(self) -> str:
@@ -302,11 +445,13 @@ class NativeProcessing:
         algorithms: NativeAlgorithms,
         project: NativeProject,
         scope: ResourceScope,
+        authority: HostAuthority | None = None,
     ) -> None:
         self._layers = layers
         self._algorithms = algorithms
         self._project = project
         self._scope = scope
+        self._authority = authority if authority is not None else HostAuthority()
 
     def register_provider(self, provider: Provider) -> NativeProcessingProvider:
         """Advertise ``provider``; ``unregister()`` on the result removes it."""
@@ -317,6 +462,7 @@ class NativeProcessing:
             algorithms=self._algorithms,
             project=self._project,
             scope=self._scope,
+            authority=self._authority,
         )
 
 
@@ -327,6 +473,7 @@ def register_provider(
     algorithms: NativeAlgorithms,
     project: NativeProject,
     scope: ResourceScope,
+    authority: HostAuthority | None = None,
 ) -> NativeProcessingProvider:
     """Register ``provider`` with QGIS and return the adapter that owns it.
 
@@ -339,7 +486,12 @@ def register_provider(
     # of registering: afterwards `processing.run` works for the caller too.
     _processing()
     bridge = NativeProcessingProvider(
-        provider, layers=layers, algorithms=algorithms, project=project, scope=scope
+        provider,
+        layers=layers,
+        algorithms=algorithms,
+        project=project,
+        scope=scope,
+        authority=authority,
     )
     if not QgsApplication.processingRegistry().addProvider(bridge):
         raise QgisSdkDeclarationError(

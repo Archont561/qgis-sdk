@@ -37,6 +37,7 @@ from qgis_sdk.models import (
     QgisSdkStaleHandleError,
     QgisSdkUnknownHandleError,
 )
+from qgis_sdk.models.files import FILE_REF, FILE_REF_KINDS, FileRef
 from qgis_sdk.network.grants import NetworkGrant
 
 MAX_FILE_REFS_PER_VIEW = 64
@@ -53,41 +54,6 @@ class FileOperation(str, Enum):
 
     READ = "read"
     WRITE = "write"
-
-
-#: The wire shape of a ref. ``title`` names the generated TypeScript type, and
-#: ``kind`` is the brand: a layer id or a free string cannot be passed where a
-#: FileRef is declared. Only ``id`` carries authority; the rest is for display.
-FILE_REF: dict[str, Any] = {
-    "type": "object",
-    "title": "FileRef",
-    "properties": {
-        "kind": {"enum": ["file"]},
-        "id": {"type": "string", "pattern": "[a-f0-9]{16,64}"},
-        "name": {"type": "string"},
-        "operations": {"type": "array", "items": {"enum": ["read", "write"]}},
-    },
-    "required": ["kind", "id"],
-    "additionalProperties": False,
-}
-
-
-@dataclass(frozen=True, slots=True)
-class FileRef:
-    """What a view holds: an opaque id and the fields it may show the user."""
-
-    id: str
-    name: str
-    operations: tuple[str, ...]
-    kind: str = "file"
-
-    def to_wire(self) -> dict[str, Any]:
-        return {
-            "kind": self.kind,
-            "id": self.id,
-            "name": self.name,
-            "operations": list(self.operations),
-        }
 
 
 @dataclass(slots=True)
@@ -198,6 +164,57 @@ class HostAuthority:
         )
         return ref
 
+    def grant_directory(
+        self,
+        binding: ViewBinding,
+        path: str | os.PathLike[str],
+        *,
+        source: str = "plugin",
+        ttl_seconds: float | None = None,
+    ) -> FileRef:
+        """Mint a read ref for an existing directory that only ``binding`` can use.
+
+        What ``DirectoryInput()`` hands a handler: the directory is resolved
+        once, the ref names that canonical directory, and it goes stale when
+        the directory is replaced or removed. A directory ref reads; writing
+        into one is a separate file grant inside it.
+        """
+        if source not in FILE_SOURCES:
+            raise QgisSdkBridgeError(
+                f"{source!r} is not a file grant source; use picker or plugin"
+            )
+        if self._count(binding.view_id) >= MAX_FILE_REFS_PER_VIEW:
+            raise QgisSdkBridgeError(
+                f"view {binding.view_id!r} already holds {MAX_FILE_REFS_PER_VIEW} "
+                "file refs; release some before granting more"
+            )
+        given = Path(path).expanduser()
+        try:
+            canonical = given.resolve(strict=True)
+        except OSError:
+            canonical = None
+        if canonical is None or not canonical.is_dir():
+            raise QgisSdkBridgeError(f"{given.name!r} is not a directory that exists")
+        ref = FileRef(
+            id=self.token(),
+            name=canonical.name or str(canonical),
+            operations=(FileOperation.READ.value,),
+            kind="directory",
+        )
+        self._files[ref.id] = _FileGrant(
+            ref=ref,
+            view_id=binding.view_id,
+            generation=binding.generation,
+            path=canonical,
+            operations=frozenset({FileOperation.READ}),
+            overwrite=False,
+            source=source,
+            max_bytes=0,
+            identity=_identity(canonical),
+            expires_at=None if ttl_seconds is None else self.clock() + ttl_seconds,
+        )
+        return ref
+
     @staticmethod
     def _canonical(path: Path, allowed: frozenset[FileOperation]) -> Path:
         if FileOperation.READ in allowed:
@@ -247,7 +264,7 @@ class HostAuthority:
 
     def _lookup(self, binding: ViewBinding, raw: Any) -> _FileGrant:
         ref_id = raw.get("id") if isinstance(raw, Mapping) else None
-        if not isinstance(raw, Mapping) or raw.get("kind") != "file":
+        if not isinstance(raw, Mapping) or raw.get("kind") not in FILE_REF_KINDS:
             raise _refuse_unknown(str(ref_id))
         if not isinstance(ref_id, str) or not ref_id:
             raise _refuse_unknown(str(ref_id))
@@ -256,7 +273,7 @@ class HostAuthority:
             if self._revoked.get(ref_id) == binding.view_id:
                 raise QgisSdkStaleHandleError(f"file ref {ref_id!r} was revoked")
             raise _refuse_unknown(ref_id)
-        if grant.view_id != binding.view_id:
+        if grant.view_id != binding.view_id or grant.ref.kind != raw["kind"]:
             raise _refuse_unknown(ref_id)
         if grant.generation != binding.generation:
             raise QgisSdkStaleHandleError(
@@ -273,13 +290,16 @@ class HostAuthority:
             current = grant.path.resolve(strict=True)
         except OSError:
             current = None
+        directory = grant.ref.kind == "directory"
+        still_there = grant.path.is_dir() if directory else grant.path.is_file()
         if (
             current != grant.path
-            or not grant.path.is_file()
+            or not still_there
             or _identity(grant.path) != grant.identity
         ):
+            what = "directory" if directory else "file"
             raise QgisSdkStaleHandleError(
-                f"file ref {grant.ref.id!r} no longer names the file that was granted"
+                f"file ref {grant.ref.id!r} no longer names the {what} that was granted"
             )
         return grant.path
 

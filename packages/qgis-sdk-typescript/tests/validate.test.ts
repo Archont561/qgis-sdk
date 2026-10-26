@@ -28,6 +28,15 @@ function codes(
 	);
 }
 
+test("the x-qgis-sdk kind annotation is read past, not refused", () => {
+	const schema = { type: "string", "x-qgis-sdk": { kind: "colour" } };
+	expect(codes("#ff0000", schema)).toEqual([]);
+	expect(codes(1, schema)).toEqual([":type"]);
+	expect(() => codes("x", { type: "string", "x-other": 1 })).toThrow(
+		/unsupported schema keyword/,
+	);
+});
+
 test("the five primitives accept their JSON type and nothing else", () => {
 	expect(codes("x", { type: "string" })).toEqual([]);
 	expect(codes(1, { type: "string" })).toEqual([":type"]);

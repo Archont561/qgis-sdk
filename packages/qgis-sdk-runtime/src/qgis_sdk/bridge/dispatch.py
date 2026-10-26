@@ -58,13 +58,14 @@ from qgis_sdk.bridge.streams import (
     Subscription,
     SubscriptionRequest,
 )
-from qgis_sdk.declarations import WIRE_VALUE_METHOD
+from qgis_sdk.declarations import WIRE_KIND_KEYWORD, WIRE_VALUE_METHOD
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
     QgisSdkBridgeProtocolError,
     QgisSdkBridgeRefusalError,
     QgisSdkError,
 )
+from qgis_sdk.models.files import FILE_REF_KINDS, FileRef
 
 
 @dataclass(frozen=True, slots=True)
@@ -800,11 +801,41 @@ def _keyword_handler(
     is spell it as keyword arguments.
     """
     _check_parameter_names(request, operation_id)
+    refs = _ref_inputs(request)
 
     def invoke(payload: Mapping[str, Any]) -> Any:
+        if refs:
+            payload = {
+                key: FileRef.from_wire(value)
+                if key in refs and value is not None
+                else value
+                for key, value in payload.items()
+            }
         return _wire_result(handler(**payload))
 
     return invoke
+
+
+def _ref_inputs(request: Any) -> frozenset[str]:
+    """Name the inputs declared as file or directory refs.
+
+    A page sends the ``FileRef`` the host minted as its wire object; the
+    handler declared ``FileInput()`` and receives the ref, the way a toolbox
+    run and a native form hand it one (TASK-68).
+    """
+    properties = request.get("properties", {}) if isinstance(request, Mapping) else {}
+    names = set()
+    for name, schema in properties.items():
+        if not isinstance(schema, Mapping):
+            continue
+        branches = schema.get("anyOf") or [schema]
+        for branch in branches:
+            intent = (
+                branch.get(WIRE_KIND_KEYWORD) if isinstance(branch, Mapping) else None
+            )
+            if isinstance(intent, Mapping) and intent.get("kind") in FILE_REF_KINDS:
+                names.add(name)
+    return frozenset(names)
 
 
 def _keyword_source(

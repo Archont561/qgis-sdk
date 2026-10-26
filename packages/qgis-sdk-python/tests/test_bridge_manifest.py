@@ -15,6 +15,7 @@ from typing import Any, Literal
 import pytest
 from qgis_sdk.bridge import BridgeOperation, Dispatcher
 from qgis_sdk.declarations import action, describe_plugin, plugin, stream
+from qgis_sdk.models import FileInput, FileRef
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
 ORIGIN = "qgis://desktop"
@@ -314,6 +315,64 @@ def test_a_schema_construct_outside_the_subset_is_refused_loudly() -> None:
 
     assert reply["error"]["code"] == "invalid_payload"
     assert "unsupported schema keyword(s) $ref" in reply["error"]["message"]
+
+
+def test_the_kind_annotation_is_not_an_unsupported_keyword() -> None:
+    """The describer puts ``x-qgis-sdk`` on inputs; validation ignores it."""
+    dispatcher = Dispatcher(authorize=lambda binding, operation: True)
+    dispatcher.register(
+        BridgeOperation(
+            "demo.paint",
+            "An input with a kind",
+            request={
+                "type": "object",
+                "properties": {
+                    "fill": {"type": "string", "x-qgis-sdk": {"kind": "colour"}}
+                },
+                "required": ["fill"],
+                "additionalProperties": False,
+            },
+        ),
+        lambda payload: payload,
+    )
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+    reply = dispatcher.dispatch(binding, _call("demo.paint", {"fill": "#ff0000"}))
+
+    assert reply["ok"] is True
+    assert reply["value"] == {"fill": "#ff0000"}
+
+
+def test_a_file_input_reaches_the_handler_as_the_ref_the_host_minted() -> None:
+    """A page sends the ``FileRef`` object; ``FileInput()`` receives a ``FileRef``."""
+    received: list[object] = []
+
+    @plugin(id="files", title="Files")
+    class Files:
+        @action
+        def load(self, source: FileInput(filters=("*.csv",)), note: str = "") -> str:
+            received.append(source)
+            return source.name
+
+    description = describe_plugin(Files)
+    instance = Files()
+    dispatcher = Dispatcher.from_description(
+        description,
+        {"load": instance.load},
+        authorize=lambda binding, operation: True,
+    )
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    ref = FileRef(id="a" * 16, name="lookup.csv", operations=("read",))
+
+    reply = dispatcher.dispatch(binding, _call("load", {"source": ref.to_wire()}))
+
+    assert reply["ok"] is True, reply
+    assert reply["value"] == "lookup.csv"
+    assert received == [ref]
+    wrong_kind = {**ref.to_wire(), "kind": "folder"}
+    refused = dispatcher.dispatch(binding, _call("load", {"source": wrong_kind}))
+    assert refused["ok"] is False
+    assert refused["error"]["code"] == "invalid_payload"
 
 
 def test_an_operation_without_schemas_keeps_the_old_behaviour() -> None:
