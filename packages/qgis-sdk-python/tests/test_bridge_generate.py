@@ -124,7 +124,7 @@ def test_the_module_carries_every_declared_operation() -> None:
     assert 'export const PLUGIN_ID = "org.example.sites";' in generated
     assert contract_fingerprint(SAMPLE) in generated
     assert "export function createOperations(" in generated
-    assert "export class ContractError extends Error {" in generated
+    assert "export class QgisSdkContractError extends Error {" in generated
     assert "export type OperationId = (typeof OPERATIONS)[number];" in generated
     for action in SAMPLE["actions"]:
         assert f'\t"{action["id"]}",' in generated
@@ -408,7 +408,34 @@ def test_the_host_module_is_deterministic_and_names_its_own_surface() -> None:
     assert "export type HostOperationId =" in first
     assert "export interface HostOperations {" in first
     assert "export function createHost(" in first
-    assert "export class HostContractError extends Error {" in first
+    assert "export class QgisSdkHostContractError extends QgisSdkError {" in first
+
+
+def test_the_plugin_module_imports_nothing_and_the_host_module_only_its_error_root() -> (
+    None
+):
+    """A plugin's client stays self-contained (decision-40); the host's extends the root."""
+    plugin = generate_typescript(SAMPLE)
+    assert "\nimport " not in plugin and not plugin.startswith("import ")
+    host = generate_host_typescript()
+    imports = [line for line in host.splitlines() if line.startswith("import ")]
+    assert imports == ['import { QgisSdkError } from "../errors";']
+
+
+def test_both_contract_errors_carry_the_shared_wire_code() -> None:
+    """Pages match on the code, not the class (AGENTS.md): both surfaces say the same."""
+    plugin = generate_typescript(SAMPLE)
+    assert 'public readonly code = "contract_validation_failed";' in plugin
+    assert 'this.name = "QgisSdkContractError";' in plugin
+    host = generate_host_typescript()
+    assert (
+        'super(`operation "${operation}": ${message}`, "contract_validation_failed");'
+        in host
+    )
+    assert (
+        "this.name ="
+        not in host.split("export class QgisSdkHostContractError")[1].split("}")[0]
+    )
 
 
 def test_the_host_module_names_the_public_types_the_manifest_declared() -> None:
@@ -428,7 +455,7 @@ def test_the_two_surfaces_do_not_export_the_same_names() -> None:
     for name in (
         "PluginOperations",
         "createOperations",
-        "ContractError",
+        "QgisSdkContractError",
         "BridgeClientLike",
         "OPERATIONS",
     ):
@@ -529,14 +556,15 @@ def _with_name(field: str, name: Any) -> dict[str, Any]:
         "call",
         "BridgeClientLike",
         "InvokeOptions",
-        "ContractError",
+        "QgisSdkContractError",
+        "QgisSdkError",
         "PluginOperations",
         "createOperations",
         "OPERATIONS",
         "OperationId",
         "createHost",
         "HOST_OPERATIONS",
-        "HostContractError",
+        "QgisSdkHostContractError",
     ],
 )
 def test_a_declared_name_the_module_already_declares_is_refused(name: str) -> None:
@@ -769,7 +797,7 @@ def test_the_host_surface_renders_a_stream_under_its_own_names() -> None:
     assert "HostStreamHandlers<JobsWatchEvent>" in host
     assert "): Promise<HostStreamHandle> {" in host
     assert "HostHostStream" not in host
-    assert "new HostContractError(" in host
+    assert "new QgisSdkHostContractError(" in host
 
 
 @pytest.mark.parametrize(
@@ -783,18 +811,18 @@ def test_the_stream_helper_names_are_reserved(name: str) -> None:
 
 def test_the_kernel_speaks_the_same_event_vocabulary_as_python() -> None:
     """The frame envelope stays hand-written in bridge.ts (decision-28), so the
-    kind unions it switches on are pinned to the Python enums here."""
+    kind unions it switches on are pinned to the Python enums here. The event
+    kinds are declared once, in declarations.ts, and the frame parser imports
+    the same list."""
     from qgis_sdk.bridge.streams import StreamEventType, StreamTerminal
 
-    bridge = (
-        PROJECT_ROOT.parents[1]
-        / "packages"
-        / "qgis-sdk-typescript"
-        / "src"
-        / "bridge.ts"
-    ).read_text(encoding="utf-8")
+    source = PROJECT_ROOT.parents[1] / "packages" / "qgis-sdk-typescript" / "src"
+    bridge = (source / "bridge.ts").read_text(encoding="utf-8")
+    declarations = (source / "declarations.ts").read_text(encoding="utf-8")
     events = " | ".join(f'"{kind.value}"' for kind in StreamEventType)
-    assert f"export type StreamEventKind = {events};" in bridge
+    assert f"export type StreamEventKind = {events};" in declarations
+    assert "export type StreamEventKind =" not in bridge
+    assert 'import type { StreamEventKind } from "./declarations";' in bridge
     for kind in StreamTerminal:
         assert f'\t| "{kind.value}"' in bridge
     assert bridge.count('\t| "') == len(StreamTerminal)

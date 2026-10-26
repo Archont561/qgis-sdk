@@ -1,15 +1,16 @@
 import { expect, test } from "@archont561/bun-test-utils";
 import { BRIDGE_PROTOCOL_VERSION, BridgeClient } from "../src/bridge";
+import { QgisSdkError } from "../src/errors";
 import {
 	type BridgeClientLike,
 	CONTRACT_FINGERPRINT,
-	ContractError,
 	createOperations,
 	type InvokeOptions,
 	SitesWatchEvent as isSitesWatchEvent,
 	OPERATIONS,
 	PLUGIN_DESCRIPTION_SCHEMA_VERSION,
 	PLUGIN_ID,
+	QgisSdkContractError,
 	SitesDetailsRequest,
 	SitesDetailsResult,
 	SitesSummaryRequest,
@@ -173,7 +174,7 @@ test("a malformed argument throws before the transport is touched", async () => 
 		layer_id: "sites",
 		guess: true,
 	} as never);
-	await expect(failing).rejects.toThrow(ContractError);
+	await expect(failing).rejects.toThrow(QgisSdkContractError);
 	expect(sent.length).toBe(0);
 });
 
@@ -184,7 +185,7 @@ test("a malformed response throws instead of leaking a wrong type", async () => 
 		mode: "fast",
 	});
 	const failing = createOperations(client).sites.summary({ layer_id: "sites" });
-	await expect(failing).rejects.toThrow(ContractError);
+	await expect(failing).rejects.toThrow(QgisSdkContractError);
 });
 
 test("the error names the operation it failed on", async () => {
@@ -192,11 +193,24 @@ test("the error names the operation it failed on", async () => {
 	try {
 		await createOperations(client).sites.refresh();
 	} catch (error) {
-		expect(error instanceof ContractError).toBe(true);
-		expect((error as ContractError).message).toContain("sites.refresh");
+		expect(error instanceof QgisSdkContractError).toBe(true);
+		expect((error as QgisSdkContractError).message).toContain("sites.refresh");
 		return;
 	}
 	throw new Error("expected the result validator to reject the reply");
+});
+
+test("a plugin's contract error stays import-free but speaks the shared code", async () => {
+	// decision-40: the generated plugin module imports nothing from the SDK, so
+	// its error cannot extend QgisSdkError; the wire code is what a page matches.
+	const { client } = scripted({ total: 1 });
+	const failing = createOperations(client).sites.refresh();
+	await expect(failing).rejects.not.toBeInstanceOf(QgisSdkError);
+	await expect(failing).rejects.toMatchObject({
+		name: "QgisSdkContractError",
+		code: "contract_validation_failed",
+		operation: "sites.refresh",
+	});
 });
 
 // -- streams (decision-28) -----------------------------------------------------
@@ -263,7 +277,7 @@ test("a malformed stream request throws before the transport is touched", async 
 		{ layer_id: "roads", guess: true } as never,
 		{},
 	);
-	await expect(failing).rejects.toThrow(ContractError);
+	await expect(failing).rejects.toThrow(QgisSdkContractError);
 	expect(scripted_.sent.length).toBe(0);
 });
 

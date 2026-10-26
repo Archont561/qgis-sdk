@@ -2,6 +2,8 @@
 // Source: the curated host manifest in qgis_sdk.bridge.host.
 // Regenerate with `qgis-sdk bridge generate --host`; CI fails on drift.
 
+import { QgisSdkError } from "../errors";
+
 export const HOST_ID = "qgis.host";
 export const HOST_FINGERPRINT = "sha256:f96bdf1046434de3c5eae01efb34c8ad2bcd1cf241a3dc42f6c4b613dc7d7d6f";
 export const HOST_SCHEMA_VERSION = 1;
@@ -64,11 +66,10 @@ export interface HostStreamHandle {
 }
 
 /** An argument or a response that does not match its declared schema. */
-export class HostContractError extends Error {
+export class QgisSdkHostContractError extends QgisSdkError {
 	public readonly operation: string;
 	public constructor(operation: string, message: string) {
-		super(`operation "${operation}": ${message}`);
-		this.name = "HostContractError";
+		super(`operation "${operation}": ${message}`, "contract_validation_failed");
 		this.operation = operation;
 	}
 }
@@ -540,7 +541,7 @@ async function call<T>(
 	acceptOutput: (value: unknown) => boolean,
 ): Promise<T> {
 	if (input !== undefined && !acceptInput(input, true)) {
-		throw new HostContractError(operation, "the arguments do not match the declared request");
+		throw new QgisSdkHostContractError(operation, "the arguments do not match the declared request");
 	}
 	const value = await client.invoke(
 		operation,
@@ -548,7 +549,7 @@ async function call<T>(
 		options,
 	);
 	if (!acceptOutput(value)) {
-		throw new HostContractError(operation, "the response does not match the declared result");
+		throw new QgisSdkHostContractError(operation, "the response does not match the declared result");
 	}
 	return value as T;
 }
@@ -563,7 +564,7 @@ async function open<E extends { readonly kind: string }>(
 	acceptEvent: (value: unknown) => value is E,
 ): Promise<HostStreamHandle> {
 	if (!acceptInput(input, true)) {
-		throw new HostContractError(operation, "the arguments do not match the declared request");
+		throw new QgisSdkHostContractError(operation, "the arguments do not match the declared request");
 	}
 	// The typed stream ends exactly once, like the subscription under it: a
 	// contract violation ends it here, closes the subscription, and the
@@ -588,7 +589,7 @@ async function open<E extends { readonly kind: string }>(
 				}
 				end({
 					kind: "error",
-					message: new HostContractError(
+					message: new QgisSdkHostContractError(
 						operation,
 						"an event does not match the declared events",
 					).message,
