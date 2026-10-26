@@ -53,6 +53,7 @@ from qgis_sdk.declarations import (
     keyword_inputs,
     mark_function,
     object_schema,
+    refuse_bindings,
     register_describer,
     resolve_hints,
     schema_for,
@@ -149,6 +150,7 @@ def job(
     validate_given(id, title)
 
     def decorate(target: Callable[..., Any]) -> Callable[..., Any]:
+        refuse_bindings(target, "@job")
         mark_function(
             target, _JOB_ATTRIBUTE, function_metadata(target, id, title), "@job"
         )
@@ -736,6 +738,25 @@ class JobHandle:
 
     def __repr__(self) -> str:
         return f"JobHandle({self.id!r}, {self.status.value})"
+
+
+#: How a ``JobHandle`` reads as an action *result* (decision-55: a surface's
+#: ``ctx.actions.<id>()`` and a page both get the id and the status back; the
+#: handle itself never crosses). ``-> JobHandle`` is a describable annotation.
+JobHandle.__qgis_sdk_schema__ = object_schema(  # type: ignore[attr-defined]
+    {
+        "id": {"type": "string"},
+        "status": {"type": "string", "enum": [status.value for status in JobStatus]},
+    },
+    ["id", "status"],
+)
+
+
+def _job_handle_wire(handle: JobHandle) -> dict[str, Any]:
+    return {"id": handle.id, "status": handle.status.value}
+
+
+JobHandle.__qgis_sdk_wire__ = _job_handle_wire  # type: ignore[attr-defined]
 
 
 # -- the service ------------------------------------------------------------------

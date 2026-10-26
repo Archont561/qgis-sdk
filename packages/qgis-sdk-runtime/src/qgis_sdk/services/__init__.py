@@ -6,6 +6,7 @@ from .contracts import (
     DesktopAccess,
     Notifications,
     Progress,
+    Ui,
     ViewControl,
     Workers,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "ProviderRegistration",
     "Settings",
     "Styles",
+    "Ui",
     "ViewControl",
     "Workers",
 ]

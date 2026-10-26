@@ -19,11 +19,15 @@ import importlib
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
+from qgis_sdk.bindings import BindingsDescription, describe_bindings
 from qgis_sdk.core import PluginContext, PluginFactory, PluginRuntime, ResourceScope
 from qgis_sdk.declarations import describe_plugin
 from qgis_sdk.models import QgisSdkError
+
+if TYPE_CHECKING:
+    from qgis_sdk.adapters.surfaces import DesktopBindings, SurfaceHost
 
 __all__ = [
     "CONTEXT_FACTORY_ATTRIBUTE",
@@ -194,7 +198,16 @@ def resolve_plugin_spec(spec: str) -> type:
 
 
 class DesktopHost:
-    """What ``host()``'s ``classFactory`` hands QGIS: lifecycle, button, page."""
+    """What ``host()``'s ``classFactory`` hands QGIS: lifecycle, bindings, page.
+
+    Beside the page (decision-43) it places the plugin's Desktop bindings
+    (decision-45/55): the ``@toolbar``/``@menu``/``@shortcut`` entries of
+    its actions and of its ``Dialog``/``Dock`` surfaces, created on
+    ``initGui`` after the runtime starts and removed on ``unload`` before it
+    stops. Inside a running QGIS the context also gains ``ctx.ui``, the way
+    an action opens a registered surface; in a bare interpreter it does not,
+    and ``ctx.ui`` is refused by name.
+    """
 
     def __init__(
         self,
@@ -207,18 +220,42 @@ class DesktopHost:
         placement: str | None,
         grants: tuple[str, ...],
         assets: Path,
+        bindings: BindingsDescription | None = None,
+        package_directory: Path | None = None,
     ) -> None:
         self._iface = iface
-        self._adapter = DesktopLifecycleAdapter(
-            plugin_class, iface, context_factory=context_factory
-        )
         self._title = title
         self._view_id = view_id
         self._placement = placement
         self._grants = grants
         self._assets = assets
+        self._package_directory = package_directory or assets.parent
         self._action: Any | None = None
         self._view: Any | None = None
+        self._bindings = (
+            bindings if bindings is not None else describe_bindings(plugin_class)
+        )
+        self._surfaces: SurfaceHost | None = None
+        self._desktop_bindings: DesktopBindings | None = None
+        if qgis_is_running():
+            from qgis_sdk.adapters.surfaces import DesktopBindings, SurfaceHost
+
+            plugin_id = self._bindings.plugin_id
+            self._surfaces = SurfaceHost(
+                iface, plugin_id=plugin_id, title=title, bindings=self._bindings
+            )
+            self._desktop_bindings = DesktopBindings(
+                iface,
+                plugin_id=plugin_id,
+                title=title,
+                bindings=self._bindings,
+                surfaces=self._surfaces,
+                package_directory=self._package_directory,
+            )
+            context_factory = _with_ui(context_factory, self._surfaces)
+        self._adapter = DesktopLifecycleAdapter(
+            plugin_class, iface, context_factory=context_factory
+        )
 
     @property
     def iface(self) -> object | None:
@@ -248,9 +285,29 @@ class DesktopHost:
         """The dock or dialog while the page is open, else ``None``."""
         return self._view
 
+    @property
+    def bindings(self) -> BindingsDescription:
+        """The bound actions and registered surfaces ``host()`` read."""
+        return self._bindings
+
+    @property
+    def surfaces(self) -> SurfaceHost | None:
+        """The surface host (``ctx.ui``) inside QGIS, else ``None``."""
+        return self._surfaces
+
+    @property
+    def desktop_bindings(self) -> DesktopBindings | None:
+        """The placed toolbar/menu/shortcut actions inside QGIS, else ``None``."""
+        return self._desktop_bindings
+
     def initGui(self) -> None:
-        """Start the plugin; with a page, add the toolbar button that opens it."""
+        """Start the plugin, place its bindings; with a page, add its button."""
         self._adapter.initGui()
+        if self._surfaces is not None and self._desktop_bindings is not None:
+            self._surfaces.attach(self.runtime, self.context)
+            self._desktop_bindings.install(self.runtime)
+            self._surfaces.restore_docks()
+            self._desktop_bindings.sync_toggles()
         if self._placement is not None:
             from qgis_sdk.adapters.webview import add_toolbar_action
 
@@ -280,7 +337,11 @@ class DesktopHost:
         return self._view
 
     def unload(self) -> None:
-        """Close the page, remove the button, stop the plugin; safe to repeat."""
+        """Close the page and surfaces, remove every button, stop the plugin."""
+        if self._desktop_bindings is not None:
+            self._desktop_bindings.remove()
+        if self._surfaces is not None:
+            self._surfaces.close_all()
         if self._view is not None:
             from qgis_sdk.adapters.webview import close_view
 
@@ -292,6 +353,18 @@ class DesktopHost:
             remove_toolbar_action(self._iface, self._action)
             self._action = None
         self._adapter.unload()
+
+
+def _with_ui(factory: ContextFactory, surfaces: SurfaceHost) -> ContextFactory:
+    """Wrap ``factory`` so the context gains ``ui`` unless the author set one."""
+
+    def with_ui(iface: object) -> PluginContext:
+        context = factory(iface)
+        if context.has("ui"):
+            return context
+        return context.with_services(ui=surfaces)
+
+    return with_ui
 
 
 def host(
@@ -312,6 +385,7 @@ def host(
     """
     plugin_class = resolve_plugin_spec(spec)
     description = describe_plugin(plugin_class)
+    bindings = describe_bindings(plugin_class)
     if placement is not None and placement not in PLACEMENTS:
         raise QgisSdkHostError(
             f"placement must be one of {', '.join(PLACEMENTS)}, got {placement!r}"
@@ -333,7 +407,8 @@ def host(
         factory = functools.partial(
             default_context, plugin_id=description.id, title=description.title
         )
-    assets = _package_directory(plugin_class) / ASSETS_DIRECTORY
+    package_directory = _package_directory(plugin_class)
+    assets = package_directory / ASSETS_DIRECTORY
 
     def classFactory(iface: object | None) -> DesktopHost:
         return DesktopHost(
@@ -345,6 +420,8 @@ def host(
             placement=placement,
             grants=granted,
             assets=assets,
+            bindings=bindings,
+            package_directory=package_directory,
         )
 
     return classFactory

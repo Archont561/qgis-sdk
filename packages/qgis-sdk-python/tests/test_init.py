@@ -3,16 +3,20 @@
 import qgis_sdk
 
 
-def test_public_surface_is_the_declarations_api() -> None:
+def test_public_surface_is_the_declarations_and_bindings_api() -> None:
     assert qgis_sdk.__all__ == [
         "ActionDescription",
         "PluginDescription",
         "QgisSdkDeclarationError",
         "StreamDescription",
         "action",
+        "describe_bindings",
         "describe_plugin",
+        "menu",
         "plugin",
+        "shortcut",
         "stream",
+        "toolbar",
     ]
 
 

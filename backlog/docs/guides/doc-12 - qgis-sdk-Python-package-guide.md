@@ -498,6 +498,109 @@ id and holds ordinary bound methods, so conventional PyQt code can build its own
 dialog and call `NativeForms.dispatch(action_id, values)` - or the handler
 directly - with the same validation.
 
+## Desktop bindings and native surfaces
+
+A plugin reaches the QGIS Desktop in two ways, both declared on the class and
+both headless until a host places them (decisions 45 and 55): a *binding*
+puts an action or a surface on the toolbar, under a menu or behind a shortcut,
+and a *surface* is a plain `Dialog` or `Dock` subclass whose `build()` returns
+the widget to show. Nothing an author writes outside `build()` imports Qt.
+
+```python
+from qgis_sdk import action, menu, plugin, shortcut, toolbar
+from qgis_sdk.ui import Dialog, Dock
+
+
+@menu("Plugins/Field tools")
+class BufferDialog(Dialog):
+    title = "Buffer a layer"
+
+    def build(self):
+        from qgis.PyQt.QtWidgets import QPushButton
+
+        button = QPushButton("Buffer 25 m")
+        button.clicked.connect(
+            lambda: self.ctx.actions.buffer(layer_id=self.initial["layer_id"], distance=25)
+        )
+        return button
+
+
+class LayerPanel(Dock, area="left"):
+    def build(self): ...
+
+
+@plugin(id="field_tools", title="Field tools")
+class FieldTools:
+    surfaces = (BufferDialog, LayerPanel)
+
+    @toolbar(icon="buffer.svg", text="Buffer")
+    @shortcut("Ctrl+Alt+B")
+    @action
+    def open_buffer(self) -> None:
+        self.ctx.ui.open(BufferDialog, initial={"layer_id": self.ctx.project.layer_ids()[0]})
+
+    @action
+    def buffer(self, layer_id: str, distance: float) -> str: ...
+```
+
+**Bindings.** `@toolbar` (bare or `@toolbar(icon="name.svg", text="...")`),
+`@menu("Top/Sub")` and `@shortcut("Ctrl+Alt+B")` stack in any order on an
+`@action` method and on a `Dialog`/`Dock` subclass, and repeat for a second
+place. They are refused with a message on anything else: a `@job` ("bind an
+`@action` that submits the job"), a `@stream`, a plain method (`@plugin`
+reports it at class creation) or a class that is not a surface. `icon` is a
+file name under the package's `icons/` directory, resolved through
+`qgis_sdk.resources.icon_path`. `describe_bindings(cls)` is the pure view:
+`entries` lists the registered surfaces (in `surfaces` order) then the bound
+actions, each with its `bindings`; `typed_without_surface` names bound actions
+that take inputs. `describe_plugin` output and `HOST_FINGERPRINT` do not
+change: bindings are placement, not contract.
+
+**The trigger rule.** A placed action for a *surface* opens it. A placed
+action for an *action* calls the handler with no arguments; an action that
+takes inputs cannot be run from a button, so `qgis-sdk check` reports it as
+`UI003` and the Desktop warns in the message bar instead of guessing. Give it
+a surface that collects the inputs and calls `self.ctx.actions.<id>(...)`, as
+`BufferDialog` does above. A handler that raises a `QgisSdkError` is reported
+in the bar and re-raised; one that returns a `JobHandle` (an action that
+submits a job and returns its handle) gets a progress widget in the bar and a
+"finished"/"failed" message when the job settles - the handler itself stays on
+the GUI thread, so offload the work with a `@job` and return the handle rather
+than blocking the button.
+
+**Lifetimes.** A `Dialog` is a fresh instance per opening: the host
+constructs it, binds `self.ctx` (a `UiContext`) and `self.initial` on the
+instance, calls `build()`, shows the window parented to the QGIS main window,
+and on close calls `on_close()`, closes the view's scope (jobs, timers and
+network it owned) and deletes the widget. A `Dock` is one instance per
+running plugin, created lazily, placed with `iface.addDockWidget` in its
+`area`; its binding is a checkable toggle, its visibility is written to
+`ctx.settings` under `ui.<surface id>.visible` and restored on the next start,
+and `unload` removes it. `self.ctx.view.request_close()` closes a dialog or
+hides a dock.
+
+**`ctx.ui.open` and `UiContext.actions`.** From an action,
+`self.ctx.ui.open(Surface, initial={...})` opens a registered surface (an
+unlisted class is refused by name); outside QGIS Desktop the `ui` service is
+absent and `ctx.ui` raises `QgisSdkUnsupportedCapabilityError` naming it.
+Inside a surface, `self.ctx.actions.<id>(**values)` (or
+`self.ctx.actions.call("<id>", **values)`) dispatches the plugin's own action
+through the same validated path a bridge call takes - unknown ids and fields
+refused by name, values coerced with the form rules - with the *view's*
+authority: while that action still runs from this view (a plain handler, or
+a job whose handle has not settled) a second call from the same view is
+refused, so a double-click cannot submit twice. `ctx.actions.ids` and
+`ctx.actions.running("<id>")` are the introspection.
+
+**Testing without QGIS.** `qgis_sdk.testing.FakeUi(scope,
+plugin_class=...)` stands in for the service: `ctx.ui.open(...)` records an
+`OpenedSurface` (`surface`, `initial`, `id`) instead of building anything,
+and `FakeViewControl` records `request_close`. `qgis-sdk new --ui native`
+writes this shape with a passing starter test; `qgis-sdk check` adds `UI003`
+and `ICON001` (a `@toolbar` icon that is not a file under `<package>/icons/`).
+Catalogue components, `Form`, `@on`/`@subscribe` and `.ui` loading are
+later tasks (decision-55); until then `build()` is plain PyQt.
+
 ## Processing algorithms and safe outputs
 
 `qgis_sdk.algorithms` is the authoring surface
@@ -1077,6 +1180,21 @@ Desktop proves the provider is in `processingRegistry()` while the plugin runs
 and gone after unload. The README gets a "Processing" section naming the
 toolbox entry `<plugin>:buffer`. It combines with `--web`.
 
+### Native UI starter: `--ui native`
+
+`qgis-sdk new --ui native` adds `<plugin>/ui.py` with `PingDialog`, a
+`Dialog` subclass bound to `Plugins/<Title>` whose `build()` is plain PyQt
+(the only place Qt is imported), lists it on the class (`surfaces =
+(PingDialog,)`) and binds a no-input `open_ping` action to the toolbar that
+calls `self.ctx.ui.open(PingDialog, initial={"value": 7})`; the dialog's
+button calls `self.ctx.actions.ping(value=...)`. `tests/test_plugin.py`
+gains a test that runs the action under `FakeUi` and asserts what was
+opened. The README gets a "Native UI" section naming `UI003` and `ICON001`.
+It combines with `--algorithm` and `--web`; the `QGIS_SDK_DEVTOOLS=1`
+harness scaffolds this variant so `qgis-sdk dev` inside real QGIS Desktop
+proves the toolbar action opens the dialog and an edit to `ui.py` is what
+the next opening builds after a reload.
+
 ### Web UI: vanilla or React, dialog or dock
 
 `new` can add a page (decision-18). On a terminal it asks four questions -
@@ -1159,6 +1277,8 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | `GRANT001` | `[tool.qgis-sdk.web] grants` names something that is neither a host grant (`layers.read`, selecting every operation that needs it) nor a host operation id (`project.layer_ids`); see `qgis_sdk.bridge.host.granted_operations`. |
 | `VERSION003` (warning) | `pyproject.toml` declares no `qgis-sdk-runtime` (or `qgis-sdk`) requirement; `build` ships the installed runtime and says so in the NOTICE. |
 | `VERSION004` | The installed `qgis-sdk-runtime` does not satisfy the project's requirement. The finding names both and the `pip install` line; the tools never install. |
+| `UI003` | A method carrying `@toolbar`/`@menu`/`@shortcut` and `@action` takes inputs beyond `self`; a button collects nothing. Drop the inputs, or bind a surface that collects them and calls `self.ctx.actions.<id>(...)`. |
+| `ICON001` | `@toolbar(icon="...")` names something that is not a file under `<package>/icons/` (a bare file name is required). |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
 | `VERSION002` | A TypeScript file starting with `// Generated by qgis-sdk. Do not edit.` declares a `PLUGIN_DESCRIPTION_SCHEMA_VERSION` or `HOST_SCHEMA_VERSION` other than the one this release generates; regenerate with `qgis-sdk bridge generate`. `node_modules` is never read. |
@@ -1581,6 +1701,17 @@ TASK-63). Every rename, in one list:
   `processing`; all are optional constructor keywords that refuse by name
   when a host leaves them out. The wire contract, `describe_plugin` output
   and `HOST_FINGERPRINT` do not move.
+- **Desktop bindings and surfaces (decisions 45 and 55; TASK-67),
+  additively.** `qgis_sdk` exports `toolbar`, `menu`, `shortcut` and
+  `describe_bindings`; `qgis_sdk.ui` exports `Dialog`, `Dock` and `Surface`
+  next to the 0.5 form-field helpers, which moved to
+  `qgis_sdk.ui.form_fields` and are re-exported from `qgis_sdk.ui`
+  unchanged. `PluginContext` gains an optional `ui` capability (`host()`
+  supplies it inside QGIS Desktop; `qgis_sdk.testing.FakeUi` elsewhere) and
+  `UiContext` gains `actions` and `settings`. A plugin that places its own
+  `QAction`s in `initGui` keeps working; moving them to `@toolbar`/`@menu`
+  lets `host()` add and remove them with the plugin. See
+  [Desktop bindings and native surfaces](#desktop-bindings-and-native-surfaces).
 
 `qgis-sdk-tools` 0.6.0 changes one thing in what `qgis-sdk bridge generate`
 emits ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-page-import-and-keep-generated-plugin-clients-import-free.md)):

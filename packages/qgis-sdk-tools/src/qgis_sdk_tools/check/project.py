@@ -8,7 +8,8 @@ Rules owned here: ``PROJECT001`` (no package), ``META001`` (a hand-written
 ``metadata.txt``; ``build``/``dev`` generate it), ``ENTRY002`` (a
 hand-written ``classFactory``; ``host()`` binds it), ``CONFIG001`` for
 ``[tool.qgis-sdk.check]``. The ``pyproject.toml`` rules live in
-:mod:`qgis_sdk_tools.project`, the version rules in :mod:`.versions`.
+:mod:`qgis_sdk_tools.project`, the version rules in :mod:`.versions`, the
+Desktop binding rules (``UI003``, ``ICON001``) in :mod:`.ui`.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from pathlib import Path
 
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
 from .imports import check_source
+from .ui import check_bindings
 from .versions import (
     check_generated_clients,
     check_runtime_pins,
@@ -96,6 +98,10 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         relative = path.relative_to(root)
         source = path.read_text(encoding="utf-8")
         diagnostics.extend(check_source(source, path=relative, native_modules=native))
+        package = root / relative.parts[0] if len(relative.parts) > 1 else None
+        diagnostics.extend(
+            check_bindings(source, path=relative, package_directory=package)
+        )
 
     diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
     return CheckReport(root=root, diagnostics=tuple(diagnostics), files_checked=files)

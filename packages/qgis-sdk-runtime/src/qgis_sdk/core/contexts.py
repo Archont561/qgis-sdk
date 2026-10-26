@@ -14,7 +14,7 @@ to ask instead of use.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, overload
 
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import (
@@ -29,11 +29,15 @@ from qgis_sdk.services import (
     Project,
     Settings,
     Styles,
+    Ui,
     ViewControl,
     Workers,
 )
 
 from .scope import ResourceScope
+
+if TYPE_CHECKING:
+    from qgis_sdk.ui.actions import ViewActions
 
 T = TypeVar("T")
 
@@ -138,6 +142,7 @@ class PluginContext(_Context):
         "_project",
         "_settings",
         "_styles",
+        "_ui",
         "_workers",
         "notifications",
         "scope",
@@ -153,6 +158,7 @@ class PluginContext(_Context):
         "algorithms",
         "workers",
         "processing",
+        "ui",
     )
 
     notifications: Notifications
@@ -166,6 +172,7 @@ class PluginContext(_Context):
     algorithms: Capability[Algorithms] = Capability()
     workers: Capability[Workers] = Capability()
     processing: Capability[Processing] = Capability()
+    ui: Capability[Ui] = Capability()
 
     def __init__(
         self,
@@ -180,6 +187,7 @@ class PluginContext(_Context):
         algorithms: Algorithms | None = None,
         workers: Workers | None = None,
         processing: Processing | None = None,
+        ui: Ui | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -193,20 +201,55 @@ class PluginContext(_Context):
             _algorithms=algorithms,
             _workers=workers,
             _processing=processing,
+            _ui=ui,
         )
+
+    def with_services(self, **services: Any) -> PluginContext:
+        """A new context over the same scope with ``services`` added, never swapped.
+
+        The Desktop host uses it to add what only it can build once the
+        runtime exists (``ui``); a capability the factory already provided
+        is a ``ValueError``, so a host cannot quietly replace an author's
+        choice.
+        """
+        for name in services:
+            if name not in self._capability_names:
+                raise ValueError(f"PluginContext has no capability named {name!r}")
+            if self.has(name):
+                raise ValueError(f"PluginContext already provides {name!r}")
+        current = {name: getattr(self, f"_{name}") for name in self._capability_names}
+        current.update(services)
+        return PluginContext(self.notifications, self.scope, **current)
 
 
 class UiContext(_Context):
-    """Capabilities for one view; a close request is not synchronous disposal."""
+    """Capabilities for one view; a close request is not synchronous disposal.
 
-    __slots__ = ("_network", "notifications", "scope", "view")
+    ``actions`` is the view-scoped way into the plugin's own actions
+    (:class:`qgis_sdk.ui.actions.ViewActions`): ``ctx.actions.buffer(...)``
+    validates, coerces and dispatches to the runtime's bound handler and
+    refuses a second call while the first still runs from this view
+    (decision-55). ``settings`` is the plugin's settings when the host
+    shares them with its surfaces.
+    """
 
-    _capability_names = ("network",)
+    __slots__ = (
+        "_actions",
+        "_network",
+        "_settings",
+        "notifications",
+        "scope",
+        "view",
+    )
+
+    _capability_names = ("network", "actions", "settings")
 
     notifications: Notifications
     view: ViewControl
     scope: ResourceScope
     network: Capability[Network] = Capability()
+    actions: Capability[ViewActions] = Capability()
+    settings: Capability[Settings] = Capability()
 
     def __init__(
         self,
@@ -214,9 +257,16 @@ class UiContext(_Context):
         view: ViewControl,
         scope: ResourceScope,
         network: Network | None = None,
+        actions: ViewActions | None = None,
+        settings: Settings | None = None,
     ) -> None:
         self._assemble(
-            notifications=notifications, view=view, scope=scope, _network=network
+            notifications=notifications,
+            view=view,
+            scope=scope,
+            _network=network,
+            _actions=actions,
+            _settings=settings,
         )
 
 

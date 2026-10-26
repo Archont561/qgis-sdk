@@ -1,6 +1,6 @@
 """Small host-facing Protocols for the first pure authoring slice."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol, TypeVar
 
 T_co = TypeVar("T_co", covariant=True)
@@ -28,6 +28,21 @@ class ViewControl(Protocol):
     """Request view closure; the owning runtime decides when to dispose it."""
 
     def request_close(self) -> None: ...
+
+
+class Ui(Protocol):
+    """Open one of the plugin's registered surfaces (decision-55).
+
+    ``surface`` is a ``Dialog``/``Dock`` subclass listed in the plugin's
+    ``surfaces = [...]``; ``initial`` is handed to the instance as
+    ``self.initial`` before ``build()``. The Desktop host shows the window
+    and returns the surface instance; the fake records the request; a host
+    without a GUI does not provide the capability at all.
+    """
+
+    def open(
+        self, surface: type, *, initial: Mapping[str, object] | None = None
+    ) -> object: ...
 
 
 class DesktopAccess(Protocol):

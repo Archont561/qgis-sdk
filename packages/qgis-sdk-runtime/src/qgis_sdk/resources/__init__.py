@@ -50,7 +50,17 @@ STYLE_CATALOG: Mapping[str, StyleSpec] = MappingProxyType(
     }
 )
 
-__all__ = ["STYLE_CATALOG", "STYLE_DIRECTORY", "require_style", "style_path"]
+#: The directory inside a plugin package where ``@toolbar(icon=...)`` looks.
+ICON_DIRECTORY_NAME = "icons"
+
+__all__ = [
+    "ICON_DIRECTORY_NAME",
+    "STYLE_CATALOG",
+    "STYLE_DIRECTORY",
+    "icon_path",
+    "require_style",
+    "style_path",
+]
 
 
 def require_style(style: str) -> StyleSpec:
@@ -67,4 +77,24 @@ def style_path(style: str) -> Path:
     path = STYLE_DIRECTORY / spec.resource
     if not path.is_file():
         raise QgisSdkPackagedResourceError(style, f"{spec.resource} is not packaged")
+    return path
+
+
+def icon_path(package_directory: Path, icon: str) -> Path:
+    """Resolve ``@toolbar(icon="buffer.svg")`` inside ``<package>/icons/``.
+
+    The name is a file name, not a path: a separator or a parent reference
+    is refused, so a binding cannot reach outside the plugin's own package.
+    A missing file is the same packaging defect a missing style is - and the
+    one ``qgis-sdk check`` reports before the plugin ever loads.
+    """
+    if not icon or Path(icon).name != icon or icon in (".", ".."):
+        raise QgisSdkPackagedResourceError(
+            icon, "an icon is a file name under the package's icons/ directory"
+        )
+    path = package_directory / ICON_DIRECTORY_NAME / icon
+    if not path.is_file():
+        raise QgisSdkPackagedResourceError(
+            icon, f"{ICON_DIRECTORY_NAME}/{icon} is not in {package_directory.name}"
+        )
     return path

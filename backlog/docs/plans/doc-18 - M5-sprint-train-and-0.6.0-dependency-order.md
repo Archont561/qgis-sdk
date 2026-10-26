@@ -44,8 +44,8 @@ What 0.5.0 did **not** do, because this milestone has to finish it:
 | [TASK-63](../../tasks/task-63%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md) function algorithms | TASK-59 ✓ | To Do | **yes** |
 | [TASK-66](../../tasks/task-66%20-%20Generate-the-typed-bridge-schema-module-and-add-QgisSdk.fromBridgeSchema.md) typed schema module + `fromBridgeSchema` | TASK-61 ✓ | To Do | **yes** (independent of 63) |
 | [TASK-64](../../tasks/task-64%20-%20Generate-metadata.txt-classFactory-and-the-page-view-in-build-and-dev.md) generated host artifacts | TASK-63 | Done (#96) | after 63 |
-| [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration (re-sliced, see sprint 4) | TASK-64 | Implemented (sprint 4) | after 64 |
-| [TASK-67](../../tasks/task-67%20-%20Bind-actions-and-Dialog-Dock-surfaces-to-the-Desktop-with-toolbar-menu-shortcut-ctx.ui.open-and-UiContext.actions.md) desktop bindings + surfaces | TASK-64 | To Do | after 64 |
+| [TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md) clean scaffold + reference migration (re-sliced, see sprint 4) | TASK-64 | Done (#97) | after 64 |
+| [TASK-67](../../tasks/task-67%20-%20Bind-actions-and-Dialog-Dock-surfaces-to-the-Desktop-with-toolbar-menu-shortcut-ctx.ui.open-and-UiContext.actions.md) desktop bindings + surfaces | TASK-64 | In Progress (sprint 5, PR open) | after 64 |
 | [TASK-60](../../tasks/task-60%20-%20Prepare-and-qualify-0.6.0-release.md) 0.6.0 gate | TASK-31 ✓, 58 ✓, 59 ✓, 61 ✓, 62, 63–67 | To Do | release gate |
 
 ## 3. Sprint train
@@ -98,7 +98,7 @@ commits inside keep the slices reviewable.
   `QGIS_SDK_SCAFFOLD_DESKTOP=1`, `QGIS_SDK_HEADLESS_LIFECYCLE=1`,
   `QGIS_SDK_DESKTOP_ADAPTER=1` and `QGIS_SDK_REFERENCE=1` harnesses re-run
   green. decision-43 and decision-12 carry dated status reviews.
-- **Sprint 4 (implemented 2026-10-26, Done on merge): TASK-65, re-sliced.**
+- **Sprint 4 (merged 2026-10-26, #97 → `daad606`): TASK-65, re-sliced.**
   What sprint 3 left: `release.py stamp` moves the example's
   `qgis-sdk-runtime` / `qgis-sdk-tools` minor windows with the kit (or the
   one side releasing) and `verify-versions` refuses a release the window
@@ -117,9 +117,14 @@ commits inside keep the slices reviewable.
   inputs → run; job → message bar; typed inputs without a surface → UI003,
   never a generated dialog; decision-55), `ctx.ui.open`,
   `UiContext.actions`, icons through
-  `qgis_sdk.resources`, `qgis-sdk new --ui native`; decision-12 promoted
-  as narrowed. `QGIS_SDK_DESKTOP_ADAPTER=1` harness. **Separable:** if
-  0.6.0 must ship earlier, this sprint moves to m-6 ahead of TASK-68.
+  `qgis_sdk.resources`, `qgis-sdk new --ui native`; decision-12 reviewed
+  (superseded by decision-55, its lifecycle rules satisfied). Delivered on
+  the sprint-5 session branch as `feat(runtime)` + `feat(tools)`: Desktop
+  evidence is the `QGIS_SDK_DEVTOOLS=1` `dev --exercise` round (toolbar
+  action opens the scaffold dialog before and after an edit of `ui.py`)
+  plus `test_surfaces_native.py` under `QgsApplication`; check gains
+  `UI003`/`ICON001`. **Separable:** if 0.6.0 must ship earlier, this
+  sprint moves to m-6 ahead of TASK-68.
 - **Gate: TASK-60.** The 0.5.0 gate re-run over the new API ([doc-14](../guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)), the
   pair `python-v0.6.0` + `ts-v0.4.0` on one merge commit, only on an
   explicit "Release 0.6.0".

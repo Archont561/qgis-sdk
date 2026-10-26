@@ -108,3 +108,22 @@ surface of its own or is a `UI003` finding. Point 4 is replaced: there is no
 plugin, and `@menu`/`@toolbar`/`@shortcut` mark surface classes as well as
 actions. `self.ctx` on a surface is an instance attribute bound by the runtime
 before `build()`. An action opens a surface only through `self.ctx.ui.open`.
+
+## Status review (2026-10-26, TASK-67): implemented, stays `accepted`
+
+Points 1 and 2 are in the runtime: `@toolbar` (bare or with `icon=`/`text=`),
+`@menu("Top/Sub")` and `@shortcut("...")` stack in any order on an
+`@action` and, per the decision-55 amendment, on a `Dialog`/`Dock` subclass;
+they are refused on a `@job` ("bind an `@action` that submits the job"), a
+`@stream`, a plain method and a class that is not a surface.
+`describe_bindings(cls)` is the pure view; `describe_plugin` and
+`HOST_FINGERPRINT` do not move. `host()` creates one `QAction` per binding on
+start and removes it on unload (`DesktopBindings`), the trigger rule is
+"surface opens, no-input action runs, typed action is refused by name" and
+`qgis-sdk check` reports the typed case as `UI003` and a missing icon as
+`ICON001`. Points 3 and 4 (an action-named surface, `DeclaredForm`) were
+superseded by decision-55 before implementation. Evidence: pure tests
+(`test_bindings.py`, `test_check_ui.py`), `QgsApplication` tests
+(`test_surfaces_native.py`, `test_desktop_host_native.py`) and the real
+Desktop `qgis-sdk dev` exercise (`QGIS_SDK_DEVTOOLS=1`), which opens the
+scaffold's dialog from its toolbar action before and after an edit.

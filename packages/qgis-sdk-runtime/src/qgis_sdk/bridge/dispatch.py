@@ -58,6 +58,7 @@ from qgis_sdk.bridge.streams import (
     Subscription,
     SubscriptionRequest,
 )
+from qgis_sdk.declarations import WIRE_VALUE_METHOD
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
     QgisSdkBridgeProtocolError,
@@ -849,6 +850,9 @@ def _wire_result(value: Any) -> Any:
     """
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
+    wire = getattr(type(value), WIRE_VALUE_METHOD, None)
+    if wire is not None:
+        return _wire_result(wire(value))
     if isinstance(value, (list, tuple)):
         return [_wire_result(item) for item in value]
     if isinstance(value, Mapping):

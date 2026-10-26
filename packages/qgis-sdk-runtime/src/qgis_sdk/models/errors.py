@@ -294,6 +294,18 @@ class QgisSdkFormError(QgisSdkError):
     code = "invalid_form_values"
 
 
+class QgisSdkUiError(QgisSdkError):
+    """A surface or a view-scoped action call was refused, by name.
+
+    Raised by the QGIS-free UI rules (``UiContext.actions``, the surface
+    registry, the fakes) and by the Desktop host when it cannot honour a
+    request - an action that still runs from the same view, a surface the
+    plugin never registered, a typed action triggered from a bare binding.
+    """
+
+    code = "ui_refused"
+
+
 class QgisSdkBridgeError(QgisSdkError):
     """A bridge call was refused, or its value cannot cross the transport.
 

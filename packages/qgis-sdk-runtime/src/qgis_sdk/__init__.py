@@ -1,5 +1,6 @@
 """QGIS-free authoring and core SDK foundations."""
 
+from .bindings import describe_bindings, menu, shortcut, toolbar
 from .declarations import (
     ActionDescription,
     PluginDescription,
@@ -17,7 +18,11 @@ __all__ = [
     "QgisSdkDeclarationError",
     "StreamDescription",
     "action",
+    "describe_bindings",
     "describe_plugin",
+    "menu",
     "plugin",
+    "shortcut",
     "stream",
+    "toolbar",
 ]

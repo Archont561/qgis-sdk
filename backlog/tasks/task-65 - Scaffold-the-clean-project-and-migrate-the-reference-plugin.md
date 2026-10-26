@@ -1,10 +1,10 @@
 ---
 id: TASK-65
 title: Scaffold the clean project and migrate the reference plugin
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-26T08:28:00Z'
-updated_date: '2026-10-26 16:35'
+updated_date: '2026-10-26 17:27'
 labels: []
 milestone: m-5
 dependencies:
@@ -37,4 +37,6 @@ Sprint 2 follow-up already moved the web/ templates onto the schema module (brid
 Re-sliced 2026-10-26 after sprint 3 (TASK-64) absorbed the scaffold templates, the runtime-window derivation and the example migration (see doc-18 sprint 4). Remaining here: release.py stamp must move the example's literal qgis-sdk-runtime>=0.5,<0.6 / qgis-sdk-tools>=0.5,<0.6 lines (and whatever tests pin them) so the gate stamps 0.6.0; doc-13, doc-14, the README quick start and package READMEs; decision-11 status review; QGIS_SDK_PLUGIN_COEXISTENCE=1 harness and scripts/plugin_coexistence_smoke.py from create_class_factory onto host(); extend the scaffold-vs-example equality test from web/package.json to the Python side. AC #1, #2 and #4 are largely satisfied by TASK-64's evidence and should be re-verified, not re-implemented.
 
 Implemented 2026-10-26 (sprint 4 of doc-18), Done on merge. What this sprint added on top of TASK-64: (1) qgis-sdk new --algorithm - <plugin>/algorithms.py with Provider(id=<plugin>) and the buffer_layer function (the example's shape), providers = (algorithms.provider,) and a buffer action through invoke(), a fourth starter test over FakeLayers/FakeAlgorithms/FakeProject; plan/check/build/CLI tests in test_scaffold_algorithm.py; the SCAFFOLD_DESKTOP harness now scaffolds the --algorithm variant and real QGIS Desktop proves the provider is registered while loaded and released on unload (10 passed). (2) release.py: stamp_example_windows / read_example_windows move examples/simple's qgis-sdk-runtime / qgis-sdk-tools minor windows on the python, runtime and tools scopes; verify-versions refuses a release the example's window excludes and reports example_windows in --json (tests/scripts 248 passed). (3) The scaffold-vs-example equality test now covers the Python side (pyproject tables, the SDK windows the scaffold derives, no metadata.txt/webview.py/classFactory, .gitignore), and test_scaffold derives the expected window from installed_runtime_version instead of a literal. (4) desktop_adapter_smoke and plugin_coexistence_smoke bind their SDK fixture through host() in __init__.py (the line build stages) with a context_factory class attribute; DESKTOP_ADAPTER 22 and PLUGIN_COEXISTENCE 23 passed in real Desktop. (5) Docs: README quick start, kit/tools/runtime READMEs, doc-12 (release stamp paragraph, --algorithm section), doc-14 harness wording; decision-11 already carried the decision-42 review from sprint 1. AC #1-#4: --algorithm plan tests, starter tests (4 passed) without QGIS, check clean, build ZIP with hasProcessingProvider=yes; example has no host artifact and declares providers with buffer_layer as a function (sprint 1/3), test-reference-example + REFERENCE harness green; windows derived from the install, example declares the same lines.
+
+Merged #97 → daad606 (TASK-65 Done; doc-18 row updated in sprint 5's first commit).
 <!-- SECTION:NOTES:END -->
