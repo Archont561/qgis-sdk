@@ -47,12 +47,22 @@ class QgisUtilsHost:
         return bool(self._utils.startPlugin(name))
 
     def unload(self, name: str) -> bool:
-        return bool(self._utils.unloadPlugin(name))
+        unloaded = bool(self._utils.unloadPlugin(name))
+        self.forget(name)
+        return unloaded
 
     def forget(self, name: str) -> None:
+        """Drop the plugin's modules so the next load reads the edited sources.
+
+        ``qgis.utils`` forgets what its import hook saw; the source modules a
+        plugin reached in other ways (``importlib``, the host package's
+        extended ``__path__``) would otherwise survive as stale copies.
+        """
         forget = getattr(self._utils, "_unloadPluginModules", None)
         if forget is not None:
             forget(name)
+        for module in [m for m in sys.modules if m.split(".")[0] == name]:
+            del sys.modules[module]
 
     def running(self, name: str) -> bool:
         return name in self._utils.active_plugins
@@ -175,7 +185,7 @@ def bootstrap(request: Mapping[str, object]) -> DevSession:
         session.timers.append(ticker)
         if not request.get("exercise"):
             ticker.start()
-            say(f"watching {root / plugin} for Python and metadata changes")
+            say(f"watching {root / plugin} for Python changes")
 
     started = coordinator.start()
     exercise = request.get("exercise")

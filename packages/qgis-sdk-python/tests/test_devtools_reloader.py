@@ -124,9 +124,9 @@ class TestPreflight:
         assert problems[0].startswith(f"{PLUGIN}/broken.py:1:")
 
     def test_missing_metadata_is_a_problem_before_teardown(self, project: Path) -> None:
-        metadata = project / PLUGIN / "metadata.txt"
-        metadata.write_text(
-            metadata.read_text(encoding="utf-8").replace("qgisMinimumVersion=", "#"),
+        manifest = project / "pyproject.toml"
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8").replace("qgis-minimum-version", "#"),
             encoding="utf-8",
         )
 

@@ -37,6 +37,7 @@ from typing import Any
 
 import layers
 import pytest
+from qgis_sdk.adapters.desktop import host
 from qgis_sdk_tools.bundle import VENDOR_PACKAGE
 from qgis_sdk_tools.scaffold.web import install_command, script_command
 
@@ -154,9 +155,10 @@ def project(tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str) -> 
     scaffolded = sorted(
         p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
     )
-    (root / "tests" / "test_plugin_smoke.py").unlink()
+    (root / "tests" / "test_plugin.py").unlink()
     _copy_tree(EXAMPLE, root)
-    assert {"README.md", "pyproject.toml", f"{PLUGIN}/metadata.txt"} <= set(scaffolded)
+    assert {"README.md", "pyproject.toml", f"{PLUGIN}/plugin.py"} <= set(scaffolded)
+    assert f"{PLUGIN}/metadata.txt" not in scaffolded  # rendered by build (decision-43)
     _bun_run(install_command("bun"), root / "web")
     for script in ("test", "typecheck", "build"):
         _bun_run(script_command("bun", script), root / "web")
@@ -167,8 +169,6 @@ def test_the_example_keeps_the_scaffold_layout(project: Path) -> None:
     for relative in (
         f"{PLUGIN}/__init__.py",
         f"{PLUGIN}/plugin.py",
-        f"{PLUGIN}/webview.py",
-        f"{PLUGIN}/metadata.txt",
         f"{PLUGIN}/data/points.geojson",
         f"{PLUGIN}/web/index.html",
         "web/src/bridge.schema.ts",
@@ -185,8 +185,6 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
     bindings = _cli(
         "bridge",
         "generate",
-        "--plugin",
-        f"{PLUGIN}.plugin:SimplePlugin",
         "--out",
         "web/src/bridge.schema.ts",
         "--check",
@@ -213,6 +211,7 @@ def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:
     with zipfile.ZipFile(archive) as zf:
         entries = set(zf.namelist())
     vendored = f"{PLUGIN}/{VENDOR_PACKAGE}/qgis_sdk"
+    assert f"{PLUGIN}/metadata.txt" in entries
     assert f"{PLUGIN}/data/points.geojson" in entries
     assert f"{PLUGIN}/web/index.html" in entries
     assert f"{vendored}/resources/styles/reference-polygon-output.qml" in entries
@@ -253,7 +252,6 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
 
     monkeypatch.syspath_prepend(str(project))
     _forget(PLUGIN)
-    module = importlib.import_module(PLUGIN)
     plugin_module = importlib.import_module(f"{PLUGIN}.plugin")
     fixture = plugin_module.FIXTURE
     before = hashlib.sha256(fixture.read_bytes()).hexdigest()
@@ -261,12 +259,12 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
     exports.mkdir()
     QgsProject.instance().removeAllMapLayers()
 
-    desktop = module.classFactory(None)
+    desktop = host(f"{PLUGIN}.plugin:SimplePlugin", placement="dock")(None)
     desktop.initGui()
     desktop.runtime.instance.ctx.settings.set(
         plugin_module.EXPORT_DIRECTORY_KEY, str(exports)
     )
-    widget = module.webview.open_view(desktop.runtime, None, placement="dock")
+    widget = desktop.show_view()
     try:
         page = widget.widget().page()
         loaded: list[bool] = []
@@ -322,11 +320,11 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
         assert len(QgsProject.instance().mapLayers()) == 3
         assert source_layer.featureCount() == 3
     finally:
-        module.webview.close_view(widget, None)
         desktop.unload()
         qgis_app.processEvents()
         QgsProject.instance().removeAllMapLayers()
         _forget(PLUGIN)
+    assert desktop.view is None
 
     assert desktop.runtime.state.value == "stopped"
     assert hashlib.sha256(fixture.read_bytes()).hexdigest() == before

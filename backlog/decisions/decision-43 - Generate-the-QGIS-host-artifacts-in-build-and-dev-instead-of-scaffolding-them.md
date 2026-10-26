@@ -139,3 +139,29 @@ truth**, and the tools detect the runtime from it:
 Carried by TASK-65 (scaffold lines) and TASK-64 (resolution and the two
 rules).
 
+
+## Status review (2026-10-26, TASK-64): implemented, with two refinements
+
+Shipped by TASK-64 (runtime `host()`/`webview`, tools `project.py`/`artifacts.py`,
+rules `PROJECT002`/`CONFIG001`/`META001`/`META002`/`ENTRY002`/`GRANT001`/
+`VERSION003`/`VERSION004`, the scaffold and `examples/simple` migrated). Two
+points were settled in the implementation and differ from, or sharpen, the text
+above:
+
+- **Grants are grants *or* operation ids.** `[tool.qgis-sdk.web] grants` accepts
+  the catalogue's grant names (`layers.read` selects `layers.list` and
+  `layers.get`) and single operation ids (`project.layer_ids`);
+  `qgis_sdk.bridge.host.granted_operations` resolves either to the ids
+  `register_host_operations(only=...)` takes, and anything else is `GRANT001`.
+  The Decision's example (`grants = ["project.read", "layers.read"]`) is
+  therefore valid as written.
+- **The starter tests go through `host()`.** Point 5 said the starter tests
+  "never import a host artifact"; `tests/test_plugin.py` instead binds
+  `classFactory = host("<pkg>.plugin:<Class>", placement=...)` and drives
+  `initGui()`/`unload()`, because `host()` without a `QgsApplication` *is* the
+  bare runtime over the fakes and running the same factory QGIS runs is the
+  better evidence. `host()` resolves the plugin module through the builtin
+  `__import__` so QGIS's own module tracking drops it on unload.
+- `qgis-sdk test --target desktop` stages the same host package `dev` does, and
+  the pytest plugin makes `import <plugin>` resolve to it inside the Desktop
+  run, so the plugin is loaded exactly as QGIS loads it.

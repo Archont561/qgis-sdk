@@ -14,7 +14,11 @@ It is small on purpose, and every part of it also works under a direct
   pass by skipping;
 * two fixtures: ``qgis_app`` (a headless ``QgsApplication`` for the ``qgis``
   target, the running one in ``desktop``) and ``qgis_iface`` (Desktop only).
-  Outside their target they fail and name the command to run.
+  Outside their target they fail and name the command to run;
+* in the ``desktop`` target, top-level packages found on ``QGIS_PLUGINPATH``
+  win over ``sys.path``, so ``import <plugin>`` is the package QGIS loaded -
+  the generated host package of decision-43, which carries ``classFactory`` -
+  rather than the bare source package pytest puts first.
 
 Without ``QGIS_SDK_TEST_TARGET`` - a developer typing ``pytest`` - the guard
 and the gate are off and ``qgis_app`` skips when PyQGIS is not importable,
@@ -68,6 +72,43 @@ class _PureGuard(importlib.abc.MetaPathFinder):
                 "with `qgis-sdk test --target qgis` (or `--target desktop`)"
             )
         return None
+
+
+class _HostFirst(importlib.abc.MetaPathFinder):
+    """Resolve top-level packages from QGIS's plugin directories before ``sys.path``.
+
+    pytest's ``pythonpath`` and conftest loading both put the project root at
+    the front of ``sys.path``; a path entry cannot win against that, a finder
+    ahead of ``PathFinder`` can. Submodules are untouched: the host package
+    extends its own ``__path__`` to the sources, so ``<plugin>.plugin`` is
+    the author's module either way.
+    """
+
+    def __init__(self, roots: Sequence[str]) -> None:
+        self._roots = list(roots)
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: Sequence[str] | None,
+        target: object = None,
+    ) -> importlib.machinery.ModuleSpec | None:
+        if "." in fullname:
+            return None
+        return importlib.machinery.PathFinder.find_spec(fullname, self._roots)
+
+
+def pytest_load_initial_conftests(early_config: pytest.Config) -> None:
+    """Desktop target: the plugin is importable the way the running QGIS loaded it.
+
+    Installed before the first conftest imports anything, so every import of
+    the plugin package in the session resolves to the host package.
+    """
+    if _target() != "desktop":
+        return
+    roots = [p for p in os.environ.get("QGIS_PLUGINPATH", "").split(os.pathsep) if p]
+    if roots and not any(isinstance(f, _HostFirst) for f in sys.meta_path):
+        sys.meta_path.insert(0, _HostFirst(roots))
 
 
 def pytest_configure(config: pytest.Config) -> None:

@@ -4,6 +4,7 @@ import os
 import runpy
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import layers
@@ -41,10 +42,9 @@ def test_scaffold_writes_every_planned_file_and_reports_the_paths(
         ".gitignore",
         "README.md",
         "field_tools/__init__.py",
-        "field_tools/metadata.txt",
         "field_tools/plugin.py",
         "pyproject.toml",
-        "tests/test_plugin_smoke.py",
+        "tests/test_plugin.py",
     ]
     for path in written:
         assert path in output
@@ -82,12 +82,16 @@ def test_the_choices_reach_the_generated_files(tmp_path: Path) -> None:
     )
 
     assert exit_code == 0, output
-    metadata = (target / "field_tools" / "metadata.txt").read_text(encoding="utf-8")
-    assert "name=Field Survey Tools" in metadata
-    assert "author=Ada Lovelace" in metadata
-    assert "email=ada@example.test" in metadata
-    assert "version=1.2.3" in metadata
-    assert "qgisMinimumVersion=4.2" in metadata
+    manifest = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
+    assert manifest["project"]["description"] == (
+        "Field Survey Tools: a minimal qgis-sdk plugin."
+    )
+    assert manifest["project"]["authors"] == [
+        {"name": "Ada Lovelace", "email": "ada@example.test"}
+    ]
+    assert manifest["project"]["version"] == "1.2.3"
+    assert manifest["tool"]["qgis-sdk"]["qgis-minimum-version"] == "4.2"
+    assert not (target / "field_tools" / "metadata.txt").exists()
     assert "# Field Survey Tools" in (target / "README.md").read_text(encoding="utf-8")
     plugin_module = (target / "field_tools" / "plugin.py").read_text(encoding="utf-8")
     assert '@plugin(id="field_tools", title="Field Survey Tools")' in plugin_module
@@ -101,7 +105,7 @@ def test_dry_run_prints_the_plan_and_touches_nothing(tmp_path: Path) -> None:
     )
 
     assert exit_code == 0, output
-    assert "field_tools/metadata.txt" in output
+    assert "field_tools/plugin.py" in output
     assert not target.exists()
 
 
@@ -149,7 +153,7 @@ def test_scaffold_still_works_as_a_hidden_deprecated_alias_of_new(
     exit_code, output = run_cli("scaffold", str(target), "--plugin", "field_tools")
 
     assert exit_code == 0, output
-    assert (target / "field_tools" / "metadata.txt").is_file()
+    assert (target / "field_tools" / "plugin.py").is_file()
 
     exit_code, output = run_cli("--help")
     assert exit_code == 0
@@ -192,8 +196,8 @@ def test_main_is_the_callable_the_console_script_registers(
 
     assert exit_info.value.code == 0
 
-    assert (target / "field_tools" / "metadata.txt").is_file()
-    assert (target / "tests" / "test_plugin_smoke.py").is_file()
+    assert (target / "field_tools" / "plugin.py").is_file()
+    assert (target / "tests" / "test_plugin.py").is_file()
 
 
 def test_the_generated_starter_tests_pass_inside_the_generated_project(
@@ -238,5 +242,5 @@ def test_dash_m_reaches_the_same_command_as_the_console_script(
 
     assert exit_info.value.code == 0
     assert (target / "pyproject.toml").is_file()
-    assert (target / "demo_tools" / "metadata.txt").is_file()
-    assert (target / "tests" / "test_plugin_smoke.py").is_file()
+    assert (target / "demo_tools" / "plugin.py").is_file()
+    assert (target / "tests" / "test_plugin.py").is_file()

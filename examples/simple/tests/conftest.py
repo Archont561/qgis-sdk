@@ -1,4 +1,10 @@
-"""One plugin runtime over the SDK fakes: the pure half of every test here."""
+"""One plugin runtime over the SDK fakes: the pure half of every test here.
+
+``classFactory`` is what `qgis-sdk build` and `qgis-sdk dev` bind for QGIS
+(decision-43): ``host()`` over the class ``pyproject.toml`` names. Outside a
+``QgsApplication`` it hands the plugin a bare context, inside one every
+curated service - which is why the ``qgis`` tests call the very same entry.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from qgis_sdk.adapters.desktop import DesktopLifecycleAdapter, create_class_factory
+from qgis_sdk.adapters.desktop import (
+    DesktopLifecycleAdapter,
+    create_class_factory,
+    host,
+)
 from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.models import BufferRequest
 from qgis_sdk.testing import (
@@ -21,6 +31,7 @@ from qgis_sdk.testing import (
 from simple.plugin import FIXTURE, SimplePlugin
 
 WORKING_CRS = "EPSG:3857"
+classFactory = host("simple.plugin:SimplePlugin", placement="dock")
 
 
 @dataclass(frozen=True, slots=True)

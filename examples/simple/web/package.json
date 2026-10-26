@@ -8,7 +8,7 @@
 		"build": "vite build",
 		"test": "vitest run",
 		"typecheck": "tsc --noEmit",
-		"bindings": "cd .. && qgis-sdk bridge generate --plugin simple.plugin:SimplePlugin --out web/src/bridge.schema.ts --check"
+		"bindings": "cd .. && qgis-sdk bridge generate --out web/src/bridge.schema.ts --check"
 	},
 	"dependencies": {
 		"@archont561/qgis-sdk": "workspace:*"

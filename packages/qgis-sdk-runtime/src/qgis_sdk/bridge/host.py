@@ -68,6 +68,7 @@ __all__ = [
     "MAX_PAGE",
     "HostOperation",
     "HostServices",
+    "granted_operations",
     "host_description",
     "host_grants",
     "register_host_operations",
@@ -362,6 +363,33 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
 def host_grants() -> dict[str, str]:
     """Return the canonical grant each operation needs, keyed by operation id."""
     return {operation.id: operation.grant for operation in HOST_OPERATIONS}
+
+
+def granted_operations(grants: Sequence[str]) -> tuple[str, ...]:
+    """Return the operation ids a project's ``grants`` list selects (decision-43).
+
+    Each entry is either a grant (``layers.read`` selects every operation
+    that needs it) or one operation id (``project.layer_ids``). The result
+    keeps the catalogue's order without duplicates - what ``only=`` of
+    :func:`register_host_operations` expects. An entry that is neither is a
+    typo that would otherwise narrow the surface in silence, so it raises.
+    """
+    wanted = set(grants)
+    known = {operation.id for operation in HOST_OPERATIONS} | {
+        operation.grant for operation in HOST_OPERATIONS
+    }
+    for entry in grants:
+        if entry not in known:
+            raise QgisSdkBridgeError(
+                f"unknown host grant {entry!r}; grants are "
+                f"{', '.join(sorted({o.grant for o in HOST_OPERATIONS}))} and "
+                f"operation ids are {', '.join(o.id for o in HOST_OPERATIONS)}"
+            )
+    return tuple(
+        operation.id
+        for operation in HOST_OPERATIONS
+        if operation.id in wanted or operation.grant in wanted
+    )
 
 
 def host_description() -> dict[str, Any]:

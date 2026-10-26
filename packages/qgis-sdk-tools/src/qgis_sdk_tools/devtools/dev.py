@@ -4,24 +4,27 @@ Two modes, both explicit (decision-8):
 
 ``desktop`` (default)
     the QGIS Desktop binary from the discovered install, an isolated profile
-    at ``<project>/.qgis-sdk/profiles/dev``, and the project root on
-    ``QGIS_PLUGINPATH`` so QGIS's own plugin machinery discovers the package
-    *in place* - no copy, no symlink. A bootstrap loads and starts it and adds
-    a **Reload** action (toolbar button, ``Ctrl+Shift+R``). Reload is manual
-    (decision-15: automatic Python reload waits for lifecycle evidence) and
-    guarded: a preflight compiles every module first and a syntax error keeps
-    the running revision; a failed unload or a failed start leaves the plugin
+    at ``<project>/.qgis-sdk/profiles/dev``, and a generated host package at
+    ``<project>/.qgis-sdk/dev/host/<plugin>/`` on ``QGIS_PLUGINPATH``
+    (decision-43): its ``metadata.txt`` is rendered from ``pyproject.toml``
+    and its ``__init__.py`` extends the package path with the project's
+    sources and binds ``classFactory`` through
+    ``qgis_sdk.adapters.desktop.host()`` - the author's tree is loaded *in
+    place*, never copied. A bootstrap loads and starts it and adds a
+    **Reload** action (toolbar button, ``Ctrl+Shift+R``). Reload is guarded:
+    a preflight compiles every module first and a syntax error keeps the
+    running revision; a failed unload or a failed start leaves the plugin
     disabled and says so, with ``qgis-sdk dev`` itself as the restart.
 ``standalone``
     a bare ``QgsApplication`` started by the install's interpreter, the plugin
-    constructed through ``classFactory(None)`` exactly as the starter tests do.
+    constructed through the same generated package's ``classFactory(None)``.
     There is no ``iface``, no plugin menu, no QGIS lifecycle and no reload;
     what it offers is a fast loop for the web page and the declared actions.
 
 With a web UI the command starts the project's Vite dev server on loopback
 and hands its origin to the plugin through ``QGIS_SDK_DEV_SERVER``; the
-generated ``webview.py`` loads from there, with HMR, only when that variable
-is set. ``vite build`` output never references it.
+runtime's page view loads from there, with HMR, only when that variable is
+set. ``vite build`` output never references it.
 """
 
 from __future__ import annotations
@@ -38,7 +41,12 @@ from typing import Final
 from qgis_sdk.environment import DEV_SERVER_ENV
 from qgis_sdk.models import QgisSdkError
 
-from qgis_sdk_tools.check import EXCLUDED_DIRECTORIES
+from qgis_sdk_tools.artifacts import (
+    QgisSdkArtifactError,
+    introspect_plugin,
+    write_dev_host,
+)
+from qgis_sdk_tools.project import ProjectConfig, QgisSdkProjectError, require_project
 from qgis_sdk_tools.scaffold.web import script_command
 
 from .installs import QgisInstall, sdk_import_paths
@@ -58,6 +66,7 @@ __all__ = [
     "inspect_project",
     "plan_dev",
     "plan_web_server",
+    "stage_host",
     "wait_for_port",
 ]
 
@@ -83,6 +92,7 @@ class DevProject:
     root: Path
     plugin: str
     web: Path | None
+    config: ProjectConfig
 
     @property
     def has_web(self) -> bool:
@@ -115,34 +125,41 @@ class DevPlan:
 
 
 def inspect_project(root: Path) -> DevProject:
-    """Find the one plugin package at ``root`` and whether it has a web UI."""
+    """Read ``[tool.qgis-sdk] plugin`` at ``root`` and whether the project has a web UI."""
     root = Path(root).resolve()
     if not root.is_dir():
         raise QgisSdkDevError(f"{root} is not a directory; give a project root")
-    packages = sorted(
-        child.name
-        for child in root.iterdir()
-        if child.is_dir()
-        and child.name not in EXCLUDED_DIRECTORIES
-        and (child / "__init__.py").is_file()
-        and (child / "metadata.txt").is_file()
-    )
-    if not packages:
+    try:
+        config = require_project(root)
+    except QgisSdkProjectError as error:
+        raise QgisSdkDevError(str(error)) from error
+    package = root / config.plugin
+    if not (package / "__init__.py").is_file():
         raise QgisSdkDevError(
-            f"no plugin package (a directory with __init__.py and metadata.txt) "
-            f"under {root}; run from the project `qgis-sdk new` created"
-        )
-    if len(packages) > 1:
-        raise QgisSdkDevError(
-            f"{root} holds several plugin packages ({', '.join(packages)}); "
-            "`qgis-sdk dev` serves one project at a time"
+            f"[tool.qgis-sdk] plugin = {config.spec!r} names the package "
+            f"`{config.plugin}`, but {package} has no __init__.py"
         )
     web = root / "web"
     return DevProject(
         root=root,
-        plugin=packages[0],
+        plugin=config.plugin,
         web=web if (web / "package.json").is_file() else None,
+        config=config,
     )
+
+
+def stage_host(project: DevProject) -> Path:
+    """Write the generated host package under ``.qgis-sdk/dev/host``; return that dir.
+
+    Imports the plugin class once, in this interpreter, to read its title
+    and providers for ``metadata.txt`` - the same facts ``build`` renders,
+    so the two files are byte-identical.
+    """
+    try:
+        facts = introspect_plugin(project.config)
+    except QgisSdkArtifactError as error:
+        raise QgisSdkDevError(str(error)) from error
+    return write_dev_host(project.config, facts, state=project.root / STATE_DIRECTORY)
 
 
 def plan_web_server(project: DevProject, port: int) -> WebServerPlan | None:
@@ -188,9 +205,11 @@ def plan_dev(
     if mode not in MODES:
         raise QgisSdkDevError(f"unknown mode {mode!r}; choose desktop or standalone")
     workspace = Path(workspace)
+    host_root = stage_host(project)
     request = {
         "root": str(project.root),
         "plugin": project.plugin,
+        "host": str(host_root),
         "mode": mode,
         "web": project.has_web,
         "dev_server": dev_server,
@@ -209,7 +228,7 @@ def plan_dev(
         probe = workspace / STANDALONE_PROBE_NAME
         probe.write_text(STANDALONE_PROBE, encoding="utf-8", newline="\n")
         process_env = install.environment(
-            env, extra_paths=(project.root, *sdk_import_paths()), headless=headless
+            env, extra_paths=(host_root, *sdk_import_paths()), headless=headless
         )
         process_env[REQUEST_ENV] = str(request_path)
         if dev_server is not None:
@@ -223,7 +242,8 @@ def plan_dev(
                 (
                     f"standalone: QgsApplication from {install.prefix} "
                     f"({install.source}); no iface, no plugin lifecycle, no reload - "
-                    f"{project.plugin} runs through classFactory(None){served}"
+                    f"{project.plugin} runs through the generated "
+                    f"{host_root / project.plugin} classFactory(None){served}"
                 ),
             ),
             profile=None,
@@ -241,13 +261,13 @@ def plan_dev(
     profile = state / "profiles" / PROFILE_NAME
     process_env = install.environment(
         env,
-        extra_paths=(project.root, *sdk_import_paths()),
+        extra_paths=(host_root, *sdk_import_paths()),
         headless=headless,
         desktop=True,
     )
     process_env[REQUEST_ENV] = str(request_path)
     process_env["QGIS_PLUGINPATH"] = _prepend_path(
-        str(project.root), env.get("QGIS_PLUGINPATH")
+        str(host_root), env.get("QGIS_PLUGINPATH")
     )
     if dev_server is not None:
         process_env[DEV_SERVER_ENV] = dev_server
@@ -267,12 +287,13 @@ def plan_dev(
         notes=(
             (
                 f"desktop: {install.executable} ({install.source}), profile "
-                f"{profile}, {project.plugin} from {project.root} "
-                f"via QGIS_PLUGINPATH{served}"
+                f"{profile}, {project.plugin} from {project.root} through the "
+                f"generated {host_root / project.plugin} on QGIS_PLUGINPATH{served}"
             ),
             (
-                "reload: on save of Python/metadata changes, the Reload button, "
-                "or Ctrl+Shift+R in QGIS; quit QGIS to stop"
+                "reload: on save of Python changes, the Reload button, "
+                "or Ctrl+Shift+R in QGIS; quit QGIS to stop "
+                "(a pyproject.toml change needs a new `qgis-sdk dev`)"
                 if watch
                 else "reload: the Reload button or Ctrl+Shift+R in QGIS; quit QGIS to stop"
             ),
@@ -363,6 +384,7 @@ from pathlib import Path
 
 request = json.loads(Path(os.environ["QGIS_SDK_DEV_REQUEST"]).read_text(encoding="utf-8"))
 root = Path(request["root"])
+host = Path(request["host"])  # the generated package: metadata.txt + classFactory
 plugin = request["plugin"]
 
 
@@ -386,7 +408,7 @@ if prefix:
     QgsApplication.setPrefixPath(prefix, True)
 app = QgsApplication([b"qgis-sdk-dev"], True)
 app.initQgis()
-sys.path.insert(0, str(root))
+sys.path.insert(0, str(host))
 module = importlib.import_module(plugin)
 held = module.classFactory(None)
 held.initGui()
@@ -396,9 +418,8 @@ say(
     "run `qgis-sdk dev` again"
 )
 window = None
-if hasattr(held, "show_view"):
-    held.show_view()
-    window = held._view
+if getattr(held, "placement", None) is not None:
+    window = held.show_view()
 else:
     window = QMainWindow()
     window.setWindowTitle(f"{plugin} (qgis-sdk dev, standalone)")

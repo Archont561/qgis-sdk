@@ -2,44 +2,29 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
+
+from qgis_sdk_tools.check.versions import installed_runtime_version
 
 from .options import QgisSdkScaffoldError, ScaffoldOptions
 from .web import install_command, plan_web, script_command
 
 LF: Final = "\n"
 
-ENTRY_POINT = '''"""QGIS imports ``classFactory(iface)`` from this module."""
-
-from .plugin import classFactory
-
-__all__ = ["classFactory"]
-'''
+#: ``<plugin>/__init__.py`` is empty on purpose (decision-43): QGIS's entry,
+#: ``classFactory``, is bound by ``qgis-sdk build`` and ``qgis-sdk dev``.
+ENTRY_POINT = ""
 
 PLUGIN_MODULE = '''"""{title}: a minimal qgis-sdk plugin."""
 
 from __future__ import annotations
 
 from qgis_sdk import action, plugin
-from qgis_sdk.adapters.desktop import create_class_factory
-from qgis_sdk.core import PluginContext, ResourceScope
-{web_import}
-
-class MessageBarNotifications:
-    """Send informational messages to the host message bar, if there is one."""
-
-    def __init__(self, iface: object | None) -> None:
-        self._iface = iface
-
-    def info(self, message: str) -> None:
-        # ``QgisInterface.messageBar`` is a method, and the bar exists only when a
-        # host supplied an interface, so a plain attribute lookup would crash here.
-        if self._iface is None:
-            return
-        self._iface.messageBar().pushInfo("{title}", message)
+from qgis_sdk.core import PluginContext
 
 
 @plugin(id="{plugin}", title="{title}")
@@ -57,95 +42,26 @@ class {class_name}Plugin:
     def project_layers(self) -> list[str]:
         """The same project service a web view reaches as ``host.project``."""
         return list(self.ctx.project.layer_ids())
+'''
 
+STARTER_TEST = '''"""Smoke tests for {title}. They need no QGIS install and no display.
 
-def build_context(iface: object | None) -> PluginContext:
-    """Give the plugin exactly the capabilities this host can offer.
-
-    Inside a running QGIS every curated service is wired from PyQGIS; in a bare
-    interpreter (these tests) the context carries notifications and a scope,
-    and ``require_<service>()`` refuses by name instead of failing obscurely.
-    """
-    scope = ResourceScope()
-    notifications = MessageBarNotifications(iface)
-    if _qgis_is_running():
-        from qgis_sdk.adapters.qgis import native_plugin_context
-
-        return native_plugin_context(
-            scope, settings_prefix="{plugin}", iface=iface, notifications=notifications
-        )
-    return PluginContext(notifications=notifications, scope=scope)
-
-
-def _qgis_is_running() -> bool:
-    try:
-        from qgis.core import QgsApplication
-    except ImportError:
-        return False
-    return QgsApplication.instance() is not None
-
-
-{class_factory}'''
-
-PLAIN_CLASS_FACTORY = """classFactory = create_class_factory({class_name}Plugin, context_factory=build_context)
+``host()`` is what `qgis-sdk build` and `qgis-sdk dev` bind as ``classFactory``;
+outside QGIS it gives the plugin a bare context, so these tests run the real
+lifecycle against the SDK's own refusals.
 """
-
-# With a web UI, QGIS holds a small wrapper: the SDK lifecycle as before plus
-# one toolbar button that opens the page. ``webview`` imports Qt inside its
-# functions, so this module still loads without QGIS.
-WEB_CLASS_FACTORY = """_lifecycle = create_class_factory({class_name}Plugin, context_factory=build_context)
-
-
-class {class_name}Desktop:
-    \"\"\"What QGIS holds: the SDK lifecycle plus one toolbar button for the page.\"\"\"
-
-    def __init__(self, iface: object | None) -> None:
-        self._iface = iface
-        self._plugin = _lifecycle(iface)
-        self._action: object | None = None
-        self._view: object | None = None
-
-    @property
-    def runtime(self) -> object:
-        \"\"\"The SDK runtime: the tests read it, the view's dispatcher is built from it.\"\"\"
-        return self._plugin.runtime
-
-    def initGui(self) -> None:
-        self._plugin.initGui()
-        self._action = webview.add_toolbar_action(self._iface, "{title}", self.show_view)
-
-    def show_view(self) -> None:
-        \"\"\"Open the page on first use; bring it to the front after that.\"\"\"
-        if self._view is None:
-            self._view = webview.open_view(
-                self.runtime, self._iface, placement="{placement}"
-            )
-        self._view.show()
-        self._view.raise_()
-
-    def unload(self) -> None:
-        if self._view is not None:
-            webview.close_view(self._view, self._iface)
-            self._view = None
-        webview.remove_toolbar_action(self._iface, self._action)
-        self._action = None
-        self._plugin.unload()
-
-
-def classFactory(iface: object | None) -> {class_name}Desktop:
-    \"\"\"QGIS calls this with its interface; the starter tests call it with ``None``.\"\"\"
-    return {class_name}Desktop(iface)
-"""
-
-STARTER_TEST = '''"""Smoke tests for {title}. They need no QGIS install and no display."""
 
 import pytest
-import {plugin}
 from qgis_sdk import describe_plugin
+from qgis_sdk.adapters.desktop import host
+
+from {plugin}.plugin import {class_name}Plugin
+
+classFactory = host("{plugin}.plugin:{class_name}Plugin"{host_arguments})
 
 
-def test_class_factory_starts_and_unloads_without_a_host() -> None:
-    plugin = {plugin}.classFactory(None)
+def test_the_plugin_starts_and_unloads_without_a_host() -> None:
+    plugin = classFactory(None)
     plugin.initGui()
     try:
         assert plugin.runtime.state.value == "running"
@@ -156,7 +72,7 @@ def test_class_factory_starts_and_unloads_without_a_host() -> None:
 
 
 def test_declared_actions_are_the_plugins_public_surface() -> None:
-    description = describe_plugin({plugin}.plugin.{class_name}Plugin)
+    description = describe_plugin({class_name}Plugin)
 
     assert [action.id for action in description.actions] == ["ping", "project_layers"]
 
@@ -164,7 +80,7 @@ def test_declared_actions_are_the_plugins_public_surface() -> None:
 def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
     from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 
-    plugin = {plugin}.classFactory(None)
+    plugin = classFactory(None)
     plugin.initGui()
     try:
         with pytest.raises(QgisSdkUnsupportedCapabilityError):
@@ -173,8 +89,37 @@ def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
         plugin.unload()
 '''
 
-PYPROJECT = """# Generated by `qgis-sdk new`. A plugin project needs no build step: QGIS
-# imports the plugin package straight from a profile directory.
+PYPROJECT = """# Generated by `qgis-sdk new`. The project is the plugin: `qgis-sdk dev` runs
+# this directory inside QGIS and `qgis-sdk build` turns it into the ZIP. QGIS's
+# metadata.txt and classFactory are derived from this file (decision-43).
+[project]
+name = "{name}"
+version = "{version}"
+description = "{description}"
+authors = [{{ name = "{author}", email = "{email}" }}]
+requires-python = ">=3.11"
+# The runtime the plugin is written for; `build` vendors the installed one and
+# `check` reports a mismatch (VERSION004). `qgis-sdk` itself never installs.
+dependencies = ["{runtime_requirement}"]
+
+[dependency-groups]
+dev = ["{tools_requirement}"]
+
+[tool.qgis-sdk]
+# The class QGIS runs; `build` and `dev` bind classFactory to it through
+# qgis_sdk.adapters.desktop.host().
+plugin = "{plugin}.plugin:{class_name}Plugin"
+qgis-minimum-version = "{qgis_minimum_version}"
+experimental = true
+# Where QGIS is, when `qgis-sdk test` and `qgis-sdk dev` should not discover it
+# (they otherwise try QGIS_PREFIX_PATH, `qgis` on PATH, then this environment).
+# qgis-prefix = "/path/to/qgis"
+
+# Extra metadata.txt keys, passed through as written:
+# [tool.qgis-sdk.metadata]
+# homepage = "https://example.org/{name}"
+# tags = "vector"
+{web_table}
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
@@ -182,16 +127,20 @@ testpaths = ["tests"]
 # `qgis_iface` fixtures, and the guard `qgis-sdk test` relies on. Plain `pytest`
 # keeps working; `qgis-sdk test --target qgis|desktop` runs the native layers.
 addopts = "-p qgis_sdk_tools.pytest_plugin"
+"""
 
-[tool.qgis-sdk]
-# Where QGIS is, when `qgis-sdk test` and `qgis-sdk dev` should not discover it
-# (they otherwise try QGIS_PREFIX_PATH, `qgis` on PATH, then this environment).
-# qgis-prefix = "/path/to/qgis"
+WEB_TABLE = """
+[tool.qgis-sdk.web]
+# The page in web/: shown as a {placement}; `grants` lists the host grants
+# (`layers.read`) or operation ids (`project.layer_ids`) the page may use;
+# `qgis-sdk bridge generate --host` renders the catalogue.
+placement = "{placement}"
+grants = []
 """
 
 GITIGNORE = """__pycache__/
 .pytest_cache/
-# `qgis-sdk dev` keeps its isolated QGIS profile here.
+# `qgis-sdk dev` keeps its isolated QGIS profile and the generated host package here.
 .qgis-sdk/
 # `qgis-sdk build` writes the installable ZIP here.
 dist/
@@ -215,11 +164,10 @@ def plan_scaffold(options: ScaffoldOptions) -> tuple[GeneratedFile, ...]:
     values = [
         GeneratedFile(".gitignore", GITIGNORE),
         GeneratedFile("README.md", _readme(options)),
-        GeneratedFile("pyproject.toml", PYPROJECT),
-        GeneratedFile(f"{options.plugin}/metadata.txt", _metadata(options)),
+        GeneratedFile("pyproject.toml", _pyproject(options)),
         GeneratedFile(f"{options.plugin}/__init__.py", ENTRY_POINT),
         GeneratedFile(f"{options.plugin}/plugin.py", _plugin_module(options)),
-        GeneratedFile("tests/test_plugin_smoke.py", _starter_test(options)),
+        GeneratedFile("tests/test_plugin.py", _starter_test(options)),
         *(GeneratedFile(path, content) for path, content in plan_web(options)),
     ]
     return tuple(sorted(values, key=lambda file: file.path))
@@ -242,40 +190,47 @@ def write_scaffold(
     return paths
 
 
-def _metadata(options: ScaffoldOptions) -> str:
-    fields = (
-        ("name", options.title),
-        ("description", f"{options.title}: a minimal qgis-sdk plugin."),
-        ("about", f"{options.title} was generated by `qgis-sdk new`."),
-        ("version", options.version),
-        ("qgisMinimumVersion", options.qgis_minimum_version),
-        ("author", options.author),
-        ("email", options.email),
-        ("experimental", "True"),
-        ("hasProcessingProvider", "No"),
+def _pyproject(options: ScaffoldOptions) -> str:
+    runtime, tools = sdk_requirements()
+    web_table = (
+        "" if options.web is None else WEB_TABLE.format(placement=options.web.placement)
     )
-    lines = ["[general]", *(f"{key}={value}" for key, value in fields)]
-    return LF.join(lines) + LF
+    return PYPROJECT.format(
+        name=options.plugin.replace("_", "-"),
+        version=options.version,
+        description=f"{options.title}: a minimal qgis-sdk plugin.",
+        author=options.author,
+        email=options.email,
+        runtime_requirement=runtime,
+        tools_requirement=tools,
+        plugin=options.plugin,
+        class_name=_class_name(options.plugin),
+        qgis_minimum_version=options.qgis_minimum_version,
+        web_table=web_table,
+    )
+
+
+def sdk_requirements() -> tuple[str, str]:
+    """``qgis-sdk-runtime>=X.Y,<X.Y+1`` and the same for the tools, from this install.
+
+    ``X.Y`` is the installed runtime's minor (the checkout's manifest when
+    the tools run from source); the tools follow at the same number, which
+    is how the kit releases them.
+    """
+    version = installed_runtime_version() or "0.0"
+    digits = re.match(r"(\d+)(?:\.(\d+))?", version)
+    major, minor = (
+        (int(digits.group(1)), int(digits.group(2) or 0)) if digits else (0, 0)
+    )
+    window = f">={major}.{minor},<{major}.{minor + 1}"
+    return f"qgis-sdk-runtime{window}", f"qgis-sdk-tools{window}"
 
 
 def _plugin_module(options: ScaffoldOptions) -> str:
-    class_name = _class_name(options.plugin)
-    if options.web is None:
-        web_import = ""
-        class_factory = PLAIN_CLASS_FACTORY.format(class_name=class_name)
-    else:
-        web_import = "from . import webview\n"
-        class_factory = WEB_CLASS_FACTORY.format(
-            class_name=class_name,
-            title=options.title,
-            placement=options.web.placement,
-        )
     return PLUGIN_MODULE.format(
         title=options.title,
         plugin=options.plugin,
-        class_name=class_name,
-        web_import=web_import,
-        class_factory=class_factory,
+        class_name=_class_name(options.plugin),
     )
 
 
@@ -284,6 +239,9 @@ def _starter_test(options: ScaffoldOptions) -> str:
         title=options.title,
         plugin=options.plugin,
         class_name=_class_name(options.plugin),
+        host_arguments=(
+            "" if options.web is None else f', placement="{options.web.placement}"'
+        ),
     )
 
 
@@ -293,17 +251,16 @@ def _class_name(plugin: str) -> str:
 
 def _readme(options: ScaffoldOptions) -> str:
     plugin = options.plugin
+    class_name = _class_name(plugin)
     return f"""# {options.title}
 
 A minimal [qgis-sdk](https://pypi.org/project/qgis-sdk/) plugin generated by
-`qgis-sdk new`. {plugin}/plugin.py holds the whole design: one `@plugin`
-class, one `@action`, and `classFactory` built by the SDK's Desktop adapter.
-Nothing is hidden behind generated boilerplate, and no Qt or QGIS import appears
-in the file that declares the plugin.
-
-{plugin}/metadata.txt carries the fields QGIS requires (`name`, `description`,
-`version`, `qgisMinimumVersion`). Replace the generated author and email before
-publishing anywhere.
+`qgis-sdk new`. `{plugin}/plugin.py` holds the whole design: one `@plugin`
+class with two `@action`s, and nothing else - no Qt or QGIS import, no
+`classFactory`, no `metadata.txt`. `pyproject.toml` names the class
+(`[tool.qgis-sdk] plugin`) and the few facts QGIS needs; `qgis-sdk build` and
+`qgis-sdk dev` derive the QGIS entry from them. Replace the generated author
+and email in `[project]` before publishing anywhere.
 
 ## Desktop mode
 
@@ -316,40 +273,45 @@ qgis-sdk dev
 
 finds QGIS (`--qgis-prefix`, `[tool.qgis-sdk] qgis-prefix` in pyproject.toml,
 `QGIS_PREFIX_PATH`, `qgis` on PATH, or the current environment), starts QGIS
-Desktop with its own profile in `.qgis-sdk/profiles/dev`, and puts this
-directory on `QGIS_PLUGINPATH` so QGIS loads `{plugin}/` from source. QGIS
-imports `{plugin}.classFactory`, calls it with its interface, then calls
-`initGui()`; saving a Python or metadata file (or the Reload button,
-Ctrl+Shift+R) unloads and starts the current source again. A syntax error
-refuses the reload and keeps the running revision; work that cannot stop
-within two seconds refuses it too and is named; if unloading or starting fails
-the plugin stays disabled and the message says so - restart `qgis-sdk dev`.
-`--no-watch` leaves reloads to the button. Quit QGIS to stop.
+Desktop with its own profile in `.qgis-sdk/profiles/dev`, writes a small host
+package to `.qgis-sdk/dev/host/{plugin}/` (`metadata.txt` plus a
+`classFactory` bound through `qgis_sdk.adapters.desktop.host()`) and puts that
+directory on `QGIS_PLUGINPATH`, so QGIS loads `{plugin}/` from source, in
+place. Saving a Python file (or the Reload button, Ctrl+Shift+R) unloads and
+starts the current source again; a `pyproject.toml` change needs a new
+`qgis-sdk dev`. A syntax error refuses the reload and keeps the running
+revision; work that cannot stop within two seconds refuses it too and is named;
+if unloading or starting fails the plugin stays disabled and the message says
+so - restart `qgis-sdk dev`. `--no-watch` leaves reloads to the button. Quit
+QGIS to stop.
 
 To install into a real profile instead, `qgis-sdk build` writes
-`dist/{plugin}-<version>.zip` with the SDK runtime vendored inside, and
-Plugins > Manage and Install Plugins > Install from ZIP installs it in any
-supported QGIS without qgis-sdk.
+`dist/{plugin}-<version>.zip` with `metadata.txt`, the `classFactory` line and
+the SDK runtime inside, and Plugins > Manage and Install Plugins > Install from
+ZIP installs it in any supported QGIS without qgis-sdk.
 
 ## Standalone Qt mode
 
 Use this when the code runs without QGIS, for example in a plain Qt application
-or in the starter tests. Build the context yourself and pass no interface:
+or in the starter tests. `host()` gives the plugin exactly what the process can
+offer:
 
 ```python
-from {plugin}.plugin import build_context
+from qgis_sdk.adapters.desktop import host
 
-context = build_context(None)
+plugin = host("{plugin}.plugin:{class_name}Plugin")(None)
+plugin.initGui()
 ```
 
-`context.has("desktop")` is then `False`, so reading `context.desktop` raises
-`QgisSdkUnsupportedCapabilityError` with `code="unsupported_capability"` instead
-of inventing a host: standalone mode provides no `iface`, no message bar and no
-plugin lifecycle. Informational messages are dropped, because the notifications
-service has no bar to write to. `qgis-sdk dev --mode standalone` runs exactly
-this in a bare `QgsApplication`: no Desktop, no reload, close the window to
-stop. Run Qt without a display by setting `QT_QPA_PLATFORM=offscreen`, which is
-what the workspace smokes do.
+Without a `QgsApplication` the context has no `desktop`, so reading
+`ctx.desktop` raises `QgisSdkUnsupportedCapabilityError` with
+`code="unsupported_capability"` instead of inventing a host: standalone mode
+provides no `iface`, no message bar and no plugin lifecycle. Informational
+messages are dropped, because the notifications service has no bar to write
+to. `qgis-sdk dev --mode standalone` runs the same entry in a bare
+`QgsApplication`: no Desktop, no reload, close the window to stop. Run Qt
+without a display by setting `QT_QPA_PLATFORM=offscreen`, which is what the
+workspace smokes do.
 
 ## Tests
 
@@ -395,12 +357,13 @@ cd web
 `qgis-sdk dev` starts the Vite dev server on loopback and the page is served
 from it inside QGIS, with hot module replacement (`qgis-sdk test --target web`
 runs the Vitest suite). Without the command, build before enabling the plugin:
-`{plugin}/webview.py` loads `{plugin}/web/index.html` from disk and shows a
-hint until it exists. The page is confined to that directory by
-`BrowserPolicy(asset_roots=...)` and reaches no remote origin until you grant
-one there; a build never references the dev server. Dependencies are pinned to the
-versions this SDK release was qualified with; the Chromium target in
-`web/vite.config.ts` follows the oldest QGIS you support.
+the SDK's page view loads `{plugin}/web/index.html` from disk and shows a hint
+until it exists. The page is confined to that directory and reaches no remote
+origin; `[tool.qgis-sdk.web]` in pyproject.toml chooses the placement and
+lists the curated host operations (`grants`) the page may call - none until
+you name them. A build never references the dev server. Dependencies are
+pinned to the versions this SDK release was qualified with; the Chromium
+target in `web/vite.config.ts` follows the oldest QGIS you support.
 """
 
 

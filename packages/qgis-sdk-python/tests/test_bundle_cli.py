@@ -65,7 +65,9 @@ def test_build_json_is_the_result_serialization(tmp_path: Path) -> None:
 
 def test_build_prints_the_findings_and_fails_with_1(tmp_path: Path) -> None:
     target = scaffolded(tmp_path)
-    (target / "survey_helper" / "__init__.py").write_text("", encoding="utf-8")
+    (target / "survey_helper" / "__init__.py").write_text(
+        "def classFactory(iface):\n    return None\n", encoding="utf-8"
+    )
     (target / "survey_helper" / "extra.py").write_text("import requests\n")
     runtime = FakeCliRuntime(cwd=tmp_path)
 
@@ -74,7 +76,7 @@ def test_build_prints_the_findings_and_fails_with_1(tmp_path: Path) -> None:
     assert result.exit_code == 1
     lines = runtime.stdout.splitlines()
     assert any(
-        line.startswith("survey_helper/__init__.py: ENTRY001 ") for line in lines
+        line.startswith("survey_helper/__init__.py:1:1: ENTRY002 ") for line in lines
     )
     assert any(line.startswith("survey_helper/extra.py:1:1: DEP001 ") for line in lines)
     assert "build refused: 2 errors" in runtime.stderr
@@ -122,4 +124,5 @@ def test_build_outside_a_project_is_exit_2(tmp_path: Path) -> None:
     result = runner.invoke(app, ["build"], obj=runtime)
 
     assert result.exit_code == 2
-    assert "no plugin package" in runtime.stderr
+    assert "PROJECT002" in runtime.stderr
+    assert "[tool.qgis-sdk]" in runtime.stderr

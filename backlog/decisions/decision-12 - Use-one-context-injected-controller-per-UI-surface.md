@@ -54,3 +54,21 @@ restates.
 surface classes under a `QgsApplication`, with the Decision section read as
 narrowed to the context seam and the surface lifecycle. The "decorated
 controller class" wording is superseded and should not be implemented.
+
+## Status review (2026-10-26, TASK-64): the runtime owns its first surface, stays `proposed`
+
+TASK-64 implemented decision-43: the page a project declares under
+`[tool.qgis-sdk.web]` is opened by the runtime (`qgis_sdk.adapters.desktop.host()`
+over `qgis_sdk.adapters.webview.open_view`) as a `QDockWidget` or `QDialog`, with
+its `Dispatcher`, its `QWebChannel` object and the host operations its grants
+select - configured from TOML, never authored. That is the first UI surface the
+runtime owns end to end, and it already follows this decision's lifecycle rules:
+one view per runtime, `show_view()` raises the existing one, `unload()` closes
+and disposes it, the plugin's scope ends what the view started. Nothing of the
+controller API (`UiContext`-injected surface classes, `build()`, `ctx.ui.open`)
+is touched by it.
+
+**Promotion condition:** unchanged - TASK-67's `dialog=`/`dock=` surface classes
+under a `QgsApplication`. When it is promoted, the Decision section should name
+the runtime page view as the reference implementation of "the runtime constructs
+and parents the outer container and owns cleanup".

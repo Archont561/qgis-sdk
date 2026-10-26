@@ -74,17 +74,22 @@ class TestInspect:
 
         assert inspect_project(project).plugin == "field_tools"
 
-    def test_no_plugin_package_is_an_error(self, tmp_path: Path) -> None:
-        with pytest.raises(QgisSdkDevError, match="no plugin package"):
+    def test_no_project_manifest_is_an_error(self, tmp_path: Path) -> None:
+        with pytest.raises(QgisSdkDevError, match="PROJECT002"):
             inspect_project(tmp_path)
 
-    def test_two_plugin_packages_are_an_error(self, project: Path) -> None:
-        other = project / "other"
-        other.mkdir()
-        (other / "__init__.py").write_text("")
-        (other / "metadata.txt").write_text("[general]\n")
+    def test_a_manifest_naming_a_missing_package_is_an_error(
+        self, project: Path
+    ) -> None:
+        manifest = project / "pyproject.toml"
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8").replace(
+                "field_tools.plugin:FieldToolsPlugin", "other.plugin:OtherPlugin"
+            ),
+            encoding="utf-8",
+        )
 
-        with pytest.raises(QgisSdkDevError, match="field_tools, other"):
+        with pytest.raises(QgisSdkDevError, match="`other`.*has no __init__.py"):
             inspect_project(project)
 
 
@@ -157,7 +162,13 @@ class TestDesktopPlan:
             str(workspace / "dev-desktop.py"),
         )
         assert plan.profile == root / ".qgis-sdk" / "profiles" / "dev"
-        assert plan.env["QGIS_PLUGINPATH"] == os.pathsep.join((str(root), "/elsewhere"))
+        host = root / ".qgis-sdk" / "dev" / "host"
+        assert plan.env["QGIS_PLUGINPATH"] == os.pathsep.join((str(host), "/elsewhere"))
+        assert (host / "field_tools" / "metadata.txt").is_file()
+        init = (host / "field_tools" / "__init__.py").read_text(encoding="utf-8")
+        assert "classFactory = host('field_tools.plugin:FieldToolsPlugin')" in init
+        assert str((root / "field_tools").as_posix()) in init
+        assert not (root / "field_tools" / "metadata.txt").exists()
         assert plan.env["PYTHONHOME"] == str(install.prefix)
         assert plan.env["QT_QPA_PLATFORM"] == "offscreen"
         assert DEV_SERVER_ENV not in plan.env
@@ -166,6 +177,7 @@ class TestDesktopPlan:
         assert request == {
             "root": str(root),
             "plugin": "field_tools",
+            "host": str(host),
             "mode": "desktop",
             "web": False,
             "dev_server": None,
@@ -177,12 +189,12 @@ class TestDesktopPlan:
         ) == DESKTOP_PROBE
         assert "Ctrl+Shift+R" in plan.notes[1]
         assert "on save" in plan.notes[1]
-        assert "via QGIS_PLUGINPATH" in plan.notes[0]
+        assert "generated" in plan.notes[0] and "on QGIS_PLUGINPATH" in plan.notes[0]
         # The bootstrap imports qgis_sdk_tools inside QGIS's own interpreter.
         sdk_paths = [str(path) for path in sdk_import_paths()]
         assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
             str(install.bindings),
-            str(root),
+            str(host),
             *sdk_paths,
         ]
 
@@ -276,7 +288,7 @@ class TestStandalonePlan:
         sdk_paths = [str(path) for path in sdk_import_paths()]
         assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
             str(install.bindings),
-            str(project.resolve()),
+            str(project.resolve() / ".qgis-sdk" / "dev" / "host"),
             *sdk_paths,
         ]
         assert "no iface, no plugin lifecycle, no reload" in plan.notes[0]

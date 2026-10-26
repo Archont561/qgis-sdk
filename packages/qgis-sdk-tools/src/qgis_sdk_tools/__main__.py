@@ -260,7 +260,10 @@ app.command("scaffold", hidden=True, deprecated=True)(new)
 def bridge_generate(
     plugin: Annotated[
         str | None,
-        typer.Option(help="Plugin class as module:Attribute, described without QGIS."),
+        typer.Option(
+            help="Plugin class as module:Attribute, described without QGIS; "
+            "defaults to [tool.qgis-sdk] plugin in ./pyproject.toml."
+        ),
     ] = None,
     description: Annotated[
         Path | None,
@@ -333,11 +336,24 @@ def _describe(
                 "--host renders the curated host surface; give no --plugin or --description"
             )
         return host_description(), generate_host_typescript
+    if plugin is None and description is None:
+        plugin = _configured_plugin()
     if (plugin is None) == (description is None):
-        raise QgisSdkBridgeError("give exactly one of --plugin or --description")
+        raise QgisSdkBridgeError(
+            "give exactly one of --plugin or --description (or set "
+            "[tool.qgis-sdk] plugin in pyproject.toml)"
+        )
     if plugin is not None:
         return describe_plugin_spec(plugin), generate_schema_typescript
     return load_description(description), generate_schema_typescript
+
+
+def _configured_plugin() -> str | None:
+    """``[tool.qgis-sdk] plugin`` of the working directory's project, if any."""
+    from qgis_sdk_tools.project import load_project
+
+    config, _findings = load_project(Path.cwd())
+    return None if config is None else config.spec
 
 
 @app.command("check")
@@ -526,7 +542,7 @@ def dev(
         bool,
         typer.Option(
             "--no-watch",
-            help="Do not reload on saved Python/metadata changes; "
+            help="Do not reload on saved Python changes; "
             "only the Reload button (Ctrl+Shift+R) reloads.",
         ),
     ] = False,

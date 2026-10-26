@@ -70,7 +70,10 @@ def test_desktop_is_the_default_and_runs_the_binary_in_place(
     assert cwd == project
     env = runtime.environments[0]
     assert env is not None
-    assert env["QGIS_PLUGINPATH"] == str(project)
+    assert env["QGIS_PLUGINPATH"] == str(project / ".qgis-sdk" / "dev" / "host")
+    assert (
+        project / ".qgis-sdk" / "dev" / "host" / "field_tools" / "metadata.txt"
+    ).is_file()
     assert runtime.started == []
     assert "desktop:" in runtime.stderr
     assert "Ctrl+Shift+R" in runtime.stderr
@@ -205,4 +208,4 @@ def test_a_directory_without_a_plugin_is_exit_code_2(
     result = runner.invoke(app, ["dev", "--qgis-prefix", str(prefix)], obj=runtime)
 
     assert result.exit_code == 2
-    assert "no plugin package" in runtime.stderr
+    assert "PROJECT002" in runtime.stderr

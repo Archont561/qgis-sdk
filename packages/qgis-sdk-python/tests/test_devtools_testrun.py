@@ -169,7 +169,9 @@ class TestDesktop:
         assert plan.workspace == workspace
         assert plan.env[TARGET_ENV] == "desktop"
         assert plan.env["PYTHONHOME"] == str(install.prefix)  # conda prefix
-        assert plan.env["QGIS_PLUGINPATH"] == str(project)
+        assert plan.env["QGIS_PLUGINPATH"] == str(
+            project / ".qgis-sdk" / "dev" / "host"
+        )
         assert plan.env["DISPLAY"] == ":99"
         request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
         assert request == {

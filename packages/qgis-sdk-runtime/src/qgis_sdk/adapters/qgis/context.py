@@ -1,8 +1,9 @@
 """Assemble every PyQGIS-backed service into one ``PluginContext``.
 
-A generated plugin's ``build_context(iface)`` is the one place that knows it is
-running inside QGIS Desktop. This module is what it calls there, so a plugin
-gets the whole curated surface - layers, project, settings, styles, Processing,
+``qgis_sdk.adapters.desktop.host()`` is the one place that knows a plugin is
+running inside QGIS Desktop (decision-43). This module is what it calls there -
+or what a plugin's own ``context_factory`` calls - so a plugin gets the whole
+curated surface - layers, project, settings, styles, Processing,
 workers and the network client - on ``self.ctx`` with one line, and the web
 view built from the same context (``HostServices.from_context``) answers from
 the very same instances. Everything is owned by the scope passed in: closing

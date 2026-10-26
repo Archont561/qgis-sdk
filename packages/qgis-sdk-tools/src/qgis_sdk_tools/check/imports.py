@@ -105,9 +105,9 @@ def _classify(
                 f"when `{module}` loads"
             ),
             remediation=(
-                "Build native contexts inside the function that runs in QGIS "
-                "(the scaffold's `build_context`), or declare the module native "
-                "under [tool.qgis-sdk.check] native-modules."
+                "Let `host()` build the context (decision-43), import the adapter "
+                "inside the function that runs in QGIS, or declare the module "
+                "native under [tool.qgis-sdk.check] native-modules."
             ),
         )
     return None

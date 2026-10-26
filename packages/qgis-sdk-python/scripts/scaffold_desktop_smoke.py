@@ -1,9 +1,12 @@
 """Load and unload a generated plugin inside a real QGIS Desktop run (TASK-1 AC2).
 
-This is TASK-1 AC2's evidence: the generated plugin is placed in a clean profile's
-user-plugin directory and QGIS's own plugin machinery parses ``metadata.txt``
-(``qgis.utils.findPlugins``), starts the plugin (``loadPlugin`` + ``startPlugin``)
-and unloads it (``unloadPlugin``) - the same calls the Plugins dialog makes.
+This is TASK-1 AC2's evidence: the generated project is built with
+``build_plugin`` - which is what renders ``metadata.txt`` and binds
+``classFactory`` since decision-43 (TASK-64) - the ZIP is unpacked into a clean
+profile's user-plugin directory and QGIS's own plugin machinery parses
+``metadata.txt`` (``qgis.utils.findPlugins``), starts the plugin (``loadPlugin``
++ ``startPlugin``) and unloads it (``unloadPlugin``) - the same calls the
+Plugins dialog makes.
 
 The headless Desktop rules - ``QT_QPA_PLATFORM=offscreen``, a placeholder
 ``DISPLAY``, ``PYTHONHOME`` at the live prefix, and the probe/report exchange - are
@@ -32,6 +35,7 @@ import platform
 import shutil
 import sys
 import tempfile
+import zipfile
 from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import Final
@@ -229,15 +233,18 @@ def plugin_title(plugin: str) -> str:
 def _run_lifecycle(
     executable: Path, prefix: Path, workspace: Path, plugin: str, title: str
 ) -> DesktopScaffoldReport:
-    """Generate the project, install it into the profile, then drive it in Desktop."""
+    """Generate and build the project, install the ZIP, then drive it in Desktop."""
     ensure_source_root_on_path()
+    from qgis_sdk_tools.bundle import build_plugin
     from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
     project = workspace / "project"
     write_scaffold(ScaffoldOptions.resolve(plugin), project)
+    built = build_plugin(project, out=workspace / "dist", run=_never_run)
     plugins_root = profile_plugin_dir(executable, prefix, workspace)
     plugins_root.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(project / plugin, plugins_root / plugin)
+    with zipfile.ZipFile(built.archive) as archive:
+        archive.extractall(plugins_root)
 
     write_workspace_file(
         workspace, REQUEST_FILE, request_document(plugins_root, plugin, title)
@@ -251,6 +258,10 @@ def _run_lifecycle(
             plugin, f"the Desktop probe wrote no {REPORT_FILE}"
         )
     return DesktopScaffoldReport.from_payload(payload)
+
+
+def _never_run(argv: object, cwd: object) -> int:
+    raise AssertionError(f"the scaffold has no web build to run: {argv} in {cwd}")
 
 
 def run_smoke(

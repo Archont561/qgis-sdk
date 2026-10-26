@@ -24,6 +24,7 @@ from typing import Any
 
 import layers
 import pytest
+from qgis_sdk.adapters.desktop import host
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command, script_command
 
@@ -134,11 +135,11 @@ def test_the_built_page_answers_a_ping_inside_qgis(
     )
     monkeypatch.syspath_prepend(str(root))
     _forget(plugin)  # the other manager's project used the same package name
-    module = importlib.import_module(plugin)
+    class_name = "".join(part.capitalize() for part in plugin.split("_")) + "Plugin"
 
-    desktop = module.classFactory(None)
+    desktop = host(f"{plugin}.plugin:{class_name}", placement=placement)(None)
     desktop.initGui()
-    widget = module.webview.open_view(desktop.runtime, None, placement=placement)
+    widget = desktop.show_view()
     try:
         view = (
             widget.widget()
@@ -169,11 +170,11 @@ def test_the_built_page_answers_a_ping_inside_qgis(
             ),
         )
     finally:
-        module.webview.close_view(widget, None)
         desktop.unload()
         qgis_app.processEvents()
         _forget(plugin)
     assert desktop.runtime.state.value == "stopped"
+    assert desktop.view is None
 
 
 def _forget(package: str) -> None:

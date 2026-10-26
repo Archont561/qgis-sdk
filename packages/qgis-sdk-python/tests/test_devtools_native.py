@@ -23,7 +23,6 @@ What it proves, each through the command line a user would type:
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import shutil
@@ -37,6 +36,7 @@ from typing import Any
 
 import layers
 import pytest
+from qgis_sdk.adapters.desktop import host
 from qgis_sdk_tools.devtools.dev import DEV_SERVER_ENV
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command
@@ -62,12 +62,14 @@ except ImportError:  # pragma: no cover - depends on the host
 DEADLINE = 30.0
 
 NATIVE_TESTS = """import pytest
-import field_tools
+from qgis_sdk.adapters.desktop import host
+
+classFactory = host("field_tools.plugin:FieldToolsPlugin")
 
 
 @pytest.mark.qgis
 def test_project_layers_under_a_real_qgis(qgis_app):
-    plugin = field_tools.classFactory(None)
+    plugin = classFactory(None)
     plugin.initGui()
     try:
         assert plugin.runtime.actions["project_layers"]() == []
@@ -133,7 +135,9 @@ class TestTestCommand:
         assert result.returncode == 0, result.stdout + result.stderr
         assert "1 passed, 4 deselected" in result.stdout
         assert "target desktop:" in result.stderr
-        assert not list(Path(project).glob(".qgis-sdk"))  # test profiles are temporary
+        # Test profiles are temporary; only the generated host package stays.
+        assert [p.name for p in (Path(project) / ".qgis-sdk").iterdir()] == ["dev"]
+        assert (Path(project) / ".qgis-sdk" / "dev" / "host" / "field_tools").is_dir()
 
     def test_a_failing_desktop_test_fails_the_command(self, project: Path) -> None:
         failing = project / "tests" / "test_failing.py"
@@ -239,13 +243,22 @@ def _bun() -> str | None:
 
 
 @pytest.fixture(scope="module")
-def web_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def web_project(
+    tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str
+) -> Path:
+    """A vanilla web project on the workspace bridge (decision-41)."""
     bun = _bun()
     if bun is None:
         pytest.skip("bun is not available for the web half")
     root = tmp_path_factory.mktemp("devtools-web") / "web_tools"
     write_scaffold(
-        ScaffoldOptions.resolve("web_tools", web="vanilla", package_manager="bun"), root
+        ScaffoldOptions.resolve(
+            "web_tools",
+            web="vanilla",
+            package_manager="bun",
+            sdk_dependency=workspace_bridge,
+        ),
+        root,
     )
     install = subprocess.run(
         [bun, *install_command("bun")[1:]],
@@ -327,10 +340,9 @@ def test_the_page_served_by_vite_updates_in_place_and_keeps_its_bridge(
 ) -> None:
     monkeypatch.setenv(DEV_SERVER_ENV, vite)
     monkeypatch.syspath_prepend(str(web_project))
-    module = importlib.import_module("web_tools")
-    desktop = module.classFactory(None)
+    desktop = host("web_tools.plugin:WebToolsPlugin", placement="dialog")(None)
     desktop.initGui()
-    widget = module.webview.open_view(desktop.runtime, None, placement="dialog")
+    widget = desktop.show_view()
     app_ts = web_project / "web" / "src" / "app.ts"
     original = app_ts.read_text(encoding="utf-8")
     try:
@@ -381,8 +393,8 @@ def test_the_page_served_by_vite_updates_in_place_and_keeps_its_bridge(
         )
     finally:
         app_ts.write_text(original, encoding="utf-8")
-        module.webview.close_view(widget, None)
         desktop.unload()
+        assert desktop.view is None
         qgis_app.processEvents()
         for name in [n for n in sys.modules if n.split(".")[0] == "web_tools"]:
             del sys.modules[name]
