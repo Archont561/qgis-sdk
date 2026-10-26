@@ -4,7 +4,7 @@ title: Prepare and qualify 0.7.0 release
 status: To Do
 assignee: []
 created_date: 2026-10-16 12:02
-updated_date: '2026-10-26T09:30:00Z'
+updated_date: '2026-10-26T09:49:00Z'
 labels: []
 milestone: m-6
 dependencies:
@@ -13,6 +13,7 @@ dependencies:
   - TASK-69
   - TASK-70
   - TASK-73
+  - TASK-77
   - TASK-43
 references:
   - doc-8
@@ -54,7 +55,7 @@ Rewritten on 2026-10-26: this task kept its id and the 0.7.0 number but changed 
 author: qgis-sdk agent
 created: 2026-10-24 19:10
 ---
-AC #5 was added on 2026-10-24 to carry the bridge obligation the then-m-6, now [m-7](../milestones/m-7%20-%200.8.0-%E2%80%94-deferred-native-compute-feasibility-%28tenta.md) already states: a native backend changes what runs behind Python, not what crosses `QWebChannel`, so this milestone expects no bridge release at all - and the milestone requires that expectation to be re-checked rather than repeated. Deferred or not, the gate has to be able to say "nothing crossed" with evidence. No criterion had been checked.
+AC #5 was added on 2026-10-24 to carry the bridge obligation the then-m-6, now [m-8](../milestones/m-8%20-%200.9.0-%E2%80%94-deferred-native-compute-feasibility-(tenta.md) already states: a native backend changes what runs behind Python, not what crosses `QWebChannel`, so this milestone expects no bridge release at all - and the milestone requires that expectation to be re-checked rather than repeated. Deferred or not, the gate has to be able to say "nothing crossed" with evidence. No criterion had been checked.
 ---
 
 created: 2026-10-21 21:56

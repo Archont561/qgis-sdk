@@ -36,7 +36,7 @@ field does, so a "task that ratified this decision" is always an *inbound*
 
 - **A milestone ID is not a version.** IDs are allocated in planning order and
   only happen to match release order today: `m-4` is 0.5.0, `m-5` is 0.6.0,
-  `m-6` is 0.7.0 and `m-7` is 0.8.0. Until 2026-10-24 the first two were inverted (`m-4` held
+  `m-6` is 0.7.0, `m-7` is 0.8.0 and `m-8` is 0.9.0. Until 2026-10-24 the first two were inverted (`m-4` held
   0.6.0 and `m-5` held 0.5.0), which read as "the fourth milestone ships the
   sixth release"; the IDs were swapped rather than the targets, and the tasks
   moved with their version. The same happened on 2026-10-25 when 0.6.0 was
@@ -46,8 +46,10 @@ field does, so a "task that ratified this decision" is always an *inbound*
   place through `milestone rename` (which re-points the tasks' `milestone:`
   fields), and the deferred research moved on to 0.8.0 as a new `m-7`, taking
   TASK-10 and a fresh gate (TASK-71) with it while TASK-32 stayed as the
-  0.7.0 gate and was rewritten. A deferred reservation never keeps a number
-  that a shipping release needs. Read the title, never infer the release from
+  0.7.0 gate and was rewritten. Later the same day agent access (decision-49)
+  took 0.8.0: `m-7` was renamed in place again and the research moved to
+  0.9.0 as `m-8` with TASK-10 and TASK-71. A deferred reservation never keeps
+  a number that a shipping release needs. Read the title, never infer the release from
   the number.
 - **The file name is the record's display name, not its identity.** Renaming a
   task's title through the CLI does not rename its file; the `id:` field is the
@@ -216,8 +218,8 @@ Some concepts have no class, and inventing a field for them is worse than a
 document:
 
 - **Sprint / iteration** — lives in a plan document (`doc-9` for v2, `doc-16`
-  for m-3, `doc-17` for m-4, `doc-18` for m-5, `doc-19` for m-6, `doc-20` for
-  the tentative m-7) and in the milestone body's `## Sprint train` section. Per-task sprint fields cost 25 edits a sprint and are not
+  for m-3, `doc-17` for m-4, `doc-18` for m-5, `doc-19` for m-6, `doc-21` for m-7,
+  `doc-20` for the tentative m-8) and in the milestone body's `## Sprint train` section. Per-task sprint fields cost 25 edits a sprint and are not
   queryable by anything this project runs.
 - **Blocker** — a task stays in its status and its blocker is named in a comment
   with a date and a reason, as the GitHub Actions outage was recorded (`doc-8`).
