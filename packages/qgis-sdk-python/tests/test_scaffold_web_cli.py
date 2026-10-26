@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -119,6 +120,37 @@ def test_flags_write_the_web_plan_without_asking_or_installing(tmp_path: Path) -
         'placement="dock"'
         in (tmp_path / "field_tools/field_tools/plugin.py").read_text()
     )
+
+
+def test_sdk_dependency_flag_reaches_the_package_json(tmp_path: Path) -> None:
+    runtime = FakeCliRuntime(cwd=tmp_path, interactive=True, input="never read\n")
+
+    result = invoke(
+        runtime,
+        "new",
+        "field_tools",
+        "--web",
+        "vanilla",
+        "--sdk-dependency",
+        "file:../../packages/qgis-sdk-typescript",
+    )
+
+    assert result.exit_code == 0, runtime.stderr + result.output
+    package = json.loads((tmp_path / "field_tools/web/package.json").read_text())
+    assert package["dependencies"]["@archont561/qgis-sdk"] == (
+        "file:../../packages/qgis-sdk-typescript"
+    )
+    assert "?" not in runtime.stdout
+
+
+def test_sdk_dependency_without_a_web_framework_is_refused(tmp_path: Path) -> None:
+    runtime = FakeCliRuntime(cwd=tmp_path)
+
+    result = invoke(runtime, "new", "field_tools", "--sdk-dependency", "0.9.0")
+
+    assert result.exit_code == 1
+    assert "needs a web framework" in runtime.stderr
+    assert not (tmp_path / "field_tools").exists()
 
 
 def test_the_target_resolves_against_the_runtimes_cwd(tmp_path: Path) -> None:
