@@ -3,10 +3,10 @@ id: TASK-108
 title: >-
   Adopt the declarative surface form across the scaffold, the web mirror and the
   snapshot tooling
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-27 10:02'
-updated_date: '2026-10-27 10:03'
+updated_date: '2026-10-27 14:11'
 labels:
   - ui
   - python

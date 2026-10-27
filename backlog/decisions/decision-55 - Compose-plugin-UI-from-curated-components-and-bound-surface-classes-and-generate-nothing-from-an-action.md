@@ -184,3 +184,30 @@ shows both forms: `BufferDialog` builds because its `Form` needs `ctx`,
 checks over declared components, `Form` with declared inputs, the web
 mirror's keyword forms, attribute names in snapshots) are
 [TASK-108](../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md).
+
+## Status review (2026-10-27, TASK-108): the declarative form adopted, stays `accepted`
+
+The follow-ups of the amendment above landed, each as the smallest rule
+that keeps the ones before it. `Form` takes inputs declared on the class
+and keys them by name the first time anything asks, so a declared surface
+can group its inputs under an action without naming them twice; the link
+from a field to its form is an object, not a closure, so the per-window
+copy reports to the per-window form. The default `build()` seeds the
+declared inputs from `initial` by name, at any depth, and refuses a key no
+declared input carries - the opener's contract is the same as
+`Form.for_action(initial=)`. A snapshot node of a declared component names
+its class attribute (`"attribute"`) next to its `name`, which is what an
+agent reads back into the source. `qgis-sdk check` reads the declarative
+form statically as `UI005` - an `@on(attribute)` over a string or a number
+or a name the class never binds, a `Custom` holding a widget built at class
+definition - and still leaves to the host what the source does not show (a
+helper call, a module-level name). The scaffold's `PingDialog` is declared
+(`Number`, `Form`, `Button`, `LogView`; no Qt in the package), and its
+README says in one sentence that a `build()` returning any QWidget is the
+escape hatch; `BufferDialog` in the example keeps `build()` because
+`Form.for_action` needs `ctx`, so the example still shows both forms. The
+web catalogue takes the Python keyword spellings for the shared names
+(`options`, `required`, `cancellable`, `text`, `of`) and doc-13 lists both
+spellings and what each side lacks. Not done, as before: no metaclass, no
+DSL, no widget-creating decorator, and `initial` is not applied to an
+author's own `build()`.
