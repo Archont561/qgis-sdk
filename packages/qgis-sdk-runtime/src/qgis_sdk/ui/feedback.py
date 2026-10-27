@@ -1,4 +1,4 @@
-"""The catalogue's feedback components (decision-55 point 3; TASK-96).
+"""The catalogue's feedback components (decision-55 point 3).
 
 ``JobProgress`` follows one :class:`~qgis_sdk.jobs.JobHandle` - its
 fraction, its outcome, a Cancel button; ``LogView`` shows the records the

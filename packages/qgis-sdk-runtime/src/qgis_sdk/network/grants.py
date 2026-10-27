@@ -1,4 +1,4 @@
-"""Per-view network grants (decision-20, TASK-20).
+"""Per-view network grants (decision-20).
 
 A view never receives the network. It receives a :class:`NetworkGrant`: the
 origins it may reach, the methods it may use, whether it may spend the host's

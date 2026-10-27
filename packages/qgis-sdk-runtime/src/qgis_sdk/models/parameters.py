@@ -5,7 +5,7 @@ box or a spin box. It is not enough to render the right *widget*: a ``str`` may
 be free text or a vector layer the user picks from the canvas, and a ``float``
 may be an arbitrary number or a distance whose unit the host should show. The
 markers ride along in ``Annotated`` metadata so the wire schema keeps describing
-the stored value while the host learns the intent (TASK-39).
+the stored value while the host learns the intent.
 
 The usual spelling is the alias (decision-42): ``layer: LayerInput``,
 ``crs: CrsInput``, ``distance: Metres``, ``source: FileInput(filters=("*.gpkg",))``,

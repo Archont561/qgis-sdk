@@ -7,8 +7,8 @@ applied by the QGIS authentication manager, and no credential ever passes
 through here. A reply is turned into a buffered ``Response`` on the thread
 that owns the reply, and the live ``QNetworkReply`` is never handed out.
 
-Three behaviours are the transport's rather than Qt's, because the TASK-5
-measurements showed Qt's defaults would break decision-4:
+Three behaviours are the transport's rather than Qt's, because the network
+limits measurements showed Qt's defaults would break decision-4:
 
 - **Redirects are followed here**, one request per hop, and ``Authorization``,
   ``Cookie`` and the auth configuration are dropped when the origin changes.

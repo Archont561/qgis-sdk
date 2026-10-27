@@ -1,9 +1,9 @@
 """Drive the reload policy end to end inside QGIS and write what happened.
 
 ``qgis-sdk dev --exercise REPORT`` is how the opt-in harness
-(``tests/test_devtools_native.py``) proves TASK-21 without a human at the
-keyboard: the steps below are the acceptance criteria in order, each
-recorded under a stable key, and QGIS quits with the report's verdict.
+(``tests/test_devtools_native.py``) proves the reload policy without a human
+at the keyboard: the steps below are the checks in order, each recorded under
+a stable key, and QGIS quits with the report's verdict.
 
 The full exercise edits the scaffold's ``ping`` action between reloads, so it
 only fits a project that declares one; with ``--ui native``'s ``ui.py`` it
@@ -147,7 +147,7 @@ def run_exercise(session: DevSession, path: Path) -> None:
                 )
                 ticker.stop()  # type: ignore[attr-defined]
 
-        # TASK-67: a surface edited between reloads is what the next opening
+        # A surface edited between reloads is what the next opening
         # builds; the bound action stays on the toolbar across revisions.
         ui_source = package / "ui.py"
         report["surface"] = None

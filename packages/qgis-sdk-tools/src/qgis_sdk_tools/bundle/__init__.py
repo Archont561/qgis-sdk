@@ -1,4 +1,4 @@
-"""``qgis-sdk build``: a validated, installable plugin ZIP (TASK-8, decision-8).
+"""``qgis-sdk build``: a validated, installable plugin ZIP (decision-8).
 
 ``build_plugin`` is the library the command calls. In order:
 

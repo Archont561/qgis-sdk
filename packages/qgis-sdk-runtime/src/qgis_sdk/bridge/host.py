@@ -26,7 +26,7 @@ Two rules are enforced by the declaration rather than by review:
   a later event-loop turn, so the GUI thread never waits on a socket.
 
 Beyond the read-only operations and ``styles.apply``, the surface carries the
-TASK-20 slice: an open through a file ref, an export through a file ref, and a
+authority operations: an open through a file ref, an export through a file ref, and a
 fetch through a network grant. Each is refused with its own code when the ref
 or grant does not cover what was asked (decision-20).
 """
@@ -546,8 +546,8 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
 #: missing from both this mapping and :data:`HOST_OPERATIONS` is a test failure.
 _NOTIFICATION_LEVELS_DEFERRED = (
     "a level on the message bar; `notifications.info` stays the one wire operation "
-    "until the bridge store slice (TASK-69) adds levelled feedback without moving "
-    "HOST_FINGERPRINT in the middle of the 0.7.0 train"
+    "until a later protocol version adds levelled feedback without moving "
+    "HOST_FINGERPRINT in the middle of a release train"
 )
 
 DEFERRED_HOST_METHODS: Mapping[str, str] = {
@@ -569,7 +569,7 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
     "Notifications.with_action": (
         "attaches a button that runs a plugin action; a page draws its own "
         "buttons over `actions.call` (decision-55), and a host-side button a page "
-        "can press needs the bridge store slice (TASK-69) to carry it"
+        "can press needs a later protocol version to carry it"
     ),
     "Algorithms.execute": (
         "the plugin-local provider surface; a page runs any algorithm, the "
@@ -636,7 +636,7 @@ class HostServices:
     ``authority`` mints the file refs ``layers.open_vector`` and
     ``files.export`` accept and holds each view's network grant; the
     application mints refs on it after a picker closes and grants network per
-    view. ``network`` is the TASK-5 transport ``network.fetch`` sends through;
+    view. ``network`` is the transport ``network.fetch`` sends through;
     without one the operation is declared but fails, never silently served.
     ``algorithms`` answers the ``algorithms.*`` operations the same way, and
     ``files`` is the plugin's own files service: a file a run produced is a

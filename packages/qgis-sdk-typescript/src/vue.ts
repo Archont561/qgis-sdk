@@ -1,5 +1,5 @@
 /**
- * Thin Vue 3 bindings over the store core (TASK-69, decision-47).
+ * Thin Vue 3 bindings over the store core (decision-47).
  *
  * This entry point is optional and is the only one that imports Vue. It adds
  * no behaviour: every composable wraps one store from `./stores` in a

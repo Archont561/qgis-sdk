@@ -7,7 +7,7 @@ submitted as ``ctx.jobs.bind(name).delay(**inputs)`` with the context injected
 by the runtime at call time. decision-21 fixed what owns the work: a view by
 default, a plugin only explicitly, with disposal detaching the view's callbacks
 at once and *requesting* cancellation rather than pretending to have it. This
-module is both, over the TASK-13 step scheduler, and it is QGIS-free: a host
+module is both, over the step scheduler, and it is QGIS-free: a host
 drives :meth:`JobService.tick` from the event loop it already has, and that is
 the only thread author callbacks ever run on.
 
@@ -460,7 +460,7 @@ class _Attempt:
         return self.job.error if self.status is JobStatus.FAILED else None
 
     def outcome(self) -> object:
-        """Return the result, or raise what stands in its place (TASK-46)."""
+        """Return the result, or raise what stands in its place."""
         status = self.status
         if status is JobStatus.SUCCEEDED:
             return self.job.result
@@ -483,7 +483,7 @@ class _Attempt:
             owner.ensure_open()
         # The job's own owner detaches everything on disposal; only a
         # different owner needs a hook of its own, held per scope so a
-        # finished job leaves nothing behind on it (TASK-47).
+        # finished job leaves nothing behind on it.
         hooked = owner if owner is not None and owner is not self.owner._scope else None
         subscription = JobSubscription(self, event, callback, hooked)
         if self._replay(subscription):
@@ -781,7 +781,7 @@ class _Runtime:
 
     Built once by the plugin's service and handed to each view-derived one, so
     a derived service is a complete object with the same attributes as its
-    parent (TASK-48) rather than a shell that reaches into the root.
+    parent rather than a shell that reaches into the root.
     """
 
     scope: ResourceScope
@@ -814,7 +814,7 @@ class _Runtime:
             attempt.abandoned()
         self.attempts.clear()
 
-    # -- explicit subscription owners (TASK-47)
+    # -- explicit subscription owners
 
     def add_owner_hook(
         self, owner: ResourceScope, subscription: JobSubscription
@@ -986,7 +986,7 @@ class JobService:
         A tick entered while another is on the stack - a job or a subscriber
         opened a modal dialog whose nested event loop fired the host timer -
         does nothing and returns ``0``; the outer tick finishes when the
-        dialog closes (TASK-44). Re-stepping a job that is mid-step would fail
+        dialog closes. Re-stepping a job that is mid-step would fail
         it, and an exception here would escape a Qt slot.
         """
         runtime = self._runtime

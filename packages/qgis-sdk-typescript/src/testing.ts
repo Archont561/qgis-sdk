@@ -1,5 +1,5 @@
 /**
- * An injected per-client harness for the bridge (TASK-18, decision-23).
+ * An injected per-client harness for the bridge (decision-23).
  *
  * The harness is a {@link WireTransport}: a page's own `BridgeClient` speaks to
  * it exactly as it would to a QWebChannel, and a test scripts what the host
@@ -10,7 +10,7 @@
  * What it proves is bounded. A green test here says the page handles the
  * frames a host *could* send; it says nothing about what a QWebEngineView or
  * a real host does. That evidence lives in the Python suite and in the
- * qualification harnesses recorded in doc-14. Keep the two apart in reports.
+ * qualification harnesses recorded in the workspace guide. Keep the two apart in reports.
  *
  * Everything the harness sends is delivered asynchronously, one message per
  * microtask, so a reply never re-enters the client inside its own `send`.
@@ -111,7 +111,7 @@ export interface HarnessOptions {
 	/**
 	 * The host operation ids the scripted handshake advertises; every curated
 	 * id by default. A narrowed list is how a test proves a page respects
-	 * `qgis.host.granted` (TASK-66 AC #5). A call outside it is still answered
+	 * `qgis.host.granted`. A call outside it is still answered
 	 * by whatever the test scripted - typically `fault("not_authorized", ...)` -
 	 * because that refusal is the host's, not the harness's.
 	 */

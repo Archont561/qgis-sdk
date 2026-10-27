@@ -1,5 +1,5 @@
 /**
- * Thin Svelte 5 bindings over the store core (TASK-69, decision-47).
+ * Thin Svelte 5 bindings over the store core (decision-47).
  *
  * This entry point is optional and is the only one that imports Svelte. The
  * stores in `./stores` already satisfy Svelte's store contract - `subscribe`

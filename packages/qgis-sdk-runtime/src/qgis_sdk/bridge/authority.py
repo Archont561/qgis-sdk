@@ -1,4 +1,4 @@
-"""Host-minted file references and per-view grants (decision-20, TASK-20).
+"""Host-minted file references and per-view grants (decision-20).
 
 The bridge never accepts a path from a page. File authority comes from the
 host: a native picker the user answered, or a plugin granting a path it owns.

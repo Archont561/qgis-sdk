@@ -1,4 +1,4 @@
-"""Behaviour mixins for surfaces (decision-55 point 2; TASK-96).
+"""Behaviour mixins for surfaces (decision-55 point 2).
 
 A mixin adds one behaviour to a ``Dialog``/``Dock`` without a widget of its
 own: ``RunsJobs`` runs the plugin's actions and cancels what is still

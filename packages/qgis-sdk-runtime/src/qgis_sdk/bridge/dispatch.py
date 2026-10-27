@@ -636,7 +636,7 @@ class Dispatcher:
         adapter did, before the first message - so it asks for the contract
         with a call instead. The reply is the one :meth:`handshake` builds,
         narrowed to the operations this view is authorized to call: what it
-        lists is exactly what ``qgis.host.granted`` may show (TASK-66 AC #5).
+        lists is exactly what ``qgis.host.granted`` may show.
         """
         if binding.generation != self._generation:
             return failure(
@@ -844,7 +844,7 @@ def _ref_inputs(request: Any) -> frozenset[str]:
 
     A page sends the ``FileRef`` the host minted as its wire object; the
     handler declared ``FileInput()`` and receives the ref, the way a toolbox
-    run and a native form hand it one (TASK-68).
+    run and a native form hand it one.
     """
     properties = request.get("properties", {}) if isinstance(request, Mapping) else {}
     names = set()

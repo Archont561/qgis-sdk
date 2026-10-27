@@ -80,7 +80,7 @@ SUPPORT_MATRIX: tuple[Target, ...] = (
         "qualified",
         "the locked Pixi environment (QGIS 4.2.3, Qt 6.11.2, Chromium 140, "
         "CPython 3.14): native suite, headless Desktop harnesses, the reference "
-        "plugin through the toolchain and the release gate (doc-14)",
+        "plugin through the toolchain and the release gate (workspace guide)",
     ),
     Target(
         "linux",
@@ -90,7 +90,7 @@ SUPPORT_MATRIX: tuple[Target, ...] = (
         None,
         None,
         "qualified",
-        "the QGIS-free suite on CPython 3.11.2, the `requires-python` floor (doc-14)",
+        "the QGIS-free suite on CPython 3.11.2, the `requires-python` floor",
     ),
     Target(
         "windows",
@@ -122,7 +122,7 @@ SUPPORT_MATRIX: tuple[Target, ...] = (
         None,
         None,
         "unqualified",
-        "no Windows QGIS 4 installation in CI or the sandbox (TASK-33 AC 1)",
+        "no Windows QGIS 4 installation in CI or the sandbox",
     ),
     Target(
         "macos",
@@ -132,7 +132,7 @@ SUPPORT_MATRIX: tuple[Target, ...] = (
         None,
         None,
         "unqualified",
-        "no macOS QGIS 4 installation in CI or the sandbox (TASK-33 AC 1)",
+        "no macOS QGIS 4 installation in CI or the sandbox",
     ),
 )
 

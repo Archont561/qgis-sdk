@@ -3,11 +3,11 @@
 A :class:`NetworkRequest` is what a transport receives: already resolved, already
 validated, with no credentials in the URL. A :class:`Response` is fully buffered,
 which is why the body ceiling is a request value and not a transport setting.
-The two limits below were set from measurement, not chosen (TASK-5):
+The two limits below were set from measurement, not chosen:
 
 - :data:`DEFAULT_MAX_BODY_BYTES` is the largest response whose hand-over from the
-  finished reply to Python stayed inside the 40 ms GUI budget doc-6 holds the
-  scheduler to: 16 MiB took 14-19 ms, 32 MiB took 40-50 ms.
+  finished reply to Python stayed inside the 40 ms GUI budget the scheduler is
+  held to: 16 MiB took 14-19 ms, 32 MiB took 40-50 ms.
 - :data:`DEFAULT_MAX_REDIRECTS` is the browser limit; the SDK transport follows
   each hop itself at about 1 ms per hop on loopback, so 20 hops stay inside the
   same budget. It follows them itself because the real manager was measured
