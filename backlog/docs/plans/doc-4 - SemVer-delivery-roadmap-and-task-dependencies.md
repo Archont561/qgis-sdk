@@ -177,6 +177,7 @@ Sprint order in [doc-21](doc-21%20-%20M7-sprint-train-and-0.8.0-dependency-order
 - [TASK-73](../../tasks/task-73%20-%20Add-qgis_sdk.console-ConsoleSession-over-the-curated-services-PluginHandle-and-PluginRuntime.algorithms.md): Add `qgis_sdk.console`: `ConsoleSession` over the curated services, `PluginHandle` and `PluginRuntime.algorithms` (decision-48)
 - [TASK-77](../../tasks/task-77%20-%20Declare-externals-with-a-startup-probe-vendor-pure-Python-packages-in-build-and-bucket-imports-in-check.md): Declare externals with a startup probe, vendor pure-Python packages in `build`, and bucket imports in `check` (decision-50)
 - [TASK-78](../../tasks/task-78%20-%20Prepare-and-qualify-0.8.0-release.md): Prepare and qualify 0.8.0 release (Python only; bridge confirmed unchanged)
+- [TASK-111](../../tasks/task-111%20-%20Split-the-eight-longest-hand-written-source-files-into-packages-behind-unchanged-barrels.md): Split the eight longest hand-written source files into packages behind unchanged barrels (housekeeping, no API or wire change)
 
 ### 0.9.0
 
