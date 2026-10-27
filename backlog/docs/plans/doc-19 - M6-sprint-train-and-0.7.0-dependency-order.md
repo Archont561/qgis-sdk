@@ -37,14 +37,14 @@ TASK-69 (sprint 2) landed in PR #104 (`c8cd119`) as three commits:
 | 69b | vanilla and React scaffold templates render the `ping` form from the declaration and a layer picker over `layers.list`; `grants = ["layers.read"]` in the scaffold and the example; scaffold-web harness green | done (`3ddd7ca`) |
 | 69c | doc-13 stores/adapters/Tier table, READMEs, backlog closure | done (`ae13694`) |
 
-TASK-96 (sprint 3) landed in three slices, one commit series in one pull request:
+TASK-96 (sprint 3) landed in PR #105 (`c92ba2b`), one commit series:
 
 | Slice | Content | Status |
 | --- | --- | --- |
 | 96a | containers `Panel`, `Group`, `Tabs`, `Row`; feedback `JobProgress`, `LogView`, `ResultTable`; buttons `RunButton`, `AcceptCancel`; `Custom(qwidget)`; a `QWidget` class taking `ctx` accepted as a surface; `ui_snapshot` under the fake; the `ctx.log` minimum (decision-63) with a recording fake and the `QgsMessageLog` adapter | done (`316a6ea`) |
 | 96b | `@on(name).changed\|clicked\|toggled\|edited` / `@on(name, signal)`, `@subscribe(stream)`, `ctx.on`, `on_accept`/`on_close`, `ui="file.ui"` loading, mixins `RunsJobs`/`SubscribesStreams`/`HasAcceptCancel`, the echo flag | done (`c053bf7`) |
-| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | done (this pull request) |
-| 96d | property tests over the rule-shaped parametrize tables (versions, release tags, derived names, origins, cursors, coercion, the schema subset against `jsonschema`); the declarative surface form (components as class attributes, `@on(component)`, per-window copies) as a decision-55 amendment, with the example's `ResultsDock` declared; follow-ups in [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md) | done (this pull request) |
+| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | done (PR #105) |
+| 96d | property tests over the rule-shaped parametrize tables (versions, release tags, derived names, origins, cursors, coercion, the schema subset against `jsonschema`); the declarative surface form (components as class attributes, `@on(component)`, per-window copies) as a decision-55 amendment, with the example's `ResultsDock` declared; follow-ups in [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md) | done (PR #105) |
 
 ## 1. Where m-6 starts from
 
