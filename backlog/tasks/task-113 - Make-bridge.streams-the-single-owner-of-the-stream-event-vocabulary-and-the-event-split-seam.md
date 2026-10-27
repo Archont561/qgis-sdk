@@ -3,10 +3,10 @@ id: TASK-113
 title: >-
   Make bridge.streams the single owner of the stream event vocabulary and the
   event-split seam
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-27 21:55'
-updated_date: '2026-10-27 22:06'
+updated_date: '2026-10-27 22:15'
 labels: []
 milestone: m-7
 dependencies: []
@@ -32,4 +32,6 @@ Audit 2026-10-27 (clean-code core-dry-single-source, core-encapsulation). The th
 
 <!-- SECTION:NOTES:BEGIN -->
 Done on the audit branch: declarations/_contract.py is the one tuple; bridge/protocol.py imports it, bridge/streams.py derives _EVENT_KINDS from StreamEventType, ui/streams.py validates emit() kinds against it (a fifth inline spelling the audit missed) and imports the now-public split_event. Three tests in test_bridge_streams.py pin enum == tuple, protocol is declarations, the ui EventKind literal prefix, and the public seam. Python suite 1971 passed / 48 skipped; generate_bridge_clients.py --check up to date; HOST_FINGERPRINT in generated/host.ts unchanged.
+
+Merged in PR #120 (merge commit c4c96f5, 2026-10-27) with CI green on c278dec.
 <!-- SECTION:NOTES:END -->

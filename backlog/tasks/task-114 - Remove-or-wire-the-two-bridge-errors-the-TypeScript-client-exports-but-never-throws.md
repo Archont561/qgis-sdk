@@ -3,10 +3,10 @@ id: TASK-114
 title: >-
   Remove or wire the two bridge errors the TypeScript client exports but never
   throws
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-27 21:55'
-updated_date: '2026-10-27 22:08'
+updated_date: '2026-10-27 22:15'
 labels: []
 milestone: m-11
 dependencies: []
@@ -32,4 +32,6 @@ Audit 2026-10-27 (clean-code core-yagni-features). packages/qgis-sdk-typescript/
 
 <!-- SECTION:NOTES:BEGIN -->
 Resolved as remove: QgisSdkBridgeSequenceError and QgisSdkBridgeStreamEndedError deleted from src/bridge/errors.ts with their bridge.ts barrel lines, the index.test.ts error-export pin and the d3aa848 constructor test; the unused BridgeStreamTerminal import went with them. The gap terminal in client.ts is untouched. Gates: biome clean, tsc clean, TS tests 310 pass with bridge/errors.ts at 100% and all files 99.62/99.33, UI tests 100 pass, root typecheck ok, Python test_bridge_generate + contract fixtures 110 pass (they read the TS sources).
+
+Merged in PR #120 (merge commit c4c96f5, 2026-10-27) with CI green on c278dec.
 <!-- SECTION:NOTES:END -->
