@@ -10,6 +10,8 @@ import {
 	QgisSdkBridgeClosedError,
 	QgisSdkBridgeProtocolError,
 	QgisSdkBridgeRemoteError,
+	QgisSdkBridgeSequenceError,
+	QgisSdkBridgeStreamEndedError,
 	QgisSdkBridgeTimeoutError,
 	type WireTransport,
 } from "@/bridge";
@@ -382,6 +384,34 @@ test("a frame that skips a sequence ends the subscription instead of delivering"
 	expect(client.sequenceBreaks).toBe(1);
 	expect(client.activeSubscriptions).toEqual([]);
 	expect(scripted.sent.some((m) => m.kind === "unsubscribe")).toBe(true);
+});
+
+test("the stream errors a page may raise carry the subscription and the frame facts", () => {
+	// The client itself reports a gap or an end as a terminal frame; these two
+	// errors are the typed form a page raises from such a terminal, so their
+	// shape - code, message and the facts a handler switches on - is pinned.
+	const gap = new QgisSdkBridgeSequenceError("s1", 1, 3);
+	expect(gap).toBeInstanceOf(Error);
+	expect(gap.code).toBe("stream_gap");
+	expect(gap.message).toBe('Subscription "s1" expected frame 1 but received 3');
+	expect([gap.subscriptionId, gap.expected, gap.received]).toEqual([
+		"s1",
+		1,
+		3,
+	]);
+
+	const described = new QgisSdkBridgeStreamEndedError("s1", {
+		kind: "error",
+		message: "the host stopped",
+	});
+	expect(described.code).toBe("error");
+	expect(described.message).toBe("the host stopped");
+	expect(described.subscriptionId).toBe("s1");
+	expect(described.terminal.kind).toBe("error");
+
+	const bare = new QgisSdkBridgeStreamEndedError("s2", { kind: "complete" });
+	expect(bare.code).toBe("complete");
+	expect(bare.message).toBe('Subscription "s2" ended: complete');
 });
 
 test("closing a subscription notifies the host once", async () => {
