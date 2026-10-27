@@ -632,12 +632,12 @@ component initialisation raise `QgisSdkBridgeSvelteError`
 
 The web half of the UI catalogue (decision-55) is a second npm package,
 `@archont561/qgis-sdk-ui` ([decision-47](../../decisions/decision-47%20-%20Build-web-UI-on-a-framework-free-store-core-with-per-framework-adapters-and-ship-components-as-qgis-sdk-ui.md)
-point 3; TASK-70). It peer-depends on this package through a caret range,
+point 3). It peer-depends on this package through a caret range,
 has `lit` as its only dependency, and ships `dist`, `README.md` and
 `LICENSE` - nothing else (a pack test keeps it so). Like this package it
 has an unscoped alias, `qgis-sdk-ui` (`packages/qgis-sdk-ui-alias`), that
 re-exports every entry and `@import`s both stylesheets at the exact same
-version; a `ui-v*` tag publishes the pair (TASK-110).
+version; a `ui-v*` tag publishes the pair.
 
 ### The elements
 
@@ -665,7 +665,7 @@ control.
 #### The keyword forms, both spellings
 
 A component reads the same in Python and in a page for the names both
-catalogues have (TASK-108 AC #4). The Python keyword is the constructor
+catalogues have. The Python keyword is the constructor
 argument of `qgis_sdk.ui`; the web spelling is the element property (the
 `.prop` binding in Lit, the prop of a wrapper), with the attribute where one
 exists. What one side has and the other does not is said so, not papered
@@ -747,8 +747,8 @@ event attribute names) and the `use:qgisProps={props}` action for a
 serves the catalogue; `bun run storybook:build` writes `storybook-static/`,
 which CI builds on every run (`pixi run -e bun storybook-build`) and the docs
 workflow publishes at
-[archont561.github.io/qgis-sdk/storybook/](https://archont561.github.io/qgis-sdk/storybook/)
-(TASK-43). The toolbar's **Theme** entry
+[archont561.github.io/qgis-sdk/storybook/](https://archont561.github.io/qgis-sdk/storybook/).
+The toolbar's **Theme** entry
 switches the QGIS light and dark palettes through the tokens, the a11y addon
 runs with `test: "error"`, and every story renders against
 `createBridgeHarness` - "Refused" and "Faulted" are states of a component,
@@ -825,18 +825,18 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
 
 ## Next minor (unreleased) migration notes
 
-**`@archont561/qgis-sdk-ui` 0.1.0 (TASK-70, decision-47 point 3).** A new
+**`@archont561/qgis-sdk-ui` 0.1.0 (decision-47 point 3).** A new
 package rather than a change to this one; see
 [Components](#components-archont561qgis-sdk-ui). This package gains nothing
 for it except being its peer. `qgis-sdk new --web` opts in through one import
 (`--ui-dependency` pins it); `release.py` knows the `ui` scope and refuses a
 UI release whose bridge peer range excludes the workspace bridge.
-TASK-108 adds the Python keyword spellings to the elements (`.options` on
+0.1.0 adds the Python keyword spellings to the elements (`.options` on
 `<qgis-choice>` with `.choices` as the alias, `required` on every input,
 `cancellable` on `<qgis-job-progress>`, `text` on `<qgis-run-button>`,
 `.of` on `<qgis-field-picker>`); nothing existing changed meaning.
 
-**Processing from a page (TASK-109, decision-64).** Four new host operations
+**Processing from a page (decision-64).** Four new host operations
 (`algorithms.providers/list/describe/run`) and two grants (`algorithms.read`,
 `algorithms.run`) move `HOST_FINGERPRINT` to `sha256:16790dc8…`;
 `HOST_SCHEMA_VERSION` and `BRIDGE_PROTOCOL_VERSION` stay at 1. `./host` also
@@ -850,7 +850,7 @@ grants `algorithms.run` and extends the `bindings` script with
 `qgis-sdk processing generate --check`; an existing project adds the file
 with that command and the grant by hand.
 
-**Stores and two more adapters (TASK-69, decision-47).** The root now exports
+**Stores and two more adapters (decision-47).** The root now exports
 the four stores; `./react` is rewritten over them with the same exported names
 and types (`react.test.ts` passes unchanged) plus `useStore`, `useForm` and
 `useHostQuery`; `./vue` and `./svelte` are new subpaths behind optional peers.
@@ -861,7 +861,7 @@ web templates render a form from the declaration and a layer picker over
 that adopts `layersQuery` adds that grant by hand or sees the store's
 `refused` state.
 
-**Parameter kinds on the wire (TASK-68, decision-46 point 1).** A declared
+**Parameter kinds on the wire (decision-46 point 1).** A declared
 input the Python side marked (`LayerInput`, `FileInput(filters=)`,
 `Range(min, max)`, ...) carries `"x-qgis-sdk": { kind, ...attributes }` in its
 request schema. `validateAgainstSchema` reads past the keyword (any other

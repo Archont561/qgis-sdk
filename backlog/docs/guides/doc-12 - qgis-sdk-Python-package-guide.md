@@ -49,7 +49,7 @@ plugin installs nothing because the ZIP carries its own copy.
 ### What the matrix says
 
 Where the kit is qualified is stated once, in `qgis_sdk_tools.targets`
-(TASK-9 AC 2), and rendered here from that source; the test
+and rendered here from that source; the test
 `test_targets.py::test_the_python_guide_renders_the_same_matrix` fails when
 the table and the module disagree, and `test_targets_native.py` fails when
 the host the native suite runs on stops being a qualified row. `qualified`
@@ -236,17 +236,17 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class (TASK-2, TASK-49) |
+| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
-| `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use (TASK-14, TASK-63) |
+| `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
-| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery (TASK-15) |
-| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists (TASK-39, TASK-63) |
-| `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
+| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery |
+| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists |
+| `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -403,8 +403,8 @@ decides whether to `unload()`.
 
 Since 0.6.0 a plugin project carries no `metadata.txt`, no `classFactory`
 and no view module
-([decision-43](../../decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md);
-TASK-64). `pyproject.toml` names the class and the tools derive what QGIS
+([decision-43](../../decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md)).
+`pyproject.toml` names the class and the tools derive what QGIS
 needs from it:
 
 ```toml
@@ -721,7 +721,7 @@ contract tests the runtime runs natively (`tests/ui_component_contract.py`)
 pass against that state. `LayerPicker.refresh()` re-reads the project under
 the fake (natively `QgsMapLayerComboBox` follows the project on its own);
 `kind="raster"` lists nothing under the fake until the all-layer-types
-service lands (TASK-77). Note the names `FileInput`, `DirectoryInput` and
+service lands. Note the names `FileInput`, `DirectoryInput` and
 `Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
 handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
 surface shows); import the one you mean, or alias.
@@ -959,8 +959,7 @@ same names on the Qt tree.
 ### `ctx.log`
 
 `ctx.log.info|warning|error(message, **fields)` is the plugin's structured
-log (decision-63; the minimal form from TASK-96, the full service in
-TASK-106): a `LogRecord(level, message, fields, plugin, time)` goes to the
+log (decision-63): a `LogRecord(level, message, fields, plugin, time)` goes to the
 QGIS message log under the plugin's tab on the Desktop (`NativeLog`) and to
 `RecordingLog.records`/`.messages` in tests; `subscribe(listener)` is how
 `LogView` follows it. `UiContext` carries `log` as well, so a surface logs
@@ -988,7 +987,7 @@ it goes to the message log with the label written after the message; under
 runs the button once `bind_actions(...)` named the dispatcher (the Desktop
 host binds it at `initGui`). The wire keeps `notifications.info` only: a page
 draws its own buttons over `actions.call`, and levelled feedback for pages
-arrives with the bridge store slice (TASK-69) so `HOST_FINGERPRINT` does not
+arrives with the bridge store slice so `HOST_FINGERPRINT` does not
 move mid-train.
 
 ### `ctx.files`
@@ -1240,7 +1239,7 @@ of `Provider` instances, or lists one id twice, is refused when the
 | `Literal["fast", "safe"]` | `str` | one of the choices | `QgsProcessingParameterEnum` | `choice` |
 | `str` / `int` / `float` / `bool` | itself | itself | string / number / number / boolean | `text` / `integer` / `number` / `boolean` |
 
-A marker on a type it does not fit (`Annotated[int, LayerParameter()]`), a `Literal` of non-strings, a `FieldInput` whose `of` is not a layer input of the same declaration, or a bare `FileRef` input without `FileInput`/`DirectoryInput` is refused at declaration with the input name. A dataclass or a list input is still refused for an algorithm (a toolbox has no widget for it); an action may declare one. `FileRef` (`qgis_sdk.models`) is the branded reference of decision-20: the toolbox mints it from the dialog's picker through the host authority for the duration of the run, a page sends the ref the host minted and the handler receives the `FileRef` object, and a wrong-kind ref (a `file` where a `directory` was declared) is refused before the handler runs. Resolving a ref to a path from plugin code arrives with the `FileInput` component of the `Form` helper (TASK-68, next slice).
+A marker on a type it does not fit (`Annotated[int, LayerParameter()]`), a `Literal` of non-strings, a `FieldInput` whose `of` is not a layer input of the same declaration, or a bare `FileRef` input without `FileInput`/`DirectoryInput` is refused at declaration with the input name. A dataclass or a list input is still refused for an algorithm (a toolbox has no widget for it); an action may declare one. `FileRef` (`qgis_sdk.models`) is the branded reference of decision-20: the toolbox mints it from the dialog's picker through the host authority for the duration of the run, a page sends the ref the host minted and the handler receives the `FileRef` object, and a wrong-kind ref (a `file` where a `directory` was declared) is refused before the handler runs. Resolving a ref to a path from plugin code arrives with the `FileInput` component of the `Form` helper.
 
 The bridge builds an `AlgorithmContext` over the dialog's feedback and calls the function through the same `invoke` an action uses, then copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
 
@@ -1510,7 +1509,7 @@ scoped: a job is a decorated plain function whose first parameter is the
 `JobContext` the runtime injects and whose remaining keyword parameters are
 typed the way an action's are, submission is `bind(fn).delay(**inputs)` and
 nothing else, and the handle you get back is typed end to end. `qgis_sdk.jobs`
-is QGIS-free; it runs on the TASK-13 step scheduler and a host drives
+is QGIS-free; it runs on the step scheduler and a host drives
 `JobService.tick()` from whatever event loop it already has.
 
 ```python
@@ -2151,7 +2150,7 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## 0.7.0 migration notes (in progress)
 
-**Parameter kinds (decision-46 point 1; TASK-68).** Six kinds join
+**Parameter kinds (decision-46 point 1).** Six kinds join
 `LayerInput`/`CrsInput`/`Metres`: `FileInput(filters=)`, `DirectoryInput()`,
 `FieldInput(of=)`, `Range(min, max)`, `Colour()` and `Literal[...]` choices
 (the table under "Providers" above). What changes for existing code:
@@ -2178,7 +2177,7 @@ published for the bridge, and no `ts-v*` tag exists.
   call and a form use to refuse a value; `parameter_kind` keeps its name and
   now delegates to `qgis_sdk.declarations.resolve_kind`.
 
-**Input components and `ctx.files` (TASK-68, slice 68b).**
+**Input components and `ctx.files`.**
 
 - `qgis_sdk.ui` exports the eleven input components (`LayerPicker`,
   `FieldPicker`, `CrsPicker`, `FileInput`, `DirectoryInput`, `Distance`,
@@ -2203,7 +2202,7 @@ published for the bridge, and no `ts-v*` tag exists.
   <name> expects ...` shape.
 
 **`Form`, `Button`, `Column`; `NativeForms` and `DeclaredFormDialog`
-removed (TASK-68, slice 68c).** See *Forms: an action's inputs as a window*.
+removed.** See *Forms: an action's inputs as a window*.
 
 - `qgis_sdk.adapters.qgis.ui` is gone: `NativeForms(runtime)`,
   `.fields(id)`, `.render(id)`, `.run(id)`, `.dispatch(id, values)` and
@@ -2244,7 +2243,7 @@ removed (TASK-68, slice 68c).** See *Forms: an action's inputs as a window*.
   names its widgets. The desktop-adapter qualification fixture gained a
   `Form`-built dialog and the `form_submitted` stage.
 
-**Wiring, mixins, containers, feedback, `Custom`, `ctx.log` (TASK-96).**
+**Wiring, mixins, containers, feedback, `Custom`, `ctx.log`.**
 See *Wiring*, *Containers, feedback, buttons and `Custom`*, *Behaviour
 mixins*, *Designer files and the pure-PyQt path* and *Testing surfaces
 without QGIS* above.
@@ -2289,7 +2288,7 @@ declarative form* above.
   Tools`); it read `field Tools` before.
 - `ResultsDock` in the example is declared; its button is `buttons/fixture`
   (was `buttons/open`) and the table `self.results` (was `self.table`).
-- Adoption (TASK-108): `Form` accepts unnamed inputs and keys them by name
+- Adoption: `Form` accepts unnamed inputs and keys them by name
   lazily (`Form._fields` resolves on first use; a form of inputs that never
   get a name refuses when read); the default `build()` seeds declared
   inputs from `initial` and refuses an unknown key
@@ -2299,7 +2298,7 @@ declarative form* above.
   (`form/value`, `buttons/ping`, `feedback/answers`; it was `value`, `ping`
   and `answer` built in PyQt).
 
-**Any registered algorithm (decision-64; TASK-109).** See *Any registered
+**Any registered algorithm (decision-64).** See *Any registered
 algorithm* above. Nothing existing breaks; what is new:
 
 - `Algorithms` gains `providers()`, `list(provider=None)`, `describe(id)`
@@ -2325,7 +2324,7 @@ algorithm* above. Nothing existing breaks; what is new:
 
 ## 0.6.0 migration notes
 
-**Project shape (decision-43; TASK-64).** A 0.6 project carries no
+**Project shape (decision-43).** A 0.6 project carries no
 `metadata.txt`, `classFactory` or `webview.py`; `qgis-sdk check` reports the
 old files as `META001`/`ENTRY002`. To migrate a 0.5 project:
 
@@ -2350,10 +2349,10 @@ old files as `META001`/`ENTRY002`. To migrate a 0.5 project:
 `classFactory` themselves; see *Desktop host* above.
 
 0.6.0 of `qgis-sdk-runtime` changes how a job is written
-([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md);
-TASK-58) and how optional services are reached on every context
-([decision-39](../../decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md);
-TASK-59). Everything about submission, handles, delivery and ownership is as
+([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md))
+and how optional services are reached on every context
+([decision-39](../../decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md)).
+Everything about submission, handles, delivery and ownership is as
 in 0.5.
 
 - **`require_<name>()` is gone; the attribute refuses by name.** On
@@ -2391,8 +2390,8 @@ in 0.5.
   @plugin, or a function declared with @job or @provider.algorithm".
 
 Algorithms follow the same move
-([decision-42](../../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md);
-TASK-63). Every rename, in one list:
+([decision-42](../../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md)).
+Every rename, in one list:
 
 - **`@provider.algorithm` decorates a function, not a class.** `run(self,
   inputs: Request) -> Result` becomes `def name(ctx: AlgorithmContext,
@@ -2449,7 +2448,7 @@ TASK-63). Every rename, in one list:
   `processing`; all are optional constructor keywords that refuse by name
   when a host leaves them out. The wire contract, `describe_plugin` output
   and `HOST_FINGERPRINT` do not move.
-- **Desktop bindings and surfaces (decisions 45 and 55; TASK-67),
+- **Desktop bindings and surfaces (decisions 45 and 55),
   additively.** `qgis_sdk` exports `toolbar`, `menu`, `shortcut` and
   `describe_bindings`; `qgis_sdk.ui` exports `Dialog`, `Dock` and `Surface`
   next to the 0.5 form-field helpers, which moved to
@@ -2476,14 +2475,14 @@ emits ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-p
 
 0.5.0 splits the one `qgis-sdk` wheel into three
 distributions ([decision-35](../../decisions/decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md)
-step 2, un-gated by [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md);
-TASK-57), adds the reference workflow (`qgis_sdk.exports`,
-`Layers.export_vector`, the `reference/polygon-output` style, `examples/simple`;
-TASK-22), the support matrix and `qgis-sdk targets` (TASK-9,
-[decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)),
+step 2, un-gated by [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md)),
+adds the reference workflow (`qgis_sdk.exports`,
+`Layers.export_vector`, the `reference/polygon-output` style, `examples/simple`),
+the support matrix and `qgis-sdk targets`
+([decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)),
 and `dev --exercise`'s smoke report. The bridge is unchanged: `@archont561/qgis-sdk`
 stays 0.3.0 and was qualified inside a real `QWebEngineView` against this
-release (TASK-31 AC 5, [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-task-31-2026-10-25)).
+release ([doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-task-31-2026-10-25)).
 
 **Who installs what.**
 
@@ -2538,11 +2537,11 @@ landing order.
   bridge's `package.json` and the alias carry `0.3.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.4.0`
   and `--scope typescript --version 0.3.0`.
-- **`qgis-sdk build`** (TASK-8) is new; see "Building an installable ZIP".
+- **`qgis-sdk build`** is new; see "Building an installable ZIP".
   Projects generated by `qgis-sdk new` now ignore `dist/`. A plugin that
   imports `qgis_sdk_tools` or `qgis_sdk.testing` from package code is
   refused at build time (`DEP001`/`DEP002`): those never ship.
-- **`qgis-sdk dev` reloads on save and quiesces first** (TASK-21). The
+- **`qgis-sdk dev` reloads on save and quiesces first**. The
   Desktop bootstrap is now the importable module
   `qgis_sdk_tools.devtools.reloader` (policy, tested without QGIS) plus
   `.devtools.bootstrap` (the QGIS glue the `--code` probe reaches);
