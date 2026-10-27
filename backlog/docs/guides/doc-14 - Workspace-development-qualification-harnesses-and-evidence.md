@@ -1149,6 +1149,49 @@ at `0.0.0` only. The first clean `ui-v0.1.0` tag is the first real publish
 of both names and waits for the 0.7.0 gate; deprecate the `0.0.0`
 placeholders after it (owner-side).
 
+## 0.7.0 triple rehearsal (2026-10-27)
+
+Before the TASK-32 gate, after PR #115 re-scoped TASK-73 and TASK-77 out
+of m-6, the three release trains were dry-run together on main at
+`2427e37` with one prerelease tag each (annotations carry the rehearsal
+notes; a tag is never moved):
+
+```sh
+git tag -a python-v0.7.0-rc.1 2427e37 -m "qgis-sdk 0.7.0-rc.1 (rehearsal) ..."
+git tag -a ts-v0.5.0-rc.1 2427e37 -m "@archont561/qgis-sdk 0.5.0-rc.1 (rehearsal) ..."
+git tag -a ui-v0.1.0-rc.3 2427e37 -m "@archont561/qgis-sdk-ui 0.1.0-rc.3 (rehearsal) ..."
+git push origin python-v0.7.0-rc.1 ts-v0.5.0-rc.1 ui-v0.1.0-rc.3
+```
+
+| Tag | `release.yml` run | Outcome |
+| --- | --- | --- |
+| `ts-v0.5.0-rc.1` | [40566502962](https://github.com/Archont561/qgis-sdk/actions/runs/40566502962) | every job green: `build` stamped `0.5.0-rc.1` for scope `typescript` (package.json, the `qgis-sdk` alias and its pin, `SDK_NPM_VERSION`), verify-versions agreed, bridge built; `npm` and `github-packages` ran their dry-runs under dist-tag `next` with every publish step skipped as prerelease; `github-release` published the prerelease with `archont561-qgis-sdk-0.5.0-rc.1.tgz`, `qgis-sdk-0.5.0-rc.1.tgz` and `SHA256SUMS`. npm still serves `@archont561/qgis-sdk@0.4.0` as `latest` |
+| `ui-v0.1.0-rc.3` | [40566503512](https://github.com/Archont561/qgis-sdk/actions/runs/40566503512) | every job green, as `ui-v0.1.0-rc.2` above: pack check, alias and bridge tarballs, smoke install, `npm publish --dry-run --tag next` for both names, publish steps skipped; prerelease `ui-v0.1.0-rc.3` with the two tarballs and `SHA256SUMS`. npm still lists both names at `0.0.0` only |
+| `python-v0.7.0-rc.1` | [40566503318](https://github.com/Archont561/qgis-sdk/actions/runs/40566503318) | **`build` failed** at "Verify the stamped manifests": `stamp --scope python --version 0.7.0-rc.1` writes the example's windows as the clean minor line (`qgis-sdk-runtime>=0.7,<0.8`, an example never pins a prerelease) and `verify-versions` then asked whether `0.7.0-rc.1` lies in that window on full SemVer order, where `0.7.0-rc.1 < 0.7.0`. Every later job skipped; nothing was built or uploaded |
+
+The Python failure is a release-tool defect, not a package one: the tools'
+own `VERSION004` reads such a window on release segments only, so the
+stamped `0.7.0rc1` tools accept the example - `verify-versions` disagreed
+with the rule it exists to mirror. The example-window check post-dates
+the `python-v0.5.0-rc.1` rehearsal (it arrived with the 0.6.0 stamping of
+the example's windows), so no `-rc.N` of the Python scope had exercised
+it. The fix (`fix(release)`: `example_window_includes` compares the
+release's core version, test
+`test_verify_versions_reads_the_example_window_on_release_segments`)
+reproduces the failing stamp-then-verify in `tests/scripts` and, replayed
+on the real tree, `stamp` + `verify-versions --scope python` at
+`0.7.0-rc.1` now agree on all nine entries. Since a tag is never moved,
+the second rehearsal is `python-v0.7.0-rc.2` on the merge commit that
+carries the fix (recorded below when run).
+
+Open for the stamp pull request of the real triple, found while
+rehearsing: `packages/qgis-sdk-ui/package.json` peers on
+`@archont561/qgis-sdk >=0.4.0 <0.5.0`, which `verify-versions --scope ui`
+will refuse once the bridge is stamped `0.5.0`; the range moves to
+`>=0.5.0 <0.6.0` by hand in that pull request (no `stamp` scope owns it,
+by design - the components declare which bridge they were qualified
+with).
+
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
 profile, while `test_webchannel_native.py` and `test_webengine_native.py`

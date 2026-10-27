@@ -2675,6 +2675,24 @@ def test_verify_versions_names_an_example_window_that_excludes_the_release(
     assert "stamp --scope python --version 0.6.0" in out
 
 
+def test_verify_versions_reads_the_example_window_on_release_segments(
+    tmp_path, monkeypatch
+):
+    """An rc stamps the clean minor window, and verify must accept it.
+
+    ``stamp`` writes ``>=0.7,<0.8`` for ``0.7.0-rc.1`` (an example never pins
+    a prerelease) and the tools' ``VERSION004`` reads such a window on release
+    segments only, so ``0.7.0rc1`` satisfies it; verify-versions has to agree
+    or every ``-rc.N`` rehearsal of the Python scope fails at the stamp.
+    """
+    _example_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.7.0-rc.1", "--scope", "python"]) == 0
+    assert (
+        main(["verify-versions", "--scope", "python", "--version", "0.7.0-rc.1"]) == 0
+    )
+
+
 def test_verify_versions_passes_without_an_example_manifest(tmp_path, monkeypatch):
     _python_manifests(tmp_path, monkeypatch)
 
