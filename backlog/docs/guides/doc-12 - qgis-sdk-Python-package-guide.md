@@ -8,9 +8,10 @@ created_date: '2026-10-24 21:20'
 
 The reference prose for the `qgis-sdk` Python package. It used to live in
 `packages/qgis-sdk-python/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here, where it is the source the documentation site
-([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md))
-will render. The headings dropped the task tags they carried in the README;
+moved it here, where it is the source the documentation site at
+[archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
+renders, one page per section
+([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)). The headings dropped the task tags they carried in the README;
 the records that landed each surface are TASK-2 (declarations), TASK-11 (pure
 contract layer), TASK-24 (runtime and Desktop adapter), TASK-3 (native forms),
 TASK-14 and TASK-63 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27

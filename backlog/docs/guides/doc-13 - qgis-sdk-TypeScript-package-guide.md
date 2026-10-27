@@ -8,7 +8,9 @@ created_date: '2026-10-24 21:20'
 
 The reference prose for `@archont561/qgis-sdk`. It used to live in
 `packages/qgis-sdk-typescript/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here as the source for the documentation site
+moved it here as the source the documentation site at
+[archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
+renders, one page per section
 ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)).
 Status at the time of writing: `0.4.0` is the released version (`ts-v0.4.0`,
 tagged with `python-v0.6.0` on one merge commit as the 0.6.0 pair; packages
@@ -704,7 +706,9 @@ event attribute names) and the `use:qgisProps={props}` action for a
 `bun run storybook` (in `packages/qgis-sdk-ui`) builds the package and
 serves the catalogue; `bun run storybook:build` writes `storybook-static/`,
 which CI builds on every run (`pixi run -e bun storybook-build`) and the docs
-site pipeline publishes once TASK-43 lands. The toolbar's **Theme** entry
+workflow publishes at
+[archont561.github.io/qgis-sdk/storybook/](https://archont561.github.io/qgis-sdk/storybook/)
+(TASK-43). The toolbar's **Theme** entry
 switches the QGIS light and dark palettes through the tokens, the a11y addon
 runs with `test: "error"`, and every story renders against
 `createBridgeHarness` - "Refused" and "Faulted" are states of a component,

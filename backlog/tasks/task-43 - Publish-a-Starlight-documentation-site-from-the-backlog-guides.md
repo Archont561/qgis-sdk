@@ -1,10 +1,10 @@
 ---
 id: TASK-43
 title: Publish a Starlight documentation site from the backlog guides
-status: To Do
+status: In Progress
 assignee: []
-created_date: 2026-10-24 21:14
-updated_date: '2026-10-26T08:53:00Z'
+created_date: '2026-10-24 21:14'
+updated_date: '2026-10-27 16:53'
 labels: []
 milestone: m-6
 dependencies: []
@@ -41,4 +41,6 @@ Stand up an Astro Starlight site (the pixi-sandbox docs are the model: docs/ in 
 2026-10-24: AC #3 pulled forward, it needed no site. tests/scripts/test_readme_shape.py (release-tool suite) holds each README to one H1, the decision-29 section set (Installation, Try it, Example, Develop, Documentation, License), no subsections, an 80-line budget, and a link to a backlog guide; it rejects the former 870-line package README on two counts. AC #1 and #2 remain the Starlight site itself.
 
 Joined m-6 (0.7.0) on 2026-10-26: the Storybook static build of decision-46 publishes with this site.
+
+2026-10-27: apps/docs (Astro 7.4 + Starlight 0.42, built under Bun) renders doc-12/13/14 one page per H2 through scripts/generate.ts (links rewritten, headings demoted, editUrl and lastUpdated from the guide), with start pages, a splash landing, brand.css, robots.txt, sitemap and llms.txt/.md twins (starlight-llms-markdown), the qgis-sdk-ui Storybook under /storybook/, a zero-dependency link check over dist/ and Bun tests at 90% coverage. Pixi tasks docs-build, docs-link-check, docs-dev; .github/workflows/docs.yml builds and link-checks on PRs and deploys to GitHub Pages from main. Root README carries the docs badge and link. AC #1 proven locally (68 pages, 5804 internal links, 0 broken); AC #2 awaits the first deploy from main.
 <!-- SECTION:NOTES:END -->

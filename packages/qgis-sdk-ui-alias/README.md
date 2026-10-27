@@ -64,9 +64,9 @@ QGIS palette once the handshake answered.
 - [TypeScript package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) -
   the elements, their properties in both spellings, the wrappers, the
   `--qgis-sdk-*` variables and the `./uno` preset.
-- Storybook: `bun run storybook` in `packages/qgis-sdk-ui` serves every
-  component with a theme switcher and the a11y addon; the static build
-  joins the docs site when it ships.
+- [Storybook](https://archont561.github.io/qgis-sdk/storybook/) - every
+  component with a theme switcher and the a11y addon; `bun run storybook`
+  in `packages/qgis-sdk-ui` serves the same catalogue from source.
 
 ## License
 
