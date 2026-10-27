@@ -125,7 +125,7 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   `ui` job, `stamp --scope ui` over the alias and `UI_NPM_VERSION`, the
   unscoped `qgis-sdk-ui` alias since npm holds both names); TASK-110 is
   Done. Its `ui-v0.1.0-rc.1` rehearsal failed on npm 12's `pack --json`
-  shape and is re-run as `rc.2` with the fix (doc-14).
+  shape; `rc.2` on the fix (PR #110, `27fcea7`) was fully green (doc-14).
 - **Sprint 5: [TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md).** Pulled forward from m-10 on instruction
   (2026-10-27; [decision-64](../../decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md)): `ctx.algorithms.list/describe/run` over any
   algorithm the host registry holds, `qgis-sdk processing generate`
