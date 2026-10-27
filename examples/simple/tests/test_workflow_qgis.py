@@ -129,13 +129,17 @@ def test_the_results_dock_is_the_catalogue_mounted_as_qgis_widgets(
     from simple.surfaces import ResultsDock
 
     dock = desktop.runtime.instance.ctx.ui.open(ResultsDock)
-    window = dock.table.widget.window()
+    window = dock.results.widget.window()
     names = [node["objectName"] for node in _walk(ui_snapshot(window))]
-    assert {"buttons/open", "buttons/clear", "feedback/results", "feedback/log"} <= set(
-        names
-    )
+    assert {
+        "buttons/fixture",
+        "buttons/clear",
+        "feedback/results",
+        "feedback/log",
+    } <= set(names)
+    assert not ResultsDock.results.mounted  # the class holds prototypes only
 
-    window.findChild(QPushButton, "buttons/open").click()
+    window.findChild(QPushButton, "buttons/fixture").click()
     qgis_app.processEvents()
     table = window.findChild(QTableWidget, "feedback/results")
     assert table.rowCount() == 1

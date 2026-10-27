@@ -33,8 +33,19 @@ class Custom(Component):
     prefix = "custom"
 
     def __init__(
-        self, name: str, widget: Callable[..., Any] | Any, *, label: str | None = None
+        self,
+        name: str | Callable[..., Any] | Any = None,
+        widget: Callable[..., Any] | Any = None,
+        *,
+        label: str | None = None,
     ) -> None:
+        if name is not None and not isinstance(name, str):
+            # ``Custom(factory)``: the name comes from the class attribute.
+            if widget is not None:
+                raise QgisSdkUiError(
+                    f"Custom takes a name or a widget first, not both: {name!r}"
+                )
+            name, widget = None, name
         super().__init__(name, label=label)
         if widget is None:
             raise QgisSdkUiError(f"{self._describe()} needs a widget or a factory")

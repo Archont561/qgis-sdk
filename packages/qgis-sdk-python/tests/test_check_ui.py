@@ -260,6 +260,27 @@ def test_an_on_name_missing_from_the_designer_file_is_ui002(tmp_path: Path) -> N
         class HandBuilt(Dialog):
             @wired("anything").changed
             def anything(self, value): ...
+
+
+        GO = "go"
+        GONE = "gone"
+
+
+        class Constants(Dialog):
+            ui = "buffer.ui"
+            spare = ui.Button(text="Spare")
+
+            @wired(GO).clicked
+            def go(self): ...
+
+            @wired(GONE).clicked
+            def gone(self): ...
+
+            @wired(spare).clicked
+            def spare_clicked(self): ...
+
+            @wired(unknown_name).clicked
+            def unknown(self): ...
         """
     found = list(
         check_bindings(
@@ -276,6 +297,9 @@ def test_an_on_name_missing_from_the_designer_file_is_ui002(tmp_path: Path) -> N
             "'missing'"
         ),
         "UI002:22:Lost.ui = 'lost.ui': pkg/lost.ui does not exist",
+        # A module-level constant resolves; a declared component or a name the
+        # checker cannot read is left to the host.
+        "UI002:45:@on('gone') in Constants: buffer.ui declares no widget named 'gone'",
     ]
     assert "distance, go" in found[0].remediation
     assert all(d.severity == "error" for d in found)

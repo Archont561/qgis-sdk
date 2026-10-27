@@ -22,6 +22,7 @@ from typing import Any
 from qgis_sdk.core import ResourceScope, UiContext
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.ui.components import Component
+from qgis_sdk.ui.declarative import materialise
 from qgis_sdk.ui.surfaces import Surface, describe_surface, is_surface_class
 from qgis_sdk.ui.uifile import fake_ui_tree, resolve_ui_path
 from qgis_sdk.ui.wiring import wire_surface
@@ -187,6 +188,7 @@ def build_surface(
             f"{surface.__name__} is a widget surface; it needs Qt and a host to open"
         )
     instance = surface()
+    materialise(instance)  # the declared components, as this window's copies
     instance.ctx = ctx
     instance.initial = MappingProxyType(dict(initial or {}))
     if surface.ui is not None and _uses_default_build(surface):

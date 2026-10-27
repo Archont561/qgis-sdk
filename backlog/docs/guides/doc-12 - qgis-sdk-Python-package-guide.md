@@ -779,6 +779,58 @@ imperative form and returns the `ViewSubscription` (`open`, `pending`,
 surface runs (returning `False` keeps the window open); `on_close()` runs
 once the window closes, before the view's scope disposes.
 
+### The declarative form: components as class attributes
+
+A surface whose tree does not depend on `ctx` can skip `build()` and the
+names altogether. A component assigned to a class attribute takes the
+attribute's name; the default `build()` returns the declared components no
+other declared component contains (one root as it is, several stacked in a
+`Column` named after the class); `@on` accepts the component itself:
+
+```python
+from qgis_sdk.ui import Button, Dock, Group, LogView, ResultTable, Row, RunButton, on
+
+
+class ResultsDock(Dock, area="right"):
+    fixture = RunButton(action_id="open_fixture", text="Open the fixture")   # buttons/fixture
+    clear = Button(text="Clear")                                             # buttons/clear
+    tools = Row([fixture, clear])                                            # tools
+    results = ResultTable(columns=[("name", "Layer"), ("crs", "CRS")])       # feedback/results
+    log = LogView()                                                          # feedback/log
+    log_group = Group([log], label="Log", collapsible=True)                  # log_group
+
+    @on(fixture).finished
+    def opened(self, layer) -> None:
+        self.results.set_rows([*self.results.rows(), {"name": layer.name, "crs": layer.crs}])
+
+    @on(clear).clicked
+    def cleared(self) -> None:
+        self.results.set_rows([])
+```
+
+The class attributes are prototypes. Every opening gets its own deep copy
+of the whole set before `build()` - the host and `build_surface` both do
+this - so `self.results` in a method is that window's table, two docks never
+share a listener or a widget, and a `RunButton(progress=progress)` on the
+instance points at the instance's `JobProgress`. Shared state belongs on
+the plugin, not on a component. A `Custom` declared this way needs a
+factory (a widget instance cannot be copied; the refusal names the
+attribute). Every catalogue class takes its arguments by keyword for this
+(`Row([a, b])`, `Group([...], label=)`, `RunButton(action_id=)`,
+`Button(text=)`, `ResultTable(columns=)`, `Custom(widget=)`); the
+positional `Name("name", ...)` forms are unchanged, and an explicit name
+wins over the attribute's. A component without a name refuses to attach or
+snapshot and says what to do. `Form` keeps keying its fields by name, so
+inputs inside a `Form` are named explicitly.
+
+`@on(component)` on a component the class does not declare is refused when
+the surface opens unless `build()` placed that very object in the tree.
+`qgis-sdk check` leaves these targets to the host (and resolves a
+module-level `NAME = "..."` constant for `UI002`). Mixing is fine: an
+author's `build()` sees the copies (`Column("root", [self.note, ...])`),
+and `BufferDialog` in the example keeps `build()` because its form needs
+`ctx`, while `ResultsDock` is declared.
+
 ### Containers, feedback, buttons and `Custom`
 
 The rest of the catalogue (decision-55 point 3), each a `Component` with a
@@ -2040,6 +2092,23 @@ without QGIS* above.
 - The `simple` example gained `ResultsDock`, a `Dock` of the catalogue;
   the scaffold's `PingDialog` uses `@on("ping").clicked` instead of
   `button.clicked.connect`.
+
+**The declarative surface form (decision-55 amendment).** See *The
+declarative form* above.
+
+- Every component's `name` is optional and every catalogue class has a
+  keyword form; `Component` gained `__set_name__`, `named`, lazy `label`
+  and `object_name`, `Button.text` is a property, `RunButton.progress` is
+  readable. A `Container` checks for clashing child names when built *and*
+  when attached (declared children get their names after the class body).
+- `Surface.build()`'s default returns the declared tree before refusing;
+  `qgis_sdk.ui.declarative` (`declared_components`, `materialise`,
+  `declared_root`, `resolve_declared`) is what the host, `build_surface`
+  and `wire_surface` use; `Wire.target` may be a `Component`.
+- `derive_title` capitalises a lower-camel name (`fieldTools` → `Field
+  Tools`); it read `field Tools` before.
+- `ResultsDock` in the example is declared; its button is `buttons/fixture`
+  (was `buttons/open`) and the table `self.results` (was `self.table`).
 
 ## 0.6.0 migration notes
 

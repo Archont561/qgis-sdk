@@ -16,7 +16,7 @@ from typing import Any, Literal
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.services import LogRecord
 
-from .components import Component
+from .components import Component, split_name_and_children
 from .form_fields import label_for
 
 __all__ = ["JobProgress", "LogView", "ResultTable"]
@@ -29,7 +29,7 @@ ProgressStatus = Literal[
 class _Feedback(Component):
     prefix = "feedback"
 
-    def __init__(self, name: str, *, label: str | None = None) -> None:
+    def __init__(self, name: str | None = None, *, label: str | None = None) -> None:
         super().__init__(name, label=label)
         self._listeners: list[Callable[[Any], None]] = []
 
@@ -72,7 +72,11 @@ class JobProgress(_Feedback):
     """
 
     def __init__(
-        self, name: str, *, label: str | None = None, cancellable: bool = True
+        self,
+        name: str | None = None,
+        *,
+        label: str | None = None,
+        cancellable: bool = True,
     ) -> None:
         super().__init__(name, label=label)
         self.cancellable = cancellable
@@ -193,7 +197,7 @@ class LogView(_Feedback):
     """
 
     def __init__(
-        self, name: str, *, label: str | None = None, limit: int = 500
+        self, name: str | None = None, *, label: str | None = None, limit: int = 500
     ) -> None:
         super().__init__(name, label=label)
         if limit < 1:
@@ -253,11 +257,14 @@ class ResultTable(_Feedback):
 
     def __init__(
         self,
-        name: str,
-        columns: Sequence[str | tuple[str, str]],
+        name: str | Sequence[str | tuple[str, str]] | None = None,
+        columns: Sequence[str | tuple[str, str]] | None = None,
         *,
         label: str | None = None,
     ) -> None:
+        # ``ResultTable(["id", "name"])`` and ``ResultTable(columns=[...])``
+        # both leave the name to the class attribute (decision-55).
+        name, columns = split_name_and_children("ResultTable", name, columns)  # type: ignore[assignment]
         super().__init__(name, label=label)
         keys: list[str] = []
         headings: list[str] = []

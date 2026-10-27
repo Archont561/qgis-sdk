@@ -138,6 +138,17 @@ class _Names:
         self.action: set[str] = set()
         self.surfaces: set[str] = set()
         self.on: set[str] = set()
+        #: Module-level ``NAME = "literal"`` assignments, for ``@on(NAME)``.
+        self.constants: dict[str, str] = {}
+        for statement in tree.body:
+            if (
+                isinstance(statement, ast.Assign)
+                and isinstance(statement.value, ast.Constant)
+                and isinstance(statement.value.value, str)
+            ):
+                for target in statement.targets:
+                    if isinstance(target, ast.Name):
+                        self.constants[target.id] = statement.value.value
         modules: list[str] = []
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module in (
@@ -362,11 +373,8 @@ def _check_ui_names(
             continue
         for decorator in method.decorator_list:
             target = names.on_target(decorator)
-            if not isinstance(target, ast.Constant) or not isinstance(
-                target.value, str
-            ):
-                continue
-            if target.value in declared:
+            name = _literal_name(target, names)
+            if name is None or name in declared:
                 continue
             yield Diagnostic(
                 rule="UI002",
@@ -374,8 +382,8 @@ def _check_ui_names(
                 line=decorator.lineno,
                 column=decorator.col_offset + 1,
                 message=(
-                    f"@on({target.value!r}) in {node.name}: {ui} declares no "
-                    f"widget named {target.value!r}"
+                    f"@on({name!r}) in {node.name}: {ui} declares no "
+                    f"widget named {name!r}"
                 ),
                 remediation=(
                     f"Use one of the objectNames the file declares ({known}) or "
@@ -383,6 +391,20 @@ def _check_ui_names(
                     "surface opens otherwise."
                 ),
             )
+
+
+def _literal_name(target: ast.expr | None, names: _Names) -> str | None:
+    """The node name an ``@on`` target spells, when the checker can read it.
+
+    A string literal, or a module-level ``NAME = "literal"``; a component
+    declared on the class (``@on(clear)``) or anything else is left to the
+    host, which resolves it when the surface opens.
+    """
+    if isinstance(target, ast.Constant) and isinstance(target.value, str):
+        return target.value
+    if isinstance(target, ast.Name):
+        return names.constants.get(target.id)
+    return None
 
 
 def _class_constant(node: ast.ClassDef, name: str) -> object:

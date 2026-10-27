@@ -30,8 +30,8 @@ class Panel(Container):
 
     def __init__(
         self,
-        name: str,
-        children: Sequence[Component],
+        name: str | Sequence[Component] | None = None,
+        children: Sequence[Component] | None = None,
         *,
         label: str | None = None,
         scrollable: bool = False,
@@ -54,8 +54,8 @@ class Group(Container):
 
     def __init__(
         self,
-        name: str,
-        children: Sequence[Component],
+        name: str | Sequence[Component] | None = None,
+        children: Sequence[Component] | None = None,
         *,
         label: str | None = None,
         collapsible: bool = False,
@@ -79,8 +79,8 @@ class Tabs(Container):
 
     def __init__(
         self,
-        name: str,
-        children: Sequence[Component],
+        name: str | Sequence[Component] | None = None,
+        children: Sequence[Component] | None = None,
         *,
         label: str | None = None,
         current: str | None = None,
@@ -88,7 +88,9 @@ class Tabs(Container):
         super().__init__(name, children, label=label)
         if not self._children:
             raise QgisSdkUiError(f"{self._describe()} needs at least one page")
-        self._current = self._children[0].name
+        # ``None`` means the first page, whose name may arrive after the
+        # class body that declared it ran.
+        self._current: str | None = None
         self._listeners: list[Callable[[str], None]] = []
         if current is not None:
             self.set_current(current)
@@ -100,7 +102,7 @@ class Tabs(Container):
 
     def current(self) -> str:
         """The name of the page currently shown."""
-        return self._current
+        return self._current if self._current is not None else self._children[0].name
 
     def set_current(self, name: str) -> None:
         """Show the page called ``name``; an unknown name is refused."""
@@ -127,11 +129,11 @@ class Tabs(Container):
 
     def snapshot(self) -> dict[str, Any]:
         node = super().snapshot()
-        node["current"] = self._current
+        node["current"] = self.current()
         return node
 
     def _state(self) -> object:
-        return self.pages.index(self._current)
+        return self.pages.index(self.current())
 
     def _from_widget(self, value: object) -> None:
         if self._syncing:
@@ -149,7 +151,7 @@ class Tabs(Container):
         self._store(name)
 
     def _store(self, name: str) -> None:
-        if name == self._current:
+        if name == self.current():
             return
         self._current = name
         for listener in tuple(self._listeners):

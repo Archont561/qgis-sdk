@@ -34,6 +34,7 @@ from qgis_sdk.models import QgisSdkError, QgisSdkUiError
 from qgis_sdk.resources import icon_path
 from qgis_sdk.ui.actions import ViewActions
 from qgis_sdk.ui.components import Component
+from qgis_sdk.ui.declarative import materialise
 from qgis_sdk.ui.streams import ViewStreams
 from qgis_sdk.ui.surfaces import Surface, describe_surface
 from qgis_sdk.ui.wiring import wire_surface
@@ -321,6 +322,9 @@ class SurfaceHost:
         try:
             if issubclass(bound.cls, Surface):
                 instance = bound.cls()
+                # Components declared on the class become this window's own
+                # copies before ``build()`` can read them (declarative form).
+                materialise(instance)
                 instance.ctx = ui
                 instance.initial = values
                 widget = instance.build()

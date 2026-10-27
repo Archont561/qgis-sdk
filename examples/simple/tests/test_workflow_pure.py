@@ -186,23 +186,27 @@ def test_the_results_dock_lists_what_the_plugin_produced(fake_host: FakeHost) ->
     )
     built = build_surface(ResultsDock, ctx)
 
+    # The declared components, named after their attributes, under a column
+    # named after the class; the instance holds its own copies.
     names = [node["objectName"] for node in _walk(ui_snapshot(built.root))]
-    assert names[:6] == [
+    assert names == [
         "results_dock",
         "tools",
-        "buttons/open",
+        "buttons/fixture",
         "buttons/clear",
         "feedback/results",
         "log_group",
+        "feedback/log",
     ]
-    assert "feedback/log" in names
+    assert built.surface.results is not ResultsDock.results
+    assert built.find("fixture") is built.surface.fixture
 
-    built.find("open").click()
-    assert built.surface.table.cells() == (("points", "point", ""),)
+    built.find("fixture").click()
+    assert built.surface.results.cells() == (("points", "point", ""),)
     assert built.find("log").lines()[-1] == "[info] layer ready layer='points' crs=''"
 
     built.find("clear").click()
-    assert built.surface.table.rows() == ()
+    assert built.surface.results.rows() == ()
     built.close()
 
 

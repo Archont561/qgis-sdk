@@ -91,12 +91,27 @@ _QT_SIGNALS = {
 
 @dataclass(frozen=True, slots=True)
 class Wire:
-    """One connection a method asked for."""
+    """One connection a method asked for.
+
+    ``target`` is a node name, a stream id, or - for ``@on(component)`` -
+    the component prototype declared on the surface class.
+    """
 
     kind: str  # "on" | "subscribe"
-    target: str
+    target: str | Component
     signal: str | None = None
     request: Mapping[str, object] = field(default_factory=dict)
+
+    @property
+    def shown(self) -> str:
+        """How the target reads in a message: the name, or the attribute."""
+        return _shown(self.target)
+
+
+def _shown(target: str | Component) -> str:
+    if isinstance(target, str):
+        return repr(target)
+    return target._name or f"<unnamed {type(target).__name__}>"
 
 
 def _mark(method: T, wire: Wire) -> T:
@@ -111,47 +126,52 @@ def _mark(method: T, wire: Wire) -> T:
 class OnMarker:
     """``on("distance")``: pick the signal as an attribute, or call with one."""
 
-    __slots__ = ("_name",)
+    __slots__ = ("_target",)
 
-    def __init__(self, name: str) -> None:
-        self._name = name
+    def __init__(self, target: str | Component) -> None:
+        self._target = target
 
     def __getattr__(self, signal: str) -> Callable[[T], T]:
         if signal.startswith("_") or signal not in ON_SIGNALS:
             known = ", ".join(ON_SIGNALS)
+            shown = _shown(self._target)
             raise AttributeError(
-                f"@on({self._name!r}) has no signal {signal!r}; use one of {known} "
-                f"or @on({self._name!r}, {signal!r}) for a Qt signal"
+                f"@on({shown}) has no signal {signal!r}; use one of {known} "
+                f"or @on({shown}, {signal!r}) for a Qt signal"
             )
         return self._decorator(signal)
 
     def __call__(self, method: T) -> T:
+        shown = _shown(self._target)
         raise QgisSdkUiError(
-            f"@on({self._name!r}) needs a signal: @on({self._name!r}).changed "
-            f"or @on({self._name!r}, 'valueChanged')"
+            f"@on({shown}) needs a signal: @on({shown}).changed "
+            f"or @on({shown}, 'valueChanged')"
         )
 
     def _decorator(self, signal: str) -> Callable[[T], T]:
         def decorate(method: T) -> T:
-            return _mark(method, Wire("on", self._name, signal))
+            return _mark(method, Wire("on", self._target, signal))
 
         return decorate
 
 
-def on(name: str, signal: str | None = None) -> Any:
-    """Mark a method to run when node ``name`` emits ``signal``.
+def on(target: str | Component, signal: str | None = None) -> Any:
+    """Mark a method to run when ``target`` emits ``signal``.
 
-    ``@on("distance").changed`` for a catalogue signal; ``@on("distance",
-    "valueChanged")`` for a Qt signal by name (it also resolves against the
-    catalogue's names, so ``@on("go", "clicked")`` works on a ``Button``).
+    ``target`` is a node name - ``@on("distance").changed`` for a catalogue
+    signal, ``@on("distance", "valueChanged")`` for a Qt signal by name (it
+    also resolves against the catalogue's names, so ``@on("go", "clicked")``
+    works on a ``Button``) - or a component declared on the surface class
+    (``@on(clear).clicked``), which wires to that window's copy of it.
     """
-    if not isinstance(name, str) or not name:
-        raise QgisSdkUiError("@on needs the name of a node")
-    marker = OnMarker(name)
+    if isinstance(target, Component) or isinstance(target, str) and target:
+        marker = OnMarker(target)
+    else:
+        raise QgisSdkUiError("@on needs the name of a node or a component")
     if signal is None:
         return marker
     if not isinstance(signal, str) or not signal:
-        raise QgisSdkUiError(f"@on({name!r}): the signal must be a name")
+        raise QgisSdkUiError(f"@on({_shown(target)}): the signal must be a name")
     return marker._decorator(signal)
 
 
@@ -246,12 +266,8 @@ def _subscription(
 def _connection(
     root: Any, wire: Wire, method: Callable[..., Any], surface: Any
 ) -> Callable[[], Callable[[], None]]:
-    node = _find(root, wire.target)
-    if node is None:
-        raise QgisSdkUiError(
-            f"@on({wire.target!r}) on {type(surface).__name__}: "
-            f"build() produced no node named {wire.target!r}"
-        )
+    shown = wire.shown
+    node = _node(root, wire, surface)
     signal = wire.signal or "changed"
     if isinstance(node, Component):
         subscription_name = ON_SIGNALS.get(signal, signal)
@@ -262,15 +278,15 @@ def _connection(
             "dispose",
         ):
             raise QgisSdkUiError(
-                f"@on({wire.target!r}).{signal}: {type(node).__name__} "
-                f"{wire.target!r} has no such signal"
+                f"@on({shown}).{signal}: {type(node).__name__} "
+                f"{node.name!r} has no such signal"
             )
         listener = _adapt(method)
         return lambda: subscribe_method(listener)
     qt_signal = _qt_signal(node, signal)
     if qt_signal is None:
         raise QgisSdkUiError(
-            f"@on({wire.target!r}, {signal!r}): widget {wire.target!r} "
+            f"@on({shown}, {signal!r}): widget {shown} "
             f"({type(node).__name__}) has no such signal"
         )
     slot = _adapt(method)
@@ -287,6 +303,33 @@ def _connection(
         return disconnect
 
     return connect
+
+
+def _node(root: Any, wire: Wire, surface: Any) -> Any:
+    """The node ``@on`` named: by name in the tree, or the declared copy."""
+    target = wire.target
+    if isinstance(target, Component):
+        from .declarative import resolve_declared
+
+        node = resolve_declared(surface, target)
+        if node is not None:
+            return node
+        # Not declared on the class: it must then be in the built tree by
+        # identity (a module-level component ``build()`` placed).
+        if target.named and _find(root, target.name) is target:
+            return target
+        raise QgisSdkUiError(
+            f"@on({wire.shown}) on {type(surface).__name__}: the component is "
+            f"not declared on {type(surface).__name__} and build() did not "
+            "place it"
+        )
+    node = _find(root, target)
+    if node is None:
+        raise QgisSdkUiError(
+            f"@on({target!r}) on {type(surface).__name__}: "
+            f"build() produced no node named {target!r}"
+        )
+    return node
 
 
 def _find(root: Any, name: str) -> Any:

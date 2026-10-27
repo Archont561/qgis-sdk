@@ -47,16 +47,20 @@ from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.testing import FakeWorkers
 from qgis_sdk.ui import (
     AcceptCancel,
+    Button,
     Column,
     Dialog,
     HasAcceptCancel,
     JobProgress,
     Number,
+    Row,
     RunButton,
     RunsJobs,
     StreamEvent,
     on,
+    snapshot_names,
     subscribe,
+    ui_snapshot,
 )
 
 UI_FILE = """\
@@ -128,6 +132,29 @@ class BufferDialog(RunsJobs, HasAcceptCancel, Dialog):
         EVENTS.append(("accept", None))
 
 
+class Declared(Dialog):
+    """The declarative form: no ``build()``, components on the class."""
+
+    title = "Declared"
+    distance = Number()
+    run = RunButton(action_id="buffer", values=lambda: {"distance": 3}, text="Run")
+    reset = Button(text="Reset")
+    tools = Row([run, reset])
+
+    @on(distance).changed
+    def distance_changed(self, value: float) -> None:
+        EVENTS.append(("distance", value))
+
+    @on(run).finished
+    def ran(self, result: object) -> None:
+        EVENTS.append(("ran", result))
+
+    @on(reset).clicked
+    def cleared(self) -> None:
+        self.distance.set_value(0)
+        EVENTS.append(("reset", self.distance.value()))
+
+
 class HandBuilt(Dialog):
     def build(self) -> QWidget:
         widget = QWidget()
@@ -181,7 +208,7 @@ class WiredPlugin:
     ctx: PluginContext
     jobs: JobService
     tickers: list[Ticker]
-    surfaces = (BufferDialog, HandBuilt, FromFile, Watcher)
+    surfaces = (BufferDialog, Declared, HandBuilt, FromFile, Watcher)
 
     @action(id="buffer", title="Buffer")
     def buffer(self, distance: float) -> str:
@@ -281,6 +308,47 @@ def test_a_running_job_is_cancelled_when_the_dialog_closes(
     pump(qgis_app, 0.05)
     plugin_instance.jobs.tick()
     assert handle.status is JobStatus.CANCELLED
+
+
+def test_a_declared_surface_opens_twice_without_sharing_a_widget(
+    host: tuple[SurfaceHost, WiredPlugin], qgis_app: Any
+) -> None:
+    surfaces, _plugin = host
+    first = surfaces.open(Declared)
+    second = surfaces.open(Declared)
+    assert isinstance(first, Declared) and isinstance(second, Declared)
+    assert first.distance is not second.distance
+    assert first.distance is not Declared.distance and not Declared.distance.mounted
+    one, two = (opened.widget for opened in surfaces.dialogs)
+
+    # The native tree carries the declared names, as the fake rendering does.
+    names = snapshot_names(ui_snapshot(one))
+    for expected in (
+        "declared",
+        "form/distance",
+        "tools",
+        "buttons/run",
+        "buttons/reset",
+    ):
+        assert expected in names, names
+
+    one.findChild(QDoubleSpinBox, "form/distance").setValue(4)
+    assert two.findChild(QDoubleSpinBox, "form/distance").value() == 0
+    one.findChild(QPushButton, "buttons/run").click()
+    one.findChild(QPushButton, "buttons/reset").click()
+    assert EVENTS == [
+        ("distance", 4.0),
+        ("ran", "buffered 3.0"),
+        ("distance", 0.0),
+        ("reset", 0.0),
+    ]
+    assert one.findChild(QDoubleSpinBox, "form/distance").value() == 0
+
+    one.close()
+    EVENTS.clear()
+    two.findChild(QPushButton, "buttons/reset").click()
+    assert EVENTS == [("reset", 0.0)]
+    pump(qgis_app, 0.05)
 
 
 def test_on_over_a_hand_built_qt_tree(

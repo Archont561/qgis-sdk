@@ -36,8 +36,8 @@ class RunButton(Button):
 
     def __init__(
         self,
-        name: str,
-        action_id: str,
+        name: str | None = None,
+        action_id: str | None = None,
         *,
         values: Values = None,
         progress: JobProgress | None = None,
@@ -53,6 +53,11 @@ class RunButton(Button):
         self._last: object = None
         self._finished: list[Callable[[object], None]] = []
         self.clicked(self.run)
+
+    @property
+    def progress(self) -> JobProgress | None:
+        """The ``JobProgress`` a returned handle is bound to, if any."""
+        return self._progress
 
     @property
     def last(self) -> object:
@@ -126,7 +131,7 @@ class AcceptCancel(Component):
 
     def __init__(
         self,
-        name: str = "dialog_buttons",
+        name: str | None = "dialog_buttons",
         *,
         accept_text: str = "OK",
         cancel_text: str = "Cancel",
