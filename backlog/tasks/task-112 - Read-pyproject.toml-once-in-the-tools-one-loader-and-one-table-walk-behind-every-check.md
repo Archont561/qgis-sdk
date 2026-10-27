@@ -3,10 +3,10 @@ id: TASK-112
 title: >-
   Read pyproject.toml once in the tools: one loader and one table walk behind
   every check
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-27 21:55'
-updated_date: '2026-10-27 22:04'
+updated_date: '2026-10-27 22:15'
 labels: []
 milestone: m-7
 dependencies: []
@@ -32,4 +32,6 @@ Audit 2026-10-27 (clean-code core-dry-extraction, core-dry-single-source). The t
 
 <!-- SECTION:NOTES:BEGIN -->
 Done on the audit branch: manifest.py holds read_pyproject()/table(); project.py, bundle/validate.py, check/project.py, check/versions.py (4 sites) and devtools/installs.py call them; _IMPORT_PREFIX removed. grep tomllib.loads -> manifest.py only. Gates: ruff lint/format clean, Python suite 1968 passed / 48 skipped (4 new tests in tests/test_manifest.py), tests/scripts 262 passed.
+
+Merged in PR #120 (merge commit c4c96f5, 2026-10-27) with CI green on c278dec.
 <!-- SECTION:NOTES:END -->
