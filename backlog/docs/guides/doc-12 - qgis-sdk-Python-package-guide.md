@@ -46,6 +46,8 @@ plugin installs nothing because the ZIP carries its own copy.
 
 ## Supported targets
 
+### What the matrix says
+
 Where the kit is qualified is stated once, in `qgis_sdk_tools.targets`
 (TASK-9 AC 2), and rendered here from that source; the test
 `test_targets.py::test_the_python_guide_renders_the_same_matrix` fails when
@@ -71,16 +73,19 @@ it; `qgis-sdk targets --json` is the machine-readable form.
 | macos | arm64 | 3.14 | 4.2 | - | - | unqualified | no macOS QGIS 4 installation in CI or the sandbox (TASK-33 AC 1) |
 <!-- support-matrix:end -->
 
-**The bridge pair.** The TypeScript bridge is qualified as a pair with a
-Python release, never alone: `@archont561/qgis-sdk` 0.4.0 ran inside a real
-`QWebEngineView` against `qgis-sdk` 0.6.0 on the Linux row above, 0.3.0
-against 0.5.0 before it
+### The bridge pair
+
+The TypeScript bridge is qualified as a pair with a Python release, never
+alone: `@archont561/qgis-sdk` 0.4.0 ran inside a real `QWebEngineView` against
+`qgis-sdk` 0.6.0 on the Linux row above, 0.3.0 against 0.5.0 before it
 (`tests/test_reference_example_native.py`, the workspace bridge, contract
 version 1 on both sides - `HOST_SCHEMA_VERSION` and
 `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, what `VERSION002` checks a generated
-client against). A plugin author pinning that pair may assume what the
-matrix says; the package numbers are otherwise independent
+client against). A plugin author pinning that pair may assume what the matrix
+says; the package numbers are otherwise independent
 ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+
+### Where the evidence is recorded
 
 The release workflow records this table in its job summary next to the
 metadata and build checks it runs, so a release says on which targets its
@@ -157,6 +162,8 @@ class FieldTools:
   the class exists, exactly as before; `derive_id` and `derive_title` in
   `qgis_sdk.declarations` expose the conversion for tools that need it.
   `Provider(...)` itself has no class to derive from and keeps requiring both.
+### What does `describe_plugin` do, and not do?
+
 `describe_plugin` does not instantiate the class, dispatch handlers, evaluate
 properties, or call dataclass default factories. It resolves annotations with
 `typing.get_type_hints`, which may evaluate forward references: inspect **trusted
@@ -181,6 +188,8 @@ by ID, not discovery order. The schema version is independent of package version
 and future bridge protocol versions. Consumers must reject unsupported versions;
 no compatibility negotiation or reader-extension policy is implemented here.
 
+#### Which schema subset is supported?
+
 Request/result schemas use the JSON Schema 2020-12 keyword subset `type`,
 `properties`, `required`, `additionalProperties`, `anyOf`, `enum`, `items`,
 `minimum`, and `maximum`. Supported annotations are `str`, `bool`, `float`, `int`,
@@ -191,6 +200,8 @@ host/native objects, mappings, recursive DTOs, and `Annotated` metadata (includi
 backend-specific constraints in the test-only spike sample) are rejected rather
 than silently weakened. No validation dependency or runtime backend is selected.
 
+#### What makes a valid action?
+
 Each action must be an ordinary synchronous instance method with first parameter
 `self`, annotated inputs and an explicit result annotation (`-> None` for no
 result). Inputs may be positional-or-keyword or keyword-only; variadic and
@@ -200,6 +211,8 @@ is an object keyed by parameter name (the example has a `request` property).
 Inherited actions follow Python MRO and ordinary overrides; each inspected class
 must have its own `@plugin` metadata. Duplicate action IDs are errors.
 
+#### Defaults, nullability and unknown properties
+
 A default makes an input omittable, not nullable; only a union with `None` makes
 it nullable. Dataclass request fields without defaults are required; result
 writer schemas require **all** dataclass fields, including defaulted fields.
@@ -208,6 +221,8 @@ properties are disallowed. These are structural writer/request schemas, not an
 extensible result-reader policy or a serializer for result instances. Runtime
 validation must additionally reject nonfinite numbers and implement ADR-22's
 explicit integer normalization; JSON Schema alone is not a Python validator.
+
+#### What fails, and how
 
 Invalid declarations raise `QgisSdkDeclarationError` (a `QgisSdkError` with code
 `invalid_declaration`), naming the action/binding/field where applicable. IDs must
@@ -1027,6 +1042,8 @@ print(described.qualified_id, described.kinds, described.required)
 # field_tools:buffer {'layer_id': 'layer', 'distance': 'metres', 'crs': 'crs'} ('layer_id', 'distance', 'crs')
 ```
 
+### How do I run one from a context?
+
 `invoke(function, ctx, **inputs)` runs one from the context the caller already
 holds - the `PluginContext` of an action, the `JobContext` of a job, or the
 `AlgorithmContext` of another algorithm. It reads `algorithms`, `project` and
@@ -1054,6 +1071,8 @@ Nothing is injected at decoration time, so a unit test needs no runner: call
 `buffer(fake_context, layer_id=..., distance=..., crs=...)` with an
 `AlgorithmContext` built over the `qgis_sdk.testing` fakes.
 
+### What does the description carry?
+
 The input schemas come from the same `qgis_sdk.declarations` generator that
 describes plugin actions, so an algorithm's inputs are held to one documented
 typing subset. `AlgorithmDescription` carries `parameters`, `required`,
@@ -1061,9 +1080,27 @@ typing subset. `AlgorithmDescription` carries `parameters`, `required`,
 `result_type` / `result_schema`, `group`, `provider_id` and `qualified_id`;
 `to_dict()["inputs"]` is the object schema itself.
 
-**Non-destructive by construction (decision-19).** `Algorithms.execute` writes a *new* output and opens it as a layer the runtime owns; no method edits the source dataset. A run that fails deletes its own temporary directory before re-raising, so no partial output survives a failure, and the intermediate reprojection a buffer needs is scaffolding that never outlives the run either. `invoke` adds the output to the project only after the function returned, the result matched its declared type *and* cancellation was not requested in between; a failure or cancellation at any point leaves the project as it was.
+### Safe outputs
 
-**Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
+#### Non-destructive by construction (decision-19)
+
+`Algorithms.execute` writes a *new* output and opens it as a layer the runtime
+owns; no method edits the source dataset. A run that fails deletes its own
+temporary directory before re-raising, so no partial output survives a failure,
+and the intermediate reprojection a buffer needs is scaffolding that never
+outlives the run either. `invoke` adds the output to the project only after the
+function returned, the result matched its declared type *and* cancellation was
+not requested in between; a failure or cancellation at any point leaves the
+project as it was.
+
+#### Explicit CRS and units where a distance is involved
+
+`BufferRequest` requires `working_crs` and `distance_metres`; the native
+backend refuses a working CRS that is geographic (a distance there would be
+degrees) or whose units are not metres, instead of converting behind the
+caller's back. `CentroidRequest` has no distance and therefore no working CRS:
+decision-19 requires a projected CRS *where the operation has one*, not
+everywhere.
 
 Two honest limits of this slice: cancellation is observed at phase boundaries (before the function runs, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm's result is a vector layer - other layer kinds arrive with the services that produce them.
 
@@ -1109,6 +1146,8 @@ or boolean as itself. A run that fails removes that directory and raises
 `run` is synchronous on the GUI thread, like `processing.run`; a long
 algorithm belongs in a `@job`.
 
+#### The generated modules
+
 `qgis_sdk.processing.native`, `.qgis`, `.gdal`, `.p3d` and `.pdal` are
 **generated**, never edited: each carries a `TypedDict` per algorithm (the
 shape `run(id, params)` is typed by), a request class per algorithm
@@ -1121,6 +1160,8 @@ fresh by `scripts/generate_processing_snapshot.py` and a CI drift check. A
 host whose registry differs is what `describe` reports; the host's
 description, not the snapshot, is what a run is validated against.
 
+#### Over the fakes
+
 Over the fakes, `FakeAlgorithms.list`/`describe` answer from that snapshot
 (or a `Catalogue` the test passes as `catalogue=`), and `run` answers from
 what the test scripted with `script_run(id, outputs)` - a mapping of output
@@ -1128,6 +1169,8 @@ name to a `Path` (becomes the registered layer or a `FileRef`, by the
 output's kind) or a scalar, or a callable of the `AlgorithmRun` - and
 records every run in `.runs`. A run nobody scripted fails with
 `QgisSdkAlgorithmFailedError`, never with an invented layer.
+
+#### Generating modules for another provider
 
 A project that depends on a provider the runtime does not ship generates its
 own modules with the developer tools:
@@ -1372,60 +1415,88 @@ async def load(self, ctx):
     return response.raise_for_status().json()
 ```
 
-- **Coroutines, scheduled by the host.** `get`/`post`/`request` are
-  `async def` and suspend on a `Handoff` from `qgis_sdk.core.scheduling`: the
-  job waits, the GUI thread does not. Cancelling the job aborts the reply;
-  closing the owning scope aborts everything the client still has in flight, so
-  a disposed plugin never gets a callback.
-- **Blocking is explicit and off the GUI thread.** `ctx.network.blocking.get(...)`
-  runs the same exchange on the calling thread under a local event loop and
-  raises `QgisSdkBlockingOnGuiThreadError` on the GUI thread instead of nesting
-  an event loop into the host's. Use it from `QThreadPool`, `QgsTask` or a
-  plain thread.
-- **Derived, immutable clients.** `configure(base_url, headers, timeout,
-  auth_config, max_redirects, max_body_bytes)` returns a new client; nothing
-  mutates a shared default, so a typed service client carries its own base URL
-  without touching the plugin's.
-- **One `Response`.** `status_code`, `reason`, `headers` (case-insensitive,
-  credentials redacted in `repr`), `content`, `text`, `json()`, `ok` and
-  `raise_for_status()`. A `404` is a response; only `raise_for_status()` turns
-  it into `QgisSdkHttpStatusError`.
-- **Errors you can tell apart by `code`.** `QgisSdkRequestRejectedError`
-  (bad URL, user-info in the URL, unsupported method),
-  `QgisSdkRequestCancelledError`, `QgisSdkConnectionError`,
-  `QgisSdkRequestTimeoutError`, `QgisSdkTlsError`,
-  `QgisSdkAuthenticationError`, `QgisSdkRedirectError`,
-  `QgisSdkResponseTooLargeError`, `QgisSdkHttpStatusError`,
-  `QgisSdkDecodeError`, all under `QgisSdkNetworkError` with the method and the
-  URL in the message.
-- **Defaults from measurement.** 30 s timeout, 20 redirects, 16 MiB buffered
-  body; the last two were measured against `QgsNetworkAccessManager` on
-  loopback servers, not chosen. A body over the ceiling is aborted while
-  downloading, not buffered and then refused.
-- **QGIS owns the configuration.** The native transport goes through
-  `QgsNetworkAccessManager`, so the proxy, the certificate trust and the
-  authentication database a user set in QGIS apply; `auth_config` is handed to
-  `QgsAuthManager.updateNetworkRequest`, and no credential passes through the
-  SDK. Trust changes made at runtime need `rebuildTrustedCaCertsCache()` and,
-  for a host Qt already talked to, `clearConnectionCache()`; both are QGIS
-  calls, not SDK ones.
-- **Redirects are followed by the transport, not by Qt.** The manager was
-  measured forwarding `Authorization` and `Cookie` to another origin, so the
-  transport follows hops itself and drops `Authorization`, `Cookie`,
-  `Proxy-Authorization` and the auth configuration when scheme, host or port
-  changes; `https` → `http` is refused.
-- **Typed services compose over it.** `qgis_sdk.network.OgcApiFeatures(network,
-  base_url)` is the first: `collections()`, `items(collection_id, limit, bbox)`
-  and `next_page(page)` return dataclasses, and a malformed document is a
-  `QgisSdkServiceResponseError`. WMS/WFS layers stay on QGIS providers.
-- **Tests inject a fake.** `qgis_sdk.testing.FakeNetworkTransport` is scripted
-  with `expect(method, url, response | exception | responder, hold=False)`;
-  an unexpected request fails the test with `QgisSdkNetworkFakeError`, a held
-  request is released from the test with `pending[0].deliver()`, and
-  `assert_satisfied()` reports unmet expectations. It never opens a socket.
-  The native transport is covered by `tests/test_network_native.py` against
-  loopback servers, including the QGIS proxy setting, a Basic authentication
-  configuration, and a certificate trusted through the auth manager.
+### How does a request run?
+
+#### Coroutines, scheduled by the host
+
+`get`/`post`/`request` are `async def` and suspend on a `Handoff` from
+`qgis_sdk.core.scheduling`: the job waits, the GUI thread does not. Cancelling
+the job aborts the reply; closing the owning scope aborts everything the client
+still has in flight, so a disposed plugin never gets a callback.
+
+#### Blocking is explicit and off the GUI thread
+
+`ctx.network.blocking.get(...)` runs the same exchange on the calling thread
+under a local event loop and raises `QgisSdkBlockingOnGuiThreadError` on the
+GUI thread instead of nesting an event loop into the host's. Use it from
+`QThreadPool`, `QgsTask` or a plain thread.
+
+#### Derived, immutable clients
+
+`configure(base_url, headers, timeout, auth_config, max_redirects,
+max_body_bytes)` returns a new client; nothing mutates a shared default, so a
+typed service client carries its own base URL without touching the plugin's.
+
+### What comes back?
+
+#### One `Response`
+
+`status_code`, `reason`, `headers` (case-insensitive, credentials redacted in
+`repr`), `content`, `text`, `json()`, `ok` and `raise_for_status()`. A `404` is
+a response; only `raise_for_status()` turns it into `QgisSdkHttpStatusError`.
+
+#### Errors you can tell apart by `code`
+
+`QgisSdkRequestRejectedError` (bad URL, user-info in the URL, unsupported
+method), `QgisSdkRequestCancelledError`, `QgisSdkConnectionError`,
+`QgisSdkRequestTimeoutError`, `QgisSdkTlsError`, `QgisSdkAuthenticationError`,
+`QgisSdkRedirectError`, `QgisSdkResponseTooLargeError`,
+`QgisSdkHttpStatusError`, `QgisSdkDecodeError`, all under `QgisSdkNetworkError`
+with the method and the URL in the message.
+
+### Which limits and configuration apply?
+
+#### Defaults from measurement
+
+30 s timeout, 20 redirects, 16 MiB buffered body; the last two were measured
+against `QgsNetworkAccessManager` on loopback servers, not chosen. A body over
+the ceiling is aborted while downloading, not buffered and then refused.
+
+#### QGIS owns the configuration
+
+The native transport goes through `QgsNetworkAccessManager`, so the proxy, the
+certificate trust and the authentication database a user set in QGIS apply;
+`auth_config` is handed to `QgsAuthManager.updateNetworkRequest`, and no
+credential passes through the SDK. Trust changes made at runtime need
+`rebuildTrustedCaCertsCache()` and, for a host Qt already talked to,
+`clearConnectionCache()`; both are QGIS calls, not SDK ones.
+
+#### Redirects are followed by the transport, not by Qt
+
+The manager was measured forwarding `Authorization` and `Cookie` to another
+origin, so the transport follows hops itself and drops `Authorization`,
+`Cookie`, `Proxy-Authorization` and the auth configuration when scheme, host or
+port changes; `https` → `http` is refused.
+
+### What builds on it?
+
+#### Typed services compose over it
+
+`qgis_sdk.network.OgcApiFeatures(network, base_url)` is the first:
+`collections()`, `items(collection_id, limit, bbox)` and `next_page(page)`
+return dataclasses, and a malformed document is a
+`QgisSdkServiceResponseError`. WMS/WFS layers stay on QGIS providers.
+
+#### Tests inject a fake
+
+`qgis_sdk.testing.FakeNetworkTransport` is scripted with `expect(method, url,
+response | exception | responder, hold=False)`; an unexpected request fails the
+test with `QgisSdkNetworkFakeError`, a held request is released from the test
+with `pending[0].deliver()`, and `assert_satisfied()` reports unmet
+expectations. It never opens a socket. The native transport is covered by
+`tests/test_network_native.py` against loopback servers, including the QGIS
+proxy setting, a Basic authentication configuration, and a certificate trusted
+through the auth manager.
 
 ## Scoped jobs
 
@@ -1480,6 +1551,8 @@ a plain `def` runs in one step on the driving thread, a generator is refused.
 `delay`; there is no ambient `add.delay(...)`, because the owner is always
 explicit (decision-21).
 
+### What is checked before a job runs?
+
 `describe_job(add)` returns the `JobDescription` (`id`, `title`, the parameter
 names, which are required, the result type, and the object schema of the
 inputs plus the result schema from the declarations generator) without calling
@@ -1527,45 +1600,52 @@ into keyword parameters (a dataclass is still a fine parameter type when the
 inputs are genuinely one object), and call `delay` with keywords. A class
 handed to `@job` or `bind` is refused with a message that points here.
 
-Three rules decide everything else:
+### Three rules decide everything else
 
-- **A request is not a state.** `handle.cancel()` returns whether the job was
-  still active and sets `cancel_requested`; `status` becomes `cancelled` only
-  when the job acknowledges it at a suspension point (or before it ever
-  started). A job that finishes anyway reports `succeeded`, honestly. Work
-  that never reaches a suspension point stays `running`; `quiesce()` names it
-  as a blocker instead of pretending it stopped, and nothing kills a thread.
-- **Callbacks run on the tick, never on a worker.** Progress reported from a
-  worker thread is coalesced to the latest fraction and delivered on the next
-  tick; each terminal outcome is delivered exactly once, in subscription
-  order. Subscribing late replays the current state synchronously as one
-  transition; a terminal replay completes the subscription. A callback that
-  raises is detached and reported through `faults` / `on_fault`, never
-  raised into the tick. `handle.get(timeout)` blocks only off the GUI thread -
-  on it, `QgisSdkJobWaitRefusedError`; a timeout is
-  `QgisSdkJobNotSettledError`. `handle.result` reads the same outcome
-  without waiting: the typed result, the job's own exception for a failed
-  job, `QgisSdkJobCancelledError` for a cancelled one, and
-  `QgisSdkJobNotSettledError` only while the job is queued or running.
-  A `tick()` entered while another is on the stack - a job or a callback
-  opened a modal dialog and its nested event loop fired the host timer - is
-  ignored and returns `0`; a nested `quiesce()` is refused with the blocker
-  `a tick is already in progress on this thread`.
-- **Disposal beats delivery.** `ctx.jobs` in a view is
-  `plugin_jobs.scoped(view_scope)`: closing the view disposes every
-  subscription it owns first, then asks each of its jobs to stop. Hiding a
-  dock is not disposal. A finished handle whose view closed afterwards refuses
-  new subscriptions rather than replaying into it. Plugin-lifetime work is
-  explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
-  plugin scope abandons everything through the scheduler's existing rule;
-  nobody is called. A subscription may name another owner
-  (`handle.on_success(cb, owner=other_scope)`); that owner's closure detaches
-  it, and the service keeps one close hook per such owner, released as the
-  job finishes, so a long-lived owner does not accumulate finished jobs.
+#### A request is not a state
+
+`handle.cancel()` returns whether the job was still active and sets
+`cancel_requested`; `status` becomes `cancelled` only when the job acknowledges
+it at a suspension point (or before it ever started). A job that finishes
+anyway reports `succeeded`, honestly. Work that never reaches a suspension
+point stays `running`; `quiesce()` names it as a blocker instead of pretending
+it stopped, and nothing kills a thread.
+
+#### Callbacks run on the tick, never on a worker
+
+Progress reported from a worker thread is coalesced to the latest fraction and
+delivered on the next tick; each terminal outcome is delivered exactly once, in
+subscription order. Subscribing late replays the current state synchronously as
+one transition; a terminal replay completes the subscription. A callback that
+raises is detached and reported through `faults` / `on_fault`, never raised
+into the tick. `handle.get(timeout)` blocks only off the GUI thread - on it,
+`QgisSdkJobWaitRefusedError`; a timeout is `QgisSdkJobNotSettledError`.
+`handle.result` reads the same outcome without waiting: the typed result, the
+job's own exception for a failed job, `QgisSdkJobCancelledError` for a
+cancelled one, and `QgisSdkJobNotSettledError` only while the job is queued or
+running. A `tick()` entered while another is on the stack - a job or a callback
+opened a modal dialog and its nested event loop fired the host timer - is
+ignored and returns `0`; a nested `quiesce()` is refused with the blocker `a
+tick is already in progress on this thread`.
+
+#### Disposal beats delivery
+
+`ctx.jobs` in a view is `plugin_jobs.scoped(view_scope)`: closing the view
+disposes every subscription it owns first, then asks each of its jobs to stop.
+Hiding a dock is not disposal. A finished handle whose view closed afterwards
+refuses new subscriptions rather than replaying into it. Plugin-lifetime work
+is explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
+plugin scope abandons everything through the scheduler's existing rule; nobody
+is called. A subscription may name another owner (`handle.on_success(cb,
+owner=other_scope)`); that owner's closure detaches it, and the service keeps
+one close hook per such owner, released as the job finishes, so a long-lived
+owner does not accumulate finished jobs.
 
 There are no automatic retries: resubmission is `delay` again, with a new
 logical id, and `attempt` is carried as `1` so a later, explicit retry policy
 has somewhere to count.
+
+### How do hosts compose the service?
 
 Hosts compose the service once per plugin:
 

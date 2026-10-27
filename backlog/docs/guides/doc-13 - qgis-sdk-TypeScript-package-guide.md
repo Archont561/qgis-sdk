@@ -143,16 +143,25 @@ const client = new BridgeClient({
 const layer = await client.invoke("layers.info", { layer_id: "sites" });
 ```
 
-- **Correlated calls:** a reply that names no pending call is counted, never
-  delivered to whichever call happens to be waiting.
-- **Three different outcomes:** a local abort, a timeout and a closed client are
-  three errors, and a timeout says the outcome is unknown. Nothing is retried
-  automatically.
-- **Subscriptions:** `client.subscribe(operation, payload, { onEvent, onTerminal })`
-  resolves with a handle once the host acknowledges it. Frames must arrive with
-  a `seq` that continues the sequence; anything else ends the subscription with a
-  `gap` terminal instead of delivering out of order. `close()` notifies the host
-  once, and closing an already-ended subscription sends nothing.
+### What the client guarantees
+
+#### Correlated calls
+
+A reply that names no pending call is counted, never delivered to whichever
+call happens to be waiting.
+
+#### Three different outcomes
+
+A local abort, a timeout and a closed client are three errors, and a timeout
+says the outcome is unknown. Nothing is retried automatically.
+
+#### Subscriptions
+
+`client.subscribe(operation, payload, { onEvent, onTerminal })` resolves with a
+handle once the host acknowledges it. Frames must arrive with a `seq` that
+continues the sequence; anything else ends the subscription with a `gap`
+terminal instead of delivering out of order. `close()` notifies the host once,
+and closing an already-ended subscription sends nothing.
 
 ```ts
 const subscription = await client.subscribe("project.changes", {}, {
@@ -264,6 +273,8 @@ $ qgis-sdk bridge generate --plugin my_plugin.plugin:MyPlugin
 wrote web/src/bridge.schema.ts
 ```
 
+### What does the module export?
+
 The module is data, not code. It exports the declared value types, `OPERATIONS`
 and `OperationId`, one `Operations` interface (request and result per action),
 one `Streams` interface (request and event union per stream), and as its
@@ -283,6 +294,8 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 export default schema;
 ```
 
+### How does a page build a `QgisSdk`?
+
 `defineBridgeSchema` is the module's only import. It parses and freezes the
 description exactly as `parsePluginDescription` does and pins the two type
 parameters; there is no generated validator, because the SDK validates at run
@@ -297,60 +310,78 @@ const qgis = QgisSdk.fromBridgeSchema(schema);
 const summary = await qgis.sites.summary({ layer_id: "sites" });
 ```
 
-- **Transport.** Without options `fromBridgeSchema` connects to the
-  `QWebChannel` object named `"bridge"`, which is what the Python runtime
-  registers on the view. Outside a QGIS web view it throws
-  `QgisSdkWebChannelError` (`code: "no_web_channel"`) synchronously, so the
-  page can say why instead of waiting on a channel that never comes. Pass
-  `{ transport }` to use another wire (the test harness below), `{ client }` to
-  share a `BridgeClient` the page already owns (then `close()` leaves it
-  alone), `{ channelObject }` for another registered name, `{ timeoutMs }` for
-  the per-call timeout of an owned client.
-- **Compile time.** Every declared operation is a method nested under the
-  segments of its id: `qgis.open_fixture()` for a plain id,
-  `qgis.sites.summary(...)` for `sites.summary`, `qgis.tools.measure.area(...)`
-  for a deeper one - the same shape as `qgis.host.layers.list(...)`. An
-  operation the plugin did not declare is not a member, and a misspelled or
-  mistyped argument is a type error - including an unknown property inside a
-  nested object. An action whose request declares no fields takes no
-  argument. Two rules follow from nesting, checked by `bridge generate` and
-  again by `fromBridgeSchema` (`QgisSdkDeclarationError`): an id may not be a
-  prefix of another (`sites` cannot be a method and hold `sites.summary`),
-  and an id's first segment may not be a core member (`client`, `host`,
-  `schema`, `ready`, `close`).
-- **Runtime.** The method validates what it sends (strict: unknown arguments
-  are refused before the transport is touched) and what comes back (lenient:
-  a field a newer host added is tolerated, a missing or mistyped one is
-  refused). Both refusals are `QgisSdkContractError` (`code:
-  "contract_validation_failed"`) naming the operation, the direction
-  (`request`, `result` or `event`) and the issues, each with a path.
-  Primitives, `list`/`tuple`, unions, `Literal` and nested dataclasses are
-  checked; a reply the schema cannot describe never reaches the page.
-- **Streams are operations too (decision-28).** A method the plugin marked with
-  `@stream(id="sites.watch", events={"data": SiteChange, "progress": ScanProgress})`
-  becomes `qgis.sites.watch(request, { onEvent, onTerminal }, options)`,
-  returning the same `StreamHandle` as `client.subscribe`. `onEvent` narrows
-  on `event.kind`; a frame whose kind the plugin did not declare, or whose
-  payload does not match, ends the subscription with an `error` terminal
-  instead of reaching the handler. The frame envelope - `seq`, `gap`,
-  `close()` - stays in this package's kernel.
-- **`qgis.host`** is the typed host surface of
-  [Host namespaces](#host-namespaces) on the same client - `layers`,
-  `project`, `settings`, `notifications`, `styles`, `files` and the
-  `network.fetch` stream - plus `granted`, the host operation ids the
-  handshake advertised for this view. A call outside the grants is refused by
-  the host with its own failure code; the SDK does not pre-empt it.
-- **`qgis.ready`** resolves once the handshake answered; it rejects with the
-  host's `QgisSdkBridgeRemoteError` when the host refused the handshake and
-  with `QgisSdkBridgeProtocolError` when the reply is not a handshake;
-  `qgis.client` is the `BridgeClient` underneath for what no method covers;
-  `qgis.schema` is the module the instance was built from. A plugin may not
-  declare an operation named like one of these members
-  (`QgisSdkDeclarationError`).
-- **Owned by CI.** The file is generated source, never edited by hand: the
-  plugin's CI runs `qgis-sdk bridge generate --check` and fails when the
-  checked-in copy differs. `CONTRACT_FINGERPRINT` identifies the wire contract
-  the file was built from.
+### How does it connect, and what does it check?
+
+#### Transport
+
+Without options `fromBridgeSchema` connects to the `QWebChannel` object named
+`"bridge"`, which is what the Python runtime registers on the view. Outside a
+QGIS web view it throws `QgisSdkWebChannelError` (`code: "no_web_channel"`)
+synchronously, so the page can say why instead of waiting on a channel that
+never comes. Pass `{ transport }` to use another wire (the test harness below),
+`{ client }` to share a `BridgeClient` the page already owns (then `close()`
+leaves it alone), `{ channelObject }` for another registered name, `{ timeoutMs
+}` for the per-call timeout of an owned client.
+
+#### Compile time
+
+Every declared operation is a method nested under the segments of its id:
+`qgis.open_fixture()` for a plain id, `qgis.sites.summary(...)` for
+`sites.summary`, `qgis.tools.measure.area(...)` for a deeper one - the same
+shape as `qgis.host.layers.list(...)`. An operation the plugin did not declare
+is not a member, and a misspelled or mistyped argument is a type error -
+including an unknown property inside a nested object. An action whose request
+declares no fields takes no argument. Two rules follow from nesting, checked by
+`bridge generate` and again by `fromBridgeSchema` (`QgisSdkDeclarationError`):
+an id may not be a prefix of another (`sites` cannot be a method and hold
+`sites.summary`), and an id's first segment may not be a core member (`client`,
+`host`, `schema`, `ready`, `close`).
+
+#### Runtime
+
+The method validates what it sends (strict: unknown arguments are refused
+before the transport is touched) and what comes back (lenient: a field a newer
+host added is tolerated, a missing or mistyped one is refused). Both refusals
+are `QgisSdkContractError` (`code: "contract_validation_failed"`) naming the
+operation, the direction (`request`, `result` or `event`) and the issues, each
+with a path. Primitives, `list`/`tuple`, unions, `Literal` and nested
+dataclasses are checked; a reply the schema cannot describe never reaches the
+page.
+
+#### Streams are operations too (decision-28)
+
+A method the plugin marked with `@stream(id="sites.watch", events={"data":
+SiteChange, "progress": ScanProgress})` becomes `qgis.sites.watch(request, {
+onEvent, onTerminal }, options)`, returning the same `StreamHandle` as
+`client.subscribe`. `onEvent` narrows on `event.kind`; a frame whose kind the
+plugin did not declare, or whose payload does not match, ends the subscription
+with an `error` terminal instead of reaching the handler. The frame envelope -
+`seq`, `gap`, `close()` - stays in this package's kernel.
+
+### What else is on the instance?
+
+#### `qgis.host`
+
+`qgis.host` is the typed host surface of [Host namespaces](#host-namespaces) on
+the same client - `layers`, `project`, `settings`, `notifications`, `styles`,
+`files` and the `network.fetch` stream - plus `granted`, the host operation ids
+the handshake advertised for this view. A call outside the grants is refused by
+the host with its own failure code; the SDK does not pre-empt it.
+
+#### `qgis.ready`
+
+`qgis.ready` resolves once the handshake answered; it rejects with the host's
+`QgisSdkBridgeRemoteError` when the host refused the handshake and with
+`QgisSdkBridgeProtocolError` when the reply is not a handshake; `qgis.client`
+is the `BridgeClient` underneath for what no method covers; `qgis.schema` is
+the module the instance was built from. A plugin may not declare an operation
+named like one of these members (`QgisSdkDeclarationError`).
+
+#### Owned by CI
+
+The file is generated source, never edited by hand: the plugin's CI runs
+`qgis-sdk bridge generate --check` and fails when the checked-in copy differs.
+`CONTRACT_FINGERPRINT` identifies the wire contract the file was built from.
 
 ```ts
 const handle = await qgis.sites.watch(
@@ -410,35 +441,46 @@ layers.subscribe((state) => {
 void layers.refresh();
 ```
 
-- **`OperationStore(operation)`** - one declared operation as state:
-  `idle | pending | ok (value) | error (error)`. `run(input)` resolves with
-  the value or `undefined` (failed, aborted or superseded; the state carries
-  the error, so the promise never rejects into an event handler); only the
-  latest run can change the state. `abort()`, `reset()`.
-- **`StreamStore(open, handlers?)`** - one subscription that follows the
-  *content* of its input (`setInput(value)`, keyed on `stableKey`; `null`
-  closes it): `idle | opening | open | ended | failed`. `setHandlers` swaps
-  the callbacks without reopening; `close()` sends one unsubscribe even before
-  the host has acknowledged the open.
-- **`FormStore` / `formStore(qgis, actionId, { initial })`** - the typed form
-  for one declared action, built from its request schema with
-  `schemaFields(schema)`: a `FormField` per property with the parameter kind
-  the Python side marked (`"x-qgis-sdk"`, [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md)),
-  a `labelFor` label, `required`, `nullable`, `choices` and `details`.
-  `set(name, value)` coerces strings per kind (numbers, booleans, integers)
-  and validates with `validateAgainstSchema`; `setValues`, `reset()`,
-  `submit()` (validates, marks `submitted`, then runs the operation),
-  `abort()`, `dispose()`, `field(name)`. The declared dialect has no
-  defaults, so starting values come from `initial`.
-- **`HostQueryStore(qgis, hostOperationId, loader)`** - reads the curated
-  host surface after the handshake. When `qgis.host.granted` lacks the
-  operation the query needs it settles on `refused` (with the operation id
-  and a message) **without a call**, so a page can say "add `layers.read` to
-  the page's grants" instead of surfacing a `not_authorized` fault.
-  `layersQuery(qgis, { pageSize? })` follows `layers.list` to the last page;
-  `layerFieldsQuery(qgis, layerId)` reads `layers.get` for a `field` input
-  whose `of` names a layer input. Both need the `layers.read` grant, which
-  the scaffold's `[tool.qgis-sdk.web] grants` now lists.
+### The four stores
+
+#### `OperationStore(operation)`
+
+One declared operation as state: `idle | pending | ok (value) | error (error)`.
+`run(input)` resolves with the value or `undefined` (failed, aborted or
+superseded; the state carries the error, so the promise never rejects into an
+event handler); only the latest run can change the state. `abort()`, `reset()`.
+
+#### `StreamStore(open, handlers?)`
+
+One subscription that follows the *content* of its input (`setInput(value)`,
+keyed on `stableKey`; `null` closes it): `idle | opening | open | ended |
+failed`. `setHandlers` swaps the callbacks without reopening; `close()` sends
+one unsubscribe even before the host has acknowledged the open.
+
+#### `FormStore` / `formStore(qgis, actionId, { initial })`
+
+The typed form for one declared action, built from its request schema with
+`schemaFields(schema)`: a `FormField` per property with the parameter kind the
+Python side marked (`"x-qgis-sdk"`,
+[doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md)), a `labelFor` label,
+`required`, `nullable`, `choices` and `details`. `set(name, value)` coerces
+strings per kind (numbers, booleans, integers) and validates with
+`validateAgainstSchema`; `setValues`, `reset()`, `submit()` (validates, marks
+`submitted`, then runs the operation), `abort()`, `dispose()`, `field(name)`.
+The declared dialect has no defaults, so starting values come from `initial`.
+
+#### `HostQueryStore(qgis, hostOperationId, loader)`
+
+Reads the curated host surface after the handshake. When `qgis.host.granted`
+lacks the operation the query needs it settles on `refused` (with the operation
+id and a message) **without a call**, so a page can say "add `layers.read` to
+the page's grants" instead of surfacing a `not_authorized` fault.
+`layersQuery(qgis, { pageSize? })` follows `layers.list` to the last page;
+`layerFieldsQuery(qgis, layerId)` reads `layers.get` for a `field` input whose
+`of` names a layer input. Both need the `layers.read` grant, which the
+scaffold's `[tool.qgis-sdk.web] grants` now lists.
+
+### Misuse, and the shared behaviour suite
 
 A `QgisSdkStoreError` (`"store_error"`) is raised for misuse: a form over an
 action the schema does not declare, or a field the form does not have. The
