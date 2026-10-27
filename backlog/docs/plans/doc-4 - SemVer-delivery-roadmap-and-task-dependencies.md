@@ -160,6 +160,7 @@ Sprint order in [doc-19](doc-19%20-%20M6-sprint-train-and-0.7.0-dependency-order
 - [TASK-77](../../tasks/task-77%20-%20Declare-externals-with-a-startup-probe-vendor-pure-Python-packages-in-build-and-bucket-imports-in-check.md): Declare externals with a startup probe, vendor pure-Python packages in `build`, and bucket imports in `check` (decision-50)
 - [TASK-70](../../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md): Create `@archont561/qgis-sdk-ui`: web components on the store core, React, Vue and Svelte wrappers, palette tokens and Storybook (decision-47 point 3; closes decision-16's theme half)
 - [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md): Adopt the declarative surface form across the scaffold, the web mirror and the snapshot tooling (decision-55 amendment; after TASK-70)
+- [TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md): Generate the Processing catalogue: typed registry in Python and TypeScript, list, describe and run for any provider (decision-64; pulled forward from TASK-94, sprint 5)
 - [TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md): Publish a Starlight documentation site from the backlog guides (carries the Storybook build)
 - [TASK-32](../../tasks/task-32%20-%20Prepare-and-qualify-0.7.0-release.md): Prepare and qualify 0.7.0 release (Python 0.7.0 + the next bridge minor + `qgis-sdk-ui` 0.1.0)
 
@@ -204,7 +205,7 @@ Sprint order in [doc-25](doc-25%20-%20M10-sprint-train-and-0.11.0-dependency-ord
 - [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md): Add mesh, point cloud, vector tile, annotation and tiled-scene layer kinds with per-kind info models and open operations
 - [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md): Add symbology, labelling and the style manager: renderer and symbol models, labelling settings, style manager read, QML and SLD import and export
 - [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md): Add connections and authentication configuration: registered data-source connections, browsing, opening from a connection, auth configuration ids
-- [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md): Widen Processing: discovery and help, every output kind, model files and batch runs
+- [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md): Processing: model files and batch runs; function algorithms declare every output kind (narrowed by TASK-109)
 - [TASK-95](../../tasks/task-95%20-%20Prepare-and-qualify-0.11.0-release.md): Prepare and qualify 0.11.0 release
 
 ### 1.0.0
