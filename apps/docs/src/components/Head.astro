@@ -1,0 +1,29 @@
+---
+/**
+ * Starlight's head plus structured data on the landing page: a
+ * SoftwareApplication record search engines show as a rich result. The
+ * default component keeps every upstream tag; this only appends.
+ */
+import Default from "@astrojs/starlight/components/Head.astro";
+import { BASE, DESCRIPTION, REPOSITORY, SITE, TITLE } from "../../site";
+import { versions } from "../versions";
+
+const isLanding = Astro.locals.starlightRoute.id === "";
+const jsonLd = {
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	name: TITLE,
+	description: DESCRIPTION,
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: "Linux, macOS, Windows",
+	offers: { "@type": "Offer", price: "0" },
+	url: `${SITE}${BASE}/`,
+	downloadUrl: "https://pypi.org/project/qgis-sdk/",
+	softwareVersion: versions.python,
+	codeRepository: REPOSITORY,
+	license: `${REPOSITORY}/blob/main/LICENSE`,
+};
+---
+
+<Default><slot /></Default>
+{isLanding && <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />}

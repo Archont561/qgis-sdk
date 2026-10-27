@@ -1,0 +1,21 @@
+{
+	"name": "@workspace/docs",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"generate": "bun run scripts/generate.ts",
+		"dev": "bun run generate && bun --bun astro dev --host 0.0.0.0",
+		"build": "bun run generate && bun --bun astro build",
+		"check-links": "bun run scripts/check-links.ts",
+		"preview": "bun --bun astro preview",
+		"test": "bun test",
+		"coverage": "bun --cwd=../.. --config=apps/docs/bunfig.toml test --coverage apps/docs/tests"
+	},
+	"dependencies": {
+		"@astrojs/starlight": "0.42.7",
+		"astro": "7.4.2",
+		"sharp": "0.35.5",
+		"starlight-llms-markdown": "0.1.0"
+	}
+}

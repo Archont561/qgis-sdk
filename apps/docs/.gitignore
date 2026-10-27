@@ -1,0 +1,9 @@
+# Rendered from backlog/docs/guides by scripts/generate.ts
+/src/content/docs/python/
+/src/content/docs/typescript/
+/src/content/docs/workspace/
+# Copied from packages/qgis-sdk-ui/storybook-static by scripts/generate.ts
+/public/storybook/
+# Astro
+/.astro/
+/dist/

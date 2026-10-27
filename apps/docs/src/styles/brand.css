@@ -1,0 +1,107 @@
+/*
+ * The single source of visual truth. Starlight reads the --sl-* tokens; the
+ * landing page and every page share them, so both layers read as one product.
+ * Restraint on purpose: one accent, one surface scale, hairlines over shadows.
+ */
+
+:root {
+	--brand-grad: linear-gradient(90deg, #3fbf8a, #1f7a9a);
+	/* Light scheme accent: QGIS-adjacent green, legible on white. */
+	--sl-color-accent-low: #d6f3e6;
+	--sl-color-accent: #137a52;
+	--sl-color-accent-high: #0a4a32;
+	--sl-color-white: #0f172a;
+	--sl-color-gray-1: #1e293b;
+	--sl-color-gray-2: #334155;
+	--sl-color-gray-3: #64748b;
+	--sl-color-gray-4: #94a3b8;
+	--sl-color-gray-5: #cbd5e1;
+	--sl-color-gray-6: #eef2f6;
+	--sl-color-gray-7: #f6f8fa;
+	--sl-color-black: #ffffff;
+}
+
+:root[data-theme="dark"] {
+	--sl-color-accent-low: #0e3b2b;
+	--sl-color-accent: #3fbf8a;
+	--sl-color-accent-high: #a7ecd0;
+	--sl-color-white: #f1f5f9;
+	--sl-color-gray-1: #e2e8f0;
+	--sl-color-gray-2: #c3ccd8;
+	--sl-color-gray-3: #8c98a8;
+	--sl-color-gray-4: #5a6577;
+	--sl-color-gray-5: #353d4b;
+	--sl-color-gray-6: #1c222c;
+	--sl-color-black: #0f1115;
+	--sl-color-bg-nav: #0b0d11;
+	--sl-color-bg-sidebar: #12161d;
+}
+
+/* Hero: one gradient keyword, a gray lead, a copyable install line. */
+.hero h1 {
+	letter-spacing: -0.02em;
+}
+.hero .tagline {
+	color: var(--sl-color-gray-2);
+}
+.install-chip {
+	display: inline-block;
+	margin-top: 1rem;
+	padding: 0.5rem 0.9rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	font-family: var(--sl-font-mono);
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-white);
+	background: var(--sl-color-gray-6);
+	user-select: all;
+}
+.grad {
+	background: var(--brand-grad);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+
+/* Numbered steps on the landing page. */
+.steps {
+	counter-reset: step;
+	display: grid;
+	gap: 1rem;
+	grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+	padding: 0;
+	list-style: none;
+}
+.steps li {
+	counter-increment: step;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	padding: 1rem;
+	margin: 0;
+}
+.steps li::before {
+	content: counter(step, decimal-leading-zero);
+	display: block;
+	font-family: var(--sl-font-mono);
+	color: var(--sl-color-accent);
+	margin-bottom: 0.4rem;
+}
+.steps li > :first-child {
+	margin-top: 0;
+}
+
+/* Version badges in the hero. */
+.versions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	justify-content: center;
+	margin: 1rem 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-3);
+}
+.versions code {
+	color: var(--sl-color-white);
+}

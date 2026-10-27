@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://archont561.github.io/qgis-sdk/sitemap-index.xml
+
+# AI crawlers are welcome; /qgis-sdk/llms.txt indexes the site for them.
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /
