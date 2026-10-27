@@ -20,7 +20,11 @@ instance holds the instance's buttons and a ``RunButton`` its instance's
 ``JobProgress``. The host does this right after constructing the surface,
 before ``build()``; :func:`declared_root` is what the default ``build()``
 returns: the components no other declared component contains, as one
-``Column`` when there are several.
+``Column`` when there are several. :func:`apply_initial` is the other half
+of the default ``build()``: the ``initial`` values the opener passed go to
+the declared inputs of those names (at any depth - a ``Form`` or a ``Group``
+declared on the class counts), and a name no declared input carries is
+refused rather than dropped.
 """
 
 from __future__ import annotations
@@ -31,11 +35,13 @@ from typing import Any
 from qgis_sdk.declarations import derive_id
 from qgis_sdk.models import QgisSdkUiError
 
-from .components import Column, Component
+from .components import Column, Component, Input
 
 __all__ = [
     "MATERIALISED_ATTRIBUTE",
+    "apply_initial",
     "declared_components",
+    "declared_inputs",
     "declared_root",
     "materialise",
     "resolve_declared",
@@ -101,6 +107,46 @@ def declared_root(surface: Any) -> Component | None:
     if len(roots) == 1:
         return roots[0]
     return Column(derive_id(type(surface).__name__), roots)
+
+
+def declared_inputs(surface: Any) -> dict[str, Input]:
+    """Every :class:`Input` in the declared trees of ``surface``, by name.
+
+    The instance's copies, at any depth, in declaration order; an input
+    reached twice (declared and placed in a declared container) counts once.
+    """
+    found: dict[str, Input] = {}
+    seen: set[int] = set()
+
+    def visit(component: Component) -> None:
+        if id(component) in seen:
+            return
+        seen.add(id(component))
+        if isinstance(component, Input):
+            found.setdefault(component.name, component)
+        for child in component.children():
+            visit(child)
+
+    for component in materialise(surface).values():
+        visit(component)
+    return found
+
+
+def apply_initial(surface: Any) -> None:
+    """Seed the declared inputs from ``surface.initial``; an unknown name is refused."""
+    initial = getattr(surface, "initial", None) or {}
+    if not initial:
+        return
+    inputs = declared_inputs(surface)
+    unknown = sorted(set(initial) - set(inputs))
+    if unknown:
+        known = ", ".join(sorted(inputs)) or "none"
+        raise QgisSdkUiError(
+            f"{type(surface).__name__} has no input "
+            f"{', '.join(map(repr, unknown))}; it has: {known}"
+        )
+    for name, value in initial.items():
+        inputs[name].set_value(value)
 
 
 def resolve_declared(surface: Any, prototype: Component) -> Component | None:

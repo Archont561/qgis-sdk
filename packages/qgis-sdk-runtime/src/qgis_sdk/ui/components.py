@@ -142,13 +142,19 @@ class Component:
         self._name: str | None = None
         if name is not None:
             self._name = self._valid_name(name)
+        self._attribute: str | None = None
         self._label = label
         self._ctx: UiContext | None = None
         self._native: NativeRendering | None = None
         self._syncing = False
 
     def __set_name__(self, owner: type, attribute: str) -> None:
-        """A component declared on a class is called after its attribute."""
+        """A component declared on a class is called after its attribute.
+
+        The attribute is remembered either way, so a snapshot can say which
+        class attribute a node came from when its name was given explicitly.
+        """
+        self._attribute = attribute
         if self._name is None:
             self._name = self._valid_name(attribute)
 
@@ -169,6 +175,11 @@ class Component:
     def named(self) -> bool:
         """Whether the component has its name already."""
         return self._name is not None
+
+    @property
+    def attribute(self) -> str | None:
+        """The surface class attribute this component was declared on, if any."""
+        return self._attribute
 
     @property
     def label(self) -> str:
@@ -272,12 +283,15 @@ class Component:
 
     def snapshot(self) -> dict[str, Any]:
         """The semantic node of this component in a UI snapshot (decision-51)."""
-        return {
+        node = {
             "type": type(self).__name__,
             "name": self.name,
             "label": self.label,
             "objectName": self.object_name,
         }
+        if self._attribute is not None:
+            node["attribute"] = self._attribute
+        return node
 
     # -- for subclasses -------------------------------------------------------------
 

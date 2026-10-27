@@ -89,15 +89,17 @@ class Surface:
 
         The default loads ``ui`` when the class names a Designer file, else
         returns the components declared on the class (the declarative form:
-        the roots, stacked in a ``Column`` when there are several), and
-        refuses when there is neither.
+        the roots, stacked in a ``Column`` when there are several, with the
+        declared inputs seeded from ``initial`` by name), and refuses when
+        there is neither.
         """
         if self.ui is not None:
             return load_ui(type(self))
-        from .declarative import declared_root
+        from .declarative import apply_initial, declared_root
 
         root = declared_root(self)
         if root is not None:
+            apply_initial(self)
             return root
         raise NotImplementedError(
             f"{type(self).__name__}.build() must return the widget to show, "

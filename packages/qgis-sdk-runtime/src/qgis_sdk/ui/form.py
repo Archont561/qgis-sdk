@@ -52,6 +52,11 @@ class Form(Component):
     is what :meth:`submit` calls (set by :meth:`for_action`, or by hand for
     a form built from fields). The widget's ``objectName`` is the form's
     ``name`` (``form`` by default), its fields' ``form/<field>``.
+
+    The fields may be unnamed when the form is built - inputs declared on a
+    surface class get their names after the class body ran - so the form
+    keys them by name the first time anything asks (``fields``, ``values()``,
+    ``attach``), and refuses two of one name then.
     """
 
     def __init__(
@@ -64,22 +69,21 @@ class Form(Component):
     ) -> None:
         super().__init__(name, label=label)
         self.action_id = action_id
-        self._fields: dict[str, Input] = {}
-        for field in fields:
+        self._inputs: tuple[Input, ...] = tuple(fields)
+        for field in self._inputs:
             if not isinstance(field, Input):
+                shown = f" {field._name!r}" if isinstance(field, Component) else ""
                 raise QgisSdkUiError(
-                    f"{self._describe()}: {type(field).__name__} {field.name!r} is "
+                    f"{self._describe()}: {type(field).__name__}{shown} is "
                     "not an input; a form holds the catalogue's inputs only"
                 )
-            if field.name in self._fields:
-                raise QgisSdkUiError(
-                    f"{self._describe()}: two fields named {field.name!r}"
-                )
-            self._fields[field.name] = field
         self._listeners: list[FormListener] = []
         self._unsubscribes = [
-            field.changed(_relay(self, field.name)) for field in self._fields.values()
+            field.changed(_FieldRelay(self, field)) for field in self._inputs
         ]
+        self._by_name: dict[str, Input] | None = None
+        if all(field.named for field in self._inputs):
+            _ = self._fields  # named already: refuse a duplicate now
 
     # -- construction ---------------------------------------------------------------
 
@@ -130,6 +134,20 @@ class Form(Component):
         return form
 
     # -- fields ---------------------------------------------------------------------
+
+    @property
+    def _fields(self) -> dict[str, Input]:
+        """The inputs by name, resolved once every input has its name."""
+        if self._by_name is None:
+            by_name: dict[str, Input] = {}
+            for field in self._inputs:
+                if field.name in by_name:
+                    raise QgisSdkUiError(
+                        f"{self._describe()}: two fields named {field.name!r}"
+                    )
+                by_name[field.name] = field
+            self._by_name = by_name
+        return self._by_name
 
     @property
     def fields(self) -> tuple[Input, ...]:
@@ -220,8 +238,21 @@ class Form(Component):
             listener(name, value)
 
 
-def _relay(form: Form, name: str) -> Callable[[Any], None]:
-    return lambda value: form._notify(name, value)
+class _FieldRelay:
+    """A field's change, reported to its form as ``(name, value)``.
+
+    An object rather than a closure so that ``deepcopy`` of a declared form
+    (one copy per window) copies the link too: the copied field then reports
+    to the copied form, not the prototype. The name is read when the change
+    happens, by which time a declared input has it.
+    """
+
+    def __init__(self, form: Form, field: Input) -> None:
+        self.form = form
+        self.field = field
+
+    def __call__(self, value: Any) -> None:
+        self.form._notify(self.field.name, value)
 
 
 def input_for(spec: FieldSpec, *, of: LayerPicker | None = None) -> Input:
