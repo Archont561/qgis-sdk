@@ -375,13 +375,15 @@ jobs:
       # The UI elements import the bridge's built entry, so the bridge is
       # built first; `--conditions=browser` is what `@lit/react` needs under
       # bun test (the package's own `test` script passes it the same way).
+      # The unscoped `qgis-sdk-ui` alias is tested next to it: its tests pin
+      # the alias to the scoped package file for file.
       - name: Test qgis-sdk-ui
         shell: bash
         run: |
           set -o pipefail
           bun run --filter '@archont561/qgis-sdk' build
           bun run --filter '@archont561/qgis-sdk-ui' build
-          bun test --conditions=browser packages/qgis-sdk-ui/tests 2>&1 | tee bun-ui-tests.log
+          bun test --conditions=browser packages/qgis-sdk-ui/tests packages/qgis-sdk-ui-alias/tests 2>&1 | tee bun-ui-tests.log
 
       - name: Report qgis-sdk-ui test results
         if: ${{ !cancelled() }}

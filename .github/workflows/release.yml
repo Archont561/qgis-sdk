@@ -20,12 +20,18 @@ name: release
 # repository owner provisioned: PyPI projects `qgis-sdk`, `qgis-sdk-runtime`
 # and `qgis-sdk-tools` accept tokens from this workflow file (release.yml)
 # under GitHub environment `pypi`, and npm
-# package `@archont561/qgis-sdk` from release.yml under environment `npm`
+# packages `@archont561/qgis-sdk`, `qgis-sdk`, `@archont561/qgis-sdk-ui` and
+# `qgis-sdk-ui` from release.yml under environment `npm`
 # (the binding is per package name: the one provisioned for the former
 # `qgis-sdk-bridge` does not carry over, see decision-33). Renaming this file
 # or those environments breaks publishing. Prerelease tags
 # (vX.Y.Z-suffix) dry-run both registries instead of uploading, so version
 # space is only consumed by a deliberate clean release.
+#
+# `ui-v*` tags are the web components' own train (decision-47, TASK-110):
+# the `ui` job packs `@archont561/qgis-sdk-ui` and its unscoped alias
+# `qgis-sdk-ui`, checks the tarball holds `dist`, `README.md` and `LICENSE`
+# only, and publishes both; it never touches the bridge, PyPI or Conda.
 
 on:
   push:
@@ -69,6 +75,7 @@ jobs:
       runtime: ${{ steps.classify.outputs.runtime }}
       tools: ${{ steps.classify.outputs.tools }}
       typescript: ${{ steps.classify.outputs.typescript }}
+      ui: ${{ steps.classify.outputs.ui }}
       tag_name: ${{ steps.classify.outputs.tag_name }}
     steps:
       - name: Checkout
@@ -94,7 +101,7 @@ jobs:
           --scoped
 
       - name: Cache Bun install store
-        if: steps.classify.outputs.typescript == 'true'
+        if: steps.classify.outputs.typescript == 'true' || steps.classify.outputs.ui == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
@@ -103,7 +110,7 @@ jobs:
             ${{ runner.os }}-bun-install-
 
       - name: Install JavaScript dependencies
-        if: steps.classify.outputs.typescript == 'true'
+        if: steps.classify.outputs.typescript == 'true' || steps.classify.outputs.ui == 'true'
         run: pixi run -e bun install-js
 
       - name: Stamp the released package
@@ -147,9 +154,16 @@ jobs:
         if: steps.classify.outputs.python == 'true'
         run: pixi run -e build release-build-conda
 
+      # The components import the bridge's built entry, so a UI release
+      # builds the bridge too; the bridge tarball only feeds the UI job's
+      # smoke install and is never published from a `ui-v*` tag.
       - name: Build the TypeScript bridge
-        if: steps.classify.outputs.typescript == 'true'
+        if: steps.classify.outputs.typescript == 'true' || steps.classify.outputs.ui == 'true'
         run: pixi run -e bun bun run --filter '@archont561/qgis-sdk' build
+
+      - name: Build the web components
+        if: steps.classify.outputs.ui == 'true'
+        run: pixi run -e bun bun run --filter '@archont561/qgis-sdk-ui' build
 
       - name: Capture the tag annotation as release notes
         env:
@@ -177,7 +191,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload bridge package artifact
-        if: steps.classify.outputs.typescript == 'true'
+        if: steps.classify.outputs.typescript == 'true' || steps.classify.outputs.ui == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bridge-package
@@ -198,6 +212,30 @@ jobs:
             packages/qgis-sdk-alias/LICENSE
             packages/qgis-sdk-alias/*.js
             packages/qgis-sdk-alias/*.d.ts
+
+      - name: Upload UI package artifact
+        if: steps.classify.outputs.ui == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-package
+          path: |
+            packages/qgis-sdk-ui/package.json
+            packages/qgis-sdk-ui/README.md
+            packages/qgis-sdk-ui/LICENSE
+            packages/qgis-sdk-ui/dist
+
+      - name: Upload UI alias package artifact
+        if: steps.classify.outputs.ui == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-alias-package
+          path: |
+            packages/qgis-sdk-ui-alias/package.json
+            packages/qgis-sdk-ui-alias/README.md
+            packages/qgis-sdk-ui-alias/LICENSE
+            packages/qgis-sdk-ui-alias/*.js
+            packages/qgis-sdk-ui-alias/*.d.ts
+            packages/qgis-sdk-ui-alias/*.css
 
       - name: Upload release notes artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -449,6 +487,173 @@ jobs:
             done
           fi
 
+  # The web components' train (decision-47, TASK-110). Trusted-publishing
+  # bindings: npm packages `@archont561/qgis-sdk-ui` and its unscoped alias
+  # `qgis-sdk-ui` each accept OIDC tokens from release.yml under the `npm`
+  # environment. The alias is published after the scoped package it pins,
+  # so `qgis-sdk-ui@X` never resolves before `@archont561/qgis-sdk-ui@X`.
+  ui:
+    needs: build
+    if: needs.build.outputs.ui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download UI package artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui-package
+          path: ui
+
+      - name: Download UI alias package artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui-alias-package
+          path: ui-alias
+
+      # The bridge built in the same run feeds the smoke install below, so
+      # the check never depends on which bridge npm holds today.
+      - name: Download bridge package artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bridge-package
+          path: bridge
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Pin npm to an OIDC-capable version
+        run: |
+          npm install -g npm@12.2.0
+          npm --version
+
+      # `files` whitelists dist, README.md and LICENSE; the dry run lists
+      # what the tarball would hold, and anything outside that set (a source,
+      # a story, a test) fails the release before it is packed.
+      - name: Pack the UI tarball and check what it holds
+        working-directory: ui
+        run: |
+          set -o pipefail
+          npm pkg delete devDependencies scripts
+          npm pack --dry-run --json > ../ui-pack.json
+          node - <<'EOF'
+          const [pack] = JSON.parse(require("node:fs").readFileSync("../ui-pack.json", "utf8"));
+          const allowed = (path) =>
+            path.startsWith("dist/") || ["package.json", "README.md", "LICENSE"].includes(path);
+          const outside = pack.files.map((f) => f.path).filter((path) => !allowed(path));
+          if (outside.length > 0) {
+            throw new Error(`the UI tarball holds more than dist, README and LICENSE: ${outside.join(", ")}`);
+          }
+          for (const required of ["package.json", "README.md", "LICENSE", "dist/index.js", "dist/define.js", "dist/style.css", "dist/tokens.css"]) {
+            if (!pack.files.some((f) => f.path === required)) {
+              throw new Error(`the UI tarball lacks ${required}`);
+            }
+          }
+          console.log(`${pack.name}@${pack.version}: ${pack.files.length} files, all under dist/ plus package.json, README.md, LICENSE`);
+          EOF
+          npm pack
+
+      - name: Pack the alias tarball
+        working-directory: ui-alias
+        run: npm pack
+
+      - name: Pack the bridge for the smoke install
+        working-directory: bridge
+        run: |
+          npm pkg delete devDependencies
+          npm pack
+
+      # The alias re-exports the components through its exact pin; prove the
+      # pair installs and resolves from the tarballs before either is
+      # published. Lit needs a DOM to import, so happy-dom stands in for the
+      # page; the framework entries need their peers and are left to the
+      # alias tests in CI.
+      - name: Smoke-test the alias against the UI tarball
+        run: |
+          mkdir -p smoke
+          cat > smoke/mirror.mjs <<'EOF'
+          import { GlobalRegistrator } from "@happy-dom/global-registrator";
+          GlobalRegistrator.register();
+          const entries = ["", "/define"];
+          for (const entry of entries) {
+            const scoped = Object.keys(await import(`@archont561/qgis-sdk-ui${entry}`)).sort();
+            const alias = Object.keys(await import(`qgis-sdk-ui${entry}`)).sort();
+            if (JSON.stringify(scoped) !== JSON.stringify(alias) || scoped.length === 0) {
+              throw new Error(`qgis-sdk-ui${entry} does not mirror @archont561/qgis-sdk-ui${entry}`);
+            }
+            console.log(`qgis-sdk-ui${entry}: ${alias.length} exports mirrored`);
+          }
+          for (const sheet of ["style.css", "tokens.css"]) {
+            const scoped = import.meta.resolve(`@archont561/qgis-sdk-ui/${sheet}`);
+            const alias = import.meta.resolve(`qgis-sdk-ui/${sheet}`);
+            const text = (await import("node:fs")).readFileSync(new URL(alias), "utf8");
+            if (!text.includes(`@import "@archont561/qgis-sdk-ui/${sheet}"`) || !scoped.endsWith(sheet)) {
+              throw new Error(`qgis-sdk-ui/${sheet} does not import the scoped stylesheet`);
+            }
+            console.log(`qgis-sdk-ui/${sheet}: imports the scoped stylesheet`);
+          }
+          await GlobalRegistrator.unregister();
+          EOF
+          cd smoke
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --ignore-scripts ../bridge/*.tgz ../ui/*.tgz ../ui-alias/*.tgz @happy-dom/global-registrator
+          node mirror.mjs
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-npm-tgz
+          path: |
+            ui/*.tgz
+            ui-alias/*.tgz
+
+      - name: Dry-run the publish
+        if: needs.build.outputs.prerelease == 'true'
+        working-directory: ui
+        run: |
+          set -o pipefail
+          # npm refuses to publish a prerelease without an explicit dist-tag,
+          # even for a dry run; `next` keeps `latest` untouched.
+          npm publish --dry-run --access public --tag next ./*.tgz 2>&1 | tee ../npm-publish.log
+          npm publish --dry-run --access public --tag next ../ui-alias/*.tgz 2>&1 | tee -a ../npm-publish.log
+          echo "npm publish skipped: ${{ needs.build.outputs.version }} is a prerelease (dry-run only, dist-tag next, both names)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to npm
+        if: needs.build.outputs.prerelease == 'false'
+        working-directory: ui
+        run: |
+          set -o pipefail
+          if [ "$(npm view "@archont561/qgis-sdk-ui@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
+            echo "npm already has @archont561/qgis-sdk-ui@${{ needs.build.outputs.version }}; skipping."
+          else
+            npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee ../npm-publish.log
+          fi
+
+      - name: Publish the alias to npm
+        if: needs.build.outputs.prerelease == 'false'
+        working-directory: ui-alias
+        run: |
+          set -o pipefail
+          if [ "$(npm view "qgis-sdk-ui@${{ needs.build.outputs.version }}" version --registry=https://registry.npmjs.org 2>/dev/null || true)" = "${{ needs.build.outputs.version }}" ]; then
+            echo "npm already has qgis-sdk-ui@${{ needs.build.outputs.version }}; skipping."
+          else
+            npm publish --provenance --access public --loglevel verbose ./*.tgz 2>&1 | tee -a ../npm-publish.log
+          fi
+
+      - name: Report npm publish output on failure
+        if: failure()
+        run: |
+          if [ -f npm-publish.log ]; then
+            grep -iE 'oidc|ENEEDAUTH|E40|error' npm-publish.log | tail -n 15 | while IFS= read -r line; do
+              echo "::error::npm publish (ui): $line"
+            done
+          fi
+
   # GitHub Packages only accepts names scoped to the repository owner, so the
   # unscoped alias `qgis-sdk` is npm-only; only the scoped package goes here.
   github-packages:
@@ -508,13 +713,14 @@ jobs:
           fi
 
   github-release:
-    needs: [build, pypi, conda, npm, github-packages]
+    needs: [build, pypi, conda, npm, ui, github-packages]
     if: >-
       always() &&
       needs.build.result == 'success' &&
       (needs.pypi.result == 'success' || needs.pypi.result == 'skipped') &&
       (needs.conda.result == 'success' || needs.conda.result == 'skipped') &&
       (needs.npm.result == 'success' || needs.npm.result == 'skipped') &&
+      (needs.ui.result == 'success' || needs.ui.result == 'skipped') &&
       (needs.github-packages.result == 'success' || needs.github-packages.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -553,6 +759,13 @@ jobs:
           name: npm-tgz
           path: npm
 
+      - name: Download UI tarball artifact
+        if: needs.build.outputs.ui == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui-npm-tgz
+          path: npm
+
       - name: Download release notes artifact
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -567,7 +780,8 @@ jobs:
           shopt -s nullglob
           # The npm-tgz artifact carries two tarballs under their pack
           # directories (bridge/, alias/) since the alias shipped; ts-v0.3.0
-          # published both and then found no asset under npm/*.tgz.
+          # published both and then found no asset under npm/*.tgz. A ui-v*
+          # tag downloads ui-npm-tgz (ui/, ui-alias/) into the same place.
           # Wheels sit one directory per distribution (dist/pypi/<name>/).
           assets=(dist/pypi/*/*.whl dist/conda/*.conda npm/*.tgz npm/*/*.tgz)
           if [ "${#assets[@]}" -eq 0 ]; then

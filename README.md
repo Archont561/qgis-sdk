@@ -22,6 +22,8 @@ is documented, nothing is promised stable.
 | [`qgis-sdk-tools`](packages/qgis-sdk-tools) | `qgis-sdk new` / `check` / `test` / `dev` / `build` / `targets` | `pip install qgis-sdk-tools` |
 | [`@archont561/qgis-sdk`](packages/qgis-sdk-typescript) | TypeScript transport client, host namespaces, generated clients | `bun add @archont561/qgis-sdk` |
 | [`qgis-sdk` on npm](packages/qgis-sdk-alias) | Unscoped alias re-exporting `@archont561/qgis-sdk` at the same version | `bun add qgis-sdk` |
+| [`@archont561/qgis-sdk-ui`](packages/qgis-sdk-ui) | Light-DOM web components mirroring the native UI catalogue, with React, Vue and Svelte wrappers | `bun add @archont561/qgis-sdk-ui` |
+| [`qgis-sdk-ui` on npm](packages/qgis-sdk-ui-alias) | Unscoped alias re-exporting `@archont561/qgis-sdk-ui` at the same version | `bun add qgis-sdk-ui` |
 | [`@workspace/config`](packages/config) | Shared TypeScript and Bunup configuration (private) | — |
 
 ## Try it

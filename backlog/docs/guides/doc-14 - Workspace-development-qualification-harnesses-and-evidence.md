@@ -91,6 +91,8 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 | `packages/qgis-sdk-typescript` | TypeScript bridge for QWebEngineView plugin interfaces |
 | `packages/qgis-sdk-typescript/tests` | Bun tests for the bridge |
 | `packages/qgis-sdk-alias` | Unscoped npm alias `qgis-sdk`: re-export files, manifest and Bun tests that pin it to the scoped package |
+| `packages/qgis-sdk-ui` | The `@archont561/qgis-sdk-ui` web components (Lit, light DOM), their wrappers, stories and Bun tests |
+| `packages/qgis-sdk-ui-alias` | Unscoped npm alias `qgis-sdk-ui`: re-export files, `@import` stylesheets, manifest and Bun tests that pin it to the components |
 | `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
 | `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
 | `scripts` | Repository-root developer scripts (restore) |
@@ -175,6 +177,38 @@ pixi run -e bun bun run --filter qgis-sdk-python build # wheels + the Conda outp
 ```
 
 `release.py build-python` writes one directory per distribution and checks every wheel with Twine; `release.yml` publishes each directory from its own step. The recipe builds `qgis-sdk-runtime`, `qgis-sdk-tools` and `qgis-sdk` under `dist/conda/`; only the outputs a tag's scope ships are uploaded.
+
+### Release scopes, tags and the pins a release moves
+
+One tag releases one scope; `release.py classify --scoped` turns the tag
+into the flags `release.yml` gates its jobs on, `stamp --scope <s>` moves
+every manifest of that scope and `verify-versions --scope <s>` refuses a
+release whose manifests disagree.
+
+| Scope | Tag prefix | Stamps | Publishes |
+| :-- | :-- | :-- | :-- |
+| `python` | `python-v` | the kit, runtime and tools `pyproject.toml`, the recipe contexts, the kit pins, the example's windows | three wheels (PyPI), three Conda outputs (prefix.dev) |
+| `runtime`, `tools` | `runtime-v`, `tools-v` | that distribution alone (the tools' runtime range follows the runtime at HEAD) | its wheel and Conda output |
+| `typescript` | `ts-v` | `packages/qgis-sdk-typescript/package.json`, the `qgis-sdk` alias and its exact pin, `SDK_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk` and `qgis-sdk` (npm, GitHub Packages for the scoped name) |
+| `ui` | `ui-v` | `packages/qgis-sdk-ui/package.json`, the `qgis-sdk-ui` alias (`packages/qgis-sdk-ui-alias`) and its exact pin, `UI_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (npm) |
+| `all` | `v` | everything the `python` and `typescript` scopes stamp; never the `ui` train | both |
+
+The `ui` train (decision-47, TASK-110) is deliberate: `plan` never picks it
+up from an alignment release, `detect_scope_from_files` reports `ui` only
+when the components or their alias are the one package that changed, and
+`verify-versions --scope ui` additionally refuses a peer range on
+`@archont561/qgis-sdk` that excludes the bridge at HEAD. `release.yml`'s
+`ui` job builds the bridge and the components, runs `npm pack --dry-run`
+and fails when the tarball holds anything but `dist/`, `package.json`,
+`README.md` and `LICENSE`, packs the alias, installs the pair from the
+tarballs next to the bridge built in the same run and checks the alias
+mirrors the scoped exports and `@import`s the scoped stylesheets, then
+publishes the scoped package and the alias after it under trusted
+publishing; an `-rc.N` tag dry-runs both under the `next` dist-tag. The two
+scaffold pins are the versions `qgis-sdk new` writes for a page (decision-41
+for the bridge, `--ui-dependency` for the components), so a tools release
+offers the newest of each it was qualified with; the committed pins are
+tested to equal the manifests at HEAD.
 
 ## Developer scripts
 

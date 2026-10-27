@@ -100,6 +100,8 @@ def _the_real_manifests_stay_untouched():
         release._RECIPE,
         release._BRIDGE_PACKAGE,
         release._ALIAS_PACKAGE,
+        release._UI_PACKAGE,
+        release._UI_ALIAS_PACKAGE,
         release._EXAMPLE_PYPROJECT,
     )
     before = {
@@ -169,6 +171,7 @@ def _python_manifests(
     monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "no-web.py")
     monkeypatch.setattr(release, "_EXAMPLE_PYPROJECT", tmp_path / "no-example.toml")
     monkeypatch.setattr(release, "_UI_PACKAGE", tmp_path / "no-ui.json")
+    monkeypatch.setattr(release, "_UI_ALIAS_PACKAGE", tmp_path / "no-ui-alias.json")
     return {
         "pyproject": pyproject,
         "runtime": runtime,
@@ -2845,3 +2848,256 @@ def test_the_repository_ui_package_accepts_the_bridge_at_head():
 
     assert release_module.ui_peer_range_includes(peer, bridge_version)
     assert main(["verify-versions", "--scope", "ui"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# A ui release moves the scaffold UI pin and the unscoped alias (TASK-110)
+# ---------------------------------------------------------------------------
+
+SCAFFOLD_WEB_PY_WITH_UI = (
+    SCAFFOLD_WEB_PY + 'UI_NPM_PACKAGE: Final = "@archont561/qgis-sdk-ui"\n'
+    'UI_NPM_VERSION: Final = "0.1.0"\n'
+    '"""The published web components the templates opt into, pinned exactly."""\n'
+)
+UI_ALIAS_PACKAGE_JSON = (
+    '{\n\t"name": "qgis-sdk-ui",\n\t"version": "0.1.0",\n'
+    '\t"dependencies": {\n\t\t"@archont561/qgis-sdk-ui": "0.1.0"\n\t}\n}\n'
+)
+
+
+def test_read_scaffold_ui_pin_returns_the_pinned_components_version():
+    assert release_module.read_scaffold_ui_pin(
+        SCAFFOLD_WEB_PY_WITH_UI
+    ) == Version.parse("0.1.0")
+    with pytest.raises(QgisSdkReleaseError, match="UI_NPM_VERSION"):
+        release_module.read_scaffold_ui_pin(SCAFFOLD_WEB_PY)
+    with pytest.raises(QgisSdkReleaseVersionError):
+        release_module.read_scaffold_ui_pin(
+            SCAFFOLD_WEB_PY_WITH_UI.replace(
+                'UI_NPM_VERSION: Final = "0.1.0"', 'UI_NPM_VERSION: Final = "^0.1.0"'
+            )
+        )
+
+
+def test_stamp_scaffold_ui_pin_rewrites_only_the_ui_constant():
+    stamped = release_module.stamp_scaffold_ui_pin(
+        SCAFFOLD_WEB_PY_WITH_UI, Version.parse("0.2.0")
+    )
+
+    assert 'UI_NPM_VERSION: Final = "0.2.0"\n' in stamped
+    assert 'SDK_NPM_VERSION: Final = "0.1.0"\n' in stamped
+    assert (
+        stamped.replace(
+            'UI_NPM_VERSION: Final = "0.2.0"', 'UI_NPM_VERSION: Final = "0.1.0"'
+        )
+        == SCAFFOLD_WEB_PY_WITH_UI
+    )
+    with pytest.raises(QgisSdkReleaseError, match="UI_NPM_VERSION"):
+        release_module.stamp_scaffold_ui_pin(SCAFFOLD_WEB_PY, Version.parse("0.2.0"))
+
+
+def _ui_train_manifests(
+    tmp_path,
+    monkeypatch,
+    bridge_version="0.1.0",
+    ui_text=None,
+    web_text=None,
+    alias_text=None,
+):
+    package, ui = _ui_manifests(
+        tmp_path, monkeypatch, bridge_version=bridge_version, ui_text=ui_text
+    )
+    web = tmp_path / "web.py"
+    web.write_text(web_text or SCAFFOLD_WEB_PY_WITH_UI, encoding="utf-8")
+    monkeypatch.setattr(release_module, "_SCAFFOLD_WEB", web)
+    alias = tmp_path / "ui-alias.json"
+    alias.write_text(alias_text or UI_ALIAS_PACKAGE_JSON, encoding="utf-8")
+    monkeypatch.setattr(release_module, "_UI_ALIAS_PACKAGE", alias)
+    return package, ui, web, alias
+
+
+def test_stamp_scope_ui_moves_the_scaffold_ui_pin_and_the_alias(tmp_path, monkeypatch):
+    """A UI release moves the pin `qgis-sdk new --ui-dependency` writes and the alias."""
+    package, ui, web, alias = _ui_train_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "ui"]) == 0
+
+    assert json.loads(ui.read_text())["version"] == "0.2.0"
+    assert 'UI_NPM_VERSION: Final = "0.2.0"' in web.read_text()
+    assert 'SDK_NPM_VERSION: Final = "0.1.0"' in web.read_text()
+    assert json.loads(alias.read_text()) == {
+        "name": "qgis-sdk-ui",
+        "version": "0.2.0",
+        "dependencies": {"@archont561/qgis-sdk-ui": "0.2.0"},
+    }
+    assert json.loads(package.read_text())["version"] == "0.1.0"
+    assert main(["verify-versions", "--scope", "ui", "--version", "0.2.0"]) == 0
+
+
+def test_stamp_scope_typescript_leaves_the_scaffold_ui_pin_and_the_ui_alias_alone(
+    tmp_path, monkeypatch
+):
+    _, ui, web, alias = _ui_train_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.3.0", "--scope", "typescript"]) == 0
+
+    assert 'SDK_NPM_VERSION: Final = "0.3.0"' in web.read_text()
+    assert 'UI_NPM_VERSION: Final = "0.1.0"' in web.read_text()
+    assert json.loads(ui.read_text())["version"] == "0.1.0"
+    assert json.loads(alias.read_text())["version"] == "0.1.0"
+
+
+def test_verify_versions_names_a_scaffold_ui_pin_that_lags(
+    tmp_path, monkeypatch, capsys
+):
+    _ui_train_manifests(
+        tmp_path,
+        monkeypatch,
+        ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.1.1", 1),
+        alias_text=UI_ALIAS_PACKAGE_JSON.replace("0.1.0", "0.1.1"),
+    )
+
+    assert main(["verify-versions", "--scope", "ui"]) == 1
+
+    out = capsys.readouterr().out
+    assert "scaffold ui pin=0.1.0" in out
+    assert "ui package.json=0.1.1" in out
+    # The bridge train is not held hostage by a stale UI pin.
+    assert main(["verify-versions", "--scope", "typescript", "--version", "0.1.0"]) == 0
+
+
+def test_verify_versions_names_a_ui_alias_that_lags(tmp_path, monkeypatch, capsys):
+    _ui_train_manifests(
+        tmp_path,
+        monkeypatch,
+        ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.1.1", 1),
+        web_text=SCAFFOLD_WEB_PY_WITH_UI.replace(
+            'UI_NPM_VERSION: Final = "0.1.0"', 'UI_NPM_VERSION: Final = "0.1.1"'
+        ),
+    )
+
+    assert main(["verify-versions", "--scope", "ui", "--json"]) == 1
+
+    out = capsys.readouterr().out
+    assert "ui alias package.json=0.1.0" in out
+    assert "ui alias dependency=0.1.0" in out
+
+
+def test_verify_versions_reports_the_whole_ui_train(tmp_path, monkeypatch, capsys):
+    _ui_train_manifests(tmp_path, monkeypatch)
+
+    assert main(["verify-versions", "--scope", "ui", "--json"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["scopes"]["ui"]["manifests"] == {
+        "ui package.json": "0.1.0",
+        "ui alias package.json": "0.1.0",
+        "ui alias dependency": "0.1.0",
+        "scaffold ui pin": "0.1.0",
+    }
+
+
+def test_a_scaffold_without_a_ui_pin_is_a_bridge_pin_only(tmp_path, monkeypatch):
+    """The fixture of the bridge tests predates the UI pin; it still verifies."""
+    _ui_train_manifests(tmp_path, monkeypatch, web_text=SCAFFOLD_WEB_PY)
+
+    assert main(["verify-versions", "--scope", "ui", "--version", "0.1.0"]) == 0
+    assert main(["stamp", "--version", "0.2.0", "--scope", "ui"]) == 0
+
+
+def test_ui_alias_changes_count_as_ui():
+    assert (
+        release_module.detect_scope_from_files(["packages/qgis-sdk-ui-alias/index.js"])
+        == "ui"
+    )
+    assert release_module.commit_scopes(
+        _commit("fix(ui): alias re-exports uno", "packages/qgis-sdk-ui-alias/uno.js")
+    ) == frozenset({"ui"})
+
+
+def test_the_repository_ui_train_agrees_at_head(monkeypatch):
+    """The committed manifests: the scaffold UI pin and the alias follow the package."""
+    root = Path(release_module.__file__).resolve().parent.parent
+    ui = root / "packages" / "qgis-sdk-ui" / "package.json"
+    alias = root / "packages" / "qgis-sdk-ui-alias" / "package.json"
+    web = root / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
+    monkeypatch.setattr(release_module, "_SCAFFOLD_WEB", web)
+    monkeypatch.setattr(release_module, "_UI_ALIAS_PACKAGE", alias)
+    ui_version = Version.parse(json.loads(ui.read_text())["version"])
+
+    assert release_module.read_scaffold_ui_pin(web.read_text()) == ui_version
+    assert release_module.read_alias_versions(
+        alias.read_text(), dependency="@archont561/qgis-sdk-ui"
+    ) == (ui_version, ui_version)
+    assert main(["verify-versions", "--scope", "ui"]) == 0
+
+
+def test_release_workflow_publishes_the_ui_train(monkeypatch):
+    """A ``ui-v*`` tag reaches npm the way ``ts-v*`` tags do (TASK-110 AC #1, #4).
+
+    The ``ui`` job is gated on the classify flag, runs under the ``npm``
+    trusted-publishing environment, packs the scoped package and its unscoped
+    alias, dry-runs a prerelease under ``next`` and publishes the alias only
+    after the scoped package it pins.
+    """
+    import yaml
+
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load(
+        (repo_root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    )
+    jobs = workflow["jobs"]
+    assert jobs["build"]["outputs"]["ui"] == "${{ steps.classify.outputs.ui }}"
+    build_steps = {step.get("name"): step for step in jobs["build"]["steps"]}
+    assert build_steps["Install JavaScript dependencies"]["if"] == (
+        "steps.classify.outputs.typescript == 'true' || "
+        "steps.classify.outputs.ui == 'true'"
+    )
+    assert build_steps["Build the web components"]["if"] == (
+        "steps.classify.outputs.ui == 'true'"
+    )
+    assert "@archont561/qgis-sdk-ui" in build_steps["Build the web components"]["run"]
+    assert build_steps["Upload UI package artifact"]["with"]["name"] == "ui-package"
+    assert (
+        build_steps["Upload UI alias package artifact"]["with"]["name"]
+        == "ui-alias-package"
+    )
+
+    ui = jobs["ui"]
+    assert ui["needs"] == "build"
+    assert ui["if"] == "needs.build.outputs.ui == 'true'"
+    assert ui["environment"] == "npm"
+    assert ui["permissions"] == {"id-token": "write", "contents": "read"}
+    steps = {step.get("name"): step for step in ui["steps"]}
+    pack = steps["Pack the UI tarball and check what it holds"]["run"]
+    assert "npm pack --dry-run" in pack
+    for allowed in ("dist/", "README.md", "LICENSE", "package.json"):
+        assert allowed in pack
+    assert "npm pkg delete devDependencies" in pack
+    smoke = steps["Smoke-test the alias against the UI tarball"]["run"]
+    assert "qgis-sdk-ui" in smoke and "@archont561/qgis-sdk-ui" in smoke
+    dry = steps["Dry-run the publish"]
+    assert dry["if"] == "needs.build.outputs.prerelease == 'true'"
+    assert dry["run"].count("npm publish --dry-run --access public --tag next") == 2
+    publish = steps["Publish to npm"]
+    assert publish["if"] == "needs.build.outputs.prerelease == 'false'"
+    assert "@archont561/qgis-sdk-ui@" in publish["run"]
+    assert "--provenance" in publish["run"]
+    alias = steps["Publish the alias to npm"]
+    assert alias["if"] == "needs.build.outputs.prerelease == 'false'"
+    assert '"qgis-sdk-ui@' in alias["run"]
+    names = [step.get("name") for step in ui["steps"]]
+    assert names.index("Publish to npm") < names.index("Publish the alias to npm")
+    assert steps["Upload tarball artifact"]["with"]["name"] == "ui-npm-tgz"
+
+    release = jobs["github-release"]
+    assert "ui" in release["needs"]
+    ui_gate = "needs.ui.result == 'success' || needs.ui.result == 'skipped'"
+    assert ui_gate in release["if"]
+    release_steps = {step.get("name"): step for step in release["steps"]}
+    assert release_steps["Download UI tarball artifact"]["if"] == (
+        "needs.build.outputs.ui == 'true'"
+    )
+    assert release_steps["Download UI tarball artifact"]["with"]["name"] == (
+        "ui-npm-tgz"
+    )

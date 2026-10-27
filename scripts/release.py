@@ -58,10 +58,16 @@ _ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
 # the bridge at HEAD would install against a bridge it was never tested with.
 _UI_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-ui/package.json"
 _UI_PEER = "@archont561/qgis-sdk"
+# The unscoped ``qgis-sdk-ui`` re-exports ``@archont561/qgis-sdk-ui`` at an
+# exact pin, the shape of the bridge alias (decision-33): stamped and verified
+# with the UI package whenever it exists, ignored when it does not.
+_UI_ALIAS_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-ui-alias/package.json"
+_UI_ALIAS_DEPENDENCY = "@archont561/qgis-sdk-ui"
 # ``qgis-sdk new`` pins the bridge it was qualified with (decision-18); the pin
 # moves with every bridge release so a tools release offers the newest bridge
 # it knows (decision-41). Stamped and verified with the bridge whenever the
-# file exists, ignored when it does not.
+# file exists, ignored when it does not. The same file pins the web components
+# (``UI_NPM_VERSION``), which move with the ``ui`` train instead.
 _SCAFFOLD_WEB = (
     _REPO_ROOT / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
 )
@@ -315,7 +321,8 @@ _TYPESCRIPT_PREFIXES = (
     "packages/qgis-sdk-alias/",
     "packages/qgis-sdk-bridge/",
 )
-_UI_PREFIXES = ("packages/qgis-sdk-ui/",)
+# The UI alias ships with the components: a change to either is a UI release.
+_UI_PREFIXES = ("packages/qgis-sdk-ui/", "packages/qgis-sdk-ui-alias/")
 
 
 def commit_packages(commit: Commit) -> tuple[bool, bool]:
@@ -1423,6 +1430,34 @@ def stamp_scaffold_pin(text: str, version: Version) -> str:
     return _SCAFFOLD_PIN.sub(rf"\g<1>{version}\g<3>", text, count=1)
 
 
+_SCAFFOLD_UI_PIN = re.compile(
+    r'^(UI_NPM_VERSION: Final = ")([^"\n]*)(")$', re.MULTILINE
+)
+
+
+def has_scaffold_ui_pin(text: str) -> bool:
+    """Whether ``scaffold/web.py`` pins the web components at all."""
+    return _SCAFFOLD_UI_PIN.search(text) is not None
+
+
+def read_scaffold_ui_pin(text: str) -> Version:
+    """Return the components version ``qgis-sdk new --ui-dependency`` pins.
+
+    Exact like the bridge pin: the templates import one published version.
+    """
+    match = _SCAFFOLD_UI_PIN.search(text)
+    if match is None:
+        raise QgisSdkReleaseError("scaffold/web.py declares no UI_NPM_VERSION pin")
+    return Version.parse(match.group(2))
+
+
+def stamp_scaffold_ui_pin(text: str, version: Version) -> str:
+    """Move the scaffold's components pin to ``version``, touching nothing else."""
+    if not has_scaffold_ui_pin(text):
+        raise QgisSdkReleaseError("scaffold/web.py declares no UI_NPM_VERSION pin")
+    return _SCAFFOLD_UI_PIN.sub(rf"\g<1>{version}\g<3>", text, count=1)
+
+
 @dataclass(frozen=True)
 class ManifestVersions:
     """The version each released manifest currently carries."""
@@ -1440,6 +1475,9 @@ class ManifestVersions:
     scaffold_pin: Version | None = None
     ui: Version | None = None
     ui_peer_range: tuple[Version, str] | None = None
+    ui_alias: Version | None = None
+    ui_alias_dependency: Version | None = None
+    scaffold_ui_pin: Version | None = None
 
     def items(self) -> tuple[tuple[str, Version], ...]:
         """Return the labelled versions that exist, in reporting order.
@@ -1472,8 +1510,22 @@ class ManifestVersions:
         return tuple(found)
 
     def ui_items(self) -> tuple[tuple[str, Version], ...]:
-        """The manifests of the ``ui`` scope: the one package.json, when present."""
-        return () if self.ui is None else (("ui package.json", self.ui),)
+        """The manifests of the ``ui`` scope, when the package is present.
+
+        The components' package.json leads; the unscoped alias (its version
+        and its exact pin) and the scaffold's ``UI_NPM_VERSION`` follow it,
+        so a release that forgot one of them is named here.
+        """
+        if self.ui is None:
+            return ()
+        found = [("ui package.json", self.ui)]
+        if self.ui_alias is not None:
+            found.append(("ui alias package.json", self.ui_alias))
+        if self.ui_alias_dependency is not None:
+            found.append(("ui alias dependency", self.ui_alias_dependency))
+        if self.scaffold_ui_pin is not None:
+            found.append(("scaffold ui pin", self.scaffold_ui_pin))
+        return tuple(found)
 
     def agreed(self) -> Version:
         """Return the version every manifest carries, or name the disagreement.
@@ -1498,17 +1550,25 @@ def manifest_versions(
     tools_text: str | None = None,
     scaffold_text: str | None = None,
     ui_text: str | None = None,
+    ui_alias_text: str | None = None,
 ) -> ManifestVersions:
     """Read all released manifests and return what each one carries.
 
     ``pyproject_text`` is the kit's; when the runtime's and the tools' are given
     too, their versions and the kit's pins on them join the Python scope.
     ``scaffold_text`` is ``scaffold/web.py``, whose bridge pin joins the
-    TypeScript scope. ``ui_text`` is the web components' package.json: its
-    version and its peer range on the bridge form the ``ui`` scope.
+    TypeScript scope and whose components pin (when it has one) joins the
+    ``ui`` scope. ``ui_text`` is the web components' package.json: its
+    version and its peer range on the bridge form the ``ui`` scope, with
+    ``ui_alias_text`` (the unscoped alias) when it is given.
     """
     alias, alias_dependency = (
         read_alias_versions(alias_text) if alias_text is not None else (None, None)
+    )
+    ui_alias, ui_alias_dependency = (
+        read_alias_versions(ui_alias_text, dependency=_UI_ALIAS_DEPENDENCY)
+        if ui_alias_text is not None
+        else (None, None)
     )
     return ManifestVersions(
         pyproject=read_pyproject_version(pyproject_text),
@@ -1534,6 +1594,13 @@ def manifest_versions(
         ),
         ui=read_package_json_version(ui_text) if ui_text is not None else None,
         ui_peer_range=read_ui_peer_range(ui_text) if ui_text is not None else None,
+        ui_alias=ui_alias,
+        ui_alias_dependency=ui_alias_dependency,
+        scaffold_ui_pin=(
+            read_scaffold_ui_pin(scaffold_text)
+            if scaffold_text is not None and has_scaffold_ui_pin(scaffold_text)
+            else None
+        ),
     )
 
 
@@ -2064,6 +2131,26 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
         ui_text = _UI_PACKAGE.read_text(encoding="utf-8")
         _UI_PACKAGE.write_text(stamp_package_json(ui_text, version), encoding="utf-8")
         stamped.append(str(_UI_PACKAGE))
+        if _UI_ALIAS_PACKAGE.is_file():
+            ui_alias_text = _UI_ALIAS_PACKAGE.read_text(encoding="utf-8")
+            _UI_ALIAS_PACKAGE.write_text(
+                stamp_alias_package_json(
+                    ui_alias_text, version, dependency=_UI_ALIAS_DEPENDENCY
+                ),
+                encoding="utf-8",
+            )
+            stamped.append(
+                f"{_UI_ALIAS_PACKAGE} (and its pin on {_UI_ALIAS_DEPENDENCY})"
+            )
+        if _SCAFFOLD_WEB.is_file():
+            web_text = _SCAFFOLD_WEB.read_text(encoding="utf-8")
+            if has_scaffold_ui_pin(web_text):
+                _SCAFFOLD_WEB.write_text(
+                    stamp_scaffold_ui_pin(web_text, version), encoding="utf-8"
+                )
+                stamped.append(
+                    f"{_SCAFFOLD_WEB} (the pin qgis-sdk new --ui-dependency offers)"
+                )
     print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
     return 0
 
@@ -2089,6 +2176,11 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
         _SCAFFOLD_WEB.read_text(encoding="utf-8") if _SCAFFOLD_WEB.is_file() else None
     )
     ui_text = _UI_PACKAGE.read_text(encoding="utf-8") if _UI_PACKAGE.is_file() else None
+    ui_alias_text = (
+        _UI_ALIAS_PACKAGE.read_text(encoding="utf-8")
+        if _UI_ALIAS_PACKAGE.is_file()
+        else None
+    )
     versions = manifest_versions(
         _PYPROJECT.read_text(encoding="utf-8"),
         _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
@@ -2098,6 +2190,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
         tools_text,
         scaffold_text,
         ui_text,
+        ui_alias_text,
     )
     contract = contract_versions(
         _PY_DECLARATIONS.read_text(encoding="utf-8"),
