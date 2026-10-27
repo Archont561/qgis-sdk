@@ -14,6 +14,7 @@ to ask instead of use.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, overload
 
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
@@ -40,6 +41,7 @@ from .scope import ResourceScope
 
 if TYPE_CHECKING:
     from qgis_sdk.ui.actions import ViewActions
+    from qgis_sdk.ui.streams import ViewStreams
 
 T = TypeVar("T")
 
@@ -255,6 +257,7 @@ class UiContext(_Context):
         "_network",
         "_project",
         "_settings",
+        "_streams",
         "notifications",
         "scope",
         "view",
@@ -268,6 +271,7 @@ class UiContext(_Context):
         "project",
         "files",
         "log",
+        "streams",
     )
 
     notifications: Notifications
@@ -282,6 +286,9 @@ class UiContext(_Context):
     project: Capability[Project] = Capability()
     files: Capability[Files] = Capability()
     log: Capability[Log] = Capability()
+    #: The plugin's ``@stream`` methods, subscribed from this view
+    #: (:class:`qgis_sdk.ui.streams.ViewStreams`); ``ctx.on`` is the short form.
+    streams: Capability[ViewStreams] = Capability()
 
     def __init__(
         self,
@@ -295,6 +302,7 @@ class UiContext(_Context):
         project: Project | None = None,
         files: Files | None = None,
         log: Log | None = None,
+        streams: ViewStreams | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -307,7 +315,19 @@ class UiContext(_Context):
             _project=project,
             _files=files,
             _log=log,
+            _streams=streams,
         )
+
+    def on(
+        self, stream: str, callback: Callable[[Any], None], /, **request: object
+    ) -> Any:
+        """Subscribe ``callback`` to the plugin's ``stream`` for this view's lifetime.
+
+        The imperative form of ``@subscribe`` (decision-55): the subscription
+        is owned by the view's scope and ends with the window. Returns the
+        :class:`~qgis_sdk.ui.streams.ViewSubscription`.
+        """
+        return self.streams.subscribe(stream, callback, owner=self.scope, **request)
 
 
 class AlgorithmContext(_Context):

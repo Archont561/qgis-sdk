@@ -34,7 +34,9 @@ from qgis_sdk.models import QgisSdkError, QgisSdkUiError
 from qgis_sdk.resources import icon_path
 from qgis_sdk.ui.actions import ViewActions
 from qgis_sdk.ui.components import Component
+from qgis_sdk.ui.streams import ViewStreams
 from qgis_sdk.ui.surfaces import Surface, describe_surface
+from qgis_sdk.ui.wiring import wire_surface
 
 __all__ = [
     "DOCK_VISIBLE_SETTING",
@@ -84,6 +86,54 @@ class _WidgetControl:
 
     def request_close(self) -> None:
         self._close()
+
+
+class _StreamPump:
+    """Drive one view's ``ViewStreams`` from the Qt event loop.
+
+    A pushed event from another thread or an opened iterator wakes the pump;
+    it then delivers on the GUI thread and keeps polling while a pull
+    subscription is open. Nothing runs after the view's scope closed.
+    """
+
+    INTERVAL_MS = 50
+
+    def __init__(self, scope: Any) -> None:
+        from qgis.PyQt.QtCore import QMetaObject, Qt, QThread, QTimer
+
+        self._scope = scope
+        self.streams: ViewStreams | None = None
+        # Created on the GUI thread, where the host opens views, so the timer
+        # belongs to it; another thread may only ask it to start.
+        timer = QTimer()
+        timer.setInterval(self.INTERVAL_MS)
+        timer.timeout.connect(self.pump)
+        self._timer = timer
+        self._current_thread = QThread.currentThread
+        self._queued = Qt.ConnectionType.QueuedConnection
+        self._invoke = QMetaObject.invokeMethod
+        scope.on_close(self._stop)
+
+    def wake(self) -> None:
+        if self._scope.closed or self.streams is None:
+            return
+        if self._current_thread() is not self._timer.thread():
+            self._invoke(self._timer, "start", self._queued)
+        elif not self._timer.isActive():
+            self._timer.start()
+
+    def pump(self) -> None:
+        streams = self.streams
+        if self._scope.closed or streams is None:
+            self._stop()
+            return
+        streams.pump()
+        if not streams.busy:
+            self._stop()
+
+    def _stop(self) -> None:
+        if self._timer is not None:
+            self._timer.stop()
 
 
 @dataclass(slots=True)
@@ -239,6 +289,9 @@ class SurfaceHost:
     ) -> tuple[UiContext, Any]:
         runtime, context = self._require_attached()
         scope = context.scope.child()
+        pump = _StreamPump(scope)
+        streams = ViewStreams(runtime, view_id=view_id, wake=pump.wake)
+        pump.streams = streams
         ui = UiContext(
             context.notifications,
             _WidgetControl(close),
@@ -250,7 +303,9 @@ class SurfaceHost:
             project=context.project if context.has("project") else None,
             files=context.files if context.has("files") else None,
             log=context.log if context.has("log") else None,
+            streams=streams,
         )
+        scope.on_close(streams.dispose)
         return ui, scope
 
     def _build(
@@ -278,6 +333,7 @@ class SurfaceHost:
                 except AttributeError:  # pragma: no cover - a slotted widget
                     pass
                 widget = instance
+            root = widget
             if isinstance(widget, Component):
                 # A catalogue component is state until mounted: bind it to
                 # this opening's context (unless build() already did) and
@@ -285,12 +341,14 @@ class SurfaceHost:
                 if not widget.attached:
                     widget.attach(ui)
                 widget = widget.mount()
+            if widget is None:
+                raise QgisSdkUiError(f"{bound.cls.__name__}.build() returned no widget")
+            # ``@on``/``@subscribe`` and the behaviour mixins connect once
+            # the tree exists; the scope undoes it all.
+            wire_surface(instance, root, ui)
         except BaseException:
             scope.close()
             raise
-        if widget is None:
-            scope.close()
-            raise QgisSdkUiError(f"{bound.cls.__name__}.build() returned no widget")
         return instance, widget, scope, view_id
 
     def _open_dialog(

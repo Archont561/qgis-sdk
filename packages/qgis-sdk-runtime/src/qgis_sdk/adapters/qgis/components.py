@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from qgis.core import (
@@ -81,7 +82,7 @@ from qgis_sdk.ui.form import Form
 
 from .processing import _qt_filter
 
-__all__ = ["Rendering", "mount"]
+__all__ = ["Rendering", "load_ui", "mount"]
 
 #: Spin-box bounds: wide enough never to clip a
 #: value the wire accepts, finite so the widget does not overflow.
@@ -129,6 +130,16 @@ def mount(
         if isinstance(component, cls):
             return builder(component, parent, on_change)
     raise QgisSdkUiError(f"no native widget for {type(component).__name__}")
+
+
+def load_ui(path: Path, parent: QWidget | None = None) -> QWidget:
+    """Load a Designer file into a fresh widget (``uic.loadUi``)."""
+    from qgis.PyQt import uic
+
+    widget = uic.loadUi(str(path))
+    if parent is not None:
+        widget.setParent(parent)
+    return widget
 
 
 def _connect(rendering: Rendering, signal: Any, slot: Callable[..., None]) -> None:

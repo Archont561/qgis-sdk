@@ -23,6 +23,8 @@ from qgis_sdk.core import ResourceScope, UiContext
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.ui.components import Component
 from qgis_sdk.ui.surfaces import Surface, describe_surface, is_surface_class
+from qgis_sdk.ui.uifile import fake_ui_tree, resolve_ui_path
+from qgis_sdk.ui.wiring import wire_surface
 
 __all__ = [
     "BuiltSurface",
@@ -106,10 +108,12 @@ def fake_ui_context(
     ``notifications`` (a ``RecordingNotifications``), ``view`` (a
     ``FakeViewControl``) and ``log`` (a ``RecordingLog``) are provided
     unless passed; ``layers``, ``project``, ``files``, ``settings``,
-    ``network`` and ``actions`` are carried when given. ``runtime`` - a
-    started ``PluginRuntime`` - builds ``actions`` as the host would.
+    ``network``, ``actions`` and ``streams`` are carried when given.
+    ``runtime`` - a started ``PluginRuntime`` - builds ``actions`` and
+    ``streams`` as the host would.
     """
     from qgis_sdk.ui.actions import ViewActions
+    from qgis_sdk.ui.streams import ViewStreams
 
     from .fakes import RecordingLog, RecordingNotifications
 
@@ -120,9 +124,12 @@ def fake_ui_context(
     if "log" not in services:
         services["log"] = RecordingLog(scope)
     if runtime is not None:
-        if "actions" in services:
-            raise QgisSdkUiError("fake_ui_context: pass runtime or actions, not both")
+        if "actions" in services or "streams" in services:
+            raise QgisSdkUiError(
+                "fake_ui_context: pass runtime or actions/streams, not both"
+            )
         services["actions"] = ViewActions(runtime, view_id=view_id)
+        services["streams"] = ViewStreams(runtime, view_id=view_id)
     return UiContext(notifications, view, scope, **services)
 
 
@@ -134,17 +141,20 @@ class BuiltSurface:
     root: Any
     ctx: UiContext
 
-    def find(self, name: str) -> Component:
-        """The component called ``name`` anywhere in the tree."""
+    def find(self, name: str) -> Any:
+        """The node called ``name`` anywhere in the tree: a component or a fake widget."""
         root = self.root
-        if not isinstance(root, Component):
-            raise QgisSdkUiError("build() returned no catalogue component")
-        if root.name == name:
-            return root
+        if isinstance(root, Component):
+            if root.name == name:
+                return root
+            finder = getattr(root, "find", None)
+            if finder is None:
+                raise QgisSdkUiError(f"{root.name!r} has no children to search")
+            return finder(name)
         finder = getattr(root, "find", None)
-        if finder is None:
-            raise QgisSdkUiError(f"{root.name!r} has no children to search")
-        return finder(name)
+        if callable(finder):
+            return finder(name)
+        raise QgisSdkUiError("build() returned no catalogue component")
 
     def close(self) -> None:
         """What closing the window does: ``on_close()``, then the scope."""
@@ -163,9 +173,11 @@ def build_surface(
     """Run ``surface.build()`` under ``ctx`` exactly as the host would, minus Qt.
 
     The instance gets ``ctx`` and ``initial`` first; a catalogue component
-    ``build()`` returns is attached to the context, never mounted. A surface
-    in the widget form is refused: it *is* a Qt widget and opens only under
-    a host.
+    ``build()`` returns is attached to the context, never mounted; the
+    ``@on``/``@subscribe`` methods and the behaviour mixins are wired as the
+    host would. A ``ui =`` surface gets a :class:`~qgis_sdk.ui.uifile.FakeUiTree`
+    read from the Designer file. A surface in the widget form is refused: it
+    *is* a Qt widget and opens only under a host.
     """
     if not is_surface_class(surface):
         name = getattr(surface, "__name__", repr(surface))
@@ -177,7 +189,17 @@ def build_surface(
     instance = surface()
     instance.ctx = ctx
     instance.initial = MappingProxyType(dict(initial or {}))
-    root = instance.build()
+    if surface.ui is not None and _uses_default_build(surface):
+        # The Designer file as declared names, not widgets: ``@on`` wires to
+        # fake signals a test emits.
+        root: Any = fake_ui_tree(resolve_ui_path(surface, surface.ui))
+    else:
+        root = instance.build()
     if isinstance(root, Component) and not root.attached:
         root.attach(ctx)
+    wire_surface(instance, root, ctx)
     return BuiltSurface(instance, root, ctx)
+
+
+def _uses_default_build(surface: type) -> bool:
+    return surface.build is Surface.build

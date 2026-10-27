@@ -40,6 +40,7 @@ from qgis_sdk.declarations import (
     derive_title,
     validate_given,
 )
+from qgis_sdk.models import QgisSdkUiError
 
 if TYPE_CHECKING:
     from qgis_sdk.core.contexts import UiContext
@@ -54,6 +55,7 @@ __all__ = [
     "is_dock",
     "is_surface_class",
     "is_widget_surface",
+    "load_ui",
 ]
 
 #: Where a ``Dock`` may sit; the names QGIS uses, not Qt's enum.
@@ -75,18 +77,35 @@ class Surface:
     title: ClassVar[str | None] = None
     #: An explicit surface id; derived from the class name when left ``None``.
     id: ClassVar[str | None] = None
+    #: A Qt Designer file, relative to the class's module, that the default
+    #: ``build()`` loads; ``@on`` names then refer to its ``objectName``s.
+    ui: ClassVar[str | None] = None
 
     ctx: UiContext
     initial: Mapping[str, Any]
 
     def build(self) -> Any:
-        """Return the widget the host shows; the one Qt-touching author hook."""
+        """Return the widget the host shows; the one Qt-touching author hook.
+
+        The default loads ``ui`` when the class names a Designer file and
+        refuses otherwise, so a surface either writes ``build()`` or points
+        at a file.
+        """
+        if self.ui is not None:
+            return load_ui(type(self))
         raise NotImplementedError(
-            f"{type(self).__name__}.build() must return the widget to show"
+            f"{type(self).__name__}.build() must return the widget to show, "
+            "or the class must name a Designer file in `ui`"
         )
+
+    def on_accept(self) -> Any:
+        """Called by the Accept button (``HasAcceptCancel``); ``False`` keeps the window."""
 
     def on_close(self) -> None:
         """Called once the window closes, before the surface's scope disposes."""
+
+    def _attach_behaviours(self, root: Any, ctx: UiContext) -> None:
+        """Hook the behaviour mixins chain through after ``build()``."""
 
 
 class Dialog(Surface):
@@ -128,6 +147,26 @@ class SurfaceDescription:
     kind: SurfaceKind
     area: str | None
     modal: bool
+
+
+def load_ui(cls: type, parent: Any = None) -> Any:
+    """Load the Designer file ``cls.ui`` names into a widget; needs QGIS."""
+    import importlib
+
+    from .components import NATIVE_CATALOGUE
+    from .uifile import resolve_ui_path
+
+    ui = getattr(cls, "ui", None)
+    if not isinstance(ui, str) or not ui:
+        raise QgisSdkUiError(f"{cls.__name__} names no Designer file in `ui`")
+    path = resolve_ui_path(cls, ui)
+    if not path.is_file():
+        raise QgisSdkUiError(f"{cls.__name__}.ui = {ui!r}: {path} does not exist")
+    try:
+        catalogue = importlib.import_module(NATIVE_CATALOGUE)
+    except ImportError as error:
+        raise QgisSdkUiError(f"loading {path.name} needs QGIS: {error}") from error
+    return catalogue.load_ui(path, parent)
 
 
 def is_surface_class(value: object) -> bool:
