@@ -120,8 +120,10 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   emitting a Python module (TypedDict + request class per algorithm) and a
   TypeScript module per provider with `--check`, the shipped snapshot of
   `native`/`qgis`/`gdal`/`3d`/`pdal`, the `algorithms.*` host operations
-  and grants, `runAlgorithm` typed by the generated registry. TASK-70's
-  Storybook, docs and closure finish right after it.
+  and grants, `runAlgorithm` typed by the generated registry. PR #106
+  merged as `d3e930e` (CI, autorelease and publish-sandbox green, no tag);
+  TASK-109 is Done. TASK-70's Storybook, docs and closure finish right
+  after it.
 - **Sprint 6: TASK-43.** The Starlight site from the backlog guides with
   the Storybook static build mounted under it, deployed by a `docs.yml`
   workflow to GitHub Pages; the root README gains the docs badge and link
