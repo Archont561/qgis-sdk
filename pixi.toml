@@ -132,6 +132,10 @@ cmd = "bun run biome check ."
 [feature.bun.tasks.typecheck]
 cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk' typecheck && bun run --filter '@archont561/qgis-sdk-ui' typecheck"
 
+[feature.bun.tasks.storybook-build]
+# The static Storybook of qgis-sdk-ui; its own `build` runs first.
+cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk-ui' storybook:build"
+
 [feature.bun.tasks.turbo-test]
 cmd = "bun run test"
 

@@ -27,3 +27,5 @@ coverage/
 .pytest_cache/
 __pycache__/
 .config/turborepo/
+# Storybook static build of packages/qgis-sdk-ui
+storybook-static/
