@@ -328,6 +328,30 @@ def test_typescript_module_declares_params_results_and_the_registry() -> None:
     assert only_native == emit_typescript_module(CATALOGUE, ["native"])
 
 
+def test_typescript_module_lints_clean_as_source_does() -> None:
+    """Only the aliases a shape uses are imported; an empty result is a closed
+    type rather than an empty interface (Biome's noUnusedImports and
+    noEmptyInterface apply to the generated page module)."""
+    text = emit_typescript_module(CATALOGUE)
+    imports = text[text.index("import {") : text.index("} from")]
+
+    # The whole fixture never uses an extent, a point or a range.
+    for unused in ("Extent", "PointValue", "RangeValue"):
+        assert unused not in imports
+    for used in ("Destination", "FileRef", "LayerRef", "VectorLayerInfo"):
+        assert f"\ttype {used}," in imports
+    assert "export type P3dTessellateResult = Record<string, never>;" in text
+    assert "export type QgisBasicstatistics2Result = Record<string, never>;" in text
+    assert "Result {\n}" not in text
+
+    only_3d = emit_typescript_module(CATALOGUE, ["3d"])
+    imports_3d = only_3d[only_3d.index("import {") : only_3d.index("} from")]
+    assert "\ttype LayerRef," in imports_3d
+    assert "Destination" not in imports_3d
+    assert "VectorLayerInfo" not in imports_3d
+    assert "\trunAlgorithm as runAny," in imports_3d
+
+
 def test_python_module_of_a_provider_without_algorithms_is_still_valid() -> None:
     text = emit_python_module(CATALOGUE, "missing")
 
