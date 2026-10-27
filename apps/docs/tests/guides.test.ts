@@ -164,7 +164,7 @@ describe("renderGuides", () => {
 			"python/index.md",
 			"python/installation.md",
 			"python/scoped-jobs.md",
-			"typescript/040-migration-notes.md",
+			"typescript-migration/v0-4.md",
 			"typescript/index.md",
 			"typescript/transport-client.md",
 		]);
@@ -234,7 +234,7 @@ describe("renderGuides", () => {
 			"[doc-13](/qgis-sdk/typescript/transport-client/)",
 		);
 		expect(byPath.get("python/scoped-jobs.md")).toContain(
-			"[0.4.0 notes](/qgis-sdk/typescript/040-migration-notes/)",
+			"[0.4.0 notes](/qgis-sdk/typescript/migration/v0-4/)",
 		);
 		expect(byPath.get("typescript/index.md")).toContain(
 			"[doc-12](/qgis-sdk/python/)",
@@ -320,27 +320,22 @@ describe("renderGuides", () => {
 			{ base: "", repository: "https://github.com/o/r" },
 		);
 		const draft =
-			drafts.find((p) => p.path.endsWith("070-migration-notes-in-progress.md"))
-				?.content ?? "";
+			drafts.find((p) => p.path === "python-migration/v0-7.md")?.content ?? "";
 		expect(draft).toContain(
-			'sidebar:\n  order: 1\n  badge: {"text":"Draft","variant":"caution"}\n',
+			'sidebar:\n  order: 993\n  badge: {"text":"Draft","variant":"caution"}\n',
 		);
 		expect(draft).toContain(
 			"---\n:::caution[Draft]\nThese notes describe the unreleased 0.7.0 line. Content changes as the release is cut.\n:::\n\nBody.\n",
 		);
 		const next =
-			drafts.find(
-				(p) =>
-					p.path.endsWith("migration-notes.md") &&
-					p.path.startsWith("typescript/"),
-			)?.content ?? "";
+			drafts.find((p) => p.path === "typescript-migration/next-minor.md")
+				?.content ?? "";
 		expect(next).toContain('badge: {"text":"Draft","variant":"caution"}');
 		expect(next).toContain(
 			"These notes describe the unreleased next minor. Content changes as the release is cut.",
 		);
 		const released =
-			drafts.find((p) => p.path.endsWith("060-migration-notes.md"))?.content ??
-			"";
+			drafts.find((p) => p.path === "python-migration/v0-6.md")?.content ?? "";
 		expect(released).not.toContain("badge");
 		expect(released).not.toContain(":::caution");
 	});
@@ -351,6 +346,103 @@ describe("renderGuides", () => {
 		expect(index).toContain(
 			"- [Desktop host: `host()` and the project manifest](/qgis-sdk/python/desktop-host-host-and-the-project-manifest/)",
 		);
+	});
+});
+
+describe("migration notes", () => {
+	const pages = renderGuides(
+		[
+			{
+				guide: PYTHON,
+				markdown: [
+					"# T",
+					"",
+					"## Installation",
+					"",
+					"See [the 0.4 notes](#040-migration-notes) and [the policy](#010-experimental-release-and-migration-policy).",
+					"",
+					"## 0.1.0 experimental release and migration policy",
+					"",
+					"Policy.",
+					"",
+					"## 0.7.0 migration notes (in progress)",
+					"",
+					"Soon.",
+					"",
+					"### Parameter kinds",
+					"",
+					"Kinds.",
+					"",
+					"## 0.4.0 migration notes",
+					"",
+					"Done. See [kinds](#parameter-kinds).",
+					"",
+				].join("\n"),
+			},
+			{
+				guide: TYPESCRIPT,
+				markdown:
+					"# T\n\n## Exports\n\nSee [doc-12 0.4](doc-12%20-%20qgis-sdk-Python-package-guide.md#040-migration-notes).\n\n## 0.3.0 migration notes\n\nBody.\n",
+			},
+		],
+		{ base: "/qgis-sdk", repository: "https://github.com/o/r" },
+	);
+	const byPath = new Map(pages.map((p) => [p.path, p.content]));
+
+	test("live in a sibling directory with a slug under the guide's route", () => {
+		expect([...byPath.keys()].sort()).toEqual([
+			"python-migration/v0-1-experimental-policy.md",
+			"python-migration/v0-4.md",
+			"python-migration/v0-7.md",
+			"python/index.md",
+			"python/installation.md",
+			"typescript-migration/v0-3.md",
+			"typescript/exports.md",
+			"typescript/index.md",
+		]);
+		expect(byPath.get("python-migration/v0-4.md")).toContain(
+			'slug: "python/migration/v0-4"',
+		);
+		expect(byPath.get("typescript-migration/v0-3.md")).toContain(
+			'slug: "typescript/migration/v0-3"',
+		);
+	});
+
+	test("carry a human title and sort newest first", () => {
+		expect(byPath.get("python-migration/v0-7.md")).toContain(
+			'title: "0.7.0 migration notes"',
+		);
+		expect(
+			byPath.get("python-migration/v0-1-experimental-policy.md"),
+		).toContain('title: "0.1.0 experimental release and migration policy"');
+		const order = (path: string): number =>
+			Number(/order: (\d+)/.exec(byPath.get(path) ?? "")?.[1]);
+		expect(order("python-migration/v0-7.md")).toBeLessThan(
+			order("python-migration/v0-4.md"),
+		);
+		expect(order("python-migration/v0-4.md")).toBeLessThan(
+			order("python-migration/v0-1-experimental-policy.md"),
+		);
+	});
+
+	test("are reached by the anchors the guides already use", () => {
+		const installation = byPath.get("python/installation.md") ?? "";
+		expect(installation).toContain(
+			"[the 0.4 notes](/qgis-sdk/python/migration/v0-4/)",
+		);
+		expect(installation).toContain(
+			"[the policy](/qgis-sdk/python/migration/v0-1-experimental-policy/)",
+		);
+		expect(byPath.get("python-migration/v0-4.md")).toContain(
+			"[kinds](/qgis-sdk/python/migration/v0-7/#parameter-kinds)",
+		);
+		expect(byPath.get("typescript/exports.md")).toContain(
+			"[doc-12 0.4](/qgis-sdk/python/migration/v0-4/)",
+		);
+		expect(byPath.get("python/index.md")).toContain(
+			"- [0.4.0 migration notes](/qgis-sdk/python/migration/v0-4/)",
+		);
+		expect(pages.warnings).toHaveLength(0);
 	});
 });
 

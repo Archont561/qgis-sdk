@@ -1,7 +1,8 @@
 /**
  * Write the generated half of `src/content/docs/` before `astro dev|build`.
  *
- * - the three backlog guides, one directory each (see `lib/guides.ts`);
+ * - the three backlog guides, one directory each plus a `<section>-migration`
+ *   sibling for the migration notes (see `lib/guides.ts`);
  * - `reference/design-decisions.md`, one curated table over the decision
  *   records (see `lib/decisions.ts` and `decision-summaries.ts`);
  * - `public/storybook/`, a copy of `packages/qgis-sdk-ui/storybook-static`
@@ -53,11 +54,10 @@ async function main(): Promise<void> {
 	}
 	const pages = renderGuides(inputs, { base: BASE, repository: REPOSITORY });
 
-	for (const guide of GUIDES) {
-		await rm(join(CONTENT_DIR, guide.section), {
-			recursive: true,
-			force: true,
-		});
+	// Every directory the guides render into is theirs alone, so a page whose
+	// section was renamed or removed does not linger from an earlier run.
+	for (const dir of new Set(pages.map((page) => dirname(page.path)))) {
+		await rm(join(CONTENT_DIR, dir), { recursive: true, force: true });
 	}
 	for (const page of pages) {
 		const target = join(CONTENT_DIR, page.path);

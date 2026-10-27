@@ -1,6 +1,8 @@
 # Rendered from backlog/docs/guides by scripts/generate.ts
 /src/content/docs/python/
+/src/content/docs/python-migration/
 /src/content/docs/typescript/
+/src/content/docs/typescript-migration/
 /src/content/docs/contributing/workspace/
 # Rendered from backlog/decisions by scripts/generate.ts
 /src/content/docs/reference/

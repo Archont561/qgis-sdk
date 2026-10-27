@@ -42,13 +42,30 @@ export default defineConfig({
 						{ slug: "start/concepts" },
 					],
 				},
+				// The migration notes render into a sibling directory and are routed
+				// under the guide with `slug`, so they can sit in one collapsed
+				// subgroup at the bottom of the guide instead of among its sections.
 				{
 					label: "Python package",
-					items: [{ autogenerate: { directory: "python" } }],
+					items: [
+						{ autogenerate: { directory: "python" } },
+						{
+							label: "Migration notes",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "python-migration" } }],
+						},
+					],
 				},
 				{
 					label: "TypeScript SDK",
-					items: [{ autogenerate: { directory: "typescript" } }],
+					items: [
+						{ autogenerate: { directory: "typescript" } },
+						{
+							label: "Migration notes",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "typescript-migration" } }],
+						},
+					],
 				},
 				{
 					label: "Reference",
@@ -90,7 +107,9 @@ export default defineConfig({
 					sectionLabels: {
 						start: "Start here",
 						python: "Python package guide",
+						"python/migration": "Python migration notes",
 						typescript: "TypeScript SDK guide",
+						"typescript/migration": "TypeScript migration notes",
 						reference: "Reference",
 						contributing: "Contributing",
 						"contributing/workspace": "Workspace, harnesses, and evidence",

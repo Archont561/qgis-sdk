@@ -56,8 +56,65 @@ export const GUIDES: readonly Guide[] = [
 
 export interface Section {
 	readonly heading: string;
+	/**
+	 * The page slug under the guide's route. A plain section is the GitHub
+	 * slug of its heading; a migration note is `migration/<name>`.
+	 */
 	readonly slug: string;
 	readonly body: string;
+	/** Set when the section is a migration note. */
+	readonly migration?: MigrationPage;
+}
+
+/**
+ * A migration note's place on the site. The guides title them by version
+ * ("0.4.0 migration notes") and keep them in whatever order they were
+ * written; the site files them under `<guide>/migration/<name>` and lists
+ * them newest first.
+ */
+export interface MigrationPage {
+	/** The last route segment, e.g. `v0-4`. */
+	readonly name: string;
+	/** The page title without the draft marker. */
+	readonly title: string;
+	/** Sidebar order; newest first, an unreleased line before every release. */
+	readonly order: number;
+}
+
+const MIGRATION_NOTES =
+	/^(\d+)\.(\d+)\.\d+ migration notes(?: \(in progress\))?$/;
+const MIGRATION_POLICY =
+	/^(\d+)\.(\d+)\.\d+ experimental release and migration policy$/;
+const NEXT_MINOR_NOTES = /^Next minor \(unreleased\) migration notes$/;
+
+/** Classify a `##` heading as a migration note, or `null`. */
+export function migrationPage(heading: string): MigrationPage | null {
+	const versioned = (match: RegExpExecArray): number =>
+		1000 - (Number(match[1]) * 100 + Number(match[2]));
+	const notes = MIGRATION_NOTES.exec(heading);
+	if (notes) {
+		return {
+			name: `v${notes[1]}-${notes[2]}`,
+			title: heading.replace(/ \(in progress\)$/, ""),
+			order: versioned(notes),
+		};
+	}
+	const policy = MIGRATION_POLICY.exec(heading);
+	if (policy) {
+		return {
+			name: `v${policy[1]}-${policy[2]}-experimental-policy`,
+			title: heading,
+			order: versioned(policy),
+		};
+	}
+	if (NEXT_MINOR_NOTES.test(heading)) {
+		return {
+			name: "next-minor",
+			title: "Next minor migration notes",
+			order: 0,
+		};
+	}
+	return null;
 }
 
 export interface AnchorTarget {
@@ -171,7 +228,12 @@ function headingOf(line: string): Heading | null {
 export function splitGuide(markdown: string): SplitGuide {
 	let title = "";
 	const intro: string[] = [];
-	const sections: { heading: string; slug: string; lines: string[] }[] = [];
+	const sections: {
+		heading: string;
+		slug: string;
+		lines: string[];
+		migration?: MigrationPage;
+	}[] = [];
 	const anchors = new Map<string, AnchorTarget>();
 	const seen = new Map<string, number>();
 	const uniqueSlug = (text: string): string => {
@@ -190,9 +252,11 @@ export function splitGuide(markdown: string): SplitGuide {
 				continue;
 			}
 			if (heading?.level === 2) {
-				const slug = uniqueSlug(heading.text);
-				sections.push({ heading: heading.text, slug, lines: [] });
-				anchors.set(slug, { page: slug, anchor: null });
+				const anchor = uniqueSlug(heading.text);
+				const migration = migrationPage(heading.text) ?? undefined;
+				const slug = migration ? `migration/${migration.name}` : anchor;
+				sections.push({ heading: heading.text, slug, lines: [], migration });
+				anchors.set(anchor, { page: slug, anchor: null });
 				continue;
 			}
 			if (heading && current) {
@@ -209,6 +273,7 @@ export function splitGuide(markdown: string): SplitGuide {
 			heading: s.heading,
 			slug: s.slug,
 			body: s.lines.join("\n").trim(),
+			...(s.migration ? { migration: s.migration } : {}),
 		})),
 		anchors,
 	};
@@ -479,22 +544,28 @@ class Renderer {
 			});
 			split.sections.forEach((section, position) => {
 				const draft = draftNotice(section.heading);
+				const { migration } = section;
+				const pageTitle = migration?.title ?? plainText(section.heading);
 				const head = frontmatter({
-					title: plainText(section.heading),
-					description: describe(
-						section.body,
-						`${title}: ${plainText(section.heading)}`,
-					),
+					title: pageTitle,
+					description: describe(section.body, `${title}: ${pageTitle}`),
+					// A migration note is written to a sibling directory so the
+					// sidebar can group the notes under one label, and routed under
+					// the guide with `slug`.
+					slug: migration ? `${guide.section}/${section.slug}` : undefined,
 					editUrl: this.editUrl(guide),
 					lastUpdated,
 					sidebar: {
-						order: position + 1,
+						order: migration?.order ?? position + 1,
 						...(draft ? { badge: { text: "Draft", variant: "caution" } } : {}),
 					},
 				});
 				const body = this.prose(guide, section.slug, section.body, true);
+				const path = migration
+					? `${guide.section}-migration/${migration.name}.md`
+					: `${guide.section}/${section.slug}.md`;
 				pages.push({
-					path: `${guide.section}/${section.slug}.md`,
+					path,
 					content: `${head}${draft ? `${draft}\n` : ""}${body}\n`,
 				});
 			});
