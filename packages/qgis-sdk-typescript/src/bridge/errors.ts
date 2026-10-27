@@ -1,7 +1,7 @@
-/** The bridge's errors: protocol, timeout, abort, closed, sequence, ended and remote. */
+/** The bridge's errors: protocol, timeout, abort, closed and remote. */
 
 import { QgisSdkError } from "../errors";
-import type { BridgeFailure, BridgeStreamTerminal } from "./protocol";
+import type { BridgeFailure } from "./protocol";
 
 /**
  * An envelope or reply does not match the versioned bridge protocol.
@@ -47,50 +47,6 @@ export class QgisSdkBridgeAbortedError extends QgisSdkError {
 export class QgisSdkBridgeClosedError extends QgisSdkError {
 	public constructor() {
 		super("This bridge client is closed", "closed");
-	}
-}
-
-/**
- * A subscription's frames were not the sequence the host promised.
- *
- * The client does not try to reassemble: a missed frame is a fact about the
- * subscription, not something to paper over.
- */
-export class QgisSdkBridgeSequenceError extends QgisSdkError {
-	public readonly subscriptionId: string;
-	public readonly expected: number;
-	public readonly received: number;
-
-	public constructor(
-		subscriptionId: string,
-		expected: number,
-		received: number,
-	) {
-		super(
-			`Subscription ${JSON.stringify(subscriptionId)} expected frame ${expected} but received ${received}`,
-			"stream_gap",
-		);
-		this.subscriptionId = subscriptionId;
-		this.expected = expected;
-		this.received = received;
-	}
-}
-
-/**
- * The subscription ended with a terminal frame the caller may want to inspect.
- */
-export class QgisSdkBridgeStreamEndedError extends QgisSdkError {
-	public readonly subscriptionId: string;
-	public readonly terminal: BridgeStreamTerminal;
-
-	public constructor(subscriptionId: string, terminal: BridgeStreamTerminal) {
-		super(
-			terminal.message ??
-				`Subscription ${JSON.stringify(subscriptionId)} ended: ${terminal.kind}`,
-			terminal.kind,
-		);
-		this.subscriptionId = subscriptionId;
-		this.terminal = terminal;
 	}
 }
 

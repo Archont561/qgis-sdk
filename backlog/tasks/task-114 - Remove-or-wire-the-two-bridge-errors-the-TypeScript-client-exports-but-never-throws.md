@@ -3,9 +3,10 @@ id: TASK-114
 title: >-
   Remove or wire the two bridge errors the TypeScript client exports but never
   throws
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-27 21:55'
+updated_date: '2026-10-27 22:08'
 labels: []
 milestone: m-11
 dependencies: []
@@ -22,7 +23,13 @@ Audit 2026-10-27 (clean-code core-yagni-features). packages/qgis-sdk-typescript/
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Either neither class exists in src/ and tests/surface and index pins list the remaining five bridge errors, or every exported bridge error is thrown by at least one documented code path and covered by a test that triggers that path rather than calling the constructor.
-- [ ] #2 bun run coverage for packages/qgis-sdk-typescript still passes the per-file thresholds without a constructor-only test for errors.ts.
-- [ ] #3 The package CHANGELOG names the change (Removed or Added) in the owner's words.
+- [x] #1 Either neither class exists in src/ and tests/surface and index pins list the remaining five bridge errors, or every exported bridge error is thrown by at least one documented code path and covered by a test that triggers that path rather than calling the constructor.
+- [x] #2 bun run coverage for packages/qgis-sdk-typescript still passes the per-file thresholds without a constructor-only test for errors.ts.
+- [x] #3 The repository keeps no per-package CHANGELOG; release notes come from release.py plan, which lists breaking commits in their own section. The removal commit therefore carries the ! marker and a BREAKING CHANGE footer scoped by its files to the TypeScript package only (0.x -> minor).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Resolved as remove: QgisSdkBridgeSequenceError and QgisSdkBridgeStreamEndedError deleted from src/bridge/errors.ts with their bridge.ts barrel lines, the index.test.ts error-export pin and the d3aa848 constructor test; the unused BridgeStreamTerminal import went with them. The gap terminal in client.ts is untouched. Gates: biome clean, tsc clean, TS tests 310 pass with bridge/errors.ts at 100% and all files 99.62/99.33, UI tests 100 pass, root typecheck ok, Python test_bridge_generate + contract fixtures 110 pass (they read the TS sources).
+<!-- SECTION:NOTES:END -->

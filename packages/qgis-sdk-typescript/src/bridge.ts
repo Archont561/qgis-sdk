@@ -24,8 +24,6 @@ export {
 	QgisSdkBridgeClosedError,
 	QgisSdkBridgeProtocolError,
 	QgisSdkBridgeRemoteError,
-	QgisSdkBridgeSequenceError,
-	QgisSdkBridgeStreamEndedError,
 	QgisSdkBridgeTimeoutError,
 } from "./bridge/errors";
 export { parseInvokeReply, parseStreamFrame } from "./bridge/frames";
