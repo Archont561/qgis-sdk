@@ -6,6 +6,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version as PackagingVersion
 from qgis_sdk.bridge.protocol import HOST_SCHEMA_VERSION
 from qgis_sdk.declarations import PLUGIN_DESCRIPTION_SCHEMA_VERSION
 from qgis_sdk_tools.check import check_project
@@ -40,6 +44,32 @@ def declare(root: Path, lines: str) -> None:
     (root / "pyproject.toml").write_text(BASE.replace(AUTHORS, AUTHORS + lines))
 
 
+# -- strategies: release versions and the specifier grammar the rule reads ------
+
+#: Small segments keep the shrunk counterexamples readable and the padding rules
+#: (``0.5`` == ``0.5.0``) exercised.
+segments = st.lists(st.integers(0, 9), min_size=1, max_size=3)
+release_versions = segments.map(lambda parts: ".".join(map(str, parts)))
+#: ``~=`` needs two segments and ``==X.*`` is its own clause shape.
+_two_plus = st.lists(st.integers(0, 9), min_size=2, max_size=3).map(
+    lambda parts: ".".join(map(str, parts))
+)
+clauses = st.one_of(
+    st.tuples(
+        st.sampled_from(["==", "!=", ">=", "<=", ">", "<"]), release_versions
+    ).map("".join),
+    _two_plus.map(lambda v: f"~={v}"),
+    release_versions.map(lambda v: f"=={v}.*"),
+    release_versions.map(lambda v: f"!={v}.*"),
+)
+specifiers = st.lists(clauses, min_size=0, max_size=3).map(",".join)
+
+
+def oracle_admits(specifier: str, version: str) -> bool:
+    """What ``packaging`` says; the arithmetic under test must agree."""
+    return SpecifierSet(specifier).contains(PackagingVersion(version), prereleases=True)
+
+
 @pytest.fixture
 def supported(monkeypatch: pytest.MonkeyPatch) -> RuntimeRange:
     """Pin what "this tools release supports" so the tests do not track the tree."""
@@ -70,29 +100,44 @@ def test_installed_metadata_normalizes_the_clause_order(
     assert supported_runtime_range() == RuntimeRange(lower="0.4.0", upper="0.5")
 
 
+@given(specifier=specifiers, inside=release_versions)
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(specifier="", inside="0.5.0")
+@example(specifier=">=0.4.0,<0.6", inside="0.5.0")
+@example(specifier="~=0.5.1", inside="0.5.1")
+@example(specifier="==0.5.*", inside="0.5.0")
+def test_a_specifier_some_supported_version_satisfies_admits_the_range(
+    specifier: str, inside: str
+) -> None:
+    """Soundness: a point ``packaging`` admits inside the range means the
+    range arithmetic must admit the specifier too (it may admit more: ``!=``
+    is ignored there on purpose)."""
+    rng = RuntimeRange(lower="0.5.0", upper="0.6")
+    lower = PackagingVersion(rng.lower)
+    upper = PackagingVersion(rng.upper)
+    if not (lower <= PackagingVersion(inside) < upper):
+        return
+    if oracle_admits(specifier, inside):
+        assert requirement_admits_range(specifier, rng) is True
+
+
 @pytest.mark.parametrize(
     ("specifier", "admits"),
     [
-        ("", True),
-        ("==0.5.2", True),
-        ("==0.5.0", True),
         ("==0.4.0", False),
         ("==0.6.0", False),
         (">=0.4.0,<0.5", False),
-        (">=0.4.0,<0.6", True),
-        (">=0.5.9", True),
         (">=0.6.0", False),
         ("<0.5.0", False),
-        ("<=0.5.0", True),
-        ("~=0.5.1", True),
         ("~=0.4.0", False),
-        ("==0.5.*", True),
         ("==0.4.*", False),
-        ("!=0.5.0", True),
-        (">0.5.0,<0.5.1", True),
+        ("!=0.5.0", True),  # `!=` alone never empties a range
+        ("@@@", True),  # a syntax the arithmetic does not know is never reported
     ],
 )
-def test_requirement_admits_range(specifier: str, admits: bool) -> None:
+def test_requirement_admits_range_refuses_what_lies_outside(
+    specifier: str, admits: bool
+) -> None:
     rng = RuntimeRange(lower="0.5.0", upper="0.6")
     assert requirement_admits_range(specifier, rng) is admits
 
@@ -167,28 +212,29 @@ def installed(monkeypatch: pytest.MonkeyPatch) -> str:
     return "0.5.2"
 
 
+@given(specifier=specifiers, version=release_versions)
+@settings(max_examples=80, deadline=None, derandomize=True)
+@example(specifier=">=0.5,<0.6", version="0.5.2")
+@example(specifier="==0.5.*", version="0.6.0")
+@example(specifier="!=0.5.*", version="0.6.1")
+@example(specifier="~=0.5.1", version="0.6.0")
+@example(specifier="==0.5", version="0.5.0")  # zero padding
+def test_requirement_admits_version_agrees_with_packaging(
+    specifier: str, version: str
+) -> None:
+    assert versions_module.requirement_admits_version(specifier, version) is (
+        oracle_admits(specifier, version)
+    )
+
+
 @pytest.mark.parametrize(
-    ("specifier", "version", "admits"),
-    [
-        (">=0.5,<0.6", "0.5.2", True),
-        (">=0.5,<0.6", "0.6.0", False),
-        (">=0.5,<0.6", "0.4.9", False),
-        ("==0.5.2", "0.5.2", True),
-        ("==0.5.*", "0.5.9", True),
-        ("==0.5.*", "0.6.0", False),
-        ("!=0.5.2", "0.5.2", False),
-        ("!=0.5.*", "0.6.1", True),
-        ("~=0.5.1", "0.5.9", True),
-        ("~=0.5.1", "0.6.0", False),
-        (">0.5.2", "0.5.2", False),
-        ("<=0.5.2", "0.5.2", True),
-        ("", "1.2.3", True),
-        (">=0.5", "not-a-version", True),
-        ("@@@", "0.5.2", True),
-    ],
+    ("specifier", "version"),
+    [("", "1.2.3"), (">=0.5", "not-a-version"), ("@@@", "0.5.2")],
 )
-def test_requirement_admits_version(specifier: str, version: str, admits: bool) -> None:
-    assert versions_module.requirement_admits_version(specifier, version) is admits
+def test_what_the_arithmetic_cannot_read_counts_as_satisfied(
+    specifier: str, version: str
+) -> None:
+    assert versions_module.requirement_admits_version(specifier, version) is True
 
 
 def test_the_installed_runtime_version_is_known_here() -> None:

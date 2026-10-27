@@ -8,8 +8,11 @@ display, and the adapter is then only allowed to be mechanical.
 from __future__ import annotations
 
 import json
+import math
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 from qgis_sdk.declarations import ActionDescription, action, describe_plugin, plugin
 from qgis_sdk.models import QgisSdkFormError
 from qgis_sdk.ui.form_fields import FieldSpec, _coerce, coerce_values, form_fields
@@ -203,6 +206,41 @@ def test_coerce_refuses_an_empty_required_text_field() -> None:
 
     with pytest.raises(QgisSdkFormError, match="non-empty string"):
         coerce_values(action, {"name": "   "})
+
+
+#: What a widget hands back: the Python value, or the same value typed into a
+#: text box (``str(value)``); both must coerce to the same thing.
+_WIDGET_VALUES = [
+    ({"type": "integer"}, st.integers(-(10**9), 10**9)),
+    ({"type": "number"}, st.floats(allow_nan=False, allow_infinity=False, width=32)),
+    ({"type": "boolean"}, st.booleans()),
+    ({"enum": ["fast", "slow", "exact"]}, st.sampled_from(["fast", "slow", "exact"])),
+]
+widget_values = st.one_of(
+    [st.tuples(st.just(schema), values) for schema, values in _WIDGET_VALUES]
+)
+
+
+@given(case=widget_values)
+@settings(max_examples=80, deadline=None, derandomize=True)
+@example(case=({"type": "integer"}, -0))
+@example(case=({"type": "number"}, 1e-7))
+@example(case=({"type": "boolean"}, False))
+def test_coerce_round_trips_a_value_and_its_text_form_to_the_same_result(
+    case,
+) -> None:
+    schema, value = case
+    action = _action({"value": schema})
+
+    coerced = coerce_values(action, {"value": value})["value"]
+    typed = coerce_values(action, {"value": str(value)})["value"]
+
+    assert type(coerced) is type(value)
+    assert coerced == value or (
+        isinstance(value, float) and math.isclose(coerced, value, rel_tol=1e-6)
+    )
+    assert typed == coerced  # the text box is not a second coercion rule
+    assert coerce_values(action, {"value": coerced})["value"] == coerced
 
 
 @pytest.mark.parametrize(
