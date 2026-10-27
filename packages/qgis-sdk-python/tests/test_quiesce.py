@@ -14,13 +14,14 @@ from dataclasses import dataclass, field
 import pytest
 from qgis_sdk import action, plugin
 from qgis_sdk.core import (
+    JobContext,
     PluginContext,
     PluginRuntime,
     PluginRuntimeState,
     QuiesceOutcome,
     ResourceScope,
 )
-from qgis_sdk.jobs import JobContext, JobService, job
+from qgis_sdk.jobs import JobService, job
 from qgis_sdk.models import QgisSdkScopeClosedError
 from qgis_sdk.testing import FakeWorkers
 
