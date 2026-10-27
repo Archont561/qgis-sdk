@@ -3,10 +3,10 @@ id: TASK-109
 title: >-
   Generate the Processing catalogue: typed registry in Python and TypeScript,
   list, describe and run for any provider
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-27 11:16'
-updated_date: '2026-10-27 13:05'
+updated_date: '2026-10-27 13:38'
 labels: []
 milestone: m-6
 dependencies:
@@ -35,4 +35,6 @@ decision-64. Today ctx.algorithms.execute() accepts two hand-written requests (B
 
 <!-- SECTION:NOTES:BEGIN -->
 Implemented on arena/3160af4b-qgis-sdk in four commits: 951d4a7 (sprint 5 backlog), f323d57 (109a: models, catalogue reader, pure emitters, snapshot script + CI drift check, qgis-sdk processing generate), 637f1bf (109b: ctx.algorithms providers/list/describe/run, run allocation, FakeAlgorithms, native tests over native:buffer, gdal:translate and native:basicstatisticsforfields), 387caa1 (host ops algorithms.* behind algorithms.read/run, HOST_FINGERPRINT -> sha256:16790dc8, bridge runAlgorithm + generated AlgorithmRegistry emitter, scaffold bindings/grants/processing.schema.ts, example native.Centroids + typed page, doc-12/doc-13/doc-22). Evidence: quick suite 1885 passed; QGIS_SDK_NATIVE_SERVICES services 153; QGIS_SDK_REFERENCE 5; QGIS_SDK_SCAFFOLD_WEB 8; bridge bun test 307, ui 65; snapshot and host client --check up to date; example bindings --check both up to date. Status stays In Progress until the PR merges.
+
+2026-10-27: PR #106 merged as d3e930e; CI, autorelease (no tag) and publish-sandbox green on main. Closed; sprint 4 (TASK-70) resumes.
 <!-- SECTION:NOTES:END -->

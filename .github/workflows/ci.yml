@@ -204,6 +204,13 @@ jobs:
         id: s14
         run: pixi run -e bun typecheck
 
+      # The static Storybook is the portable-story catalogue of qgis-sdk-ui
+      # (TASK-70); it is built here so a story that no longer compiles fails
+      # the gate, and published by the docs site pipeline once TASK-43 lands.
+      - name: Build the qgis-sdk-ui Storybook
+        id: s23
+        run: pixi run -e bun storybook-build
+
       - name: Check coverage for all packages
         id: coverage
         run: |
@@ -239,6 +246,16 @@ jobs:
         with:
           files: coverage/qgis-sdk-typescript/lcov.info
           flags: qgis-sdk-typescript
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload UI coverage
+        id: s24
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: coverage/qgis-sdk-ui/lcov.info
+          flags: qgis-sdk-ui
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -354,3 +371,21 @@ jobs:
         run: |
           summary=$(grep -Eo '[0-9]+ pass' bun-tests.log | head -1 || true)
           echo "::notice::bun test: ${summary:-no summary line}"
+
+      # The UI elements import the bridge's built entry, so the bridge is
+      # built first; `--conditions=browser` is what `@lit/react` needs under
+      # bun test (the package's own `test` script passes it the same way).
+      - name: Test qgis-sdk-ui
+        shell: bash
+        run: |
+          set -o pipefail
+          bun run --filter '@archont561/qgis-sdk' build
+          bun run --filter '@archont561/qgis-sdk-ui' build
+          bun test --conditions=browser packages/qgis-sdk-ui/tests 2>&1 | tee bun-ui-tests.log
+
+      - name: Report qgis-sdk-ui test results
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          summary=$(grep -Eo '[0-9]+ pass' bun-ui-tests.log | head -1 || true)
+          echo "::notice::bun test (qgis-sdk-ui): ${summary:-no summary line}"

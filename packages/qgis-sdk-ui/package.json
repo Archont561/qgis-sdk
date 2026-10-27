@@ -57,7 +57,9 @@
 		"build": "bunup && bun scripts/build-css.ts",
 		"test": "bun test --conditions=browser",
 		"coverage": "bun --cwd=../.. --config=packages/qgis-sdk-ui/bunfig.toml test --conditions=browser --coverage packages/qgis-sdk-ui/tests",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"storybook": "bun run build && storybook dev -p 6006 --no-open",
+		"storybook:build": "bun run build && storybook build -o storybook-static --quiet"
 	},
 	"dependencies": {
 		"lit": "^3.3.3"
@@ -86,6 +88,8 @@
 	"devDependencies": {
 		"@archont561/qgis-sdk": "workspace:*",
 		"@lit/react": "1.0.8",
+		"@storybook/addon-a11y": "10.6.4",
+		"@storybook/web-components-vite": "10.6.4",
 		"@types/node": "26.6.5",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
@@ -96,7 +100,9 @@
 		"happy-dom": "21.0.4",
 		"react": "19.3.1",
 		"react-dom": "19.3.1",
+		"storybook": "10.6.4",
 		"svelte": "5.57.3",
+		"vite": "8.3.5",
 		"vue": "3.5.44"
 	}
 }

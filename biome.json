@@ -5,6 +5,7 @@
 			"**",
 			"!!**/src/generated",
 			"!!**/dist",
+			"!!**/storybook-static",
 			"!!**/coverage",
 			"!!**/build",
 			"!!**/tests/contracts/generated",
