@@ -258,7 +258,7 @@ def test_targets_does_not_fail_an_unqualified_host(monkeypatch, tmp_path) -> Non
 def test_targets_describes_the_qgis_install_the_other_commands_find(
     monkeypatch, tmp_path
 ) -> None:
-    import qgis_sdk_tools.__main__ as main_module
+    from qgis_sdk_tools._commands import _targets as targets_command
 
     asked: dict[str, object] = {}
 
@@ -270,7 +270,7 @@ def test_targets_describes_the_qgis_install_the_other_commands_find(
         return Install()
 
     versions = {"qgis": "4.2.3-Belém", "qt": "6.11.2", "chromium": "140.0.1.2"}
-    monkeypatch.setattr(main_module, "find_qgis_install", find)
+    monkeypatch.setattr(targets_command, "find_qgis_install", find)
     monkeypatch.setattr(targets_module, "bindings_probe", lambda bindings: versions.get)
     monkeypatch.setattr(targets_module.platform, "system", lambda: "Linux")
     monkeypatch.setattr(targets_module.platform, "machine", lambda: "x86_64")
@@ -291,13 +291,13 @@ def test_targets_describes_the_qgis_install_the_other_commands_find(
 def test_targets_falls_back_to_the_interpreter_without_a_qgis_install(
     monkeypatch, tmp_path
 ) -> None:
-    import qgis_sdk_tools.__main__ as main_module
+    from qgis_sdk_tools._commands import _targets as targets_command
     from qgis_sdk_tools.devtools import QgisSdkQgisNotFoundError
 
     def missing(env, *, prefix=None, project=None):
         raise QgisSdkQgisNotFoundError("no QGIS")
 
-    monkeypatch.setattr(main_module, "find_qgis_install", missing)
+    monkeypatch.setattr(targets_command, "find_qgis_install", missing)
     monkeypatch.setattr(targets_module, "probe_installed", lambda name: None)
     runtime = FakeCliRuntime(tmp_path)
 
