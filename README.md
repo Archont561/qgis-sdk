@@ -7,34 +7,39 @@
   <a href="https://github.com/Archont561/qgis-sdk/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
-**A Python-first foundation for QGIS plugins, with a typed TypeScript bridge for
-plugin interfaces hosted in `QWebEngineView`.**
+**A Python-first foundation for QGIS plugins: plain classes in, a loadable
+plugin out - with a typed TypeScript SDK and web components for interfaces
+hosted in `QWebEngineView`.**
 
-Declare a plugin on plain Python classes; the SDK derives the plugin description,
-the native forms, the Processing algorithms, the bridge allowlist and the generated
-TypeScript client from those same declarations. Experimental `0.x`: every release
-is documented, nothing is promised stable.
+Declare a plugin on plain Python classes; the SDK derives the plugin
+description, the native windows, the Processing algorithms, the bridge
+allowlist and the typed page-side client from those same declarations. The
+pure layers import without QGIS or Qt, so a plugin is testable from source.
+
+> Status: experimental `0.x` - Python kit `0.6.0`, TypeScript SDK `0.4.0`,
+> web components `0.1.0` (first release pending). Every `0.Y.0` carries
+> migration notes; nothing is promised stable before `1.0.0`.
 
 | Package | What it is | Install |
 | :-- | :-- | :-- |
-| [`qgis-sdk`](packages/qgis-sdk-python) | The Python developer kit: installs the runtime and the tools below at one tested version | `pip install qgis-sdk` |
-| [`qgis-sdk-runtime`](packages/qgis-sdk-runtime) | Python declarations, contracts, runtime, adapters - what a plugin imports, dependency-free | `pip install qgis-sdk-runtime` |
-| [`qgis-sdk-tools`](packages/qgis-sdk-tools) | `qgis-sdk new` / `check` / `test` / `dev` / `build` / `targets` | `pip install qgis-sdk-tools` |
-| [`@archont561/qgis-sdk`](packages/qgis-sdk-typescript) | TypeScript transport client, host namespaces, generated clients | `bun add @archont561/qgis-sdk` |
-| [`qgis-sdk` on npm](packages/qgis-sdk-alias) | Unscoped alias re-exporting `@archont561/qgis-sdk` at the same version | `bun add qgis-sdk` |
+| [`qgis-sdk`](packages/qgis-sdk-python) | The Python developer kit: the runtime and the tools below at one tested version | `pip install qgis-sdk` |
+| [`qgis-sdk-runtime`](packages/qgis-sdk-runtime) | What a plugin imports: declarations, UI catalogue, services, adapters - standard library only | `pip install qgis-sdk-runtime` |
+| [`qgis-sdk-tools`](packages/qgis-sdk-tools) | The `qgis-sdk` command: `new`, `check`, `test`, `dev`, `build`, `bridge`, `processing`, `targets` | `pip install qgis-sdk-tools` |
+| [`@archont561/qgis-sdk`](packages/qgis-sdk-typescript) | TypeScript SDK: `QgisSdk` over the generated schema, host namespaces, stores, React/Vue/Svelte bindings | `bun add @archont561/qgis-sdk` |
+| [`qgis-sdk` on npm](packages/qgis-sdk-alias) | Unscoped alias of `@archont561/qgis-sdk` at the same version | `bun add qgis-sdk` |
 | [`@archont561/qgis-sdk-ui`](packages/qgis-sdk-ui) | Light-DOM web components mirroring the native UI catalogue, with React, Vue and Svelte wrappers | `bun add @archont561/qgis-sdk-ui` |
-| [`qgis-sdk-ui` on npm](packages/qgis-sdk-ui-alias) | Unscoped alias re-exporting `@archont561/qgis-sdk-ui` at the same version | `bun add qgis-sdk-ui` |
-| [`@workspace/config`](packages/config) | Shared TypeScript and Bunup configuration (private) | — |
+| [`qgis-sdk-ui` on npm](packages/qgis-sdk-ui-alias) | Unscoped alias of `@archont561/qgis-sdk-ui` at the same version | `bun add qgis-sdk-ui` |
+| [`@workspace/config`](packages/config) | Shared TypeScript and Bunup configuration (private) | - |
 
 ## Try it
 
 ```sh
 pip install qgis-sdk
-qgis-sdk new my_tools --title "My Tools"   # pyproject.toml + the plugin class (asks about a web UI)
+qgis-sdk new my_tools --title "My Tools"   # pyproject.toml, the plugin class, a declared dialog (asks about a web UI)
 qgis-sdk check my_tools                    # QGIS-free project checks
 cd my_tools && qgis-sdk test               # pytest, QGIS-free by default (--target qgis|desktop)
 qgis-sdk dev                               # the plugin from source in a real QGIS, reload on save
-qgis-sdk build                             # dist/<plugin>-<version>.zip: metadata.txt, classFactory and the runtime added for you
+qgis-sdk build                             # dist/<plugin>-<version>.zip with the runtime vendored inside
 qgis-sdk targets                           # where the kit is qualified, and where this host stands
 ```
 
@@ -50,10 +55,10 @@ pixi run -e bun bun run coverage   # the 90% gates CI uses
 
 The guides live in the backlog until the documentation site ships (TASK-43):
 
-- [Python package guide](backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md)
-- [TypeScript package guide](backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
-- [Workspace, harnesses and qualification evidence](backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
-- [Decisions](backlog/decisions) and the [roadmap](backlog/docs/plans/doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md)
+- [Python package guide](backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) - declarations, the UI catalogue, services, Processing, the scaffold, the command, migration notes
+- [TypeScript package guide](backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) - `QgisSdk`, host namespaces, stores, bindings, the components, testing
+- [Workspace, harnesses and qualification evidence](backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md) - environments, release scopes, harnesses, release gates
+- [Decisions](backlog/decisions) and the [roadmap](backlog/docs/plans/doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md); the [reference plugin](examples/simple) is the smallest complete project
 
 Contributors start with [AGENTS.md](AGENTS.md).
 

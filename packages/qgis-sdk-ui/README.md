@@ -2,28 +2,33 @@
 
 **Light-DOM web components for QGIS plugin pages, on the
 [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk)
-store core.**
+store core - the web half of the SDK's UI catalogue.**
 
-The web half of the SDK's UI catalogue: a form over a declared action, layer,
-field and CRS pickers, file and directory inputs, a distance, a choice, a
-progress bar, a log and a run button. Each is a Lit element rendering into
-itself, so the page's stylesheet reaches every control and a `<label for>`
-works; each carries `data-qgis-sdk` and `data-part="label|control|error"`
-hooks. Styling is a compiled `style.css` of `qs-` utilities bound to
-`--qgis-sdk-*` tokens, which the host palette fills inside QGIS.
+A form over a declared action, layer, field and CRS pickers, file and
+directory inputs, a distance, a choice, a progress bar, a log and a run
+button, each named and keyworded as its native counterpart. Every element
+is a Lit element rendering into itself, so the page's stylesheet reaches
+each control and a `<label for>` works; each carries `data-qgis-sdk` and
+`data-part="label|control|error"` hooks. Styling is a compiled `style.css`
+of `qs-` utilities bound to `--qgis-sdk-*` tokens the host palette fills.
+`./react`, `./vue` and `./svelte` wrap the same elements.
 
-> Experimental, `0.1.0` unpublished: the first npm release follows the
-> `ui-v*` tag, under this name and the unscoped alias `qgis-sdk-ui`. `lit`
-> is the only dependency; `@archont561/qgis-sdk` is a peer. `./react` needs
-> `react` and `@lit/react`, `./vue` needs `vue`, `./svelte` needs `svelte`,
-> `./uno` needs `@unocss/preset-mini`.
+> Status: `0.1.0`, experimental; the first npm release follows the
+> `ui-v*` tag under this name and the unscoped alias `qgis-sdk-ui`. `lit`
+> is the only dependency, `@archont561/qgis-sdk` a peer; `./react` needs
+> `react` and `@lit/react`, `./vue` needs `vue`, `./svelte` needs
+> `svelte`, `./uno` needs `@unocss/preset-mini`.
 
 ## Installation
 
 ```sh
-bun add @archont561/qgis-sdk-ui
-npm install @archont561/qgis-sdk-ui
+bun add @archont561/qgis-sdk-ui        # or its unscoped alias: bun add qgis-sdk-ui
+npm install @archont561/qgis-sdk-ui    # or: npm install qgis-sdk-ui
 ```
+
+`qgis-sdk-ui` on npm re-exports every entry point and stylesheet of
+`@archont561/qgis-sdk-ui` at the same version; the two names share this
+README.
 
 ## Example
 
@@ -41,43 +46,27 @@ form.store = formStore(qgis, "buffer");
 
 ```html
 <qgis-form label="Buffer"></qgis-form>
-<qgis-layer-picker name="layer_id" label="Layer"></qgis-layer-picker>
+<qgis-layer-picker name="layer_id" label="Layer" required></qgis-layer-picker>
 <qgis-job-progress label="Job"></qgis-job-progress>
 ```
 
-A page outside QGIS, or one without the `layers.read` grant, sees the pickers
-say so instead of a fault. `applyHostTheme(qgis)` takes the running QGIS
-palette once the handshake answered and leaves the documented defaults
-otherwise.
-
-### Frameworks
-
 ```tsx
 import { QgisLayerPicker } from "@archont561/qgis-sdk-ui/react";
-<QgisLayerPicker qgis={qgis} name="layer_id" label="Layer" onChange={pick} />;
+<QgisLayerPicker qgis={qgis} name="layer_id" label="Layer" required onQgisChange={pick} />;
 ```
 
-```vue
-<QgisLayerPicker :qgis="qgis" name="layer_id" label="Layer" @change="pick" />
-```
-
-```svelte
-<qgis-layer-picker {qgis} name="layer_id" label="Layer" onqgis-change={pick} />
-```
-
-The React components come from `@lit/react`; the Vue ones bind every property
-as a property and re-emit `change`, `result`, `run` and `cancel`; Svelte sets
-properties on a registered element by itself, and `use:qgisProps` does it for
-a `<svelte:element>`.
+A page outside QGIS, or one without the `layers.read` grant, sees the
+pickers say so instead of a fault; `applyHostTheme(qgis)` takes the running
+QGIS palette once the handshake answered.
 
 ## Documentation
 
 - [TypeScript package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) -
-  the components, the wrappers, the `--qgis-sdk-*` variables and the
-  `./uno` preset.
+  the elements, their properties in both spellings, the wrappers, the
+  `--qgis-sdk-*` variables and the `./uno` preset.
 - Storybook: `bun run storybook` in `packages/qgis-sdk-ui` serves every
-  component with a light/dark theme switcher and the a11y addon; the static
-  build joins the docs site when it exists.
+  component with a theme switcher and the a11y addon; the static build
+  joins the docs site when it ships.
 
 ## License
 

@@ -1086,10 +1086,24 @@ reproduced and then rehearsed locally under npm 12.2.0 - the pack check
 the alias smoke install (`qgis-sdk-ui`: 31 exports mirrored, `/define` 1,
 both stylesheets `@import` the scoped ones) and `npm publish --dry-run
 --tag next`. A tag is never moved, so the second rehearsal is
-`ui-v0.1.0-rc.2` on the merge commit that carries the fix; its outcome is
-recorded below when it runs. npm lists `@archont561/qgis-sdk-ui` and
-`qgis-sdk-ui` at the owner's `0.0.0` reservation placeholders only,
-confirming nothing uploaded.
+`ui-v0.1.0-rc.2` on the merge commit that carries the fix (recorded
+below). npm lists `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` at the
+owner's `0.0.0` reservation placeholders only, confirming nothing uploaded.
+
+**Second rehearsal (2026-10-27, after PR #110 merged as `27fcea7`).**
+`ui-v0.1.0-rc.2` on `27fcea7`, `release.yml` run
+[40534599349](https://github.com/Archont561/qgis-sdk/actions/runs/40534599349),
+every job green: `build` as above at `0.1.0-rc.2`; `ui` ran all twelve
+steps - the pack check under npm 12.2.0, the alias tarball, the bridge
+packed for the smoke install, the smoke install (exports mirrored,
+stylesheets imported), the tarball artifact and `npm publish --dry-run
+--tag next` for both names - with `Publish to npm` and `Publish the alias
+to npm` skipped as prerelease; `github-release` published the prerelease
+`ui-v0.1.0-rc.2` with `archont561-qgis-sdk-ui-0.1.0-rc.2.tgz`,
+`qgis-sdk-ui-0.1.0-rc.2.tgz` and `SHA256SUMS`. npm still lists both names
+at `0.0.0` only. The first clean `ui-v0.1.0` tag is the first real publish
+of both names and waits for the 0.7.0 gate; deprecate the `0.0.0`
+placeholders after it (owner-side).
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
