@@ -1,7 +1,7 @@
 # Rendered from backlog/docs/guides by scripts/generate.ts
 /src/content/docs/python/
 /src/content/docs/typescript/
-/src/content/docs/workspace/
+/src/content/docs/contributing/workspace/
 # Rendered from backlog/decisions by scripts/generate.ts
 /src/content/docs/reference/
 # Copied from packages/qgis-sdk-ui/storybook-static by scripts/generate.ts

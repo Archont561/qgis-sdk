@@ -103,10 +103,11 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 never edited, and the site cites what ships (releases, registries, versions),
 never how the work was tracked:
 
-- `apps/docs/scripts/generate.ts` renders this guide, doc-12 and doc-13 into
-  `src/content/docs/{workspace,python,typescript}/` - one page per `##`
-  section, the preamble as the directory's index, sub-headings moved up one
-  level. Same-guide and cross-guide anchors become site routes; a link to a
+- `apps/docs/scripts/generate.ts` renders doc-12, doc-13 and this guide into
+  `src/content/docs/{python,typescript,contributing/workspace}/` - one page
+  per `##` section, the preamble as the directory's index, sub-headings
+  moved up one level; this guide is contributor material and sits outside
+  the consumer reference. Same-guide and cross-guide anchors become site routes; a link to a
   decision record lands on its row of the design-decisions page, which the
   same script renders from `backlog/decisions/` and the one-line summaries
   in `scripts/decision-summaries.ts`; a link to a task, a milestone, a plan

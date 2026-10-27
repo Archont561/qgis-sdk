@@ -25,6 +25,8 @@ export interface Guide {
 	readonly section: string;
 	/** The sidebar group label. */
 	readonly label: string;
+	/** The index page's title when it should differ from the guide's H1. */
+	readonly title?: string;
 }
 
 /** The three guides decision-29 named, in the order the sidebar shows them. */
@@ -44,8 +46,11 @@ export const GUIDES: readonly Guide[] = [
 	{
 		id: "doc-14",
 		file: "doc-14 - Workspace-development-qualification-harnesses-and-evidence.md",
-		section: "workspace",
-		label: "Workspace and qualification",
+		// Contributor material: how the workspace is developed and what the
+		// harnesses proved. It is not part of the consumer reference.
+		section: "contributing/workspace",
+		label: "Contributing",
+		title: "Workspace, harnesses, and evidence",
 	},
 ];
 
@@ -449,6 +454,7 @@ class Renderer {
 			if (split === undefined) {
 				continue;
 			}
+			const title = guide.title ?? split.title;
 			const index = [
 				this.prose(guide, "index", split.intro, false),
 				"",
@@ -464,8 +470,8 @@ class Renderer {
 				path: `${guide.section}/index.md`,
 				content:
 					frontmatter({
-						title: split.title,
-						description: describe(split.intro, split.title),
+						title,
+						description: describe(split.intro, title),
 						editUrl: this.editUrl(guide),
 						lastUpdated,
 						sidebar: { label: "Overview", order: 0 },
@@ -477,7 +483,7 @@ class Renderer {
 					title: plainText(section.heading),
 					description: describe(
 						section.body,
-						`${split.title}: ${plainText(section.heading)}`,
+						`${title}: ${plainText(section.heading)}`,
 					),
 					editUrl: this.editUrl(guide),
 					lastUpdated,

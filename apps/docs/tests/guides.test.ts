@@ -359,7 +359,59 @@ describe("GUIDES", () => {
 		expect(GUIDES.map((g) => [g.id, g.section])).toEqual([
 			["doc-12", "python"],
 			["doc-13", "typescript"],
-			["doc-14", "workspace"],
+			["doc-14", "contributing/workspace"],
 		]);
+	});
+
+	test("keeps the workspace guide out of the consumer reference", () => {
+		const workspace = GUIDES[2] as Guide;
+		expect(workspace.label).toBe("Contributing");
+		expect(workspace.title).toBe("Workspace, harnesses, and evidence");
+	});
+});
+
+describe("a guide with a title of its own", () => {
+	const pages = renderGuides(
+		[
+			{
+				guide: {
+					id: "doc-14",
+					file: "doc-14 - W.md",
+					section: "contributing/workspace",
+					label: "Contributing",
+					title: "Workspace, harnesses, and evidence",
+				},
+				markdown:
+					"# Workspace development\n\nIntro.\n\n## Quick start\n\nRun it.\n",
+			},
+			{
+				guide: PYTHON,
+				markdown:
+					"# P\n\n## A\n\nSee [the harness](doc-14%20-%20W.md#quick-start).\n",
+			},
+		],
+		{ base: "/qgis-sdk", repository: "https://github.com/o/r" },
+	);
+
+	test("titles the index with the override and nests the pages", () => {
+		const index = pages.find(
+			(p) => p.path === "contributing/workspace/index.md",
+		);
+		expect(index?.content).toContain(
+			'title: "Workspace, harnesses, and evidence"',
+		);
+		expect(index?.content).toContain(
+			"- [Quick start](/qgis-sdk/contributing/workspace/quick-start/)",
+		);
+		expect(
+			pages.find((p) => p.path === "contributing/workspace/quick-start.md")
+				?.content,
+		).toContain('description: "Run it."');
+	});
+
+	test("routes cross-guide links at the nested directory", () => {
+		expect(pages.find((p) => p.path === "python/a.md")?.content).toContain(
+			"[the harness](/qgis-sdk/contributing/workspace/quick-start/)",
+		);
 	});
 });

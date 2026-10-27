@@ -51,14 +51,21 @@ export default defineConfig({
 					items: [{ autogenerate: { directory: "typescript" } }],
 				},
 				{
-					label: "Workspace and qualification",
-					items: [
-						{ autogenerate: { directory: "workspace", collapsed: true } },
-					],
-				},
-				{
 					label: "Reference",
 					items: [{ slug: "reference/design-decisions" }],
+				},
+				{
+					label: "Contributing",
+					collapsed: true,
+					items: [
+						{
+							label: "Workspace, harnesses, and evidence",
+							collapsed: true,
+							items: [
+								{ autogenerate: { directory: "contributing/workspace" } },
+							],
+						},
+					],
 				},
 				{
 					label: "Project",
@@ -84,8 +91,9 @@ export default defineConfig({
 						start: "Start here",
 						python: "Python package guide",
 						typescript: "TypeScript SDK guide",
-						workspace: "Workspace, harnesses and qualification evidence",
 						reference: "Reference",
+						contributing: "Contributing",
+						"contributing/workspace": "Workspace, harnesses, and evidence",
 					},
 					optionalLinks: [
 						{
