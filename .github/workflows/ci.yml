@@ -116,6 +116,18 @@ jobs:
             bridge generate --plugin simple.plugin:SimplePlugin \
             --out web/src/bridge.schema.ts --check)
 
+      # The Processing snapshot the runtime ships (qgis_sdk/processing) is
+      # generated from the pinned QGIS by the same reader and emitters
+      # `qgis-sdk processing generate` uses; it is read here because this is
+      # the one job with a QGIS to read (decision-64).
+      - name: Check the Processing snapshot is current
+        id: s22
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pixi run -e default python \
+            packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check
+
       # The default environment carries the QGIS feature, so this is the only
       # place the native layers actually execute against real Qt and QGIS: the
       # native form path, the QGIS network transport, the restricted WebEngine
