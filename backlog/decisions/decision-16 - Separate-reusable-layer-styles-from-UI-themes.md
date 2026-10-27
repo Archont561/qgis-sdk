@@ -2,7 +2,7 @@
 id: decision-16
 title: Separate reusable layer styles from UI themes
 date: '2026-10-16 08:05'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -61,3 +61,43 @@ and CSS/QSS equivalence stay out, as the Decision section already said.
 **Promotion condition:** promote when TASK-70 lands the palette tokens and
 `./ui`; the status review at that point names the variables as the theme
 surface and this decision is read with that narrowing.
+
+## Status review (2026-10-27): promoted to `accepted`; the palette tokens are the theme surface
+
+TASK-70 landed the theme half, and it is exactly the narrowing the previous
+review named. The UI theme surface of this SDK is the set of CSS custom
+properties `@archont561/qgis-sdk-ui` publishes as `TOKEN_NAMES`, each read as
+`--qgis-sdk-<name>`:
+
+| Token | Palette role (`PALETTE_ROLES`) | Token | Palette role |
+| --- | --- | --- | --- |
+| `bg` | `window` | `accent-fg` | `highlightedText` |
+| `fg` | `windowText` | `border` | `mid` |
+| `surface` | `base` | `muted` | `placeholderText` |
+| `surface-fg` | `text` | `link` | `link` |
+| `control` | `button` | `danger` | fixed per side |
+| `control-fg` | `buttonText` | `font`, `font-size`, `radius`, `space` | fixed per side |
+| `accent` | `highlight` | | |
+
+How it is read with this narrowing:
+
+- **Seeded by the host, not styled by it.** `host()` carries the running QGIS
+  palette in the handshake; `applyHostTheme(qgis)` turns it into the tokens
+  through `PALETTE_ROLES` over the light or dark defaults and sets
+  `data-qgis-sdk-theme`. A page outside QGIS keeps `tokens.css` (the light
+  defaults on `:root`, the dark ones under the attribute). The application's
+  global stylesheet is never touched; native widgets inherit the QGIS palette
+  and no QSS ships.
+- **One stylesheet, any palette.** `dist/style.css` is compiled from the
+  package's own `qs-` utilities and binds every colour, font and radius to a
+  token, so switching palettes - the host's, or the Storybook toolbar's -
+  needs no rebuild. A consumer's `./uno` preset builds the same tokens.
+- **Layer styles stay on the other side of the line.** `styles.apply` applies
+  packaged QML to layers with compatibility checks; it reads no token and the
+  tokens read no renderer. Rich declarative themes, CSS/QSS equivalence and a
+  `ctx.ui.theme` API remain out of scope, as the Decision section says.
+
+The Consequences hold as written: separate contracts, models, adapters and
+tests for the two halves. The second consequence is now settled rather than
+open - the token names above are the committed surface, and renaming one is a
+breaking change of `qgis-sdk-ui`.

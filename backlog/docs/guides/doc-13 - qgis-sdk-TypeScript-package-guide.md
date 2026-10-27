@@ -586,6 +586,108 @@ component that prefers it to `$store`. `setQgisSdk`/`getQgisSdk` outside
 component initialisation raise `QgisSdkBridgeSvelteError`
 (`"svelte_binding"`); `QGIS_SDK_CONTEXT` is the context key.
 
+## Components: `@archont561/qgis-sdk-ui`
+
+The web half of the UI catalogue (decision-55) is a second npm package,
+`@archont561/qgis-sdk-ui` ([decision-47](../../decisions/decision-47%20-%20Build-web-UI-on-a-framework-free-store-core-with-per-framework-adapters-and-ship-components-as-qgis-sdk-ui.md)
+point 3; TASK-70). It peer-depends on this package through a caret range,
+has `lit` as its only dependency, and ships `dist`, `README.md` and
+`LICENSE` - nothing else (a pack test keeps it so).
+
+### The elements
+
+Every element is a Lit element rendering into **itself** - no shadow root -
+so the page's stylesheet reaches each control, a `<label for>` works, and
+`querySelector` finds what a test or a script needs. Each carries
+`data-qgis-sdk="<name>"` on the host element and `data-part` hooks inside
+(`label`, `control`, `error`, and per element `pick`, `cancel`, `clear`);
+an error renders as `data-part="error"` and is `aria-describedby` from the
+control.
+
+| Element | Mirrors (native) | Reads | Raises |
+| --- | --- | --- | --- |
+| `<qgis-form>` | `Form` | `.store` (a `FormStore`), `.qgis`, `.pickers`, `submit-label` | `qgis-change`, `qgis-run`, `qgis-result` |
+| `<qgis-layer-picker>` | `LayerPicker` | `.qgis`, `geometry`, `nullable` | `qgis-change` |
+| `<qgis-field-picker>` | `FieldPicker` | `.qgis`, `.layer`, `nullable` | `qgis-change` |
+| `<qgis-crs-picker>` | `CrsPicker` | `.suggestions`, `.value` | `qgis-change` |
+| `<qgis-distance>` | `Distance` | `unit`, `.min`, `.max`, `.step`, `.value` | `qgis-change` |
+| `<qgis-choice>` | `Choice` | `.choices`, `.value`, `nullable` | `qgis-change` (typed value) |
+| `<qgis-file-input>`, `<qgis-directory-input>` | `FileInput`, `DirectoryInput` | `.pick` (a `FileRef` picker), `.filters`, `.value` | `qgis-change` (a `FileRef` or `null`) |
+| `<qgis-job-progress>` | `Progress` | `status`, `.fraction`, `message`, `.store`, `.cancel` | `qgis-cancel` |
+| `<qgis-log-view>` | `Log` | `.lines`, `limit`, `.store`, `clearable` | - |
+| `<qgis-run-button>` | `RunButton` | `.form` or `.operation` + `.input`, `pending-label` | `qgis-run`, `qgis-result` |
+
+`import "@archont561/qgis-sdk-ui/define"` registers the whole catalogue
+(`DEFINED` lists what it registered); `defineElements(registry?)` from the
+root does the same on demand and leaves a tag another script took. The
+host-bound pickers are `layersQuery` and `layerFieldsQuery` behind an element:
+without the `layers.read` grant they show the refusal and its remedy, and a
+host fault lands under the control as `data-part="error"`. A page never
+names a path: a file input holds a host-minted `FileRef` and shows its
+`name`.
+
+### Styling: `style.css`, the tokens and `./uno`
+
+Two stylesheets ship. `tokens.css` sets the `--qgis-sdk-*` custom
+properties - the light defaults on `:root`, the dark ones under
+`[data-qgis-sdk-theme="dark"]`. `style.css` is compiled from the package's
+own sources by UnoCSS `preset-mini` with every utility `qs-` prefixed and
+**no preflight**, so it sits beside a page's Tailwind or Uno classes without
+a selector in common (a collision fixture proves it), and every colour, font
+and radius in it is a `var(--qgis-sdk-*)` - a palette change is a variable
+change, never a rebuild. The build refuses a `style.css` over its documented
+byte budget.
+
+The tokens (`TOKEN_NAMES`) are the theme surface decision-16 names: `bg`,
+`fg`, `surface`, `surface-fg`, `control`, `control-fg`, `accent`,
+`accent-fg`, `border`, `muted`, `link`, `danger`, `font`, `font-size`,
+`radius`, `space`. `applyHostTheme(qgis)` waits for the handshake, maps the
+host palette's roles onto them (`PALETTE_ROLES`: `window` → `bg`,
+`highlight` → `accent`, ...) over the matching light or dark defaults, sets
+them on `<html>` and `data-qgis-sdk-theme`; outside QGIS it resolves `null`
+and the stylesheet defaults stay. `applyTheme(tokens)`, `clearTheme()`,
+`tokensFromTheme(theme)` and `tokensStylesheet()` are the pieces.
+
+A page that runs UnoCSS itself imports the preset instead of the
+stylesheet: `presetQgisSdk()` from `./uno` (peer `@unocss/preset-mini`)
+builds the same `qs-` utilities over the same token colours in the
+consumer's own pipeline.
+
+### Wrappers
+
+`./react` wraps every element with `@lit/react` (`QgisForm`,
+`QgisLayerPicker`, ... with `onChange`, `onRun`, `onResult`, `onCancel`
+props and a `ref` to the element); `./vue` exports components that bind
+every prop as a property and re-emit `change`, `result`, `run` and `cancel`,
+plus a `components` map for `app.component`; `./svelte` needs no wrapper -
+Svelte 5 sets properties on a registered element - and exports `ON` (the
+event attribute names) and the `use:qgisProps={props}` action for a
+`<svelte:element>`. All three pass one behaviour suite
+(`tests/wrapper-behaviour.ts`).
+
+### Storybook and the stories as fixtures
+
+`bun run storybook` (in `packages/qgis-sdk-ui`) builds the package and
+serves the catalogue; `bun run storybook:build` writes `storybook-static/`,
+which CI builds on every run (`pixi run -e bun storybook-build`) and the docs
+site pipeline publishes once TASK-43 lands. The toolbar's **Theme** entry
+switches the QGIS light and dark palettes through the tokens, the a11y addon
+runs with `test: "error"`, and every story renders against
+`createBridgeHarness` - "Refused" and "Faulted" are states of a component,
+not broken stories. The same stories are fixtures: `tests/stories.test.ts`
+composes them with `composeStories` under the preview's annotations and
+checks, per story, light-DOM rendering, the hooks, label-to-control
+association and, for the form, that the focus order follows the declaration
+and ends on the run button.
+
+Inside QGIS the page's variables match the running palette: the WebEngine
+harness (`QGIS_SDK_SCAFFOLD_WEB=1`, `test_scaffold_web_native.py`) loads the
+scaffolded Tier 1 pages, which call `applyHostTheme(qgis)` on start, and
+after the ping reads the document's computed `--qgis-sdk-bg` and
+`--qgis-sdk-fg` back: they equal the `window` and `windowText` colours
+`palette_theme()` read from the running `QApplication`, and
+`data-qgis-sdk-theme` says which side the defaults came from.
+
 ## Testing against a scripted host
 
 `./testing` is a `WireTransport` a test hands to `QgisSdk.fromBridgeSchema`
@@ -644,6 +746,13 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   the two apart in reports and never cite a mocked run as native behaviour.
 
 ## Next minor (unreleased) migration notes
+
+**`@archont561/qgis-sdk-ui` 0.1.0 (TASK-70, decision-47 point 3).** A new
+package rather than a change to this one; see
+[Components](#components-archont561qgis-sdk-ui). This package gains nothing
+for it except being its peer. `qgis-sdk new --web` opts in through one import
+(`--ui-dependency` pins it); `release.py` knows the `ui` scope and refuses a
+UI release whose bridge peer range excludes the workspace bridge.
 
 **Processing from a page (TASK-109, decision-64).** Four new host operations
 (`algorithms.providers/list/describe/run`) and two grants (`algorithms.read`,
