@@ -206,7 +206,8 @@ jobs:
 
       # The static Storybook is the portable-story catalogue of qgis-sdk-ui
       # (TASK-70); it is built here so a story that no longer compiles fails
-      # the gate, and published by the docs site pipeline once TASK-43 lands.
+      # the gate; `docs.yml` publishes it under the documentation site
+      # (`/qgis-sdk/storybook/`, TASK-43).
       - name: Build the qgis-sdk-ui Storybook
         id: s23
         run: pixi run -e bun storybook-build
