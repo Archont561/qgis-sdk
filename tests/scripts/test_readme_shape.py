@@ -33,20 +33,11 @@ READMES = (
     ROOT / "examples" / "simple" / "README.md",
 )
 
-# The two unscoped aliases are one README: the same words with the names
-# swapped. Only the `## Example` section (the entry points differ) may diverge.
-EXAMPLE_SECTION = re.compile(r"## Example\n.*?(?=\n## )", re.DOTALL)
+# An unscoped alias publishes its scoped package's README, byte for byte:
+# one README per npm package, whichever name it was installed under.
 ALIASES = (
-    (
-        ROOT / "packages" / "qgis-sdk-alias" / "README.md",
-        "qgis-sdk",
-        "qgis-sdk-typescript",
-    ),
-    (
-        ROOT / "packages" / "qgis-sdk-ui-alias" / "README.md",
-        "qgis-sdk-ui",
-        "qgis-sdk-ui",
-    ),
+    (ROOT / "packages" / "qgis-sdk-alias", ROOT / "packages" / "qgis-sdk-typescript"),
+    (ROOT / "packages" / "qgis-sdk-ui-alias", ROOT / "packages" / "qgis-sdk-ui"),
 )
 
 # The only sections a landing page may have. A new kind of section is a
@@ -111,19 +102,15 @@ def test_a_readme_carries_a_status_line_and_a_license(path: Path) -> None:
     assert text.index("> Status:") < text.index("## ")
 
 
-def test_the_two_aliases_share_one_readme() -> None:
-    """Same prose, names swapped; only the `## Example` section may differ."""
-    normalised = []
-    for path, alias, scoped_dir in ALIASES:
-        text = EXAMPLE_SECTION.sub("## Example", path.read_text(encoding="utf-8"))
-        text = text.replace("Archont561/qgis-sdk/", "<repo>/")  # the repository
-        text = text.replace("%20qgis-sdk-", "%20<kit>-")  # the guides' file names
-        text = text.replace(f"packages/{scoped_dir}", "packages/<scoped-dir>")
-        text = text.replace(f"@archont561/{alias}", "<scoped>").replace(
-            alias, "<alias>"
-        )
-        normalised.append(text)
-    assert normalised[0] == normalised[1]
+@pytest.mark.parametrize(("alias", "scoped"), ALIASES, ids=lambda p: p.name)
+def test_an_alias_readme_is_its_scoped_packages_readme(
+    alias: Path, scoped: Path
+) -> None:
+    """The alias ships the scoped README unchanged, and that README names both."""
+    assert (alias / "README.md").read_bytes() == (scoped / "README.md").read_bytes()
+    text = (scoped / "README.md").read_text(encoding="utf-8")
+    unscoped = alias.name.removesuffix("-alias")
+    assert f"bun add {unscoped}" in text, f"{scoped.name}/README.md: name the alias"
 
 
 @pytest.mark.parametrize("path", READMES, ids=lambda p: str(p.relative_to(ROOT)))

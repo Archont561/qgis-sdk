@@ -22,9 +22,13 @@ of `qs-` utilities bound to `--qgis-sdk-*` tokens the host palette fills.
 ## Installation
 
 ```sh
-bun add @archont561/qgis-sdk-ui
-npm install @archont561/qgis-sdk-ui
+bun add @archont561/qgis-sdk-ui        # or its unscoped alias: bun add qgis-sdk-ui
+npm install @archont561/qgis-sdk-ui    # or: npm install qgis-sdk-ui
 ```
+
+`qgis-sdk-ui` on npm re-exports every entry point and stylesheet of
+`@archont561/qgis-sdk-ui` at the same version; the two names share this
+README.
 
 ## Example
 

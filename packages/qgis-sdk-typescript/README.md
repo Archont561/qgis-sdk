@@ -19,9 +19,12 @@ begins with `QgisSdk` and carries a stable wire `code`.
 ## Installation
 
 ```sh
-bun add @archont561/qgis-sdk
-npm install @archont561/qgis-sdk
+bun add @archont561/qgis-sdk        # or its unscoped alias: bun add qgis-sdk
+npm install @archont561/qgis-sdk    # or: npm install qgis-sdk
 ```
+
+`qgis-sdk` on npm re-exports every entry point of `@archont561/qgis-sdk`
+at the same version; the two names share this README.
 
 ## Example
 
