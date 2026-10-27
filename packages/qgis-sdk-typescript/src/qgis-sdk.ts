@@ -97,6 +97,18 @@ export type StreamMethod<St extends StreamShape> = (
 	options?: InvokeOptions,
 ) => Promise<StreamHandle>;
 
+/**
+ * The running palette, when the handshake carried one (decision-16): the
+ * `QPalette` colour roles the host read, as CSS hex (`#rrggbb` or
+ * `#rrggbbaa`) by their camel-cased role name, and whether the window colour
+ * is dark. `qgis-sdk-ui` turns it into the `--qgis-sdk-*` custom properties;
+ * a page outside QGIS sees `null` and keeps the documented defaults.
+ */
+export interface QgisSdkHostTheme {
+	readonly palette: Readonly<Record<string, string>>;
+	readonly dark: boolean;
+}
+
 /** What the handshake told this page about the host (decision-27). */
 export interface QgisSdkHost extends HostOperations {
 	/**
@@ -104,6 +116,11 @@ export interface QgisSdkHost extends HostOperations {
 	 * until {@link QgisSdkCore.ready} has resolved.
 	 */
 	readonly granted: readonly HostOperationId[];
+	/**
+	 * The host's palette, `null` until {@link QgisSdkCore.ready} has resolved
+	 * and when the host sent none.
+	 */
+	readonly theme: QgisSdkHostTheme | null;
 }
 
 /** The members every `QgisSdk` has, whatever its schema declares. */
@@ -174,6 +191,8 @@ const HOST_IDS: ReadonlySet<string> = new Set<string>(HOST_OPERATIONS);
 /** The handshake, as far as this module reads it. */
 interface Handshake {
 	readonly operations: readonly string[];
+	readonly granted: readonly HostOperationId[];
+	readonly theme: QgisSdkHostTheme | null;
 }
 
 function parseHandshake(value: unknown): Handshake {
@@ -188,7 +207,34 @@ function parseHandshake(value: unknown): Handshake {
 			operations.push(operation.id);
 		}
 	}
-	return { operations };
+	return {
+		operations,
+		granted: Object.freeze(
+			operations.filter((id): id is HostOperationId => HOST_IDS.has(id)),
+		),
+		theme: parseTheme(value.theme),
+	};
+}
+
+/**
+ * The `theme` of a handshake, or `null` when absent or malformed: a palette
+ * that cannot be read is no reason to refuse the host, the page just keeps
+ * its defaults. Only string colours are kept.
+ */
+function parseTheme(value: unknown): QgisSdkHostTheme | null {
+	if (!isPlainRecord(value) || !isPlainRecord(value.palette)) {
+		return null;
+	}
+	const palette: Record<string, string> = {};
+	for (const [role, colour] of Object.entries(value.palette)) {
+		if (typeof colour === "string") {
+			palette[role] = colour;
+		}
+	}
+	return Object.freeze({
+		palette: Object.freeze(palette),
+		dark: value.dark === true,
+	});
 }
 
 function unwrapRequest(
@@ -303,15 +349,24 @@ function streamMethod(
 
 function buildHost(
 	client: BridgeClient,
-	granted: () => readonly HostOperationId[],
+	handshake: () => Handshake | null,
 ): QgisSdkHost {
 	const host = createHost(client);
 	return Object.freeze({
 		...host,
 		get granted(): readonly HostOperationId[] {
-			return granted();
+			return granted(handshake());
+		},
+		get theme(): QgisSdkHostTheme | null {
+			return handshake()?.theme ?? null;
 		},
 	});
+}
+
+const NO_GRANTS: readonly HostOperationId[] = Object.freeze([]);
+
+function granted(handshake: Handshake | null): readonly HostOperationId[] {
+	return handshake === null ? NO_GRANTS : handshake.granted;
 }
 
 function build<O, S>(
@@ -335,14 +390,9 @@ function build<O, S>(
 			transport as WireTransport,
 			options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
 		);
-	let granted: readonly HostOperationId[] = Object.freeze([]);
+	let handshake: Handshake | null = null;
 	const ready = client.handshake().then((value) => {
-		const handshake = parseHandshake(value);
-		granted = Object.freeze(
-			handshake.operations.filter((id): id is HostOperationId =>
-				HOST_IDS.has(id),
-			),
-		);
+		handshake = parseHandshake(value);
 	});
 	// A page that never awaits `ready` still sees every call fail on its own;
 	// the rejection is not left unobserved on top of that.
@@ -350,7 +400,7 @@ function build<O, S>(
 	const members: Record<string, unknown> = {
 		schema,
 		client,
-		host: buildHost(client, () => granted),
+		host: buildHost(client, () => handshake),
 		ready,
 		close: (): void => {
 			if (owned) {

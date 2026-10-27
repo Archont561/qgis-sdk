@@ -1,0 +1,9 @@
+{
+	"extends": "../config/tsconfig/library.json",
+	"compilerOptions": {
+		"types": ["bun", "node"],
+		"useDefineForClassFields": false
+	},
+	"include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
+	"exclude": ["dist", "node_modules", "coverage"]
+}

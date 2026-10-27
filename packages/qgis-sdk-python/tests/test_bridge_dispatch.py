@@ -553,3 +553,42 @@ def test_unwatch_stops_the_wake_calls_and_a_wake_never_raises_into_the_host() ->
 
     assert fetch.sink.emit({"n": 1}) is True
     assert woken == []
+
+
+def test_the_handshake_carries_the_theme_the_provider_reads() -> None:
+    palettes = [
+        {"palette": {"window": "#323232"}, "dark": True},
+        None,
+        {"palette": {"window": "#efefef"}, "dark": False},
+    ]
+    dispatcher = Dispatcher(
+        description={"schema_version": 1, "id": "demo.plugin", "actions": []},
+        authorize=lambda binding, operation: True,
+        theme=lambda: palettes.pop(0),
+    )
+
+    binding, first = dispatcher.handshake(view_id="view-1", origin="qgis://desktop")
+    assert first["theme"] == {"palette": {"window": "#323232"}, "dark": True}
+
+    without = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "call_id": "no-theme",
+            "kind": "handshake",
+        },
+    )
+    assert "theme" not in without["value"]
+
+    again = dispatcher.dispatch(
+        binding,
+        {"protocol": BRIDGE_PROTOCOL_VERSION, "call_id": "theme", "kind": "handshake"},
+    )
+    assert again["value"]["theme"] == {"palette": {"window": "#efefef"}, "dark": False}
+    assert json.loads(json.dumps(again)) == again
+
+
+def test_a_dispatcher_without_a_provider_advertises_no_theme() -> None:
+    dispatcher = Dispatcher(authorize=lambda binding, operation: True)
+    _binding, reply = dispatcher.handshake(view_id="view-1", origin="qgis://desktop")
+    assert "theme" not in reply

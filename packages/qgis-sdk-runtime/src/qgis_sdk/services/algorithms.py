@@ -1,37 +1,78 @@
-"""One execution capability: run an operation into a new, owned output."""
+"""One execution capability: run a registered algorithm into new, owned outputs."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Protocol
 
-from qgis_sdk.models import AlgorithmRequest, VectorLayerInfo
+from qgis_sdk.models import (
+    AlgorithmInfo,
+    AlgorithmRequest,
+    AlgorithmRun,
+    ProviderInfo,
+    RunResult,
+    TypedRun,
+    VectorLayerInfo,
+)
 
 
 class Algorithms(Protocol):
-    """Run one registered operation and return the layer it produced.
+    """Run any algorithm the host's Processing registry holds.
 
-    The contract is deliberately narrow because every guarantee here is one
-    decision-19 makes about destructive workflows:
+    Every guarantee here is one decision-19 makes about destructive
+    workflows, now for the whole registry (decision-64):
 
-    * ``execute`` never edits the source. It writes a new output and opens that
-      output as a layer this runtime owns, so a caller that later styles or
-      discards it is not touching the dataset it started from.
-    * A failed execution leaves no partial output behind. Implementations
-      remove what they wrote before re-raising, so a caller never has to know
-      where the temporary file would have been.
-    * The output is a separate layer, not a replacement: adding it to the
-      project is the caller's decision and happens only after success.
+    * ``run`` never edits an input. Destination parameters the caller leaves
+      out are allocated under a run directory this service owns; vector
+      destinations come back as layers this runtime owns, everything else on
+      disk as a readable :class:`~qgis_sdk.models.FileRef`, numbers and
+      strings as they are.
+    * A failed run leaves no partial output behind. Implementations remove
+      what the run wrote before raising ``QgisSdkAlgorithmFailedError``.
+    * Outputs are separate: adding one to the project is the caller's
+      decision and happens only after success.
 
-    Requests are the typed models in ``qgis_sdk.models``. An unknown or
-    undeclarable request raises ``QgisSdkAlgorithmRejectedError`` before any
-    data is read, and an unknown layer raises ``QgisSdkLayerNotFoundError``.
+    ``describe`` and ``list`` read the registry's own description (the
+    :class:`~qgis_sdk.models.Catalogue` shape), so an installed third-party
+    provider is as visible as ``native``. A request is validated against
+    that description before any data is read: an unknown algorithm raises
+    ``QgisSdkAlgorithmNotFoundError``, an unacceptable parameter mapping
+    ``QgisSdkAlgorithmRejectedError``, an unknown layer
+    ``QgisSdkLayerNotFoundError``.
 
-    Requiring a *projected* working CRS is implemented by the native backend: it
-    has the CRS database needed to tell projected from geographic and to check
-    that the units are metres. The in-memory double refuses only what pure code
-    can decide (an unspecified CRS), so do not read parity of that check into
-    the fake.
+    ``execute`` is the hand-written predecessor for ``BufferRequest`` and
+    ``CentroidRequest``; it keeps its chained-reprojection behaviour and
+    stays until a documented minor retires it.
+
+    The in-memory double answers ``list``/``describe`` from the shipped
+    snapshot and ``run`` from outputs the test scripted; whether a working
+    CRS is projected is still the native backend's own check.
     """
+
+    def providers(self) -> tuple[ProviderInfo, ...]:
+        """Every registered provider."""
+        ...
+
+    def list(self, provider: str | None = None) -> tuple[AlgorithmInfo, ...]:
+        """Every registered algorithm, or those of one provider."""
+        ...
+
+    def describe(self, algorithm_id: str) -> AlgorithmInfo:
+        """The registry's description of one algorithm."""
+        ...
+
+    def run(
+        self,
+        request: AlgorithmRun | TypedRun | str,
+        params: Mapping[str, object] | None = None,
+    ) -> RunResult:
+        """Run one algorithm into new outputs and describe what it produced.
+
+        ``request`` is a generated request class instance, an
+        :class:`~qgis_sdk.models.AlgorithmRun`, or an algorithm id with
+        ``params`` (the ``processing.run`` shape).
+        """
+        ...
 
     def execute(self, request: AlgorithmRequest) -> VectorLayerInfo:
         """Run ``request`` into a new output and return its layer description."""

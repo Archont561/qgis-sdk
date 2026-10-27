@@ -168,6 +168,7 @@ def _python_manifests(
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "no-alias.json")
     monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "no-web.py")
     monkeypatch.setattr(release, "_EXAMPLE_PYPROJECT", tmp_path / "no-example.toml")
+    monkeypatch.setattr(release, "_UI_PACKAGE", tmp_path / "no-ui.json")
     return {
         "pyproject": pyproject,
         "runtime": runtime,
@@ -1439,6 +1440,7 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
         "runtime": "true",
         "tools": "true",
         "typescript": "false",
+        "ui": "false",
         "tag_name": "python-v0.2.0",
     }
 
@@ -1457,6 +1459,7 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
         "runtime": "false",
         "tools": "false",
         "typescript": "true",
+        "ui": "false",
         "tag_name": "ts/v0.2.0-rc.1",
     }
 
@@ -1633,6 +1636,7 @@ def test_runtime_and_tools_are_release_scopes_of_their_own():
         "runtime": True,
         "tools": False,
         "typescript": False,
+        "ui": False,
     }
     assert release_module.scope_ships("python")["tools"] is True
 
@@ -2036,7 +2040,7 @@ def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
     # A release stamps these manifests, so the assertion is about the serialized
     # agreement - every manifest of a scope carrying the scope's one version -
     # rather than about the number the workspace happens to carry today.
-    assert set(scopes) == {"runtime", "tools", "kit", "typescript"}
+    assert set(scopes) == {"runtime", "tools", "kit", "typescript", "ui"}
     assert set(scopes["runtime"]["manifests"]) == {
         "runtime pyproject.toml",
         "recipe runtime_version",
@@ -2055,6 +2059,8 @@ def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
     assert typescript_scope["manifests"] == {
         "package.json": typescript_scope["version"]
     }
+    assert scopes["ui"]["manifests"] == {"ui package.json": scopes["ui"]["version"]}
+    assert scopes["ui"]["bridge_peer_range"].startswith(">=")
     assert payload["contract"] == {"python": 1, "typescript": 1}
 
 
@@ -2670,3 +2676,172 @@ def test_verify_versions_passes_without_an_example_manifest(tmp_path, monkeypatc
     _python_manifests(tmp_path, monkeypatch)
 
     assert main(["verify-versions", "--scope", "python", "--version", "0.1.0"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# The web components: the ``ui`` scope (TASK-70, decision-47)
+# ---------------------------------------------------------------------------
+
+UI_PACKAGE_JSON = (
+    '{\n\t"name": "@archont561/qgis-sdk-ui",\n\t"version": "0.1.0",\n'
+    '\t"peerDependencies": {\n\t\t"@archont561/qgis-sdk": ">=0.1.0 <0.2.0"\n\t}\n}\n'
+)
+
+
+def _ui_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", ui_text=None):
+    files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
+    ui = tmp_path / "ui.json"
+    ui.write_text(ui_text or UI_PACKAGE_JSON, encoding="utf-8")
+    monkeypatch.setattr(release_module, "_UI_PACKAGE", ui)
+    return files["package"], ui
+
+
+def test_ui_is_a_release_scope_of_its_own_and_never_part_of_all():
+    assert normalize_scope("ui") == "ui"
+    assert normalize_scope("@archont561/qgis-sdk-ui") == "ui"
+    assert tag_for_version(Version.parse("0.1.0"), "ui") == "ui-v0.1.0"
+    assert parse_release_tag("ui-v0.2.0") == ("ui", Version.parse("0.2.0"))
+    assert release_module.scope_ships("ui") == {
+        "python": False,
+        "kit": False,
+        "runtime": False,
+        "tools": False,
+        "typescript": False,
+        "ui": True,
+    }
+    assert release_module.scope_ships("all")["ui"] is False
+    tags = ("v0.6.0", "ts-v0.4.0", "ui-v0.1.0")
+    assert sort_tags(tags, scope="ui") == ("ui-v0.1.0",)
+    assert sort_tags(tags, scope="all") == ("v0.6.0", "ts-v0.4.0")
+    assert sort_tags(tags, scope="typescript") == ("v0.6.0", "ts-v0.4.0")
+
+
+def test_ui_commits_move_only_the_ui_scope():
+    ui_commit = _commit(
+        "feat(ui): add a picker", "packages/qgis-sdk-ui/src/elements/picker.ts"
+    )
+    bridge_commit = _commit(
+        "fix(bridge): parse", "packages/qgis-sdk-typescript/src/x.ts"
+    )
+
+    assert commits_for_scope([ui_commit, bridge_commit], "ui") == (ui_commit,)
+    assert commits_for_scope([ui_commit, bridge_commit], "typescript") == (
+        bridge_commit,
+    )
+    assert commits_for_scope([ui_commit], "all") == ()
+    assert (
+        release_module.detect_scope_from_files(["packages/qgis-sdk-ui/src/index.ts"])
+        == "ui"
+    )
+    assert (
+        release_module.detect_scope_from_files(
+            ["packages/qgis-sdk-ui/src/index.ts", "packages/qgis-sdk-typescript/a.ts"]
+        )
+        == "typescript"
+    )
+
+
+def test_plan_for_the_ui_scope_reads_only_ui_tags_and_commits(monkeypatch):
+    config = parse_versionrc(SAMPLE_VERSIONRC)
+    commits = (
+        _commit("feat(ui): add a picker", "packages/qgis-sdk-ui/src/picker.ts"),
+        _commit("feat(bridge): new store", "packages/qgis-sdk-typescript/src/s.ts"),
+    )
+    plan = compute_plan(
+        trigger="dispatch",
+        tags=("v0.6.0", "ts-v0.4.0", "ui-v0.1.0"),
+        commits=commits,
+        config=config,
+        scope="ui",
+    )
+    assert plan.scope == "ui"
+    assert plan.base_tag == "ui-v0.1.0"
+    assert plan.tag == "ui-v0.2.0"
+    assert "add a picker" in plan.changelog
+    assert "new store" not in plan.changelog
+
+    first = compute_plan(
+        trigger="dispatch",
+        tags=("v0.6.0", "ts-v0.4.0"),
+        commits=commits,
+        config=config,
+        scope="ui",
+    )
+    assert first.first is True
+    assert first.tag == "ui-v0.1.0"
+
+
+def test_read_ui_peer_range_reads_the_floor_and_the_ceiling():
+    assert release_module.read_ui_peer_range(UI_PACKAGE_JSON) == (
+        Version.parse("0.1.0"),
+        "0.2.0",
+    )
+    with pytest.raises(QgisSdkReleaseError, match="peerDependencies"):
+        release_module.read_ui_peer_range('{"name": "x", "version": "0.1.0"}')
+    with pytest.raises(QgisSdkReleaseVersionError, match=">=X.Y.Z <U"):
+        release_module.read_ui_peer_range(
+            UI_PACKAGE_JSON.replace(">=0.1.0 <0.2.0", "^0.1.0")
+        )
+
+
+def test_stamp_scope_ui_moves_the_ui_manifest_alone(tmp_path, monkeypatch):
+    package, ui = _ui_manifests(tmp_path, monkeypatch)
+
+    assert main(["stamp", "--version", "0.2.0", "--scope", "ui"]) == 0
+
+    assert json.loads(ui.read_text())["version"] == "0.2.0"
+    assert json.loads(package.read_text())["version"] == "0.1.0"
+    assert main(["verify-versions", "--scope", "ui", "--version", "0.2.0"]) == 0
+
+    assert main(["stamp", "--version", "0.3.0", "--scope", "typescript"]) == 0
+    assert json.loads(ui.read_text())["version"] == "0.2.0"
+
+
+def test_verify_versions_refuses_a_ui_peer_range_that_excludes_the_bridge(
+    tmp_path, monkeypatch, capsys
+):
+    _ui_manifests(tmp_path, monkeypatch, bridge_version="0.2.0")
+
+    assert main(["verify-versions", "--scope", "ui"]) == 1
+
+    out = capsys.readouterr().out
+    assert "peer" in out
+    assert "0.2.0" in out
+    # The other scopes are not held hostage by the UI's range.
+    assert main(["verify-versions", "--scope", "typescript", "--version", "0.2.0"]) == 0
+
+
+def test_verify_versions_without_a_scope_covers_the_ui_when_present(
+    tmp_path, monkeypatch, capsys
+):
+    _ui_manifests(tmp_path, monkeypatch)
+
+    assert main(["verify-versions", "--json"]) == 0
+
+    report = json.loads(capsys.readouterr().out)
+    assert report["scopes"]["ui"] == {
+        "version": "0.1.0",
+        "manifests": {"ui package.json": "0.1.0"},
+        "bridge_peer_range": ">=0.1.0 <0.2.0",
+    }
+    assert "ui package.json" not in report["scopes"]["typescript"]["manifests"]
+
+
+def test_verify_versions_for_all_leaves_the_ui_train_out(tmp_path, monkeypatch):
+    _ui_manifests(
+        tmp_path, monkeypatch, ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.9.0", 1)
+    )
+
+    assert main(["verify-versions", "--scope", "all", "--version", "0.1.0"]) == 0
+
+
+def test_the_repository_ui_package_accepts_the_bridge_at_head():
+    """The committed manifests, not a fixture: a ui release is possible today."""
+    root = Path(release_module.__file__).resolve().parent.parent
+    bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
+    ui = root / "packages" / "qgis-sdk-ui" / "package.json"
+    bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
+    peer = release_module.read_ui_peer_range(ui.read_text())
+
+    assert release_module.ui_peer_range_includes(peer, bridge_version)
+    assert main(["verify-versions", "--scope", "ui"]) == 0

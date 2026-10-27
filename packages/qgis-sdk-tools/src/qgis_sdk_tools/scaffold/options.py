@@ -73,6 +73,9 @@ class WebOptions:
     packages/qgis-sdk-typescript>`` so the page runs on the workspace bridge
     (decision-41).
     """
+    ui_dependency: str | None = None
+    """The same for ``@archont561/qgis-sdk-ui``, the web components the page
+    opts into with one import (decision-47); ``None`` is the pinned release."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,13 +121,14 @@ class ScaffoldOptions:
         sdk_dependency: str | None = None,
         algorithm: bool = False,
         ui: str | None = None,
+        ui_dependency: str | None = None,
     ) -> ScaffoldOptions:
         """Check what the caller chose and derive what it left out.
 
         ``web`` names the framework (``vanilla`` or ``react``) or is ``None``
-        for a plugin without a page; ``placement``, ``package_manager`` and
-        ``sdk_dependency`` refine it and are refused on their own.
-        ``algorithm`` adds the Processing starter.
+        for a plugin without a page; ``placement``, ``package_manager``,
+        ``sdk_dependency`` and ``ui_dependency`` refine it and are refused on
+        their own. ``algorithm`` adds the Processing starter.
         """
         return cls(
             plugin=_package_name(plugin),
@@ -135,7 +139,7 @@ class ScaffoldOptions:
             ),
             author=_text(author, "author"),
             email=_text(email, "email"),
-            web=_web(web, placement, package_manager, sdk_dependency),
+            web=_web(web, placement, package_manager, sdk_dependency, ui_dependency),
             algorithm=bool(algorithm),
             ui=_ui(ui),
         )
@@ -160,12 +164,14 @@ def _web(
     placement: str | None,
     package_manager: str | None,
     sdk_dependency: str | None = None,
+    ui_dependency: str | None = None,
 ) -> WebOptions | None:
     if framework is None:
         for label, value in (
             ("placement", placement),
             ("package manager", package_manager),
             ("SDK dependency", sdk_dependency),
+            ("UI dependency", ui_dependency),
         ):
             if value is not None:
                 raise QgisSdkScaffoldError(
@@ -185,6 +191,7 @@ def _web(
             "package manager",
         ),
         sdk_dependency=_dependency_spec(sdk_dependency),
+        ui_dependency=_dependency_spec(ui_dependency),
     )
 
 

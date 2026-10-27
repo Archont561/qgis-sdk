@@ -52,6 +52,12 @@ _BRIDGE_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-typescript/package.json"
 # it exists, and ignored when it does not.
 _ALIAS_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-alias/package.json"
 _ALIAS_DEPENDENCY = "@archont561/qgis-sdk"
+# The web components ship as their own npm package on their own train
+# (decision-47): ``ui-v*`` tags, never part of an alignment release. The
+# package names the bridge as a peer range; a UI release whose range excludes
+# the bridge at HEAD would install against a bridge it was never tested with.
+_UI_PACKAGE = _REPO_ROOT / "packages/qgis-sdk-ui/package.json"
+_UI_PEER = "@archont561/qgis-sdk"
 # ``qgis-sdk new`` pins the bridge it was qualified with (decision-18); the pin
 # moves with every bridge release so a tools release offers the newest bridge
 # it knows (decision-41). Stamped and verified with the bridge whenever the
@@ -126,7 +132,11 @@ def list_changed_files(
 
 
 def detect_scope_from_files(files: Iterable[str]) -> str:
-    """Classify changed paths into ``all``, ``python``, ``typescript``, or ``none``.
+    """Classify changed paths into ``all``, ``python``, ``typescript``, ``ui`` or ``none``.
+
+    ``ui`` is only detected when the web components are the one package that
+    changed: the UI train is deliberate (``--scope ui``), and an alignment
+    release never carries it.
 
     Only shipped package paths count. Tooling, CI, backlog and root files are
     not artifacts of either package, so changing them must not manufacture a
@@ -137,18 +147,23 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
     """
     py = False
     ts = False
+    ui = False
     for raw in files:
         path = raw.strip()
         if path.startswith(_PYTHON_PREFIXES):
             py = True
         elif path.startswith(_TYPESCRIPT_PREFIXES):
             ts = True
+        elif path.startswith(_UI_PREFIXES):
+            ui = True
     if py and ts:
         return "all"
     if py:
         return "python"
     if ts:
         return "typescript"
+    if ui:
+        return "ui"
     return "none"
 
 
@@ -300,6 +315,7 @@ _TYPESCRIPT_PREFIXES = (
     "packages/qgis-sdk-alias/",
     "packages/qgis-sdk-bridge/",
 )
+_UI_PREFIXES = ("packages/qgis-sdk-ui/",)
 
 
 def commit_packages(commit: Commit) -> tuple[bool, bool]:
@@ -327,7 +343,7 @@ def commit_scopes(commit: Commit) -> frozenset[str]:
     no file list is treated as touching everything, like :func:`commit_packages`.
     """
     if not commit.files:
-        return frozenset({"python", "runtime", "tools", "typescript"})
+        return frozenset({"python", "runtime", "tools", "typescript", "ui"})
     scopes = set()
     for path in commit.files:
         if path.startswith(_RUNTIME_PREFIXES):
@@ -338,6 +354,8 @@ def commit_scopes(commit: Commit) -> frozenset[str]:
             scopes.add("python")
         elif path.startswith(_TYPESCRIPT_PREFIXES):
             scopes.add("typescript")
+        elif path.startswith(_UI_PREFIXES):
+            scopes.add("ui")
     return frozenset(scopes)
 
 
@@ -347,7 +365,7 @@ def commits_for_scope(commits: Iterable[Commit], scope: str) -> tuple[Commit, ..
     kept: list[Commit] = []
     for commit in commits:
         scopes = commit_scopes(commit)
-        relevant = bool(scopes) if wanted == "all" else wanted in scopes
+        relevant = bool(scopes - {"ui"}) if wanted == "all" else wanted in scopes
         if relevant:
             kept.append(commit)
     return tuple(kept)
@@ -488,6 +506,10 @@ _SCOPE_ALIASES = {
     # through ts-v0.2.0 (decision-33).
     "qgis-sdk-bridge": "typescript",
     "bun": "typescript",
+    # The web components (decision-47): their own train, never in ``all``.
+    "ui": "ui",
+    "qgis-sdk-ui": "ui",
+    "@archont561/qgis-sdk-ui": "ui",
 }
 _SCOPE_PREFIXES = {
     "all": "v",
@@ -495,6 +517,7 @@ _SCOPE_PREFIXES = {
     "runtime": "runtime-v",
     "tools": "tools-v",
     "typescript": "ts-v",
+    "ui": "ui-v",
 }
 # Which tag scopes shipped a given distribution: a `python-v*` tag released the
 # runtime and the tools too, so it is a base for either of them.
@@ -504,6 +527,7 @@ _SCOPE_SHIPPED_BY = {
     "runtime": ("all", "python", "runtime"),
     "tools": ("all", "python", "tools"),
     "typescript": ("all", "typescript"),
+    "ui": ("ui",),
 }
 
 
@@ -522,11 +546,12 @@ def scope_ships(scope: str) -> dict[str, bool]:
         "runtime": kit or canonical == "runtime",
         "tools": kit or canonical == "tools",
         "typescript": canonical in ("all", "typescript"),
+        "ui": canonical == "ui",
     }
 
 
 def normalize_scope(scope: str) -> str:
-    """Normalize a scope alias to ``all``, ``python``, ``runtime``, ``tools`` or ``typescript``."""
+    """Normalize a scope alias to ``all``, ``python``, ``runtime``, ``tools``, ``typescript`` or ``ui``."""
     key = scope.strip().lower()
     if not key:
         return "all"
@@ -820,7 +845,12 @@ def sort_tags(tags: Iterable[str], scope: str = "all") -> tuple[str, ...]:
             tag_scope, version = parse_release_tag(tag)
         except QgisSdkReleaseVersionError:
             continue
-        if wanted != "all" and tag_scope not in _SCOPE_SHIPPED_BY[wanted]:
+        if wanted == "all":
+            # The UI train never joins an alignment release, so its tags are
+            # no base for one.
+            if tag_scope == "ui":
+                continue
+        elif tag_scope not in _SCOPE_SHIPPED_BY[wanted]:
             continue
         known.append((version.sort_key(), tag))
     known.sort(key=lambda item: item[0], reverse=True)
@@ -1340,6 +1370,37 @@ def read_alias_versions(
     )
 
 
+_PEER_RANGE = re.compile(r"^>=\s*(?P<lower>\S+)\s+<\s*(?P<upper>\S+)$")
+
+
+def read_ui_peer_range(text: str) -> tuple[Version, str]:
+    """Return ``(lower, upper)`` of the UI package's peer range on the bridge.
+
+    The range is written ``>=X.Y.Z <U``: a floor the components were built
+    against and an exclusive ceiling, the npm spelling of the minor window the
+    tools declare on the runtime.
+    """
+    data = json.loads(text)
+    peers = data.get("peerDependencies") or {}
+    raw = peers.get(_UI_PEER)
+    if not isinstance(raw, str):
+        raise QgisSdkReleaseError(
+            f"ui package.json names no peerDependencies entry for {_UI_PEER}"
+        )
+    match = _PEER_RANGE.match(raw.strip())
+    if match is None:
+        raise QgisSdkReleaseVersionError(
+            f"the ui peer range on {_UI_PEER} must read '>=X.Y.Z <U', got {raw!r}"
+        )
+    return Version.parse(match.group("lower")), match.group("upper")
+
+
+def ui_peer_range_includes(peer: tuple[Version, str], bridge: Version) -> bool:
+    """Whether the bridge at HEAD falls inside the UI package's peer range."""
+    lower, upper = peer
+    return runtime_range_includes(lower, upper, bridge)
+
+
 _SCAFFOLD_PIN = re.compile(r'^(SDK_NPM_VERSION: Final = ")([^"\n]*)(")$', re.MULTILINE)
 
 
@@ -1377,9 +1438,15 @@ class ManifestVersions:
     recipe_runtime: Version | None = None
     recipe_tools: Version | None = None
     scaffold_pin: Version | None = None
+    ui: Version | None = None
+    ui_peer_range: tuple[Version, str] | None = None
 
     def items(self) -> tuple[tuple[str, Version], ...]:
-        """Return the labelled versions that exist, in reporting order."""
+        """Return the labelled versions that exist, in reporting order.
+
+        The UI package is not among them: it versions on its own train and
+        never has to agree with the kit or the bridge (see :meth:`ui_items`).
+        """
         found = [
             ("pyproject.toml", self.pyproject),
             ("package.json", self.package_json),
@@ -1404,6 +1471,10 @@ class ManifestVersions:
             found.append(("scaffold pin", self.scaffold_pin))
         return tuple(found)
 
+    def ui_items(self) -> tuple[tuple[str, Version], ...]:
+        """The manifests of the ``ui`` scope: the one package.json, when present."""
+        return () if self.ui is None else (("ui package.json", self.ui),)
+
     def agreed(self) -> Version:
         """Return the version every manifest carries, or name the disagreement.
 
@@ -1426,13 +1497,15 @@ def manifest_versions(
     runtime_text: str | None = None,
     tools_text: str | None = None,
     scaffold_text: str | None = None,
+    ui_text: str | None = None,
 ) -> ManifestVersions:
     """Read all released manifests and return what each one carries.
 
     ``pyproject_text`` is the kit's; when the runtime's and the tools' are given
     too, their versions and the kit's pins on them join the Python scope.
     ``scaffold_text`` is ``scaffold/web.py``, whose bridge pin joins the
-    TypeScript scope.
+    TypeScript scope. ``ui_text`` is the web components' package.json: its
+    version and its peer range on the bridge form the ``ui`` scope.
     """
     alias, alias_dependency = (
         read_alias_versions(alias_text) if alias_text is not None else (None, None)
@@ -1459,6 +1532,8 @@ def manifest_versions(
         scaffold_pin=(
             read_scaffold_pin(scaffold_text) if scaffold_text is not None else None
         ),
+        ui=read_package_json_version(ui_text) if ui_text is not None else None,
+        ui_peer_range=read_ui_peer_range(ui_text) if ui_text is not None else None,
     )
 
 
@@ -1498,11 +1573,14 @@ def scoped_manifest_versions(
 
     The Python package owns ``pyproject.toml`` and the conda ``recipe.yaml``;
     the bridge owns ``package.json``. An unscoped ``v*`` release owns all three,
-    which is what an alignment release is.
+    which is what an alignment release is. The ``ui`` scope owns the web
+    components' package.json alone.
     """
     wanted = scope if scope == "kit" else normalize_scope(scope)
     if wanted == "all":
         return versions.items()
+    if wanted == "ui":
+        return versions.ui_items()
     allowed = _MANIFEST_GROUPS.get(wanted, _TYPESCRIPT_MANIFESTS)
     return tuple(
         (name, version) for name, version in versions.items() if name in allowed
@@ -1982,6 +2060,10 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
                 stamp_scaffold_pin(web_text, version), encoding="utf-8"
             )
             stamped.append(f"{_SCAFFOLD_WEB} (the pin qgis-sdk new offers)")
+    if scope == "ui":
+        ui_text = _UI_PACKAGE.read_text(encoding="utf-8")
+        _UI_PACKAGE.write_text(stamp_package_json(ui_text, version), encoding="utf-8")
+        stamped.append(str(_UI_PACKAGE))
     print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
     return 0
 
@@ -2006,6 +2088,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
     scaffold_text = (
         _SCAFFOLD_WEB.read_text(encoding="utf-8") if _SCAFFOLD_WEB.is_file() else None
     )
+    ui_text = _UI_PACKAGE.read_text(encoding="utf-8") if _UI_PACKAGE.is_file() else None
     versions = manifest_versions(
         _PYPROJECT.read_text(encoding="utf-8"),
         _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
@@ -2014,6 +2097,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
         runtime_text,
         tools_text,
         scaffold_text,
+        ui_text,
     )
     contract = contract_versions(
         _PY_DECLARATIONS.read_text(encoding="utf-8"),
@@ -2021,15 +2105,16 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
     )
     shared_contract = contract.agreed()
     split = runtime_text is not None and tools_text is not None
+    ui_scopes: tuple[str, ...] = ("ui",) if ui_text is not None else ()
     if scope_raw:
         wanted_scopes: tuple[str, ...] = (normalize_scope(scope_raw),)
     elif split:
         # Without a release in hand each distribution only has to agree with
         # itself: the runtime or the tools may have released alone since the
         # last kit, so the kit's pins may lag them, never lead them.
-        wanted_scopes = ("runtime", "tools", "kit", "typescript")
+        wanted_scopes = ("runtime", "tools", "kit", "typescript", *ui_scopes)
     else:
-        wanted_scopes = ("python", "typescript")
+        wanted_scopes = ("python", "typescript", *ui_scopes)
     expected = Version.parse(expected_raw) if expected_raw else None
     if expected is not None and len(wanted_scopes) > 1:
         raise QgisSdkReleaseVersionError(
@@ -2054,6 +2139,21 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
             reported[scope]["pins"] = {
                 requirement: str(pinned) for requirement, pinned in versions.kit_pins
             }
+        if scope == "ui" and versions.ui_peer_range is not None:
+            # The components are tested against the bridge next to them; a
+            # peer range that excludes it would install against a bridge they
+            # never saw, so the release is refused until the range follows.
+            lower, upper = versions.ui_peer_range
+            if not ui_peer_range_includes(
+                versions.ui_peer_range, versions.package_json
+            ):
+                raise QgisSdkReleaseVersionError(
+                    f"the ui package declares {_UI_PEER} >={lower} <{upper} as its "
+                    f"peer but the bridge at HEAD is {versions.package_json}; widen "
+                    "the peer range in packages/qgis-sdk-ui/package.json before a "
+                    "ui release"
+                )
+            reported[scope]["bridge_peer_range"] = f">={lower} <{upper}"
         if (
             scope in ("python", "runtime", "tools")
             and tools_text

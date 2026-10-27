@@ -127,7 +127,9 @@ def _copy_tree(source: Path, target: Path) -> None:
 
 
 @pytest.fixture(scope="module")
-def project(tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str) -> Path:
+def project(
+    tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str, workspace_ui: str
+) -> Path:
     """``qgis-sdk new`` with the example's options, the example copied on top."""
     root = tmp_path_factory.mktemp("reference") / PLUGIN
     created = _cli(
@@ -147,6 +149,8 @@ def project(tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str) -> 
         "bun",
         "--sdk-dependency",
         workspace_bridge,
+        "--ui-dependency",
+        workspace_ui,
         "--no-input",
         "--no-install",
         cwd=root.parent,
@@ -194,13 +198,13 @@ def test_check_bindings_and_both_test_targets_are_clean(project: Path) -> None:
 
     pure = _cli("test", "-q", "-p", "no:faulthandler", cwd=project)
     assert pure.returncode == 0, pure.stdout + pure.stderr
-    assert "19 passed" in pure.stdout
+    assert "20 passed" in pure.stdout
 
     native = _cli(
         "test", "--target", "qgis", "-q", "-p", "no:faulthandler", cwd=project
     )
     assert native.returncode == 0, native.stdout + native.stderr
-    assert "6 passed" in native.stdout
+    assert "7 passed" in native.stdout
 
 
 def test_build_ships_fixture_page_and_the_packaged_style(project: Path) -> None:

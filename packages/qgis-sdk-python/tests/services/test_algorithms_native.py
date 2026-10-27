@@ -17,6 +17,7 @@ import pytest
 from qgis_sdk.models import (
     BufferRequest,
     CentroidRequest,
+    QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmRejectedError,
     QgisSdkLayerNotFoundError,
     VectorLayerInfo,
@@ -226,3 +227,106 @@ def test_centroids_run_without_a_working_crs(native_services: Services) -> None:
     output = native_services.algorithms.execute(CentroidRequest(layer_id=source.id))
 
     assert (output.geometry_type, output.crs) == ("point", source.crs)
+
+
+# -- the generic run over the live registry (decision-64) -------------------
+
+
+def test_a_gdal_algorithm_runs_on_a_raster_the_sdk_produced(
+    native_services: Services,
+) -> None:
+    """Two providers, two destination kinds: a native raster destination
+    becomes a readable ref, and that ref is a valid raster input to GDAL."""
+    constant = native_services.algorithms.run(
+        "native:createconstantrasterlayer",
+        {
+            "EXTENT": "0,10,0,10 [EPSG:3857]",
+            "TARGET_CRS": "EPSG:3857",
+            "PIXEL_SIZE": 1.0,
+            "NUMBER": 7,
+            "OUTPUT_TYPE": 5,
+        },
+    )
+    raster = constant.file("OUTPUT")
+    assert raster.operations == ("read",)
+    source = native_services.files.resolve(raster)
+    assert source.suffix == ".tif" and source.is_file()
+    assert source.parent.parent == native_services.work_directory
+
+    translated = native_services.algorithms.run(
+        "gdal:translate", {"INPUT": raster, "TARGET_CRS": "EPSG:4326"}
+    )
+
+    output = native_services.files.resolve(translated.file("OUTPUT"))
+    assert output.is_file() and output.suffix == ".tif"
+    assert output.parent != source.parent
+
+
+def test_a_failed_generic_run_leaves_no_output_behind(
+    native_services: Services,
+) -> None:
+    source = native_services.layers.open_vector(native_services.dataset)
+    before = sorted(native_services.work_directory.rglob("*"))
+
+    with pytest.raises(QgisSdkAlgorithmFailedError) as error:
+        native_services.algorithms.run(
+            "native:fieldcalculator",
+            {
+                "INPUT": source.id,
+                "FIELD_NAME": "x",
+                "FIELD_TYPE": 0,
+                "FORMULA": "this is not an expression (",
+            },
+        )
+
+    assert error.value.algorithm_id == "native:fieldcalculator"
+    assert error.value.detail
+    assert sorted(native_services.work_directory.rglob("*")) == before
+    assert native_services.layers.layer(source.id) == source
+
+
+def test_a_named_destination_is_honoured_and_the_source_file_untouched(
+    native_services: Services, tmp_path: Path
+) -> None:
+    source = native_services.layers.open_vector(native_services.dataset)
+    before = _digest(native_services.dataset)
+    chosen = tmp_path / "chosen.gpkg"
+
+    result = native_services.algorithms.run(
+        "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
+    )
+
+    assert chosen.is_file()
+    assert result.vector("OUTPUT").geometry_type == "point"
+    assert _digest(native_services.dataset) == before
+
+
+def test_describe_sees_a_provider_registered_at_runtime(
+    native_services: Services,
+) -> None:
+    """Any provider: an author's own, registered a moment ago, is described
+    from the live registry exactly like ``native``."""
+    from qgis_sdk.adapters.qgis import NativeProcessing
+    from sample_algorithms import sample_provider
+
+    processing = NativeProcessing(
+        layers=native_services.layers,
+        algorithms=native_services.algorithms,
+        project=native_services.project,
+        scope=native_services.scope,
+    )
+    before = {p.id for p in native_services.algorithms.providers()}
+    assert sample_provider.id not in before
+    handle = processing.register_provider(sample_provider)
+    try:
+        listed = native_services.algorithms.list(sample_provider.id)
+        assert len(listed) == len(sample_provider.algorithms)
+        assert {a.provider for a in listed} == {sample_provider.id}
+        info = native_services.algorithms.describe(listed[0].id)
+        assert info.provider == sample_provider.id
+        assert info.parameters and info.outputs
+    finally:
+        handle.unregister()
+    assert sample_provider.id not in {
+        p.id for p in native_services.algorithms.providers()
+    }

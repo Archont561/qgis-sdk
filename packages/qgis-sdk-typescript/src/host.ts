@@ -16,9 +16,18 @@
  * it hands back the ref the host minted after a picker, and the host resolves
  * it against the calling view. `network.fetch` is a stream, because the reply
  * arrives on a later turn and the GUI thread must not wait for it.
+ *
+ * `algorithms.*` (decision-64) lists, describes and runs any Processing
+ * algorithm the host registered; `runAlgorithm` in the root entry reshapes a
+ * `RunResult` into the typed object a generated `processing.schema.ts` spells.
  */
 
 export {
+	AlgorithmInfo,
+	AlgorithmListRequest,
+	AlgorithmPage,
+	AlgorithmRequest,
+	AlgorithmSummary,
 	createHost,
 	ExportRequest,
 	ExportResult,
@@ -43,8 +52,15 @@ export {
 	NetworkFetchEvent,
 	NotificationsInfoRequest,
 	OpenVectorRequest,
+	OutputInfo,
 	PageRequest,
+	ParameterInfo,
+	ProviderInfo,
+	ProviderPage,
 	QgisSdkHostContractError,
+	RunAlgorithmRequest,
+	RunOutput,
+	RunResult,
 	SettingsGetRequest,
 	StylesApplyRequest,
 	VectorLayerInfo,

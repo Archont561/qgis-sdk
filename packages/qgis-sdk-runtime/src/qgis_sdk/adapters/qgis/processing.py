@@ -269,7 +269,7 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
                 progress=_FeedbackProgress(feedback),
                 cancellation=_FeedbackCancellation(feedback),
                 scope=scope,
-                algorithms=self._bridge.algorithms,
+                algorithms=self._bridge.algorithm_service,
                 project=self._bridge.project,
             )
             result = invoke(
@@ -389,7 +389,9 @@ class NativeProcessingProvider(QgsProcessingProvider):
         super().__init__()
         self._provider = provider
         self.layers = layers
-        self.algorithms = algorithms
+        # Not ``self.algorithms``: that is ``QgsProcessingProvider.algorithms()``,
+        # which the registry calls to enumerate what this provider offers.
+        self.algorithm_service = algorithms
         self.project = project
         self.scope = scope
         #: Mints the refs for files a Processing dialog picked; a host that

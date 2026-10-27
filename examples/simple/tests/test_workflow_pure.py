@@ -74,6 +74,25 @@ def test_buffer_creates_a_styled_new_layer_and_keeps_the_source(
     assert fake_host.layers.layer(source.id) == source
 
 
+def test_centroid_runs_the_generated_request_and_the_fake_records_it(
+    fake_host: FakeHost,
+) -> None:
+    """``simple:centroid`` is ``native.Centroids`` under the hood (decision-64)."""
+    from qgis_sdk.algorithms import invoke
+    from qgis_sdk.models import AlgorithmRun
+    from simple.algorithms import centroid_layer
+
+    source = fake_host.runtime.actions["open_fixture"]()
+
+    output = invoke(centroid_layer, fake_host.context, layer_id=source.id)
+
+    assert output.name == "centroids"
+    assert output.geometry_type == "point"
+    assert fake_host.algorithms.runs == [
+        AlgorithmRun("native:centroids", {"INPUT": source.id})
+    ]
+
+
 def test_buffer_without_a_working_crs_changes_nothing(fake_host: FakeHost) -> None:
     source = fake_host.runtime.actions["open_fixture"]()
 

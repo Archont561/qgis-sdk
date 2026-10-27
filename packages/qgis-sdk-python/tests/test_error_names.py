@@ -32,11 +32,16 @@ def test_sdk_defined_exception_classes_keep_the_prefix() -> None:
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
-            bases = (
+            bases = [
                 base.id if isinstance(base, ast.Name) else base.attr
                 for base in node.bases
                 if isinstance(base, (ast.Name, ast.Attribute))
-            )
+            ]
+            if "TypedRun" in bases:
+                # A generated request class is named after a QGIS algorithm
+                # (``native:raiseexception`` -> ``RaiseException``); it is not
+                # an exception and must keep the host's name.
+                continue
             is_exception = node.name.endswith(("Error", "Exception", "ExceptionGroup"))
             is_exception |= any(
                 name.endswith(("Error", "Exception", "ExceptionGroup"))

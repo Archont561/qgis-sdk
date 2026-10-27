@@ -31,6 +31,7 @@ from pathlib import Path
 import layers as test_layers
 import pytest
 from qgis_sdk.core import ResourceScope
+from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, CentroidRequest
 from qgis_sdk.services import (
     Algorithms,
@@ -82,6 +83,8 @@ class Services:
     select: Callable[[str, Sequence[int]], None]
     working_crs: str = WORKING_CRS
     work_directory: Path | None = None
+    # The files service the algorithms backend mints its file outputs through.
+    files: FilesService | None = None
 
 
 def _native_available() -> bool:
@@ -115,6 +118,7 @@ def _algorithm_work_directory() -> Path:
 def _fake_services() -> Services:
     from qgis_sdk.testing import (
         FakeAlgorithms,
+        FakeFiles,
         FakeLayers,
         FakeProject,
         FakeSettings,
@@ -145,7 +149,8 @@ def _fake_services() -> Services:
         field_names=("id",),
         crs=FIXTURE_CRS,
     )
-    algorithms = FakeAlgorithms(layers, scope)
+    files = FakeFiles(scope, owner="plugin:contract")
+    algorithms = FakeAlgorithms(layers, scope, files=files)
     algorithms.declare_output(
         BufferRequest,
         FIXTURE_ROOT / "buffer-output.gpkg",
@@ -162,8 +167,23 @@ def _fake_services() -> Services:
         field_names=FIXTURE_FIELDS,
         crs=FIXTURE_CRS,
     )
+    # The generic run answers from scripts: the same declared datasets for
+    # the vector algorithms, a real file on disk for the report, and the
+    # scalars the native run of ``native:basicstatisticsforfields`` yields
+    # over the three-feature fixture.
+    algorithms.script_run(
+        "native:buffer", {"OUTPUT": FIXTURE_ROOT / "buffer-output.gpkg"}
+    )
+    algorithms.script_run(
+        "native:centroids", {"OUTPUT": FIXTURE_ROOT / "centroid-output.gpkg"}
+    )
+    algorithms.script_run(
+        "native:basicstatisticsforfields",
+        {"COUNT": 3, "OUTPUT_HTML_FILE": MINIMAL_DATASET},
+    )
     styles = FakeStyles(layers, scope)
     return Services(
+        files=files,
         algorithms=algorithms,
         layers=layers,
         project=FakeProject(layers, scope),
@@ -211,8 +231,14 @@ def _native_services() -> Services:
         project.add_layer(layer_id)
         QgsProject.instance().mapLayer(layer_id).selectByIds(list(feature_ids))
 
+    from qgis_sdk.bridge.authority import HostAuthority
+
+    files = FilesService(HostAuthority(), scope, owner="plugin:contract")
     return Services(
-        algorithms=NativeAlgorithms(layers, scope, working_directory=work_directory),
+        files=files,
+        algorithms=NativeAlgorithms(
+            layers, scope, working_directory=work_directory, files=files
+        ),
         layers=layers,
         project=project,
         # A per-session prefix keeps the run out of the real profile's keys and

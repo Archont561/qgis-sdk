@@ -371,6 +371,7 @@ test("`host` is the curated surface on the same client, with every grant by defa
 	await qgis.ready;
 	expect(qgis.host.granted).toEqual([...HOST_OPERATIONS]);
 	expect(Object.keys(qgis.host).sort()).toEqual([
+		"algorithms",
 		"files",
 		"granted",
 		"layers",
@@ -379,6 +380,7 @@ test("`host` is the curated surface on the same client, with every grant by defa
 		"project",
 		"settings",
 		"styles",
+		"theme",
 	]);
 	harness.expectInvoke("layers.list", (payload) => {
 		expect(payload).toEqual({ limit: 2 });
@@ -495,4 +497,64 @@ test("an operation id whose first segment is a core member is refused", () => {
 			).toThrow(QgisSdkDeclarationError);
 		}
 	}
+});
+
+test("the host's theme is what the handshake carried, and null without one", async () => {
+	const theme = {
+		palette: { window: "#323232", windowText: "#dddddd" },
+		dark: true,
+	};
+	const themed = createBridgeHarness(schema, { theme });
+	const inside = QgisSdk.fromBridgeSchema(schema, { transport: themed });
+	expect(inside.host.theme).toBeNull();
+	await inside.ready;
+	expect(inside.host.theme).toEqual(theme);
+	expect(Object.isFrozen(inside.host.theme)).toBe(true);
+	expect(Object.isFrozen(inside.host.theme?.palette)).toBe(true);
+	inside.close();
+
+	const plain = createBridgeHarness(schema);
+	const outside = QgisSdk.fromBridgeSchema(schema, { transport: plain });
+	await outside.ready;
+	expect(outside.host.theme).toBeNull();
+	expect(outside.host.granted).toEqual([...HOST_OPERATIONS]);
+	outside.close();
+});
+
+function handshakeAnswering(value: Record<string, unknown>): BridgeHarness {
+	const harness = createBridgeHarness(schema);
+	return {
+		...harness,
+		send: (message) => {
+			const raw = message as { kind?: string; call_id: string };
+			if (raw.kind === "handshake") {
+				harness.deliver({ protocol: 1, call_id: raw.call_id, ok: true, value });
+				return;
+			}
+			harness.send(message);
+		},
+		subscribe: (listener) => harness.subscribe(listener),
+	};
+}
+
+test("a malformed theme is ignored rather than refused, and non-string colours dropped", async () => {
+	const partial = QgisSdk.fromBridgeSchema(schema, {
+		transport: handshakeAnswering({
+			operations: [],
+			theme: { palette: { window: "#ffffff", mid: 7 } },
+		}),
+	});
+	await partial.ready;
+	expect(partial.host.theme).toEqual({
+		palette: { window: "#ffffff" },
+		dark: false,
+	});
+	partial.close();
+
+	const loose = QgisSdk.fromBridgeSchema(schema, {
+		transport: handshakeAnswering({ operations: [], theme: "dark" }),
+	});
+	await loose.ready;
+	expect(loose.host.theme).toBeNull();
+	loose.close();
 });

@@ -34,19 +34,24 @@ or grant does not cover what was asked (decision-20).
 from __future__ import annotations
 
 import base64
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from qgis_sdk.core import PluginContext
 from qgis_sdk.models import (
+    AlgorithmInfo,
+    FileRef,
     NetworkRequest,
     QgisSdkDecodeError,
     QgisSdkResponseTooLargeError,
     Response,
+    RunResult,
 )
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.network.client import NetworkDefaults, build_request
+from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.layers import Layers
 from qgis_sdk.services.network import NetworkTransport
@@ -59,6 +64,8 @@ from .protocol import HOST_SCHEMA_VERSION, BridgeOperation
 from .streams import StreamSink
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
+    from qgis_sdk.files import FilesService
+
     from .dispatch import Dispatcher, ViewBinding
 
 __all__ = [
@@ -111,6 +118,7 @@ VECTOR_LAYER_INFO = _object(
     },
     required=("id", "name", "geometry_type", "field_names", "crs"),
 )
+VECTOR_LAYER_INFO["title"] = "VectorLayerInfo"
 
 #: The paging request, also shared: a page size and a cursor. The cursor is the
 #: offset this module issued in ``next_cursor``, encoded as a decimal string, so
@@ -169,6 +177,154 @@ FETCH_RESPONSE = _object(
     },
     required=("url", "status_code", "reason", "headers", "text", "base64"),
 )
+
+_SCALAR = {
+    "anyOf": [
+        {"type": "string"},
+        {"type": "number"},
+        {"type": "boolean"},
+        {"type": "null"},
+    ]
+}
+
+#: One registered Processing provider.
+PROVIDER_INFO = _object(
+    {
+        "id": {"type": "string"},
+        "label": {"type": "string"},
+        "version": {"type": "string"},
+    },
+    required=("id", "label", "version"),
+)
+PROVIDER_INFO["title"] = "ProviderInfo"
+
+#: One row of ``algorithms.list``: enough to fill a picker, not the help.
+ALGORITHM_SUMMARY = _object(
+    {
+        "id": {"type": "string"},
+        "provider": {"type": "string"},
+        "name": {"type": "string"},
+        "label": {"type": "string"},
+        "group": {"type": "string"},
+        "deprecated": {"type": "boolean"},
+    },
+    required=("id", "provider", "name", "label", "group", "deprecated"),
+)
+ALGORITHM_SUMMARY["title"] = "AlgorithmSummary"
+
+#: One parameter as ``algorithms.describe`` reports it. ``default_json`` is the
+#: default as JSON text (``null`` when the registry declares none): a default
+#: can be a list or an object, which the wire dialect cannot type otherwise.
+PARAMETER_INFO = _object(
+    {
+        "name": {"type": "string"},
+        "kind": {"type": "string"},
+        "label": {"type": "string"},
+        "description": {"type": "string"},
+        "optional": {"type": "boolean"},
+        "advanced": {"type": "boolean"},
+        "hidden": {"type": "boolean"},
+        "destination": {"type": "boolean"},
+        "required": {"type": "boolean"},
+        "default_json": _TEXT_OR_NULL,
+        "options": _array({"type": "string"}),
+        "multiple": {"type": "boolean"},
+        "number_type": _TEXT_OR_NULL,
+        "minimum": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "maximum": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "extension": _TEXT_OR_NULL,
+    },
+    required=(
+        "name",
+        "kind",
+        "label",
+        "description",
+        "optional",
+        "advanced",
+        "hidden",
+        "destination",
+        "required",
+        "default_json",
+        "options",
+        "multiple",
+        "number_type",
+        "minimum",
+        "maximum",
+        "extension",
+    ),
+)
+PARAMETER_INFO["title"] = "ParameterInfo"
+
+OUTPUT_INFO = _object(
+    {
+        "name": {"type": "string"},
+        "kind": {"type": "string"},
+        "label": {"type": "string"},
+    },
+    required=("name", "kind", "label"),
+)
+OUTPUT_INFO["title"] = "OutputInfo"
+
+#: The full description one ``algorithms.describe`` returns.
+ALGORITHM_INFO = _object(
+    {
+        "id": {"type": "string"},
+        "provider": {"type": "string"},
+        "name": {"type": "string"},
+        "label": {"type": "string"},
+        "group": {"type": "string"},
+        "group_id": {"type": "string"},
+        "help": {"type": "string"},
+        "deprecated": {"type": "boolean"},
+        "parameters": _array(PARAMETER_INFO),
+        "outputs": _array(OUTPUT_INFO),
+    },
+    required=(
+        "id",
+        "provider",
+        "name",
+        "label",
+        "group",
+        "group_id",
+        "help",
+        "deprecated",
+        "parameters",
+        "outputs",
+    ),
+)
+ALGORITHM_INFO["title"] = "AlgorithmInfo"
+
+#: What a page sends to run: the id and the parameters as the generated
+#: ``<Provider><Algorithm>Params`` type spells them. Layer inputs are owned
+#: layer ids; file inputs are refs this host minted for the view; the host
+#: validates the map against the algorithm's description before anything runs.
+RUN_REQUEST = _object(
+    {
+        "algorithm_id": {"type": "string"},
+        "params": {"type": "object"},
+    },
+    required=("algorithm_id", "params"),
+)
+
+#: One output of a run, tagged by what it is: an owned vector layer, a file or
+#: directory ref minted for the calling view, or a scalar.
+RUN_OUTPUT = _object(
+    {
+        "name": {"type": "string"},
+        "kind": {"enum": ["vector", "file", "value"]},
+        "layer": VECTOR_LAYER_INFO,
+        "file": FILE_REF,
+        "value": _SCALAR,
+    },
+    required=("name", "kind"),
+)
+RUN_OUTPUT["title"] = "RunOutput"
+
+RUN_RESULT = _object(
+    {"algorithm": {"type": "string"}, "outputs": _array(RUN_OUTPUT)},
+    required=("algorithm", "outputs"),
+)
+RUN_RESULT["title"] = "RunResult"
 
 
 def _page(items: Sequence[Any], cursor: str | None, truncated: bool) -> dict:
@@ -327,6 +483,54 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         result_name="ExportResult",
     ),
     HostOperation(
+        id="algorithms.providers",
+        title="List the Processing providers this host registered",
+        source="Algorithms.providers",
+        grant="algorithms.read",
+        affinity=GUI,
+        request=PAGE_REQUEST,
+        result=_page_result(PROVIDER_INFO),
+        request_name="PageRequest",
+        result_name="ProviderPage",
+    ),
+    HostOperation(
+        id="algorithms.list",
+        title="List the algorithms of one provider, or of all",
+        source="Algorithms.list",
+        grant="algorithms.read",
+        affinity=GUI,
+        request=_object(
+            {**PAGE_REQUEST["properties"], "provider": {"type": "string"}},
+        ),
+        result=_page_result(ALGORITHM_SUMMARY),
+        request_name="AlgorithmListRequest",
+        result_name="AlgorithmPage",
+    ),
+    HostOperation(
+        id="algorithms.describe",
+        title="Describe one algorithm: parameters and outputs",
+        source="Algorithms.describe",
+        grant="algorithms.read",
+        affinity=GUI,
+        request=_object(
+            {"algorithm_id": {"type": "string"}}, required=("algorithm_id",)
+        ),
+        result=ALGORITHM_INFO,
+        request_name="AlgorithmRequest",
+        result_name="AlgorithmInfo",
+    ),
+    HostOperation(
+        id="algorithms.run",
+        title="Run one algorithm and return its outputs",
+        source="Algorithms.run",
+        grant="algorithms.run",
+        affinity=GUI,
+        request=RUN_REQUEST,
+        result=RUN_RESULT,
+        request_name="RunAlgorithmRequest",
+        result_name="RunResult",
+    ),
+    HostOperation(
         id="network.fetch",
         title="Perform one HTTP request through the view's network grant",
         source="NetworkTransport.send",
@@ -368,8 +572,8 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
         "can press needs the bridge store slice (TASK-69) to carry it"
     ),
     "Algorithms.execute": (
-        "long-running; needs the job and stream surface (TASK-15, TASK-14), not a "
-        "request that times out into an unknown outcome"
+        "the plugin-local provider surface; a page runs any algorithm, the "
+        "plugin's own included, through `algorithms.run` (decision-64)"
     ),
 }
 
@@ -434,6 +638,10 @@ class HostServices:
     application mints refs on it after a picker closes and grants network per
     view. ``network`` is the TASK-5 transport ``network.fetch`` sends through;
     without one the operation is declared but fails, never silently served.
+    ``algorithms`` answers the ``algorithms.*`` operations the same way, and
+    ``files`` is the plugin's own files service: a file a run produced is a
+    ref the plugin holds, and the host re-mints it for the calling view
+    through ``files.resolve`` and the shared authority.
     """
 
     layers: Layers
@@ -443,6 +651,8 @@ class HostServices:
     notifications: Notifications
     authority: HostAuthority = field(default_factory=HostAuthority)
     network: NetworkTransport | None = None
+    algorithms: Algorithms | None = None
+    files: FilesService | None = None
 
     @classmethod
     def from_context(
@@ -468,8 +678,9 @@ class HostServices:
         """
         if network is None and context.has("network"):
             network = getattr(context.network, "transport", None)
-        if authority is None and context.has("files"):
-            authority = getattr(context.files, "authority", None)
+        files = context.files if context.has("files") else None
+        if authority is None and files is not None:
+            authority = getattr(files, "authority", None)
         return cls(
             layers=context.layers,
             project=context.project,
@@ -478,6 +689,8 @@ class HostServices:
             notifications=context.notifications,
             authority=authority if authority is not None else HostAuthority(),
             network=network,
+            algorithms=context.algorithms if context.has("algorithms") else None,
+            files=files,
         )
 
 
@@ -544,6 +757,24 @@ def _handlers(services: HostServices) -> dict[str, BoundHostHandler]:
     def styles_apply(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
         services.styles.apply_style(payload["layer_id"], payload["style"])
 
+    def algorithms_providers(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _page_of(_algorithms(services).providers(), payload)
+
+    def algorithms_list(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        found = _algorithms(services).list(payload.get("provider"))
+        return _page_of([_summary(info) for info in found], payload)
+
+    def algorithms_describe(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _algorithm_wire(_algorithms(services).describe(payload["algorithm_id"]))
+
+    def algorithms_run(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        params = {
+            str(name): _resolve_input(authority, binding, value)
+            for name, value in payload["params"].items()
+        }
+        result = _algorithms(services).run(payload["algorithm_id"], params)
+        return _result_for_view(services, binding, result)
+
     def network_fetch(binding: ViewBinding, payload: Mapping[str, Any]) -> _Fetch:
         grant = authority.require_network(binding)
         if services.network is None:
@@ -559,8 +790,107 @@ def _handlers(services: HostServices) -> dict[str, BoundHostHandler]:
         "settings.get": settings_get,
         "notifications.info": notifications_info,
         "styles.apply": styles_apply,
+        "algorithms.providers": algorithms_providers,
+        "algorithms.list": algorithms_list,
+        "algorithms.describe": algorithms_describe,
+        "algorithms.run": algorithms_run,
         "network.fetch": network_fetch,
     }
+
+
+def _algorithms(services: HostServices) -> Algorithms:
+    if services.algorithms is None:
+        raise QgisSdkBridgeError("this host has no algorithms service configured")
+    return services.algorithms
+
+
+def _summary(info: AlgorithmInfo) -> dict[str, Any]:
+    return {
+        "id": info.id,
+        "provider": info.provider,
+        "name": info.name,
+        "label": info.label,
+        "group": info.group,
+        "deprecated": info.deprecated,
+    }
+
+
+def _algorithm_wire(info: AlgorithmInfo) -> dict[str, Any]:
+    """Spell one description with every declared field present.
+
+    A page validates the reply against the generated type, so nothing is left
+    to a default the page cannot see.
+    """
+    parameters = []
+    for parameter in info.parameters:
+        has_default = (
+            parameter.has_default
+            if parameter.has_default is not None
+            else parameter.default is not None
+        )
+        parameters.append(
+            {
+                "name": parameter.name,
+                "kind": parameter.kind,
+                "label": parameter.label,
+                "description": parameter.description,
+                "optional": parameter.optional,
+                "advanced": parameter.advanced,
+                "hidden": parameter.hidden,
+                "destination": parameter.destination,
+                "required": parameter.required,
+                "default_json": json.dumps(parameter.default) if has_default else None,
+                "options": list(parameter.options),
+                "multiple": parameter.multiple,
+                "number_type": parameter.number_type,
+                "minimum": parameter.minimum,
+                "maximum": parameter.maximum,
+                "extension": parameter.extension,
+            }
+        )
+    return {
+        **_summary(info),
+        "group_id": info.group_id,
+        "help": info.help,
+        "parameters": parameters,
+        "outputs": [
+            {"name": output.name, "kind": output.kind, "label": output.label}
+            for output in info.outputs
+        ],
+    }
+
+
+def _resolve_input(authority: HostAuthority, binding: ViewBinding, value: Any) -> Any:
+    """Turn a ref the view holds into the path the algorithm reads.
+
+    Only a ref-shaped value is touched; the authority resolves it against the
+    calling view, so a ref minted for another view or a forged id is refused
+    here before the algorithm sees a parameter. Everything else (a layer id,
+    a number, a list) crosses as the page sent it.
+    """
+    if isinstance(value, Mapping) and value.get("kind") in ("file", "directory"):
+        return str(authority.resolve_file(binding, value, FileOperation.READ))
+    return value
+
+
+def _result_for_view(
+    services: HostServices, binding: ViewBinding, result: RunResult
+) -> dict[str, Any]:
+    """Re-mint the refs a run produced so the calling view holds them, not the plugin."""
+    outputs: dict[str, object] = {}
+    for name, value in result.outputs.items():
+        if isinstance(value, FileRef):
+            if services.files is None:
+                raise QgisSdkBridgeError(
+                    "this host has no files service to hand a run's file outputs over"
+                )
+            path = services.files.resolve(value)
+            if value.kind == "directory":
+                value = services.authority.grant_directory(binding, path)
+            else:
+                value = services.authority.grant_file(binding, path)
+        outputs[name] = value
+    return RunResult(algorithm=result.algorithm, outputs=outputs).to_wire()
 
 
 def _fetch_request(payload: Mapping[str, Any]) -> NetworkRequest:

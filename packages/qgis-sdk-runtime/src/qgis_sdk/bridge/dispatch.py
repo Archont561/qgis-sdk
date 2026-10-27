@@ -91,6 +91,13 @@ BoundStreamSource = Callable[
 ]
 Authorizer = Callable[[ViewBinding, str], bool]
 Waker = Callable[[], None]
+ThemeProvider = Callable[[], Mapping[str, Any] | None]
+"""Reads the host's palette for the handshake's ``theme``; ``None`` means no theme.
+
+Called on every handshake, so a page that reconnects after the user switched the
+QGIS theme sees the new palette. The adapter supplies one that reads
+``QApplication.palette()``; the dispatcher itself never imports Qt.
+"""
 
 
 class Dispatcher:
@@ -102,9 +109,11 @@ class Dispatcher:
         description: Mapping[str, Any] | None = None,
         authorize: Authorizer | None = None,
         ledger: ReleaseLedger | None = None,
+        theme: ThemeProvider | None = None,
     ) -> None:
         self._description = None if description is None else to_wire(description)
         self._authorize = authorize
+        self._theme = theme
         self._ledger = ledger if ledger is not None else ReleaseLedger()
         self._ledger.dispose_subscription = self._dispose_subscription
         self._handlers: dict[str, BoundHandler] = {}
@@ -124,6 +133,7 @@ class Dispatcher:
         streams: Mapping[str, Callable[..., Any]] | None = None,
         authorize: Authorizer | None = None,
         ledger: ReleaseLedger | None = None,
+        theme: ThemeProvider | None = None,
     ) -> Dispatcher:
         """Build a dispatcher whose allowlist *is* the plugin description.
 
@@ -140,7 +150,9 @@ class Dispatcher:
         stream the host pushes into.
         """
         advertised, actions, declared_streams = _description_parts(description)
-        dispatcher = cls(description=advertised, authorize=authorize, ledger=ledger)
+        dispatcher = cls(
+            description=advertised, authorize=authorize, ledger=ledger, theme=theme
+        )
         for action in actions:
             operation_id = action["id"]
             handler = handlers.get(operation_id)
@@ -191,6 +203,7 @@ class Dispatcher:
         *,
         authorize: Authorizer | None = None,
         ledger: ReleaseLedger | None = None,
+        theme: ThemeProvider | None = None,
     ) -> Dispatcher:
         """Build from a started runtime: its description and its bound handlers.
 
@@ -204,6 +217,7 @@ class Dispatcher:
             streams=getattr(runtime, "streams", None),
             authorize=authorize,
             ledger=ledger,
+            theme=theme,
         )
 
     @property
@@ -323,8 +337,16 @@ class Dispatcher:
             "plugin": self._description,
             "host_schema_version": HOST_SCHEMA_VERSION,
             "operations": [operation.to_dict() for operation in self.operations()],
+            **self._theme_entry(),
         }
         return binding, to_wire(reply)
+
+    def _theme_entry(self) -> dict[str, Any]:
+        """``{"theme": ...}`` when the provider has a palette, nothing otherwise."""
+        if self._theme is None:
+            return {}
+        theme = self._theme()
+        return {} if theme is None else {"theme": dict(theme)}
 
     def dispatch(
         self,
@@ -632,6 +654,7 @@ class Dispatcher:
                 for operation in self.operations()
                 if self._is_authorized(binding, operation.id)
             ],
+            **self._theme_entry(),
         }
         return success(call_id, to_wire(reply))
 

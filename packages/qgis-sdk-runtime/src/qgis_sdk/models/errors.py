@@ -267,6 +267,31 @@ class QgisSdkAlgorithmRejectedError(QgisSdkError):
         super().__init__(f"Algorithm request {request!r} was refused: {listed}")
 
 
+class QgisSdkAlgorithmNotFoundError(QgisSdkError):
+    """No algorithm with this id is registered on the host (or in the catalogue)."""
+
+    code = "algorithm_not_found"
+
+    def __init__(self, algorithm_id: str) -> None:
+        self.algorithm_id = algorithm_id
+        super().__init__(f"Algorithm {algorithm_id!r} is not registered")
+
+
+class QgisSdkAlgorithmFailedError(QgisSdkError):
+    """Processing ran the algorithm and it failed.
+
+    ``detail`` is the message Processing reported; what the run wrote before
+    failing has been removed (decision-19).
+    """
+
+    code = "algorithm_failed"
+
+    def __init__(self, algorithm_id: str, detail: str) -> None:
+        self.algorithm_id = algorithm_id
+        self.detail = detail
+        super().__init__(f"Algorithm {algorithm_id!r} failed: {detail}")
+
+
 class QgisSdkAlgorithmCancelledError(QgisSdkError):
     """Cancellation was observed at an algorithm phase boundary.
 

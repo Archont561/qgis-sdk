@@ -5,11 +5,15 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:af91deacf225dc28b6a3bcf97eb2bfa2b6031928ba594b03d4a7703155981689";
+export const HOST_FINGERPRINT = "sha256:16790dc8c4d77ef5b5f22636702e913f3d6fb63275d0ae3e5a4ca6e8001a9abd";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
 export const HOST_OPERATIONS = [
+	"algorithms.describe",
+	"algorithms.list",
+	"algorithms.providers",
+	"algorithms.run",
 	"files.export",
 	"layers.get",
 	"layers.list",
@@ -89,6 +93,44 @@ function isSafeInteger(value: unknown): value is number {
 	return typeof value === "number" && Number.isSafeInteger(value);
 }
 
+export interface AlgorithmInfo {
+	readonly deprecated: boolean;
+	readonly group: string;
+	readonly group_id: string;
+	readonly help: string;
+	readonly id: string;
+	readonly label: string;
+	readonly name: string;
+	readonly outputs: readonly OutputInfo[];
+	readonly parameters: readonly ParameterInfo[];
+	readonly provider: string;
+}
+
+export interface AlgorithmListRequest {
+	readonly cursor?: string;
+	readonly limit?: number;
+	readonly provider?: string;
+}
+
+export interface AlgorithmPage {
+	readonly items: readonly AlgorithmSummary[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
+export interface AlgorithmRequest {
+	readonly algorithm_id: string;
+}
+
+export interface AlgorithmSummary {
+	readonly deprecated: boolean;
+	readonly group: string;
+	readonly id: string;
+	readonly label: string;
+	readonly name: string;
+	readonly provider: string;
+}
+
 export interface ExportRequest {
 	readonly content: string;
 	readonly file: FileRef;
@@ -153,9 +195,64 @@ export interface OpenVectorRequest {
 	readonly file: FileRef;
 }
 
+export interface OutputInfo {
+	readonly kind: string;
+	readonly label: string;
+	readonly name: string;
+}
+
 export interface PageRequest {
 	readonly cursor?: string;
 	readonly limit?: number;
+}
+
+export interface ParameterInfo {
+	readonly advanced: boolean;
+	readonly default_json: string | null;
+	readonly description: string;
+	readonly destination: boolean;
+	readonly extension: string | null;
+	readonly hidden: boolean;
+	readonly kind: string;
+	readonly label: string;
+	readonly maximum: number | null;
+	readonly minimum: number | null;
+	readonly multiple: boolean;
+	readonly name: string;
+	readonly number_type: string | null;
+	readonly optional: boolean;
+	readonly options: readonly string[];
+	readonly required: boolean;
+}
+
+export interface ProviderInfo {
+	readonly id: string;
+	readonly label: string;
+	readonly version: string;
+}
+
+export interface ProviderPage {
+	readonly items: readonly ProviderInfo[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
+export interface RunAlgorithmRequest {
+	readonly algorithm_id: string;
+	readonly params: Record<string, unknown>;
+}
+
+export interface RunOutput {
+	readonly file?: FileRef;
+	readonly kind: "vector" | "file" | "value";
+	readonly layer?: VectorLayerInfo;
+	readonly name: string;
+	readonly value?: string | number | boolean | null;
+}
+
+export interface RunResult {
+	readonly algorithm: string;
+	readonly outputs: readonly RunOutput[];
 }
 
 export interface SettingsGetRequest {
@@ -174,6 +271,124 @@ export interface VectorLayerInfo {
 	readonly geometry_type: "point" | "line" | "polygon" | "none";
 	readonly id: string;
 	readonly name: string;
+}
+
+export function AlgorithmInfo(value: unknown, strict = false): value is AlgorithmInfo {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("group" in value)) return false;
+	if (!("group_id" in value)) return false;
+	if (!("help" in value)) return false;
+	if (!("deprecated" in value)) return false;
+	if (!("parameters" in value)) return false;
+	if (!("outputs" in value)) return false;
+	if (value["deprecated"] !== undefined && !(typeof value["deprecated"] === "boolean")) {
+		return false;
+	}
+	if (value["group"] !== undefined && !(typeof value["group"] === "string")) {
+		return false;
+	}
+	if (value["group_id"] !== undefined && !(typeof value["group_id"] === "string")) {
+		return false;
+	}
+	if (value["help"] !== undefined && !(typeof value["help"] === "string")) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["outputs"] !== undefined && !((Array.isArray(value["outputs"]) && value["outputs"].every((item) => OutputInfo(item, strict))))) {
+		return false;
+	}
+	if (value["parameters"] !== undefined && !((Array.isArray(value["parameters"]) && value["parameters"].every((item) => ParameterInfo(item, strict))))) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["deprecated", "group", "group_id", "help", "id", "label", "name", "outputs", "parameters", "provider"])) return false;
+	return true;
+}
+
+export function AlgorithmListRequest(value: unknown, strict = false): value is AlgorithmListRequest {
+	if (!isRecord(value)) return false;
+	if (value["cursor"] !== undefined && !(typeof value["cursor"] === "string" && new RegExp("^(?:[0-9]+)$").test(value["cursor"]))) {
+		return false;
+	}
+	if (value["limit"] !== undefined && !((isSafeInteger(value["limit"]) && value["limit"] >= 1 && value["limit"] <= 200))) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["cursor", "limit", "provider"])) return false;
+	return true;
+}
+
+export function AlgorithmPage(value: unknown, strict = false): value is AlgorithmPage {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => AlgorithmSummary(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function AlgorithmRequest(value: unknown, strict = false): value is AlgorithmRequest {
+	if (!isRecord(value)) return false;
+	if (!("algorithm_id" in value)) return false;
+	if (value["algorithm_id"] !== undefined && !(typeof value["algorithm_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["algorithm_id"])) return false;
+	return true;
+}
+
+export function AlgorithmSummary(value: unknown, strict = false): value is AlgorithmSummary {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("group" in value)) return false;
+	if (!("deprecated" in value)) return false;
+	if (value["deprecated"] !== undefined && !(typeof value["deprecated"] === "boolean")) {
+		return false;
+	}
+	if (value["group"] !== undefined && !(typeof value["group"] === "string")) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["deprecated", "group", "id", "label", "name", "provider"])) return false;
+	return true;
 }
 
 export function ExportRequest(value: unknown, strict = false): value is ExportRequest {
@@ -357,6 +572,24 @@ export function OpenVectorRequest(value: unknown, strict = false): value is Open
 	return true;
 }
 
+export function OutputInfo(value: unknown, strict = false): value is OutputInfo {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("label" in value)) return false;
+	if (value["kind"] !== undefined && !(typeof value["kind"] === "string")) {
+		return false;
+	}
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["kind", "label", "name"])) return false;
+	return true;
+}
+
 export function PageRequest(value: unknown, strict = false): value is PageRequest {
 	if (!isRecord(value)) return false;
 	if (value["cursor"] !== undefined && !(typeof value["cursor"] === "string" && new RegExp("^(?:[0-9]+)$").test(value["cursor"]))) {
@@ -366,6 +599,162 @@ export function PageRequest(value: unknown, strict = false): value is PageReques
 		return false;
 	}
 	if (strict && !hasOnly(value, ["cursor", "limit"])) return false;
+	return true;
+}
+
+export function ParameterInfo(value: unknown, strict = false): value is ParameterInfo {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("description" in value)) return false;
+	if (!("optional" in value)) return false;
+	if (!("advanced" in value)) return false;
+	if (!("hidden" in value)) return false;
+	if (!("destination" in value)) return false;
+	if (!("required" in value)) return false;
+	if (!("default_json" in value)) return false;
+	if (!("options" in value)) return false;
+	if (!("multiple" in value)) return false;
+	if (!("number_type" in value)) return false;
+	if (!("minimum" in value)) return false;
+	if (!("maximum" in value)) return false;
+	if (!("extension" in value)) return false;
+	if (value["advanced"] !== undefined && !(typeof value["advanced"] === "boolean")) {
+		return false;
+	}
+	if (value["default_json"] !== undefined && !((typeof value["default_json"] === "string" || value["default_json"] === null))) {
+		return false;
+	}
+	if (value["description"] !== undefined && !(typeof value["description"] === "string")) {
+		return false;
+	}
+	if (value["destination"] !== undefined && !(typeof value["destination"] === "boolean")) {
+		return false;
+	}
+	if (value["extension"] !== undefined && !((typeof value["extension"] === "string" || value["extension"] === null))) {
+		return false;
+	}
+	if (value["hidden"] !== undefined && !(typeof value["hidden"] === "boolean")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !(typeof value["kind"] === "string")) {
+		return false;
+	}
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["maximum"] !== undefined && !((typeof value["maximum"] === "number" && Number.isFinite(value["maximum"]) || value["maximum"] === null))) {
+		return false;
+	}
+	if (value["minimum"] !== undefined && !((typeof value["minimum"] === "number" && Number.isFinite(value["minimum"]) || value["minimum"] === null))) {
+		return false;
+	}
+	if (value["multiple"] !== undefined && !(typeof value["multiple"] === "boolean")) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["number_type"] !== undefined && !((typeof value["number_type"] === "string" || value["number_type"] === null))) {
+		return false;
+	}
+	if (value["optional"] !== undefined && !(typeof value["optional"] === "boolean")) {
+		return false;
+	}
+	if (value["options"] !== undefined && !((Array.isArray(value["options"]) && value["options"].every((item) => typeof item === "string")))) {
+		return false;
+	}
+	if (value["required"] !== undefined && !(typeof value["required"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["advanced", "default_json", "description", "destination", "extension", "hidden", "kind", "label", "maximum", "minimum", "multiple", "name", "number_type", "optional", "options", "required"])) return false;
+	return true;
+}
+
+export function ProviderInfo(value: unknown, strict = false): value is ProviderInfo {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("version" in value)) return false;
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["version"] !== undefined && !(typeof value["version"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["id", "label", "version"])) return false;
+	return true;
+}
+
+export function ProviderPage(value: unknown, strict = false): value is ProviderPage {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => ProviderInfo(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function RunAlgorithmRequest(value: unknown, strict = false): value is RunAlgorithmRequest {
+	if (!isRecord(value)) return false;
+	if (!("algorithm_id" in value)) return false;
+	if (!("params" in value)) return false;
+	if (value["algorithm_id"] !== undefined && !(typeof value["algorithm_id"] === "string")) {
+		return false;
+	}
+	if (value["params"] !== undefined && !(isRecord(value["params"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["algorithm_id", "params"])) return false;
+	return true;
+}
+
+export function RunOutput(value: unknown, strict = false): value is RunOutput {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("kind" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "vector" || value["kind"] === "file" || value["kind"] === "value"))) {
+		return false;
+	}
+	if (value["layer"] !== undefined && !(VectorLayerInfo(value["layer"], strict))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["value"] !== undefined && !((typeof value["value"] === "string" || typeof value["value"] === "number" && Number.isFinite(value["value"]) || typeof value["value"] === "boolean" || value["value"] === null))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file", "kind", "layer", "name", "value"])) return false;
+	return true;
+}
+
+export function RunResult(value: unknown, strict = false): value is RunResult {
+	if (!isRecord(value)) return false;
+	if (!("algorithm" in value)) return false;
+	if (!("outputs" in value)) return false;
+	if (value["algorithm"] !== undefined && !(typeof value["algorithm"] === "string")) {
+		return false;
+	}
+	if (value["outputs"] !== undefined && !((Array.isArray(value["outputs"]) && value["outputs"].every((item) => RunOutput(item, strict))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["algorithm", "outputs"])) return false;
 	return true;
 }
 
@@ -434,6 +823,12 @@ export function NetworkFetchEvent(value: unknown, strict = false): value is Netw
 
 /** Every operation this surface declares, as callable methods. */
 export interface HostOperations {
+	readonly algorithms: {
+		readonly describe: (input: AlgorithmRequest, options?: HostInvokeOptions) => Promise<AlgorithmInfo>;
+		readonly list: (input?: AlgorithmListRequest, options?: HostInvokeOptions) => Promise<AlgorithmPage>;
+		readonly providers: (input?: PageRequest, options?: HostInvokeOptions) => Promise<ProviderPage>;
+		readonly run: (input: RunAlgorithmRequest, options?: HostInvokeOptions) => Promise<RunResult>;
+	};
 	readonly files: {
 		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
 	};
@@ -461,6 +856,32 @@ export interface HostOperations {
 
 export function createHost(client: HostClientLike): HostOperations {
 	return {
+		algorithms: {
+			describe: (input: AlgorithmRequest, options?: HostInvokeOptions) =>
+				call<AlgorithmInfo>(
+					client, "algorithms.describe", input, options,
+					AlgorithmRequest,
+					AlgorithmInfo,
+				),
+			list: (input?: AlgorithmListRequest, options?: HostInvokeOptions) =>
+				call<AlgorithmPage>(
+					client, "algorithms.list", input, options,
+					AlgorithmListRequest,
+					AlgorithmPage,
+				),
+			providers: (input?: PageRequest, options?: HostInvokeOptions) =>
+				call<ProviderPage>(
+					client, "algorithms.providers", input, options,
+					PageRequest,
+					ProviderPage,
+				),
+			run: (input: RunAlgorithmRequest, options?: HostInvokeOptions) =>
+				call<RunResult>(
+					client, "algorithms.run", input, options,
+					RunAlgorithmRequest,
+					RunResult,
+				),
+		},
 		files: {
 			export: (input: ExportRequest, options?: HostInvokeOptions) =>
 				call<ExportResult>(

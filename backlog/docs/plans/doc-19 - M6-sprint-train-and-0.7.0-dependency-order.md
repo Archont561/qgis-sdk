@@ -37,14 +37,14 @@ TASK-69 (sprint 2) landed in PR #104 (`c8cd119`) as three commits:
 | 69b | vanilla and React scaffold templates render the `ping` form from the declaration and a layer picker over `layers.list`; `grants = ["layers.read"]` in the scaffold and the example; scaffold-web harness green | done (`3ddd7ca`) |
 | 69c | doc-13 stores/adapters/Tier table, READMEs, backlog closure | done (`ae13694`) |
 
-TASK-96 (sprint 3) landed in three slices, one commit series in one pull request:
+TASK-96 (sprint 3) landed in PR #105 (`c92ba2b`), one commit series:
 
 | Slice | Content | Status |
 | --- | --- | --- |
 | 96a | containers `Panel`, `Group`, `Tabs`, `Row`; feedback `JobProgress`, `LogView`, `ResultTable`; buttons `RunButton`, `AcceptCancel`; `Custom(qwidget)`; a `QWidget` class taking `ctx` accepted as a surface; `ui_snapshot` under the fake; the `ctx.log` minimum (decision-63) with a recording fake and the `QgsMessageLog` adapter | done (`316a6ea`) |
 | 96b | `@on(name).changed\|clicked\|toggled\|edited` / `@on(name, signal)`, `@subscribe(stream)`, `ctx.on`, `on_accept`/`on_close`, `ui="file.ui"` loading, mixins `RunsJobs`/`SubscribesStreams`/`HasAcceptCancel`, the echo flag | done (`c053bf7`) |
-| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | done (this pull request) |
-| 96d | property tests over the rule-shaped parametrize tables (versions, release tags, derived names, origins, cursors, coercion, the schema subset against `jsonschema`); the declarative surface form (components as class attributes, `@on(component)`, per-window copies) as a decision-55 amendment, with the example's `ResultsDock` declared; follow-ups in [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md) | done (this pull request) |
+| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | done (PR #105) |
+| 96d | property tests over the rule-shaped parametrize tables (versions, release tags, derived names, origins, cursors, coercion, the schema subset against `jsonschema`); the declarative surface form (components as class attributes, `@on(component)`, per-window copies) as a decision-55 amendment, with the example's `ResultsDock` declared; follow-ups in [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md) | done (PR #105) |
 
 ## 1. Where m-6 starts from
 
@@ -114,7 +114,15 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   `files` whitelist, README per decision-29; the Tier 1 templates opt in
   through one import; decision-16 promoted. The webengine palette test
   needs a QGIS host (Linux CI has one).
-- **Sprint 5: TASK-43.** The Starlight site from the backlog guides with
+- **Sprint 5: [TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md).** Pulled forward from m-10 on instruction
+  (2026-10-27; [decision-64](../../decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md)): `ctx.algorithms.list/describe/run` over any
+  algorithm the host registry holds, `qgis-sdk processing generate`
+  emitting a Python module (TypedDict + request class per algorithm) and a
+  TypeScript module per provider with `--check`, the shipped snapshot of
+  `native`/`qgis`/`gdal`/`3d`/`pdal`, the `algorithms.*` host operations
+  and grants, `runAlgorithm` typed by the generated registry. TASK-70's
+  Storybook, docs and closure finish right after it.
+- **Sprint 6: TASK-43.** The Starlight site from the backlog guides with
   the Storybook static build mounted under it, deployed by a `docs.yml`
   workflow to GitHub Pages; the root README gains the docs badge and link
   and loses nothing else (decision-29).

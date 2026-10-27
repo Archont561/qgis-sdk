@@ -3,10 +3,10 @@ id: TASK-70
 title: >-
   Create @archont561/qgis-sdk-ui: web components on the store core, React, Vue
   and Svelte wrappers, palette tokens and Storybook
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-26T11:26:00Z'
+updated_date: '2026-10-27 10:15'
 labels: []
 milestone: m-6
 dependencies:

@@ -141,6 +141,26 @@ def test_a_nested_object_becomes_a_named_interface_not_a_record() -> None:
     assert 'SitesDetailsRequestOptions(value["options"], strict)' in generated
 
 
+def test_an_open_map_stays_a_record_rather_than_an_empty_interface() -> None:
+    """``{"type": "object"}`` with no shape is a map the host checks by other means."""
+    described = _single(
+        "sites.run",
+        request={
+            "type": "object",
+            "properties": {"params": {"type": "object"}},
+            "required": ["params"],
+            "additionalProperties": False,
+        },
+        result={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+    generated = generate_typescript(described)
+    assert "readonly params: Record<string, unknown>;" in generated
+    assert 'isRecord(value["params"])' in generated
+    assert "SitesRunRequestParams" not in generated
+    # A closed object with no properties is still the empty interface it was.
+    assert "readonly [key: string]: never;" in generated
+
+
 def test_a_non_object_result_validates_the_value_itself() -> None:
     """The request/result schema is not always an object, and the call must compile."""
     described = _single(

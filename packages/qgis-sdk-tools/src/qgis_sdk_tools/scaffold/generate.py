@@ -353,9 +353,11 @@ WEB_TABLE = """
 # The page in web/: shown as a {placement}; `grants` lists the host grants
 # (`layers.read`) or operation ids (`project.layer_ids`) the page may use;
 # `qgis-sdk bridge generate --host` renders the catalogue. The starter page's
-# layer picker reads `layers.list`, which `layers.read` covers.
+# layer picker reads `layers.list`, which `layers.read` covers, and
+# `algorithms.run` lets `runAlgorithm` from web/src/processing.schema.ts run
+# the host's Processing algorithms.
 placement = "{placement}"
-grants = ["layers.read"]
+grants = ["layers.read", "algorithms.run"]
 """
 
 GITIGNORE = """__pycache__/
@@ -657,9 +659,12 @@ def _web_readme(options: ScaffoldOptions) -> str:
 `web/` is a Vite app ({framework}) that QGIS shows as a {web.placement}: the
 {options.title!r} toolbar button opens it. The page talks to the plugin through
 `QgisSdk` built on `web/src/bridge.schema.ts`, generated from the declarations
-in `{plugin}/plugin.py` and checked in. Run `{run.format(script="bindings")}` in
-CI (it runs `qgis-sdk bridge generate --check`) so the file cannot drift from
-them.
+in `{plugin}/plugin.py` and checked in. Next to it, `web/src/processing.schema.ts`
+types the host's own Processing algorithms (`native`, from the SDK's snapshot
+to start): `runAlgorithm(qgis, "native:buffer", {{ INPUT }})` from it runs any
+of them behind the `algorithms.run` grant. Run `{run.format(script="bindings")}`
+in CI (it runs `qgis-sdk bridge generate --check` and `qgis-sdk processing
+generate --check` against your QGIS) so neither file can drift.
 
 ```sh
 cd web
@@ -675,7 +680,8 @@ the SDK's page view loads `{plugin}/web/index.html` from disk and shows a hint
 until it exists. The page is confined to that directory and reaches no remote
 origin; `[tool.qgis-sdk.web]` in pyproject.toml chooses the placement and
 lists the curated host operations (`grants`) the page may call - `layers.read`
-to start, for the layer picker. A build never references the dev server.
+for the layer picker and `algorithms.run` for the typed Processing runner, to
+start. A build never references the dev server.
 Dependencies are pinned to the versions this SDK release was qualified with;
 the Chromium target in `web/vite.config.ts` follows the oldest QGIS you
 support.

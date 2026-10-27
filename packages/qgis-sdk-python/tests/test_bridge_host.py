@@ -18,7 +18,7 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from qgis_sdk.bridge import BridgeErrorCode, Dispatcher
-from qgis_sdk.bridge.authority import HostAuthority
+from qgis_sdk.bridge.authority import FileOperation, HostAuthority
 from qgis_sdk.bridge.host import (
     DEFAULT_PAGE,
     DEFERRED_HOST_METHODS,
@@ -45,8 +45,8 @@ from qgis_sdk.testing import FakeNetworkTransport, reply
 
 ORIGIN = "qgis://desktop"
 
-#: The five curated Protocols plus Algorithms: decision-27 defers the sixth
-#: because it starts work, which needs the job surface rather than a call.
+#: The five curated Protocols plus Algorithms, whose generic surface
+#: (decision-64) is on the wire and whose plugin-local ``execute`` is not.
 PROTOCOLS: dict[str, type] = {
     "Layers": Layers,
     "Project": Project,
@@ -292,6 +292,8 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "styles.apply",
         "files.export",
         "network.fetch",
+        "algorithms.read",
+        "algorithms.run",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.
@@ -1004,3 +1006,241 @@ def test_host_services_from_a_context_share_the_files_authority() -> None:
     assert services.authority is files.authority
     explicit = HostServices.from_context(context, authority=HostAuthority())
     assert explicit.authority is not files.authority
+
+
+# -- algorithms (decision-64) ------------------------------------------------
+
+
+def _algorithm_services(tmp_path: Path):
+    """A host over the fake algorithms, with a plugin files service to re-mint from."""
+    from qgis_sdk.core import ResourceScope
+    from qgis_sdk.testing import FakeAlgorithms, FakeFiles
+    from qgis_sdk.testing import FakeLayers as FakeLayerService
+
+    scope = ResourceScope()
+    layers = FakeLayerService(scope)
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "reference"
+    layers.register(
+        fixtures / "points.geojson",
+        name="points",
+        geometry_type="point",
+        field_names=("id",),
+    )
+    layers.register(
+        fixtures / "lines.geojson",
+        name="lines",
+        geometry_type="line",
+        field_names=("id",),
+    )
+    files = FakeFiles(scope, owner="plugin:demo")
+    algorithms = FakeAlgorithms(layers, scope, files=files)
+    services = HostServices(
+        layers=layers,
+        project=FakeProject(ids=[]),
+        settings=FakeSettings(values={}),
+        styles=FakeStyles(),
+        notifications=FakeNotifications(),
+        authority=files.authority,
+        algorithms=algorithms,
+        files=files,
+    )
+    return services, layers, files, algorithms, fixtures
+
+
+def test_algorithms_providers_and_list_page_the_registry(tmp_path: Path) -> None:
+    services, *_ = _algorithm_services(tmp_path)
+    dispatcher = _dispatcher(services)
+
+    providers = _call(dispatcher, "algorithms.providers", {})
+    assert providers["ok"] is True
+    assert {p["id"] for p in providers["value"]["items"]} >= {"native", "gdal"}
+    assert set(providers["value"]["items"][0]) == {"id", "label", "version"}
+
+    page = _call(dispatcher, "algorithms.list", {"provider": "gdal", "limit": 5})
+    assert page["ok"] is True
+    assert page["value"]["truncated"] is True
+    assert all(item["provider"] == "gdal" for item in page["value"]["items"])
+    assert set(page["value"]["items"][0]) == {
+        "id",
+        "provider",
+        "name",
+        "label",
+        "group",
+        "deprecated",
+    }
+
+    everything = _call(dispatcher, "algorithms.list", {"limit": 200})
+    assert everything["value"]["truncated"] is True
+    assert len(everything["value"]["items"]) == 200
+
+
+def test_algorithms_describe_spells_every_field_and_the_default_as_json(
+    tmp_path: Path,
+) -> None:
+    services, *_ = _algorithm_services(tmp_path)
+    dispatcher = _dispatcher(services)
+
+    described = _call(
+        dispatcher, "algorithms.describe", {"algorithm_id": "native:buffer"}
+    )
+
+    assert described["ok"] is True
+    info = described["value"]
+    assert info["id"] == "native:buffer"
+    by_name = {p["name"]: p for p in info["parameters"]}
+    assert by_name["INPUT"]["required"] is True
+    assert by_name["INPUT"]["default_json"] is None
+    assert by_name["DISTANCE"]["default_json"] == "10"
+    assert by_name["OUTPUT"]["destination"] is True
+    assert [o["name"] for o in info["outputs"]] == ["OUTPUT"]
+
+    missing = _call(dispatcher, "algorithms.describe", {"algorithm_id": "grass:nope"})
+    assert missing["ok"] is False
+
+
+def test_algorithms_run_takes_view_refs_and_hands_outputs_back_as_view_refs(
+    tmp_path: Path,
+) -> None:
+    services, layers, files, algorithms, fixtures = _algorithm_services(tmp_path)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    raster = tmp_path / "dem.tif"
+    raster.write_bytes(b"not really a raster")
+    report = tmp_path / "report.html"
+    report.write_text("<p>ok</p>")
+    (tmp_path / "out.tif").write_bytes(b"translated")
+    view_ref = services.authority.grant_file(binding, raster, source="picker")
+    algorithms.script_run(
+        "gdal:translate",
+        lambda run: {"OUTPUT": tmp_path / "out.tif", "SEEN": run.params["INPUT"]},
+    )
+    algorithms.script_run(
+        "native:basicstatisticsforfields",
+        {"COUNT": 3, "OUTPUT_HTML_FILE": report, "OUTPUT": fixtures / "points.geojson"},
+    )
+
+    translated = _call(
+        dispatcher,
+        "algorithms.run",
+        {"algorithm_id": "gdal:translate", "params": {"INPUT": view_ref.to_wire()}},
+        binding=binding,
+    )
+    assert translated["ok"] is True, translated
+    outputs = {o["name"]: o for o in translated["value"]["outputs"]}
+    # The ref was resolved against the calling view; the algorithm saw a path.
+    assert outputs["SEEN"] == {
+        "name": "SEEN",
+        "kind": "value",
+        "value": str(raster.resolve()),
+    }
+    assert outputs["OUTPUT"]["kind"] == "file"
+    produced = outputs["OUTPUT"]["file"]
+    assert (
+        services.authority.resolve_file(binding, produced, FileOperation.READ)
+        == (tmp_path / "out.tif").resolve()
+    )
+
+    points = layers.open_vector(fixtures / "points.geojson")
+    stats = _call(
+        dispatcher,
+        "algorithms.run",
+        {
+            "algorithm_id": "native:basicstatisticsforfields",
+            "params": {"INPUT_LAYER": points.id, "FIELD_NAME": "id"},
+        },
+        binding=binding,
+    )
+    assert stats["ok"] is True, stats
+    outputs = {o["name"]: o for o in stats["value"]["outputs"]}
+    assert outputs["COUNT"]["value"] == 3
+    handed = outputs["OUTPUT_HTML_FILE"]["file"]
+    # Minted for the view: the view can open it, the plugin's own ref stays its own.
+    assert handed["operations"] == ["read"]
+    assert handed["id"] not in {ref.id for ref in files.granted}
+    assert (
+        services.authority.resolve_file(binding, handed, FileOperation.READ)
+        == report.resolve()
+    )
+
+
+def test_algorithms_run_refuses_a_ref_of_another_view_before_running(
+    tmp_path: Path,
+) -> None:
+    services, _, _, algorithms, _ = _algorithm_services(tmp_path)
+    dispatcher = _dispatcher(services)
+    mine = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
+    raster = tmp_path / "dem.tif"
+    raster.write_bytes(b"x")
+    foreign = services.authority.grant_file(other, raster, source="picker")
+
+    refused = _call(
+        dispatcher,
+        "algorithms.run",
+        {"algorithm_id": "gdal:translate", "params": {"INPUT": foreign.to_wire()}},
+        binding=mine,
+    )
+
+    assert refused["ok"] is False
+    assert algorithms.runs == []
+
+
+def test_algorithms_run_rejects_bad_params_and_reports_a_failed_run(
+    tmp_path: Path,
+) -> None:
+    services, layers, _, algorithms, fixtures = _algorithm_services(tmp_path)
+    dispatcher = _dispatcher(services)
+    points = layers.open_vector(fixtures / "points.geojson")
+
+    rejected = _call(
+        dispatcher,
+        "algorithms.run",
+        {"algorithm_id": "native:buffer", "params": {"INPUT": points.id, "NOPE": 1}},
+    )
+    assert rejected["ok"] is False
+    assert "NOPE" in str(rejected["error"])
+    assert algorithms.runs == []
+
+    unscripted = _call(
+        dispatcher,
+        "algorithms.run",
+        {"algorithm_id": "native:buffer", "params": {"INPUT": points.id}},
+    )
+    assert unscripted["ok"] is False
+    assert "script_run" in str(unscripted["error"])
+
+
+def test_a_host_without_an_algorithms_service_fails_rather_than_pretending() -> None:
+    dispatcher = _dispatcher(_services())
+
+    answer = _call(dispatcher, "algorithms.providers", {})
+
+    assert answer["ok"] is False
+    assert "no algorithms service" in str(answer["error"])
+
+
+def test_host_services_from_a_context_carry_algorithms_and_files() -> None:
+    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.testing import FakeAlgorithms, FakeFiles
+    from qgis_sdk.testing import FakeLayers as FakeLayerService
+
+    scope = ResourceScope()
+    layers = FakeLayerService(scope)
+    files = FakeFiles(scope, owner="plugin:demo")
+    algorithms = FakeAlgorithms(layers, scope, files=files)
+    context = PluginContext(
+        notifications=FakeNotifications(),
+        scope=scope,
+        layers=layers,
+        project=FakeProject(ids=[]),
+        settings=FakeSettings(values={}),
+        styles=FakeStyles(),
+        files=files,
+        algorithms=algorithms,
+    )
+
+    services = HostServices.from_context(context)
+
+    assert services.algorithms is algorithms
+    assert services.files is files
+    assert services.authority is files.authority

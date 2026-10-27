@@ -16,6 +16,8 @@ import json
 from typing import Final
 
 from qgis_sdk.declarations import action, describe_plugin, plugin
+from qgis_sdk.processing.codegen import emit_typescript_module
+from qgis_sdk.processing.snapshot import core_catalogue
 
 from qgis_sdk_tools.generate import generate_schema_typescript
 
@@ -43,6 +45,14 @@ SDK_NPM_VERSION: Final = "0.4.0"
 release, so a tools release offers the newest bridge it was qualified with;
 ``WebOptions.sdk_dependency`` replaces it for a page inside this repository
 (decision-41).
+"""
+UI_NPM_PACKAGE: Final = "@archont561/qgis-sdk-ui"
+UI_NPM_VERSION: Final = "0.1.0"
+"""The published web components the templates opt into, pinned exactly.
+
+One import in ``main.ts`` registers the ``<qgis-*>`` elements (decision-47);
+``scripts/release.py stamp --scope ui`` moves the pin with every UI release and
+``WebOptions.ui_dependency`` replaces it inside this repository.
 """
 
 # Qt WebEngine is Chromium: Qt 6.5 (the oldest Qt 6 LTS a QGIS 4 may ship)
@@ -114,6 +124,10 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
             "web/src/bridge.schema.ts",
             generate_schema_typescript(describe_plugin(template_plugin_class(options))),
         ),
+        (
+            "web/src/processing.schema.ts",
+            emit_typescript_module(core_catalogue(), [SCAFFOLD_PROCESSING_PROVIDER]),
+        ),
     ]
     if web.framework == "react":
         files += [
@@ -130,19 +144,37 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
     return tuple(files)
 
 
+#: The Processing provider the starter page is typed for. The scaffold writes
+#: ``web/src/processing.schema.ts`` from the runtime's own snapshot (no QGIS
+#: at scaffold time); ``bindings`` regenerates it from the project's install,
+#: so a QGIS whose registry differs shows up as drift, never as a stale type.
+SCAFFOLD_PROCESSING_PROVIDER: Final = "native"
+
+BRIDGE_BINDINGS_COMMAND: Final = (
+    "qgis-sdk bridge generate --out web/src/bridge.schema.ts --check"
+)
+PROCESSING_BINDINGS_COMMAND: Final = (
+    f"qgis-sdk processing generate --provider {SCAFFOLD_PROCESSING_PROVIDER} "
+    "--no-python --web-out web/src/processing.schema.ts --check"
+)
+
+
 def bindings_command() -> str:
     """The drift check the project's CI runs, from the project root.
 
     The plugin class comes from ``[tool.qgis-sdk] plugin`` in the project's
-    ``pyproject.toml`` (decision-43), so the command names only the output.
+    ``pyproject.toml`` (decision-43), so the first command names only the
+    output; the second reads the Processing registry of the project's QGIS
+    install (decision-64).
     """
-    return "qgis-sdk bridge generate --out web/src/bridge.schema.ts --check"
+    return f"{BRIDGE_BINDINGS_COMMAND} && {PROCESSING_BINDINGS_COMMAND}"
 
 
 def _package_json(options: ScaffoldOptions, web: WebOptions) -> str:
     react = web.framework == "react"
     dependencies: dict[str, str] = {
-        SDK_NPM_PACKAGE: web.sdk_dependency or SDK_NPM_VERSION
+        SDK_NPM_PACKAGE: web.sdk_dependency or SDK_NPM_VERSION,
+        UI_NPM_PACKAGE: web.ui_dependency or UI_NPM_VERSION,
     }
     dev_dependencies = {
         name: WEB_TEMPLATE_VERSIONS[name]
@@ -243,6 +275,12 @@ def _index_html(options: ScaffoldOptions, web: WebOptions) -> str:
 
 
 VANILLA_MAIN = """import { QgisSdk } from "@archont561/qgis-sdk";
+// The SDK's web components: this import registers every <qgis-*> element,
+// the stylesheet styles them from the --qgis-sdk-* tokens applyHostTheme
+// fills with the QGIS palette. Drop the three to go without.
+import { applyHostTheme } from "@archont561/qgis-sdk-ui";
+import "@archont561/qgis-sdk-ui/define";
+import "@archont561/qgis-sdk-ui/style.css";
 import { createApp } from "./app";
 import schema from "./bridge.schema";
 
@@ -255,7 +293,9 @@ if (root === null) {
 // it, the app. Outside a QGIS web view the SDK refuses at once, with the
 // reason, instead of waiting for a channel that never comes.
 try {
-	createApp(root, QgisSdk.fromBridgeSchema(schema));
+	const qgis = QgisSdk.fromBridgeSchema(schema);
+	void applyHostTheme(qgis);
+	createApp(root, qgis);
 } catch (failure: unknown) {
 	root.textContent =
 		failure instanceof Error
@@ -507,6 +547,13 @@ test("a refusal from the host lands in the error line instead of a rejected prom
 
 REACT_MAIN = """import { QgisSdk } from "@archont561/qgis-sdk";
 import { BridgeProvider } from "@archont561/qgis-sdk/react";
+// The SDK's web components: this import registers every <qgis-*> element
+// (the typed React components are in "@archont561/qgis-sdk-ui/react"), the
+// stylesheet styles them from the --qgis-sdk-* tokens applyHostTheme fills
+// with the QGIS palette. Drop the three to go without.
+import { applyHostTheme } from "@archont561/qgis-sdk-ui";
+import "@archont561/qgis-sdk-ui/define";
+import "@archont561/qgis-sdk-ui/style.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -522,6 +569,7 @@ if (root === null) {
 // SDK refuses at once, with the reason.
 try {
 	const qgis = QgisSdk.fromBridgeSchema(schema);
+	void applyHostTheme(qgis);
 	createRoot(root).render(
 		<StrictMode>
 			<BridgeProvider qgis={qgis}>

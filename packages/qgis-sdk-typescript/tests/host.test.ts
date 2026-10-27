@@ -1,6 +1,8 @@
 import { expect, test } from "@archont561/bun-test-utils";
 import { QgisSdkError } from "@";
 import {
+	type AlgorithmInfo,
+	type AlgorithmSummary,
 	createHost,
 	type FileRef,
 	HOST_FINGERPRINT,
@@ -13,7 +15,9 @@ import {
 	type HostStreamTerminal,
 	type NetworkFetchEvent,
 	PageRequest,
+	type ParameterInfo,
 	QgisSdkHostContractError,
+	type RunOutput,
 	type VectorLayerInfo,
 } from "@/host";
 
@@ -87,6 +91,10 @@ test("the host module names its surface and advertises its version", () => {
 	expect(HOST_SCHEMA_VERSION).toBe(1);
 	expect(HOST_FINGERPRINT.startsWith("sha256:")).toBe(true);
 	expect(HOST_OPERATIONS).toEqual([
+		"algorithms.describe",
+		"algorithms.list",
+		"algorithms.providers",
+		"algorithms.run",
 		"files.export",
 		"layers.get",
 		"layers.list",
@@ -337,4 +345,201 @@ test("a response the host should not have produced ends the fetch as an error", 
 	expect(ends[0]?.kind).toBe("error");
 	expect(ends[0]?.message).toContain("network.fetch");
 	expect(scripted_.closed()).toBe(1);
+});
+
+const distance: ParameterInfo = {
+	name: "DISTANCE",
+	label: "Distance",
+	description: "",
+	kind: "distance",
+	required: true,
+	optional: false,
+	advanced: false,
+	hidden: false,
+	destination: false,
+	multiple: false,
+	default_json: "10.0",
+	options: [],
+	minimum: null,
+	maximum: 1e6,
+	number_type: "double",
+	extension: null,
+};
+
+const bufferInfo: AlgorithmInfo = {
+	id: "native:buffer",
+	provider: "native",
+	name: "buffer",
+	label: "Buffer",
+	group: "Vector geometry",
+	group_id: "vectorgeometry",
+	help: "Buffers the features.",
+	deprecated: false,
+	parameters: [distance],
+	outputs: [{ name: "OUTPUT", label: "Buffered", kind: "outputVector" }],
+};
+
+test("the providers and the algorithm list are paged like every other list", async () => {
+	const providers = scripted({
+		items: [{ id: "native", label: "QGIS (native c++)", version: "4.2.3" }],
+		truncated: false,
+	});
+	const first = await createHost(providers.client).algorithms.providers();
+	expect(first.items[0]?.id).toBe("native");
+	expect(providers.sent[0]?.operation).toBe("algorithms.providers");
+	expect(providers.sent[0]?.payload).toEqual({});
+
+	const summary: AlgorithmSummary = {
+		id: "native:buffer",
+		provider: "native",
+		name: "buffer",
+		label: "Buffer",
+		group: "Vector geometry",
+		deprecated: false,
+	};
+	const list = scripted({
+		items: [summary],
+		truncated: true,
+		next_cursor: "1",
+	});
+	const result = await createHost(list.client).algorithms.list({
+		provider: "native",
+		limit: 1,
+	});
+	expect(result.items[0]?.label).toBe("Buffer");
+	expect(result.next_cursor).toBe("1");
+	expect(list.sent[0]?.operation).toBe("algorithms.list");
+	expect(list.sent[0]?.payload).toEqual({ provider: "native", limit: 1 });
+
+	const tooLarge = createHost(list.client).algorithms.list({
+		limit: 500,
+	} as never);
+	await expect(tooLarge).rejects.toThrow(QgisSdkHostContractError);
+	expect(list.sent.length).toBe(1);
+
+	const { client: badProvider } = scripted({
+		items: [{ id: "native", label: "QGIS", version: 4 }],
+		truncated: false,
+	});
+	await expect(createHost(badProvider).algorithms.providers()).rejects.toThrow(
+		QgisSdkHostContractError,
+	);
+	const { client: badSummary } = scripted({
+		items: [{ ...summary, deprecated: "no" }],
+		truncated: false,
+	});
+	await expect(createHost(badSummary).algorithms.list()).rejects.toThrow(
+		QgisSdkHostContractError,
+	);
+});
+
+test("a description carries typed parameters and outputs, and nothing looser", async () => {
+	const { client, sent } = scripted(bufferInfo);
+	const info = await createHost(client).algorithms.describe({
+		algorithm_id: "native:buffer",
+	});
+	expect(info.parameters[0]?.maximum).toBe(1e6);
+	expect(info.parameters[0]?.default_json).toBe("10.0");
+	expect(info.outputs[0]?.kind).toBe("outputVector");
+	expect(sent[0]?.operation).toBe("algorithms.describe");
+	expect(sent[0]?.payload).toEqual({ algorithm_id: "native:buffer" });
+
+	const describe = (reply: unknown) =>
+		createHost(scripted(reply).client).algorithms.describe({
+			algorithm_id: "native:buffer",
+		});
+	await expect(
+		describe({ ...bufferInfo, parameters: [{ ...distance, minimum: "0" }] }),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		describe({ ...bufferInfo, parameters: [{ ...distance, options: [1] }] }),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		describe({
+			...bufferInfo,
+			outputs: [{ name: "OUTPUT", kind: "outputVector" }],
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(describe({ ...bufferInfo, deprecated: 0 })).rejects.toThrow(
+		QgisSdkHostContractError,
+	);
+	const { id: _id, ...withoutId } = bufferInfo;
+	await expect(describe(withoutId)).rejects.toThrow(QgisSdkHostContractError);
+
+	const { client: unsent, sent: nothing } = scripted(bufferInfo);
+	await expect(
+		createHost(unsent).algorithms.describe({} as never),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+});
+
+test("a run sends the id and the params and reads back tagged outputs", async () => {
+	const outputs: RunOutput[] = [
+		{ name: "OUTPUT", kind: "vector", layer: sites },
+		{ name: "REPORT", kind: "file", file: picked },
+		{ name: "COUNT", kind: "value", value: 3 },
+		{ name: "MEAN", kind: "value", value: null },
+	];
+	const { client, sent } = scripted({ algorithm: "native:buffer", outputs });
+	const result = await createHost(client).algorithms.run({
+		algorithm_id: "native:buffer",
+		params: { INPUT: "sites", DISTANCE: 25 },
+	});
+	expect(result.outputs.length).toBe(4);
+	expect(result.outputs[0]?.layer?.id).toBe("sites");
+	expect(sent[0]?.operation).toBe("algorithms.run");
+	expect(sent[0]?.payload).toEqual({
+		algorithm_id: "native:buffer",
+		params: { INPUT: "sites", DISTANCE: 25 },
+	});
+
+	const run = (reply: unknown) =>
+		createHost(scripted(reply).client).algorithms.run({
+			algorithm_id: "native:buffer",
+			params: {},
+		});
+	await expect(
+		run({
+			algorithm: "native:buffer",
+			outputs: [{ name: "X", kind: "raster" }],
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		run({
+			algorithm: "native:buffer",
+			outputs: [{ name: "X", kind: "value", value: {} }],
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		run({
+			algorithm: "native:buffer",
+			outputs: [{ name: "X", kind: "file", file: "/tmp/x" }],
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		run({
+			algorithm: "native:buffer",
+			outputs: [{ name: "X", kind: "vector", layer: {} }],
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(run({ algorithm: "native:buffer" })).rejects.toThrow(
+		QgisSdkHostContractError,
+	);
+	await expect(run({ algorithm: 7, outputs: [] })).rejects.toThrow(
+		QgisSdkHostContractError,
+	);
+
+	const { client: unsent, sent: nothing } = scripted(null);
+	await expect(
+		createHost(unsent).algorithms.run({
+			algorithm_id: "native:buffer",
+		} as never),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		createHost(unsent).algorithms.run({
+			algorithm_id: "native:buffer",
+			params: [],
+		} as never),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
 });

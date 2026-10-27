@@ -105,6 +105,37 @@ test("open, select, buffer and export go through the declared actions in order",
 	client.close();
 });
 
+test("the centroids control runs the host's Processing through the generated registry", async () => {
+	const { harness, client, click, text } = page();
+	harness.expectInvoke("open_fixture", () => SOURCE);
+	harness.expectInvoke("algorithms.run", (payload) => {
+		expect(payload).toEqual({
+			algorithm_id: "native:centroids",
+			params: { INPUT: "points-1", ALL_PARTS: false },
+		});
+		return {
+			algorithm: "native:centroids",
+			outputs: [
+				{
+					name: "OUTPUT",
+					kind: "vector",
+					layer: { ...SOURCE, id: "centroids-1", name: "centroids" },
+				},
+			],
+		};
+	});
+
+	click("open");
+	await until(() => text("source") !== "");
+	click("centroids");
+	await until(() => text("centroids-result") !== "");
+
+	expect(text("centroids-result")).toBe("centroids (point) centroids-1");
+	expect(operations(harness)).toEqual(["open_fixture", "algorithms.run"]);
+	harness.assertSatisfied();
+	client.close();
+});
+
 test("a buffer before the dataset is opened never reaches the host", async () => {
 	const { harness, client, click, text } = page();
 

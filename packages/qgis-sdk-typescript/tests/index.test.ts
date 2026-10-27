@@ -18,6 +18,7 @@ import * as bridge from "@/src/bridge";
 import * as declarations from "@/src/declarations";
 import * as errors from "@/src/errors";
 import { isPlainRecord } from "@/src/internal";
+import * as processing from "@/src/processing";
 import * as qgisSdk from "@/src/qgis-sdk";
 import * as schema from "@/src/schema";
 import * as stores from "@/src/stores";
@@ -56,12 +57,13 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 	}
 });
 
-test("the root is the union of the error root, the declarations, the bridge, the SDK and the stores", () => {
+test("the root is the union of the error root, the declarations, the bridge, the SDK, the stores and processing", () => {
 	const names = (module: object): string[] => Object.keys(module).sort();
 	const expected = new Set([
 		...names(errors),
 		...names(declarations),
 		...names(bridge),
+		...names(processing),
 		...names(qgisSdk),
 		...names(schema),
 		...names(stores),

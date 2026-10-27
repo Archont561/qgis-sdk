@@ -12,8 +12,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 from qgis_sdk.models import (
+    AlgorithmRun,
     BufferRequest,
     CentroidRequest,
+    FileRef,
+    QgisSdkAlgorithmNotFoundError,
+    QgisSdkAlgorithmRejectedError,
     QgisSdkLayerNotFoundError,
     VectorLayerInfo,
 )
@@ -99,3 +103,97 @@ def test_nothing_is_added_to_the_project_by_the_operation_itself(
     _buffer(services, source.id)
 
     assert services.project.layer_ids() == ()
+
+
+# -- the generic run (decision-64) -------------------------------------------
+
+
+def test_the_registry_describes_the_core_buffer(services: Services) -> None:
+    info = services.algorithms.describe("native:buffer")
+
+    assert (info.id, info.provider, info.name) == ("native:buffer", "native", "buffer")
+    assert [p.name for p in info.required] == ["INPUT"]
+    assert info.parameter("DISTANCE").kind == "distance"
+    assert info.parameter("OUTPUT").destination is True
+    assert info.parameter("END_CAP_STYLE").options[:2] == ("Round", "Flat")
+    assert [o.kind for o in info.outputs] == ["outputVector"]
+    assert info in services.algorithms.list("native")
+    assert info in services.algorithms.list()
+    assert "native" in {p.id for p in services.algorithms.providers()}
+    assert len(services.algorithms.list("native")) > 100
+
+
+def test_an_unknown_algorithm_is_not_found(services: Services) -> None:
+    with pytest.raises(QgisSdkAlgorithmNotFoundError) as error:
+        services.algorithms.describe("saga:nothing")
+    assert error.value.algorithm_id == "saga:nothing"
+    with pytest.raises(QgisSdkAlgorithmNotFoundError):
+        services.algorithms.run("saga:nothing", {})
+    assert services.algorithms.list("saga") == ()
+
+
+def test_a_run_is_validated_before_any_data_is_read(services: Services) -> None:
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as error:
+        services.algorithms.run("native:buffer", {"DISTANCE": "far", "EXTRA": 1})
+
+    reasons = "; ".join(error.value.reasons)
+    assert "INPUT is required" in reasons
+    assert "DISTANCE must be a number" in reasons
+    assert "EXTRA is not a parameter" in reasons
+    assert services.layers.list_layers() == ()
+
+
+def test_the_generic_run_produces_an_owned_vector_layer(services: Services) -> None:
+    source = services.layers.open_vector(services.dataset)
+
+    result = services.algorithms.run(
+        "native:buffer", {"INPUT": source.id, "DISTANCE": 0.01, "SEGMENTS": 4}
+    )
+
+    assert result.algorithm == "native:buffer"
+    output = result.vector("OUTPUT")
+    assert isinstance(output, VectorLayerInfo)
+    assert output.id != source.id
+    assert output.geometry_type == "polygon"
+    assert set(source.field_names) <= set(output.field_names)
+    assert services.layers.layer(source.id) == source
+    assert services.project.layer_ids() == ()
+    assert output.id in {layer.id for layer in services.layers.list_layers()}
+
+
+def test_a_generated_request_class_runs_like_the_id(services: Services) -> None:
+    from qgis_sdk.processing import native
+
+    source = services.layers.open_vector(services.dataset)
+
+    result = services.algorithms.run(native.Centroids(input=source.id))
+
+    assert result.vector("OUTPUT").geometry_type == "point"
+    with pytest.raises(QgisSdkAlgorithmRejectedError, match="params go with"):
+        services.algorithms.run(native.Centroids(input=source.id), {"X": 1})
+
+
+def test_scalar_and_file_outputs_come_back_typed(services: Services) -> None:
+    source = services.layers.open_vector(services.dataset)
+
+    result = services.algorithms.run(
+        AlgorithmRun(
+            "native:basicstatisticsforfields",
+            {"INPUT_LAYER": source.id, "FIELD_NAME": "value"},
+        )
+    )
+
+    assert result.value("COUNT") == 3
+    report = result.file("OUTPUT_HTML_FILE")
+    assert isinstance(report, FileRef)
+    assert report.operations == ("read",)
+    assert services.files is not None
+    assert services.files.resolve(report).is_file()
+    assert "OUTPUT_HTML_FILE" in set(result)
+
+
+def test_an_unknown_layer_input_is_refused_by_the_generic_run(
+    services: Services,
+) -> None:
+    with pytest.raises(QgisSdkLayerNotFoundError):
+        services.algorithms.run("native:buffer", {"INPUT": "no-such-layer"})

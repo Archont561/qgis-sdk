@@ -3,6 +3,8 @@
 from .algorithms import AlgorithmRequest, BufferRequest, CentroidRequest
 from .errors import (
     QgisSdkAlgorithmCancelledError,
+    QgisSdkAlgorithmFailedError,
+    QgisSdkAlgorithmNotFoundError,
     QgisSdkAlgorithmRejectedError,
     QgisSdkAuthenticationError,
     QgisSdkBlockingOnGuiThreadError,
@@ -76,6 +78,19 @@ from .parameters import (
     RangeParameter,
     parameter_kinds,
 )
+from .processing import (
+    DESTINATION_KINDS,
+    LAYER_KINDS,
+    AlgorithmInfo,
+    AlgorithmRun,
+    Catalogue,
+    OutputInfo,
+    ParameterInfo,
+    ProviderInfo,
+    RunResult,
+    TypedRun,
+    validate_parameters,
+)
 from .styles import StyleSpec
 
 __all__ = [
@@ -83,11 +98,16 @@ __all__ = [
     "DEFAULT_MAX_BODY_BYTES",
     "DEFAULT_MAX_REDIRECTS",
     "DEFAULT_TIMEOUT_SECONDS",
+    "DESTINATION_KINDS",
     "FILE_REF",
     "FILE_REF_KINDS",
+    "LAYER_KINDS",
     "MAX_SAFE_INTEGER",
+    "AlgorithmInfo",
     "AlgorithmRequest",
+    "AlgorithmRun",
     "BufferRequest",
+    "Catalogue",
     "CentroidRequest",
     "Colour",
     "ColourParameter",
@@ -108,8 +128,13 @@ __all__ = [
     "Metres",
     "MetresParameter",
     "NetworkRequest",
+    "OutputInfo",
+    "ParameterInfo",
     "ParameterKind",
+    "ProviderInfo",
     "QgisSdkAlgorithmCancelledError",
+    "QgisSdkAlgorithmFailedError",
+    "QgisSdkAlgorithmNotFoundError",
     "QgisSdkAlgorithmRejectedError",
     "QgisSdkAuthenticationError",
     "QgisSdkBlockingOnGuiThreadError",
@@ -152,8 +177,11 @@ __all__ = [
     "Range",
     "RangeParameter",
     "Response",
+    "RunResult",
     "StyleSpec",
+    "TypedRun",
     "VectorExport",
     "VectorLayerInfo",
     "parameter_kinds",
+    "validate_parameters",
 ]

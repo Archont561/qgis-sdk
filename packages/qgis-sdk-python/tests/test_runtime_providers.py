@@ -171,4 +171,4 @@ def test_providers_do_not_change_the_plugin_description_or_the_host_contract() -
     # Providers are host-side registrations, not page-callable operations: the
     # host contract the generated clients pin does not move (decision-42).
     assert HOST_SCHEMA_VERSION == 1
-    assert contract_fingerprint(host_description()).startswith("sha256:af91deac")
+    assert contract_fingerprint(host_description()).startswith("sha256:16790dc8")

@@ -234,6 +234,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use (TASK-14, TASK-63) |
+| `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery (TASK-15) |
 | `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists (TASK-39, TASK-63) |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
@@ -1047,6 +1048,82 @@ typing subset. `AlgorithmDescription` carries `parameters`, `required`,
 **Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
 
 Two honest limits of this slice: cancellation is observed at phase boundaries (before the function runs, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm's result is a vector layer - other layer kinds arrive with the services that produce them.
+
+### Any registered algorithm: `list`, `describe`, `run` and the generated registry
+
+`BufferRequest` and `CentroidRequest` are the hand-written predecessors of a
+generated family. Since 0.7.0
+([decision-64](../../decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md))
+`ctx.algorithms` reaches **every** algorithm the host's Processing registry
+holds - native, qgis, gdal, 3d, pdal, GRASS, SAGA, a third-party plugin's -
+through one surface:
+
+```python
+from qgis_sdk.processing import native
+
+providers = ctx.algorithms.providers()           # ProviderInfo per registered provider
+summaries = ctx.algorithms.list(provider="gdal")  # AlgorithmInfo, help and all
+info = ctx.algorithms.describe("native:buffer")   # parameters, outputs, defaults
+
+# Three spellings of one run; all return a RunResult.
+result = ctx.algorithms.run(native.Buffer(input=layer.id, distance=25.0))
+result = ctx.algorithms.run("native:buffer", {"INPUT": layer.id, "DISTANCE": 25.0})
+result = ctx.algorithms.run(AlgorithmRun("native:buffer", {"INPUT": layer.id}))
+
+buffered = result.vector("OUTPUT")      # an owned VectorLayerInfo
+stats = ctx.algorithms.run(
+    "native:basicstatisticsforfields", {"INPUT_LAYER": layer.id, "FIELD_NAME": "id"}
+)
+stats.value("COUNT")                    # 3
+report = stats.file("OUTPUT_HTML_FILE")  # a read-only FileRef; ctx.files.resolve(report)
+```
+
+The rules are the ones `execute` already follows. The request is validated
+against the algorithm's own description **before any data is read**
+(`QgisSdkAlgorithmRejectedError` lists every reason; an unknown id is
+`QgisSdkAlgorithmNotFoundError`). A layer input is the id of a layer this
+runtime owns, a `FileRef`, or a path the plugin already holds. A destination
+left out is allocated under a fresh run directory and comes back owned: a
+vector sink as a `VectorLayerInfo`, a raster, file, folder or HTML report as
+a `FileRef` minted through `ctx.files` with read only, and a number, string
+or boolean as itself. A run that fails removes that directory and raises
+`QgisSdkAlgorithmFailedError` - no partial output survives (decision-19).
+`run` is synchronous on the GUI thread, like `processing.run`; a long
+algorithm belongs in a `@job`.
+
+`qgis_sdk.processing.native`, `.qgis`, `.gdal`, `.p3d` and `.pdal` are
+**generated**, never edited: each carries a `TypedDict` per algorithm (the
+shape `run(id, params)` is typed by), a request class per algorithm
+(`native.Buffer`, `native.Centroids`, ... - frozen dataclasses whose fields
+are the parameters in snake case, destinations defaulting to `None`) and a
+`REGISTRY` of `AlgorithmInfo`. They come from a snapshot of the registry of
+the QGIS the SDK release was qualified with
+(`qgis_sdk/processing/catalogue.json`; `QGIS_VERSION` says which), kept
+fresh by `scripts/generate_processing_snapshot.py` and a CI drift check. A
+host whose registry differs is what `describe` reports; the host's
+description, not the snapshot, is what a run is validated against.
+
+Over the fakes, `FakeAlgorithms.list`/`describe` answer from that snapshot
+(or a `Catalogue` the test passes as `catalogue=`), and `run` answers from
+what the test scripted with `script_run(id, outputs)` - a mapping of output
+name to a `Path` (becomes the registered layer or a `FileRef`, by the
+output's kind) or a scalar, or a callable of the `AlgorithmRun` - and
+records every run in `.runs`. A run nobody scripted fails with
+`QgisSdkAlgorithmFailedError`, never with an invented layer.
+
+A project that depends on a provider the runtime does not ship generates its
+own modules with the developer tools:
+
+```sh
+qgis-sdk processing generate --provider grass --provider saga   # reads the project's QGIS
+qgis-sdk processing generate --check                            # CI: fail on drift
+```
+
+The reader runs *inside* the project's QGIS interpreter (the tools never
+import QGIS); the output is `<plugin package>/processing/` in Python
+(`--out`) and `web/src/processing.schema.ts` for the page (`--web-out`),
+each skippable (`--no-python`, `--no-web`). Pass `--catalogue <json>` to
+render from a catalogue a reader already wrote.
 
 ## Providers: algorithms in the QGIS Processing toolbox
 
@@ -2109,6 +2186,30 @@ declarative form* above.
   Tools`); it read `field Tools` before.
 - `ResultsDock` in the example is declared; its button is `buttons/fixture`
   (was `buttons/open`) and the table `self.results` (was `self.table`).
+
+**Any registered algorithm (decision-64; TASK-109).** See *Any registered
+algorithm* above. Nothing existing breaks; what is new:
+
+- `Algorithms` gains `providers()`, `list(provider=None)`, `describe(id)`
+  and `run(request, params=None)`; `execute` and `BufferRequest` /
+  `CentroidRequest` stay as they are and are documented as the predecessors
+  of `native.Buffer` / `native.Centroids`. `FakeAlgorithms` answers
+  `list`/`describe` from the shipped snapshot and `run` from
+  `script_run(...)`; its `runs` list records every `run` as an
+  `AlgorithmRun`.
+- New generated subpackage `qgis_sdk.processing` (`native`, `qgis`, `gdal`,
+  `p3d`, `pdal`, `catalogue.json`) and new models `ProviderInfo`,
+  `AlgorithmInfo`, `ParameterInfo`, `OutputInfo`, `AlgorithmRun`,
+  `RunResult`, `RunOutput`; new errors `QgisSdkAlgorithmNotFoundError`,
+  `QgisSdkAlgorithmRejectedError`, `QgisSdkAlgorithmFailedError`.
+- Host operations `algorithms.providers/list/describe/run` behind the grants
+  `algorithms.read` / `algorithms.run`; `HOST_FINGERPRINT` moved once to
+  `sha256:16790dc8…`. `qgis-sdk new --web` grants `algorithms.run`, writes
+  `web/src/processing.schema.ts` and runs `qgis-sdk processing generate
+  --check` from `bindings`.
+- New developer command `qgis-sdk processing generate` (tools never import
+  QGIS: the reader runs in the project's interpreter) and the repo script
+  `scripts/generate_processing_snapshot.py` with a CI drift check.
 
 ## 0.6.0 migration notes
 
