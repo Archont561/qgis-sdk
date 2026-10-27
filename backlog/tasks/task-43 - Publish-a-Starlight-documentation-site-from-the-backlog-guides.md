@@ -1,10 +1,10 @@
 ---
 id: TASK-43
 title: Publish a Starlight documentation site from the backlog guides
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-24 21:14'
-updated_date: '2026-10-27 16:53'
+updated_date: '2026-10-27 17:30'
 labels: []
 milestone: m-6
 dependencies: []
@@ -30,8 +30,8 @@ Stand up an Astro Starlight site (the pixi-sandbox docs are the model: docs/ in 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 An Astro Starlight site under docs/ (or apps/docs) builds from Bun in the pinned workspace and renders the Python guide, the bridge guide and the workspace/qualification guide as pages with working internal links.
-- [ ] #2 A docs workflow builds the site on pull requests and deploys it to GitHub Pages from main; the root README carries the docs badge and link, as pixi-sandbox does.
+- [x] #1 An Astro Starlight site under docs/ (or apps/docs) builds from Bun in the pinned workspace and renders the Python guide, the bridge guide and the workspace/qualification guide as pages with working internal links.
+- [x] #2 A docs workflow builds the site on pull requests and deploys it to GitHub Pages from main; the root README carries the docs badge and link, as pixi-sandbox does.
 - [x] #3 Every README stays within the decision-29 shape (pitch, install, one example, pointers) and a check in tests/scripts fails when a README reintroduces a reference section.
 <!-- AC:END -->
 
@@ -43,4 +43,6 @@ Stand up an Astro Starlight site (the pixi-sandbox docs are the model: docs/ in 
 Joined m-6 (0.7.0) on 2026-10-26: the Storybook static build of decision-46 publishes with this site.
 
 2026-10-27: apps/docs (Astro 7.4 + Starlight 0.42, built under Bun) renders doc-12/13/14 one page per H2 through scripts/generate.ts (links rewritten, headings demoted, editUrl and lastUpdated from the guide), with start pages, a splash landing, brand.css, robots.txt, sitemap and llms.txt/.md twins (starlight-llms-markdown), the qgis-sdk-ui Storybook under /storybook/, a zero-dependency link check over dist/ and Bun tests at 90% coverage. Pixi tasks docs-build, docs-link-check, docs-dev; .github/workflows/docs.yml builds and link-checks on PRs and deploys to GitHub Pages from main. Root README carries the docs badge and link. AC #1 proven locally (68 pages, 5804 internal links, 0 broken); AC #2 awaits the first deploy from main.
+
+2026-10-27 (closure): PR #112 merged as ac5731a. docs workflow run 40547204847 on main: build + link check (5804 links, 70 pages, 0 broken) and the GitHub Pages deploy both succeeded; the Pages API reports build_type workflow at https://archont561.github.io/qgis-sdk/ with the Storybook under /storybook/ and llms.txt twins. AC #1 and #2 checked on that evidence; AC #3 was checked on 2026-10-24.
 <!-- SECTION:NOTES:END -->
