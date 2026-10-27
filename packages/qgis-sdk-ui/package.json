@@ -1,0 +1,83 @@
+{
+	"name": "@archont561/qgis-sdk-ui",
+	"version": "0.1.0",
+	"description": "Light-DOM web components for QGIS SDK web views: form, pickers, progress and log on the @archont561/qgis-sdk store core, with React, Vue and Svelte wrappers and palette tokens.",
+	"license": "MIT",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./define": {
+			"types": "./dist/define.d.ts",
+			"import": "./dist/define.js",
+			"default": "./dist/define.js"
+		},
+		"./uno": {
+			"types": "./dist/uno.d.ts",
+			"import": "./dist/uno.js",
+			"default": "./dist/uno.js"
+		},
+		"./style.css": "./dist/style.css",
+		"./tokens.css": "./dist/tokens.css"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Archont561/qgis-sdk.git",
+		"directory": "packages/qgis-sdk-ui"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bunup && bun scripts/build-css.ts",
+		"test": "bun test",
+		"coverage": "bun --cwd=../.. --config=packages/qgis-sdk-ui/bunfig.toml test --coverage packages/qgis-sdk-ui/tests",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"lit": "^3.3.3"
+	},
+	"peerDependencies": {
+		"@archont561/qgis-sdk": ">=0.4.0 <0.5.0",
+		"react": ">=18",
+		"svelte": ">=5",
+		"vue": ">=3.4"
+	},
+	"peerDependenciesMeta": {
+		"react": {
+			"optional": true
+		},
+		"svelte": {
+			"optional": true
+		},
+		"vue": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@archont561/qgis-sdk": "workspace:*",
+		"@lit/react": "1.0.8",
+		"@types/node": "26.6.5",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"@unocss/core": "66.12.0",
+		"@unocss/preset-mini": "66.12.0",
+		"@workspace/config": "workspace:*",
+		"bunup": "^0.16.32",
+		"happy-dom": "21.0.4",
+		"react": "19.3.1",
+		"react-dom": "19.3.1",
+		"svelte": "5.57.3",
+		"vue": "3.5.44"
+	}
+}

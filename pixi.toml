@@ -130,7 +130,7 @@ cmd = "bun install --frozen-lockfile"
 cmd = "bun run biome check ."
 
 [feature.bun.tasks.typecheck]
-cmd = "bun run --filter '@archont561/qgis-sdk' typecheck"
+cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk' typecheck && bun run --filter '@archont561/qgis-sdk-ui' typecheck"
 
 [feature.bun.tasks.turbo-test]
 cmd = "bun run test"
