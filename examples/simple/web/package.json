@@ -11,7 +11,8 @@
 		"bindings": "cd .. && qgis-sdk bridge generate --out web/src/bridge.schema.ts --check"
 	},
 	"dependencies": {
-		"@archont561/qgis-sdk": "workspace:*"
+		"@archont561/qgis-sdk": "workspace:*",
+		"@archont561/qgis-sdk-ui": "workspace:*"
 	},
 	"devDependencies": {
 		"happy-dom": "21.0.4",

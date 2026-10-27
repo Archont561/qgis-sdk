@@ -84,11 +84,13 @@ def built_project(
     manager: str,
     tmp_path_factory: pytest.TempPathFactory,
     workspace_bridge: str,
+    workspace_ui: str,
 ) -> tuple[Path, str]:
     """Scaffold, install, run Vitest and tsc, build; return (root, framework).
 
-    On the workspace bridge (decision-41): the templates are qualified against
-    the bridge this checkout ships, not the release the scaffold pins.
+    On the workspace bridge and components (decision-41, decision-47): the
+    templates are qualified against what this checkout ships, not the
+    releases the scaffold pins.
     """
     framework = request.param
     placement = "dock" if framework == "react" else "dialog"
@@ -101,6 +103,7 @@ def built_project(
             placement=placement,
             package_manager=manager,
             sdk_dependency=workspace_bridge,
+            ui_dependency=workspace_ui,
         ),
         root,
     )

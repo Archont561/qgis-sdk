@@ -258,9 +258,9 @@ def _bun() -> str | None:
 
 @pytest.fixture(scope="module")
 def web_project(
-    tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str
+    tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str, workspace_ui: str
 ) -> Path:
-    """A vanilla web project on the workspace bridge (decision-41)."""
+    """A vanilla web project on the workspace bridge and components (decision-41)."""
     bun = _bun()
     if bun is None:
         pytest.skip("bun is not available for the web half")
@@ -271,6 +271,7 @@ def web_project(
             web="vanilla",
             package_manager="bun",
             sdk_dependency=workspace_bridge,
+            ui_dependency=workspace_ui,
         ),
         root,
     )

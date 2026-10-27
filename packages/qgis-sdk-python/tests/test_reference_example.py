@@ -19,7 +19,7 @@ import tomllib
 import layers
 from qgis_sdk_tools.scaffold import ScaffoldOptions, plan_scaffold
 from qgis_sdk_tools.scaffold.generate import sdk_requirements
-from qgis_sdk_tools.scaffold.web import SDK_NPM_PACKAGE
+from qgis_sdk_tools.scaffold.web import SDK_NPM_PACKAGE, UI_NPM_PACKAGE
 
 EXAMPLE = layers.REPOSITORY_ROOT / "examples" / "simple"
 WORKSPACE = "workspace:*"
@@ -35,6 +35,7 @@ def _example_plan():
             placement="dock",
             package_manager="bun",
             sdk_dependency=WORKSPACE,
+            ui_dependency=WORKSPACE,
         )
     )
 
@@ -75,6 +76,7 @@ def test_the_example_page_is_the_scaffold_on_the_workspace_bridge() -> None:
 
     example = json.loads((EXAMPLE / "web" / "package.json").read_text())
     assert example["dependencies"][SDK_NPM_PACKAGE] == WORKSPACE
+    assert example["dependencies"][UI_NPM_PACKAGE] == WORKSPACE
     assert example == json.loads(scaffolded)
 
 

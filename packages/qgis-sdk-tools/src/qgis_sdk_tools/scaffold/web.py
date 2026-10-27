@@ -44,6 +44,14 @@ release, so a tools release offers the newest bridge it was qualified with;
 ``WebOptions.sdk_dependency`` replaces it for a page inside this repository
 (decision-41).
 """
+UI_NPM_PACKAGE: Final = "@archont561/qgis-sdk-ui"
+UI_NPM_VERSION: Final = "0.1.0"
+"""The published web components the templates opt into, pinned exactly.
+
+One import in ``main.ts`` registers the ``<qgis-*>`` elements (decision-47);
+``scripts/release.py stamp --scope ui`` moves the pin with every UI release and
+``WebOptions.ui_dependency`` replaces it inside this repository.
+"""
 
 # Qt WebEngine is Chromium: Qt 6.5 (the oldest Qt 6 LTS a QGIS 4 may ship)
 # carries Chromium 108. Raise this with qgisMinimumVersion, never above it.
@@ -142,7 +150,8 @@ def bindings_command() -> str:
 def _package_json(options: ScaffoldOptions, web: WebOptions) -> str:
     react = web.framework == "react"
     dependencies: dict[str, str] = {
-        SDK_NPM_PACKAGE: web.sdk_dependency or SDK_NPM_VERSION
+        SDK_NPM_PACKAGE: web.sdk_dependency or SDK_NPM_VERSION,
+        UI_NPM_PACKAGE: web.ui_dependency or UI_NPM_VERSION,
     }
     dev_dependencies = {
         name: WEB_TEMPLATE_VERSIONS[name]
@@ -243,6 +252,12 @@ def _index_html(options: ScaffoldOptions, web: WebOptions) -> str:
 
 
 VANILLA_MAIN = """import { QgisSdk } from "@archont561/qgis-sdk";
+// The SDK's web components: this import registers every <qgis-*> element,
+// the stylesheet styles them from the --qgis-sdk-* tokens applyHostTheme
+// fills with the QGIS palette. Drop the three to go without.
+import { applyHostTheme } from "@archont561/qgis-sdk-ui";
+import "@archont561/qgis-sdk-ui/define";
+import "@archont561/qgis-sdk-ui/style.css";
 import { createApp } from "./app";
 import schema from "./bridge.schema";
 
@@ -255,7 +270,9 @@ if (root === null) {
 // it, the app. Outside a QGIS web view the SDK refuses at once, with the
 // reason, instead of waiting for a channel that never comes.
 try {
-	createApp(root, QgisSdk.fromBridgeSchema(schema));
+	const qgis = QgisSdk.fromBridgeSchema(schema);
+	void applyHostTheme(qgis);
+	createApp(root, qgis);
 } catch (failure: unknown) {
 	root.textContent =
 		failure instanceof Error
@@ -507,6 +524,13 @@ test("a refusal from the host lands in the error line instead of a rejected prom
 
 REACT_MAIN = """import { QgisSdk } from "@archont561/qgis-sdk";
 import { BridgeProvider } from "@archont561/qgis-sdk/react";
+// The SDK's web components: this import registers every <qgis-*> element
+// (the typed React components are in "@archont561/qgis-sdk-ui/react"), the
+// stylesheet styles them from the --qgis-sdk-* tokens applyHostTheme fills
+// with the QGIS palette. Drop the three to go without.
+import { applyHostTheme } from "@archont561/qgis-sdk-ui";
+import "@archont561/qgis-sdk-ui/define";
+import "@archont561/qgis-sdk-ui/style.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
@@ -522,6 +546,7 @@ if (root === null) {
 // SDK refuses at once, with the reason.
 try {
 	const qgis = QgisSdk.fromBridgeSchema(schema);
+	void applyHostTheme(qgis);
 	createRoot(root).render(
 		<StrictMode>
 			<BridgeProvider qgis={qgis}>

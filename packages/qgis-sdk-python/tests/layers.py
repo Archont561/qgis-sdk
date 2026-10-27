@@ -60,6 +60,7 @@ def source_path(*extra: Path | str) -> str:
 
 REPOSITORY_ROOT = PACKAGES_ROOT.parent
 BRIDGE_PACKAGE = PACKAGES_ROOT / "qgis-sdk-typescript"
+UI_PACKAGE = PACKAGES_ROOT / "qgis-sdk-ui"
 """The workspace ``@archont561/qgis-sdk``, which in-repository pages run on."""
 
 
@@ -80,13 +81,33 @@ def pack_workspace_bridge(destination: Path, *, bun: str) -> str:
     ships, so a page that passes on it passes on the published package too
     (decision-41). Every manager (bun, npm, pnpm) accepts ``file:<tarball>``.
     """
+    return _pack_workspace_package(
+        destination, bun=bun, name="@archont561/qgis-sdk", directory=BRIDGE_PACKAGE
+    )
+
+
+def pack_workspace_ui(destination: Path, *, bun: str) -> str:
+    """Build and pack the workspace web components; return their ``file:`` spec.
+
+    The same rule as the bridge: the templates opt into
+    ``@archont561/qgis-sdk-ui`` (decision-47), so a page generated here gets
+    this checkout's components, packed the way a release ships them.
+    """
+    return _pack_workspace_package(
+        destination, bun=bun, name="@archont561/qgis-sdk-ui", directory=UI_PACKAGE
+    )
+
+
+def _pack_workspace_package(
+    destination: Path, *, bun: str, name: str, directory: Path
+) -> str:
     # bunup's shebang asks for ``bun`` on PATH, which a Pixi-only bun is not.
     path = os.pathsep.join((str(Path(bun).parent), os.environ.get("PATH", "")))
     env = {**os.environ, "NO_COLOR": "1", "CI": "1", "PATH": path}
     destination.mkdir(parents=True, exist_ok=True)
     for command, cwd in (
-        ((bun, "run", "--filter", "@archont561/qgis-sdk", "build"), REPOSITORY_ROOT),
-        ((bun, "pm", "pack", "--destination", str(destination)), BRIDGE_PACKAGE),
+        ((bun, "run", "--filter", name, "build"), REPOSITORY_ROOT),
+        ((bun, "pm", "pack", "--destination", str(destination)), directory),
     ):
         result = subprocess.run(
             command, cwd=cwd, env=env, capture_output=True, text=True, check=False

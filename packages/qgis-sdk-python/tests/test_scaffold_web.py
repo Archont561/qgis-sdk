@@ -24,6 +24,8 @@ from qgis_sdk_tools.scaffold.web import (
     BROWSER_TARGET,
     SDK_NPM_PACKAGE,
     SDK_NPM_VERSION,
+    UI_NPM_PACKAGE,
+    UI_NPM_VERSION,
     WEB_TEMPLATE_VERSIONS,
     install_command,
     script_command,
@@ -154,6 +156,7 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
     assert package["private"] is True
     assert package["type"] == "module"
     assert package["dependencies"][SDK_NPM_PACKAGE] == SDK_NPM_VERSION == "0.4.0"
+    assert package["dependencies"][UI_NPM_PACKAGE] == UI_NPM_VERSION == "0.1.0"
     assert package["scripts"] == {
         "dev": "vite",
         "build": "vite build",
@@ -164,7 +167,8 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
     pinned = {**package["dependencies"], **package["devDependencies"]}
     for name, version in pinned.items():
         assert version[0].isdigit(), f"{name} is not pinned exactly: {version}"
-        assert version == WEB_TEMPLATE_VERSIONS.get(name, SDK_NPM_VERSION)
+        expected = UI_NPM_VERSION if name == UI_NPM_PACKAGE else SDK_NPM_VERSION
+        assert version == WEB_TEMPLATE_VERSIONS.get(name, expected)
     assert "vite" in package["devDependencies"]
     assert "vitest" in package["devDependencies"]
     assert "bunup" not in pinned  # library tooling, never an app's (decision-18)
@@ -197,6 +201,25 @@ def test_an_explicit_sdk_dependency_replaces_the_pin_and_nothing_else() -> None:
     ]
     assert options(web="vanilla").web is not None
     assert options(web="vanilla").web.sdk_dependency is None
+    assert options(web="vanilla").web.ui_dependency is None
+
+
+def test_the_templates_opt_into_the_web_components_with_one_import() -> None:
+    """decision-47: the components are one import away, and as easy to drop."""
+    for framework, main in (
+        ("vanilla", "web/src/main.ts"),
+        ("react", "web/src/main.tsx"),
+    ):
+        plan = plan_scaffold(
+            options(web=framework, package_manager="bun", ui_dependency="workspace:*")
+        )
+        package = json.loads(content_of(plan, "web/package.json"))
+        assert package["dependencies"][UI_NPM_PACKAGE] == "workspace:*"
+        assert package["dependencies"][SDK_NPM_PACKAGE] == SDK_NPM_VERSION
+        source = content_of(plan, main)
+        assert 'import "@archont561/qgis-sdk-ui/define";' in source
+        assert 'import "@archont561/qgis-sdk-ui/style.css";' in source
+        assert "applyHostTheme(qgis)" in source
 
 
 def test_vite_targets_the_qualified_chromium_and_builds_into_the_plugin_package() -> (

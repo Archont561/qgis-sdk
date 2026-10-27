@@ -127,7 +127,9 @@ def _copy_tree(source: Path, target: Path) -> None:
 
 
 @pytest.fixture(scope="module")
-def project(tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str) -> Path:
+def project(
+    tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str, workspace_ui: str
+) -> Path:
     """``qgis-sdk new`` with the example's options, the example copied on top."""
     root = tmp_path_factory.mktemp("reference") / PLUGIN
     created = _cli(
@@ -147,6 +149,8 @@ def project(tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str) -> 
         "bun",
         "--sdk-dependency",
         workspace_bridge,
+        "--ui-dependency",
+        workspace_ui,
         "--no-input",
         "--no-install",
         cwd=root.parent,

@@ -76,7 +76,11 @@ from qgis_sdk_tools.scaffold.questionnaire import (
     WebAnswers,
     ask_web_questions,
 )
-from qgis_sdk_tools.scaffold.web import SDK_NPM_VERSION, install_command
+from qgis_sdk_tools.scaffold.web import (
+    SDK_NPM_VERSION,
+    UI_NPM_VERSION,
+    install_command,
+)
 
 app = typer.Typer(
     add_completion=False,
@@ -151,6 +155,15 @@ def new(
             ),
         ),
     ] = None,
+    ui_dependency: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "The same for @archont561/qgis-sdk-ui, the web components the page "
+                f"opts into: the latest release ({UI_NPM_VERSION}) unless given."
+            ),
+        ),
+    ] = None,
     install: Annotated[
         bool | None,
         typer.Option(
@@ -177,6 +190,7 @@ def new(
             placement=placement,
             package_manager=package_manager,
             sdk_dependency=sdk_dependency,
+            ui_dependency=ui_dependency,
             install=install,
             no_input=no_input,
         )
@@ -192,6 +206,7 @@ def new(
             placement=answers.placement,
             package_manager=answers.package_manager,
             sdk_dependency=sdk_dependency,
+            ui_dependency=ui_dependency,
             algorithm=algorithm,
             ui=ui,
         )
@@ -211,12 +226,14 @@ def _web_answers(
     placement: str | None,
     package_manager: str | None,
     sdk_dependency: str | None,
+    ui_dependency: str | None = None,
     install: bool | None,
     no_input: bool,
 ) -> WebAnswers:
     """Flags when any were given; the questionnaire on a terminal; else no web UI."""
     flagged = any(
-        value is not None for value in (web, placement, package_manager, sdk_dependency)
+        value is not None
+        for value in (web, placement, package_manager, sdk_dependency, ui_dependency)
     )
     if install and not flagged:
         raise QgisSdkScaffoldError("--install needs --web vanilla or --web react")
@@ -706,6 +723,7 @@ def _resolve(
     placement: str | None,
     package_manager: str | None,
     sdk_dependency: str | None = None,
+    ui_dependency: str | None = None,
     algorithm: bool = False,
     ui: str | None = None,
 ) -> ScaffoldOptions:
@@ -725,6 +743,7 @@ def _resolve(
         ("placement", placement),
         ("package_manager", package_manager),
         ("sdk_dependency", sdk_dependency),
+        ("ui_dependency", ui_dependency),
     ):
         if value is not None:
             given[key] = value
