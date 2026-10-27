@@ -128,27 +128,21 @@ def test_choosing_a_directory_needs_the_desktop(fake_host: FakeHost) -> None:
 def test_the_buffer_dialog_is_the_buffer_action_as_a_form(fake_host: FakeHost) -> None:
     """``BufferDialog.build()`` returns a ``Column`` of the action's ``Form`` and
     one button; pressing it submits through ``ctx.actions`` and closes."""
-    from qgis_sdk.core import UiContext
-    from qgis_sdk.testing import FakeViewControl
-    from qgis_sdk.ui import ViewActions
+    from qgis_sdk.testing import build_surface, fake_ui_context
     from simple.surfaces import BufferDialog
 
     source = fake_host.runtime.actions["open_fixture"]()
-    view = FakeViewControl()
-    dialog = BufferDialog()
-    dialog.ctx = UiContext(
-        fake_host.notifications,
-        view,
+    ctx = fake_ui_context(
         fake_host.runtime.instance.ctx.scope.child(),
-        actions=ViewActions(fake_host.runtime, view_id="test"),
+        runtime=fake_host.runtime,
+        notifications=fake_host.notifications,
         layers=fake_host.layers,
         project=fake_host.project,
     )
-    dialog.initial = {"distance_metres": 250}
-
-    column = dialog.build()
-    snapshot = column.snapshot()
-    form, run = column.children()
+    built = build_surface(BufferDialog, ctx, initial={"distance_metres": 250})
+    dialog = built.surface
+    snapshot = built.root.snapshot()
+    form, run = built.root.children()
 
     assert [f["objectName"] for f in snapshot["children"][0]["fields"]] == [
         "form/layer_id",
@@ -161,14 +155,59 @@ def test_the_buffer_dialog_is_the_buffer_action_as_a_form(fake_host: FakeHost) -
     run.click()  # nothing chosen yet: a warning, the window stays
     assert fake_host.notifications.records[-1].level == "warning"
     assert "layer_id, working_crs are required" in fake_host.notifications.messages[-1]
-    assert view.close_requests == 0
+    assert ctx.view.close_requests == 0
 
     form.set_values({"layer_id": source.id, "working_crs": WORKING_CRS})
-    run.click()
+    run.click()  # @on("run").clicked is wired by build_surface as by the host
 
     assert fake_host.notifications.records[-1].level == "success"
-    assert view.close_requests == 1
+    assert ctx.view.close_requests == 1
+    assert ctx.log.messages[-1] == "buffered"
     output = next(
         layer for layer in fake_host.project.layer_ids() if layer != source.id
     )
     assert fake_host.layers.layer(output).crs == WORKING_CRS
+    assert dialog.form is form
+
+
+def test_the_results_dock_lists_what_the_plugin_produced(fake_host: FakeHost) -> None:
+    """``ResultsDock`` under the fake: ``Open the fixture`` runs the action and
+    its result lands in the table; the log view shows ``ctx.log``; ``Clear`` empties."""
+    from qgis_sdk.testing import build_surface, fake_ui_context
+    from qgis_sdk.ui import ui_snapshot
+    from simple.surfaces import ResultsDock
+
+    ctx = fake_ui_context(
+        fake_host.runtime.instance.ctx.scope.child(),
+        runtime=fake_host.runtime,
+        notifications=fake_host.notifications,
+        layers=fake_host.layers,
+        project=fake_host.project,
+    )
+    built = build_surface(ResultsDock, ctx)
+
+    names = [node["objectName"] for node in _walk(ui_snapshot(built.root))]
+    assert names[:6] == [
+        "results_dock",
+        "tools",
+        "buttons/open",
+        "buttons/clear",
+        "feedback/results",
+        "log_group",
+    ]
+    assert "feedback/log" in names
+
+    built.find("open").click()
+    assert built.surface.table.cells() == (("points", "point", ""),)
+    assert built.find("log").lines()[-1] == "[info] layer ready layer='points' crs=''"
+
+    built.find("clear").click()
+    assert built.surface.table.rows() == ()
+    built.close()
+
+
+def _walk(node: dict) -> list[dict]:
+    found = [node]
+    for child in node.get("children", ()):
+        found.extend(_walk(child))
+    return found

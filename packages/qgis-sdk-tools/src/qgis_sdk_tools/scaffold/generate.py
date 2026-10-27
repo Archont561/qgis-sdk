@@ -65,16 +65,18 @@ UI_ACTION = '''
 UI_MODULE = '''"""{title}: native surfaces, plain classes built in pure PyQt (decision-55).
 
 The host constructs a ``Dialog`` per opening, binds ``self.ctx`` (a
-``UiContext``: ``actions``, ``view``, ``notifications``) and ``self.initial``
-on the instance, then calls ``build()`` for the widget to show and disposes
-the scope when the window closes. Qt is imported inside ``build()`` so the
-module stays importable by the pure tests and ``describe_bindings``.
+``UiContext``: ``actions``, ``view``, ``notifications``, ``log``) and
+``self.initial`` on the instance, calls ``build()`` for the widget to show,
+connects the ``@on`` methods to the widgets they name and disposes the
+scope - connections included - when the window closes. Qt is imported
+inside ``build()`` so the module stays importable by the pure tests,
+``describe_bindings`` and ``qgis-sdk check`` (``UI004`` warns otherwise).
 """
 
 from __future__ import annotations
 
 from qgis_sdk import menu
-from qgis_sdk.ui import Dialog
+from qgis_sdk.ui import Dialog, on
 
 
 @menu("Plugins/{title}")
@@ -101,12 +103,12 @@ class PingDialog(Dialog):
         self.answer.setObjectName("answer")
         button = QPushButton("Ping", widget)
         button.setObjectName("ping")
-        button.clicked.connect(self.ping)
         layout.addWidget(self.value)
         layout.addWidget(button)
         layout.addWidget(self.answer)
         return widget
 
+    @on("ping").clicked  # connected after build(), by objectName; gone with the window
     def ping(self) -> None:
         """Call the plugin's own action through the validated, view-scoped path."""
         self.answer.setText(str(self.ctx.actions.ping(value=self.value.value())))
@@ -601,16 +603,22 @@ def _ui_readme(options: ScaffoldOptions) -> str:
 plain PyQt and the only place Qt is imported - the escape hatch, kept as the
 starter so nothing is hidden; `Form.for_action(self.ctx, "ping")` plus a
 `qgis_sdk.ui.Button` builds the same window from the action's declaration
-without touching Qt (see the `simple` example's `surfaces.py`).
+without touching Qt (see the `simple` example's `surfaces.py`, and its
+`ResultsDock` for a `Dock` of containers, a `ResultTable` and a `LogView`).
 `@menu("Plugins/...")` on the class puts it in the Plugins menu, `plugin.py`
 lists it in `surfaces` and binds the no-input `open_ping` action to the
-toolbar, which calls `self.ctx.ui.open(PingDialog, initial=...)`. Inside the
-dialog `self.ctx` is a `UiContext`: `self.ctx.actions.ping(...)` dispatches
-the plugin's own action with validation, `self.ctx.view.request_close()`
-closes the window. `qgis-sdk check` reads the surfaces: every interactive
-widget a `build()` constructs needs `setObjectName` (`UI001`; the catalogue's
-components name theirs), a bound action with inputs needs a surface that
-collects them (`UI003`), and `@toolbar(icon="name.svg")` names a file under
+toolbar, which calls `self.ctx.ui.open(PingDialog, initial=...)`. The method
+under `@on("ping").clicked` is connected to the widget of that `objectName`
+after `build()` and disconnected with the window; `ui = "ping.ui"` instead
+of `build()` loads a Qt Designer file the same way. Inside the dialog
+`self.ctx` is a `UiContext`: `self.ctx.actions.ping(...)` dispatches the
+plugin's own action with validation, `self.ctx.view.request_close()` closes
+the window. `qgis-sdk check` reads the surfaces: every interactive widget a
+`build()` constructs needs `setObjectName` (`UI001`; the catalogue's
+components name theirs), an `@on` name must exist in the `.ui` file
+(`UI002`), a bound action with inputs needs a surface that collects them
+(`UI003`), Qt imported at module level in the package is warned about
+(`UI004`), and `@toolbar(icon="name.svg")` names a file under
 `{plugin}/icons/` (`ICON001`). The starter test drives the action under
 `qgis_sdk.testing.FakeUi` without QGIS.
 """

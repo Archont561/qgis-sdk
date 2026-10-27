@@ -209,3 +209,73 @@ def test_check_project_reports_both_rules_with_remediation(tmp_path: Path) -> No
     assert "field_tools/icons/buffer.svg" in by_rule["ICON001"].remediation
     rendered = by_rule["ICON001"].render()
     assert rendered.startswith("field_tools/plugin.py:10:")
+
+
+UI_FILE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Buffer</class>
+ <widget class="QWidget" name="Buffer">
+  <layout class="QVBoxLayout" name="layout">
+   <item><widget class="QDoubleSpinBox" name="distance"/></item>
+   <item><widget class="QPushButton" name="go"/></item>
+  </layout>
+ </widget>
+</ui>
+"""
+
+
+def test_an_on_name_missing_from_the_designer_file_is_ui002(tmp_path: Path) -> None:
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "buffer.ui").write_text(UI_FILE, encoding="utf-8")
+    source = """
+        from qgis_sdk import ui
+        from qgis_sdk.ui import Dialog, on as wired
+
+
+        class Buffer(Dialog):
+            ui = "buffer.ui"
+
+            @wired("distance").changed
+            def distance(self, value): ...
+
+            @ui.on("go", "clicked")
+            def go(self): ...
+
+            @wired("gone").clicked
+            def gone(self): ...
+
+            @ui.on("missing", "toggled")
+            def missing(self, state): ...
+
+
+        class Lost(ui.Dock):
+            ui = "lost.ui"
+
+            @wired("x").changed
+            def x(self, value): ...
+
+
+        class HandBuilt(Dialog):
+            @wired("anything").changed
+            def anything(self, value): ...
+        """
+    found = list(
+        check_bindings(
+            textwrap.dedent(source),
+            path=Path("pkg/views.py"),
+            package_directory=package,
+            directory=package,
+        )
+    )
+    assert [f"{d.rule}:{d.line}:{d.message}" for d in found] == [
+        "UI002:15:@on('gone') in Buffer: buffer.ui declares no widget named 'gone'",
+        (
+            "UI002:18:@on('missing') in Buffer: buffer.ui declares no widget named "
+            "'missing'"
+        ),
+        "UI002:22:Lost.ui = 'lost.ui': pkg/lost.ui does not exist",
+    ]
+    assert "distance, go" in found[0].remediation
+    assert all(d.severity == "error" for d in found)

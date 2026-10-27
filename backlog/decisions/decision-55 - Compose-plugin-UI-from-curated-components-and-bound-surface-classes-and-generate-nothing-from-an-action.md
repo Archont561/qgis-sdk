@@ -141,3 +141,23 @@ action: a bound typed action is a finding, never a form. Still open under
 this decision: the component catalogue and `Form` (TASK-68), wiring
 decorators, mixins, containers, feedback, `Custom`, fake rendering and
 `UI002`/`UI004` (TASK-96), `.ui` loading and the web mirror.
+
+## Status review (2026-10-27, TASK-96): the catalogue and the wiring landed, stays `accepted`
+
+Points 2, 3, 5 and 7 are implemented as written: `@on(name).<listener>` /
+`@on(name, signal)` and `@subscribe(stream)` mark methods that the host (and
+`build_surface` under the fake) connects after `build()` and disconnects
+with the view's scope; `ctx.on`, `on_accept`/`on_close`; `ui = "file.ui"`
+loaded by `uic` natively and read as a `FakeUiTree` purely; the mixins
+`RunsJobs`, `SubscribesStreams`, `HasAcceptCancel` (the `AcceptCancel`
+*component* keeps that name, the mixin is `HasAcceptCancel`); containers
+`Panel`/`Group`/`Tabs`/`Row`/`Column`, feedback
+`JobProgress`/`LogView`/`ResultTable`, buttons `Button`/`RunButton`/
+`AcceptCancel`, `Custom`, the QWidget-class surface form, `ui_snapshot` of
+both renderings; `UI002` and the warning `UI004` (which applies to modules
+declared native, where `QGIS001` is lifted). One refinement to point 2: an
+event caused by the view's own `ctx.actions` call is flagged `echo` only
+when the stream pushed it synchronously during that call - a pull iterator
+never echoes. Still open: the web mirror of the catalogue (TASK-70) and the
+full `ctx.log` service behind `LogView` (TASK-106, decision-63).
+

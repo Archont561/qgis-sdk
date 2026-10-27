@@ -1,11 +1,14 @@
-"""UI001 / UI003 / ICON001: native UI that cannot work as written (decision-55).
+"""UI001 / UI002 / UI003 / ICON001: native UI that cannot work as written.
 
-``UI001``: a ``Dialog``/``Dock`` method constructs an interactive Qt or QGIS
-widget and never calls ``setObjectName`` on it - the UI snapshots agents
-read and the tests that drive a window find widgets by ``objectName``
-(decision-51), so an unnamed input is invisible to both. The catalogue's
-components name their widgets (``form/<field>``, ``buttons/<name>``); hand
-placed widgets must say their name themselves.
+Decision-55 point 7. ``UI001``: a ``Dialog``/``Dock`` method constructs an
+interactive Qt or QGIS widget and never calls ``setObjectName`` on it - the
+UI snapshots agents read and the tests that drive a window find widgets by
+``objectName`` (decision-51), so an unnamed input is invisible to both. The
+catalogue's components name their widgets (``form/<field>``,
+``buttons/<name>``); hand placed widgets must say their name themselves.
+``UI002``: a surface points at a Designer file (``ui = "x.ui"``) and an
+``@on(name)`` names a widget the file does not declare, or the file is not
+there - the host would refuse the surface when it opens.
 ``UI003``: an ``@action`` that takes inputs is bound to the toolbar, a menu or
 a shortcut, and no surface collects those inputs - the host refuses the
 trigger by name rather than inventing a dialog, so ``check`` says so first.
@@ -24,6 +27,9 @@ import ast
 from collections.abc import Iterator
 from pathlib import Path
 
+from qgis_sdk.models import QgisSdkUiError
+from qgis_sdk.ui.uifile import ui_names
+
 from .diagnostics import Diagnostic
 
 __all__ = ["ICON_DIRECTORY", "INTERACTIVE_WIDGETS", "check_bindings"]
@@ -32,6 +38,8 @@ ICON_DIRECTORY = "icons"
 _BINDINGS = frozenset({"toolbar", "menu", "shortcut"})
 _SOURCES = frozenset({"qgis_sdk", "qgis_sdk.bindings", "qgis_sdk.declarations"})
 _SURFACE_SOURCES = frozenset({"qgis_sdk.ui", "qgis_sdk.ui.surfaces"})
+_WIRING_SOURCES = frozenset({"qgis_sdk.ui", "qgis_sdk.ui.wiring"})
+_UI_MODULES = frozenset({"qgis_sdk.ui", "ui"})
 _SURFACES = frozenset({"Dialog", "Dock"})
 
 #: Widget classes a user interacts with; a label or a layout needs no name.
@@ -90,13 +98,18 @@ INTERACTIVE_WIDGETS = frozenset(
 
 
 def check_bindings(
-    source: str, *, path: Path, package_directory: Path | None
+    source: str,
+    *,
+    path: Path,
+    package_directory: Path | None,
+    directory: Path | None = None,
 ) -> Iterator[Diagnostic]:
-    """Yield the UI001, UI003 and ICON001 findings in ``source``, in source order.
+    """Yield the UI001-UI003 and ICON001 findings in ``source``, in source order.
 
     ``path`` is the root-relative path the diagnostics report;
     ``package_directory`` is where ``icons/`` is looked up (``None`` skips
-    ICON001, for a file outside any package).
+    ICON001, for a file outside any package); ``directory`` is where the
+    file lives, so a relative ``ui = "x.ui"`` resolves (``None`` skips UI002).
     """
     try:
         tree = ast.parse(source, filename=str(path))
@@ -113,6 +126,8 @@ def check_bindings(
                 yield from _check_icon(decorator, names, path, package_directory)
         if isinstance(node, ast.ClassDef) and names.is_surface(node):
             yield from _check_surface_widgets(node, path)
+            if directory is not None:
+                yield from _check_ui_names(node, names, path, directory)
 
 
 class _Names:
@@ -122,12 +137,17 @@ class _Names:
         self.bindings: dict[str, str] = {}
         self.action: set[str] = set()
         self.surfaces: set[str] = set()
+        self.on: set[str] = set()
         modules: list[str] = []
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module in _SURFACE_SOURCES:
+            if isinstance(node, ast.ImportFrom) and node.module in (
+                _SURFACE_SOURCES | _WIRING_SOURCES
+            ):
                 for alias in node.names:
-                    if alias.name in _SURFACES:
+                    if alias.name in _SURFACES and node.module in _SURFACE_SOURCES:
                         self.surfaces.add(alias.asname or alias.name)
+                    elif alias.name == "on" and node.module in _WIRING_SOURCES:
+                        self.on.add(alias.asname or alias.name)
             elif isinstance(node, ast.ImportFrom) and node.module in _SOURCES:
                 for alias in node.names:
                     local = alias.asname or alias.name
@@ -150,10 +170,30 @@ class _Names:
                 isinstance(base, ast.Attribute)
                 and base.attr in _SURFACES
                 and isinstance(base.value, ast.Attribute | ast.Name)
-                and ast.unparse(base.value) in ("qgis_sdk.ui", "ui")
+                and ast.unparse(base.value) in _UI_MODULES
             ):
                 return True
         return False
+
+    def on_target(self, decorator: ast.expr) -> ast.expr | None:
+        """The first argument of ``@on(...)`` however the decorator is spelled.
+
+        ``@on("x").changed``, ``@on("x", "sig")``, ``@ui.on("x")`` and an
+        alias ``from qgis_sdk.ui import on as wired`` all count.
+        """
+        call = decorator.value if isinstance(decorator, ast.Attribute) else decorator
+        if not isinstance(call, ast.Call) or not call.args:
+            return None
+        func = call.func
+        if isinstance(func, ast.Name):
+            return call.args[0] if func.id in self.on else None
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "on"
+            and ast.unparse(func.value) in _UI_MODULES
+        ):
+            return call.args[0]
+        return None
 
     def kind(self, decorator: ast.expr) -> str | None:
         """``"toolbar"``/``"menu"``/``"shortcut"``/``"action"`` or ``None``."""
@@ -289,6 +329,76 @@ def _check_surface_widgets(node: ast.ClassDef, path: Path) -> Iterator[Diagnosti
                     "its widget for you."
                 ),
             )
+
+
+def _check_ui_names(
+    node: ast.ClassDef, names: _Names, path: Path, directory: Path
+) -> Iterator[Diagnostic]:
+    """UI002: ``@on`` over a Designer file that declares no such widget."""
+    ui = _class_constant(node, "ui")
+    if not isinstance(ui, str) or not ui:
+        return
+    file = directory / ui
+    try:
+        declared = ui_names(file)
+    except QgisSdkUiError as error:
+        shown = file if Path(ui).is_absolute() else path.parent / ui
+        reason = "does not exist" if not file.is_file() else str(error)
+        yield Diagnostic(
+            rule="UI002",
+            path=path,
+            line=node.lineno,
+            column=node.col_offset + 1,
+            message=f"{node.name}.ui = {ui!r}: {shown.as_posix()} {reason}",
+            remediation=(
+                f"Save the Designer form next to {path.name} as {ui}, or point "
+                "`ui` at the file; the host loads it before wiring @on."
+            ),
+        )
+        return
+    known = ", ".join(declared) or "none"
+    for method in node.body:
+        if not isinstance(method, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        for decorator in method.decorator_list:
+            target = names.on_target(decorator)
+            if not isinstance(target, ast.Constant) or not isinstance(
+                target.value, str
+            ):
+                continue
+            if target.value in declared:
+                continue
+            yield Diagnostic(
+                rule="UI002",
+                path=path,
+                line=decorator.lineno,
+                column=decorator.col_offset + 1,
+                message=(
+                    f"@on({target.value!r}) in {node.name}: {ui} declares no "
+                    f"widget named {target.value!r}"
+                ),
+                remediation=(
+                    f"Use one of the objectNames the file declares ({known}) or "
+                    "name the widget in Qt Designer; wiring fails when the "
+                    "surface opens otherwise."
+                ),
+            )
+
+
+def _class_constant(node: ast.ClassDef, name: str) -> object:
+    for statement in node.body:
+        if isinstance(statement, ast.Assign):
+            targets = statement.targets
+            value = statement.value
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            targets = [statement.target]
+            value = statement.value
+        else:
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name) and target.id == name:
+                return value.value if isinstance(value, ast.Constant) else None
+    return None
 
 
 def _callee_name(call: ast.Call) -> str:

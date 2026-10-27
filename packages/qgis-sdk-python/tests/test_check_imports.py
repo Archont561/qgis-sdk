@@ -203,3 +203,32 @@ def test_a_syntax_error_is_reported_as_a_diagnostic_not_an_exception() -> None:
     assert found.rule == "SYNTAX001"
     assert found.line == 1
     assert found.severity == "error"
+
+
+def test_qt_at_module_level_in_a_declared_native_module_is_a_ui004_warning() -> None:
+    source = """
+        from qgis.core import QgsProject
+        from qgis.PyQt.QtWidgets import QDialog
+        import PyQt5.QtCore
+        from qgis.PyQt import uic
+
+        def later():
+            from qgis.PyQt.QtWidgets import QLabel
+        """
+    native = Path("field_tools/native/views.py")
+    found = diagnostics(source, path=native, native_modules=("field_tools.native.*",))
+
+    assert [(d.rule, d.line, d.severity) for d in found] == [
+        ("UI004", 3, "warning"),
+        ("UI004", 4, "warning"),
+        ("UI004", 5, "warning"),
+    ]
+    assert "defeats the fakes" in found[0].message
+    assert "build()" in found[0].remediation
+    # Outside the plugin package (a test module) the rule stays quiet.
+    assert (
+        diagnostics(
+            source, path=Path("tests/test_views.py"), native_modules=("tests.*",)
+        )
+        == []
+    )

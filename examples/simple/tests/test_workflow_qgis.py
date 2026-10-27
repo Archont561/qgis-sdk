@@ -117,6 +117,45 @@ def test_the_native_dialog_and_a_direct_call_dispatch_the_same_handler(
     assert {source.id, output_id} <= set(_project_ids())
 
 
+def test_the_results_dock_is_the_catalogue_mounted_as_qgis_widgets(
+    desktop: Any, qgis_app: Any
+) -> None:
+    """``ResultsDock`` opened by the host: the table, the log view and the two
+    buttons are real widgets with the catalogue's names; ``Open the fixture``
+    runs the action through ``ctx.actions`` and the row appears; the log view
+    shows the ``ctx.log`` records of other surfaces too."""
+    from qgis.PyQt.QtWidgets import QPlainTextEdit, QPushButton, QTableWidget
+    from qgis_sdk.ui import ui_snapshot
+    from simple.surfaces import ResultsDock
+
+    dock = desktop.runtime.instance.ctx.ui.open(ResultsDock)
+    window = dock.table.widget.window()
+    names = [node["objectName"] for node in _walk(ui_snapshot(window))]
+    assert {"buttons/open", "buttons/clear", "feedback/results", "feedback/log"} <= set(
+        names
+    )
+
+    window.findChild(QPushButton, "buttons/open").click()
+    qgis_app.processEvents()
+    table = window.findChild(QTableWidget, "feedback/results")
+    assert table.rowCount() == 1
+    assert table.item(0, 0).text() == "points"
+
+    desktop.runtime.instance.ctx.log.warning("from elsewhere", source="test")
+    log = window.findChild(QPlainTextEdit, "feedback/log")
+    assert log.toPlainText().splitlines()[-1].startswith("[warning] from elsewhere")
+
+    window.findChild(QPushButton, "buttons/clear").click()
+    assert table.rowCount() == 0
+
+
+def _walk(node: dict) -> list[dict]:
+    found = [node]
+    for child in node.get("children", ()):
+        found.extend(_walk(child))
+    return found
+
+
 def _crs(authid: str) -> Any:
     from qgis.core import QgsCoordinateReferenceSystem
 

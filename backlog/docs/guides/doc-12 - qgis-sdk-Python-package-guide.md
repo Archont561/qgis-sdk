@@ -542,7 +542,7 @@ the widget to show. Nothing an author writes outside `build()` imports Qt.
 
 ```python
 from qgis_sdk import action, menu, plugin, shortcut, toolbar
-from qgis_sdk.ui import Dialog, Dock
+from qgis_sdk.ui import Button, Dialog, Dock, on
 
 
 @menu("Plugins/Field tools")
@@ -550,13 +550,11 @@ class BufferDialog(Dialog):
     title = "Buffer a layer"
 
     def build(self):
-        from qgis.PyQt.QtWidgets import QPushButton
+        return Button("buffer", "Buffer 25 m")
 
-        button = QPushButton("Buffer 25 m")
-        button.clicked.connect(
-            lambda: self.ctx.actions.buffer(layer_id=self.initial["layer_id"], distance=25)
-        )
-        return button
+    @on("buffer").clicked
+    def buffer(self) -> None:
+        self.ctx.actions.buffer(layer_id=self.initial["layer_id"], distance=25)
 
 
 class LayerPanel(Dock, area="left"):
@@ -630,10 +628,12 @@ refused, so a double-click cannot submit twice. `ctx.actions.ids` and
 plugin_class=...)` stands in for the service: `ctx.ui.open(...)` records an
 `OpenedSurface` (`surface`, `initial`, `id`) instead of building anything,
 and `FakeViewControl` records `request_close`. `qgis-sdk new --ui native`
-writes this shape with a passing starter test; `qgis-sdk check` adds `UI003`
-and `ICON001` (a `@toolbar` icon that is not a file under `<package>/icons/`).
-`Form`, `@on`/`@subscribe` and `.ui` loading are later slices of TASK-68
-(decision-55); `build()` may return plain PyQt or one catalogue component.
+writes this shape with a passing starter test; `qgis-sdk check` adds `UI002`,
+`UI003`, `UI004` and `ICON001` (a `@toolbar` icon that is not a file under
+`<package>/icons/`). `build()` may return plain PyQt, one catalogue component
+or nothing at all when `ui = "file.ui"` names a Designer form; *Wiring*,
+*Containers, feedback, buttons and `Custom`* and *Testing surfaces without
+QGIS* below are the rest of the picture.
 
 ### Input components
 
@@ -715,6 +715,170 @@ service lands (TASK-77). Note the names `FileInput`, `DirectoryInput` and
 `Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
 handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
 surface shows); import the one you mean, or alias.
+
+### Wiring: `@on`, `@subscribe`, `ctx.on`
+
+A surface's methods are connected to its widgets *after* `build()` and
+disconnected when the window goes, by the host under QGIS and by
+`build_surface` under the fake (decision-55 point 2). Nothing is connected
+by hand and nothing is wrapped: the decorators only mark the method, so a
+test calls it directly.
+
+```python
+from qgis_sdk.ui import Column, Dialog, Distance, LogView, RunButton, StreamEvent, on, subscribe
+
+
+class Buffer(Dialog):
+    def build(self):
+        return Column("buffer", [Distance("distance"), RunButton("run", "buffer"), LogView("log")])
+
+    @on("distance").changed            # the component's listener; the value is the argument
+    def distance_changed(self, metres: float) -> None: ...
+
+    @on("run").finished                # what the action returned, or its job handle
+    def ran(self, result) -> None: ...
+
+    @on("distance", "editingFinished") # any Qt signal of the widget behind the name
+    def committed(self) -> None: ...
+
+    @subscribe("progress", layer="roads")   # a plugin @stream, with its request
+    def progress(self, event: StreamEvent) -> None: ...
+```
+
+**`@on(name).<signal>`** names a component or widget by the `name` it was
+built with (`"distance"`, which is `form/distance` on the Qt side; a bare
+`objectName` of a hand-built or Designer widget also works) and one of the
+catalogue's listener names: `changed`, `clicked`, `toggled`, `edited`,
+`selected`, `accepted`, `cancelled`, `finished`. On a component the
+listener is used (`Component.changed(...)`, `RunButton.finished(...)`); on
+a plain widget the matching Qt signal is (`valueChanged`, `textChanged`,
+`toggled`, `clicked`, ...). An unknown listener name is an `AttributeError`
+at class creation. **`@on(name, "signal")`** connects a Qt signal by its
+own name. Both pass as many positional arguments as the method declares,
+so `def go(self)` on a `clicked(bool)` signal is fine. A name `build()` did
+not produce, or a widget without that signal, is refused when the surface
+opens, naming both; `qgis-sdk check` reports the Designer-file case
+statically as `UI002`.
+
+**`@subscribe(stream, **request)`** subscribes the method to one of the
+plugin's `@stream` methods for the view's lifetime with the request
+validated the way a page's subscribe is (unknown or ill-typed arguments
+refused by name). The method receives a `StreamEvent(stream, kind,
+payload, echo, terminal)`: `kind` is the declared event kind, `"complete"`
+or `"error"`; `echo` is `True` when the event was caused by this view's own
+`ctx.actions` call (a synchronous push during the call - a pull iterator
+never echoes), so a panel can ignore what it just did. Events reach the
+method on the GUI thread only: a push from another thread waits for the
+host's pump (every 50 ms while something is pending; nothing runs once the
+view's scope closed). **`ctx.on(stream, callback, **request)`** is the
+imperative form and returns the `ViewSubscription` (`open`, `pending`,
+`dispose()`); `ctx.streams.open` lists the view's live subscriptions. Closing the window closes every subscription and asks a
+`PushSource` to `close()`.
+
+**Hooks.** `on_accept()` is what the Accept button of a `HasAcceptCancel`
+surface runs (returning `False` keeps the window open); `on_close()` runs
+once the window closes, before the view's scope disposes.
+
+### Containers, feedback, buttons and `Custom`
+
+The rest of the catalogue (decision-55 point 3), each a `Component` with a
+state and a semantic `snapshot()`, mounted as QGIS widgets by the host:
+
+| Component | Holds | Native widget / objectName |
+|---|---|---|
+| `Row(name, children)` / `Column(name, children)` | children | `QWidget` with `QHBoxLayout`/`QVBoxLayout`, `objectName = name` |
+| `Panel(name, children, scrollable=False)` | children | `QWidget`, or a `QScrollArea` around it |
+| `Group(name, children, label=, collapsible=False)` | children | `QGroupBox` / `QgsCollapsibleGroupBox` |
+| `Tabs(name, children)` | one child per tab, each child's `label` the title; `current()`/`set_current(name)`/`changed` | `QTabWidget` |
+| `Button(name, text)` | `clicked(listener)`, `click()` | `QPushButton`, `buttons/<name>` |
+| `RunButton(name, action_id, values=, progress=)` | runs the action through `ctx.actions` with `values` (a `Form`, a mapping or a callable); `last`, `finished(listener)` | `QPushButton`, `buttons/<name>` |
+| `AcceptCancel(name="dialog_buttons")` | `accepted(listener)`, `cancelled(listener)`, `accept()`, `cancel()` | `QDialogButtonBox`, `buttons/<name>` |
+| `JobProgress(name)` | `bind(handle)` follows a job handle: `status`, `progress`, `message`; the Cancel button cancels it | progress bar + label + button, `feedback/<name>` |
+| `LogView(name, limit=500)` | the plugin's `ctx.log` records as they arrive: `records()`, `lines()`, `clear()` (refused by name without `ctx.log`) | `QPlainTextEdit`, `feedback/<name>` |
+| `ResultTable(name, columns)` | rows of mappings under `columns` (keys or `(key, heading)`): `set_rows`, `rows()`, `cells()`, `select(i)`, `selected()`, `selected_row()`, `changed` | `QTableWidget`, `feedback/<name>` |
+| `Custom(name, widget_or_factory)` | any `QWidget` you built, or a zero-argument factory called at mount | the widget itself, `custom/<name>` |
+
+`Container.find(name)` reaches a descendant by name; `attach(ctx)` and
+`dispose()` walk the children. `ui_snapshot(widget_or_component)` (decision-51)
+lists the semantic nodes of a mounted tree or of an unmounted component tree,
+so an agent and a pure test read the same structure.
+
+**The widget form.** A plain class - typically a `QWidget` subclass you
+already have - with `kind = "dialog"` or `kind = "dock"` and a constructor
+taking the `UiContext` is accepted in `surfaces` as it is; the host shows the
+instance, binds `initial` when it can and calls `on_close()` if present.
+It opens only under a host (the class *is* Qt), so keep it in a module
+declared native and reach it from tests through the desktop harness.
+
+### Behaviour mixins
+
+Three mixins add the common behaviours to a `Dialog`/`Dock` (decision-55
+point 5); list them before the base class:
+
+```python
+from qgis_sdk.ui import AcceptCancel, Column, Dialog, HasAcceptCancel, JobProgress, RunsJobs
+
+
+class Export(RunsJobs, HasAcceptCancel, Dialog):
+    def build(self):
+        self.progress = JobProgress("job")
+        return Column("export", [..., self.progress, AcceptCancel()])
+
+    def on_accept(self):
+        self.run("export_layer", layer_id=..., file_name="out.gpkg")  # a job: tracked, shown, cancelled on close
+        return False  # keep the window open while it runs
+```
+
+- **`RunsJobs`**: `self.run(action_id, **values)` calls the action through
+  `ctx.actions`; a returned job handle is tracked (`self.jobs`), bound to
+  the `JobProgress` stored as `self.progress` (`progress_attribute` renames
+  it) and cancelled when the window closes; `cancel_jobs()` does it early.
+- **`SubscribesStreams`**: `self.subscribe(stream, callback, **request)`
+  and `self.subscriptions`/`unsubscribe_all()` over `ctx.on`.
+- **`HasAcceptCancel`**: wires the `AcceptCancel` row named `buttons`
+  (`"dialog_buttons"` by default; a `QDialogButtonBox` of that `objectName`
+  in a hand-built or Designer tree works too): Accept runs `on_accept()`
+  and closes unless it returned `False`; Cancel runs `on_cancel()` and
+  closes.
+
+### Designer files and the pure-PyQt path
+
+`ui = "buffer.ui"` on a surface names a Qt Designer file relative to the
+class's module; the default `build()` loads it with `uic` under the host,
+and `@on` names are the file's `objectName`s. Under the fake,
+`build_surface` reads the same XML into a `FakeUiTree` of `FakeWidget`s
+whose signals (`clicked`, `valueChanged`, ... by widget class) a test
+`emit`s. `qgis_sdk.ui.load_ui(cls)` is the loader when a `build()` wants to
+add to the loaded form. The pure-PyQt path stays: `build()` may construct
+Qt widgets itself (import Qt *inside* `build()`), name the interactive ones
+(`UI001`) and still use `@on(name, "signal")` and the mixins over them -
+the scaffold's `PingDialog` is written that way.
+
+### Testing surfaces without QGIS: `build_surface`
+
+`qgis_sdk.testing.build_surface(Surface, ctx, initial=)` runs `build()`
+exactly as the host would, minus Qt: the instance gets `ctx` and `initial`,
+the returned component is attached (never mounted), a `ui =` surface gets
+the fake tree, and the `@on`/`@subscribe` methods and the mixins are wired.
+It returns a `BuiltSurface` (`surface`, `root`, `ctx`, `find(name)`,
+`close()`); `fake_ui_context(scope, runtime=started_runtime, **services)`
+builds the `UiContext` over `RecordingNotifications`, `FakeViewControl`,
+`RecordingLog` and - given the runtime - real `ViewActions`/`ViewStreams`,
+so a button click under the fake dispatches the plugin's own handler and a
+`@subscribe` receives what the plugin's stream pushes. The example's
+`tests/test_workflow_pure.py` drives `BufferDialog` and `ResultsDock` this
+way; its `test_workflow_qgis.py` opens them under the host and checks the
+same names on the Qt tree.
+
+### `ctx.log`
+
+`ctx.log.info|warning|error(message, **fields)` is the plugin's structured
+log (decision-63; the minimal form from TASK-96, the full service in
+TASK-106): a `LogRecord(level, message, fields, plugin, time)` goes to the
+QGIS message log under the plugin's tab on the Desktop (`NativeLog`) and to
+`RecordingLog.records`/`.messages` in tests; `subscribe(listener)` is how
+`LogView` follows it. `UiContext` carries `log` as well, so a surface logs
+what it did and every `LogView` of the plugin shows it.
 
 ### `ctx.notifications`
 
@@ -1450,7 +1614,9 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | `VERSION003` (warning) | `pyproject.toml` declares no `qgis-sdk-runtime` (or `qgis-sdk`) requirement; `build` ships the installed runtime and says so in the NOTICE. |
 | `VERSION004` | The installed `qgis-sdk-runtime` does not satisfy the project's requirement. The finding names both and the `pip install` line; the tools never install. |
 | `UI001` | A method of a `Dialog`/`Dock` subclass constructs an interactive Qt or QGIS widget (`QPushButton`, `QLineEdit`, `QSpinBox`, `QgsMapLayerComboBox`, ... - `qgis_sdk_tools.check.ui.INTERACTIVE_WIDGETS`) and never calls `setObjectName` on the name holding it; a constructor passed straight to `addWidget` is flagged too. Name it, or use a `qgis_sdk.ui` component, which names its widget (`form/<field>`, `buttons/<name>`). |
+| `UI002` | A `Dialog`/`Dock` subclass with `ui = "file.ui"` has an `@on(name)` whose `name` is not an `objectName` the Designer file declares, or the file is not next to the module. The wiring would refuse the surface when it opens; the finding lists the names the file does declare. |
 | `UI003` | A method carrying `@toolbar`/`@menu`/`@shortcut` and `@action` takes inputs beyond `self`; a button collects nothing. Drop the inputs, or bind a surface that collects them and calls `self.ctx.actions.<id>(...)`. |
+| `UI004` (warning) | A module of the plugin package that is *declared native* still imports `qgis.PyQt`, `PyQt5/6` or `PySide2/6` when it loads: the exemption lifts `QGIS001`, but Qt at module level defeats the fakes (`build_surface`, `ui_snapshot`) and `check`'s inspection of that module. Keep Qt inside `build()`; the catalogue needs no Qt import. |
 | `ICON001` | `@toolbar(icon="...")` names something that is not a file under `<package>/icons/` (a bare file name is required). |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
@@ -1845,6 +2011,35 @@ removed (TASK-68, slice 68c).** See *Forms: an action's inputs as a window*.
 - `qgis-sdk check` reports `UI001`; the scaffold's `PingDialog` already
   names its widgets. The desktop-adapter qualification fixture gained a
   `Form`-built dialog and the `form_submitted` stage.
+
+**Wiring, mixins, containers, feedback, `Custom`, `ctx.log` (TASK-96).**
+See *Wiring*, *Containers, feedback, buttons and `Custom`*, *Behaviour
+mixins*, *Designer files and the pure-PyQt path* and *Testing surfaces
+without QGIS* above.
+
+- `qgis_sdk.ui` exports `on`, `subscribe`, `wire_surface`, `wires_of`,
+  `StreamEvent`, `ViewStreams`, `ViewSubscription`, `load_ui`, the
+  containers `Panel`/`Group`/`Tabs`/`Row` (next to `Column`), the feedback
+  `JobProgress`/`LogView`/`ResultTable`, the buttons `RunButton`/`AcceptCancel`
+  (next to `Button`), `Custom`, `ui_snapshot` and the mixins
+  `RunsJobs`/`SubscribesStreams`/`HasAcceptCancel`. `Surface` gained the
+  `ui` class attribute and the `on_accept()`/`on_close()` hooks; a plain
+  class with `kind` and a `ctx` constructor argument is accepted in
+  `surfaces` (the widget form).
+- A `Button`/`Form` listener connected by hand inside `build()` keeps
+  working; the `@on` form is the one the fake wires for you, so a test that
+  called `build()` directly and clicked should move to `build_surface`.
+- `UiContext` gained `log` and `streams` and the `on(stream, callback)`
+  method; `PluginContext` gained `log` (`qgis_sdk.services.Log`,
+  `NativeLog` on the Desktop, `RecordingLog` in `qgis_sdk.testing`).
+  `fake_ui_context(runtime=)` builds `actions` *and* `streams`.
+- A view's own synchronous push during `ctx.actions.<id>()` is delivered
+  with `StreamEvent.echo = True`; bridge subscribers are unchanged.
+- `qgis-sdk check` reports `UI002` and the warning `UI004`;
+  `check_bindings(..., directory=)` is how the Designer file is found.
+- The `simple` example gained `ResultsDock`, a `Dock` of the catalogue;
+  the scaffold's `PingDialog` uses `@on("ping").clicked` instead of
+  `button.clicked.connect`.
 
 ## 0.6.0 migration notes
 

@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-26T11:01:00Z'
-updated_date: '2026-10-27 08:50'
+updated_date: '2026-10-27 09:31'
 labels: []
 milestone: m-6
 dependencies:
@@ -34,4 +34,6 @@ decision-55 points 2, 3, 5 and 7. @on(name).changed|clicked|toggled|edited and @
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-26: AC 4 added - minimal ctx.log as LogView's source (decision-63).
+
+2026-10-27: landed in three slices on one branch - 96a 316a6ea (containers, feedback, buttons, Custom, widget-form surface, ui_snapshot, ctx.log minimum), 96b c053bf7 (@on/@subscribe/ctx.on, hooks, ui= loading, RunsJobs/SubscribesStreams/HasAcceptCancel, echo flag, host stream pump), 96c (UI002/UI004, doc-12, the example's ResultsDock, scaffold PingDialog on @on). Pure wiring tests 16, native 5; example 19 pure / 6 native; quick suite 1841 passed. Status goes Done with the ACs once the pull request is merged.
 <!-- SECTION:NOTES:END -->

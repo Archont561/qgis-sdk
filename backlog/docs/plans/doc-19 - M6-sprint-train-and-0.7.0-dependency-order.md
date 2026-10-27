@@ -37,13 +37,13 @@ TASK-69 (sprint 2) landed in PR #104 (`c8cd119`) as three commits:
 | 69b | vanilla and React scaffold templates render the `ping` form from the declaration and a layer picker over `layers.list`; `grants = ["layers.read"]` in the scaffold and the example; scaffold-web harness green | done (`3ddd7ca`) |
 | 69c | doc-13 stores/adapters/Tier table, READMEs, backlog closure | done (`ae13694`) |
 
-TASK-96 (sprint 3) lands in slices, each a pull request:
+TASK-96 (sprint 3) landed in three slices, one commit series in one pull request:
 
 | Slice | Content | Status |
 | --- | --- | --- |
-| 96a | containers `Panel`, `Group`, `Tabs`, `Row`; feedback `JobProgress`, `LogView`, `ResultTable`; buttons `RunButton`, `AcceptCancel`; `Custom(qwidget)`; a `QWidget` class taking `ctx` accepted as a surface; `ui_snapshot` under the fake; the `ctx.log` minimum (decision-63) with a recording fake and the `QgsMessageLog` adapter | in progress |
-| 96b | `@on(name).changed\|clicked\|toggled\|edited` / `@on(name, signal)`, `@subscribe(stream)`, `ctx.on`, `on_accept`/`on_close`, `ui="file.ui"` loading, mixins `RunsJobs`/`SubscribesStreams`/`AcceptCancel`, the echo flag | planned |
-| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | planned |
+| 96a | containers `Panel`, `Group`, `Tabs`, `Row`; feedback `JobProgress`, `LogView`, `ResultTable`; buttons `RunButton`, `AcceptCancel`; `Custom(qwidget)`; a `QWidget` class taking `ctx` accepted as a surface; `ui_snapshot` under the fake; the `ctx.log` minimum (decision-63) with a recording fake and the `QgsMessageLog` adapter | done (`316a6ea`) |
+| 96b | `@on(name).changed\|clicked\|toggled\|edited` / `@on(name, signal)`, `@subscribe(stream)`, `ctx.on`, `on_accept`/`on_close`, `ui="file.ui"` loading, mixins `RunsJobs`/`SubscribesStreams`/`HasAcceptCancel`, the echo flag | done (`c053bf7`) |
+| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | done (this pull request) |
 
 ## 1. Where m-6 starts from
 

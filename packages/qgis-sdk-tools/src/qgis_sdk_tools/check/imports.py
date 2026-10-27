@@ -1,11 +1,17 @@
-"""QGIS001 / ARCH001: native imports that execute when a module loads (decision-14).
+"""QGIS001 / ARCH001 / UI004: native imports that execute when a module loads.
 
-The question is *when* an import runs, not whether it appears: a statement in
-the module body, a class body, a ``try``, a ``with`` or a module-level ``if``
-runs when the module is imported, so a pure test or ``describe_plugin`` cannot
-import that module without QGIS. A statement inside a function runs when the
-function is called, and a statement under ``if TYPE_CHECKING:`` never runs.
-Only the source is read; nothing is imported.
+The question is *when* an import runs, not whether it appears (decision-14):
+a statement in the module body, a class body, a ``try``, a ``with`` or a
+module-level ``if`` runs when the module is imported, so a pure test or
+``describe_plugin`` cannot import that module without QGIS. A statement
+inside a function runs when the function is called, and a statement under
+``if TYPE_CHECKING:`` never runs. Only the source is read; nothing is imported.
+
+A module declared native is exempt from QGIS001 and ARCH001; ``UI004`` then
+warns when it imports Qt itself (``qgis.PyQt``, ``PyQt*``, ``PySide*``) at
+module level inside the plugin package, because that defeats the fake
+rendering and ``check``'s inspection even though QGIS is present
+(decision-55 point 7).
 """
 
 from __future__ import annotations
@@ -17,10 +23,18 @@ from pathlib import Path
 
 from .diagnostics import Diagnostic
 
-__all__ = ["NATIVE_ADAPTER_PACKAGE", "NATIVE_ROOTS", "check_source", "module_name"]
+__all__ = [
+    "NATIVE_ADAPTER_PACKAGE",
+    "NATIVE_ROOTS",
+    "QT_ROOTS",
+    "check_source",
+    "module_name",
+]
 
 # Top-level packages that need a QGIS or Qt runtime to import.
 NATIVE_ROOTS = frozenset({"qgis", "PyQt5", "PyQt6", "PySide2", "PySide6"})
+# The Qt bindings themselves, however reached: what a surface keeps in ``build()``.
+QT_ROOTS = frozenset({"qgis.PyQt", "PyQt5", "PyQt6", "PySide2", "PySide6"})
 # The SDK's own PyQGIS-backed adapters: pure code reaches them from inside the
 # function that runs in QGIS, never at import time (ARCH001).
 NATIVE_ADAPTER_PACKAGE = "qgis_sdk.adapters.qgis"
@@ -63,14 +77,48 @@ def check_source(
             remediation="Fix the syntax error; check reads the file without importing it.",
         )
         return
-    if is_native_module(module, native_modules):
-        return
+    native = is_native_module(module, native_modules)
+    if native and (len(path.parts) < 2 or path.parts[0] == "tests"):
+        return  # a native module outside the plugin package: nothing to say
     for node, imported in _import_time_imports(tree):
         for name in imported:
-            diagnostic = _classify(name, node, path=path, module=module)
+            diagnostic = (
+                _qt_in_native(name, node, path=path, module=module)
+                if native
+                else _classify(name, node, path=path, module=module)
+            )
             if diagnostic is not None:
                 yield diagnostic
                 break  # one finding per statement, however many names it binds
+
+
+def _is_qt(name: str) -> bool:
+    return any(name == root or name.startswith(root + ".") for root in QT_ROOTS)
+
+
+def _qt_in_native(
+    name: str, node: ast.stmt, *, path: Path, module: str
+) -> Diagnostic | None:
+    if not _is_qt(name):
+        return None
+    return Diagnostic(
+        rule="UI004",
+        path=path,
+        line=node.lineno,
+        column=node.col_offset + 1,
+        severity="warning",
+        message=(
+            f"`{name}` is imported when `{module}` loads; Qt at module level "
+            "defeats the fakes (build_surface, ui_snapshot) and check's "
+            "inspection of the module"
+        ),
+        remediation=(
+            "Keep Qt inside build() or the method that needs it - the "
+            "qgis_sdk.ui catalogue needs no Qt import at all - so the module "
+            "imports in a pure test; the declared-native exemption only lifts "
+            "QGIS001."
+        ),
+    )
 
 
 def _classify(
