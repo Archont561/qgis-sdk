@@ -27,6 +27,7 @@ def _no_repository_alias_manifest(tmp_path, monkeypatch):
     """
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "absent-alias.json")
     monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "absent-web.py")
+    monkeypatch.setattr(release, "_UI_ALIAS_PACKAGE", tmp_path / "absent-ui-alias.json")
 
 
 SAMPLE_VERSIONRC = """\
