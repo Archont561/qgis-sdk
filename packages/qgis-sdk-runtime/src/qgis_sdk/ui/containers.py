@@ -1,4 +1,4 @@
-"""The catalogue's layouts beside ``Column`` (decision-55 point 3; TASK-96).
+"""The catalogue's layouts beside ``Column`` (decision-55 point 3).
 
 Every container here is a :class:`~qgis_sdk.ui.components.Container`: it
 holds other components, attaches and disposes them with itself and names

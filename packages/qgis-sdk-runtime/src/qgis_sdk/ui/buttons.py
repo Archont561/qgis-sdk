@@ -1,4 +1,4 @@
-"""Buttons beyond the plain one: ``RunButton`` and ``AcceptCancel`` (TASK-96).
+"""Buttons beyond the plain one: ``RunButton`` and ``AcceptCancel``.
 
 ``RunButton`` presses into ``ctx.actions``: it collects the values (from a
 ``Form``, a mapping or a callable), calls the named action and, when the

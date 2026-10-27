@@ -1,4 +1,4 @@
-"""The running palette, as the handshake's ``theme`` (decision-16, TASK-70).
+"""The running palette, as the handshake's ``theme`` (decision-16).
 
 A page inside QGIS should look like QGIS. The WebEngine adapter reads
 ``QApplication.palette()`` through :func:`palette_theme` and hands the result to

@@ -1,5 +1,5 @@
 /**
- * The versioned transport contract a web view speaks (TASK-4, first slice).
+ * The versioned transport contract a web view speaks.
  *
  * This module is the client half of `qgis_sdk.bridge`: it parses the replies the
  * host produces, correlates them by call id, and refuses anything that does not

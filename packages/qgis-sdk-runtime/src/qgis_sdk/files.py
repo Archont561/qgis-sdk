@@ -1,4 +1,4 @@
-"""The ``Files`` service over the host authority (decision-20, TASK-68).
+"""The ``Files`` service over the host authority (decision-20).
 
 One :class:`~qgis_sdk.bridge.authority.HostAuthority` per runtime mints every
 ref a plugin ever sees: the page host's, the Processing toolbox's and the

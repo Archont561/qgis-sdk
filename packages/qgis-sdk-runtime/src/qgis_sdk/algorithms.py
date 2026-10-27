@@ -23,7 +23,7 @@ Each input maps to one *parameter kind* - what a host renders for it. The
 kinds are deliberately few: a marked layer, a marked CRS, a marked distance in
 metres, or a plain primitive. Anything else is refused at decoration, naming
 the input and the supported kinds, so no adapter has to invent a widget at run
-time (TASK-39).
+time.
 """
 
 from __future__ import annotations

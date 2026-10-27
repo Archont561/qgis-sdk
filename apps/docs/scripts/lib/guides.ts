@@ -6,9 +6,11 @@
  * is read. Nothing here is hand-maintained: each guide is split into one page
  * per `##` section under a directory of its own, the preamble becomes that
  * directory's index, sub-headings move up one level so the page title is the
- * only H1, and the links the guides write for the backlog are rewritten -
- * same-guide and cross-guide anchors to the routes that now hold them, every
- * other backlog record (decisions, tasks, plans) to the repository on GitHub.
+ * only H1, and the links the guides write for the backlog are rewritten:
+ * same-guide and cross-guide anchors to the routes that now hold them, a
+ * decision record to its row on the design-decisions page, any other backlog
+ * record to the repository on GitHub. A link to a process record (tasks,
+ * plans, agent rules) is dropped, its text kept.
  *
  * Pure functions only: the CLI in `../generate.ts` does the file system work.
  */
@@ -23,6 +25,8 @@ export interface Guide {
 	readonly section: string;
 	/** The sidebar group label. */
 	readonly label: string;
+	/** The index page's title when it should differ from the guide's H1. */
+	readonly title?: string;
 }
 
 /** The three guides decision-29 named, in the order the sidebar shows them. */
@@ -42,15 +46,75 @@ export const GUIDES: readonly Guide[] = [
 	{
 		id: "doc-14",
 		file: "doc-14 - Workspace-development-qualification-harnesses-and-evidence.md",
-		section: "workspace",
-		label: "Workspace and qualification",
+		// Contributor material: how the workspace is developed and what the
+		// harnesses proved. It is not part of the consumer reference.
+		section: "contributing/workspace",
+		label: "Contributing",
+		title: "Workspace, harnesses, and evidence",
 	},
 ];
 
 export interface Section {
 	readonly heading: string;
+	/**
+	 * The page slug under the guide's route. A plain section is the GitHub
+	 * slug of its heading; a migration note is `migration/<name>`.
+	 */
 	readonly slug: string;
 	readonly body: string;
+	/** Set when the section is a migration note. */
+	readonly migration?: MigrationPage;
+}
+
+/**
+ * A migration note's place on the site. The guides title them by version
+ * ("0.4.0 migration notes") and keep them in whatever order they were
+ * written; the site files them under `<guide>/migration/<name>` and lists
+ * them newest first.
+ */
+export interface MigrationPage {
+	/** The last route segment, e.g. `v0-4`. */
+	readonly name: string;
+	/** The page title without the draft marker. */
+	readonly title: string;
+	/** Sidebar order; newest first, an unreleased line before every release. */
+	readonly order: number;
+}
+
+const MIGRATION_NOTES =
+	/^(\d+)\.(\d+)\.\d+ migration notes(?: \(in progress\))?$/;
+const MIGRATION_POLICY =
+	/^(\d+)\.(\d+)\.\d+ experimental release and migration policy$/;
+const NEXT_MINOR_NOTES = /^Next minor \(unreleased\) migration notes$/;
+
+/** Classify a `##` heading as a migration note, or `null`. */
+export function migrationPage(heading: string): MigrationPage | null {
+	const versioned = (match: RegExpExecArray): number =>
+		1000 - (Number(match[1]) * 100 + Number(match[2]));
+	const notes = MIGRATION_NOTES.exec(heading);
+	if (notes) {
+		return {
+			name: `v${notes[1]}-${notes[2]}`,
+			title: heading.replace(/ \(in progress\)$/, ""),
+			order: versioned(notes),
+		};
+	}
+	const policy = MIGRATION_POLICY.exec(heading);
+	if (policy) {
+		return {
+			name: `v${policy[1]}-${policy[2]}-experimental-policy`,
+			title: heading,
+			order: versioned(policy),
+		};
+	}
+	if (NEXT_MINOR_NOTES.test(heading)) {
+		return {
+			name: "next-minor",
+			title: "Next minor migration notes",
+			order: 0,
+		};
+	}
+	return null;
 }
 
 export interface AnchorTarget {
@@ -164,7 +228,12 @@ function headingOf(line: string): Heading | null {
 export function splitGuide(markdown: string): SplitGuide {
 	let title = "";
 	const intro: string[] = [];
-	const sections: { heading: string; slug: string; lines: string[] }[] = [];
+	const sections: {
+		heading: string;
+		slug: string;
+		lines: string[];
+		migration?: MigrationPage;
+	}[] = [];
 	const anchors = new Map<string, AnchorTarget>();
 	const seen = new Map<string, number>();
 	const uniqueSlug = (text: string): string => {
@@ -183,9 +252,11 @@ export function splitGuide(markdown: string): SplitGuide {
 				continue;
 			}
 			if (heading?.level === 2) {
-				const slug = uniqueSlug(heading.text);
-				sections.push({ heading: heading.text, slug, lines: [] });
-				anchors.set(slug, { page: slug, anchor: null });
+				const anchor = uniqueSlug(heading.text);
+				const migration = migrationPage(heading.text) ?? undefined;
+				const slug = migration ? `migration/${migration.name}` : anchor;
+				sections.push({ heading: heading.text, slug, lines: [], migration });
+				anchors.set(anchor, { page: slug, anchor: null });
 				continue;
 			}
 			if (heading && current) {
@@ -202,13 +273,43 @@ export function splitGuide(markdown: string): SplitGuide {
 			heading: s.heading,
 			slug: s.slug,
 			body: s.lines.join("\n").trim(),
+			...(s.migration ? { migration: s.migration } : {}),
 		})),
 		anchors,
 	};
 }
 
-/** Markdown links, `[text](target)`; targets carry no spaces (the guides use `%20`). */
-const LINK = /\]\(([^)\s]+)\)/g;
+/**
+ * Markdown links, `[text](target)`; targets carry no spaces (the guides use
+ * `%20`). The leading `!` of an image is captured so images are left alone.
+ */
+const LINK = /(!?)\[([^[\]]*)\]\(([^)\s]+)\)/g;
+
+/**
+ * Repository paths that are process, not product: the site never links them.
+ * Official docs cite shipped artifacts (releases, registries, versions); how
+ * the work was planned and tracked stays in the repository.
+ */
+const PROCESS_PATHS = [
+	/^backlog\/tasks\//,
+	/^backlog\/milestones\//,
+	/^backlog\/docs\/plans\//,
+	/^AGENTS\.md$/,
+	/^\.agents\//,
+];
+
+/**
+ * A decision record: the site renders them as one curated table, so a link
+ * lands on the record's row there rather than on the raw file.
+ */
+const DECISION_PATH = /^backlog\/decisions\/decision-(\d+)\b/;
+
+/** Repository-relative path of a link written inside the guides directory. */
+function repositoryPath(relative: string): string | null {
+	const decoded = decodeURIComponent(relative.split("#", 2)[0] ?? "");
+	const resolved = posix.normalize(posix.join(GUIDES_DIR, decoded));
+	return resolved.startsWith("..") ? null : resolved;
+}
 
 function plainText(markdown: string): string {
 	return markdown
@@ -247,6 +348,25 @@ function describe(body: string, fallback: string): string {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A section the guide itself marks as not released yet. */
+const DRAFT_HEADING = /\((?:in progress|unreleased)\)/i;
+
+/**
+ * The caution a draft page opens with, or `null` for released content. The
+ * notes of a line still being cut are published because the release needs
+ * them, but they must not read as finished guidance.
+ */
+function draftNotice(heading: string): string | null {
+	if (!DRAFT_HEADING.test(heading)) {
+		return null;
+	}
+	const version = /\d+\.\d+\.\d+/.exec(heading)?.[0];
+	const line = version
+		? `the unreleased ${version} line`
+		: "the unreleased next minor";
+	return `:::caution[Draft]\nThese notes describe ${line}. Content changes as the release is cut.\n:::\n`;
+}
 
 function frontmatter(fields: Record<string, unknown>): string {
 	const lines: string[] = ["---"];
@@ -293,24 +413,22 @@ class Renderer {
 		return `${dir}${target.page}/${target.anchor ? `#${target.anchor}` : ""}`;
 	}
 
-	private repositoryUrl(relative: string): string | null {
-		const [path, anchor] = relative.split("#", 2);
-		const decoded = decodeURIComponent(path ?? "");
-		const resolved = posix.normalize(posix.join(GUIDES_DIR, decoded));
-		if (resolved.startsWith("..")) {
-			return null;
-		}
-		const encoded = resolved.split("/").map(encodeURIComponent).join("/");
+	private repositoryUrl(path: string, relative: string): string {
+		const anchor = relative.split("#", 2)[1];
+		const encoded = path.split("/").map(encodeURIComponent).join("/");
 		const ref = this.options.ref ?? "main";
 		return `${this.options.repository}/blob/${ref}/${encoded}${anchor ? `#${anchor}` : ""}`;
 	}
 
-	/** Where a link written inside `guide` points once the guide is split. */
+	/**
+	 * Where a link written inside `guide` points once the guide is split, or
+	 * `null` when the site must not link it at all (the text is kept).
+	 */
 	private rewrite(
 		guide: Guide,
 		url: string,
 		warn: (reason: string) => void,
-	): string {
+	): string | null {
 		if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
 			return url;
 		}
@@ -327,12 +445,20 @@ class Renderer {
 			}
 		}
 		if (targetGuide === undefined) {
-			const repository = this.repositoryUrl(url);
-			if (repository === null) {
+			const path = repositoryPath(url);
+			if (path === null) {
 				warn("escapes the repository");
 				return url;
 			}
-			return repository;
+			if (PROCESS_PATHS.some((pattern) => pattern.test(path))) {
+				warn("cites a process record; the link was dropped");
+				return null;
+			}
+			const decision = DECISION_PATH.exec(path);
+			if (decision) {
+				return `${this.options.base}/reference/design-decisions/#decision-${decision[1]}`;
+			}
+			return this.repositoryUrl(path, url);
 		}
 		if (anchor === null || anchor === "") {
 			return this.route(targetGuide, null);
@@ -357,12 +483,18 @@ class Renderer {
 				if (segment.code) {
 					return segment.text;
 				}
-				let text = segment.text.replace(LINK, (_whole, url: string) => {
-					const rewritten = this.rewrite(guide, url, (reason) =>
-						this.warnings.push({ guide: guide.id, page, link: url, reason }),
-					);
-					return `](${rewritten})`;
-				});
+				let text = segment.text.replace(
+					LINK,
+					(whole: string, image: string, label: string, url: string) => {
+						if (image) {
+							return whole;
+						}
+						const rewritten = this.rewrite(guide, url, (reason) =>
+							this.warnings.push({ guide: guide.id, page, link: url, reason }),
+						);
+						return rewritten === null ? label : `[${label}](${rewritten})`;
+					},
+				);
 				if (demote) {
 					text = text.replace(/^#(#{2,5}\s)/gm, "$1");
 				}
@@ -387,6 +519,7 @@ class Renderer {
 			if (split === undefined) {
 				continue;
 			}
+			const title = guide.title ?? split.title;
 			const index = [
 				this.prose(guide, "index", split.intro, false),
 				"",
@@ -402,27 +535,38 @@ class Renderer {
 				path: `${guide.section}/index.md`,
 				content:
 					frontmatter({
-						title: split.title,
-						description: describe(split.intro, split.title),
+						title,
+						description: describe(split.intro, title),
 						editUrl: this.editUrl(guide),
 						lastUpdated,
 						sidebar: { label: "Overview", order: 0 },
 					}) + index,
 			});
 			split.sections.forEach((section, position) => {
+				const draft = draftNotice(section.heading);
+				const { migration } = section;
+				const pageTitle = migration?.title ?? plainText(section.heading);
 				const head = frontmatter({
-					title: plainText(section.heading),
-					description: describe(
-						section.body,
-						`${split.title}: ${plainText(section.heading)}`,
-					),
+					title: pageTitle,
+					description: describe(section.body, `${title}: ${pageTitle}`),
+					// A migration note is written to a sibling directory so the
+					// sidebar can group the notes under one label, and routed under
+					// the guide with `slug`.
+					slug: migration ? `${guide.section}/${section.slug}` : undefined,
 					editUrl: this.editUrl(guide),
 					lastUpdated,
-					sidebar: { order: position + 1 },
+					sidebar: {
+						order: migration?.order ?? position + 1,
+						...(draft ? { badge: { text: "Draft", variant: "caution" } } : {}),
+					},
 				});
+				const body = this.prose(guide, section.slug, section.body, true);
+				const path = migration
+					? `${guide.section}-migration/${migration.name}.md`
+					: `${guide.section}/${section.slug}.md`;
 				pages.push({
-					path: `${guide.section}/${section.slug}.md`,
-					content: `${head}${this.prose(guide, section.slug, section.body, true)}\n`,
+					path,
+					content: `${head}${draft ? `${draft}\n` : ""}${body}\n`,
 				});
 			});
 		}

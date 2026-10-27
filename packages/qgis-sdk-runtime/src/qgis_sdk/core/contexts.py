@@ -281,7 +281,7 @@ class UiContext(_Context):
     actions: Capability[ViewActions] = Capability()
     settings: Capability[Settings] = Capability()
     #: What the catalogue's pickers list and the ``FileInput`` mints through
-    #: (TASK-68): the plugin's own services, handed to its surfaces.
+    #: the plugin's own services, handed to its surfaces.
     layers: Capability[Layers] = Capability()
     project: Capability[Project] = Capability()
     files: Capability[Files] = Capability()

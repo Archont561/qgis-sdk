@@ -2,7 +2,7 @@
 id: decision-24
 title: Release the Python SDK and TypeScript bridge at one shared version
 date: '2026-10-24 15:40'
-status: accepted
+status: superseded
 ---
 ## Context
 

@@ -6,16 +6,11 @@ created_date: '2026-10-24 21:20'
 ---
 # Workspace development, qualification harnesses and evidence
 
-How the workspace is developed and what has been proven on a real QGIS host.
-This used to be spread across the root and package READMEs;
-[decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here. The qualification tables and harness reports below are the
-evidence [TASK-23](../../tasks/task-23%20-%20Qualify-candidate-QGIS-4-Windows-and-Linux-toolchains.md),
-[TASK-24](../../tasks/task-24%20-%20Implement-scoped-plugin-runtime-and-native-lifecycle-adapter.md)
-and [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md)
-cite; the numbers are the ones recorded when each harness last ran, not a
-guarantee. [AGENTS.md](../../../AGENTS.md) and the skills under `.agents/skills/`
-remain the authority for the session workflow.
+How the workspace is developed and what has been proven on a real QGIS host:
+the environments and tasks, the test layers, the build artifacts, the headless
+and Desktop harnesses, and the evidence each release gate recorded. The
+numbers in the qualification tables and harness reports are the ones recorded
+when each harness last ran, not a guarantee.
 
 ## Quick start
 
@@ -104,18 +99,27 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 ## Documentation site
 
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/) is
-`apps/docs`, an Astro Starlight site ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md),
-[decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)).
-Its reference pages are generated, never edited:
+`apps/docs`, an Astro Starlight site. Its reference pages are generated,
+never edited, and the site cites what ships (releases, registries, versions),
+never how the work was tracked:
 
-- `apps/docs/scripts/generate.ts` renders this guide, doc-12 and doc-13 into
-  `src/content/docs/{workspace,python,typescript}/` - one page per `##`
-  section, the preamble as the directory's index, sub-headings moved up one
-  level. Same-guide and cross-guide anchors become site routes; links to
-  decisions, tasks and plans point at the repository on GitHub. Each page's
-  "Edit page" opens the guide, and its `lastUpdated` is the guide's last
-  commit. The generated directories are ignored by git. A link whose anchor
-  no guide has is reported by the generator and fails the link check.
+- `apps/docs/scripts/generate.ts` renders doc-12, doc-13 and this guide into
+  `src/content/docs/{python,typescript,contributing/workspace}/` - one page
+  per `##` section, the preamble as the directory's index, sub-headings
+  moved up one level, the migration notes filed under `<guide>/migration/`
+  newest first; this guide is contributor material and sits outside the
+  consumer reference. Same-guide and cross-guide anchors become site routes; a link to a
+  decision record lands on its row of the design-decisions page, which the
+  same script renders from `backlog/decisions/` and the one-line summaries
+  in `scripts/decision-summaries.ts`; a link to a task, a milestone, a plan
+  or the agent rules is dropped (its text stays) and reported, so those
+  records never surface on the site. Each page's "Edit page" opens
+  the guide, and its `lastUpdated` is the guide's last commit. A section
+  whose heading says *(in progress)* or *(unreleased)* is published with a
+  Draft badge and opens with a caution, so notes on a line still being cut
+  never read as finished guidance. The generated directories are ignored by
+  git. A link whose anchor no guide has is reported by the generator and
+  fails the link check.
 - The same script copies `packages/qgis-sdk-ui/storybook-static` to
   `public/storybook/` when it exists, so the site serves the Storybook at
   `/storybook/`; `docs-build` builds it first.
@@ -146,7 +150,7 @@ Its reference pages are generated, never edited:
 - Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 - Lefthook runs staged-file Ruff/Biome checks, Convco validates commit messages, and pre-push runs the coverage task.
 
-Commit messages use Conventional Commits form (validated by Convco). See [AGENTS.md](../../../AGENTS.md) for the session and merge workflow, and the agent skills under `.agents/skills/` for TDD, refactor, clean-code, backlog, and skill-creator guidance. Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` and export only prefixed exception names.
+Commit messages use Conventional Commits form (validated by Convco). Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` and export only prefixed exception names.
 
 ## Python package development
 
@@ -306,7 +310,7 @@ The support promise itself is one machine-readable source, `qgis_sdk_tools.targe
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
 | Two-plugin `pydantic` / `pydantic_core` coexistence in QGIS Desktop | Qualified on Linux (`plugin_coexistence_smoke.py`, TASK-33 AC #3) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
-| QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`, doc-15) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
+| QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Display-server Desktop GUI + in-Desktop `QWebEngineView` rendering | Blocker: no display server or `Xvfb` in sandbox/CI (`offscreen` renders no widgets, TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) |
 | Chromium sandbox | Disabled by headless flags above | N/A | N/A |
 
@@ -430,9 +434,7 @@ pixi run -e default python packages/qgis-sdk-python/scripts/qt_scheduler_smoke.p
 }
 ```
 
-The numbers are one Linux/offscreen sample, not a latency guarantee; the
-reasoning and the repeated runs are recorded in
-[doc-6](../plans/doc-6%20-%20TASK-13-Qt-scheduler-spike-evidence.md). Run the
+The numbers are one Linux/offscreen sample, not a latency guarantee. Run the
 opt-in test with:
 
 ```sh
@@ -451,9 +453,10 @@ transport-followed hop costs, and how long the GUI thread stalls when a 1 to
 pixi run -e default python packages/qgis-sdk-python/scripts/network_limits_probe.py
 ```
 
-The shipped defaults (20 redirects, 16 MiB buffered body) and the finding that
-made the transport follow redirects itself are recorded in
-[doc-15](../plans/doc-15%20-%20TASK-5-network-limits-measurement-evidence.md).
+The shipped defaults are 20 redirects and a 16 MiB buffered body. The probe
+also found that `QgsNetworkAccessManager` forwards `Authorization` and
+`Cookie` to a different origin when it follows a redirect itself, which is
+why the transport follows redirects on its own and never delegates them to Qt.
 `tests/scripts/test_network_limits_probe.py` pins the recommendation rule in the
 QGIS-free suite; the measurement itself is opt-in:
 
@@ -725,7 +728,7 @@ The bridge inside the real `QWebEngineView` is the published
 project); no bridge defect surfaced, so the bridge is not re-released for
 0.5.0.
 
-## 0.4.0 release gate (TASK-30, 2026-10-25)
+## 0.4.0 release gate (2026-10-25)
 
 What was run before the Python 0.4.0 stamp was requested, on Linux with
 QGIS 4.2.3 (Qt 6.11.2, Chromium 140), Bun 1.4.2, from `main` `7c7a1d0`
@@ -738,7 +741,7 @@ inferred from CI.
 - **Scope.** `release.py plan --scope python --bump minor` from
   `python-v0.3.0` plans `python-v0.4.0` with ten features and three fixes
   (the push default would plan a 0.3.1 patch; the minor is the explicit
-  act doc-4 requires). `plan --scope typescript` skips: no release-worthy
+  act the release policy requires). `plan --scope typescript` skips: no release-worthy
   commit since `ts-v0.3.0`, and `git diff ts-v0.3.0..main` under
   `packages/qgis-sdk-typescript` and `packages/qgis-sdk-alias` is empty, so
   the bridge is not released (TASK-30 AC5). `verify-versions` agrees on
@@ -792,7 +795,7 @@ inferred from CI.
   confirms 0.4.0 as the latest version; prefix.dev is not reachable from
   the sandbox, so the conda publish is attested by the job log only.
 
-## 0.5.0 release gate (TASK-31, 2026-10-25)
+## 0.5.0 release gate (2026-10-25)
 
 What was run before the Python 0.5.0 tag, on Linux x86-64 with QGIS 4.2.3
 (Qt 6.11.2, Chromium 140), CPython 3.14.8 in the locked Pixi environment and
@@ -896,7 +899,7 @@ nothing is inferred from CI.
   placeholders of the runtime and the tools (and the kit's own `0.0.0`) on
   PyPI are now superseded and should be yanked by the owner.
 
-## 0.6.0 release gate (TASK-60, 2026-10-26)
+## 0.6.0 release gate (2026-10-26)
 
 What was run on `main` `2763cad` (the TASK-67 merge, PR #98) on Linux
 x86-64 with QGIS 4.2.3 (Qt 6.11.2), CPython 3.14.8 in the locked Pixi
@@ -1050,7 +1053,7 @@ carry 0.5.0. Stamping, tagging and publishing wait for an explicit
   the owner: yank the `0.0.0` placeholders of the runtime and the tools on
   PyPI, deprecate the `0.0.0-stage` npm versions.
 
-## Split release pipeline rehearsal (TASK-57 AC 3)
+## Split release pipeline rehearsal
 
 The pipeline for three distributions landed with PR #78 (`60c1dc2`):
 `release.py classify/plan` emit `kit`/`runtime`/`tools` flags next to
@@ -1101,7 +1104,7 @@ Do not use a `workflow_dispatch` of `release.yml` with `tag=python-v0.4.0`
 as a rehearsal: 0.4.0 is a clean version, so the runtime and tools steps
 would publish for real.
 
-## UI release train rehearsal (TASK-110, 2026-10-27)
+## UI release train rehearsal (2026-10-27)
 
 The `ui` job landed with PR #109 (`803232c`). The sandbox token cannot
 dispatch workflows, so the job was exercised with one prerelease tag, which

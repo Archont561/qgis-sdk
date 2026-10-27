@@ -15,8 +15,8 @@ debug interrupt raised through author code -- is recorded on the job and then
 re-raised to whoever is driving the tick, never absorbed as a quiet job failure. And
 once disposal has settled a job, that settlement is final: author code that is
 already on the stack cannot complete, re-suspend or re-attach a handoff afterwards.
-The scheduler is the mechanism the TASK-13 spike measures; selecting public async
-syntax stays a separate decision.
+The scheduler is the measured mechanism; selecting public async syntax stays a
+separate decision.
 """
 
 from __future__ import annotations

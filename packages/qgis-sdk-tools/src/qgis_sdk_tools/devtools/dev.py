@@ -198,8 +198,8 @@ def plan_dev(
     metadata changes (debounced, serialised; see ``devtools.reloader``);
     the Reload button works either way. ``exercise`` makes the bootstrap
     drive itself through the reload policy, write a JSON report there and
-    quit; it is how the harness proves TASK-21 without a human at the
-    keyboard. The SDK's own packages join ``PYTHONPATH`` so the bootstrap
+    quit; it is how the harness proves the reload policy without a human at
+    the keyboard. The SDK's own packages join ``PYTHONPATH`` so the bootstrap
     imports inside QGIS's interpreter whichever Python runs the CLI.
     """
     if mode not in MODES:

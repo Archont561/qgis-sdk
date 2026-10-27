@@ -55,7 +55,7 @@ HEADLESS_PLATFORM: Final = "offscreen"
 #: platform; the offscreen plugin never connects to it, so any value serves.
 PLACEHOLDER_DISPLAY: Final = ":99"
 #: What an offscreen Chromium needs to come up without a GPU or a display; the
-#: flags the SDK's own headless WebEngine harness qualified (TASK-23).
+#: flags the SDK's own headless WebEngine harness qualified with.
 HEADLESS_CHROMIUM_FLAGS: Final = (
     "--no-sandbox --disable-gpu --disable-dev-shm-usage --single-process"
 )

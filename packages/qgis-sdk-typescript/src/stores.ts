@@ -1,5 +1,5 @@
 /**
- * The framework-free store core (TASK-69, decision-47).
+ * The framework-free store core (decision-47).
  *
  * Every adapter - `./react`, `./vue`, `./svelte`, or a vanilla page with no
  * adapter at all - drives the same four stores. A store is a value plus the

@@ -9,7 +9,7 @@ also refuses a surface the class does not list, exactly as the Desktop does.
 :func:`fake_ui_context` assembles the ``UiContext`` a surface sees, over
 recording fakes; :func:`build_surface` runs a surface's ``build()`` under it
 the way the host does, so a catalogue tree can be driven and snapshotted in
-a pure test (TASK-96).
+a pure test.
 """
 
 from __future__ import annotations

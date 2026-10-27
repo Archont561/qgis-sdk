@@ -2,7 +2,7 @@
 
 Fakes exist so pure tests can exercise a workflow without QGIS, and so the
 contract suite can hold a fake and the future native adapter to identical
-expectations (TASK-25.1). They are not emulators: they store what the contract
+expectations. They are not emulators: they store what the contract
 observes and no more.
 """
 

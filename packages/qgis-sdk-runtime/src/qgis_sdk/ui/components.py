@@ -1,4 +1,4 @@
-"""The catalogue's input components (decision-55 point 3; TASK-68).
+"""The catalogue's input components (decision-55 point 3).
 
 A component is *state first, widget second*. ``LayerPicker("layer")`` holds
 a layer id, ``FileInput("source")`` a :class:`~qgis_sdk.models.FileRef`,

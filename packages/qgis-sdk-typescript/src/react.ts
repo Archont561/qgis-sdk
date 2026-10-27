@@ -1,5 +1,5 @@
 /**
- * Thin React bindings over the store core (TASK-18, decision-18, TASK-69).
+ * Thin React bindings over the store core (decision-18, decision-47).
  *
  * This entry point is optional and is the only one that imports React. It adds
  * no second client: a component reaches the same `QgisSdk` or `BridgeClient` a

@@ -42,18 +42,46 @@ export default defineConfig({
 						{ slug: "start/concepts" },
 					],
 				},
+				// The migration notes render into a sibling directory and are routed
+				// under the guide with `slug`, so they can sit in one collapsed
+				// subgroup at the bottom of the guide instead of among its sections.
 				{
 					label: "Python package",
-					items: [{ autogenerate: { directory: "python" } }],
+					items: [
+						{ autogenerate: { directory: "python" } },
+						{
+							label: "Migration notes",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "python-migration" } }],
+						},
+					],
 				},
 				{
 					label: "TypeScript SDK",
-					items: [{ autogenerate: { directory: "typescript" } }],
+					items: [
+						{ autogenerate: { directory: "typescript" } },
+						{
+							label: "Migration notes",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "typescript-migration" } }],
+						},
+					],
 				},
 				{
-					label: "Workspace and qualification",
+					label: "Reference",
+					items: [{ slug: "reference/design-decisions" }],
+				},
+				{
+					label: "Contributing",
+					collapsed: true,
 					items: [
-						{ autogenerate: { directory: "workspace", collapsed: true } },
+						{
+							label: "Workspace, harnesses, and evidence",
+							collapsed: true,
+							items: [
+								{ autogenerate: { directory: "contributing/workspace" } },
+							],
+						},
 					],
 				},
 				{
@@ -68,15 +96,9 @@ export default defineConfig({
 									},
 								]
 							: []),
+						// Shipped artifacts only: releases and registries, never the
+						// plans and tasks behind them.
 						{ label: "Releases", link: `${REPOSITORY}/releases` },
-						{
-							label: "Decisions",
-							link: `${REPOSITORY}/tree/main/backlog/decisions`,
-						},
-						{
-							label: "Roadmap",
-							link: `${REPOSITORY}/blob/main/backlog/docs/plans/doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md`,
-						},
 					],
 				},
 			],
@@ -85,8 +107,12 @@ export default defineConfig({
 					sectionLabels: {
 						start: "Start here",
 						python: "Python package guide",
+						"python/migration": "Python migration notes",
 						typescript: "TypeScript SDK guide",
-						workspace: "Workspace, harnesses and qualification evidence",
+						"typescript/migration": "TypeScript migration notes",
+						reference: "Reference",
+						contributing: "Contributing",
+						"contributing/workspace": "Workspace, harnesses, and evidence",
 					},
 					optionalLinks: [
 						{

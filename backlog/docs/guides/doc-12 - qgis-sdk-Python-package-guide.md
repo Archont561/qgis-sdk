@@ -6,20 +6,13 @@ created_date: '2026-10-24 21:20'
 ---
 # qgis-sdk Python package guide
 
-The reference prose for the `qgis-sdk` Python package. It used to live in
-`packages/qgis-sdk-python/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here, where it is the source the documentation site at
+The reference for the `qgis-sdk` Python package: the declarations, the pure
+contract layer, the scoped runtime, the Desktop host, forms and native
+surfaces, Processing, the bridge host side, networking, scoped jobs, the
+project scaffold and the `qgis-sdk` command, with the migration notes of every
+release at the end. The documentation site at
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
-renders, one page per section
-([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)). The headings dropped the task tags they carried in the README;
-the records that landed each surface are TASK-2 (declarations), TASK-11 (pure
-contract layer), TASK-24 (runtime and Desktop adapter), TASK-3 (native forms),
-TASK-14 and TASK-63 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
-(bridge host side, generated client, host surface), TASK-17 and decision-28
-(generated client and streams), TASK-5 and decision-4 (networking), TASK-1
-(scaffold), TASK-27 and TASK-28 (release
-policy and migration notes, TASK-29 for 0.3.0, TASK-30 for 0.4.0, TASK-31 for
-0.5.0, TASK-60 for 0.6.0). Status at the time of writing: Python `0.6.0`
+renders it one page per section. Status at the time of writing: Python `0.6.0`
 (`python-v0.6.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
 and prefix.dev) released as a pair with the bridge `@archont561/qgis-sdk`
 `0.4.0` (`ts-v0.4.0`), both tagged on one merge commit; the previous pair was
@@ -53,8 +46,10 @@ plugin installs nothing because the ZIP carries its own copy.
 
 ## Supported targets
 
+### What the matrix says
+
 Where the kit is qualified is stated once, in `qgis_sdk_tools.targets`
-(TASK-9 AC 2), and rendered here from that source; the test
+and rendered here from that source; the test
 `test_targets.py::test_the_python_guide_renders_the_same_matrix` fails when
 the table and the module disagree, and `test_targets_native.py` fails when
 the host the native suite runs on stops being a qualified row. `qualified`
@@ -70,28 +65,31 @@ it; `qgis-sdk targets --json` is the machine-readable form.
 <!-- support-matrix:begin -->
 | OS | Arch | Python | QGIS | Qt | Chromium | Status | Evidence |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
-| linux | x86-64 | 3.14 | 4.2 | 6.11 | 140 | qualified | the locked Pixi environment (QGIS 4.2.3, Qt 6.11.2, Chromium 140, CPython 3.14): native suite, headless Desktop harnesses, the reference plugin through the toolchain and the release gate (doc-14) |
-| linux | x86-64 | 3.11 | - | - | - | qualified | the QGIS-free suite on CPython 3.11.2, the `requires-python` floor (doc-14) |
+| linux | x86-64 | 3.14 | 4.2 | 6.11 | 140 | qualified | the locked Pixi environment (QGIS 4.2.3, Qt 6.11.2, Chromium 140, CPython 3.14): native suite, headless Desktop harnesses, the reference plugin through the toolchain and the release gate (workspace guide) |
+| linux | x86-64 | 3.11 | - | - | - | qualified | the QGIS-free suite on CPython 3.11.2, the `requires-python` floor |
 | windows | x86-64 | 3.14 | - | - | - | qualified | ci.yml `cross-platform (windows-latest)`: `pip install` of the kit and the QGIS-free suite |
 | macos | arm64 | 3.14 | - | - | - | qualified | ci.yml `cross-platform (macos-latest)`: `pip install` of the kit and the QGIS-free suite |
-| windows | x86-64 | 3.14 | 4.2 | - | - | unqualified | no Windows QGIS 4 installation in CI or the sandbox (TASK-33 AC 1) |
-| macos | arm64 | 3.14 | 4.2 | - | - | unqualified | no macOS QGIS 4 installation in CI or the sandbox (TASK-33 AC 1) |
+| windows | x86-64 | 3.14 | 4.2 | - | - | unqualified | no Windows QGIS 4 installation in CI or the sandbox |
+| macos | arm64 | 3.14 | 4.2 | - | - | unqualified | no macOS QGIS 4 installation in CI or the sandbox |
 <!-- support-matrix:end -->
 
-**The bridge pair.** The TypeScript bridge is qualified as a pair with a
-Python release, never alone: `@archont561/qgis-sdk` 0.4.0 ran inside a real
-`QWebEngineView` against `qgis-sdk` 0.6.0 on the Linux row above, 0.3.0
-against 0.5.0 before it
+### The bridge pair
+
+The TypeScript bridge is qualified as a pair with a Python release, never
+alone: `@archont561/qgis-sdk` 0.4.0 ran inside a real `QWebEngineView` against
+`qgis-sdk` 0.6.0 on the Linux row above, 0.3.0 against 0.5.0 before it
 (`tests/test_reference_example_native.py`, the workspace bridge, contract
 version 1 on both sides - `HOST_SCHEMA_VERSION` and
 `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, what `VERSION002` checks a generated
-client against). A plugin author pinning that pair may assume what the
-matrix says; the package numbers are otherwise independent
+client against). A plugin author pinning that pair may assume what the matrix
+says; the package numbers are otherwise independent
 ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
 
+### Where the evidence is recorded
+
 The release workflow records this table in its job summary next to the
-metadata and build checks it runs ([doc-17](../plans/doc-17%20-%20M4-sprint-train-and-0.5.0-dependency-order.md),
-sprint 3), so a release says on which targets its qualification holds. The
+metadata and build checks it runs, so a release says on which targets its
+qualification holds. The
 detailed per-requirement evidence stays in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#headless-qgis-and-webengine-qualification).
 
 The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md).
@@ -164,6 +162,8 @@ class FieldTools:
   the class exists, exactly as before; `derive_id` and `derive_title` in
   `qgis_sdk.declarations` expose the conversion for tools that need it.
   `Provider(...)` itself has no class to derive from and keeps requiring both.
+### What does `describe_plugin` do, and not do?
+
 `describe_plugin` does not instantiate the class, dispatch handlers, evaluate
 properties, or call dataclass default factories. It resolves annotations with
 `typing.get_type_hints`, which may evaluate forward references: inspect **trusted
@@ -188,6 +188,8 @@ by ID, not discovery order. The schema version is independent of package version
 and future bridge protocol versions. Consumers must reject unsupported versions;
 no compatibility negotiation or reader-extension policy is implemented here.
 
+#### Which schema subset is supported?
+
 Request/result schemas use the JSON Schema 2020-12 keyword subset `type`,
 `properties`, `required`, `additionalProperties`, `anyOf`, `enum`, `items`,
 `minimum`, and `maximum`. Supported annotations are `str`, `bool`, `float`, `int`,
@@ -198,6 +200,8 @@ host/native objects, mappings, recursive DTOs, and `Annotated` metadata (includi
 backend-specific constraints in the test-only spike sample) are rejected rather
 than silently weakened. No validation dependency or runtime backend is selected.
 
+#### What makes a valid action?
+
 Each action must be an ordinary synchronous instance method with first parameter
 `self`, annotated inputs and an explicit result annotation (`-> None` for no
 result). Inputs may be positional-or-keyword or keyword-only; variadic and
@@ -207,6 +211,8 @@ is an object keyed by parameter name (the example has a `request` property).
 Inherited actions follow Python MRO and ordinary overrides; each inspected class
 must have its own `@plugin` metadata. Duplicate action IDs are errors.
 
+#### Defaults, nullability and unknown properties
+
 A default makes an input omittable, not nullable; only a union with `None` makes
 it nullable. Dataclass request fields without defaults are required; result
 writer schemas require **all** dataclass fields, including defaulted fields.
@@ -215,6 +221,8 @@ properties are disallowed. These are structural writer/request schemas, not an
 extensible result-reader policy or a serializer for result instances. Runtime
 validation must additionally reject nonfinite numbers and implement ADR-22's
 explicit integer normalization; JSON Schema alone is not a Python validator.
+
+#### What fails, and how
 
 Invalid declarations raise `QgisSdkDeclarationError` (a `QgisSdkError` with code
 `invalid_declaration`), naming the action/binding/field where applicable. IDs must
@@ -228,17 +236,17 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class (TASK-2, TASK-49) |
+| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
 | `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
-| `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use (TASK-14, TASK-63) |
+| `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
-| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery (TASK-15) |
-| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists (TASK-39, TASK-63) |
-| `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types (TASK-3) |
+| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery |
+| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists |
+| `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
 
@@ -395,8 +403,8 @@ decides whether to `unload()`.
 
 Since 0.6.0 a plugin project carries no `metadata.txt`, no `classFactory`
 and no view module
-([decision-43](../../decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md);
-TASK-64). `pyproject.toml` names the class and the tools derive what QGIS
+([decision-43](../../decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md)).
+`pyproject.toml` names the class and the tools derive what QGIS
 needs from it:
 
 ```toml
@@ -713,7 +721,7 @@ contract tests the runtime runs natively (`tests/ui_component_contract.py`)
 pass against that state. `LayerPicker.refresh()` re-reads the project under
 the fake (natively `QgsMapLayerComboBox` follows the project on its own);
 `kind="raster"` lists nothing under the fake until the all-layer-types
-service lands (TASK-77). Note the names `FileInput`, `DirectoryInput` and
+service lands. Note the names `FileInput`, `DirectoryInput` and
 `Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
 handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
 surface shows); import the one you mean, or alias.
@@ -951,8 +959,7 @@ same names on the Qt tree.
 ### `ctx.log`
 
 `ctx.log.info|warning|error(message, **fields)` is the plugin's structured
-log (decision-63; the minimal form from TASK-96, the full service in
-TASK-106): a `LogRecord(level, message, fields, plugin, time)` goes to the
+log (decision-63): a `LogRecord(level, message, fields, plugin, time)` goes to the
 QGIS message log under the plugin's tab on the Desktop (`NativeLog`) and to
 `RecordingLog.records`/`.messages` in tests; `subscribe(listener)` is how
 `LogView` follows it. `UiContext` carries `log` as well, so a surface logs
@@ -980,7 +987,7 @@ it goes to the message log with the label written after the message; under
 runs the button once `bind_actions(...)` named the dispatcher (the Desktop
 host binds it at `initGui`). The wire keeps `notifications.info` only: a page
 draws its own buttons over `actions.call`, and levelled feedback for pages
-arrives with the bridge store slice (TASK-69) so `HOST_FINGERPRINT` does not
+arrives with the bridge store slice so `HOST_FINGERPRINT` does not
 move mid-train.
 
 ### `ctx.files`
@@ -1034,6 +1041,8 @@ print(described.qualified_id, described.kinds, described.required)
 # field_tools:buffer {'layer_id': 'layer', 'distance': 'metres', 'crs': 'crs'} ('layer_id', 'distance', 'crs')
 ```
 
+### How do I run one from a context?
+
 `invoke(function, ctx, **inputs)` runs one from the context the caller already
 holds - the `PluginContext` of an action, the `JobContext` of a job, or the
 `AlgorithmContext` of another algorithm. It reads `algorithms`, `project` and
@@ -1061,6 +1070,8 @@ Nothing is injected at decoration time, so a unit test needs no runner: call
 `buffer(fake_context, layer_id=..., distance=..., crs=...)` with an
 `AlgorithmContext` built over the `qgis_sdk.testing` fakes.
 
+### What does the description carry?
+
 The input schemas come from the same `qgis_sdk.declarations` generator that
 describes plugin actions, so an algorithm's inputs are held to one documented
 typing subset. `AlgorithmDescription` carries `parameters`, `required`,
@@ -1068,9 +1079,27 @@ typing subset. `AlgorithmDescription` carries `parameters`, `required`,
 `result_type` / `result_schema`, `group`, `provider_id` and `qualified_id`;
 `to_dict()["inputs"]` is the object schema itself.
 
-**Non-destructive by construction (decision-19).** `Algorithms.execute` writes a *new* output and opens it as a layer the runtime owns; no method edits the source dataset. A run that fails deletes its own temporary directory before re-raising, so no partial output survives a failure, and the intermediate reprojection a buffer needs is scaffolding that never outlives the run either. `invoke` adds the output to the project only after the function returned, the result matched its declared type *and* cancellation was not requested in between; a failure or cancellation at any point leaves the project as it was.
+### Safe outputs
 
-**Explicit CRS and units where a distance is involved.** `BufferRequest` requires `working_crs` and `distance_metres`; the native backend refuses a working CRS that is geographic (a distance there would be degrees) or whose units are not metres, instead of converting behind the caller's back. `CentroidRequest` has no distance and therefore no working CRS: decision-19 requires a projected CRS *where the operation has one*, not everywhere.
+#### Non-destructive by construction (decision-19)
+
+`Algorithms.execute` writes a *new* output and opens it as a layer the runtime
+owns; no method edits the source dataset. A run that fails deletes its own
+temporary directory before re-raising, so no partial output survives a failure,
+and the intermediate reprojection a buffer needs is scaffolding that never
+outlives the run either. `invoke` adds the output to the project only after the
+function returned, the result matched its declared type *and* cancellation was
+not requested in between; a failure or cancellation at any point leaves the
+project as it was.
+
+#### Explicit CRS and units where a distance is involved
+
+`BufferRequest` requires `working_crs` and `distance_metres`; the native
+backend refuses a working CRS that is geographic (a distance there would be
+degrees) or whose units are not metres, instead of converting behind the
+caller's back. `CentroidRequest` has no distance and therefore no working CRS:
+decision-19 requires a projected CRS *where the operation has one*, not
+everywhere.
 
 Two honest limits of this slice: cancellation is observed at phase boundaries (before the function runs, and after it before the project is touched), not by aborting a native operation mid-flight; and an algorithm's result is a vector layer - other layer kinds arrive with the services that produce them.
 
@@ -1116,6 +1145,8 @@ or boolean as itself. A run that fails removes that directory and raises
 `run` is synchronous on the GUI thread, like `processing.run`; a long
 algorithm belongs in a `@job`.
 
+#### The generated modules
+
 `qgis_sdk.processing.native`, `.qgis`, `.gdal`, `.p3d` and `.pdal` are
 **generated**, never edited: each carries a `TypedDict` per algorithm (the
 shape `run(id, params)` is typed by), a request class per algorithm
@@ -1128,6 +1159,8 @@ fresh by `scripts/generate_processing_snapshot.py` and a CI drift check. A
 host whose registry differs is what `describe` reports; the host's
 description, not the snapshot, is what a run is validated against.
 
+#### Over the fakes
+
 Over the fakes, `FakeAlgorithms.list`/`describe` answer from that snapshot
 (or a `Catalogue` the test passes as `catalogue=`), and `run` answers from
 what the test scripted with `script_run(id, outputs)` - a mapping of output
@@ -1135,6 +1168,8 @@ name to a `Path` (becomes the registered layer or a `FileRef`, by the
 output's kind) or a scalar, or a callable of the `AlgorithmRun` - and
 records every run in `.runs`. A run nobody scripted fails with
 `QgisSdkAlgorithmFailedError`, never with an invented layer.
+
+#### Generating modules for another provider
 
 A project that depends on a provider the runtime does not ship generates its
 own modules with the developer tools:
@@ -1204,7 +1239,7 @@ of `Provider` instances, or lists one id twice, is refused when the
 | `Literal["fast", "safe"]` | `str` | one of the choices | `QgsProcessingParameterEnum` | `choice` |
 | `str` / `int` / `float` / `bool` | itself | itself | string / number / number / boolean | `text` / `integer` / `number` / `boolean` |
 
-A marker on a type it does not fit (`Annotated[int, LayerParameter()]`), a `Literal` of non-strings, a `FieldInput` whose `of` is not a layer input of the same declaration, or a bare `FileRef` input without `FileInput`/`DirectoryInput` is refused at declaration with the input name. A dataclass or a list input is still refused for an algorithm (a toolbox has no widget for it); an action may declare one. `FileRef` (`qgis_sdk.models`) is the branded reference of decision-20: the toolbox mints it from the dialog's picker through the host authority for the duration of the run, a page sends the ref the host minted and the handler receives the `FileRef` object, and a wrong-kind ref (a `file` where a `directory` was declared) is refused before the handler runs. Resolving a ref to a path from plugin code arrives with the `FileInput` component of the `Form` helper (TASK-68, next slice).
+A marker on a type it does not fit (`Annotated[int, LayerParameter()]`), a `Literal` of non-strings, a `FieldInput` whose `of` is not a layer input of the same declaration, or a bare `FileRef` input without `FileInput`/`DirectoryInput` is refused at declaration with the input name. A dataclass or a list input is still refused for an algorithm (a toolbox has no widget for it); an action may declare one. `FileRef` (`qgis_sdk.models`) is the branded reference of decision-20: the toolbox mints it from the dialog's picker through the host authority for the duration of the run, a page sends the ref the host minted and the handler receives the `FileRef` object, and a wrong-kind ref (a `file` where a `directory` was declared) is refused before the handler runs. Resolving a ref to a path from plugin code arrives with the `FileInput` component of the `Form` helper.
 
 The bridge builds an `AlgorithmContext` over the dialog's feedback and calls the function through the same `invoke` an action uses, then copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
 
@@ -1379,61 +1414,88 @@ async def load(self, ctx):
     return response.raise_for_status().json()
 ```
 
-- **Coroutines, scheduled by the host.** `get`/`post`/`request` are
-  `async def` and suspend on a `Handoff` from `qgis_sdk.core.scheduling`: the
-  job waits, the GUI thread does not. Cancelling the job aborts the reply;
-  closing the owning scope aborts everything the client still has in flight, so
-  a disposed plugin never gets a callback.
-- **Blocking is explicit and off the GUI thread.** `ctx.network.blocking.get(...)`
-  runs the same exchange on the calling thread under a local event loop and
-  raises `QgisSdkBlockingOnGuiThreadError` on the GUI thread instead of nesting
-  an event loop into the host's. Use it from `QThreadPool`, `QgsTask` or a
-  plain thread.
-- **Derived, immutable clients.** `configure(base_url, headers, timeout,
-  auth_config, max_redirects, max_body_bytes)` returns a new client; nothing
-  mutates a shared default, so a typed service client carries its own base URL
-  without touching the plugin's.
-- **One `Response`.** `status_code`, `reason`, `headers` (case-insensitive,
-  credentials redacted in `repr`), `content`, `text`, `json()`, `ok` and
-  `raise_for_status()`. A `404` is a response; only `raise_for_status()` turns
-  it into `QgisSdkHttpStatusError`.
-- **Errors you can tell apart by `code`.** `QgisSdkRequestRejectedError`
-  (bad URL, user-info in the URL, unsupported method),
-  `QgisSdkRequestCancelledError`, `QgisSdkConnectionError`,
-  `QgisSdkRequestTimeoutError`, `QgisSdkTlsError`,
-  `QgisSdkAuthenticationError`, `QgisSdkRedirectError`,
-  `QgisSdkResponseTooLargeError`, `QgisSdkHttpStatusError`,
-  `QgisSdkDecodeError`, all under `QgisSdkNetworkError` with the method and the
-  URL in the message.
-- **Defaults from measurement.** 30 s timeout, 20 redirects, 16 MiB buffered
-  body; the last two come from
-  [doc-15](../plans/doc-15%20-%20TASK-5-network-limits-measurement-evidence.md).
-  A body over the ceiling is aborted while downloading, not buffered and then
-  refused.
-- **QGIS owns the configuration.** The native transport goes through
-  `QgsNetworkAccessManager`, so the proxy, the certificate trust and the
-  authentication database a user set in QGIS apply; `auth_config` is handed to
-  `QgsAuthManager.updateNetworkRequest`, and no credential passes through the
-  SDK. Trust changes made at runtime need `rebuildTrustedCaCertsCache()` and,
-  for a host Qt already talked to, `clearConnectionCache()`; both are QGIS
-  calls, not SDK ones.
-- **Redirects are followed by the transport, not by Qt.** The manager was
-  measured forwarding `Authorization` and `Cookie` to another origin, so the
-  transport follows hops itself and drops `Authorization`, `Cookie`,
-  `Proxy-Authorization` and the auth configuration when scheme, host or port
-  changes; `https` → `http` is refused.
-- **Typed services compose over it.** `qgis_sdk.network.OgcApiFeatures(network,
-  base_url)` is the first: `collections()`, `items(collection_id, limit, bbox)`
-  and `next_page(page)` return dataclasses, and a malformed document is a
-  `QgisSdkServiceResponseError`. WMS/WFS layers stay on QGIS providers.
-- **Tests inject a fake.** `qgis_sdk.testing.FakeNetworkTransport` is scripted
-  with `expect(method, url, response | exception | responder, hold=False)`;
-  an unexpected request fails the test with `QgisSdkNetworkFakeError`, a held
-  request is released from the test with `pending[0].deliver()`, and
-  `assert_satisfied()` reports unmet expectations. It never opens a socket.
-  The native transport is covered by `tests/test_network_native.py` against
-  loopback servers, including the QGIS proxy setting, a Basic authentication
-  configuration, and a certificate trusted through the auth manager.
+### How does a request run?
+
+#### Coroutines, scheduled by the host
+
+`get`/`post`/`request` are `async def` and suspend on a `Handoff` from
+`qgis_sdk.core.scheduling`: the job waits, the GUI thread does not. Cancelling
+the job aborts the reply; closing the owning scope aborts everything the client
+still has in flight, so a disposed plugin never gets a callback.
+
+#### Blocking is explicit and off the GUI thread
+
+`ctx.network.blocking.get(...)` runs the same exchange on the calling thread
+under a local event loop and raises `QgisSdkBlockingOnGuiThreadError` on the
+GUI thread instead of nesting an event loop into the host's. Use it from
+`QThreadPool`, `QgsTask` or a plain thread.
+
+#### Derived, immutable clients
+
+`configure(base_url, headers, timeout, auth_config, max_redirects,
+max_body_bytes)` returns a new client; nothing mutates a shared default, so a
+typed service client carries its own base URL without touching the plugin's.
+
+### What comes back?
+
+#### One `Response`
+
+`status_code`, `reason`, `headers` (case-insensitive, credentials redacted in
+`repr`), `content`, `text`, `json()`, `ok` and `raise_for_status()`. A `404` is
+a response; only `raise_for_status()` turns it into `QgisSdkHttpStatusError`.
+
+#### Errors you can tell apart by `code`
+
+`QgisSdkRequestRejectedError` (bad URL, user-info in the URL, unsupported
+method), `QgisSdkRequestCancelledError`, `QgisSdkConnectionError`,
+`QgisSdkRequestTimeoutError`, `QgisSdkTlsError`, `QgisSdkAuthenticationError`,
+`QgisSdkRedirectError`, `QgisSdkResponseTooLargeError`,
+`QgisSdkHttpStatusError`, `QgisSdkDecodeError`, all under `QgisSdkNetworkError`
+with the method and the URL in the message.
+
+### Which limits and configuration apply?
+
+#### Defaults from measurement
+
+30 s timeout, 20 redirects, 16 MiB buffered body; the last two were measured
+against `QgsNetworkAccessManager` on loopback servers, not chosen. A body over
+the ceiling is aborted while downloading, not buffered and then refused.
+
+#### QGIS owns the configuration
+
+The native transport goes through `QgsNetworkAccessManager`, so the proxy, the
+certificate trust and the authentication database a user set in QGIS apply;
+`auth_config` is handed to `QgsAuthManager.updateNetworkRequest`, and no
+credential passes through the SDK. Trust changes made at runtime need
+`rebuildTrustedCaCertsCache()` and, for a host Qt already talked to,
+`clearConnectionCache()`; both are QGIS calls, not SDK ones.
+
+#### Redirects are followed by the transport, not by Qt
+
+The manager was measured forwarding `Authorization` and `Cookie` to another
+origin, so the transport follows hops itself and drops `Authorization`,
+`Cookie`, `Proxy-Authorization` and the auth configuration when scheme, host or
+port changes; `https` → `http` is refused.
+
+### What builds on it?
+
+#### Typed services compose over it
+
+`qgis_sdk.network.OgcApiFeatures(network, base_url)` is the first:
+`collections()`, `items(collection_id, limit, bbox)` and `next_page(page)`
+return dataclasses, and a malformed document is a
+`QgisSdkServiceResponseError`. WMS/WFS layers stay on QGIS providers.
+
+#### Tests inject a fake
+
+`qgis_sdk.testing.FakeNetworkTransport` is scripted with `expect(method, url,
+response | exception | responder, hold=False)`; an unexpected request fails the
+test with `QgisSdkNetworkFakeError`, a held request is released from the test
+with `pending[0].deliver()`, and `assert_satisfied()` reports unmet
+expectations. It never opens a socket. The native transport is covered by
+`tests/test_network_native.py` against loopback servers, including the QGIS
+proxy setting, a Basic authentication configuration, and a certificate trusted
+through the auth manager.
 
 ## Scoped jobs
 
@@ -1447,7 +1509,7 @@ scoped: a job is a decorated plain function whose first parameter is the
 `JobContext` the runtime injects and whose remaining keyword parameters are
 typed the way an action's are, submission is `bind(fn).delay(**inputs)` and
 nothing else, and the handle you get back is typed end to end. `qgis_sdk.jobs`
-is QGIS-free; it runs on the TASK-13 step scheduler and a host drives
+is QGIS-free; it runs on the step scheduler and a host drives
 `JobService.tick()` from whatever event loop it already has.
 
 ```python
@@ -1487,6 +1549,8 @@ a plain `def` runs in one step on the driving thread, a generator is refused.
 `ctx.jobs.delay(add, left=1, right=2)` is the one-call spelling of `bind` then
 `delay`; there is no ambient `add.delay(...)`, because the owner is always
 explicit (decision-21).
+
+### What is checked before a job runs?
 
 `describe_job(add)` returns the `JobDescription` (`id`, `title`, the parameter
 names, which are required, the result type, and the object schema of the
@@ -1535,45 +1599,52 @@ into keyword parameters (a dataclass is still a fine parameter type when the
 inputs are genuinely one object), and call `delay` with keywords. A class
 handed to `@job` or `bind` is refused with a message that points here.
 
-Three rules decide everything else:
+### Three rules decide everything else
 
-- **A request is not a state.** `handle.cancel()` returns whether the job was
-  still active and sets `cancel_requested`; `status` becomes `cancelled` only
-  when the job acknowledges it at a suspension point (or before it ever
-  started). A job that finishes anyway reports `succeeded`, honestly. Work
-  that never reaches a suspension point stays `running`; `quiesce()` names it
-  as a blocker instead of pretending it stopped, and nothing kills a thread.
-- **Callbacks run on the tick, never on a worker.** Progress reported from a
-  worker thread is coalesced to the latest fraction and delivered on the next
-  tick; each terminal outcome is delivered exactly once, in subscription
-  order. Subscribing late replays the current state synchronously as one
-  transition; a terminal replay completes the subscription. A callback that
-  raises is detached and reported through `faults` / `on_fault`, never
-  raised into the tick. `handle.get(timeout)` blocks only off the GUI thread -
-  on it, `QgisSdkJobWaitRefusedError`; a timeout is
-  `QgisSdkJobNotSettledError`. `handle.result` reads the same outcome
-  without waiting: the typed result, the job's own exception for a failed
-  job, `QgisSdkJobCancelledError` for a cancelled one, and
-  `QgisSdkJobNotSettledError` only while the job is queued or running.
-  A `tick()` entered while another is on the stack - a job or a callback
-  opened a modal dialog and its nested event loop fired the host timer - is
-  ignored and returns `0`; a nested `quiesce()` is refused with the blocker
-  `a tick is already in progress on this thread`.
-- **Disposal beats delivery.** `ctx.jobs` in a view is
-  `plugin_jobs.scoped(view_scope)`: closing the view disposes every
-  subscription it owns first, then asks each of its jobs to stop. Hiding a
-  dock is not disposal. A finished handle whose view closed afterwards refuses
-  new subscriptions rather than replaying into it. Plugin-lifetime work is
-  explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
-  plugin scope abandons everything through the scheduler's existing rule;
-  nobody is called. A subscription may name another owner
-  (`handle.on_success(cb, owner=other_scope)`); that owner's closure detaches
-  it, and the service keeps one close hook per such owner, released as the
-  job finishes, so a long-lived owner does not accumulate finished jobs.
+#### A request is not a state
+
+`handle.cancel()` returns whether the job was still active and sets
+`cancel_requested`; `status` becomes `cancelled` only when the job acknowledges
+it at a suspension point (or before it ever started). A job that finishes
+anyway reports `succeeded`, honestly. Work that never reaches a suspension
+point stays `running`; `quiesce()` names it as a blocker instead of pretending
+it stopped, and nothing kills a thread.
+
+#### Callbacks run on the tick, never on a worker
+
+Progress reported from a worker thread is coalesced to the latest fraction and
+delivered on the next tick; each terminal outcome is delivered exactly once, in
+subscription order. Subscribing late replays the current state synchronously as
+one transition; a terminal replay completes the subscription. A callback that
+raises is detached and reported through `faults` / `on_fault`, never raised
+into the tick. `handle.get(timeout)` blocks only off the GUI thread - on it,
+`QgisSdkJobWaitRefusedError`; a timeout is `QgisSdkJobNotSettledError`.
+`handle.result` reads the same outcome without waiting: the typed result, the
+job's own exception for a failed job, `QgisSdkJobCancelledError` for a
+cancelled one, and `QgisSdkJobNotSettledError` only while the job is queued or
+running. A `tick()` entered while another is on the stack - a job or a callback
+opened a modal dialog and its nested event loop fired the host timer - is
+ignored and returns `0`; a nested `quiesce()` is refused with the blocker `a
+tick is already in progress on this thread`.
+
+#### Disposal beats delivery
+
+`ctx.jobs` in a view is `plugin_jobs.scoped(view_scope)`: closing the view
+disposes every subscription it owns first, then asks each of its jobs to stop.
+Hiding a dock is not disposal. A finished handle whose view closed afterwards
+refuses new subscriptions rather than replaying into it. Plugin-lifetime work
+is explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
+plugin scope abandons everything through the scheduler's existing rule; nobody
+is called. A subscription may name another owner (`handle.on_success(cb,
+owner=other_scope)`); that owner's closure detaches it, and the service keeps
+one close hook per such owner, released as the job finishes, so a long-lived
+owner does not accumulate finished jobs.
 
 There are no automatic retries: resubmission is `delay` again, with a new
 logical id, and `attempt` is carried as `1` so a later, explicit retry policy
 has somewhere to count.
+
+### How do hosts compose the service?
 
 Hosts compose the service once per plugin:
 
@@ -2079,7 +2150,7 @@ published for the bridge, and no `ts-v*` tag exists.
 
 ## 0.7.0 migration notes (in progress)
 
-**Parameter kinds (decision-46 point 1; TASK-68).** Six kinds join
+**Parameter kinds (decision-46 point 1).** Six kinds join
 `LayerInput`/`CrsInput`/`Metres`: `FileInput(filters=)`, `DirectoryInput()`,
 `FieldInput(of=)`, `Range(min, max)`, `Colour()` and `Literal[...]` choices
 (the table under "Providers" above). What changes for existing code:
@@ -2106,7 +2177,7 @@ published for the bridge, and no `ts-v*` tag exists.
   call and a form use to refuse a value; `parameter_kind` keeps its name and
   now delegates to `qgis_sdk.declarations.resolve_kind`.
 
-**Input components and `ctx.files` (TASK-68, slice 68b).**
+**Input components and `ctx.files`.**
 
 - `qgis_sdk.ui` exports the eleven input components (`LayerPicker`,
   `FieldPicker`, `CrsPicker`, `FileInput`, `DirectoryInput`, `Distance`,
@@ -2131,7 +2202,7 @@ published for the bridge, and no `ts-v*` tag exists.
   <name> expects ...` shape.
 
 **`Form`, `Button`, `Column`; `NativeForms` and `DeclaredFormDialog`
-removed (TASK-68, slice 68c).** See *Forms: an action's inputs as a window*.
+removed.** See *Forms: an action's inputs as a window*.
 
 - `qgis_sdk.adapters.qgis.ui` is gone: `NativeForms(runtime)`,
   `.fields(id)`, `.render(id)`, `.run(id)`, `.dispatch(id, values)` and
@@ -2172,7 +2243,7 @@ removed (TASK-68, slice 68c).** See *Forms: an action's inputs as a window*.
   names its widgets. The desktop-adapter qualification fixture gained a
   `Form`-built dialog and the `form_submitted` stage.
 
-**Wiring, mixins, containers, feedback, `Custom`, `ctx.log` (TASK-96).**
+**Wiring, mixins, containers, feedback, `Custom`, `ctx.log`.**
 See *Wiring*, *Containers, feedback, buttons and `Custom`*, *Behaviour
 mixins*, *Designer files and the pure-PyQt path* and *Testing surfaces
 without QGIS* above.
@@ -2217,7 +2288,7 @@ declarative form* above.
   Tools`); it read `field Tools` before.
 - `ResultsDock` in the example is declared; its button is `buttons/fixture`
   (was `buttons/open`) and the table `self.results` (was `self.table`).
-- Adoption (TASK-108): `Form` accepts unnamed inputs and keys them by name
+- Adoption: `Form` accepts unnamed inputs and keys them by name
   lazily (`Form._fields` resolves on first use; a form of inputs that never
   get a name refuses when read); the default `build()` seeds declared
   inputs from `initial` and refuses an unknown key
@@ -2227,7 +2298,7 @@ declarative form* above.
   (`form/value`, `buttons/ping`, `feedback/answers`; it was `value`, `ping`
   and `answer` built in PyQt).
 
-**Any registered algorithm (decision-64; TASK-109).** See *Any registered
+**Any registered algorithm (decision-64).** See *Any registered
 algorithm* above. Nothing existing breaks; what is new:
 
 - `Algorithms` gains `providers()`, `list(provider=None)`, `describe(id)`
@@ -2253,7 +2324,7 @@ algorithm* above. Nothing existing breaks; what is new:
 
 ## 0.6.0 migration notes
 
-**Project shape (decision-43; TASK-64).** A 0.6 project carries no
+**Project shape (decision-43).** A 0.6 project carries no
 `metadata.txt`, `classFactory` or `webview.py`; `qgis-sdk check` reports the
 old files as `META001`/`ENTRY002`. To migrate a 0.5 project:
 
@@ -2278,10 +2349,10 @@ old files as `META001`/`ENTRY002`. To migrate a 0.5 project:
 `classFactory` themselves; see *Desktop host* above.
 
 0.6.0 of `qgis-sdk-runtime` changes how a job is written
-([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md);
-TASK-58) and how optional services are reached on every context
-([decision-39](../../decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md);
-TASK-59). Everything about submission, handles, delivery and ownership is as
+([decision-38](../../decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md))
+and how optional services are reached on every context
+([decision-39](../../decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md)).
+Everything about submission, handles, delivery and ownership is as
 in 0.5.
 
 - **`require_<name>()` is gone; the attribute refuses by name.** On
@@ -2319,8 +2390,8 @@ in 0.5.
   @plugin, or a function declared with @job or @provider.algorithm".
 
 Algorithms follow the same move
-([decision-42](../../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md);
-TASK-63). Every rename, in one list:
+([decision-42](../../decisions/decision-42%20-%20Declare-algorithms-as-plain-functions-on-providers-the-plugin-owns.md)).
+Every rename, in one list:
 
 - **`@provider.algorithm` decorates a function, not a class.** `run(self,
   inputs: Request) -> Result` becomes `def name(ctx: AlgorithmContext,
@@ -2377,7 +2448,7 @@ TASK-63). Every rename, in one list:
   `processing`; all are optional constructor keywords that refuse by name
   when a host leaves them out. The wire contract, `describe_plugin` output
   and `HOST_FINGERPRINT` do not move.
-- **Desktop bindings and surfaces (decisions 45 and 55; TASK-67),
+- **Desktop bindings and surfaces (decisions 45 and 55),
   additively.** `qgis_sdk` exports `toolbar`, `menu`, `shortcut` and
   `describe_bindings`; `qgis_sdk.ui` exports `Dialog`, `Dock` and `Surface`
   next to the 0.5 form-field helpers, which moved to
@@ -2404,14 +2475,14 @@ emits ([decision-40](../../decisions/decision-40%20-%20Make-the-root-entry-the-p
 
 0.5.0 splits the one `qgis-sdk` wheel into three
 distributions ([decision-35](../../decisions/decision-35%20-%20Split-the-Python-SDK-into-a-runtime-a-tools-package-and-a-meta-kit-behind-one-contract.md)
-step 2, un-gated by [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md);
-TASK-57), adds the reference workflow (`qgis_sdk.exports`,
-`Layers.export_vector`, the `reference/polygon-output` style, `examples/simple`;
-TASK-22), the support matrix and `qgis-sdk targets` (TASK-9,
-[decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)),
+step 2, un-gated by [decision-36](../../decisions/decision-36%20-%20Cut-the-three-Python-distributions-before-the-contract-freeze.md)),
+adds the reference workflow (`qgis_sdk.exports`,
+`Layers.export_vector`, the `reference/polygon-output` style, `examples/simple`),
+the support matrix and `qgis-sdk targets`
+([decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)),
 and `dev --exercise`'s smoke report. The bridge is unchanged: `@archont561/qgis-sdk`
 stays 0.3.0 and was qualified inside a real `QWebEngineView` against this
-release (TASK-31 AC 5, [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-task-31-2026-10-25)).
+release ([doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-2026-10-25)).
 
 **Who installs what.**
 
@@ -2466,11 +2537,11 @@ landing order.
   bridge's `package.json` and the alias carry `0.3.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.4.0`
   and `--scope typescript --version 0.3.0`.
-- **`qgis-sdk build`** (TASK-8) is new; see "Building an installable ZIP".
+- **`qgis-sdk build`** is new; see "Building an installable ZIP".
   Projects generated by `qgis-sdk new` now ignore `dist/`. A plugin that
   imports `qgis_sdk_tools` or `qgis_sdk.testing` from package code is
   refused at build time (`DEP001`/`DEP002`): those never ship.
-- **`qgis-sdk dev` reloads on save and quiesces first** (TASK-21). The
+- **`qgis-sdk dev` reloads on save and quiesces first**. The
   Desktop bootstrap is now the importable module
   `qgis_sdk_tools.devtools.reloader` (policy, tested without QGIS) plus
   `.devtools.bootstrap` (the QGIS glue the `--code` probe reaches);

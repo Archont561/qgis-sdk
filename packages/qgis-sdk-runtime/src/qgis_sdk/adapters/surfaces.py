@@ -1,6 +1,6 @@
 """Place a plugin's surfaces and bindings on the QGIS Desktop (decision-55).
 
-The host-owned half of TASK-67. :class:`SurfaceHost` is what ``ctx.ui`` is
+The host-owned half of the surfaces API. :class:`SurfaceHost` is what ``ctx.ui`` is
 under ``host()``: it opens a ``Dialog`` (a fresh instance, its own
 ``UiContext`` bound before ``build()``, disposed with its scope when the
 window closes) and shows or hides a ``Dock`` (one instance per runtime, its
