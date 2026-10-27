@@ -64,12 +64,15 @@ def native_plugin_context(
     layers = NativeLayers(scope)
     transport = NativeNetworkTransport(scope)
     project = NativeProject(layers, scope)
-    algorithms = NativeAlgorithms(layers, scope, working_directory=working_directory)
     # One authority per runtime (decision-20): the refs Processing mints for
-    # a toolbox run, the ones a page receives through ``HostServices`` and the
-    # ones the form components hand a handler all resolve through it.
+    # a toolbox run, the ones a page receives through ``HostServices``, the
+    # ones the form components hand a handler and the file outputs of
+    # ``ctx.algorithms.run`` all resolve through it.
     authority = HostAuthority()
     files = FilesService(authority, scope, owner=f"plugin:{settings_prefix}")
+    algorithms = NativeAlgorithms(
+        layers, scope, working_directory=working_directory, files=files
+    )
     return PluginContext(
         notifications=(
             notifications if notifications is not None else NativeNotifications(scope)

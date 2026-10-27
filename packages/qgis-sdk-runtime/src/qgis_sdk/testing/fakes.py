@@ -17,14 +17,24 @@ import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import (
+    LAYER_KINDS,
+    AlgorithmInfo,
     AlgorithmRequest,
+    AlgorithmRun,
+    Catalogue,
     GeometryType,
+    ProviderInfo,
+    QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmRejectedError,
     QgisSdkLayerNotFoundError,
     QgisSdkStyleIncompatibleError,
+    RunResult,
+    TypedRun,
     VectorExport,
     VectorLayerInfo,
+    validate_parameters,
 )
+from qgis_sdk.processing.runs import coerce_run, output_class
 from qgis_sdk.resources import require_style
 from qgis_sdk.services import (
     Layers,
@@ -35,6 +45,7 @@ from qgis_sdk.services import (
 )
 
 if TYPE_CHECKING:
+    from qgis_sdk.files import FilesService
     from qgis_sdk.providers import Provider
 
 __all__ = [
@@ -48,21 +59,43 @@ __all__ = [
 ]
 
 
+#: What ``script_run`` accepts: the outputs, or a function of the run.
+ScriptedOutputs = Mapping[str, object] | Callable[[AlgorithmRun], Mapping[str, object]]
+
+
 class FakeAlgorithms:
     """An ``Algorithms`` backend that runs nothing and returns declared outputs.
 
-    It records every request, so a pure test can prove what an algorithm asked
-    for as well as what it did with the answer. It deliberately does not decide
-    whether a working CRS is projected: that needs a CRS database the fake does
-    not have, so the check belongs to the native adapter and its own test rather
-    than to a guess here.
+    ``list``/``describe`` answer from the shipped snapshot (or the
+    ``catalogue`` the test passes, e.g. one generated from its own QGIS);
+    ``run`` answers from outputs the test scripted with :meth:`script_run`
+    and records every :class:`AlgorithmRun` in :attr:`runs`, so a pure test
+    can prove what an algorithm asked for as well as what it did with the
+    answer. Validation is the real one (``validate_parameters`` over the
+    catalogue), so a request the host would refuse is refused here too. It
+    deliberately does not decide whether a working CRS is projected: that
+    needs a CRS database the fake does not have, so the check belongs to the
+    native adapter and its own test rather than to a guess here.
     """
 
-    def __init__(self, layers: FakeLayers, scope: ResourceScope) -> None:
+    def __init__(
+        self,
+        layers: FakeLayers,
+        scope: ResourceScope,
+        *,
+        catalogue: Catalogue | None = None,
+        files: FilesService | None = None,
+    ) -> None:
         self._layers = layers
         self._scope = scope
+        self._catalogue = catalogue
+        self._files = files
         self.requests: list[AlgorithmRequest] = []
+        self.runs: list[AlgorithmRun] = []
         self._outputs: dict[type, Path] = {}
+        self._scripted: dict[str, list[tuple[ScriptedOutputs, bool]]] = {}
+
+    # -- setup, not part of the contract ----------------------------------
 
     def declare_output(
         self,
@@ -83,6 +116,100 @@ class FakeAlgorithms:
             crs=crs,
         )
         self._outputs[request_type] = source
+
+    def script_run(
+        self,
+        algorithm_id: str,
+        outputs: ScriptedOutputs,
+        *,
+        repeat: bool = True,
+    ) -> None:
+        """Declare what the next ``run`` of ``algorithm_id`` produces.
+
+        ``outputs`` maps output names to values, or is a callable taking the
+        :class:`AlgorithmRun` and returning that mapping. A ``Path`` under a
+        vector output is opened through the fake layers (register it first);
+        a ``Path`` under a file output is granted through ``files`` and comes
+        back as a ``FileRef``; anything else is returned as given. With
+        ``repeat=False`` the answer is consumed by one run.
+        """
+        self._scripted.setdefault(algorithm_id, []).append((outputs, repeat))
+
+    # -- the contract ------------------------------------------------------
+
+    @property
+    def catalogue(self) -> Catalogue:
+        if self._catalogue is None:
+            from qgis_sdk.processing.snapshot import core_catalogue
+
+            self._catalogue = core_catalogue()
+        return self._catalogue
+
+    def providers(self) -> tuple[ProviderInfo, ...]:
+        self._scope.ensure_open()
+        return self.catalogue.providers
+
+    def list(self, provider: str | None = None) -> tuple[AlgorithmInfo, ...]:
+        self._scope.ensure_open()
+        if provider is None:
+            return self.catalogue.algorithms
+        return self.catalogue.by_provider(provider)
+
+    def describe(self, algorithm_id: str) -> AlgorithmInfo:
+        self._scope.ensure_open()
+        return self.catalogue.algorithm(algorithm_id)
+
+    def run(
+        self,
+        request: AlgorithmRun | TypedRun | str,
+        params: Mapping[str, object] | None = None,
+    ) -> RunResult:
+        """Validate like the host, record the run, answer from the script."""
+        self._scope.ensure_open()
+        run = coerce_run(request, params)
+        info = self.describe(run.algorithm)
+        validate_parameters(info, run.params)
+        for parameter in info.parameters:
+            value = run.params.get(parameter.name)
+            if value is None or parameter.kind not in LAYER_KINDS:
+                continue
+            # Same rule as the native adapter: an owned layer id, a ref, or
+            # an existing path; anything else is an unknown layer.
+            if isinstance(value, str) and not Path(value).exists():
+                self._layers.layer(value)
+        self.runs.append(run)
+        answer = self._next_answer(run)
+        outputs: dict[str, object] = {}
+        for name, value in answer.items():
+            kind = output_class(info, name)
+            if isinstance(value, Path):
+                if kind == "vector":
+                    value = self._layers.open_vector(value)
+                elif kind == "directory":
+                    value = self._file_service().grant_directory(value)
+                elif kind == "file":
+                    value = self._file_service().grant_file(value)
+            outputs[name] = value
+        return RunResult(algorithm=run.algorithm, outputs=outputs)
+
+    def _next_answer(self, run: AlgorithmRun) -> Mapping[str, object]:
+        queue = self._scripted.get(run.algorithm) or []
+        if not queue:
+            raise QgisSdkAlgorithmFailedError(
+                run.algorithm,
+                "no scripted outputs; call FakeAlgorithms.script_run() in the test",
+            )
+        outputs, repeat = queue[0]
+        if not repeat:
+            queue.pop(0)
+        return outputs(run) if callable(outputs) else outputs
+
+    def _file_service(self) -> FilesService:
+        if self._files is None:
+            from .files import FakeFiles
+
+            self._files = FakeFiles(self._scope, owner="plugin:fake-algorithms")
+        return self._files
 
     def execute(self, request: AlgorithmRequest) -> VectorLayerInfo:
         """Record the request and open the output declared for its type."""

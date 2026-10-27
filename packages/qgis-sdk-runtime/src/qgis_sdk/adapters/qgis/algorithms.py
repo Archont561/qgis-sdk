@@ -27,21 +27,38 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
+    LAYER_KINDS,
+    AlgorithmInfo,
     AlgorithmRequest,
+    AlgorithmRun,
     BufferRequest,
     CentroidRequest,
+    FileRef,
+    ProviderInfo,
+    QgisSdkAlgorithmFailedError,
+    QgisSdkAlgorithmNotFoundError,
     QgisSdkAlgorithmRejectedError,
+    QgisSdkLayerNotFoundError,
     QgisSdkUnsupportedCapabilityError,
+    RunResult,
+    TypedRun,
     VectorLayerInfo,
+    validate_parameters,
 )
+from qgis_sdk.processing.runs import coerce_run, destination_path, output_class
 
 from .layers import NativeLayers
+
+if TYPE_CHECKING:
+    from qgis_sdk.files import FilesService
 
 __all__ = ["NativeAlgorithms"]
 
@@ -92,9 +109,11 @@ class NativeAlgorithms:
         scope: ResourceScope,
         *,
         working_directory: Path | None = None,
+        files: FilesService | None = None,
     ) -> None:
         self._layers = layers
         self._scope = scope
+        self._files = files
         self._owns_root = working_directory is None
         root = (
             Path(tempfile.mkdtemp(prefix="qgis-sdk-algorithms-"))
@@ -105,6 +124,141 @@ class NativeAlgorithms:
         self._root = root
         self._runs = 0
         scope.on_close(self._release)
+
+    # -- the registry -------------------------------------------------------
+
+    def providers(self) -> tuple[ProviderInfo, ...]:
+        self._scope.ensure_open()
+        return self._catalogue().providers
+
+    def list(self, provider: str | None = None) -> tuple[AlgorithmInfo, ...]:
+        self._scope.ensure_open()
+        catalogue = self._catalogue()
+        return (
+            catalogue.algorithms
+            if provider is None
+            else catalogue.by_provider(provider)
+        )
+
+    def describe(self, algorithm_id: str) -> AlgorithmInfo:
+        """Describe one algorithm straight from the live registry."""
+        self._scope.ensure_open()
+        _processing()
+        from .catalogue import algorithm_info
+
+        algorithm = QgsApplication.processingRegistry().algorithmById(algorithm_id)
+        if algorithm is None:
+            raise QgisSdkAlgorithmNotFoundError(algorithm_id)
+        return algorithm_info(algorithm, algorithm.provider().id())
+
+    def _catalogue(self):
+        """The registry read in full; cheap enough to read per call."""
+        from .catalogue import read_catalogue
+
+        return read_catalogue()
+
+    # -- the generic run ----------------------------------------------------
+
+    def run(
+        self,
+        request: AlgorithmRun | TypedRun | str,
+        params: Mapping[str, object] | None = None,
+    ) -> RunResult:
+        """Run any registered algorithm into new outputs under a run directory."""
+        self._scope.ensure_open()
+        run = coerce_run(request, params)
+        info = self.describe(run.algorithm)
+        validate_parameters(info, run.params)
+        processing = _processing()
+        self._runs += 1
+        run_directory = self._root / f"run-{self._runs}"
+        run_directory.mkdir()
+        try:
+            native_params = self._native_parameters(info, run.params, run_directory)
+            try:
+                raw = processing.run(run.algorithm, native_params)
+            except Exception as error:  # QgsProcessingException and friends
+                raise QgisSdkAlgorithmFailedError(run.algorithm, str(error)) from error
+            outputs = self._convert_outputs(info, raw)
+        except BaseException:
+            shutil.rmtree(run_directory, ignore_errors=True)
+            raise
+        return RunResult(algorithm=run.algorithm, outputs=outputs)
+
+    def _native_parameters(
+        self, info: AlgorithmInfo, params: Mapping[str, object], run_directory: Path
+    ) -> dict[str, Any]:
+        """Owned layer ids become layer handles, refs become paths, missing
+        destinations are allocated; everything else is passed as given."""
+        native: dict[str, Any] = {}
+        for parameter in info.parameters:
+            value = params.get(parameter.name)
+            if parameter.destination:
+                if value is None:
+                    native[parameter.name] = str(
+                        destination_path(run_directory, parameter)
+                    )
+                elif isinstance(value, FileRef):
+                    native[parameter.name] = str(self._resolve(value, "write"))
+                else:
+                    native[parameter.name] = value
+                continue
+            if value is None:
+                continue
+            if parameter.kind in LAYER_KINDS:
+                native[parameter.name] = self._layer_input(value)
+            elif parameter.kind == "multilayer" and isinstance(value, (list, tuple)):
+                native[parameter.name] = [self._layer_input(item) for item in value]
+            elif isinstance(value, FileRef):
+                native[parameter.name] = str(self._resolve(value, "read"))
+            else:
+                native[parameter.name] = value
+        return native
+
+    def _layer_input(self, value: object) -> Any:
+        """An owned layer id, a readable ref, or an existing source string."""
+        if isinstance(value, FileRef):
+            return str(self._resolve(value, "read"))
+        if not isinstance(value, str):
+            return value
+        try:
+            return self._layers._qgs_layer(value)
+        except QgisSdkLayerNotFoundError:
+            if Path(value).exists() or "://" in value or "|" in value:
+                return value
+            raise
+
+    def _resolve(self, ref: FileRef, operation: str) -> Path:
+        if self._files is None:
+            raise QgisSdkAlgorithmRejectedError(
+                "run", ["this runtime has no files service to resolve a FileRef with"]
+            )
+        return self._files.resolve(ref, operation=operation)
+
+    def _convert_outputs(
+        self, info: AlgorithmInfo, raw: Mapping[str, Any]
+    ) -> dict[str, object]:
+        outputs: dict[str, object] = {}
+        for name, value in raw.items():
+            kind = output_class(info, name)
+            if kind == "vector" and isinstance(value, str) and value:
+                outputs[name] = self._layers.open_vector(Path(value))
+            elif kind in ("file", "directory") and isinstance(value, str) and value:
+                outputs[name] = self._file_output(Path(value), kind)
+            else:
+                outputs[name] = _plain(value)
+        return outputs
+
+    def _file_output(self, path: Path, kind: str) -> object:
+        """A readable ref for what the run wrote; the path itself without a
+        files service (a bare standalone runtime)."""
+        if not path.exists() or self._files is None:
+            return str(path)
+        if kind == "directory":
+            return self._files.grant_directory(path)
+        return self._files.grant_file(path, operations=("read",))
+
+    # -- the hand-written predecessors --------------------------------------
 
     def execute(self, request: AlgorithmRequest) -> VectorLayerInfo:
         """Run one request into a new output layer and describe that layer."""
@@ -173,6 +327,18 @@ class NativeAlgorithms:
         """Remove this runtime's temporary tree; a caller's directory stays."""
         if self._owns_root:
             shutil.rmtree(self._root, ignore_errors=True)
+
+
+def _plain(value: Any) -> object:
+    """A scalar output as Python: QGIS hands numbers, strings and booleans
+    over already; anything else is kept only by its text."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    if isinstance(value, dict):
+        return {str(k): _plain(v) for k, v in value.items()}
+    return str(value)
 
 
 def _require_metric_projected_crs(authid: str, request: str) -> None:
