@@ -63,7 +63,6 @@ Every implementation task includes focused tests; fixture integration is not per
 - [TASK-13](../../tasks/task-13%20-%20Prove-Qt-compatible-coroutine-scheduling-and-safe-cancellation.md): Prove Qt compatible coroutine scheduling and safe cancellation
 - [TASK-23](../../tasks/task-23%20-%20Qualify-candidate-QGIS-4-Windows-and-Linux-toolchains.md): Qualify candidate QGIS 4 Windows and Linux toolchains
 - [TASK-27](../../tasks/task-27%20-%20Prepare-and-qualify-0.1.0-release.md): Prepare and qualify 0.1.0 release
-- [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md): Qualify Windows, macOS and Desktop QGIS targets
 - [TASK-34](../../tasks/task-34%20-%20Optimize-CI-cost-and-latency.md): Optimize CI cost and latency
 - [TASK-37](../../tasks/task-37%20-%20Add-milestone-triggered-autorelease-and-CI-optimizations-from-playtest-patterns.md): Add milestone triggered autorelease and CI optimizations from playtest patterns
 
@@ -152,12 +151,12 @@ Re-pointed on 2026-10-25: the two breaking API changes that followed 0.5.0 take 
 ### 0.7.0
 
 Sprint order in [doc-19](doc-19%20-%20M6-sprint-train-and-0.7.0-dependency-order.md).
+TASK-73 and TASK-77 were listed here until 2026-10-27 and moved to 0.8.0
+unopened; m-6 records the reasoning.
 
 - [TASK-69](../../tasks/task-69%20-%20Replace-the-react-internals-with-a-framework-free-store-core-and-add-vue-and-svelte-adapters.md): Replace the `./react` internals with a framework-free store core and add `./vue` and `./svelte` adapters (decision-47 points 1–2, 5)
 - [TASK-68](../../tasks/task-68%20-%20Add-file-directory-field-range-colour-and-enum-parameter-kinds-the-catalogue-input-components-and-the-Form-helper.md): Add file, directory, field, range, colour and enum parameter kinds and the standard native surfaces (decision-46 points 1–2)
 - [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md): Add surface wiring and the rest of the native catalogue: @on, @subscribe, ui= loading, behaviour mixins, containers, feedback, Custom and the fake rendering
-- [TASK-73](../../tasks/task-73%20-%20Add-qgis_sdk.console-ConsoleSession-over-the-curated-services-PluginHandle-and-PluginRuntime.algorithms.md): Add `qgis_sdk.console`: `ConsoleSession` over the curated services, `PluginHandle` and `PluginRuntime.algorithms` (decision-48)
-- [TASK-77](../../tasks/task-77%20-%20Declare-externals-with-a-startup-probe-vendor-pure-Python-packages-in-build-and-bucket-imports-in-check.md): Declare externals with a startup probe, vendor pure-Python packages in `build`, and bucket imports in `check` (decision-50)
 - [TASK-70](../../tasks/task-70%20-%20Create-qgis-sdk-ui-web-components-on-the-store-core-React-Vue-and-Svelte-wrappers-palette-tokens-and-Storybook.md): Create `@archont561/qgis-sdk-ui`: web components on the store core, React, Vue and Svelte wrappers, palette tokens and Storybook (decision-47 point 3; closes decision-16's theme half)
 - [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md): Adopt the declarative surface form across the scaffold, the web mirror and the snapshot tooling (decision-55 amendment; after TASK-70)
 - [TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md): Generate the Processing catalogue: typed registry in Python and TypeScript, list, describe and run for any provider (decision-64; pulled forward from TASK-94, sprint 5)
@@ -175,6 +174,8 @@ Sprint order in [doc-21](doc-21%20-%20M7-sprint-train-and-0.8.0-dependency-order
 - [TASK-75](../../tasks/task-75%20-%20Add-qgis-sdk-mcp-on-the-official-mcp-package-behind-the-mcp-extra-and-developer-mode-in-dev-agent.md): Add `qgis-sdk mcp` on the official `mcp` package behind the `[mcp]` extra, and developer mode in `dev --agent` (decision-49 points 2–3)
 - [TASK-76](../../tasks/task-76%20-%20Add-user-mode-tool.qgis-sdk.agent-the-generated-Agent-access-surface-consent-audit-and-the-uvx-client-config.md): Add user mode: `[tool.qgis-sdk.agent]`, the generated Agent access surface, consent, audit and the `uvx` client config (decision-49 point 4)
 - [TASK-79](../../tasks/task-79%20-%20Add-UI-snapshots-structured-tree-plus-screenshot-of-the-plugins-surfaces-dev.ui-agent-tools-and-the-ui_snapshot-fixture.md): Add UI snapshots: structured tree plus screenshot of the plugin's surfaces, `dev.ui` agent tools and the `ui_snapshot` fixture (decision-51)
+- [TASK-73](../../tasks/task-73%20-%20Add-qgis_sdk.console-ConsoleSession-over-the-curated-services-PluginHandle-and-PluginRuntime.algorithms.md): Add `qgis_sdk.console`: `ConsoleSession` over the curated services, `PluginHandle` and `PluginRuntime.algorithms` (decision-48)
+- [TASK-77](../../tasks/task-77%20-%20Declare-externals-with-a-startup-probe-vendor-pure-Python-packages-in-build-and-bucket-imports-in-check.md): Declare externals with a startup probe, vendor pure-Python packages in `build`, and bucket imports in `check` (decision-50)
 - [TASK-78](../../tasks/task-78%20-%20Prepare-and-qualify-0.8.0-release.md): Prepare and qualify 0.8.0 release (Python only; bridge confirmed unchanged)
 
 ### 0.9.0
@@ -211,6 +212,10 @@ Sprint order in [doc-25](doc-25%20-%20M10-sprint-train-and-0.11.0-dependency-ord
 
 ### 1.0.0
 
+TASK-33 moved here from 0.1.0 on 2026-10-27: its open criteria need a
+Windows or macOS QGIS Desktop host, which TASK-99's native CI leg is the
+first thing to provide.
+
 Sprint order in [doc-27](doc-27%20-%20M11-sprint-train-and-1.0.0-dependency-order.md); authority model in doc-26 (TASK-105).
 
 - [TASK-99](../../tasks/task-99%20-%20Add-the-native.yml-CI-leg-Windows-and-Linux-QGIS-from-locked-Pixi-environments-every-harness-matrix-transitions.md): Add the native.yml CI leg: Windows and Linux QGIS from locked Pixi environments, every harness, matrix transitions
@@ -222,6 +227,7 @@ Sprint order in [doc-27](doc-27%20-%20M11-sprint-train-and-1.0.0-dependency-orde
 - [TASK-100](../../tasks/task-100%20-%20Add-qgis-sdk-publish-for-the-official-and-private-QGIS-plugin-repositories-with-the-PUB-check-rules.md): Add qgis-sdk publish for the official and private QGIS plugin repositories with the PUB check rules
 - [TASK-101](../../tasks/task-101%20-%20Ship-standalone-apps-as-conda-packages-from-build-target-app-and-document-server-deployment.md): Ship standalone apps as conda packages from build --target app and document server deployment
 - [TASK-98](../../tasks/task-98%20-%20Run-the-1.0-API-freeze-review-and-the-deprecation-sweep.md): Run the 1.0 API freeze review and the deprecation sweep
+- [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md): Qualify Windows, macOS and Desktop QGIS targets
 - [TASK-107](../../tasks/task-107%20-%20Prepare-and-qualify-1.0.0-release.md): Prepare and qualify 1.0.0 release
 
 ### 1.1.0

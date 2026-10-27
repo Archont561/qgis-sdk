@@ -1,12 +1,12 @@
 ---
 id: TASK-33
 title: Qualify Windows, macOS and Desktop QGIS targets
-status: In Progress
+status: To Do
 assignee: []
 created_date: 2026-10-17 16:06
-updated_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-27T18:59:00Z'
 labels: []
-milestone: m-0
+milestone: m-11
 dependencies: []
 references:
   - >-
@@ -58,6 +58,8 @@ Created at the TASK-23 closeout (2026-10-17) so the targets the Linux sandbox ca
 TASK-22 (0.5.0, 2026-10-25) adds a Windows blocker row for the reference workflow: doc-14 'Reference plugin through the toolchain' records the Linux x86-64 row (QGIS 4.2.3, Python 3.14.8, Qt 6.11.2, Chromium 140.0.7339.225) and leaves the Windows row blocked - no host, no QGIS-provisioning CI runner. When a Windows QGIS 4 host exists, run QGIS_SDK_REFERENCE=1 pytest packages/qgis-sdk-python/tests/test_reference_example_native.py (needs Bun) and fill that row.
 
 2026-10-26: decision-57 gives AC 1 its mechanism - the native.yml Windows QGIS leg (TASK-99) qualifies the Windows row; this task's rows are closed by that evidence or keep their blocker.
+
+Re-scoped 2026-10-27 from m-0 to m-11 (1.0.0) and set back to To Do: ACs 1 and 2 need a Windows or macOS QGIS Desktop host, which neither CI nor the sandbox provides; TASK-99 (the native.yml CI leg from locked Pixi environments) is what first supplies one, so the remaining qualification rides on it rather than staying In Progress across releases.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

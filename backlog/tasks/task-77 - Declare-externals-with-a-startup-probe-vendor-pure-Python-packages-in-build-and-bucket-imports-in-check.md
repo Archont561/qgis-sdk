@@ -6,8 +6,9 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
+updated_date: '2026-10-27T18:59:00Z'
 labels: []
-milestone: m-6
+milestone: m-7
 dependencies:
   - TASK-64
 type: enhancement
@@ -26,3 +27,9 @@ decision-50. [tool.qgis-sdk.build] external accepts tables {import, requirement,
 - [ ] #2 build vendors a pure-Python distribution with its license and rewritten imports and the plugin imports it from the ZIP; a compiled distribution is refused with DEP003 and a missing transitive dependency with DEP004 (pure tests on fixture distributions; build-install harness for one vendored package).
 - [ ] #3 check prints each import's bucket and reports DEP001 with both exits before any build; doc-12 states that pandas-class packages are externals with a probe, never vendored.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Re-scoped 2026-10-27 from m-6 (0.7.0) to m-7 (0.8.0): externals and pure-Python vendoring are a build feature with no UI-toolkit dependency; it blocks nothing in m-6 and nothing in m-6 blocks it, and 0.7.0 ships what is already qualified. Lands in m-7 as its own small pull request before the gate.
+<!-- SECTION:NOTES:END -->
