@@ -87,6 +87,10 @@ test("the host module names its surface and advertises its version", () => {
 	expect(HOST_SCHEMA_VERSION).toBe(1);
 	expect(HOST_FINGERPRINT.startsWith("sha256:")).toBe(true);
 	expect(HOST_OPERATIONS).toEqual([
+		"algorithms.describe",
+		"algorithms.list",
+		"algorithms.providers",
+		"algorithms.run",
 		"files.export",
 		"layers.get",
 		"layers.list",

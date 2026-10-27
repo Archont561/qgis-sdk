@@ -39,7 +39,9 @@ class FakeHost:
     """The fakes behind one runtime, so a test can arrange and observe them."""
 
     runtime: object
+    context: PluginContext
     layers: FakeLayers
+    algorithms: FakeAlgorithms
     project: FakeProject
     styles: FakeStyles
     settings: FakeSettings
@@ -62,6 +64,13 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         field_names=("id", "value"),
         crs=WORKING_CRS,
     )
+    # The generic surface is scripted per algorithm id: what `native:centroids`
+    # produces here is a layer the fake registered, the way a run allocates one.
+    centroids = tmp_path / "centroids.gpkg"
+    layers.register(
+        centroids, name="centroids", geometry_type="point", field_names=("id", "value")
+    )
+    algorithms.script_run("native:centroids", {"OUTPUT": centroids})
     project = FakeProject(layers, scope)
     styles = FakeStyles(layers, scope)
     settings = FakeSettings(scope)
@@ -81,7 +90,9 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     try:
         yield FakeHost(
             runtime=adapter.runtime,
+            context=context,
             layers=layers,
+            algorithms=algorithms,
             project=project,
             styles=styles,
             settings=settings,

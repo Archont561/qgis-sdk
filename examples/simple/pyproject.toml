@@ -31,9 +31,11 @@ about = "Open a bundled dataset, read the selection, buffer into a styled layer,
 # The page in web/: shown as a dock; `grants` lists the host grants
 # (`layers.read`) or operation ids (`project.layer_ids`) the page may use;
 # `qgis-sdk bridge generate --host` renders the catalogue. The starter page's
-# layer picker reads `layers.list`, which `layers.read` covers.
+# layer picker reads `layers.list`, which `layers.read` covers, and
+# `algorithms.run` lets `runAlgorithm` from web/src/processing.schema.ts run
+# the host's Processing algorithms (the centroids control).
 placement = "dock"
-grants = ["layers.read"]
+grants = ["layers.read", "algorithms.run"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

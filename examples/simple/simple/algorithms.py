@@ -12,6 +12,11 @@ this module only binds typed inputs to the produced layer through the injected
 service. That is why the same functions run against the in-memory double in a
 QGIS-free test, and why they live here rather than in the runtime: what a
 plugin computes is the plugin's.
+
+The two also show both spellings of a Processing call (decision-64): the
+buffer keeps the hand-written ``BufferRequest`` with its CRS policy, the
+centroid runs the generated ``native.Centroids`` request through the generic
+``ctx.algorithms.run`` that reaches any registered algorithm.
 """
 
 from __future__ import annotations
@@ -19,12 +24,12 @@ from __future__ import annotations
 from qgis_sdk.core import AlgorithmContext
 from qgis_sdk.models import (
     BufferRequest,
-    CentroidRequest,
     CrsInput,
     LayerInput,
     Metres,
     VectorLayerInfo,
 )
+from qgis_sdk.processing import native
 from qgis_sdk.providers import Provider
 
 __all__ = ["buffer_layer", "centroid_layer", "provider"]
@@ -61,5 +66,9 @@ def buffer_layer(
     id="centroid", title="Replace geometries with centroids", group="Geometry"
 )
 def centroid_layer(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:
-    """Replace each geometry of ``layer_id`` with its centroid, in a new layer."""
-    return ctx.algorithms.execute(CentroidRequest(layer_id=layer_id))
+    """Replace each geometry of ``layer_id`` with its centroid, in a new layer.
+
+    ``native.Centroids`` is generated from the QGIS registry; the omitted
+    ``output`` is allocated by the run and comes back as an owned layer.
+    """
+    return ctx.algorithms.run(native.Centroids(input=layer_id)).vector("OUTPUT")

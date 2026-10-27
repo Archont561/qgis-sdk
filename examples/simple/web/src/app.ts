@@ -1,5 +1,6 @@
 import type { QgisSdk } from "@archont561/qgis-sdk";
 import type { Operations, Streams } from "./bridge.schema";
+import { runAlgorithm } from "./processing.schema";
 
 /** The SDK this page is written against: the plugin's declared operations. */
 export type SimpleSdk = QgisSdk<Operations, Streams>;
@@ -10,6 +11,11 @@ export type SimpleSdk = QgisSdk<Operations, Streams>;
  * the host told it: the source layer it opened and the last output it
  * produced. No path is typed here - an export names a file inside the
  * directory the host chose.
+ *
+ * The centroids control is the other way to run Processing from a page: not a
+ * declared action of the plugin, but the host's own `algorithms.run` behind
+ * the `algorithms.run` grant, typed by the generated `processing.schema.ts`
+ * (`qgis-sdk processing generate`, decision-64).
  */
 const PAGE = `
 	<h1>Simple</h1>
@@ -26,6 +32,10 @@ const PAGE = `
 		<label>Working CRS <input id="crs" type="text" value="EPSG:3857" /></label>
 		<button id="buffer" type="button">Buffer</button>
 		<output id="buffer-result" for="buffer"></output>
+	</section>
+	<section>
+		<button id="centroids" type="button">Centroids (host Processing)</button>
+		<output id="centroids-result" for="centroids"></output>
 	</section>
 	<section>
 		<button id="choose-directory" type="button">Choose the export directory</button>
@@ -84,6 +94,19 @@ export function createApp(root: HTMLElement, qgis: SimpleSdk): AppState {
 		state.outputId = output.id;
 		element(root, "buffer-result").textContent =
 			`${output.name} (${output.geometry_type}, ${output.crs ?? "no CRS"})`;
+	});
+
+	run("centroids", async () => {
+		const { outputs } = await runAlgorithm(qgis, "native:centroids", {
+			INPUT: required(state.sourceId, "open the dataset first"),
+			ALL_PARTS: false,
+		});
+		const centroids = required(
+			outputs.OUTPUT?.id ?? null,
+			"the host returned no layer",
+		);
+		element(root, "centroids-result").textContent =
+			`${outputs.OUTPUT?.name} (${outputs.OUTPUT?.geometry_type}) ${centroids}`;
 	});
 
 	run("choose-directory", async () => {

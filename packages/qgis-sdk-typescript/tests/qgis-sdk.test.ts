@@ -371,6 +371,7 @@ test("`host` is the curated surface on the same client, with every grant by defa
 	await qgis.ready;
 	expect(qgis.host.granted).toEqual([...HOST_OPERATIONS]);
 	expect(Object.keys(qgis.host).sort()).toEqual([
+		"algorithms",
 		"files",
 		"granted",
 		"layers",

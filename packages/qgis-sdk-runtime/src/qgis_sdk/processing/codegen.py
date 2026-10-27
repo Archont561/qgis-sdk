@@ -465,28 +465,7 @@ def emit_typescript_module(
         else tuple(p.id for p in catalogue.providers)
     )
     algorithms = [a for a in catalogue.algorithms if a.provider in wanted]
-    out: list[str] = [
-        f"// {HEADER.format(version=catalogue.qgis_version)}",
-        "// Regenerate with `qgis-sdk processing generate`; CI fails when this file is stale.",
-        "",
-        "import {",
-        "\ttype AlgorithmHost,",
-        "\ttype AlgorithmRun,",
-        "\ttype Destination,",
-        "\ttype Extent,",
-        "\ttype FileRef,",
-        "\ttype HostInvokeOptions,",
-        "\ttype LayerRef,",
-        "\ttype PointValue,",
-        "\ttype RangeValue,",
-        "\trunAlgorithm as runAny,",
-        "\ttype VectorLayerInfo,",
-        f'}} from "{package}";',
-        "",
-        f"export const QGIS_VERSION = {_ts_string(catalogue.qgis_version)};",
-        f"export const PROVIDERS = [{', '.join(_ts_string(p) for p in wanted)}] as const;",
-        "",
-    ]
+    body: list[str] = []
     names: list[tuple[str, str]] = []
     taken: dict[str, set[str]] = {}
     for algorithm in algorithms:
@@ -494,26 +473,49 @@ def emit_typescript_module(
         taken[algorithm.provider].add(base)
         name = _ts_prefix(algorithm.provider) + base
         names.append((algorithm.id, name))
-        out.append(f"/** {algorithm.label} (`{algorithm.id}`). */")
-        out.append(f"export interface {name}Params {{")
-        for parameter in algorithm.parameters:
-            optional = "" if parameter.required else "?"
-            doc = parameter.label or parameter.name
-            if parameter.options:
-                doc += f" — one of: {', '.join(parameter.options)}"
-            out.append(f"\t/** {_ts_comment(doc)} */")
-            out.append(
-                f"\t{_ts_key(parameter.name)}{optional}: {typescript_type(parameter)};"
+        body.append(f"/** {algorithm.label} (`{algorithm.id}`). */")
+        body.extend(_ts_shape(f"{name}Params", _ts_parameter_lines(algorithm)))
+        body.extend(
+            _ts_shape(
+                f"{name}Result",
+                [
+                    f"\t{_ts_key(output.name)}?: "
+                    f"{TYPESCRIPT_OUTPUT_TYPES.get(output.kind, 'unknown')};"
+                    for output in algorithm.outputs
+                ],
             )
-        out.append("}")
-        out.append(f"export interface {name}Result {{")
-        for output in algorithm.outputs:
-            out.append(
-                f"\t{_ts_key(output.name)}?: "
-                f"{TYPESCRIPT_OUTPUT_TYPES.get(output.kind, 'unknown')};"
-            )
-        out.append("}")
-        out.append("")
+        )
+        body.append("")
+    # Import only the aliases the shapes use: a provider without an extent
+    # parameter gets no `Extent`, so the module lints clean as source does.
+    used = {
+        alias
+        for alias in _TS_VALUE_ALIASES
+        if any(re.search(rf"\b{alias}\b", line) for line in body)
+    }
+    imports = sorted(
+        [f"\ttype {alias}," for alias in used]
+        + [
+            "\ttype AlgorithmHost,",
+            "\ttype AlgorithmRun,",
+            "\ttype HostInvokeOptions,",
+            "\trunAlgorithm as runAny,",
+        ],
+        key=lambda line: line.replace("\ttype ", "\t").lower(),
+    )
+    out: list[str] = [
+        f"// {HEADER.format(version=catalogue.qgis_version)}",
+        "// Regenerate with `qgis-sdk processing generate`; CI fails when this file is stale.",
+        "",
+        "import {",
+        *imports,
+        f'}} from "{package}";',
+        "",
+        f"export const QGIS_VERSION = {_ts_string(catalogue.qgis_version)};",
+        f"export const PROVIDERS = [{', '.join(_ts_string(p) for p in wanted)}] as const;",
+        "",
+        *body,
+    ]
     out.append(
         "/** Every generated algorithm by id; `runAlgorithm` is generic over it. */"
     )
@@ -548,6 +550,39 @@ export function runAlgorithm<K extends AlgorithmId>(
 ): Promise<AlgorithmRun<AlgorithmRegistry[K]["result"]>> {
 \treturn runAny<AlgorithmRegistry, K>(qgis, id, params, options);
 }"""
+
+
+#: The aliases a generated module may import from the bridge for its shapes.
+_TS_VALUE_ALIASES = (
+    "Destination",
+    "Extent",
+    "FileRef",
+    "LayerRef",
+    "PointValue",
+    "RangeValue",
+    "VectorLayerInfo",
+)
+
+
+def _ts_parameter_lines(algorithm: AlgorithmInfo) -> list[str]:
+    lines: list[str] = []
+    for parameter in algorithm.parameters:
+        optional = "" if parameter.required else "?"
+        doc = parameter.label or parameter.name
+        if parameter.options:
+            doc += f" — one of: {', '.join(parameter.options)}"
+        lines.append(f"\t/** {_ts_comment(doc)} */")
+        lines.append(
+            f"\t{_ts_key(parameter.name)}{optional}: {typescript_type(parameter)};"
+        )
+    return lines
+
+
+def _ts_shape(name: str, members: list[str]) -> list[str]:
+    """An interface with members, or a closed empty type when there are none."""
+    if not members:
+        return [f"export type {name} = Record<string, never>;"]
+    return [f"export interface {name} {{", *members, "}"]
 
 
 def _ts_string(value: str) -> str:

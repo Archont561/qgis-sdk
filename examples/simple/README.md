@@ -36,9 +36,11 @@ One line differs from a scaffolded plugin: `web/package.json` depends on
 outside the repository gets the exact bridge release the scaffold pins
 (decision-41; `qgis-sdk new --sdk-dependency` is the switch).
 
-`web/src/bridge.schema.ts` is generated from the plugin's declarations (`bun
-run bindings` checks it); `web/src/main.ts` builds the page's `QgisSdk` on it
-in three statements. The workspace harness
+`web/src/bridge.schema.ts` is generated from the plugin's declarations and
+`web/src/processing.schema.ts` from the `native` Processing provider of the
+project's QGIS (`bun run bindings` checks both); `web/src/main.ts` builds
+the page's `QgisSdk` on the first in three statements, and `app.ts` runs
+`native:centroids` through the second's typed `runAlgorithm`. The workspace harness
 `packages/qgis-sdk-python/tests/test_reference_example_native.py` runs this
 whole sequence and proves, inside a real `QWebEngineView`, that the page and
 the native dialog produce the same result through one handler.

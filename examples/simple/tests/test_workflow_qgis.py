@@ -198,6 +198,23 @@ def test_the_workflow_class_refuses_an_unknown_layer_and_a_silent_overwrite(
     assert destination.read_text(encoding="utf-8") != "mine"
 
 
+def test_centroid_runs_the_generated_request_against_real_processing(
+    desktop: Any,
+) -> None:
+    """``native.Centroids`` reaches ``native:centroids`` and the plugin owns the output."""
+    from qgis_sdk.algorithms import invoke
+    from simple.algorithms import centroid_layer
+
+    source = desktop.runtime.actions["open_fixture"]()
+
+    output = invoke(centroid_layer, desktop.runtime.instance.ctx, layer_id=source.id)
+
+    assert output.id != source.id
+    assert output.geometry_type == "point"
+    assert _qgs_layer(output.id).featureCount() == _qgs_layer(source.id).featureCount()
+    assert desktop.runtime.instance.ctx.layers.layer(output.id) == output
+
+
 def test_the_plugins_provider_is_in_the_toolbox_only_while_it_runs(
     qgis_app: Any,
 ) -> None:

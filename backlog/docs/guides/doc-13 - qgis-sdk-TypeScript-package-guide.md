@@ -179,10 +179,13 @@ const layer = await host.layers.get({ layer_id: page.items[0]!.id });
 const theme = await host.settings.get({ key: "theme", default: "light" });
 ```
 
-- **The declared inventory:** `layers.list`, `layers.get`, `project.layer_ids`,
-  `settings.get`, `notifications.info`, `styles.apply`. Anything else of the QGIS
-  API is not reachable from a page; the operations it would need wait for their
-  owning task, and the Python manifest records which.
+- **The declared inventory:** `layers.list`, `layers.get`,
+  `layers.open_vector`, `project.layer_ids`, `settings.get`,
+  `notifications.info`, `styles.apply`, `files.export`, the `network.fetch`
+  stream and, since 0.7.0, `algorithms.providers`, `algorithms.list`,
+  `algorithms.describe` and `algorithms.run` (below). Anything else of the
+  QGIS API is not reachable from a page; the operations it would need wait
+  for their owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
   `{items, truncated, next_cursor?}`. `limit` is capped at 200, and the generated
   validator refuses a larger one before the call leaves the page. A cursor is
@@ -199,6 +202,53 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
 - **Versioned.** `HOST_SCHEMA_VERSION` and `HOST_OPERATIONS` are exported, and the
   handshake advertises the same version, so a page can tell what it is talking to
   before its first call.
+
+### Processing from a page: `algorithms.*` and `runAlgorithm`
+
+The four `algorithms` operations
+([decision-64](../../decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md))
+expose the host's Processing registry behind two grants: `algorithms.read`
+for `providers`, `list({provider?, limit?, cursor?})` and
+`describe({algorithm_id})` - pages of `ProviderInfo` / `AlgorithmSummary`
+and one `AlgorithmInfo` whose parameters carry `required`, `default_json`
+(the default as JSON text, `null` when none), `options`, bounds and
+`destination` - and `algorithms.run` for
+`run({algorithm_id, params})`. The wire is generic JSON: `params` is the
+map the algorithm's own description validates on the host before anything
+runs, and the `RunResult` is a list of tagged outputs - `{name, kind:
+"vector", layer}`, `{name, kind: "file", file}` or `{name, kind: "value",
+value}`. A layer input is an owned layer id; a file input is a `FileRef`
+this view holds, resolved against the view before the algorithm sees it;
+a file the run produced comes back as a read-only `FileRef` minted for the
+view. `HOST_FINGERPRINT` moved once for the four operations.
+
+The typing lives next to the page, not in this package. `qgis-sdk
+processing generate --web-out web/src/processing.schema.ts` (the scaffold's
+`bindings` script runs it after `bridge generate`) renders, per algorithm,
+`<Provider><Name>Params` and `<Provider><Name>Result`, an
+`AlgorithmRegistry` keyed by id, and a `runAlgorithm` bound to it:
+
+```ts
+import { runAlgorithm } from "./processing.schema";
+
+const { outputs } = await runAlgorithm(qgis, "native:buffer", {
+	INPUT: layer.id,
+	DISTANCE: 25,
+});
+outputs.OUTPUT; // VectorLayerInfo | undefined, as NativeBufferResult declares
+```
+
+Under it the root exports the generic pieces the generated module imports:
+`runAlgorithm<R, K>(qgis, id, params, options?)` (sends one
+`algorithms.run` and keys the tagged outputs by name), `outputsByName`,
+`AlgorithmHost`, `AlgorithmRun<Result>`, `AlgorithmRegistryLike`, and the
+value aliases `LayerRef`, `Destination` (`FileRef | null`: a page never
+names a path), `Extent`, `PointValue` and `RangeValue`. A test scripts the
+operation like any host id: `harness.expectInvoke("algorithms.run", (payload)
+=> ({ algorithm: "native:buffer", outputs: [...] }))`. The scaffold writes
+`web/src/processing.schema.ts` for `native` from the runtime's own snapshot
+and grants `algorithms.run`; `bindings` regenerates it against the project's
+QGIS, so a registry that differs shows up as drift rather than a stale type.
 
 ## The schema module and `QgisSdk`
 
@@ -594,6 +644,20 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   the two apart in reports and never cite a mocked run as native behaviour.
 
 ## Next minor (unreleased) migration notes
+
+**Processing from a page (TASK-109, decision-64).** Four new host operations
+(`algorithms.providers/list/describe/run`) and two grants (`algorithms.read`,
+`algorithms.run`) move `HOST_FINGERPRINT` to `sha256:16790dc8…`;
+`HOST_SCHEMA_VERSION` and `BRIDGE_PROTOCOL_VERSION` stay at 1. `./host` also
+exports the new shapes (`AlgorithmInfo`, `AlgorithmSummary`,
+`ParameterInfo`, `OutputInfo`, `ProviderInfo`, `RunOutput`, `RunResult`,
+their request types) and the root exports `runAlgorithm`, `outputsByName`
+and the Processing value aliases. A bare `{"type": "object"}` in a
+declaration now renders as `Record<string, unknown>` instead of an empty
+interface. `qgis-sdk new --web` writes `web/src/processing.schema.ts`,
+grants `algorithms.run` and extends the `bindings` script with
+`qgis-sdk processing generate --check`; an existing project adds the file
+with that command and the grant by hand.
 
 **Stores and two more adapters (TASK-69, decision-47).** The root now exports
 the four stores; `./react` is rewritten over them with the same exported names

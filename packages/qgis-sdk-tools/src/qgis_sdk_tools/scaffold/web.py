@@ -16,6 +16,8 @@ import json
 from typing import Final
 
 from qgis_sdk.declarations import action, describe_plugin, plugin
+from qgis_sdk.processing.codegen import emit_typescript_module
+from qgis_sdk.processing.snapshot import core_catalogue
 
 from qgis_sdk_tools.generate import generate_schema_typescript
 
@@ -122,6 +124,10 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
             "web/src/bridge.schema.ts",
             generate_schema_typescript(describe_plugin(template_plugin_class(options))),
         ),
+        (
+            "web/src/processing.schema.ts",
+            emit_typescript_module(core_catalogue(), [SCAFFOLD_PROCESSING_PROVIDER]),
+        ),
     ]
     if web.framework == "react":
         files += [
@@ -138,13 +144,30 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
     return tuple(files)
 
 
+#: The Processing provider the starter page is typed for. The scaffold writes
+#: ``web/src/processing.schema.ts`` from the runtime's own snapshot (no QGIS
+#: at scaffold time); ``bindings`` regenerates it from the project's install,
+#: so a QGIS whose registry differs shows up as drift, never as a stale type.
+SCAFFOLD_PROCESSING_PROVIDER: Final = "native"
+
+BRIDGE_BINDINGS_COMMAND: Final = (
+    "qgis-sdk bridge generate --out web/src/bridge.schema.ts --check"
+)
+PROCESSING_BINDINGS_COMMAND: Final = (
+    f"qgis-sdk processing generate --provider {SCAFFOLD_PROCESSING_PROVIDER} "
+    "--no-python --web-out web/src/processing.schema.ts --check"
+)
+
+
 def bindings_command() -> str:
     """The drift check the project's CI runs, from the project root.
 
     The plugin class comes from ``[tool.qgis-sdk] plugin`` in the project's
-    ``pyproject.toml`` (decision-43), so the command names only the output.
+    ``pyproject.toml`` (decision-43), so the first command names only the
+    output; the second reads the Processing registry of the project's QGIS
+    install (decision-64).
     """
-    return "qgis-sdk bridge generate --out web/src/bridge.schema.ts --check"
+    return f"{BRIDGE_BINDINGS_COMMAND} && {PROCESSING_BINDINGS_COMMAND}"
 
 
 def _package_json(options: ScaffoldOptions, web: WebOptions) -> str:

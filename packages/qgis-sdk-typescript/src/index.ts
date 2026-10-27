@@ -13,7 +13,10 @@
  *   `@archont561/qgis-sdk/bridge`, and the default QWebChannel transport
  *   (`./webchannel`) `QgisSdk` connects through when given no other;
  * - the framework-free stores (`./stores`) a vanilla page drives directly and
- *   the React, Vue and Svelte adapters wrap (decision-47).
+ *   the React, Vue and Svelte adapters wrap (decision-47);
+ * - the Processing helpers (`./processing`): the value aliases a generated
+ *   `processing.schema.ts` imports and the generic `runAlgorithm` it binds
+ *   to its `AlgorithmRegistry` (decision-64).
  *
  * The host namespaces also come as `qgis.host` on a `QgisSdk`; their own entry
  * point (`./host`) stays for a page that holds a bare `BridgeClient`. The
@@ -26,6 +29,7 @@
 export * from "./bridge";
 export * from "./declarations";
 export * from "./errors";
+export * from "./processing";
 export * from "./qgis-sdk";
 export * from "./schema";
 export * from "./stores";

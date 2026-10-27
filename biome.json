@@ -11,6 +11,8 @@
 			"!!**/tests/contracts/pydantic/generated",
 			"!!examples/*/web/src/bridge.ts",
 			"!!examples/*/web/src/bridge.schema.ts",
+			"!!examples/*/web/src/processing.schema.ts",
+			"!!packages/qgis-sdk-runtime/src/qgis_sdk/processing/catalogue.json",
 			"!!**/.pixi",
 			"!!**/.bun",
 			"!!**/.npm",

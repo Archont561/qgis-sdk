@@ -256,6 +256,20 @@ def contract_fingerprint(description: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _is_open_map(schema: Mapping[str, Any]) -> bool:
+    """Whether an object schema declares no shape at all.
+
+    ``{"type": "object"}`` with no properties and no closed
+    ``additionalProperties`` is a map the host validates by other means (the
+    parameters of ``algorithms.run``, checked against the algorithm's own
+    description). It renders inline as ``Record<string, unknown>`` rather than
+    as a named interface with no fields, which would refuse every key.
+    """
+    return (
+        not schema.get("properties") and schema.get("additionalProperties") is not False
+    )
+
+
 def _shape(schema: Any) -> Any:
     """Return ``schema`` without the keys that do not shape a TypeScript type."""
     if isinstance(schema, Mapping):
@@ -717,7 +731,7 @@ class _Generator:
         return name
 
     def _register(self, schema: Mapping[str, Any], name: str) -> None:
-        if schema.get("type") == "object":
+        if schema.get("type") == "object" and not _is_open_map(schema):
             if id(schema) in self._names:
                 return
             if "title" in schema:

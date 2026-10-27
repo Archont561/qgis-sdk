@@ -234,7 +234,7 @@ class TestHostArtifacts:
         manifest = web_project / "pyproject.toml"
         manifest.write_text(
             manifest.read_text(encoding="utf-8").replace(
-                'grants = ["layers.read"]',
+                'grants = ["layers.read", "algorithms.run"]',
                 'grants = ["layers.list", "project.layer_ids"]',
             ),
             encoding="utf-8",
