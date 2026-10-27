@@ -1354,6 +1354,17 @@ def runtime_range_includes(lower: Version, upper: str, runtime: Version) -> bool
     return runtime.sort_key() >= lower.sort_key() and below_upper
 
 
+def example_window_includes(lower: Version, upper: str, shipped: Version) -> bool:
+    """Whether the example's ``>=lower,<upper`` window admits ``shipped``.
+
+    Read on release segments only, as the tools' ``VERSION004`` reads it: an
+    example declares the minor line (``>=0.7,<0.8``), never a prerelease, so
+    ``0.7.0-rc.1`` is inside the window ``stamp`` writes for it.
+    """
+    core = Version(shipped.major, shipped.minor, shipped.patch)
+    return runtime_range_includes(lower, upper, core)
+
+
 def read_package_json_version(text: str) -> Version:
     """Read the stamped version out of the bridge ``package.json``."""
     return Version.parse(str(json.loads(text)["version"]))
@@ -2276,7 +2287,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
             }
             for name, (lower, upper) in windows.items():
                 shipped = released[name]
-                if shipped is None or runtime_range_includes(lower, upper, shipped):
+                if shipped is None or example_window_includes(lower, upper, shipped):
                     continue
                 raise QgisSdkReleaseVersionError(
                     f"examples/simple declares {name}>={lower},<{upper} but this "
