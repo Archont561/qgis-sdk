@@ -13,9 +13,10 @@ hooks. Styling is a compiled `style.css` of `qs-` utilities bound to
 `--qgis-sdk-*` tokens, which the host palette fills inside QGIS.
 
 > Experimental, `0.1.0` unpublished: the first npm release follows the
-> `ui-v*` tag. `lit` is the only dependency; `@archont561/qgis-sdk` is a
-> peer. `./react` needs `react` and `@lit/react`, `./vue` needs `vue`,
-> `./svelte` needs `svelte`, `./uno` needs `@unocss/preset-mini`.
+> `ui-v*` tag, under this name and the unscoped alias `qgis-sdk-ui`. `lit`
+> is the only dependency; `@archont561/qgis-sdk` is a peer. `./react` needs
+> `react` and `@lit/react`, `./vue` needs `vue`, `./svelte` needs `svelte`,
+> `./uno` needs `@unocss/preset-mini`.
 
 ## Installation
 
