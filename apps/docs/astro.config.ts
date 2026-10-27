@@ -68,14 +68,12 @@ export default defineConfig({
 									},
 								]
 							: []),
+						// Shipped artifacts only: releases and registries, never the
+						// plans and tasks behind them.
 						{ label: "Releases", link: `${REPOSITORY}/releases` },
 						{
 							label: "Decisions",
 							link: `${REPOSITORY}/tree/main/backlog/decisions`,
-						},
-						{
-							label: "Roadmap",
-							link: `${REPOSITORY}/blob/main/backlog/docs/plans/doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md`,
 						},
 					],
 				},

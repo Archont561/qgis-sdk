@@ -83,8 +83,8 @@ matrix says; the package numbers are otherwise independent
 ([decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
 
 The release workflow records this table in its job summary next to the
-metadata and build checks it runs ([doc-17](../plans/doc-17%20-%20M4-sprint-train-and-0.5.0-dependency-order.md),
-sprint 3), so a release says on which targets its qualification holds. The
+metadata and build checks it runs, so a release says on which targets its
+qualification holds. The
 detailed per-requirement evidence stays in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#headless-qgis-and-webengine-qualification).
 
 The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk) is published on npm and [GitHub Packages](https://github.com/Archont561/qgis-sdk/pkgs/npm/qgis-sdk); the bridge guide is [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md).
@@ -1399,10 +1399,9 @@ async def load(self, ctx):
   `QgisSdkDecodeError`, all under `QgisSdkNetworkError` with the method and the
   URL in the message.
 - **Defaults from measurement.** 30 s timeout, 20 redirects, 16 MiB buffered
-  body; the last two come from
-  [doc-15](../plans/doc-15%20-%20TASK-5-network-limits-measurement-evidence.md).
-  A body over the ceiling is aborted while downloading, not buffered and then
-  refused.
+  body; the last two were measured against `QgsNetworkAccessManager` on
+  loopback servers, not chosen. A body over the ceiling is aborted while
+  downloading, not buffered and then refused.
 - **QGIS owns the configuration.** The native transport goes through
   `QgsNetworkAccessManager`, so the proxy, the certificate trust and the
   authentication database a user set in QGIS apply; `auth_config` is handed to

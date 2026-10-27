@@ -303,7 +303,7 @@ The support promise itself is one machine-readable source, `qgis_sdk_tools.targe
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
 | Two-plugin `pydantic` / `pydantic_core` coexistence in QGIS Desktop | Qualified on Linux (`plugin_coexistence_smoke.py`, TASK-33 AC #3) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
-| QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`, doc-15) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
+| QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Display-server Desktop GUI + in-Desktop `QWebEngineView` rendering | Blocker: no display server or `Xvfb` in sandbox/CI (`offscreen` renders no widgets, TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) |
 | Chromium sandbox | Disabled by headless flags above | N/A | N/A |
 
@@ -427,9 +427,7 @@ pixi run -e default python packages/qgis-sdk-python/scripts/qt_scheduler_smoke.p
 }
 ```
 
-The numbers are one Linux/offscreen sample, not a latency guarantee; the
-reasoning and the repeated runs are recorded in
-[doc-6](../plans/doc-6%20-%20TASK-13-Qt-scheduler-spike-evidence.md). Run the
+The numbers are one Linux/offscreen sample, not a latency guarantee. Run the
 opt-in test with:
 
 ```sh
@@ -448,9 +446,10 @@ transport-followed hop costs, and how long the GUI thread stalls when a 1 to
 pixi run -e default python packages/qgis-sdk-python/scripts/network_limits_probe.py
 ```
 
-The shipped defaults (20 redirects, 16 MiB buffered body) and the finding that
-made the transport follow redirects itself are recorded in
-[doc-15](../plans/doc-15%20-%20TASK-5-network-limits-measurement-evidence.md).
+The shipped defaults are 20 redirects and a 16 MiB buffered body. The probe
+also found that `QgsNetworkAccessManager` forwards `Authorization` and
+`Cookie` to a different origin when it follows a redirect itself, which is
+why the transport follows redirects on its own and never delegates them to Qt.
 `tests/scripts/test_network_limits_probe.py` pins the recommendation rule in the
 QGIS-free suite; the measurement itself is opt-in:
 
@@ -735,7 +734,7 @@ inferred from CI.
 - **Scope.** `release.py plan --scope python --bump minor` from
   `python-v0.3.0` plans `python-v0.4.0` with ten features and three fixes
   (the push default would plan a 0.3.1 patch; the minor is the explicit
-  act doc-4 requires). `plan --scope typescript` skips: no release-worthy
+  act the release policy requires). `plan --scope typescript` skips: no release-worthy
   commit since `ts-v0.3.0`, and `git diff ts-v0.3.0..main` under
   `packages/qgis-sdk-typescript` and `packages/qgis-sdk-alias` is empty, so
   the bridge is not released (TASK-30 AC5). `verify-versions` agrees on
