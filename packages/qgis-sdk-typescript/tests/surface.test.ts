@@ -22,6 +22,10 @@ const PACKAGE = join(SRC, "..", "package.json");
 const NEUTRAL = [
 	"index.ts",
 	"bridge.ts",
+	"bridge/protocol.ts",
+	"bridge/errors.ts",
+	"bridge/frames.ts",
+	"bridge/client.ts",
 	"host.ts",
 	"generated/host.ts",
 	"declarations.ts",
