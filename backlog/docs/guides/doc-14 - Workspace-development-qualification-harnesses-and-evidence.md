@@ -1233,9 +1233,12 @@ Stamping, tagging and publishing wait for an explicit "Release 0.7.0".
   0.7.0 migration notes document), the bridge's store core with the
   `./vue` and `./svelte` adapters and `algorithms.run`, and the first
   `@archont561/qgis-sdk-ui` 0.1.0 whose peer range names the bridge
-  minor it was qualified with. Contract version 1 and `HOST_FINGERPRINT`
-  `sha256:16790dc8…` are unchanged since 0.6.0: a 0.6 page talks to a
-  0.7 host.
+  minor it was qualified with. The transport protocol and the host
+  schema version stay at 1; `HOST_FINGERPRINT` moved since 0.6.0
+  (`sha256:f96bdf10…` → `sha256:16790dc8…`, the `FileRef` kind and the
+  four Processing operations - additions), so a 0.4.0 page keeps working
+  against a 0.7 host. (Corrected 2026-10-27 after the release: the first
+  version of this line called the fingerprint unchanged.)
 - **Static gate.** `lint-python` clean, `format-python-check` 338 files,
   `lint-github-actions` clean, `biome-check` 177 files, `typecheck`
   (bridge and components) clean, `test-release-tool` / `tests/scripts`
@@ -1342,6 +1345,30 @@ Stamping, tagging and publishing wait for an explicit "Release 0.7.0".
   report `VERSION001` and `VERSION004` with their remediations and
   nothing else. The three tags follow on this pull request's merge
   commit, each only on explicit authorization.
+- **Released afterwards.** PR #118 merged as `e9b2ce8`; the annotated
+  tags `python-v0.7.0`, `ts-v0.5.0` and `ui-v0.1.0` (release notes in the
+  annotations) on that one commit ran `release.yml` three times:
+  40577281463 (`build`, `conda`, `pypi`, `github-release` succeeded; the
+  npm jobs skipped), 40577281275 (`build`, `npm`, `github-packages`,
+  `github-release` succeeded; the Python jobs skipped) and 40577280907
+  (`build`, `ui`, `github-release` succeeded; everything else skipped).
+  PyPI serves `qgis-sdk 0.7.0` (`262a32c4…`), `qgis-sdk-runtime 0.7.0`
+  (`fe409110…`) and `qgis-sdk-tools 0.7.0` (`862f1118…`) - the same
+  hashes as the wheels built here on the stamped tree, so the build is
+  reproducible. npm serves `@archont561/qgis-sdk@0.5.0` and the alias
+  `qgis-sdk@0.5.0` as `latest`, and - the first real publish of both
+  names - `@archont561/qgis-sdk-ui@0.1.0` and `qgis-sdk-ui@0.1.0` as
+  `latest` next to the `0.0.0` placeholders. The GitHub Releases carry
+  three wheels, `qgis-sdk-0.7.0-pyh245bdaf_0.conda`,
+  `qgis-sdk-runtime-0.7.0-pyh4616a5c_0.conda`,
+  `qgis-sdk-tools-0.7.0-pyh4616a5c_0.conda` and `SHA256SUMS` (Python),
+  the two tarballs and `SHA256SUMS` (bridge), the two tarballs and
+  `SHA256SUMS` (ui). prefix.dev uploads succeeded per the job log; that
+  channel and the release-asset CDN are not reachable from the sandbox,
+  so they are attested by the runs only. Still open for the owner:
+  deprecate the `0.0.0` placeholders of `@archont561/qgis-sdk-ui` and
+  `qgis-sdk-ui` on npm (and the `0.0.0` / `0.0.0-stage` ones that remain
+  from earlier releases).
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
