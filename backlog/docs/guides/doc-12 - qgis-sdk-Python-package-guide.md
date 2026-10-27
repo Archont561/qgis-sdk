@@ -6,20 +6,13 @@ created_date: '2026-10-24 21:20'
 ---
 # qgis-sdk Python package guide
 
-The reference prose for the `qgis-sdk` Python package. It used to live in
-`packages/qgis-sdk-python/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here, where it is the source the documentation site at
+The reference for the `qgis-sdk` Python package: the declarations, the pure
+contract layer, the scoped runtime, the Desktop host, forms and native
+surfaces, Processing, the bridge host side, networking, scoped jobs, the
+project scaffold and the `qgis-sdk` command, with the migration notes of every
+release at the end. The documentation site at
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
-renders, one page per section
-([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)). The headings dropped the task tags they carried in the README;
-the records that landed each surface are TASK-2 (declarations), TASK-11 (pure
-contract layer), TASK-24 (runtime and Desktop adapter), TASK-3 (native forms),
-TASK-14 and TASK-63 (algorithms), TASK-39 (providers), TASK-4 with decisions 26 and 27
-(bridge host side, generated client, host surface), TASK-17 and decision-28
-(generated client and streams), TASK-5 and decision-4 (networking), TASK-1
-(scaffold), TASK-27 and TASK-28 (release
-policy and migration notes, TASK-29 for 0.3.0, TASK-30 for 0.4.0, TASK-31 for
-0.5.0, TASK-60 for 0.6.0). Status at the time of writing: Python `0.6.0`
+renders it one page per section. Status at the time of writing: Python `0.6.0`
 (`python-v0.6.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
 and prefix.dev) released as a pair with the bridge `@archont561/qgis-sdk`
 `0.4.0` (`ts-v0.4.0`), both tagged on one merge commit; the previous pair was

@@ -241,15 +241,38 @@ describe("renderGuides", () => {
 		);
 	});
 
-	test("points backlog records the site does not render at the repository", () => {
+	test("drops links to process records and keeps their text", () => {
+		// Tasks, plans, milestones and the agent rules are how the repository
+		// works, not what it ships: the site never links them (the prose that
+		// cites them is edited at the source; this is the safety net).
 		const page =
 			byPath.get("python/desktop-host-host-and-the-project-manifest.md") ?? "";
-		expect(page).toContain(
-			"[task](https://github.com/Archont561/qgis-sdk/blob/main/backlog/tasks/task-1%20-%20Scaffold.md)",
+		expect(page).toContain("Intro paragraph with a task and a\nplan.");
+		expect(page).not.toContain("backlog/tasks");
+		expect(page).not.toContain("backlog/docs/plans");
+		expect(pages.warnings).toContainEqual({
+			guide: "doc-12",
+			page: "desktop-host-host-and-the-project-manifest",
+			link: "../../tasks/task-1%20-%20Scaffold.md",
+			reason: "cites a process record; the link was dropped",
+		});
+		const rules = renderGuides(
+			[
+				{
+					guide: PYTHON,
+					markdown:
+						"# T\n\n## A\n\nSee [AGENTS.md](../../../AGENTS.md), [skills](../../../.agents/skills/tdd/SKILL.md) and [m-6](../../milestones/m-6%20-%200.7.0.md).\n",
+				},
+			],
+			{ base: "", repository: "https://github.com/o/r" },
 		);
-		expect(page).toContain(
-			"[plan](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/plans/doc-17%20-%20Train.md)",
+		expect(rules.find((p) => p.path === "python/a.md")?.content).toContain(
+			"See AGENTS.md, skills and m-6.",
 		);
+		expect(rules.warnings).toHaveLength(3);
+	});
+
+	test("points other backlog records the site does not render at the repository", () => {
 		expect(byPath.get("python/index.md")).toContain(
 			"(https://github.com/Archont561/qgis-sdk/blob/main/backlog/decisions/decision-29%20-%20Keep-READMEs-minimal.md)",
 		);

@@ -6,13 +6,13 @@ created_date: '2026-10-24 21:20'
 ---
 # qgis-sdk TypeScript package guide
 
-The reference prose for `@archont561/qgis-sdk`. It used to live in
-`packages/qgis-sdk-typescript/README.md`; [decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here as the source the documentation site at
+The reference for `@archont561/qgis-sdk`, the page side of a plugin's web
+view: the transport client, the host namespaces, the generated schema module
+and `QgisSdk`, the framework-free stores with their React, Vue and Svelte
+bindings, the `@archont561/qgis-sdk-ui` components and the scripted test host.
+The documentation site at
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
-renders, one page per section
-([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md)).
-Status at the time of writing: `0.4.0` is the released version (`ts-v0.4.0`,
+renders it one page per section. Status at the time of writing: `0.4.0` is the released version (`ts-v0.4.0`,
 tagged with `python-v0.6.0` on one merge commit as the 0.6.0 pair; packages
 version independently,
 [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
@@ -369,10 +369,8 @@ const handle = await qgis.sites.watch(
 `qgis-sdk bridge generate --out web/src/bridge.ts` still renders what `0.3.0`
 rendered - the import-free module with `createOperations(client)`,
 `PluginOperations` and one validator per type - and prints a note that the
-schema module is the current form. It stays for one minor; the scaffold's
-`web/` template moves to the schema module when the clean project lands
-([TASK-65](../../tasks/task-65%20-%20Scaffold-the-clean-project-and-migrate-the-reference-plugin.md)).
-A page on the legacy client keeps working unchanged.
+schema module is the current form. It stays for one minor. A page on the
+legacy client keeps working unchanged.
 
 ## Stores: the framework-free core
 

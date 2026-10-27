@@ -6,16 +6,11 @@ created_date: '2026-10-24 21:20'
 ---
 # Workspace development, qualification harnesses and evidence
 
-How the workspace is developed and what has been proven on a real QGIS host.
-This used to be spread across the root and package READMEs;
-[decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)
-moved it here. The qualification tables and harness reports below are the
-evidence [TASK-23](../../tasks/task-23%20-%20Qualify-candidate-QGIS-4-Windows-and-Linux-toolchains.md),
-[TASK-24](../../tasks/task-24%20-%20Implement-scoped-plugin-runtime-and-native-lifecycle-adapter.md)
-and [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md)
-cite; the numbers are the ones recorded when each harness last ran, not a
-guarantee. [AGENTS.md](../../../AGENTS.md) and the skills under `.agents/skills/`
-remain the authority for the session workflow.
+How the workspace is developed and what has been proven on a real QGIS host:
+the environments and tasks, the test layers, the build artifacts, the headless
+and Desktop harnesses, and the evidence each release gate recorded. The
+numbers in the qualification tables and harness reports are the ones recorded
+when each harness last ran, not a guarantee.
 
 ## Quick start
 
@@ -104,18 +99,20 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 ## Documentation site
 
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/) is
-`apps/docs`, an Astro Starlight site ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md),
-[decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)).
-Its reference pages are generated, never edited:
+`apps/docs`, an Astro Starlight site. Its reference pages are generated,
+never edited, and the site cites what ships (releases, registries, versions),
+never how the work was tracked:
 
 - `apps/docs/scripts/generate.ts` renders this guide, doc-12 and doc-13 into
   `src/content/docs/{workspace,python,typescript}/` - one page per `##`
   section, the preamble as the directory's index, sub-headings moved up one
-  level. Same-guide and cross-guide anchors become site routes; links to
-  decisions, tasks and plans point at the repository on GitHub. Each page's
-  "Edit page" opens the guide, and its `lastUpdated` is the guide's last
-  commit. The generated directories are ignored by git. A link whose anchor
-  no guide has is reported by the generator and fails the link check.
+  level. Same-guide and cross-guide anchors become site routes; a link to a
+  task, a milestone, a plan or the agent rules is dropped (its text stays)
+  and reported, so those records never surface on the site; other backlog
+  records point at the repository on GitHub. Each page's "Edit page" opens
+  the guide, and its `lastUpdated` is the guide's last commit. The generated
+  directories are ignored by git. A link whose anchor no guide has is
+  reported by the generator and fails the link check.
 - The same script copies `packages/qgis-sdk-ui/storybook-static` to
   `public/storybook/` when it exists, so the site serves the Storybook at
   `/storybook/`; `docs-build` builds it first.
@@ -146,7 +143,7 @@ Its reference pages are generated, never edited:
 - Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 - Lefthook runs staged-file Ruff/Biome checks, Convco validates commit messages, and pre-push runs the coverage task.
 
-Commit messages use Conventional Commits form (validated by Convco). See [AGENTS.md](../../../AGENTS.md) for the session and merge workflow, and the agent skills under `.agents/skills/` for TDD, refactor, clean-code, backlog, and skill-creator guidance. Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` and export only prefixed exception names.
+Commit messages use Conventional Commits form (validated by Convco). Prefix every SDK-defined exception class (Python or TypeScript) with `QgisSdk` and export only prefixed exception names.
 
 ## Python package development
 

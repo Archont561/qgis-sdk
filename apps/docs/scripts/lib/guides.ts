@@ -207,8 +207,31 @@ export function splitGuide(markdown: string): SplitGuide {
 	};
 }
 
-/** Markdown links, `[text](target)`; targets carry no spaces (the guides use `%20`). */
-const LINK = /\]\(([^)\s]+)\)/g;
+/**
+ * Markdown links, `[text](target)`; targets carry no spaces (the guides use
+ * `%20`). The leading `!` of an image is captured so images are left alone.
+ */
+const LINK = /(!?)\[([^[\]]*)\]\(([^)\s]+)\)/g;
+
+/**
+ * Repository paths that are process, not product: the site never links them.
+ * Official docs cite shipped artifacts (releases, registries, versions); how
+ * the work was planned and tracked stays in the repository.
+ */
+const PROCESS_PATHS = [
+	/^backlog\/tasks\//,
+	/^backlog\/milestones\//,
+	/^backlog\/docs\/plans\//,
+	/^AGENTS\.md$/,
+	/^\.agents\//,
+];
+
+/** Repository-relative path of a link written inside the guides directory. */
+function repositoryPath(relative: string): string | null {
+	const decoded = decodeURIComponent(relative.split("#", 2)[0] ?? "");
+	const resolved = posix.normalize(posix.join(GUIDES_DIR, decoded));
+	return resolved.startsWith("..") ? null : resolved;
+}
 
 function plainText(markdown: string): string {
 	return markdown
@@ -293,24 +316,22 @@ class Renderer {
 		return `${dir}${target.page}/${target.anchor ? `#${target.anchor}` : ""}`;
 	}
 
-	private repositoryUrl(relative: string): string | null {
-		const [path, anchor] = relative.split("#", 2);
-		const decoded = decodeURIComponent(path ?? "");
-		const resolved = posix.normalize(posix.join(GUIDES_DIR, decoded));
-		if (resolved.startsWith("..")) {
-			return null;
-		}
-		const encoded = resolved.split("/").map(encodeURIComponent).join("/");
+	private repositoryUrl(path: string, relative: string): string {
+		const anchor = relative.split("#", 2)[1];
+		const encoded = path.split("/").map(encodeURIComponent).join("/");
 		const ref = this.options.ref ?? "main";
 		return `${this.options.repository}/blob/${ref}/${encoded}${anchor ? `#${anchor}` : ""}`;
 	}
 
-	/** Where a link written inside `guide` points once the guide is split. */
+	/**
+	 * Where a link written inside `guide` points once the guide is split, or
+	 * `null` when the site must not link it at all (the text is kept).
+	 */
 	private rewrite(
 		guide: Guide,
 		url: string,
 		warn: (reason: string) => void,
-	): string {
+	): string | null {
 		if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
 			return url;
 		}
@@ -327,12 +348,16 @@ class Renderer {
 			}
 		}
 		if (targetGuide === undefined) {
-			const repository = this.repositoryUrl(url);
-			if (repository === null) {
+			const path = repositoryPath(url);
+			if (path === null) {
 				warn("escapes the repository");
 				return url;
 			}
-			return repository;
+			if (PROCESS_PATHS.some((pattern) => pattern.test(path))) {
+				warn("cites a process record; the link was dropped");
+				return null;
+			}
+			return this.repositoryUrl(path, url);
 		}
 		if (anchor === null || anchor === "") {
 			return this.route(targetGuide, null);
@@ -357,12 +382,18 @@ class Renderer {
 				if (segment.code) {
 					return segment.text;
 				}
-				let text = segment.text.replace(LINK, (_whole, url: string) => {
-					const rewritten = this.rewrite(guide, url, (reason) =>
-						this.warnings.push({ guide: guide.id, page, link: url, reason }),
-					);
-					return `](${rewritten})`;
-				});
+				let text = segment.text.replace(
+					LINK,
+					(whole: string, image: string, label: string, url: string) => {
+						if (image) {
+							return whole;
+						}
+						const rewritten = this.rewrite(guide, url, (reason) =>
+							this.warnings.push({ guide: guide.id, page, link: url, reason }),
+						);
+						return rewritten === null ? label : `[${label}](${rewritten})`;
+					},
+				);
 				if (demote) {
 					text = text.replace(/^#(#{2,5}\s)/gm, "$1");
 				}
