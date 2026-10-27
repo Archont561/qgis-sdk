@@ -9,7 +9,7 @@ Rules owned here: ``PROJECT001`` (no package), ``META001`` (a hand-written
 hand-written ``classFactory``; ``host()`` binds it), ``CONFIG001`` for
 ``[tool.qgis-sdk.check]``. The ``pyproject.toml`` rules live in
 :mod:`qgis_sdk_tools.project`, the version rules in :mod:`.versions`, the
-native UI rules (``UI001``, ``UI003``, ``ICON001``) in :mod:`.ui`.
+native UI rules (``UI001``-``UI003``, ``ICON001``) in :mod:`.ui`.
 """
 
 from __future__ import annotations
@@ -100,7 +100,12 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         diagnostics.extend(check_source(source, path=relative, native_modules=native))
         package = root / relative.parts[0] if len(relative.parts) > 1 else None
         diagnostics.extend(
-            check_bindings(source, path=relative, package_directory=package)
+            check_bindings(
+                source,
+                path=relative,
+                package_directory=package,
+                directory=path.parent,
+            )
         )
 
     diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))

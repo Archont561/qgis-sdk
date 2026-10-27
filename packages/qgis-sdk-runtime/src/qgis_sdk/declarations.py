@@ -97,8 +97,10 @@ def derive_id(name: str) -> str:
 def derive_title(name: str) -> str:
     """The readable title a declaration gets from its Python name.
 
-    A CamelCase name keeps its word casing (``FieldTools`` -> ``Field Tools``);
-    a snake_case name reads as a sentence (``list_layers`` -> ``List layers``).
+    A CamelCase name keeps its word casing (``FieldTools`` -> ``Field Tools``,
+    ``HTTPServer`` -> ``HTTP Server``); a snake_case name reads as a sentence
+    (``list_layers`` -> ``List layers``). Either way a title starts with a
+    capital (``fieldTools`` -> ``Field Tools``).
     """
     words = _words(name)
     if not words:
@@ -106,7 +108,7 @@ def derive_title(name: str) -> str:
             f"Cannot derive a declaration title from {name!r}; pass title= explicitly"
         )
     if any(word[:1].isupper() for word in words):
-        return " ".join(words)
+        return " ".join([words[0][:1].upper() + words[0][1:], *words[1:]])
     return " ".join([words[0].capitalize(), *words[1:]])
 
 

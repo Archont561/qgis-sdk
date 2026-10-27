@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 from qgis_sdk.bridge import BridgeErrorCode, Dispatcher
 from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.bridge.host import (
@@ -477,8 +479,24 @@ def test_a_second_registration_is_refused_rather_than_overwriting() -> None:
         register_host_operations(dispatcher, _services(1))
 
 
-@pytest.mark.parametrize("operation", ["layers.list", "project.layer_ids"])
-@pytest.mark.parametrize("cursor", ["abc", "-3", "2.7", " 2", "", "\u0663"])
+#: Cursors are ASCII decimal offsets this host issued; anything else - signs,
+#: fractions, padding, other scripts' digits - is a cursor it did not issue.
+_ASCII_DIGITS = frozenset("0123456789")
+foreign_cursors = st.text(min_size=0, max_size=6).filter(
+    lambda text: not text or not set(text) <= _ASCII_DIGITS
+)
+
+
+@given(
+    operation=st.sampled_from(["layers.list", "project.layer_ids"]),
+    cursor=foreign_cursors,
+)
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(operation="layers.list", cursor="-3")
+@example(operation="layers.list", cursor="2.7")
+@example(operation="layers.list", cursor=" 2")
+@example(operation="layers.list", cursor="")
+@example(operation="project.layer_ids", cursor="\u0663")
 def test_a_cursor_this_host_did_not_issue_is_refused(
     operation: str, cursor: str
 ) -> None:
@@ -488,6 +506,41 @@ def test_a_cursor_this_host_did_not_issue_is_refused(
     assert reply["ok"] is False
     assert reply["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
     assert "cursor" in reply["error"]["message"]
+
+
+@given(
+    operation=st.sampled_from(["layers.list", "project.layer_ids"]),
+    count=st.integers(0, 30),
+    limit=st.integers(1, MAX_PAGE),
+)
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(operation="layers.list", count=0, limit=1)
+@example(operation="layers.list", count=5, limit=5)
+@example(operation="project.layer_ids", count=7, limit=3)
+def test_following_the_cursors_walks_every_item_exactly_once(
+    operation: str, count: int, limit: int
+) -> None:
+    """Pages concatenate to the whole list, and only the last page has no cursor."""
+    dispatcher = _dispatcher(_services(count))
+    whole = _call(dispatcher, operation, {"limit": MAX_PAGE})["value"]["items"]
+    assert len(whole) == count
+
+    walked: list = []
+    payload: dict = {"limit": limit}
+    pages = 0
+    while True:
+        page = _call(dispatcher, operation, payload)["value"]
+        pages += 1
+        assert len(page["items"]) <= limit
+        walked.extend(page["items"])
+        if not page["truncated"]:
+            assert "next_cursor" not in page
+            break
+        assert page["items"], "a truncated page is never empty"
+        payload = {"limit": limit, "cursor": page["next_cursor"]}
+
+    assert walked == whole
+    assert pages == max(1, -(-count // limit))  # ceil(count / limit), at least one
 
 
 def test_a_refused_cursor_never_reaches_the_wrapped_method() -> None:

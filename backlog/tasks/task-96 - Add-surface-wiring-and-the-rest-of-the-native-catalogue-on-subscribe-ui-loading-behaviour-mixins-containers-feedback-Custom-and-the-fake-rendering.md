@@ -3,10 +3,10 @@ id: TASK-96
 title: >-
   Add surface wiring and the rest of the native catalogue: @on, @subscribe, ui=
   loading, behaviour mixins, containers, feedback, Custom and the fake rendering
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26T11:01:00Z'
-updated_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-27 10:03'
 labels: []
 milestone: m-6
 dependencies:
@@ -34,4 +34,8 @@ decision-55 points 2, 3, 5 and 7. @on(name).changed|clicked|toggled|edited and @
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-10-26: AC 4 added - minimal ctx.log as LogView's source (decision-63).
+
+2026-10-27: landed in three slices on one branch - 96a 316a6ea (containers, feedback, buttons, Custom, widget-form surface, ui_snapshot, ctx.log minimum), 96b c053bf7 (@on/@subscribe/ctx.on, hooks, ui= loading, RunsJobs/SubscribesStreams/HasAcceptCancel, echo flag, host stream pump), 96c (UI002/UI004, doc-12, the example's ResultsDock, scaffold PingDialog on @on). Pure wiring tests 16, native 5; example 19 pure / 6 native; quick suite 1841 passed. Status goes Done with the ACs once the pull request is merged.
+
+PR #105 also carries two further commits: ceb7ffa test(python) turns seven rule-shaped parametrize tables into Hypothesis properties (the derive_title lower-camel capitalisation came out of it) and 0774928 feat(runtime) adds the declarative surface form (decision-55 amendment: components as class attributes, @on(component), per-window copies; ResultsDock declared). Adoption follow-ups: TASK-108.
 <!-- SECTION:NOTES:END -->

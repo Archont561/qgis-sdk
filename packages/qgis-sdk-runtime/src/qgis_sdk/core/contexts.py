@@ -14,6 +14,7 @@ to ask instead of use.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, overload
 
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
@@ -23,6 +24,7 @@ from qgis_sdk.services import (
     DesktopAccess,
     Files,
     Layers,
+    Log,
     Network,
     Notifications,
     Processing,
@@ -39,6 +41,7 @@ from .scope import ResourceScope
 
 if TYPE_CHECKING:
     from qgis_sdk.ui.actions import ViewActions
+    from qgis_sdk.ui.streams import ViewStreams
 
 T = TypeVar("T")
 
@@ -139,6 +142,7 @@ class PluginContext(_Context):
         "_desktop",
         "_files",
         "_layers",
+        "_log",
         "_network",
         "_processing",
         "_project",
@@ -162,6 +166,7 @@ class PluginContext(_Context):
         "processing",
         "ui",
         "files",
+        "log",
     )
 
     notifications: Notifications
@@ -177,6 +182,9 @@ class PluginContext(_Context):
     processing: Capability[Processing] = Capability()
     ui: Capability[Ui] = Capability()
     files: Capability[Files] = Capability()
+    #: Structured records under the plugin's tag (decision-63); the
+    #: ``LogView`` component watches it.
+    log: Capability[Log] = Capability()
 
     def __init__(
         self,
@@ -193,6 +201,7 @@ class PluginContext(_Context):
         processing: Processing | None = None,
         ui: Ui | None = None,
         files: Files | None = None,
+        log: Log | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -208,6 +217,7 @@ class PluginContext(_Context):
             _processing=processing,
             _ui=ui,
             _files=files,
+            _log=log,
         )
 
     def with_services(self, **services: Any) -> PluginContext:
@@ -243,15 +253,26 @@ class UiContext(_Context):
         "_actions",
         "_files",
         "_layers",
+        "_log",
         "_network",
         "_project",
         "_settings",
+        "_streams",
         "notifications",
         "scope",
         "view",
     )
 
-    _capability_names = ("network", "actions", "settings", "layers", "project", "files")
+    _capability_names = (
+        "network",
+        "actions",
+        "settings",
+        "layers",
+        "project",
+        "files",
+        "log",
+        "streams",
+    )
 
     notifications: Notifications
     view: ViewControl
@@ -264,6 +285,10 @@ class UiContext(_Context):
     layers: Capability[Layers] = Capability()
     project: Capability[Project] = Capability()
     files: Capability[Files] = Capability()
+    log: Capability[Log] = Capability()
+    #: The plugin's ``@stream`` methods, subscribed from this view
+    #: (:class:`qgis_sdk.ui.streams.ViewStreams`); ``ctx.on`` is the short form.
+    streams: Capability[ViewStreams] = Capability()
 
     def __init__(
         self,
@@ -276,6 +301,8 @@ class UiContext(_Context):
         layers: Layers | None = None,
         project: Project | None = None,
         files: Files | None = None,
+        log: Log | None = None,
+        streams: ViewStreams | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -287,7 +314,20 @@ class UiContext(_Context):
             _layers=layers,
             _project=project,
             _files=files,
+            _log=log,
+            _streams=streams,
         )
+
+    def on(
+        self, stream: str, callback: Callable[[Any], None], /, **request: object
+    ) -> Any:
+        """Subscribe ``callback`` to the plugin's ``stream`` for this view's lifetime.
+
+        The imperative form of ``@subscribe`` (decision-55): the subscription
+        is owned by the view's scope and ends with the window. Returns the
+        :class:`~qgis_sdk.ui.streams.ViewSubscription`.
+        """
+        return self.streams.subscribe(stream, callback, owner=self.scope, **request)
 
 
 class AlgorithmContext(_Context):

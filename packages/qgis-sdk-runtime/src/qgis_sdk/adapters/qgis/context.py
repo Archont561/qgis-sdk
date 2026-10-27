@@ -23,6 +23,7 @@ from qgis_sdk.services import Notifications
 
 from .algorithms import NativeAlgorithms
 from .layers import NativeLayers
+from .log import NativeLog
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
 from .processing import NativeProcessing
@@ -57,6 +58,7 @@ def native_plugin_context(
     is where Processing outputs land; left out, the service owns a temporary
     directory and removes it with the scope. ``processing`` is the registry
     ``PluginRuntime.start()`` advertises the plugin's ``providers`` with.
+    ``log`` writes to the QGIS message log under ``settings_prefix`` as its tag.
     """
     scope.ensure_open()
     layers = NativeLayers(scope)
@@ -89,4 +91,5 @@ def native_plugin_context(
             authority=authority,
         ),
         files=files,
+        log=NativeLog(scope, settings_prefix),
     )

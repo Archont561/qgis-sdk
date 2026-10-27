@@ -51,6 +51,7 @@ __all__ = [
     "Colour",
     "Column",
     "Component",
+    "Container",
     "CrsPicker",
     "DirectoryInput",
     "Distance",
@@ -62,6 +63,7 @@ __all__ = [
     "Option",
     "Text",
     "Toggle",
+    "split_name_and_children",
 ]
 
 #: The module that builds the widgets. Looked up by name at mount time so
@@ -97,38 +99,98 @@ class NativeRendering(Protocol):
     def dispose(self) -> None: ...
 
 
+def split_name_and_children(
+    kind: str, name: object, children: Sequence[Component] | None
+) -> tuple[str | None, Sequence[Component]]:
+    """Read ``Row("x", [a, b])``, ``Row([a, b])`` and ``Row(children=[a, b])`` alike.
+
+    The first positional of a container is its name when it is a string and
+    its children when it is a sequence, so the declarative form
+    (``tools = Row([run, clear])``) needs no keyword.
+    """
+    if name is None or isinstance(name, str):
+        return name, tuple(children or ())
+    if children is not None:
+        raise QgisSdkUiError(
+            f"{kind} takes a name or children first, not both: {name!r} and {children!r}"
+        )
+    if isinstance(name, Sequence):
+        return None, tuple(name)
+    raise QgisSdkUiError(
+        f"{kind} needs a name (letters, digits, underscores) or children, got {name!r}"
+    )
+
+
 class Component:
     """One node of a surface: a named thing with a widget on demand.
 
     ``name`` is what the node is called in ``objectName`` (``form/<name>``
     for an :class:`Input`, ``buttons/<name>`` for a :class:`Button`, the
     bare name for a container), which is how a test or an agent selects the
-    widget. ``attach(ctx)`` binds it to a surface's :class:`UiContext`,
-    ``mount()`` builds the widget, ``snapshot()`` is its node in a UI
-    snapshot (decision-51).
+    widget. A component assigned to a class attribute of a surface may leave
+    the name out and takes the attribute's (``go = Button(text="Go")`` is
+    ``buttons/go``); until it has one, anything that needs the name refuses.
+    ``attach(ctx)`` binds it to a surface's :class:`UiContext`, ``mount()``
+    builds the widget, ``snapshot()`` is its node in a UI snapshot
+    (decision-51).
     """
 
     #: ``objectName`` prefix; a container uses its bare name.
     prefix: ClassVar[str] = ""
 
-    def __init__(self, name: str, *, label: str | None = None) -> None:
-        if not name or not name.replace("_", "").isalnum():
-            raise QgisSdkUiError(
-                f"{type(self).__name__} needs a name "
-                f"(letters, digits, underscores), got {name!r}"
-            )
-        self.name = name
-        self.label = label if label is not None else label_for(name)
+    def __init__(self, name: str | None = None, *, label: str | None = None) -> None:
+        self._name: str | None = None
+        if name is not None:
+            self._name = self._valid_name(name)
+        self._label = label
         self._ctx: UiContext | None = None
         self._native: NativeRendering | None = None
         self._syncing = False
 
+    def __set_name__(self, owner: type, attribute: str) -> None:
+        """A component declared on a class is called after its attribute."""
+        if self._name is None:
+            self._name = self._valid_name(attribute)
+
     # -- identity -------------------------------------------------------------------
+
+    @property
+    def name(self) -> str:
+        """The node's name; refused while the component has none yet."""
+        if self._name is None:
+            raise QgisSdkUiError(
+                f"{self._describe()} has no name yet: pass one, or declare the "
+                "component as a class attribute of a surface so it takes the "
+                "attribute's name"
+            )
+        return self._name
+
+    @property
+    def named(self) -> bool:
+        """Whether the component has its name already."""
+        return self._name is not None
+
+    @property
+    def label(self) -> str:
+        """The caption shown for the node; derived from the name unless given."""
+        return self._label if self._label is not None else label_for(self.name)
+
+    @label.setter
+    def label(self, value: str | None) -> None:
+        self._label = value
 
     @property
     def object_name(self) -> str:
         """The ``objectName`` of the widget: ``<prefix>/<name>`` or the name."""
         return f"{self.prefix}/{self.name}" if self.prefix else self.name
+
+    def _valid_name(self, name: object) -> str:
+        if not isinstance(name, str) or not name or not name.replace("_", "").isalnum():
+            raise QgisSdkUiError(
+                f"{type(self).__name__} needs a name "
+                f"(letters, digits, underscores), got {name!r}"
+            )
+        return name
 
     @property
     def ctx(self) -> UiContext | None:
@@ -166,6 +228,7 @@ class Component:
             if self._ctx is ctx:
                 return self
             raise QgisSdkUiError(f"{self._describe()} is already attached")
+        _ = self.name  # a node without a name cannot be found or snapshotted
         self._ctx = ctx
         ctx.scope.on_close(self.dispose)
         for child in self.children():
@@ -232,7 +295,9 @@ class Component:
         """Hook: the context is gone."""
 
     def _describe(self) -> str:
-        return f"{type(self).__name__} {self.name!r}"
+        if self._name is None:
+            return f"unnamed {type(self).__name__}"
+        return f"{type(self).__name__} {self._name!r}"
 
     def _require_ctx(self, capability: str) -> Any:
         if self._ctx is None:
@@ -262,7 +327,7 @@ class Input(Component):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         label: str | None = None,
         value: object = None,
@@ -331,8 +396,8 @@ class Input(Component):
 
     def _spec(self) -> FieldSpec:
         return FieldSpec(
-            name=self.name,
-            label=self.label,
+            name=self._name or "",
+            label=self._label or (label_for(self._name) if self._name else ""),
             widget=self.kind,
             required=False,
             nullable=self._default() is None,
@@ -407,7 +472,7 @@ class Number(Input):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         range: tuple[float, float] | None = None,
         step: float | None = None,
@@ -469,7 +534,7 @@ class Choice(Input):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         options: Sequence[str],
         label: str | None = None,
@@ -486,8 +551,8 @@ class Choice(Input):
 
     def _spec(self) -> FieldSpec:
         return FieldSpec(
-            name=self.name,
-            label=self.label,
+            name=self._name or "",
+            label=self._label or (label_for(self._name) if self._name else ""),
             widget="choice",
             required=True,
             choices=self.options,
@@ -504,7 +569,7 @@ class Colour(Input):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         alpha: bool = True,
         label: str | None = None,
@@ -571,7 +636,7 @@ class LayerPicker(_Picker):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         kind: Literal["vector", "raster", "any"] = "vector",
         label: str | None = None,
@@ -632,7 +697,7 @@ class FieldPicker(_Picker):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         of: LayerPicker,
         label: str | None = None,
@@ -765,7 +830,7 @@ class FileInput(_RefInput):
 
     def __init__(
         self,
-        name: str,
+        name: str | None = None,
         *,
         filters: Sequence[str] = (),
         label: str | None = None,
@@ -804,11 +869,24 @@ class Button(Component):
     prefix = "buttons"
 
     def __init__(
-        self, name: str, text: str | None = None, *, label: str | None = None
+        self,
+        name: str | None = None,
+        text: str | None = None,
+        *,
+        label: str | None = None,
     ) -> None:
         super().__init__(name, label=label if label is not None else text)
-        self.text = text if text is not None else self.label
+        self._text = text
         self._listeners: list[Callable[[], None]] = []
+
+    @property
+    def text(self) -> str:
+        """The caption on the button: ``text``, else the label."""
+        return self._text if self._text is not None else self.label
+
+    @text.setter
+    def text(self, value: str | None) -> None:
+        self._text = value
 
     def clicked(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Call ``listener()`` on each press; returns the unsubscribe."""
@@ -838,21 +916,48 @@ class Button(Component):
         self.click()
 
 
-class Column(Component):
-    """Components stacked top to bottom; the plain container of the catalogue."""
+class Container(Component):
+    """A component made of others; the base of every layout in the catalogue.
+
+    Children are attached, mounted into the container's layout and disposed
+    with it; two children sharing an ``objectName`` are refused at
+    construction so a snapshot and a ``find`` are unambiguous.
+    """
 
     def __init__(
-        self, name: str, children: Sequence[Component], *, label: str | None = None
+        self,
+        name: str | Sequence[Component] | None = None,
+        children: Sequence[Component] | None = None,
+        *,
+        label: str | None = None,
     ) -> None:
+        name, children = split_name_and_children(type(self).__name__, name, children)
         super().__init__(name, label=label)
         self._children = tuple(children)
+        for child in self._children:
+            if not isinstance(child, Component):
+                raise QgisSdkUiError(
+                    f"{self._describe()}: children must be components, "
+                    f"got {type(child).__name__}"
+                )
+        # Children declared on a class get their names after the class body
+        # ran, so the clash check runs now for the named ones and again when
+        # the tree is attached.
+        self._check_children()
+
+    def _check_children(self) -> None:
         seen: set[str] = set()
         for child in self._children:
+            if not child.named:
+                continue
             if child.object_name in seen:
                 raise QgisSdkUiError(
                     f"{self._describe()}: two children named {child.object_name!r}"
                 )
             seen.add(child.object_name)
+
+    def _attached(self) -> None:
+        self._check_children()
 
     def children(self) -> tuple[Component, ...]:
         return self._children
@@ -862,7 +967,7 @@ class Column(Component):
         for child in self._children:
             if child.name == name:
                 return child
-            if isinstance(child, Column):
+            if isinstance(child, Container):
                 try:
                     return child.find(name)
                 except QgisSdkUiError:
@@ -873,3 +978,7 @@ class Column(Component):
         node = super().snapshot()
         node["children"] = [child.snapshot() for child in self._children]
         return node
+
+
+class Column(Container):
+    """Components stacked top to bottom; the plain container of the catalogue."""

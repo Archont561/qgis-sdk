@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from qgis.core import (
@@ -23,26 +24,40 @@ from qgis.core import (
     QgsProject,
 )
 from qgis.gui import (
+    QgsCollapsibleGroupBox,
     QgsColorButton,
     QgsFieldComboBox,
     QgsFileWidget,
     QgsMapLayerComboBox,
     QgsProjectionSelectionWidget,
 )
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QLineEdit,
+    QPlainTextEdit,
+    QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from qgis_sdk.models import QgisSdkFormError, QgisSdkUiError
+from qgis_sdk.ui.buttons import AcceptCancel, RunButton
 from qgis_sdk.ui.components import (
     Button,
     Choice,
@@ -60,11 +75,14 @@ from qgis_sdk.ui.components import (
     Text,
     Toggle,
 )
+from qgis_sdk.ui.containers import Group, Panel, Row, Tabs
+from qgis_sdk.ui.custom import Custom
+from qgis_sdk.ui.feedback import JobProgress, LogView, ResultTable
 from qgis_sdk.ui.form import Form
 
 from .processing import _qt_filter
 
-__all__ = ["Rendering", "mount"]
+__all__ = ["Rendering", "load_ui", "mount"]
 
 #: Spin-box bounds: wide enough never to clip a
 #: value the wire accepts, finite so the widget does not overflow.
@@ -112,6 +130,16 @@ def mount(
         if isinstance(component, cls):
             return builder(component, parent, on_change)
     raise QgisSdkUiError(f"no native widget for {type(component).__name__}")
+
+
+def load_ui(path: Path, parent: QWidget | None = None) -> QWidget:
+    """Load a Designer file into a fresh widget (``uic.loadUi``)."""
+    from qgis.PyQt import uic
+
+    widget = uic.loadUi(str(path))
+    if parent is not None:
+        widget.setParent(parent)
+    return widget
 
 
 def _connect(rendering: Rendering, signal: Any, slot: Callable[..., None]) -> None:
@@ -345,6 +373,52 @@ def _column(
     return Rendering(widget, lambda value: None)
 
 
+def _row(component: Row, parent: QWidget | None, on_change: OnChange) -> Rendering:
+    widget = QWidget(parent)
+    layout = QHBoxLayout(widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    for child in component.children():
+        layout.addWidget(child.mount(widget))
+    return Rendering(widget, lambda value: None)
+
+
+def _panel(component: Panel, parent: QWidget | None, on_change: OnChange) -> Rendering:
+    inner = QWidget(parent)
+    layout = QVBoxLayout(inner)
+    for child in component.children():
+        layout.addWidget(child.mount(inner))
+    layout.addStretch(1)
+    if not component.scrollable:
+        return Rendering(inner, lambda value: None)
+    area = QScrollArea(parent)
+    area.setWidgetResizable(True)
+    area.setFrameShape(QScrollArea.Shape.NoFrame)
+    inner.setParent(area)
+    area.setWidget(inner)
+    return Rendering(area, lambda value: None)
+
+
+def _group(component: Group, parent: QWidget | None, on_change: OnChange) -> Rendering:
+    box: QGroupBox = (
+        QgsCollapsibleGroupBox(component.label, parent)
+        if component.collapsible
+        else QGroupBox(component.label, parent)
+    )
+    layout = QVBoxLayout(box)
+    for child in component.children():
+        layout.addWidget(child.mount(box))
+    return Rendering(box, lambda value: None)
+
+
+def _tabs(component: Tabs, parent: QWidget | None, on_change: OnChange) -> Rendering:
+    tabs = QTabWidget(parent)
+    for child in component.children():
+        tabs.addTab(child.mount(tabs), child.label)
+    rendering = Rendering(tabs, lambda value: tabs.setCurrentIndex(int(value)))  # type: ignore[arg-type]
+    _connect(rendering, tabs.currentChanged, on_change)
+    return rendering
+
+
 def _form(component: Form, parent: QWidget | None, on_change: OnChange) -> Rendering:
     widget = QWidget(parent)
     layout = QFormLayout(widget)
@@ -355,10 +429,145 @@ def _form(component: Form, parent: QWidget | None, on_change: OnChange) -> Rende
     return Rendering(widget, lambda value: None)
 
 
+def _accept_cancel(
+    component: AcceptCancel, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    box = QDialogButtonBox(parent)
+    accept = box.addButton(
+        component.accept_text, QDialogButtonBox.ButtonRole.AcceptRole
+    )
+    cancel = box.addButton(
+        component.cancel_text, QDialogButtonBox.ButtonRole.RejectRole
+    )
+    accept.setObjectName(f"{component.object_name}/accept")
+    cancel.setObjectName(f"{component.object_name}/cancel")
+    rendering = Rendering(box, lambda value: None)
+    _connect(rendering, box.accepted, lambda: on_change("accept"))
+    _connect(rendering, box.rejected, lambda: on_change("cancel"))
+    return rendering
+
+
+def _custom(
+    component: Custom, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    widget = component.resolve(parent)
+    if not isinstance(widget, QWidget):
+        raise QgisSdkUiError(
+            f"Custom {component.name!r}: expected a QWidget, got {type(widget).__name__}"
+        )
+    if parent is not None and widget.parent() is not parent:
+        widget.setParent(parent)
+    return Rendering(widget, lambda value: None)
+
+
+# -- feedback ---------------------------------------------------------------------------
+
+
+def _job_progress(
+    component: JobProgress, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    widget = QWidget(parent)
+    layout = QHBoxLayout(widget)
+    layout.setContentsMargins(0, 0, 0, 0)
+    bar = QProgressBar(widget)
+    bar.setObjectName(f"{component.object_name}/bar")
+    bar.setRange(0, 100)
+    bar.setTextVisible(True)
+    message = QLabel(widget)
+    message.setObjectName(f"{component.object_name}/message")
+    layout.addWidget(bar, 1)
+    layout.addWidget(message)
+    cancel: QPushButton | None = None
+    if component.cancellable:
+        cancel = QPushButton("Cancel", widget)
+        cancel.setObjectName(f"{component.object_name}/cancel")
+        layout.addWidget(cancel)
+
+    def apply(value: object) -> None:
+        status, fraction, text = value  # type: ignore[misc]
+        if fraction is None:
+            if status in ("queued", "running"):
+                bar.setRange(0, 0)  # busy
+            else:
+                bar.setRange(0, 100)
+                bar.setValue(0)
+        else:
+            bar.setRange(0, 100)
+            bar.setValue(round(float(fraction) * 100))
+        message.setText(text if text else ("" if status == "idle" else str(status)))
+        if cancel is not None:
+            cancel.setEnabled(status in ("queued", "running"))
+
+    rendering = Rendering(widget, apply)
+    if cancel is not None:
+        _connect(rendering, cancel.clicked, lambda _checked=False: on_change("cancel"))
+    return rendering
+
+
+def _log_view(
+    component: LogView, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    view = QPlainTextEdit(parent)
+    view.setReadOnly(True)
+    view.setMaximumBlockCount(component.limit)
+
+    def apply(value: object) -> None:
+        view.setPlainText("\n".join(value))  # type: ignore[arg-type]
+        bar = view.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    return Rendering(view, apply)
+
+
+def _result_table(
+    component: ResultTable, parent: QWidget | None, on_change: OnChange
+) -> Rendering:
+    table = QTableWidget(0, len(component.columns), parent)
+    table.setHorizontalHeaderLabels(list(component.headings))
+    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+    table.verticalHeader().setVisible(False)
+
+    def apply(value: object) -> None:
+        rows, selected = value  # type: ignore[misc]
+        table.blockSignals(True)
+        try:
+            table.setRowCount(len(rows))
+            for row_index, cells in enumerate(rows):
+                for column_index, text in enumerate(cells):
+                    item = QTableWidgetItem(text)
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    table.setItem(row_index, column_index, item)
+            table.clearSelection()
+            if selected is not None:
+                table.selectRow(selected)
+        finally:
+            table.blockSignals(False)
+
+    def read() -> None:
+        rows = {index.row() for index in table.selectionModel().selectedRows()}
+        on_change(min(rows) if rows else None)
+
+    rendering = Rendering(table, apply)
+    _connect(rendering, table.itemSelectionChanged, read)
+    return rendering
+
+
 _BUILDERS: tuple[tuple[type[Component], Callable[..., Rendering]], ...] = (
+    (RunButton, _button),
     (Button, _button),
+    (AcceptCancel, _accept_cancel),
     (Column, _column),
+    (Row, _row),
+    (Panel, _panel),
+    (Group, _group),
+    (Tabs, _tabs),
+    (Custom, _custom),
     (Form, _form),
+    (JobProgress, _job_progress),
+    (LogView, _log_view),
+    (ResultTable, _result_table),
     (Text, _text),
     (Toggle, _toggle),
     (Number, _number),

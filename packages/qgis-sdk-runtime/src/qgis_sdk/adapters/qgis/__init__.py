@@ -12,6 +12,7 @@ against one set of tests.
 from .algorithms import NativeAlgorithms
 from .context import IfaceDesktopAccess, native_plugin_context
 from .layers import NativeLayers
+from .log import NativeLog
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
 from .processing import NativeProcessing, NativeProcessingProvider
@@ -24,6 +25,7 @@ __all__ = [
     "IfaceDesktopAccess",
     "NativeAlgorithms",
     "NativeLayers",
+    "NativeLog",
     "NativeNetworkTransport",
     "NativeNotifications",
     "NativeProcessing",

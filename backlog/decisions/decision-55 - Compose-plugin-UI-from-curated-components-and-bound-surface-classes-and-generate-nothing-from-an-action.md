@@ -141,3 +141,46 @@ action: a bound typed action is a finding, never a form. Still open under
 this decision: the component catalogue and `Form` (TASK-68), wiring
 decorators, mixins, containers, feedback, `Custom`, fake rendering and
 `UI002`/`UI004` (TASK-96), `.ui` loading and the web mirror.
+
+## Status review (2026-10-27, TASK-96): the catalogue and the wiring landed, stays `accepted`
+
+Points 2, 3, 5 and 7 are implemented as written: `@on(name).<listener>` /
+`@on(name, signal)` and `@subscribe(stream)` mark methods that the host (and
+`build_surface` under the fake) connects after `build()` and disconnects
+with the view's scope; `ctx.on`, `on_accept`/`on_close`; `ui = "file.ui"`
+loaded by `uic` natively and read as a `FakeUiTree` purely; the mixins
+`RunsJobs`, `SubscribesStreams`, `HasAcceptCancel` (the `AcceptCancel`
+*component* keeps that name, the mixin is `HasAcceptCancel`); containers
+`Panel`/`Group`/`Tabs`/`Row`/`Column`, feedback
+`JobProgress`/`LogView`/`ResultTable`, buttons `Button`/`RunButton`/
+`AcceptCancel`, `Custom`, the QWidget-class surface form, `ui_snapshot` of
+both renderings; `UI002` and the warning `UI004` (which applies to modules
+declared native, where `QGIS001` is lifted). One refinement to point 2: an
+event caused by the view's own `ctx.actions` call is flagged `echo` only
+when the stream pushed it synchronously during that call - a pull iterator
+never echoes. Still open: the web mirror of the catalogue (TASK-70) and the
+full `ctx.log` service behind `LogView` (TASK-106, decision-63).
+
+## Status review (2026-10-27, declarative form): amended, stays `accepted`
+
+An amendment to points 2 and 3 that keeps every rule above. A surface may
+declare its components as class attributes instead of building them:
+`clear = Button(text="Clear")` is `buttons/clear`, `tools = Row([run,
+clear])` nests them, the default `build()` returns the declared roots (one
+as it is, several stacked in a `Column` named after the class) and
+`@on(clear).clicked` wires to the component itself. The class attributes
+are prototypes: each opening deep-copies the whole set before `build()`
+(`qgis_sdk.ui.declarative.materialise`, called by the host and by
+`build_surface`), so two windows never share a widget or a listener and a
+method's `self.results` is that window's table. Plain classes, decorators
+that mark and never wrap, the fake rendering and `ui_snapshot` all hold;
+every catalogue class gained a keyword form, the positional forms stay, and
+`qgis-sdk check` leaves component targets to the host (it resolves a
+module-level constant for UI002). What was *not* done, on purpose: no
+metaclass, no YAML or dict DSL, no widget-creating decorator - the
+declaration is ordinary Python attributes and `__set_name__`. The example
+shows both forms: `BufferDialog` builds because its `Form` needs `ctx`,
+`ResultsDock` is declared. Adoption follow-ups (scaffold starter, static
+checks over declared components, `Form` with declared inputs, the web
+mirror's keyword forms, attribute names in snapshots) are
+[TASK-108](../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md).

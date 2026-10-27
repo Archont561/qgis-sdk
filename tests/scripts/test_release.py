@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
 import release as release_module
 from conftest import SAMPLE_VERSIONRC
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
+from packaging.version import Version as PackagingVersion
 from release import (
     Commit,
     QgisSdkReleaseError,
@@ -188,10 +192,66 @@ def test_parse_release_and_prerelease():
     assert str(pre) == "1.2.3-rc.1"
 
 
-@pytest.mark.parametrize("bad", ["", "0.1", "v0.1.0", "01.1.0", "0.1.0-", "x.y.z"])
-def test_parse_rejects_invalid(bad):
+# -- strategies: the SemVer subset the release tool reads -------------------------
+
+_SEMVER_TEXT = (
+    r"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?\Z"
+)
+_SCOPE_SEPARATORS = ("-", "/")
+prerelease_idents = st.sampled_from(["rc", "alpha", "beta"])
+versions = st.builds(
+    Version,
+    major=st.integers(0, 99),
+    minor=st.integers(0, 99),
+    patch=st.integers(0, 99),
+    pre=st.one_of(
+        st.none(),
+        st.tuples(prerelease_idents, st.integers(1, 20).map(str)),
+    ),
+)
+release_versions = versions.filter(lambda v: v.pre is None)
+#: Every alias ``normalize_scope`` knows that a tag can also spell (the npm
+#: name ``@archont561/qgis-sdk`` is a ``--scope`` spelling only).
+scope_aliases = st.sampled_from(
+    sorted(
+        alias
+        for alias in release_module._SCOPE_ALIASES
+        if re.fullmatch(r"[A-Za-z0-9_+-]+", alias)
+    )
+)
+
+
+@given(version=versions)
+@settings(max_examples=50, deadline=None, derandomize=True)
+def test_parse_round_trips_what_str_renders(version):
+    assert Version.parse(str(version)) == version
+    assert Version.parse(f"  {version} ") == version  # surrounding whitespace is noise
+
+
+@given(
+    text=st.text(max_size=12).filter(
+        lambda t: not re.fullmatch(_SEMVER_TEXT, t.strip())
+    )
+)
+@settings(max_examples=50, deadline=None, derandomize=True)
+@example(text="")
+@example(text="0.1")
+@example(text="v0.1.0")
+@example(text="01.1.0")
+@example(text="0.1.0-")
+def test_parse_rejects_what_is_not_a_semantic_version(text):
     with pytest.raises(QgisSdkReleaseVersionError):
-        Version.parse(bad)
+        Version.parse(text)
+
+
+@given(left=versions, right=versions)
+@settings(max_examples=50, deadline=None, derandomize=True)
+def test_sort_key_agrees_with_pep440_precedence(left, right):
+    """Our SemVer ordering and PEP 440's agree on the subset both can express."""
+    ours = (left.sort_key() > right.sort_key()) - (left.sort_key() < right.sort_key())
+    a, b = PackagingVersion(left.to_pep440()), PackagingVersion(right.to_pep440())
+    theirs = (a > b) - (a < b)
+    assert ours == theirs
 
 
 def test_ordering_puts_prereleases_before_releases():
@@ -244,17 +304,22 @@ def test_with_prerelease_validates_suffix():
         Version.parse("0.2.0").with_prerelease("rc 1")
 
 
-@pytest.mark.parametrize(
-    ("semver_text", "pep440"),
-    [
-        ("0.1.0", "0.1.0"),
-        ("0.1.0-rc.1", "0.1.0rc1"),
-        ("0.1.0-alpha.2", "0.1.0a2"),
-        ("1.0.0-beta.1", "1.0.0b1"),
-    ],
-)
-def test_to_pep440(semver_text, pep440):
-    assert Version.parse(semver_text).to_pep440() == pep440
+@given(version=versions)
+@settings(max_examples=40, deadline=None, derandomize=True)
+@example(version=Version.parse("0.1.0-rc.1"))
+@example(version=Version.parse("0.1.0-alpha.2"))
+@example(version=Version.parse("1.0.0-beta.1"))
+def test_to_pep440_is_the_same_version_in_pep440_spelling(version):
+    rendered = PackagingVersion(version.to_pep440())
+    assert rendered.release == (version.major, version.minor, version.patch)
+    if version.pre is None:
+        assert rendered.pre is None and version.to_pep440() == str(version)
+    else:
+        kind, number = version.pre
+        assert rendered.pre == (
+            {"rc": "rc", "alpha": "a", "beta": "b"}[kind],
+            int(number),
+        )
 
 
 def test_tag_helpers_roundtrip():
@@ -266,26 +331,26 @@ def test_tag_helpers_roundtrip():
         version_from_tag("0.2.0")
 
 
-@pytest.mark.parametrize(
-    ("raw_tag", "expected_scope", "expected_version"),
-    [
-        ("milestone-v0.1.0", "all", "0.1.0"),
-        ("milestone/v0.2.0", "all", "0.2.0"),
-        ("milestone/0.2.0", "all", "0.2.0"),
-        ("m-v0.3.0", "all", "0.3.0"),
-        ("milestone-v0.1.0-rc.1", "all", "0.1.0-rc.1"),
-        ("milestone/python-v0.2.0", "python", "0.2.0"),
-        ("milestone/ts-v0.2.0", "typescript", "0.2.0"),
-    ],
+@given(
+    prefix=st.sampled_from(["milestone-", "milestone/", "m-"]),
+    scope=st.one_of(st.none(), scope_aliases),
+    version=versions,
 )
-def test_parse_milestone_tag_accepts_supported_patterns(
-    raw_tag, expected_scope, expected_version
+@settings(max_examples=40, deadline=None, derandomize=True)
+@example(prefix="milestone/", scope=None, version=Version.parse("0.2.0"))
+@example(prefix="milestone/", scope="ts", version=Version.parse("0.2.0"))
+def test_parse_milestone_tag_accepts_every_prefix_scope_and_version(
+    prefix, scope, version
 ):
-    parsed = parse_milestone_tag(raw_tag)
+    if prefix == "m-" and scope is not None:
+        return  # ``m-<scope>-v…`` is not a milestone spelling
+    tag = f"{prefix}{scope}-v{version}" if scope else f"{prefix}v{version}"
+    parsed = parse_milestone_tag(tag)
     assert parsed is not None
-    scope, version = parsed
-    assert scope == expected_scope
-    assert str(version) == expected_version
+    expected = normalize_scope(scope) if scope else "all"
+    assert parsed == (expected, version)
+    if prefix == "milestone/" and scope is None:
+        assert parse_milestone_tag(f"{prefix}{version}") == ("all", version)
 
 
 def test_parse_milestone_tag_returns_none_for_regular_tags_and_rejects_malformed():
@@ -295,46 +360,44 @@ def test_parse_milestone_tag_returns_none_for_regular_tags_and_rejects_malformed
         parse_milestone_tag("milestone-vnot-a-semver")
 
 
-@pytest.mark.parametrize(
-    ("raw_tag", "expected_scope", "expected_version"),
-    [
-        ("v0.1.0", "all", "0.1.0"),
-        ("v0.1.0-rc.1", "all", "0.1.0-rc.1"),
-        ("python-v0.1.0", "python", "0.1.0"),
-        ("python/v0.1.0", "python", "0.1.0"),
-        ("py-v0.2.0", "python", "0.2.0"),
-        ("qgis-sdk-v0.2.0", "python", "0.2.0"),
-        ("ts-v0.1.0", "typescript", "0.1.0"),
-        ("typescript-v0.1.0", "typescript", "0.1.0"),
-        ("typescript/v0.1.0", "typescript", "0.1.0"),
-        ("bridge-v0.1.0", "typescript", "0.1.0"),
-        ("bridge/v0.1.0-rc.1", "typescript", "0.1.0-rc.1"),
-        ("qgis-sdk-typescript-v0.1.0", "typescript", "0.1.0"),
-        ("qgis-sdk-python-v0.1.0", "python", "0.1.0"),
-        ("qgis-sdk-bridge-v0.1.0", "typescript", "0.1.0"),
-    ],
+@given(
+    scope=st.one_of(st.none(), scope_aliases),
+    separator=st.sampled_from(_SCOPE_SEPARATORS),
+    version=versions,
 )
-def test_parse_release_tag_accepts_general_and_scoped_tags(
-    raw_tag, expected_scope, expected_version
+@settings(max_examples=50, deadline=None, derandomize=True)
+@example(scope=None, separator="-", version=Version.parse("0.1.0-rc.1"))
+@example(scope="qgis-sdk-bridge", separator="/", version=Version.parse("0.1.0"))
+@example(scope="py", separator="-", version=Version.parse("0.2.0"))
+def test_parse_release_tag_accepts_every_alias_separator_and_version(
+    scope, separator, version
 ):
-    scope, version = parse_release_tag(raw_tag)
-    assert scope == expected_scope
-    assert str(version) == expected_version
-    assert version_from_tag(raw_tag) == version
+    tag = f"{scope}{separator}v{version}" if scope else f"v{version}"
+    parsed_scope, parsed = parse_release_tag(tag)
+    assert parsed == version
+    assert parsed_scope == (normalize_scope(scope) if scope else "all")
+    assert version_from_tag(tag) == version
+    # What the tool mints for that scope parses back to the same pair.
+    minted = tag_for_version(version, parsed_scope)
+    assert parse_release_tag(minted) == (parsed_scope, version)
 
 
-@pytest.mark.parametrize(
-    "bad_tag",
-    [
-        "0.1.0",
-        "milestone-v0.1.0",
-        "milestone/v0.1.0",
-        "m-v0.1.0",
-        "unknown-v0.1.0",
-        "not-a-tag",
-    ],
+@given(
+    scope=st.from_regex(r"\A[a-z][a-z0-9]{0,8}\Z").filter(
+        lambda s: s not in release_module._SCOPE_ALIASES
+    ),
+    version=versions,
 )
-def test_parse_release_tag_rejects_non_release_tags(bad_tag):
+@settings(max_examples=30, deadline=None, derandomize=True)
+@example(scope="milestone", version=Version.parse("0.1.0"))
+@example(scope="unknown", version=Version.parse("0.1.0"))
+def test_parse_release_tag_rejects_an_unknown_scope(scope, version):
+    with pytest.raises(QgisSdkReleaseVersionError):
+        parse_release_tag(f"{scope}-v{version}")
+
+
+@pytest.mark.parametrize("bad_tag", ["0.1.0", "not-a-tag", "m-v0.1.0"])
+def test_parse_release_tag_rejects_what_is_not_v_prefixed(bad_tag):
     with pytest.raises(QgisSdkReleaseVersionError):
         parse_release_tag(bad_tag)
 
@@ -1497,23 +1560,23 @@ def test_stamp_tools_runtime_range_refuses_a_tools_manifest_without_a_range():
         )
 
 
-@pytest.mark.parametrize(
-    ("lower", "upper", "runtime", "included"),
-    [
-        ("0.4.0", "0.5", "0.4.0", True),
-        ("0.4.0", "0.5", "0.4.9", True),
-        ("0.4.0", "0.5", "0.5.0", False),
-        ("0.4.0", "0.5", "0.3.9", False),
-        ("0.4.0", "1.0", "0.9.0", True),
-    ],
+@given(
+    lower=release_versions,
+    upper=st.tuples(st.integers(0, 99), st.integers(0, 99)).map(
+        lambda pair: f"{pair[0]}.{pair[1]}"
+    ),
+    runtime=versions,
 )
-def test_runtime_range_includes(lower, upper, runtime, included):
-    assert (
-        release_module.runtime_range_includes(
-            Version.parse(lower), upper, Version.parse(runtime)
-        )
-        is included
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(lower=Version.parse("0.4.0"), upper="0.5", runtime=Version.parse("0.5.0"))
+@example(lower=Version.parse("0.4.0"), upper="0.5", runtime=Version.parse("0.4.9"))
+def test_runtime_range_includes_agrees_with_pep440_arithmetic(lower, upper, runtime):
+    expected = (
+        PackagingVersion(lower.to_pep440())
+        <= PackagingVersion(runtime.to_pep440())
+        < PackagingVersion(upper)
     )
+    assert release_module.runtime_range_includes(lower, upper, runtime) is expected
 
 
 def test_read_kit_pins_and_tools_range_round_trip():

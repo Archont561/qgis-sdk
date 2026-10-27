@@ -15,6 +15,7 @@ from .fakes import (
     FakeProject,
     FakeSettings,
     FakeStyles,
+    RecordingLog,
     RecordingNotifications,
 )
 from .files import FakeFiles
@@ -25,9 +26,17 @@ from .network import (
     QgisSdkNetworkFakeError,
     reply,
 )
-from .ui import FakeUi, FakeViewControl, OpenedSurface
+from .ui import (
+    BuiltSurface,
+    FakeUi,
+    FakeViewControl,
+    OpenedSurface,
+    build_surface,
+    fake_ui_context,
+)
 
 __all__ = [
+    "BuiltSurface",
     "FakeAlgorithms",
     "FakeFiles",
     "FakeLayers",
@@ -42,6 +51,9 @@ __all__ = [
     "OpenedSurface",
     "PendingRequest",
     "QgisSdkNetworkFakeError",
+    "RecordingLog",
     "RecordingNotifications",
+    "build_surface",
+    "fake_ui_context",
     "reply",
 ]

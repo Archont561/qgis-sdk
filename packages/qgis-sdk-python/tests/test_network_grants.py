@@ -9,6 +9,8 @@ pure model, and on the fake transport that the QGIS-free suite runs against.
 from __future__ import annotations
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 from qgis_sdk.models import (
     DEFAULT_MAX_BODY_BYTES,
     DEFAULT_MAX_REDIRECTS,
@@ -32,25 +34,53 @@ def _request(url: str, method: str = "GET", **changes) -> NetworkRequest:
 # -- origins ----------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("url", "origin"),
-    [
-        ("https://API.Example.org/collections?x=1", "https://api.example.org"),
-        ("https://api.example.org:443/", "https://api.example.org"),
-        ("http://api.example.org:80/", "http://api.example.org"),
-        ("http://127.0.0.1:8080/ok", "http://127.0.0.1:8080"),
-        ("https://[::1]:8443/", "https://[::1]:8443"),
-    ],
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+hosts = st.one_of(
+    st.from_regex(r"\A[A-Za-z][A-Za-z0-9-]{0,6}(\.[A-Za-z][A-Za-z0-9-]{0,6}){0,2}\Z"),
+    st.just("127.0.0.1"),
+    st.just("[::1]"),
 )
-def test_an_origin_is_scheme_host_and_non_default_port(url: str, origin: str) -> None:
-    assert origin_of(url) == origin
+ports = st.one_of(st.none(), st.integers(1, 65535))
+paths = st.from_regex(r"\A(/[A-Za-z0-9._-]{0,6}){0,2}(\?[a-z]=[0-9])?\Z")
 
 
-@pytest.mark.parametrize(
-    "url", ["", "api.example.org", "ftp://files.example.org", "https://", "file:///etc"]
+@given(
+    scheme=st.sampled_from(["http", "https", "HTTP", "Https"]),
+    host=hosts,
+    port=ports,
+    path=paths,
 )
-def test_a_url_without_an_http_origin_has_none(url: str) -> None:
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(scheme="https", host="API.Example.org", port=None, path="/collections?x=1")
+@example(scheme="https", host="api.example.org", port=443, path="/")
+@example(scheme="https", host="[::1]", port=8443, path="/")
+def test_an_origin_is_the_lower_cased_scheme_and_host_plus_a_non_default_port(
+    scheme: str, host: str, port: int | None, path: str
+) -> None:
+    url = f"{scheme}://{host}{'' if port is None else f':{port}'}{path}"
+    origin = origin_of(url)
+
+    expected = f"{scheme.lower()}://{host.lower()}"
+    if port is not None and port != _DEFAULT_PORTS[scheme.lower()]:
+        expected += f":{port}"
+    assert origin == expected
+    assert origin_of(origin) == origin  # an origin is its own origin
+
+
+@given(
+    scheme=st.sampled_from(["", "ftp", "file", "ws", "blob", "javascript"]),
+    rest=st.from_regex(r"\A[A-Za-z0-9./-]{0,16}\Z"),
+)
+@settings(max_examples=40, deadline=None, derandomize=True)
+@example(scheme="", rest="api.example.org")
+@example(scheme="", rest="")
+@example(scheme="file", rest="///etc")
+def test_a_url_without_an_http_scheme_and_host_has_no_origin(
+    scheme: str, rest: str
+) -> None:
+    url = f"{scheme}://{rest}" if scheme else rest
     assert origin_of(url) is None
+    assert origin_of("https://") is None  # a scheme alone names no host
 
 
 def test_a_grant_normalises_its_origins_and_refuses_what_is_not_one() -> None:

@@ -8,9 +8,12 @@ and the bridge client spells it as a property, so it stays a plain identifier.
 """
 
 import hashlib
+import re
 from typing import Any
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin, stream
 from qgis_sdk.algorithms import describe_algorithm
 from qgis_sdk.core import AlgorithmContext, JobContext
@@ -130,18 +133,55 @@ def test_an_explicit_invalid_id_is_still_refused_before_the_class_exists() -> No
         action(title="  ")
 
 
+#: Python names a decorator sees: CamelCase, snake_case, digits, a leading
+#: underscore; short, so a shrunk counterexample reads at a glance.
+python_names = st.from_regex(r"\A_{0,2}[A-Za-z][A-Za-z0-9_]{0,11}\Z")
+
+
+@given(name=python_names)
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(name="FieldTools")
+@example(name="HTTPServer")
+@example(name="_private_helper")
+@example(name="Version2Check")
+def test_a_derived_id_is_a_lower_snake_case_identifier_and_a_fixed_point(
+    name: str,
+) -> None:
+    derived = derive_id(name)
+    assert re.fullmatch(r"[a-z][a-z0-9_]*", derived), derived
+    assert derive_id(derived) == derived  # deriving again changes nothing
+    # Every letter and digit of the name survives, in order; only case and
+    # underscores move.
+    assert derived.replace("_", "") == name.replace("_", "").lower()
+
+
+@given(name=python_names)
+@settings(max_examples=60, deadline=None, derandomize=True)
+@example(name="list_layers")
+@example(name="run")
+def test_a_derived_title_keeps_camel_case_words_and_sentences_snake_case(
+    name: str,
+) -> None:
+    title = derive_title(name)
+    words = title.split(" ")
+    assert words and all(words)
+    assert title[0].isupper() or title[0].isdigit()
+    assert "_" not in title
+    if any(char.isupper() for char in name):
+        # CamelCase keeps its casing: the words of the title are the words of the id
+        assert [w.lower() for w in words] == derive_id(name).split("_")
+    else:
+        assert words[1:] == derive_id(name).split("_")[1:]
+
+
 @pytest.mark.parametrize(
     ("name", "id", "title"),
     [
-        ("FieldTools", "field_tools", "Field Tools"),
         ("HTTPServer", "http_server", "HTTP Server"),
-        ("list_layers", "list_layers", "List layers"),
-        ("_private_helper", "private_helper", "Private helper"),
         ("Version2Check", "version2_check", "Version2 Check"),
-        ("run", "run", "Run"),
     ],
 )
-def test_names_turn_into_snake_case_ids_and_readable_titles(
+def test_the_word_boundary_rule_on_its_two_hard_cases(
     name: str, id: str, title: str
 ) -> None:
     assert derive_id(name) == id

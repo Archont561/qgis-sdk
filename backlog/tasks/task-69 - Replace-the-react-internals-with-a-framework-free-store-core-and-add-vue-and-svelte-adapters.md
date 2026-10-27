@@ -3,10 +3,10 @@ id: TASK-69
 title: >-
   Replace the ./react internals with a framework-free store core and add ./vue
   and ./svelte adapters
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-26 21:38'
+updated_date: '2026-10-27 08:50'
 labels: []
 milestone: m-6
 dependencies:
@@ -23,9 +23,9 @@ decision-47 points 1, 2 and 5 (amending decision-46 point 3). The bridge root ex
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The four stores are typed end to end from the generated Operations/Streams and the host manifest, work against createBridgeHarness, and HostQueryStore exposes the refusal when the grant is absent; a behaviour test suite runs once against the core and once through each adapter and passes identically (bun tests).
-- [ ] #2 ./react keeps its exported names and types (existing react.test.ts passes unchanged), ./vue and ./svelte exist as subpaths with optional peers, each with its own Vitest project; a consumer that imports only ./react has no vue or svelte in its bundle (build output check); typecheck, Biome and coverage are green.
-- [ ] #3 The React and vanilla scaffold templates use the stores and Form/LayerPicker bindings in place of the bare button; the scaffold-web harness passes; doc-13 documents the stores, the three adapters, the vanilla path and the Tier 1 / Tier 2 table.
+- [x] #1 The four stores are typed end to end from the generated Operations/Streams and the host manifest, work against createBridgeHarness, and HostQueryStore exposes the refusal when the grant is absent; a behaviour test suite runs once against the core and once through each adapter and passes identically (bun tests).
+- [x] #2 ./react keeps its exported names and types (existing react.test.ts passes unchanged), ./vue and ./svelte exist as subpaths with optional peers, each with its own Vitest project; a consumer that imports only ./react has no vue or svelte in its bundle (build output check); typecheck, Biome and coverage are green.
+- [x] #3 The React and vanilla scaffold templates use the stores and Form/LayerPicker bindings in place of the bare button; the scaffold-web harness passes; doc-13 documents the stores, the three adapters, the vanilla path and the Tier 1 / Tier 2 table.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -39,4 +39,6 @@ Landed in one PR on `arena/efbb6cba-qgis-sdk` as three commits (69a `a2c653f` br
 - AC #3: `scaffold/web.py` vanilla page = `formStore(qgis, "ping", …)` + `layersQuery(qgis)`, React page = `useForm` + `useHostQuery(useMemo(() => layersQuery(qgis), [qgis]))`; `QGIS_SDK_SCAFFOLD_WEB=1` harness 8/8 (bun + npm × vanilla + React: install, Vitest, tsc, Vite build, built page pinged inside headless QGIS); `test_scaffold_web.py` + `test_reference_example.py` + `test_scaffold.py` 78 passed; doc-13 gained "Stores: the framework-free core", "Vue bindings", "Svelte bindings", the "Which entry for which page" Tier 1 / Tier 2 table and an unreleased-minor migration note.
 
 **Decisions taken in flight:** the scaffold and the example now declare `grants = ["layers.read"]` so the starter layer picker lists layers out of the box (the page still renders the `refused` hint when an author removes it); happy-dom does not submit a form on a submit-button click, so both templates submit from a `type="button"` click and keep the form's `submit` handler for the Enter key; the example page keeps its direct-call workflow (the Tier 1 "three statements" path stays documented) - adopting the stores there is left to TASK-70's component work. Known limits: `layerFieldsQuery` and the other kinds have no scaffold rendering yet (TASK-70); Vue/Svelte remain Tier 2 (TASK-72).
+
+2026-10-27: merged in PR #104 as `c8cd119`; CI green on Linux, macOS and Windows; evidence per AC in the notes above. Closed by the sprint 3 branch.
 <!-- SECTION:NOTES:END -->

@@ -14,6 +14,7 @@ the same action is refused from the same view until it settles.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from typing import Any, Protocol
 
 from qgis_sdk.declarations import ActionDescription, PluginDescription
@@ -21,7 +22,12 @@ from qgis_sdk.models import QgisSdkFormError, QgisSdkUiError
 
 from .form_fields import coerce_values
 
-__all__ = ["ActionCall", "ViewActions"]
+__all__ = ["CALLING_VIEW", "ActionCall", "ViewActions"]
+
+#: The view whose synchronous action call is on the stack, if any. Set around
+#: the handler call so a stream event the call produces can be flagged as
+#: that view's own echo (:mod:`qgis_sdk.ui.streams`).
+CALLING_VIEW: ContextVar[str | None] = ContextVar("qgis_sdk_calling_view", default=None)
 
 
 class ActionSource(Protocol):
@@ -111,9 +117,11 @@ class ViewActions:
         except QgisSdkFormError as error:
             raise QgisSdkUiError(str(error)) from error
         self._running[action.id] = _RUNNING
+        token = CALLING_VIEW.set(self._view_id)
         try:
             result = handler(**coerced)
         finally:
+            CALLING_VIEW.reset(token)
             del self._running[action.id]
         if _is_job_handle(result) and not _settled(result):
             self._running[action.id] = result
