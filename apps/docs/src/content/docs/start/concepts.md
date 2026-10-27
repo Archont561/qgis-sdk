@@ -76,5 +76,5 @@ See [Scoped plugin runtime](/qgis-sdk/python/scoped-plugin-runtime/).
 
 - [Python package guide](/qgis-sdk/python/) - the host and plugin side.
 - [TypeScript SDK guide](/qgis-sdk/typescript/) - the page side.
-- [Decisions](https://github.com/Archont561/qgis-sdk/tree/main/backlog/decisions) -
-  why each surface is shaped the way it is.
+- [Design decisions](/qgis-sdk/reference/design-decisions/) - why each
+  surface is shaped the way it is.

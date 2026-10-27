@@ -6,9 +6,11 @@
  * is read. Nothing here is hand-maintained: each guide is split into one page
  * per `##` section under a directory of its own, the preamble becomes that
  * directory's index, sub-headings move up one level so the page title is the
- * only H1, and the links the guides write for the backlog are rewritten -
- * same-guide and cross-guide anchors to the routes that now hold them, every
- * other backlog record (decisions, tasks, plans) to the repository on GitHub.
+ * only H1, and the links the guides write for the backlog are rewritten:
+ * same-guide and cross-guide anchors to the routes that now hold them, a
+ * decision record to its row on the design-decisions page, any other backlog
+ * record to the repository on GitHub. A link to a process record (tasks,
+ * plans, agent rules) is dropped, its text kept.
  *
  * Pure functions only: the CLI in `../generate.ts` does the file system work.
  */
@@ -226,6 +228,12 @@ const PROCESS_PATHS = [
 	/^\.agents\//,
 ];
 
+/**
+ * A decision record: the site renders them as one curated table, so a link
+ * lands on the record's row there rather than on the raw file.
+ */
+const DECISION_PATH = /^backlog\/decisions\/decision-(\d+)\b/;
+
 /** Repository-relative path of a link written inside the guides directory. */
 function repositoryPath(relative: string): string | null {
 	const decoded = decodeURIComponent(relative.split("#", 2)[0] ?? "");
@@ -375,6 +383,10 @@ class Renderer {
 			if (PROCESS_PATHS.some((pattern) => pattern.test(path))) {
 				warn("cites a process record; the link was dropped");
 				return null;
+			}
+			const decision = DECISION_PATH.exec(path);
+			if (decision) {
+				return `${this.options.base}/reference/design-decisions/#decision-${decision[1]}`;
 			}
 			return this.repositoryUrl(path, url);
 		}

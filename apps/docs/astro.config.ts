@@ -57,6 +57,10 @@ export default defineConfig({
 					],
 				},
 				{
+					label: "Reference",
+					items: [{ slug: "reference/design-decisions" }],
+				},
+				{
 					label: "Project",
 					items: [
 						...(storybook
@@ -71,10 +75,6 @@ export default defineConfig({
 						// Shipped artifacts only: releases and registries, never the
 						// plans and tasks behind them.
 						{ label: "Releases", link: `${REPOSITORY}/releases` },
-						{
-							label: "Decisions",
-							link: `${REPOSITORY}/tree/main/backlog/decisions`,
-						},
 					],
 				},
 			],
@@ -85,6 +85,7 @@ export default defineConfig({
 						python: "Python package guide",
 						typescript: "TypeScript SDK guide",
 						workspace: "Workspace, harnesses and qualification evidence",
+						reference: "Reference",
 					},
 					optionalLinks: [
 						{

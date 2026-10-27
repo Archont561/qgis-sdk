@@ -2,6 +2,8 @@
 /src/content/docs/python/
 /src/content/docs/typescript/
 /src/content/docs/workspace/
+# Rendered from backlog/decisions by scripts/generate.ts
+/src/content/docs/reference/
 # Copied from packages/qgis-sdk-ui/storybook-static by scripts/generate.ts
 /public/storybook/
 # Astro

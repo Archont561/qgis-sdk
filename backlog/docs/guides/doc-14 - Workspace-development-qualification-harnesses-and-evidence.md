@@ -107,9 +107,11 @@ never how the work was tracked:
   `src/content/docs/{workspace,python,typescript}/` - one page per `##`
   section, the preamble as the directory's index, sub-headings moved up one
   level. Same-guide and cross-guide anchors become site routes; a link to a
-  task, a milestone, a plan or the agent rules is dropped (its text stays)
-  and reported, so those records never surface on the site; other backlog
-  records point at the repository on GitHub. Each page's "Edit page" opens
+  decision record lands on its row of the design-decisions page, which the
+  same script renders from `backlog/decisions/` and the one-line summaries
+  in `scripts/decision-summaries.ts`; a link to a task, a milestone, a plan
+  or the agent rules is dropped (its text stays) and reported, so those
+  records never surface on the site. Each page's "Edit page" opens
   the guide, and its `lastUpdated` is the guide's last commit. A section
   whose heading says *(in progress)* or *(unreleased)* is published with a
   Draft badge and opens with a caution, so notes on a line still being cut

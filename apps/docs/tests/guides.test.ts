@@ -272,9 +272,26 @@ describe("renderGuides", () => {
 		expect(rules.warnings).toHaveLength(3);
 	});
 
-	test("points other backlog records the site does not render at the repository", () => {
+	test("points a decision at its row on the design-decisions page", () => {
 		expect(byPath.get("python/index.md")).toContain(
-			"(https://github.com/Archont561/qgis-sdk/blob/main/backlog/decisions/decision-29%20-%20Keep-READMEs-minimal.md)",
+			"[decision-29](/qgis-sdk/reference/design-decisions/#decision-29)",
+		);
+		expect(byPath.get("python/index.md")).not.toContain("backlog/decisions");
+	});
+
+	test("points other backlog records the site does not render at the repository", () => {
+		const other = renderGuides(
+			[
+				{
+					guide: PYTHON,
+					markdown:
+						"# T\n\n## A\n\nSee [doc-26](../specifications/doc-26%20-%20Authority.md#assets).\n",
+				},
+			],
+			{ base: "", repository: "https://github.com/o/r" },
+		);
+		expect(other.find((p) => p.path === "python/a.md")?.content).toContain(
+			"[doc-26](https://github.com/o/r/blob/main/backlog/docs/specifications/doc-26%20-%20Authority.md#assets)",
 		);
 	});
 
