@@ -2,9 +2,10 @@
 
 from qgis_sdk.models import QgisSdkError
 
-#: The event kinds a stream may declare: the same three the frame carries
-#: (``qgis_sdk.bridge.streams.StreamEventType``), spelled here so a declaration
-#: module never has to import the bridge.
+#: The event kinds a stream may declare and a frame may carry. This is the one
+#: spelling: :mod:`qgis_sdk.bridge.protocol` validates frames against it and
+#: ``qgis_sdk.bridge.streams.StreamEventType`` enumerates it, so a declaration
+#: module never imports the bridge and the bridge never re-spells the kinds.
 STREAM_EVENT_KINDS = ("data", "progress", "state")
 
 #: Version of the plugin-description wire contract. It is deliberately not the

@@ -3,9 +3,10 @@ id: TASK-113
 title: >-
   Make bridge.streams the single owner of the stream event vocabulary and the
   event-split seam
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-27 21:55'
+updated_date: '2026-10-27 22:06'
 labels: []
 milestone: m-7
 dependencies: []
@@ -22,7 +23,13 @@ Audit 2026-10-27 (clean-code core-dry-single-source, core-encapsulation). The th
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Exactly one tuple literal spells data/progress/state in packages/qgis-sdk-runtime/src; protocol.py and the declarations share it and a unit test pins StreamEventType to it.
-- [ ] #2 No module under qgis_sdk/ui imports an underscore-prefixed name from qgis_sdk.bridge (grep 'from qgis_sdk.bridge.* import .*\b_' is empty) and the ui stream tests pass unchanged.
-- [ ] #3 generate_bridge_clients.py --check passes and both fingerprints are unchanged.
+- [x] #1 Exactly one tuple literal spells data/progress/state in packages/qgis-sdk-runtime/src; protocol.py and the declarations share it and a unit test pins StreamEventType to it.
+- [x] #2 No module under qgis_sdk/ui imports an underscore-prefixed name from qgis_sdk.bridge (grep 'from qgis_sdk.bridge.* import .*\b_' is empty) and the ui stream tests pass unchanged.
+- [x] #3 generate_bridge_clients.py --check passes and both fingerprints are unchanged.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Done on the audit branch: declarations/_contract.py is the one tuple; bridge/protocol.py imports it, bridge/streams.py derives _EVENT_KINDS from StreamEventType, ui/streams.py validates emit() kinds against it (a fifth inline spelling the audit missed) and imports the now-public split_event. Three tests in test_bridge_streams.py pin enum == tuple, protocol is declarations, the ui EventKind literal prefix, and the public seam. Python suite 1971 passed / 48 skipped; generate_bridge_clients.py --check up to date; HOST_FINGERPRINT in generated/host.ts unchanged.
+<!-- SECTION:NOTES:END -->
