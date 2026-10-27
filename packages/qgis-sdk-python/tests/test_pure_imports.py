@@ -246,7 +246,9 @@ def test_the_catalogue_reaches_qt_only_by_name_at_mount_time() -> None:
     assert components.NATIVE_CATALOGUE == "qgis_sdk.adapters.qgis.components"
     assert (SOURCE_ROOT / "adapters" / "qgis" / "components.py").is_file()
     declared = {
-        module for module, _ in imports_in(SOURCE_ROOT / "ui" / "components.py", "ui")
+        module
+        for file in sorted((SOURCE_ROOT / "ui" / "components").glob("*.py"))
+        for module, _ in imports_in(file, "ui")
     }
     assert not {name for name in declared if name.startswith("qgis_sdk.adapters")}
     assert not {name for name in declared if name.split(".")[0] in ("qgis", "PyQt6")}
