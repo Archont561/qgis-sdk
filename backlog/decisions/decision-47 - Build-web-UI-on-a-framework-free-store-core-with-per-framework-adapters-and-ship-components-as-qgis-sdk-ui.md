@@ -130,3 +130,20 @@ unchanged.
    a drop-in for arbitrary hosts; doc-13 says so. TASK-70 gains ACs for the
    no-UnoCSS consumer path, the prefix collision test, the CSS size budget
    and light-DOM accessibility.
+
+## Status review (2026-10-27, TASK-110): the `ui` train publishes, stays `accepted`
+
+Point 3's package reaches npm the way the bridge does. `release.yml` gains
+a `ui` job gated on the classify flag: it builds the bridge and the
+components, refuses a tarball holding anything but `dist`, `package.json`,
+`README.md` and `LICENSE`, installs the scoped package and its alias from
+the tarballs next to the bridge built in the same run, checks the alias
+mirrors the exports and `@import`s the stylesheets, and publishes both
+under trusted publishing (an `-rc.N` tag dry-runs under `next`). The
+unscoped alias `qgis-sdk-ui` (`packages/qgis-sdk-ui-alias`) takes the
+shape of decision-33's `qgis-sdk` alias - one re-export line per entry,
+one `@import` per stylesheet, an exact pin, Bun tests that hold it to the
+scoped package file for file - because the owner provisioned both names on
+npm. `stamp --scope ui` moves the package, the alias and its pin, and
+`UI_NPM_VERSION` in `scaffold/web.py`; `verify-versions --scope ui` names
+whichever lags. The `ui` train still never rides an alignment release.

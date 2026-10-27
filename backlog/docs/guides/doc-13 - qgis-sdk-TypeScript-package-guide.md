@@ -592,7 +592,10 @@ The web half of the UI catalogue (decision-55) is a second npm package,
 `@archont561/qgis-sdk-ui` ([decision-47](../../decisions/decision-47%20-%20Build-web-UI-on-a-framework-free-store-core-with-per-framework-adapters-and-ship-components-as-qgis-sdk-ui.md)
 point 3; TASK-70). It peer-depends on this package through a caret range,
 has `lit` as its only dependency, and ships `dist`, `README.md` and
-`LICENSE` - nothing else (a pack test keeps it so).
+`LICENSE` - nothing else (a pack test keeps it so). Like this package it
+has an unscoped alias, `qgis-sdk-ui` (`packages/qgis-sdk-ui-alias`), that
+re-exports every entry and `@import`s both stylesheets at the exact same
+version; a `ui-v*` tag publishes the pair (TASK-110).
 
 ### The elements
 
