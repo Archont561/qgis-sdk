@@ -286,6 +286,48 @@ describe("renderGuides", () => {
 		);
 	});
 
+	test("gates notes on an unreleased line behind a Draft badge and aside", () => {
+		const drafts = renderGuides(
+			[
+				{
+					guide: PYTHON,
+					markdown:
+						"# T\n\n## 0.7.0 migration notes (in progress)\n\nBody.\n\n## 0.6.0 migration notes\n\nDone.\n",
+				},
+				{
+					guide: TYPESCRIPT,
+					markdown:
+						"# T\n\n## Next minor (unreleased) migration notes\n\nBody.\n",
+				},
+			],
+			{ base: "", repository: "https://github.com/o/r" },
+		);
+		const draft =
+			drafts.find((p) => p.path.endsWith("070-migration-notes-in-progress.md"))
+				?.content ?? "";
+		expect(draft).toContain(
+			'sidebar:\n  order: 1\n  badge: {"text":"Draft","variant":"caution"}\n',
+		);
+		expect(draft).toContain(
+			"---\n:::caution[Draft]\nThese notes describe the unreleased 0.7.0 line. Content changes as the release is cut.\n:::\n\nBody.\n",
+		);
+		const next =
+			drafts.find(
+				(p) =>
+					p.path.endsWith("migration-notes.md") &&
+					p.path.startsWith("typescript/"),
+			)?.content ?? "";
+		expect(next).toContain('badge: {"text":"Draft","variant":"caution"}');
+		expect(next).toContain(
+			"These notes describe the unreleased next minor. Content changes as the release is cut.",
+		);
+		const released =
+			drafts.find((p) => p.path.endsWith("060-migration-notes.md"))?.content ??
+			"";
+		expect(released).not.toContain("badge");
+		expect(released).not.toContain(":::caution");
+	});
+
 	test("the index lists the guide's sections", () => {
 		const index = byPath.get("python/index.md") ?? "";
 		expect(index).toContain("- [Installation](/qgis-sdk/python/installation/)");

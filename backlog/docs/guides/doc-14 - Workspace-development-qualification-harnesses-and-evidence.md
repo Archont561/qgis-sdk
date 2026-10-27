@@ -110,9 +110,12 @@ never how the work was tracked:
   task, a milestone, a plan or the agent rules is dropped (its text stays)
   and reported, so those records never surface on the site; other backlog
   records point at the repository on GitHub. Each page's "Edit page" opens
-  the guide, and its `lastUpdated` is the guide's last commit. The generated
-  directories are ignored by git. A link whose anchor no guide has is
-  reported by the generator and fails the link check.
+  the guide, and its `lastUpdated` is the guide's last commit. A section
+  whose heading says *(in progress)* or *(unreleased)* is published with a
+  Draft badge and opens with a caution, so notes on a line still being cut
+  never read as finished guidance. The generated directories are ignored by
+  git. A link whose anchor no guide has is reported by the generator and
+  fails the link check.
 - The same script copies `packages/qgis-sdk-ui/storybook-static` to
   `public/storybook/` when it exists, so the site serves the Storybook at
   `/storybook/`; `docs-build` builds it first.

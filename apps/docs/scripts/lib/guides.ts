@@ -271,6 +271,25 @@ function describe(body: string, fallback: string): string {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A section the guide itself marks as not released yet. */
+const DRAFT_HEADING = /\((?:in progress|unreleased)\)/i;
+
+/**
+ * The caution a draft page opens with, or `null` for released content. The
+ * notes of a line still being cut are published because the release needs
+ * them, but they must not read as finished guidance.
+ */
+function draftNotice(heading: string): string | null {
+	if (!DRAFT_HEADING.test(heading)) {
+		return null;
+	}
+	const version = /\d+\.\d+\.\d+/.exec(heading)?.[0];
+	const line = version
+		? `the unreleased ${version} line`
+		: "the unreleased next minor";
+	return `:::caution[Draft]\nThese notes describe ${line}. Content changes as the release is cut.\n:::\n`;
+}
+
 function frontmatter(fields: Record<string, unknown>): string {
 	const lines: string[] = ["---"];
 	for (const [key, value] of Object.entries(fields)) {
@@ -441,6 +460,7 @@ class Renderer {
 					}) + index,
 			});
 			split.sections.forEach((section, position) => {
+				const draft = draftNotice(section.heading);
 				const head = frontmatter({
 					title: plainText(section.heading),
 					description: describe(
@@ -449,11 +469,15 @@ class Renderer {
 					),
 					editUrl: this.editUrl(guide),
 					lastUpdated,
-					sidebar: { order: position + 1 },
+					sidebar: {
+						order: position + 1,
+						...(draft ? { badge: { text: "Draft", variant: "caution" } } : {}),
+					},
 				});
+				const body = this.prose(guide, section.slug, section.body, true);
 				pages.push({
 					path: `${guide.section}/${section.slug}.md`,
-					content: `${head}${this.prose(guide, section.slug, section.body, true)}\n`,
+					content: `${head}${draft ? `${draft}\n` : ""}${body}\n`,
 				});
 			});
 		}
