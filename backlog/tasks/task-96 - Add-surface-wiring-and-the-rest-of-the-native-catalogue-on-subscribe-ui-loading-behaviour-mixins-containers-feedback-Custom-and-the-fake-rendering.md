@@ -3,10 +3,10 @@ id: TASK-96
 title: >-
   Add surface wiring and the rest of the native catalogue: @on, @subscribe, ui=
   loading, behaviour mixins, containers, feedback, Custom and the fake rendering
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-26T11:01:00Z'
-updated_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-27 08:50'
 labels: []
 milestone: m-6
 dependencies:

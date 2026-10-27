@@ -29,13 +29,21 @@ sprint 2 is TASK-69. TASK-68 lands in slices, each a pull request:
 | 68b | the eleven catalogue input components on `qgis_sdk.ui` with fake renderings and stable `objectName`s; `ctx.files` resolution of a `FileRef` from plugin code; the desktop adapter sharing one authority with Processing | done (PR #102) |
 | 68c | `Form.for_action`/`from_schema`/`fields` with `Button`/`Column`; `NativeForms`/`DeclaredFormDialog` removed with the doc-12 migration; notification levels and `with_action`; UI001 in `check`; the example's buffer dialog from `Form`; desktop harness `form_submitted` stage | done (PR #103) |
 
-TASK-69 (sprint 2) lands in one pull request as three commits:
+TASK-69 (sprint 2) landed in PR #104 (`c8cd119`) as three commits:
 
 | Slice | Content | Status |
 | --- | --- | --- |
 | 69a | `stores.ts` in the bridge root (`OperationStore`, `StreamStore`, `FormStore`, `HostQueryStore`, `layersQuery`, `layerFieldsQuery`); `./react` rewritten over them with its exports unchanged plus `useStore`/`useForm`/`useHostQuery`; `./vue` and `./svelte` behind optional peers with their own test projects; one behaviour suite × four drivers; `dist/` isolation check in `bun run build`; alias entries | done (`a2c653f`) |
 | 69b | vanilla and React scaffold templates render the `ping` form from the declaration and a layer picker over `layers.list`; `grants = ["layers.read"]` in the scaffold and the example; scaffold-web harness green | done (`3ddd7ca`) |
-| 69c | doc-13 stores/adapters/Tier table, READMEs, backlog closure | this commit |
+| 69c | doc-13 stores/adapters/Tier table, READMEs, backlog closure | done (`ae13694`) |
+
+TASK-96 (sprint 3) lands in slices, each a pull request:
+
+| Slice | Content | Status |
+| --- | --- | --- |
+| 96a | containers `Panel`, `Group`, `Tabs`, `Row`; feedback `JobProgress`, `LogView`, `ResultTable`; buttons `RunButton`, `AcceptCancel`; `Custom(qwidget)`; a `QWidget` class taking `ctx` accepted as a surface; `ui_snapshot` under the fake; the `ctx.log` minimum (decision-63) with a recording fake and the `QgsMessageLog` adapter | in progress |
+| 96b | `@on(name).changed\|clicked\|toggled\|edited` / `@on(name, signal)`, `@subscribe(stream)`, `ctx.on`, `on_accept`/`on_close`, `ui="file.ui"` loading, mixins `RunsJobs`/`SubscribesStreams`/`AcceptCancel`, the echo flag | planned |
+| 96c | `check` UI002/UI004; doc-12 wiring, mixins, containers, `Custom`, pure-PyQt path; the example's results panel as a `Dock` from the catalogue; closure | planned |
 
 ## 1. Where m-6 starts from
 
