@@ -61,8 +61,6 @@ MAX_QUEUED_EVENTS = 64
 MAX_FRAMES_PER_PUMP = 16
 MAX_SUBSCRIPTIONS_PER_VIEW = 8
 
-_EVENT_KINDS = frozenset({"data", "progress", "state"})
-
 
 class StreamTerminal(str, Enum):
     """Why a subscription stopped, as the client sees it."""
@@ -83,11 +81,14 @@ class StreamState(str, Enum):
 
 
 class StreamEventType(str, Enum):
-    """The kinds of event a stream may carry."""
+    """The kinds of event a stream may carry: ``STREAM_EVENT_KINDS`` as an enum."""
 
     DATA = "data"
     PROGRESS = "progress"
     STATE = "state"
+
+
+_EVENT_KINDS = frozenset(kind.value for kind in StreamEventType)
 
 
 def event_frame(
@@ -380,7 +381,7 @@ class Subscription:
                 )
                 return
             try:
-                kind, payload = _split_event(item)
+                kind, payload = split_event(item)
             except QgisSdkBridgeError as error:
                 self.terminate(StreamTerminal.ERROR, message=str(error))
                 return
@@ -441,7 +442,7 @@ class StreamSink:
             self.wake()
 
 
-def _split_event(item: Any) -> tuple[StreamEventType, Any]:
+def split_event(item: Any) -> tuple[StreamEventType, Any]:
     """Split one produced item into its event kind and its payload.
 
     A source yields either a bare payload (a data event) or a mapping carrying
@@ -475,5 +476,6 @@ __all__ = [
     "Subscription",
     "SubscriptionRequest",
     "event_frame",
+    "split_event",
     "terminal_frame",
 ]

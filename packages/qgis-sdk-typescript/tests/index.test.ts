@@ -42,8 +42,6 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 		"QgisSdkBridgeClosedError",
 		"QgisSdkBridgeProtocolError",
 		"QgisSdkBridgeRemoteError",
-		"QgisSdkBridgeSequenceError",
-		"QgisSdkBridgeStreamEndedError",
 		"QgisSdkBridgeTimeoutError",
 		"QgisSdkContractError",
 		"QgisSdkContractValidationError",

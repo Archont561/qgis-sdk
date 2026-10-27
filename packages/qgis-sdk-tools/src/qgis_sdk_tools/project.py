@@ -51,7 +51,6 @@ Rules reported here:
 from __future__ import annotations
 
 import re
-import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,6 +60,7 @@ from qgis_sdk.bridge.host import HOST_OPERATIONS
 from qgis_sdk.models import QgisSdkError
 
 from qgis_sdk_tools.check.diagnostics import Diagnostic
+from qgis_sdk_tools.manifest import read_pyproject, table
 
 __all__ = [
     "GENERATED_METADATA_KEYS",
@@ -162,14 +162,15 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
     prints them all, ``build`` refuses on the errors.
     """
     root = Path(root)
-    pyproject = root / PYPROJECT
-    if not pyproject.is_file():
+    data, malformed = read_pyproject(root / PYPROJECT)
+    if data is None:
+        if malformed is not None:
+            return (
+                None,
+                (),
+            )  # CONFIG001 from check_project already names the parse error
         return None, (_missing_plugin(f"{root} has no {PYPROJECT}"),)
-    try:
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError:
-        return None, ()  # CONFIG001 from check_project already names the parse error
-    tool = _table(data, "tool", "qgis-sdk")
+    tool = table(data, "tool", "qgis-sdk")
     if tool is None:
         return None, (_missing_plugin("[tool.qgis-sdk] plugin is not set"),)
     findings: list[Diagnostic] = []
@@ -184,7 +185,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
             ),
         )
 
-    project = _table(data, "project") or {}
+    project = table(data, "project") or {}
     version = _required_text(project, "version", findings, "version")
     description = _required_text(project, "description", findings, "description")
     author, email = _first_author(project, findings)
@@ -242,14 +243,6 @@ def require_project(root: Path) -> ProjectConfig:
 
 
 # -- pieces ---------------------------------------------------------------------
-
-
-def _table(data: object, *keys: str) -> dict[str, object] | None:
-    for key in keys:
-        if not isinstance(data, dict):
-            return None
-        data = data.get(key)
-    return data if isinstance(data, dict) else None
 
 
 def _required_text(

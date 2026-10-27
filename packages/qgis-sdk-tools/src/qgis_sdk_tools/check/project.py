@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import ast
 import os
-import tomllib
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+
+from qgis_sdk_tools.manifest import read_pyproject, table
 
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
 from .imports import check_source
@@ -204,22 +205,16 @@ def _class_factory_binding(tree: ast.Module) -> ast.stmt | None:
 
 
 def _configured_native_modules(root: Path) -> tuple[tuple[str, ...], list[Diagnostic]]:
-    pyproject = root / "pyproject.toml"
-    if not pyproject.is_file():
-        return (), []
     relative = Path("pyproject.toml")
-    try:
-        data: object = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as error:
+    manifest, malformed = read_pyproject(root / relative)
+    if malformed is not None:
         return (), [
-            _config_diagnostic(relative, f"pyproject.toml does not parse: {error}")
+            _config_diagnostic(relative, f"pyproject.toml does not parse: {malformed}")
         ]
-    for key in _CONFIG_TABLE:
-        if not isinstance(data, dict):
-            return (), []
-        data = data.get(key)
-        if data is None:
-            return (), []
+    parent = table(manifest, *_CONFIG_TABLE[:-1])
+    if parent is None or _CONFIG_TABLE[-1] not in parent:
+        return (), []
+    data = parent[_CONFIG_TABLE[-1]]
     if not isinstance(data, dict):
         return (), [
             _config_diagnostic(relative, "[tool.qgis-sdk.check] must be a table")

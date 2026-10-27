@@ -76,7 +76,9 @@ _SCAFFOLD_WEB = (
 # train (or the one side that releases) so the released tools still accept
 # the example; stamped and verified whenever the file exists.
 _EXAMPLE_PYPROJECT = _REPO_ROOT / "examples/simple/pyproject.toml"
-_PY_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
+_PY_DECLARATIONS = (
+    _REPO_ROOT / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py"
+)
 _TS_DECLARATIONS = _REPO_ROOT / "packages/qgis-sdk-typescript/src/declarations.ts"
 _VERSIONRC = _REPO_ROOT / ".versionrc"
 

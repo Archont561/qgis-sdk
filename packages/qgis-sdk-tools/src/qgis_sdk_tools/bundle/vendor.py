@@ -27,7 +27,6 @@ RUNTIME_PACKAGE: Final = "qgis_sdk"
 EXCLUDED_SUBPACKAGES: Final = frozenset({"testing"})
 EXCLUDED_NAMES: Final = frozenset({"__pycache__"})
 
-_IMPORT_PREFIX = re.compile(r"(\bimport\s+)" + RUNTIME_PACKAGE + r"\b")
 _FROM_PREFIX = re.compile(r"(\bfrom\s+)" + RUNTIME_PACKAGE + r"\b")
 
 

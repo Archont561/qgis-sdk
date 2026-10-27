@@ -16,13 +16,14 @@ from __future__ import annotations
 import os
 import shutil
 import sys
-import tomllib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 from qgis_sdk.models import QgisSdkError
+
+from qgis_sdk_tools.manifest import read_pyproject, table
 
 __all__ = [
     "QgisInstall",
@@ -227,17 +228,11 @@ def _explicit_candidates(
 
 def _configured_prefix(project: Path) -> Path | None:
     pyproject = project / "pyproject.toml"
-    if not pyproject.is_file():
-        return None
-    try:
-        data: object = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as error:
-        raise QgisSdkQgisNotFoundError(
-            f"{pyproject} is not valid TOML: {error}"
-        ) from error
-    tool = data.get("tool", {}) if isinstance(data, dict) else {}
-    section = tool.get("qgis-sdk", {}) if isinstance(tool, dict) else {}
-    value = section.get("qgis-prefix") if isinstance(section, dict) else None
+    data, malformed = read_pyproject(pyproject)
+    if malformed is not None:
+        raise QgisSdkQgisNotFoundError(f"{pyproject} is not valid TOML: {malformed}")
+    section = table(data, "tool", "qgis-sdk") or {}
+    value = section.get("qgis-prefix")
     if value is None:
         return None
     if not isinstance(value, str) or not value:

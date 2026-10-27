@@ -1037,14 +1037,25 @@ def test_the_kernel_speaks_the_same_event_vocabulary_as_python() -> None:
     from qgis_sdk.bridge.streams import StreamEventType, StreamTerminal
 
     source = PROJECT_ROOT.parents[1] / "packages" / "qgis-sdk-typescript" / "src"
-    bridge = (source / "bridge.ts").read_text(encoding="utf-8")
+    # The kernel is the ``./bridge`` entry plus the modules it is a barrel over.
+    kernel = {
+        path.relative_to(source).as_posix(): path.read_text(encoding="utf-8")
+        for path in [source / "bridge.ts", *sorted((source / "bridge").glob("*.ts"))]
+    }
+    bridge = "".join(kernel.values())
     declarations = (source / "declarations.ts").read_text(encoding="utf-8")
     events = " | ".join(f'"{kind.value}"' for kind in StreamEventType)
     assert f"export type StreamEventKind = {events};" in declarations
     assert "export type StreamEventKind =" not in bridge
-    assert 'import type { StreamEventKind } from "./declarations";' in bridge
+    assert (
+        'import type { StreamEventKind } from "./declarations";' in kernel["bridge.ts"]
+    )
+    assert (
+        'import type { StreamEventKind } from "../declarations";'
+        in kernel["bridge/protocol.ts"]
+    )
     for kind in StreamTerminal:
-        assert f'\t| "{kind.value}"' in bridge
+        assert f'\t| "{kind.value}"' in kernel["bridge/protocol.ts"]
     assert bridge.count('\t| "') == len(StreamTerminal)
 
 

@@ -25,13 +25,14 @@ from __future__ import annotations
 import importlib.metadata
 import os
 import re
-import tomllib
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 from qgis_sdk.bridge.protocol import HOST_SCHEMA_VERSION
 from qgis_sdk.declarations import PLUGIN_DESCRIPTION_SCHEMA_VERSION
+
+from qgis_sdk_tools.manifest import read_pyproject, table
 
 from .diagnostics import Diagnostic
 
@@ -90,14 +91,10 @@ def supported_runtime_range() -> RuntimeRange | None:
         requirements = list(importlib.metadata.requires(TOOLS_DISTRIBUTION) or ())
     except importlib.metadata.PackageNotFoundError:
         source = Path(__file__).resolve().parents[3] / "pyproject.toml"
-        if source.is_file():
-            try:
-                data = tomllib.loads(source.read_text(encoding="utf-8"))
-            except tomllib.TOMLDecodeError:
-                data = {}
-            project = data.get("project", {}) if isinstance(data, dict) else {}
-            if project.get("name") == TOOLS_DISTRIBUTION:
-                requirements = [str(r) for r in project.get("dependencies", [])]
+        data, _malformed = read_pyproject(source)
+        project = table(data, "project") or {}
+        if project.get("name") == TOOLS_DISTRIBUTION:
+            requirements = [str(r) for r in project.get("dependencies", [])]
     for requirement in requirements:
         found = _runtime_range_of(requirement)
         if found is not None:
@@ -256,16 +253,12 @@ def _requirement_strings(data: object) -> Iterator[str]:
 
 def check_runtime_pins(root: Path) -> Iterator[Diagnostic]:
     """Report every runtime (or kit) requirement that cannot meet the supported range."""
-    pyproject = root / "pyproject.toml"
-    if not pyproject.is_file():
-        return
+    data, _malformed = read_pyproject(root / "pyproject.toml")
+    if data is None:
+        return  # absent, or CONFIG001 already reports an unparsable manifest.
     supported = supported_runtime_range()
     if supported is None:
         return
-    try:
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError:
-        return  # CONFIG001 already reports an unparsable manifest.
     for requirement in _requirement_strings(data):
         match = _REQUIREMENT.match(requirement)
         if match is None:
@@ -362,14 +355,12 @@ def installed_runtime_version() -> str | None:
     except ImportError:  # pragma: no cover - the tools depend on the runtime
         return None
     manifest = Path(qgis_sdk.__file__).resolve().parents[2] / "pyproject.toml"
-    if not manifest.is_file():
-        return None
     try:
-        data = tomllib.loads(manifest.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
+        data, _malformed = read_pyproject(manifest)
+    except OSError:
         return None
-    project = data.get("project") if isinstance(data, dict) else None
-    if not isinstance(project, dict) or project.get("name") != RUNTIME_DISTRIBUTION:
+    project = table(data, "project")
+    if project is None or project.get("name") != RUNTIME_DISTRIBUTION:
         return None
     version = project.get("version")
     return version if isinstance(version, str) else None
@@ -452,20 +443,15 @@ class RuntimeResolution:
 def resolve_runtime(root: Path) -> RuntimeResolution:
     """Pair the project's runtime requirement with the installed runtime."""
     requirement = None
-    pyproject = Path(root) / "pyproject.toml"
-    if pyproject.is_file():
-        try:
-            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-        except tomllib.TOMLDecodeError:
-            data = {}
-        for candidate in _requirement_strings(data):
-            match = _REQUIREMENT.match(candidate)
-            if match is None:
-                continue
-            name = match.group("name").lower().replace("_", "-")
-            if name in RUNTIME_REQUIREMENT_NAMES:
-                requirement = candidate.split(";", 1)[0].strip()
-                break
+    data, _malformed = read_pyproject(Path(root) / "pyproject.toml")
+    for candidate in _requirement_strings(data):
+        match = _REQUIREMENT.match(candidate)
+        if match is None:
+            continue
+        name = match.group("name").lower().replace("_", "-")
+        if name in RUNTIME_REQUIREMENT_NAMES:
+            requirement = candidate.split(";", 1)[0].strip()
+            break
     return RuntimeResolution(
         requirement=requirement, installed=installed_runtime_version()
     )

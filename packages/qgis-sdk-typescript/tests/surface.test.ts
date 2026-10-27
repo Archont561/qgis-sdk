@@ -22,6 +22,10 @@ const PACKAGE = join(SRC, "..", "package.json");
 const NEUTRAL = [
 	"index.ts",
 	"bridge.ts",
+	"bridge/protocol.ts",
+	"bridge/errors.ts",
+	"bridge/frames.ts",
+	"bridge/client.ts",
 	"host.ts",
 	"generated/host.ts",
 	"declarations.ts",
@@ -30,6 +34,11 @@ const NEUTRAL = [
 	"qgis-sdk.ts",
 	"schema.ts",
 	"stores.ts",
+	"stores/base.ts",
+	"stores/operation.ts",
+	"stores/stream.ts",
+	"stores/form.ts",
+	"stores/host-query.ts",
 	"validate.ts",
 	"webchannel.ts",
 ];

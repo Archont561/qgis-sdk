@@ -4,7 +4,7 @@ import json
 
 import pytest
 from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin
-from qgis_sdk.declarations import _schema
+from qgis_sdk.declarations._schemas import _schema
 
 
 def test_plain_plugin_is_inspected_without_constructing_or_running_it():

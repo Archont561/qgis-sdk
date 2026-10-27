@@ -20,9 +20,9 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from qgis_sdk.bridge.streams import MAX_FRAMES_PER_PUMP, PushSource, _split_event
+from qgis_sdk.bridge.streams import MAX_FRAMES_PER_PUMP, PushSource, split_event
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.declarations import PluginDescription
+from qgis_sdk.declarations import STREAM_EVENT_KINDS, PluginDescription
 from qgis_sdk.models import QgisSdkError, QgisSdkFormError, QgisSdkUiError
 
 from .actions import CALLING_VIEW
@@ -110,7 +110,7 @@ class ViewSubscription:
         if not self.active:
             return False
         name = getattr(kind, "value", kind)
-        if name not in ("data", "progress", "state"):
+        if name not in STREAM_EVENT_KINDS:
             self.fail(f"{name!r} is not a stream event kind")
             return False
         self._deliver(StreamEvent(self.stream, name, payload, echo=self._echo()))
@@ -171,7 +171,7 @@ class ViewSubscription:
                 self.fail(error)
                 break
             try:
-                kind, payload = _split_event(item)
+                kind, payload = split_event(item)
             except QgisSdkError as error:
                 self.fail(error)
                 break

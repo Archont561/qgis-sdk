@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from qgis_sdk.declarations import STREAM_EVENT_KINDS
 from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkBridgeProtocolError
 
 BRIDGE_PROTOCOL_VERSION = 1
@@ -42,11 +43,6 @@ MAX_WIRE_DEPTH = 32
 
 
 _OPERATION_ID = re.compile(r"[a-zA-Z][a-zA-Z0-9_.-]*")
-
-#: The event kinds a stream may declare and a frame may carry. Spelled here so
-#: :class:`BridgeOperation` can refuse a declaration without importing the
-#: stream machinery; :mod:`qgis_sdk.bridge.streams` enumerates the same three.
-STREAM_EVENT_KINDS = ("data", "progress", "state")
 
 
 class BridgeErrorCode(str, Enum):

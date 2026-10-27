@@ -177,6 +177,9 @@ Sprint order in [doc-21](doc-21%20-%20M7-sprint-train-and-0.8.0-dependency-order
 - [TASK-73](../../tasks/task-73%20-%20Add-qgis_sdk.console-ConsoleSession-over-the-curated-services-PluginHandle-and-PluginRuntime.algorithms.md): Add `qgis_sdk.console`: `ConsoleSession` over the curated services, `PluginHandle` and `PluginRuntime.algorithms` (decision-48)
 - [TASK-77](../../tasks/task-77%20-%20Declare-externals-with-a-startup-probe-vendor-pure-Python-packages-in-build-and-bucket-imports-in-check.md): Declare externals with a startup probe, vendor pure-Python packages in `build`, and bucket imports in `check` (decision-50)
 - [TASK-78](../../tasks/task-78%20-%20Prepare-and-qualify-0.8.0-release.md): Prepare and qualify 0.8.0 release (Python only; bridge confirmed unchanged)
+- [TASK-111](../../tasks/task-111%20-%20Split-the-eight-longest-hand-written-source-files-into-packages-behind-unchanged-barrels.md): Split the eight longest hand-written source files into packages behind unchanged barrels (housekeeping, no API or wire change)
+- [TASK-112](../../tasks/task-112%20-%20Read-pyproject.toml-once-in-the-tools-one-loader-and-one-table-walk-behind-every-check.md): Read pyproject.toml once in the tools: one loader and one table walk behind every check (audit follow-up, behaviour-preserving)
+- [TASK-113](../../tasks/task-113%20-%20Make-bridge.streams-the-single-owner-of-the-stream-event-vocabulary-and-the-event-split-seam.md): Make bridge.streams the single owner of the stream event vocabulary and the event-split seam (audit follow-up, no wire change)
 
 ### 0.9.0
 
@@ -227,6 +230,7 @@ Sprint order in [doc-27](doc-27%20-%20M11-sprint-train-and-1.0.0-dependency-orde
 - [TASK-100](../../tasks/task-100%20-%20Add-qgis-sdk-publish-for-the-official-and-private-QGIS-plugin-repositories-with-the-PUB-check-rules.md): Add qgis-sdk publish for the official and private QGIS plugin repositories with the PUB check rules
 - [TASK-101](../../tasks/task-101%20-%20Ship-standalone-apps-as-conda-packages-from-build-target-app-and-document-server-deployment.md): Ship standalone apps as conda packages from build --target app and document server deployment
 - [TASK-98](../../tasks/task-98%20-%20Run-the-1.0-API-freeze-review-and-the-deprecation-sweep.md): Run the 1.0 API freeze review and the deprecation sweep
+- [TASK-114](../../tasks/task-114%20-%20Remove-or-wire-the-two-bridge-errors-the-TypeScript-client-exports-but-never-throws.md): Remove or wire the two bridge errors the TypeScript client exports but never throws (audit follow-up for the freeze review)
 - [TASK-33](../../tasks/task-33%20-%20Qualify-Windows-macOS-and-Desktop-QGIS-targets.md): Qualify Windows, macOS and Desktop QGIS targets
 - [TASK-107](../../tasks/task-107%20-%20Prepare-and-qualify-1.0.0-release.md): Prepare and qualify 1.0.0 release
 

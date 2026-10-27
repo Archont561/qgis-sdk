@@ -44,8 +44,8 @@ LAYER_PATHS = {
     "core": SOURCE_ROOT / "core",
     "exports": SOURCE_ROOT / "exports.py",
     "files": SOURCE_ROOT / "files.py",
-    "jobs": SOURCE_ROOT / "jobs.py",
-    "declarations": SOURCE_ROOT / "declarations.py",
+    "jobs": SOURCE_ROOT / "jobs",
+    "declarations": SOURCE_ROOT / "declarations",
     "environment": SOURCE_ROOT / "environment.py",
     "models": SOURCE_ROOT / "models",
     "network": SOURCE_ROOT / "network",
@@ -246,7 +246,9 @@ def test_the_catalogue_reaches_qt_only_by_name_at_mount_time() -> None:
     assert components.NATIVE_CATALOGUE == "qgis_sdk.adapters.qgis.components"
     assert (SOURCE_ROOT / "adapters" / "qgis" / "components.py").is_file()
     declared = {
-        module for module, _ in imports_in(SOURCE_ROOT / "ui" / "components.py", "ui")
+        module
+        for file in sorted((SOURCE_ROOT / "ui" / "components").glob("*.py"))
+        for module, _ in imports_in(file, "ui")
     }
     assert not {name for name in declared if name.startswith("qgis_sdk.adapters")}
     assert not {name for name in declared if name.split(".")[0] in ("qgis", "PyQt6")}

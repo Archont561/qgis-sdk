@@ -382,3 +382,40 @@ def test_pump_respects_its_budget_across_many_subscriptions() -> None:
 
     assert len(first) == 2 * MAX_FRAMES_PER_PUMP
     assert len(dispatcher.pump(binding, limit=MAX_FRAMES_PER_PUMP)) > 0
+
+
+def test_the_stream_event_vocabulary_has_one_owner() -> None:
+    """``data``/``progress``/``state`` is spelled once, in the declarations.
+
+    The declaration refusal, the frame validation in ``protocol`` and the
+    ``StreamEventType`` enum all read the same tuple; a fourth kind added to
+    one of them cannot pass in one module and be refused in another.
+    """
+    from qgis_sdk import declarations
+    from qgis_sdk.bridge import protocol
+
+    assert protocol.STREAM_EVENT_KINDS is declarations.STREAM_EVENT_KINDS
+    assert (
+        tuple(kind.value for kind in StreamEventType) == declarations.STREAM_EVENT_KINDS
+    )
+
+
+def test_split_event_is_the_public_seam_the_ui_streams_share() -> None:
+    """``ui.streams`` splits an item exactly as the bridge does, by the same name."""
+    from qgis_sdk.bridge.streams import split_event
+
+    assert split_event({"kind": "progress", "payload": 3}) == (
+        StreamEventType.PROGRESS,
+        3,
+    )
+    assert split_event({"payload": "x"}) == (StreamEventType.DATA, "x")
+
+
+def test_the_ui_event_kind_literal_starts_with_the_same_vocabulary() -> None:
+    """``ui.streams.EventKind`` is the three kinds plus the two terminals, in order."""
+    from typing import get_args
+
+    from qgis_sdk import declarations
+    from qgis_sdk.ui.streams import EventKind
+
+    assert get_args(EventKind)[:3] == declarations.STREAM_EVENT_KINDS
