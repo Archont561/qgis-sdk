@@ -2482,7 +2482,7 @@ the support matrix and `qgis-sdk targets`
 ([decision-37](../../decisions/decision-37%20-%20State-support-as-a-matrix-of-demonstrated-targets.md)),
 and `dev --exercise`'s smoke report. The bridge is unchanged: `@archont561/qgis-sdk`
 stays 0.3.0 and was qualified inside a real `QWebEngineView` against this
-release ([doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-task-31-2026-10-25)).
+release ([doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md#050-release-gate-2026-10-25)).
 
 **Who installs what.**
 

@@ -728,7 +728,7 @@ The bridge inside the real `QWebEngineView` is the published
 project); no bridge defect surfaced, so the bridge is not re-released for
 0.5.0.
 
-## 0.4.0 release gate (TASK-30, 2026-10-25)
+## 0.4.0 release gate (2026-10-25)
 
 What was run before the Python 0.4.0 stamp was requested, on Linux with
 QGIS 4.2.3 (Qt 6.11.2, Chromium 140), Bun 1.4.2, from `main` `7c7a1d0`
@@ -795,7 +795,7 @@ inferred from CI.
   confirms 0.4.0 as the latest version; prefix.dev is not reachable from
   the sandbox, so the conda publish is attested by the job log only.
 
-## 0.5.0 release gate (TASK-31, 2026-10-25)
+## 0.5.0 release gate (2026-10-25)
 
 What was run before the Python 0.5.0 tag, on Linux x86-64 with QGIS 4.2.3
 (Qt 6.11.2, Chromium 140), CPython 3.14.8 in the locked Pixi environment and
@@ -899,7 +899,7 @@ nothing is inferred from CI.
   placeholders of the runtime and the tools (and the kit's own `0.0.0`) on
   PyPI are now superseded and should be yanked by the owner.
 
-## 0.6.0 release gate (TASK-60, 2026-10-26)
+## 0.6.0 release gate (2026-10-26)
 
 What was run on `main` `2763cad` (the TASK-67 merge, PR #98) on Linux
 x86-64 with QGIS 4.2.3 (Qt 6.11.2), CPython 3.14.8 in the locked Pixi
@@ -1053,7 +1053,7 @@ carry 0.5.0. Stamping, tagging and publishing wait for an explicit
   the owner: yank the `0.0.0` placeholders of the runtime and the tools on
   PyPI, deprecate the `0.0.0-stage` npm versions.
 
-## Split release pipeline rehearsal (TASK-57 AC 3)
+## Split release pipeline rehearsal
 
 The pipeline for three distributions landed with PR #78 (`60c1dc2`):
 `release.py classify/plan` emit `kit`/`runtime`/`tools` flags next to
@@ -1104,7 +1104,7 @@ Do not use a `workflow_dispatch` of `release.yml` with `tag=python-v0.4.0`
 as a rehearsal: 0.4.0 is a clean version, so the runtime and tools steps
 would publish for real.
 
-## UI release train rehearsal (TASK-110, 2026-10-27)
+## UI release train rehearsal (2026-10-27)
 
 The `ui` job landed with PR #109 (`803232c`). The sandbox token cannot
 dispatch workflows, so the job was exercised with one prerelease tag, which
