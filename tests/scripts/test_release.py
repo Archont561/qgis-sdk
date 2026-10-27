@@ -781,17 +781,23 @@ def test_version_override_wins(sample_config):
             ["backlog/tasks/task-1.md", "README.md", ".agents/skills/tdd/SKILL.md"],
             "none",
         ),
-        (["packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"], "python"),
+        (
+            ["packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py"],
+            "python",
+        ),
         (["packages/qgis-sdk-typescript/src/index.ts"], "typescript"),
         (
             [
-                "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py",
+                "packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py",
                 "packages/qgis-sdk-typescript/src/index.ts",
             ],
             "all",
         ),
         (
-            ["pixi.toml", "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"],
+            [
+                "pixi.toml",
+                "packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py",
+            ],
             "python",
         ),
         (
@@ -2091,7 +2097,8 @@ def test_the_repository_contract_versions_agree():
 
     contract = contract_versions(
         (
-            repo_root / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py"
+            repo_root
+            / "packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py"
         ).read_text(encoding="utf-8"),
         (repo_root / "packages/qgis-sdk-typescript/src/declarations.ts").read_text(
             encoding="utf-8"
@@ -2128,7 +2135,7 @@ def _commit(subject, *files, body=""):
 def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
     raw = (
         "\x1e" + "a" * 40 + "\x1ffeat(sdk): x\x1fbody line\n\nsecond para\x1d\n"
-        "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py\n"
+        "packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py\n"
         "pixi.toml\n"
         "\x1e" + "b" * 40 + "\x1fdocs: y\x1f\x1d\n"
         "backlog/tasks/task-1.md\n"
@@ -2137,7 +2144,7 @@ def test_parse_log_with_files_keeps_multiline_bodies_and_paths():
     commits = parse_log_with_files(raw)
 
     assert commits[0].files == (
-        "packages/qgis-sdk-runtime/src/qgis_sdk/declarations.py",
+        "packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_contract.py",
         "pixi.toml",
     )
     assert "second para" in commits[0].body

@@ -45,7 +45,7 @@ LAYER_PATHS = {
     "exports": SOURCE_ROOT / "exports.py",
     "files": SOURCE_ROOT / "files.py",
     "jobs": SOURCE_ROOT / "jobs",
-    "declarations": SOURCE_ROOT / "declarations.py",
+    "declarations": SOURCE_ROOT / "declarations",
     "environment": SOURCE_ROOT / "environment.py",
     "models": SOURCE_ROOT / "models",
     "network": SOURCE_ROOT / "network",
