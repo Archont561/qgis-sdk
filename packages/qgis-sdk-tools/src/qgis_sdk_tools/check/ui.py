@@ -1,4 +1,4 @@
-"""UI001 / UI002 / UI003 / ICON001: native UI that cannot work as written.
+"""UI001 / UI002 / UI003 / UI005 / ICON001: native UI that cannot work as written.
 
 Decision-55 point 7. ``UI001``: a ``Dialog``/``Dock`` method constructs an
 interactive Qt or QGIS widget and never calls ``setObjectName`` on it - the
@@ -12,6 +12,12 @@ there - the host would refuse the surface when it opens.
 ``UI003``: an ``@action`` that takes inputs is bound to the toolbar, a menu or
 a shortcut, and no surface collects those inputs - the host refuses the
 trigger by name rather than inventing a dialog, so ``check`` says so first.
+``UI005``: the declarative form read statically - ``@on(attribute)`` names a
+class attribute that is a string or a number rather than a component, or a
+name the class never binds, and a ``Custom`` declared on the class holds a
+widget built when the class is defined (``Custom(widget=QLabel(...))``),
+which cannot be copied for each window; the host refuses both when the
+surface opens, ``check`` says so first.
 ``ICON001``: ``@toolbar(icon="...")`` names a file that is not under the
 package's ``icons/`` directory, which would fail at ``initGui``.
 
@@ -128,6 +134,7 @@ def check_bindings(
             yield from _check_surface_widgets(node, path)
             if directory is not None:
                 yield from _check_ui_names(node, names, path, directory)
+            yield from _check_declared(node, names, path)
 
 
 class _Names:
@@ -140,7 +147,10 @@ class _Names:
         self.on: set[str] = set()
         #: Module-level ``NAME = "literal"`` assignments, for ``@on(NAME)``.
         self.constants: dict[str, str] = {}
+        #: Every name the module binds at top level (imports, defs, assignments).
+        self.module_names: set[str] = set()
         for statement in tree.body:
+            self.module_names.update(_bound_names(statement))
             if (
                 isinstance(statement, ast.Assign)
                 and isinstance(statement.value, ast.Constant)
@@ -391,6 +401,136 @@ def _check_ui_names(
                     "surface opens otherwise."
                 ),
             )
+
+
+def _check_declared(
+    node: ast.ClassDef, names: _Names, path: Path
+) -> Iterator[Diagnostic]:
+    """UI005: the declarative form, as far as the source shows it."""
+    bound: dict[str, ast.expr | None] = {}
+    for statement in node.body:
+        if isinstance(statement, ast.Assign):
+            for target in statement.targets:
+                if isinstance(target, ast.Name):
+                    bound[target.id] = statement.value
+        elif isinstance(statement, ast.AnnAssign):
+            if isinstance(statement.target, ast.Name):
+                bound[statement.target.id] = statement.value
+        else:
+            for name in _bound_names(statement):
+                bound.setdefault(name, None)
+    for attribute, value in bound.items():
+        if isinstance(value, ast.Call) and _callee_name(value) == "Custom":
+            widget = _custom_widget(value)
+            if isinstance(widget, ast.Call):
+                yield Diagnostic(
+                    rule="UI005",
+                    path=path,
+                    line=value.lineno,
+                    column=value.col_offset + 1,
+                    message=(
+                        f"{node.name}.{attribute} = Custom({_callee_name(widget)}"
+                        "(...)): a widget built when the class is defined cannot "
+                        "be copied for each window"
+                    ),
+                    remediation=(
+                        "Pass Custom the widget class or a factory "
+                        "(Custom(widget=QLabel), Custom(lambda parent: ...)); it "
+                        "runs once per opening, when the tree is mounted."
+                    ),
+                )
+    for method in node.body:
+        if not isinstance(method, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        for decorator in method.decorator_list:
+            target = names.on_target(decorator)
+            if not isinstance(target, ast.Name) or target.id in names.constants:
+                continue
+            name = target.id
+            if name in bound:
+                value = bound[name]
+                kind = _literal_kind(value)
+                if kind is None:
+                    continue  # a call, a name, an attribute: the host resolves it
+                message = (
+                    f"@on({name}) in {node.name}: {name!r} is {kind}, not a component"
+                )
+                remediation = (
+                    f"Assign a catalogue component to the class attribute "
+                    f"({name} = Button(text=...)) and wire @on({name}), or pass "
+                    f"the widget's objectName as a string: @on({name!r})."
+                )
+            elif name in names.module_names:
+                continue  # a module-level component or import: the host decides
+            else:
+                message = (
+                    f"@on({name}) in {node.name}: the class declares no component "
+                    f"named {name!r}"
+                )
+                remediation = (
+                    f"Declare the component as a class attribute ({name} = "
+                    f"Button(text=...)) above the method, or pass the widget's "
+                    f"objectName as a string: @on({name!r})."
+                )
+            yield Diagnostic(
+                rule="UI005",
+                path=path,
+                line=decorator.lineno,
+                column=decorator.col_offset + 1,
+                message=message,
+                remediation=remediation,
+            )
+
+
+def _custom_widget(call: ast.Call) -> ast.expr | None:
+    """The ``widget`` argument of a ``Custom(...)`` call, however it is passed."""
+    for keyword in call.keywords:
+        if keyword.arg == "widget":
+            return keyword.value
+    positional = list(call.args)
+    if positional and isinstance(positional[0], ast.Constant):
+        positional = positional[1:]  # Custom("name", widget)
+    return positional[0] if positional else None
+
+
+def _literal_kind(value: ast.expr | None) -> str | None:
+    """``"a str"``/``"an int"``/``"a list"`` for a literal, ``None`` for the rest."""
+    if isinstance(value, ast.Constant):
+        name = type(value.value).__name__
+    elif isinstance(value, ast.List | ast.Tuple | ast.Dict | ast.Set):
+        name = type(value).__name__.lower()
+    else:
+        return None
+    article = "an" if name[0] in "aeiou" else "a"
+    return f"{article} {name}"
+
+
+def _bound_names(statement: ast.stmt) -> Iterator[str]:
+    """The names a statement binds in its scope, as far as a checker needs."""
+    if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        yield statement.name
+    elif isinstance(statement, ast.Import | ast.ImportFrom):
+        for alias in statement.names:
+            yield alias.asname or alias.name.split(".")[0]
+    elif isinstance(statement, ast.Assign):
+        for target in statement.targets:
+            yield from _names_in(target)
+    elif isinstance(statement, ast.AnnAssign | ast.AugAssign):
+        yield from _names_in(statement.target)
+    elif isinstance(statement, ast.For | ast.With | ast.If | ast.Try):
+        for child in ast.iter_child_nodes(statement):
+            if isinstance(child, ast.stmt):
+                yield from _bound_names(child)
+        if isinstance(statement, ast.For):
+            yield from _names_in(statement.target)
+
+
+def _names_in(target: ast.expr) -> Iterator[str]:
+    if isinstance(target, ast.Name):
+        yield target.id
+    elif isinstance(target, ast.Tuple | ast.List):
+        for element in target.elts:
+            yield from _names_in(element)
 
 
 def _literal_name(target: ast.expr | None, names: _Names) -> str | None:

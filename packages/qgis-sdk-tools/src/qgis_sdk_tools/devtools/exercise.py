@@ -156,7 +156,9 @@ def run_exercise(session: DevSession, path: Path) -> None:
             and "open_ping" in qgis.utils.plugins[plugin].runtime.actions
         ):
             before_edit = _surface_round(qgis.utils.plugins[plugin], session, plugin)
-            original = edit(ui_source, 'QLabel("", widget)', 'QLabel("edited", widget)')
+            original = edit(
+                ui_source, 'LogView(label="Answers")', 'LogView(label="Edited")'
+            )
             try:
                 reloaded = coordinator.reload().outcome == "reloaded"
                 after_edit = _surface_round(qgis.utils.plugins[plugin], session, plugin)
@@ -186,9 +188,11 @@ def run_exercise(session: DevSession, path: Path) -> None:
 def _surface_round(held: Any, session: DevSession, plugin: str) -> dict[str, Any]:
     """Open the scaffold's dialog through its bound action, use it, close it.
 
-    Everything is read off the author's instance (``answer``, ``ping``), so
-    this needs no Qt import: the host built the widget, bound ``ctx`` and
-    disposes the view when the window closes.
+    Everything is read off the author's instance (the declared ``answers``
+    log view, the ``pinged`` method), so this needs no Qt import: the host
+    built the widget, bound ``ctx`` and disposes the view when the window
+    closes. ``initial`` is the log view's label, which the edit between the
+    rounds changes.
     """
     surfaces = held.surfaces
     held.runtime.actions["open_ping"]()
@@ -196,9 +200,9 @@ def _surface_round(held: Any, session: DevSession, plugin: str) -> dict[str, Any
     (record,) = surfaces.dialogs
     surface = record.surface
     shown = bool(record.widget.isVisible())
-    initial = surface.answer.text()
-    surface.ping()
-    answer = surface.answer.text()
+    initial = surface.answers.label
+    surface.pinged()
+    answer = str(surface.answers.records()[-1].fields["value"])
     record.widget.close()
     session.pump(0.1)
     return {

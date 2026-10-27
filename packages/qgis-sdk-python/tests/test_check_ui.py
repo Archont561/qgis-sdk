@@ -297,9 +297,90 @@ def test_an_on_name_missing_from_the_designer_file_is_ui002(tmp_path: Path) -> N
             "'missing'"
         ),
         "UI002:22:Lost.ui = 'lost.ui': pkg/lost.ui does not exist",
-        # A module-level constant resolves; a declared component or a name the
-        # checker cannot read is left to the host.
+        # A module-level constant resolves; a declared component is fine; a
+        # name the class never declares is UI005.
         "UI002:45:@on('gone') in Constants: buffer.ui declares no widget named 'gone'",
+        (
+            "UI005:51:@on(unknown_name) in Constants: the class declares no "
+            "component named 'unknown_name'"
+        ),
     ]
     assert "distance, go" in found[0].remediation
     assert all(d.severity == "error" for d in found)
+
+
+def test_declared_surfaces_are_read_statically_ui005(tmp_path: Path) -> None:
+    """TASK-108 AC #2: what the host refuses at open, ``check`` says first."""
+    source = """
+        from qgis.PyQt.QtWidgets import QLabel
+
+        from qgis_sdk import ui
+        from qgis_sdk.ui import Button, Custom, Dialog, Dock, Row, on
+
+
+        def make_label(parent=None):
+            return QLabel("made", parent)
+
+
+        class Fine(Dialog):
+            go = Button(text="Go")
+            tools = Row([go])
+            canvas = Custom(make_label)
+            klass = Custom(widget=QLabel)
+            lazy = ui.Custom(widget=lambda parent=None: QLabel("x", parent))
+            helper = make_button()  # the checker cannot tell; the host will
+
+            @on(go).clicked
+            def went(self): ...
+
+            @on(helper).clicked
+            def helped(self): ...
+
+
+        class Broken(Dock):
+            title = "Broken"
+            clear = "clear"
+            count = 3
+            label = Custom(widget=QLabel("built at import"))
+            other = ui.Custom(QLabel("positional"))
+
+            @on(clear).clicked
+            def cleared(self): ...
+
+            @on(count).changed
+            def counted(self, value): ...
+
+            @on(title).clicked
+            def titled(self): ...
+
+            @on(nowhere).clicked
+            def lost(self): ...
+        """
+    found = list(
+        check_bindings(
+            textwrap.dedent(source),
+            path=Path("pkg/views.py"),
+            package_directory=tmp_path,
+            directory=tmp_path,
+        )
+    )
+    assert [f"{d.rule}:{d.line}:{d.message}" for d in found] == [
+        (
+            "UI005:31:Broken.label = Custom(QLabel(...)): a widget built when the "
+            "class is defined cannot be copied for each window"
+        ),
+        (
+            "UI005:32:Broken.other = Custom(QLabel(...)): a widget built when the "
+            "class is defined cannot be copied for each window"
+        ),
+        "UI005:34:@on(clear) in Broken: 'clear' is a str, not a component",
+        "UI005:37:@on(count) in Broken: 'count' is an int, not a component",
+        "UI005:40:@on(title) in Broken: 'title' is a str, not a component",
+        (
+            "UI005:43:@on(nowhere) in Broken: the class declares no component "
+            "named 'nowhere'"
+        ),
+    ]
+    assert all(d.severity == "error" for d in found)
+    assert "factory" in found[0].remediation
+    assert "class attribute" in found[2].remediation

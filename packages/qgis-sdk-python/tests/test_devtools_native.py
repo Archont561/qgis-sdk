@@ -192,11 +192,11 @@ class TestDevCommand:
         assert surface["before"] == {
             "placed": True,
             "shown": True,
-            "initial": "",
+            "initial": "Answers",
             "answer": "7",
             "closed": True,
         }
-        assert surface["after"] == {**surface["before"], "initial": "edited"}
+        assert surface["after"] == {**surface["before"], "initial": "Edited"}
         assert report == {
             "started": True,
             "error": None,
