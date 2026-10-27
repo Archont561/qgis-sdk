@@ -38,12 +38,14 @@ export {
 	QgisRunButton,
 } from "./elements/run-button";
 export {
+	applyHostTheme,
 	applyTheme,
 	clearTheme,
 	DARK_TOKENS,
 	LIGHT_TOKENS,
 	PALETTE_ROLES,
 	type QgisTheme,
+	type ThemedHost,
 	TOKEN_NAMES,
 	type TokenName,
 	type Tokens,

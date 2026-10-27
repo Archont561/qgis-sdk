@@ -126,6 +126,38 @@ export function applyTheme(
 	}
 }
 
+/** The two members of a `QgisSdk` the host theme is read from. */
+export interface ThemedHost {
+	readonly ready: Promise<void>;
+	readonly host: { readonly theme: QgisTheme | null };
+}
+
+/**
+ * Take the host's palette once the handshake answered: the tokens it
+ * produces go on `root` and `data-qgis-sdk-theme` says which side it is on.
+ * Resolves to the tokens applied, or `null` when the host sent no theme and
+ * the page keeps its stylesheet defaults - a page outside QGIS, a harness
+ * without `theme`. A refused handshake rejects here too; the caller decides
+ * what a page without a host shows.
+ */
+export async function applyHostTheme(
+	qgis: ThemedHost,
+	root: HTMLElement = document.documentElement,
+): Promise<Tokens | null> {
+	await qgis.ready;
+	const theme = qgis.host.theme;
+	if (theme === null) {
+		return null;
+	}
+	const tokens = tokensFromTheme(theme);
+	applyTheme(tokens, root);
+	root.setAttribute(
+		"data-qgis-sdk-theme",
+		theme.dark === true ? "dark" : "light",
+	);
+	return tokens;
+}
+
 /** Remove every token from `root`, so the stylesheet defaults apply again. */
 export function clearTheme(root: HTMLElement = document.documentElement): void {
 	for (const name of TOKEN_NAMES) {

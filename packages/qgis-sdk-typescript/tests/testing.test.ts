@@ -345,3 +345,18 @@ test("listeners are counted so a test can see a client detach", () => {
 	client.close();
 	expect(harness.listeners).toBe(0);
 });
+
+test("the handshake carries the theme the harness was given, and none by default", async () => {
+	const theme = { palette: { window: "#efefef" }, dark: false };
+	const themed = createBridgeHarness(schema, { theme });
+	const client = new BridgeClient(themed);
+	const reply = (await client.handshake()) as Record<string, unknown>;
+	expect(reply.theme).toEqual(theme);
+	client.close();
+
+	const plain = createBridgeHarness(schema);
+	const bare = new BridgeClient(plain);
+	const without = (await bare.handshake()) as Record<string, unknown>;
+	expect("theme" in without).toBe(false);
+	bare.close();
+});

@@ -17,6 +17,21 @@
 			"import": "./dist/define.js",
 			"default": "./dist/define.js"
 		},
+		"./react": {
+			"types": "./dist/react.d.ts",
+			"import": "./dist/react.js",
+			"default": "./dist/react.js"
+		},
+		"./vue": {
+			"types": "./dist/vue.d.ts",
+			"import": "./dist/vue.js",
+			"default": "./dist/vue.js"
+		},
+		"./svelte": {
+			"types": "./dist/svelte.d.ts",
+			"import": "./dist/svelte.js",
+			"default": "./dist/svelte.js"
+		},
 		"./uno": {
 			"types": "./dist/uno.d.ts",
 			"import": "./dist/uno.js",
@@ -40,8 +55,8 @@
 	},
 	"scripts": {
 		"build": "bunup && bun scripts/build-css.ts",
-		"test": "bun test",
-		"coverage": "bun --cwd=../.. --config=packages/qgis-sdk-ui/bunfig.toml test --coverage packages/qgis-sdk-ui/tests",
+		"test": "bun test --conditions=browser",
+		"coverage": "bun --cwd=../.. --config=packages/qgis-sdk-ui/bunfig.toml test --conditions=browser --coverage packages/qgis-sdk-ui/tests",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
@@ -49,11 +64,15 @@
 	},
 	"peerDependencies": {
 		"@archont561/qgis-sdk": ">=0.4.0 <0.5.0",
+		"@lit/react": ">=1",
 		"react": ">=18",
 		"svelte": ">=5",
 		"vue": ">=3.4"
 	},
 	"peerDependenciesMeta": {
+		"@lit/react": {
+			"optional": true
+		},
 		"react": {
 			"optional": true
 		},

@@ -19,6 +19,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Final
 
+from qgis_sdk.adapters.palette import palette_theme
 from qgis_sdk.bridge import Dispatcher
 from qgis_sdk.core import PluginContext
 from qgis_sdk.environment import dev_server
@@ -97,7 +98,9 @@ def open_view(
     served_from = dev_server()
     index = assets / "index.html"
     dispatcher = Dispatcher.from_runtime(
-        runtime, authorize=lambda binding, operation: binding.view_id == view_id
+        runtime,
+        authorize=lambda binding, operation: binding.view_id == view_id,
+        theme=palette_theme,
     )
     if grants:
         from qgis_sdk.bridge.host import (

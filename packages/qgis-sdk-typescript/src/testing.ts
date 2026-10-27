@@ -27,6 +27,7 @@ import {
 	HOST_SCHEMA_VERSION,
 	type HostOperationId,
 } from "./generated/host";
+import type { QgisSdkHostTheme } from "./qgis-sdk";
 import type { BridgeSchema, OperationShape, StreamShape } from "./schema";
 
 const PROTOCOL = 1;
@@ -115,6 +116,12 @@ export interface HarnessOptions {
 	 * because that refusal is the host's, not the harness's.
 	 */
 	readonly granted?: readonly HostOperationId[];
+	/**
+	 * The palette the scripted handshake carries as `theme`; none by default,
+	 * which is what a page outside QGIS sees. The same shape the WebEngine
+	 * adapter sends, so a test can prove a page takes the host's colours.
+	 */
+	readonly theme?: QgisSdkHostTheme;
 }
 
 /**
@@ -221,6 +228,7 @@ export interface SchemaBridgeHarness<O, S>
 
 class Harness<Op extends string> implements BridgeHarness<Op> {
 	private readonly granted: readonly HostOperationId[];
+	private readonly theme: QgisSdkHostTheme | undefined;
 	private readonly plugin: BridgeSchema | null;
 	private readonly listenerSet = new Set<(message: unknown) => void>();
 	private readonly expectations: Expectation[] = [];
@@ -234,6 +242,7 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 
 	public constructor(options: HarnessOptions, plugin: BridgeSchema | null) {
 		this.granted = Object.freeze([...(options.granted ?? HOST_OPERATIONS)]);
+		this.theme = options.theme;
 		this.plugin = plugin;
 	}
 
@@ -379,6 +388,7 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 					id,
 					title: id,
 				})),
+				...(this.theme === undefined ? {} : { theme: this.theme }),
 			},
 		});
 	}

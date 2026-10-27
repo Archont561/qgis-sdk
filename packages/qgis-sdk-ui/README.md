@@ -13,7 +13,8 @@ hooks. Styling is a compiled `style.css` of `qs-` utilities bound to
 `--qgis-sdk-*` tokens, which the host palette fills inside QGIS.
 
 > Experimental. `lit` is the only dependency; `@archont561/qgis-sdk` is a
-> peer. `./uno` needs `@unocss/preset-mini`.
+> peer. `./react` needs `react` and `@lit/react`, `./vue` needs `vue`,
+> `./svelte` needs `svelte`, `./uno` needs `@unocss/preset-mini`.
 
 ## Installation
 
@@ -43,7 +44,29 @@ form.store = formStore(qgis, "buffer");
 ```
 
 A page outside QGIS, or one without the `layers.read` grant, sees the pickers
-say so instead of a fault.
+say so instead of a fault. `applyHostTheme(qgis)` takes the running QGIS
+palette once the handshake answered and leaves the documented defaults
+otherwise.
+
+### Frameworks
+
+```tsx
+import { QgisLayerPicker } from "@archont561/qgis-sdk-ui/react";
+<QgisLayerPicker qgis={qgis} name="layer_id" label="Layer" onChange={pick} />;
+```
+
+```vue
+<QgisLayerPicker :qgis="qgis" name="layer_id" label="Layer" @change="pick" />
+```
+
+```svelte
+<qgis-layer-picker {qgis} name="layer_id" label="Layer" onqgis-change={pick} />
+```
+
+The React components come from `@lit/react`; the Vue ones bind every property
+as a property and re-emit `change`, `result`, `run` and `cancel`; Svelte sets
+properties on a registered element by itself, and `use:qgisProps` does it for
+a `<svelte:element>`.
 
 ## Documentation
 

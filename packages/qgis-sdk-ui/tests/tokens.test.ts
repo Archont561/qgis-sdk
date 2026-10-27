@@ -6,6 +6,7 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { install, uninstall } from "./support/dom";
+import { sdkWithHarness } from "./support/schema";
 
 install();
 afterAll(uninstall);
@@ -79,5 +80,41 @@ describe("tokens", () => {
 		expect(
 			tokens.tokenDeclarations(tokens.LIGHT_TOKENS).split("\n"),
 		).toHaveLength(tokens.TOKEN_NAMES.length);
+	});
+
+	test("applyHostTheme takes the handshake's palette, or leaves the defaults", async () => {
+		const inside = sdkWithHarness({
+			theme: {
+				palette: { window: "#323232", highlight: "#aa00aa" },
+				dark: true,
+			},
+		});
+		const root = document.createElement("div");
+		const applied = await tokens.applyHostTheme(inside.qgis, root);
+		expect(applied?.bg).toBe("#323232");
+		expect(applied?.accent).toBe("#aa00aa");
+		expect(applied?.fg).toBe(tokens.DARK_TOKENS.fg);
+		expect(root.style.getPropertyValue("--qgis-sdk-bg")).toBe("#323232");
+		expect(root.getAttribute("data-qgis-sdk-theme")).toBe("dark");
+		inside.qgis.close();
+
+		const outside = sdkWithHarness();
+		const untouched = document.createElement("div");
+		expect(await tokens.applyHostTheme(outside.qgis, untouched)).toBeNull();
+		expect(untouched.style.getPropertyValue("--qgis-sdk-bg")).toBe("");
+		expect(untouched.hasAttribute("data-qgis-sdk-theme")).toBe(false);
+		outside.qgis.close();
+
+		const light = sdkWithHarness({ theme: { palette: {}, dark: false } });
+		await tokens.applyHostTheme(light.qgis);
+		expect(document.documentElement.getAttribute("data-qgis-sdk-theme")).toBe(
+			"light",
+		);
+		expect(
+			document.documentElement.style.getPropertyValue("--qgis-sdk-bg"),
+		).toBe(tokens.LIGHT_TOKENS.bg);
+		tokens.clearTheme();
+		document.documentElement.removeAttribute("data-qgis-sdk-theme");
+		light.qgis.close();
 	});
 });
