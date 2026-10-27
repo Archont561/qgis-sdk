@@ -4,6 +4,12 @@
 		"types": ["bun", "node"],
 		"useDefineForClassFields": false
 	},
-	"include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],
-	"exclude": ["dist", "node_modules", "coverage"]
+	"include": [
+		"src/**/*.ts",
+		"tests/**/*.ts",
+		"scripts/**/*.ts",
+		"stories/**/*.ts",
+		".storybook/**/*.ts"
+	],
+	"exclude": ["dist", "node_modules", "coverage", "storybook-static"]
 }

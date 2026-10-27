@@ -3,5 +3,11 @@ coverageReporter = ["text", "lcov"]
 coverageDir = "coverage/qgis-sdk-ui"
 coverageThreshold = { lines = 0.9, functions = 0.9 }
 coverageSkipTestFiles = true
-# The bridge's built output is the bridge's to cover.
-coveragePathIgnorePatterns = ["**/qgis-sdk-typescript/**", "**/node_modules/**"]
+# The bridge's built output is the bridge's to cover; the stories and the
+# Storybook preview are fixtures the tests render, not the library.
+coveragePathIgnorePatterns = [
+  "**/qgis-sdk-typescript/**",
+  "**/node_modules/**",
+  "**/qgis-sdk-ui/stories/**",
+  "**/qgis-sdk-ui/.storybook/**",
+]

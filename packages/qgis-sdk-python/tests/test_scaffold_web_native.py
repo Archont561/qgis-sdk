@@ -172,12 +172,46 @@ def test_the_built_page_answers_a_ping_inside_qgis(
                 == "1"
             ),
         )
+        _assert_page_took_the_host_palette(qgis_app, page)
     finally:
         desktop.unload()
         qgis_app.processEvents()
         _forget(plugin)
     assert desktop.runtime.state.value == "stopped"
     assert desktop.view is None
+
+
+def _assert_page_took_the_host_palette(app: Any, page: Any) -> None:
+    """The page's ``--qgis-sdk-*`` variables match the running palette (TASK-70 AC #2).
+
+    The templates call ``applyHostTheme(qgis)`` on start; once the handshake
+    answered, the computed ``--qgis-sdk-bg`` of the document is the host's
+    ``window`` colour as :func:`palette_theme` read it, and the side attribute
+    says which palette the defaults came from.
+    """
+    from qgis_sdk.adapters.palette import palette_theme
+
+    theme = palette_theme()
+    assert theme is not None
+    expected = theme["palette"]["window"]
+    read = (
+        "getComputedStyle(document.documentElement)"
+        ".getPropertyValue('--qgis-sdk-bg').trim()"
+    )
+    _pump(app, lambda: _evaluate(app, page, read) == expected)
+    assert _evaluate(
+        app, page, "document.documentElement.getAttribute('data-qgis-sdk-theme')"
+    ) == ("dark" if theme["dark"] else "light")
+    # The matching foreground came along: the tokens move as a set.
+    assert (
+        _evaluate(
+            app,
+            page,
+            "getComputedStyle(document.documentElement)"
+            ".getPropertyValue('--qgis-sdk-fg').trim()",
+        )
+        == theme["palette"]["windowText"]
+    )
 
 
 def _forget(package: str) -> None:

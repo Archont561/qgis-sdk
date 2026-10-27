@@ -12,7 +12,8 @@ works; each carries `data-qgis-sdk` and `data-part="label|control|error"`
 hooks. Styling is a compiled `style.css` of `qs-` utilities bound to
 `--qgis-sdk-*` tokens, which the host palette fills inside QGIS.
 
-> Experimental. `lit` is the only dependency; `@archont561/qgis-sdk` is a
+> Experimental, `0.1.0` unpublished: the first npm release follows the
+> `ui-v*` tag. `lit` is the only dependency; `@archont561/qgis-sdk` is a
 > peer. `./react` needs `react` and `@lit/react`, `./vue` needs `vue`,
 > `./svelte` needs `svelte`, `./uno` needs `@unocss/preset-mini`.
 
@@ -73,6 +74,9 @@ a `<svelte:element>`.
 - [TypeScript package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) -
   the components, the wrappers, the `--qgis-sdk-*` variables and the
   `./uno` preset.
+- Storybook: `bun run storybook` in `packages/qgis-sdk-ui` serves every
+  component with a light/dark theme switcher and the a11y addon; the static
+  build joins the docs site when it exists.
 
 ## License
 
