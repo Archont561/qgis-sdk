@@ -9,7 +9,7 @@ Rules owned here: ``PROJECT001`` (no package), ``META001`` (a hand-written
 hand-written ``classFactory``; ``host()`` binds it), ``CONFIG001`` for
 ``[tool.qgis-sdk.check]``. The ``pyproject.toml`` rules live in
 :mod:`qgis_sdk_tools.project`, the version rules in :mod:`.versions`, the
-native UI rules (``UI001``-``UI003``, ``ICON001``) in :mod:`.ui`.
+native UI rules (``UI001``-``UI003``, ``UI005``, ``ICON001``) in :mod:`.ui`.
 """
 
 from __future__ import annotations

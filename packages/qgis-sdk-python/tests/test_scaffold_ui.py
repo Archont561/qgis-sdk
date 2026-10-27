@@ -48,16 +48,65 @@ def test_the_plugin_lists_the_surface_and_binds_the_opening_action() -> None:
     assert "self.ctx.ui.open(PingDialog" in plugin_module
     assert '@menu("Plugins/Demo Tools")' in ui_module
     assert "class PingDialog(Dialog):" in ui_module
-    assert "self.ctx.actions.ping(" in ui_module
+    # The declarative form (TASK-108 AC #1): components on the class, a Form
+    # over the action, ``@on(component)``; no ``build()`` and no Qt at all.
+    assert 'form = Form([value], action_id="ping")' in ui_module
+    assert "@on(ping).clicked" in ui_module
+    assert "self.form.submit()" in ui_module
+    assert "def build" not in ui_module
     for module in (plugin_module, ui_module):
-        top_level = {
-            node.module
-            for node in ast.parse(module).body
-            if isinstance(node, ast.ImportFrom) and node.module
-        }
-        assert not any(name.split(".")[0] in {"qgis", "PyQt6"} for name in top_level)
-    # Qt is reached inside ``build()`` only, through the curated alias.
-    assert "from qgis.PyQt.QtWidgets import" in ui_module
+        assert not any(
+            name.split(".")[0] in {"qgis", "PyQt6"}
+            for name in _imported_modules(module)
+        )
+
+
+def _imported_modules(source: str) -> set[str]:
+    return {
+        node.module
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ImportFrom) and node.module
+    }
+
+
+def test_the_starter_dialog_opens_under_the_fake_with_its_initial_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the host does at ``open``: the copies, ``initial``, the wiring, a click."""
+    import importlib
+
+    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+    from qgis_sdk.testing import RecordingNotifications, build_surface, fake_ui_context
+    from qgis_sdk.ui import ui_snapshot
+
+    project = tmp_path / "project"
+    write_scaffold(ScaffoldOptions.resolve("demo_tools", ui="native"), project)
+    monkeypatch.syspath_prepend(str(project))
+    plugin_module = importlib.import_module("demo_tools.plugin")
+    ui_module = importlib.import_module("demo_tools.ui")
+    importlib.reload(plugin_module)
+
+    scope = ResourceScope()
+    runtime = PluginRuntime(
+        plugin_module.DemoToolsPlugin,
+        PluginContext(notifications=RecordingNotifications(scope), scope=scope),
+    )
+    runtime.start()
+    try:
+        ctx = fake_ui_context(scope.child(), runtime=runtime)
+        built = build_surface(ui_module.PingDialog, ctx, initial={"value": 7})
+        dialog = built.surface
+        assert dialog.value.value() == 7
+        assert dialog.form.fields == (dialog.value,)
+        dialog.value.set_value(3)
+        dialog.ping.click()
+        assert [line for line in dialog.answers.lines()] == ["[info] pong value=3"]
+        names = [node["name"] for node in ui_snapshot(built.root)["children"]]
+        assert names == ["form", "ping", "answers"]
+    finally:
+        runtime.unload()
+        for name in [n for n in list(sys.modules) if n.startswith("demo_tools")]:
+            del sys.modules[name]
 
 
 def test_the_native_ui_project_passes_check(tmp_path: Path) -> None:
@@ -98,6 +147,8 @@ def test_the_readme_explains_the_surface_and_the_rules() -> None:
     )
 
     assert "## Native UI" in readme
+    assert "declares its\ncomponents" in readme
+    assert "plain PyQt" in readme  # the escape hatch, in one sentence
     assert "UI003" in readme
     assert "ICON001" in readme
     assert "demo_tools/icons/" in readme

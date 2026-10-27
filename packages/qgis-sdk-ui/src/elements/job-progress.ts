@@ -107,6 +107,7 @@ export class QgisJobProgress extends QgisSdkElement {
 		store: { attribute: false },
 		read: { attribute: false },
 		cancel: { attribute: false },
+		cancellable: { type: Boolean },
 	};
 
 	declare public status: ProgressStatus;
@@ -117,6 +118,8 @@ export class QgisJobProgress extends QgisSdkElement {
 	declare public read: ProgressReader<unknown>;
 	/** Shown as a button while pending; `null` shows none. */
 	declare public cancel: (() => void) | null;
+	/** The Python `JobProgress(cancellable=)`: `false` hides the button even with a `cancel`. */
+	declare public cancellable: boolean;
 
 	private readonly source = new StoreController<unknown>(this);
 
@@ -128,6 +131,7 @@ export class QgisJobProgress extends QgisSdkElement {
 		this.store = null;
 		this.read = readProgress;
 		this.cancel = null;
+		this.cancellable = true;
 	}
 
 	/** What is shown now: the store's reading when there is one, else the properties. */
@@ -172,7 +176,7 @@ export class QgisJobProgress extends QgisSdkElement {
 					value=${ifDefined(status === "idle" ? 0 : value)}
 				></progress>
 				${
-					this.cancel !== null && status === "pending"
+					this.cancellable && this.cancel !== null && status === "pending"
 						? html`<button data-part="cancel" class=${BUTTON_CLASSES} type="button" @click=${this.onCancel}>Cancel</button>`
 						: nothing
 				}

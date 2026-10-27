@@ -50,7 +50,7 @@ export const Choice: Story = {
 	render: (args) => html`<qgis-choice
 		name="mode"
 		label=${args.label}
-		.choices=${[
+		.options=${[
 			{ value: "fast", label: "Fast" },
 			{ value: "exact", label: "Exact" },
 		]}

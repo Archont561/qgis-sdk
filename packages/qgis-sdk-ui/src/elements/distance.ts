@@ -49,6 +49,8 @@ export class QgisDistance extends QgisSdkElement {
 					max=${ifDefined(this.max)}
 					step=${ifDefined(this.step)}
 					?disabled=${this.disabled}
+					?required=${this.required}
+					aria-required=${ifDefined(this.required ? "true" : undefined)}
 					aria-invalid=${ifDefined(this.error === "" ? undefined : "true")}
 					aria-describedby=${ifDefined(describedBy(this.errorId, this.error))}
 					.value=${this.value === null ? "" : String(this.value)}

@@ -126,6 +126,8 @@ export class QgisLayerPicker extends QgisSdkElement {
 					id=${this.controlId}
 					name=${ifDefined(this.name === "" ? undefined : this.name)}
 					?disabled=${this.disabled || state.status !== "ok"}
+					?required=${this.required}
+					aria-required=${ifDefined(this.required ? "true" : undefined)}
 					aria-busy=${ifDefined(state.status === "loading" ? "true" : undefined)}
 					aria-invalid=${ifDefined(message === "" ? undefined : "true")}
 					aria-describedby=${ifDefined(describedBy(this.errorId, message))}

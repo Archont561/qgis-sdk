@@ -71,6 +71,8 @@ export class QgisFileInput extends QgisSdkElement {
 					readonly
 					placeholder=${this.placeholder}
 					?disabled=${this.disabled}
+					?required=${this.required}
+					aria-required=${ifDefined(this.required ? "true" : undefined)}
 					aria-invalid=${ifDefined(this.error === "" ? undefined : "true")}
 					aria-describedby=${ifDefined(describedBy(this.errorId, this.error))}
 					.value=${shown}

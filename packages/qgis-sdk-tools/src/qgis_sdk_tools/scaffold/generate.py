@@ -64,19 +64,21 @@ UI_ACTION = '''
 
 UI_MODULE = '''"""{title}: native surfaces, plain classes built in pure PyQt (decision-55).
 
-The host constructs a ``Dialog`` per opening, binds ``self.ctx`` (a
-``UiContext``: ``actions``, ``view``, ``notifications``, ``log``) and
-``self.initial`` on the instance, calls ``build()`` for the widget to show,
-connects the ``@on`` methods to the widgets they name and disposes the
-scope - connections included - when the window closes. Qt is imported
-inside ``build()`` so the module stays importable by the pure tests,
-``describe_bindings`` and ``qgis-sdk check`` (``UI004`` warns otherwise).
+The dialog declares its components as class attributes: each takes the
+attribute's name, the default ``build()`` stacks them, ``@on(component)``
+wires the method, and every opening gets its own copies seeded from
+``initial``. The host constructs a ``Dialog`` per opening, binds ``self.ctx``
+(a ``UiContext``: ``actions``, ``view``, ``notifications``, ``log``) and
+``self.initial``, shows what ``build()`` returns and disposes the scope -
+connections included - when the window closes. Nothing here imports Qt, so
+the module stays importable by the pure tests, ``describe_bindings`` and
+``qgis-sdk check``; a ``build()`` returning any QWidget is the escape hatch.
 """
 
 from __future__ import annotations
 
 from qgis_sdk import menu
-from qgis_sdk.ui import Dialog, on
+from qgis_sdk.ui import Button, Dialog, Form, LogView, Number, on
 
 
 @menu("Plugins/{title}")
@@ -85,33 +87,16 @@ class PingDialog(Dialog):
 
     title = "{title}: ping"
 
-    def build(self):  # a QWidget; Qt is not imported at module level
-        from qgis.PyQt.QtWidgets import (
-            QLabel,
-            QPushButton,
-            QSpinBox,
-            QVBoxLayout,
-            QWidget,
-        )
+    value = Number(integer=True, required=True)  # objectName form/value
+    form = Form([value], action_id="ping")  # submits through ctx.actions
+    ping = Button(text="Ping")  # objectName buttons/ping
+    answers = LogView(label="Answers")  # shows ctx.log as it arrives
 
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        self.value = QSpinBox(widget)
-        self.value.setObjectName("value")
-        self.value.setValue(int(self.initial.get("value", 0)))
-        self.answer = QLabel("", widget)
-        self.answer.setObjectName("answer")
-        button = QPushButton("Ping", widget)
-        button.setObjectName("ping")
-        layout.addWidget(self.value)
-        layout.addWidget(button)
-        layout.addWidget(self.answer)
-        return widget
-
-    @on("ping").clicked  # connected after build(), by objectName; gone with the window
-    def ping(self) -> None:
+    @on(ping).clicked  # connected after build(); gone with the window
+    def pinged(self) -> None:
         """Call the plugin's own action through the validated, view-scoped path."""
-        self.answer.setText(str(self.ctx.actions.ping(value=self.value.value())))
+        answer = self.form.submit()
+        self.ctx.log.info("pong", value=answer)
 '''
 
 ALGORITHM_IMPORTS = """from qgis_sdk.algorithms import invoke
@@ -601,26 +586,33 @@ def _ui_readme(options: ScaffoldOptions) -> str:
     return f"""
 ## Native UI
 
-`{plugin}/ui.py` holds `PingDialog`, a `Dialog` subclass whose `build()` is
-plain PyQt and the only place Qt is imported - the escape hatch, kept as the
-starter so nothing is hidden; `Form.for_action(self.ctx, "ping")` plus a
-`qgis_sdk.ui.Button` builds the same window from the action's declaration
-without touching Qt (see the `simple` example's `surfaces.py`, and its
-`ResultsDock` for a `Dock` of containers, a `ResultTable` and a `LogView`).
-`@menu("Plugins/...")` on the class puts it in the Plugins menu, `plugin.py`
-lists it in `surfaces` and binds the no-input `open_ping` action to the
-toolbar, which calls `self.ctx.ui.open(PingDialog, initial=...)`. The method
-under `@on("ping").clicked` is connected to the widget of that `objectName`
-after `build()` and disconnected with the window; `ui = "ping.ui"` instead
-of `build()` loads a Qt Designer file the same way. Inside the dialog
-`self.ctx` is a `UiContext`: `self.ctx.actions.ping(...)` dispatches the
-plugin's own action with validation, `self.ctx.view.request_close()` closes
-the window. `qgis-sdk check` reads the surfaces: every interactive widget a
-`build()` constructs needs `setObjectName` (`UI001`; the catalogue's
-components name theirs), an `@on` name must exist in the `.ui` file
-(`UI002`), a bound action with inputs needs a surface that collects them
-(`UI003`), Qt imported at module level in the package is warned about
-(`UI004`), and `@toolbar(icon="name.svg")` names a file under
+`{plugin}/ui.py` holds `PingDialog`, a `Dialog` subclass that declares its
+components as class attributes: a `Number` named after its attribute
+(`form/value`), a `Form` over the `ping` action, a `Button` and a `LogView`
+over `ctx.log`. The default `build()` stacks them, `initial` seeds the
+inputs by name, and every opening gets its own copies, so no Qt is imported
+anywhere in the package. A `build()` returning any QWidget is the escape
+hatch when the catalogue lacks a widget (plain PyQt, imported inside the
+method; `Form.for_action(self.ctx, "ping")` builds the inputs from the
+action's declaration there too); see the `simple` example's `surfaces.py`
+for both forms and its `ResultsDock` for a `Dock` of containers, a
+`ResultTable` and a `LogView`. `@menu("Plugins/...")` on the class puts it
+in the Plugins menu, `plugin.py` lists it in `surfaces` and binds the
+no-input `open_ping` action to the toolbar, which calls
+`self.ctx.ui.open(PingDialog, initial=...)`. The method under
+`@on(ping).clicked` is connected to that window's copy of the button after
+`build()` and disconnected with the window; `@on("name")` targets an
+`objectName` instead, and `ui = "ping.ui"` loads a Qt Designer file the
+same way. Inside the dialog `self.ctx` is a `UiContext`:
+`self.form.submit()` dispatches the plugin's own action with validation,
+`self.ctx.view.request_close()` closes the window. `qgis-sdk check` reads
+the surfaces: every interactive widget a `build()` constructs needs
+`setObjectName` (`UI001`; the catalogue's components name theirs), an `@on`
+name must exist in the `.ui` file (`UI002`), a bound action with inputs
+needs a surface that collects them (`UI003`), Qt imported at module level
+in the package is warned about (`UI004`), `@on(attribute)` must name a
+component and a declared `Custom` must take a factory, not a widget
+(`UI005`), and `@toolbar(icon="name.svg")` names a file under
 `{plugin}/icons/` (`ICON001`). The starter test drives the action under
 `qgis_sdk.testing.FakeUi` without QGIS.
 """

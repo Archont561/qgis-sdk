@@ -66,6 +66,8 @@ export class QgisCrsPicker extends QgisSdkElement {
 				list=${listId}
 				placeholder=${this.placeholder}
 				?disabled=${this.disabled}
+				?required=${this.required}
+				aria-required=${ifDefined(this.required ? "true" : undefined)}
 				aria-invalid=${ifDefined(message === "" ? undefined : "true")}
 				aria-describedby=${ifDefined(describedBy(this.errorId, message))}
 				.value=${this.value ?? ""}

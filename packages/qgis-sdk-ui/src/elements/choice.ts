@@ -29,13 +29,14 @@ export class QgisChoice extends QgisSdkElement {
 	public static readonly tagName: string = "qgis-choice";
 	public static override properties: PropertyDeclarations = {
 		...QgisSdkElement.properties,
-		choices: { attribute: false },
+		options: { attribute: false },
 		value: { attribute: false },
 		nullable: { type: Boolean },
 		placeholder: { type: String },
 	};
 
-	declare public choices: readonly Choice[];
+	/** The options offered, as the Python `Choice(options=)`. */
+	declare public options: readonly Choice[];
 	declare public value: unknown;
 	/** Offer an empty option that reports `null`. */
 	declare public nullable: boolean;
@@ -43,14 +44,23 @@ export class QgisChoice extends QgisSdkElement {
 
 	public constructor() {
 		super();
-		this.choices = [];
+		this.options = [];
 		this.value = null;
 		this.nullable = false;
 		this.placeholder = "Choose…";
 	}
 
+	/** The same list under its first name; `options` is the shared spelling. */
+	public get choices(): readonly Choice[] {
+		return this.options;
+	}
+
+	public set choices(value: readonly Choice[]) {
+		this.options = value;
+	}
+
 	protected override render(): TemplateResult {
-		const selected = this.choices.findIndex((choice) =>
+		const selected = this.options.findIndex((choice) =>
 			Object.is(choiceValue(choice), this.value),
 		);
 		return html`${labelPart(this.controlId, this.label)}
@@ -60,6 +70,8 @@ export class QgisChoice extends QgisSdkElement {
 				id=${this.controlId}
 				name=${ifDefined(this.name === "" ? undefined : this.name)}
 				?disabled=${this.disabled}
+				?required=${this.required}
+				aria-required=${ifDefined(this.required ? "true" : undefined)}
 				aria-invalid=${ifDefined(this.error === "" ? undefined : "true")}
 				aria-describedby=${ifDefined(describedBy(this.errorId, this.error))}
 				.value=${selected < 0 ? EMPTY : String(selected)}
@@ -70,7 +82,7 @@ export class QgisChoice extends QgisSdkElement {
 						? html`<option value=${EMPTY} ?selected=${selected < 0}>${this.placeholder}</option>`
 						: null
 				}
-				${this.choices.map(
+				${this.options.map(
 					(choice, index) =>
 						html`<option value=${String(index)} ?selected=${index === selected}>${labelOf(choice)}</option>`,
 				)}
@@ -83,7 +95,7 @@ export class QgisChoice extends QgisSdkElement {
 		const next =
 			select.value === EMPTY
 				? null
-				: choiceValue(this.choices[Number(select.value)] as Choice);
+				: choiceValue(this.options[Number(select.value)] as Choice);
 		this.value = next;
 		this.emitChange(next);
 	}

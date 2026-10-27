@@ -21,6 +21,7 @@ from qgis_sdk.ui import (
     Custom,
     Dialog,
     Dock,
+    Form,
     Group,
     JobProgress,
     LogView,
@@ -35,7 +36,12 @@ from qgis_sdk.ui import (
     ui_snapshot,
     wires_of,
 )
-from qgis_sdk.ui.declarative import declared_components, materialise
+from qgis_sdk.ui.declarative import (
+    apply_initial,
+    declared_components,
+    declared_inputs,
+    materialise,
+)
 
 
 @pytest.fixture
@@ -320,3 +326,113 @@ def test_the_methods_stay_plain_methods(ctx: UiContext) -> None:
     dock.rows.set_rows([{"id": 1, "name": "a"}])
     dock.cleared()
     assert dock.rows.rows() == () and dock.clicks == 1
+
+
+# -- Form over declared inputs (TASK-108 AC #3) ---------------------------------------
+
+
+class Ping(Dialog):
+    value = Number(integer=True, required=True)
+    note = Text()
+    form = Form([value, note], action_id="ping")
+    go = Button(text="Ping")
+
+
+def test_a_form_takes_inputs_declared_on_the_class_and_resolves_their_names() -> None:
+    # Inside the class body the inputs had no names yet; after it they do.
+    assert [field.name for field in Ping.form.fields] == ["value", "note"]
+    assert Ping.form.field("note") is Ping.note
+    assert Ping.form.children() == (Ping.value, Ping.note)
+
+
+def test_the_declared_form_s_copies_hold_the_instance_s_inputs(ctx: UiContext) -> None:
+    built = build_surface(Ping, ctx)
+    surface = built.surface
+    assert surface.form.fields == (surface.value, surface.note)
+    assert surface.form is not Ping.form and surface.value is not Ping.value
+    # The form is a root (it contains the inputs), the button the other one.
+    assert [c.name for c in built.root.children()] == ["form", "go"]
+    seen: list[tuple[str, object]] = []
+    surface.form.changed(lambda name, value: seen.append((name, value)))
+    surface.value.set_value(3)
+    assert seen == [("value", 3)]
+    assert surface.form.values() == {"value": 3, "note": ""}
+    assert Ping.value.value() == 0  # the prototype heard nothing
+
+
+def test_a_form_of_unnamed_inputs_outside_a_class_refuses_when_read() -> None:
+    form = Form([Number(), Text()])
+    with pytest.raises(QgisSdkUiError, match="has no name yet"):
+        _ = form.fields
+
+
+def test_a_form_still_refuses_two_declared_inputs_of_one_name() -> None:
+    class Clash(Dialog):
+        a = Number()
+        form = Form([a, Number("a")])
+
+    with pytest.raises(QgisSdkUiError, match="two fields named 'a'"):
+        _ = Clash.form.fields
+
+
+# -- initial values ---------------------------------------------------------------------
+
+
+def test_the_default_build_seeds_declared_inputs_from_initial(ctx: UiContext) -> None:
+    built = build_surface(Ping, ctx, initial={"value": 7})
+    assert built.surface.value.value() == 7
+    assert built.surface.form.values() == {"value": 7, "note": ""}
+    assert Ping.value.value() == 0  # the prototype is untouched
+
+
+def test_initial_reaches_inputs_nested_in_a_declared_container(ctx: UiContext) -> None:
+    class Nested(Dialog):
+        count = Number()
+        box = Group([count], label="Box")
+
+    built = build_surface(Nested, ctx, initial={"count": 2})
+    assert built.surface.count.value() == 2
+    assert declared_inputs(built.surface) == {"count": built.surface.count}
+
+
+def test_an_initial_name_no_declared_input_carries_is_refused(ctx: UiContext) -> None:
+    with pytest.raises(
+        QgisSdkUiError, match="Ping has no input 'typo'; it has: note, value"
+    ):
+        build_surface(Ping, ctx, initial={"typo": 1})
+    instance = Ping()
+    materialise(instance)
+    instance.initial = {}
+    apply_initial(instance)  # nothing to seed is fine
+    assert instance.value.value() == 0
+
+
+def test_an_author_s_build_keeps_initial_to_itself(ctx: UiContext) -> None:
+    class Mixed(Dialog):
+        note = Text()
+
+        def build(self) -> Column:
+            # The imperative form reads ``self.initial`` as it pleases.
+            self.note.set_value(self.initial.get("message"))
+            return Column("root", [self.note])
+
+    built = build_surface(Mixed, ctx, initial={"message": "hi", "free": 1})
+    assert built.surface.note.value() == "hi"
+
+
+# -- the attribute name in a snapshot ---------------------------------------------------
+
+
+def test_a_snapshot_names_the_attribute_a_declared_component_came_from(
+    ctx: UiContext,
+) -> None:
+    class Named(Dialog):
+        explicit = Button("named", text="Named")
+        plain = Button(text="Plain")
+
+    built = build_surface(Named, ctx)
+    nodes = {node["name"]: node for node in ui_snapshot(built.root)["children"]}
+    assert nodes["named"]["attribute"] == "explicit"
+    assert nodes["plain"]["attribute"] == "plain"
+    # A component built by hand has no attribute to report.
+    assert "attribute" not in Button("loose", text="x").snapshot()

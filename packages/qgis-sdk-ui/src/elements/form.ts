@@ -158,7 +158,7 @@ export class QgisForm extends QgisSdkElement {
 			case "choice":
 				control = html`<qgis-choice
 					.name=${common.name} .label=${common.label} .error=${common.error} ?disabled=${common.disabled}
-					.choices=${field.choices as readonly string[]}
+					.options=${field.choices as readonly string[]}
 					.value=${value ?? null}
 					.nullable=${!field.required || field.nullable}
 				></qgis-choice>`;

@@ -607,15 +607,46 @@ control.
 | Element | Mirrors (native) | Reads | Raises |
 | --- | --- | --- | --- |
 | `<qgis-form>` | `Form` | `.store` (a `FormStore`), `.qgis`, `.pickers`, `submit-label` | `qgis-change`, `qgis-run`, `qgis-result` |
-| `<qgis-layer-picker>` | `LayerPicker` | `.qgis`, `geometry`, `nullable` | `qgis-change` |
-| `<qgis-field-picker>` | `FieldPicker` | `.qgis`, `.layer`, `nullable` | `qgis-change` |
-| `<qgis-crs-picker>` | `CrsPicker` | `.suggestions`, `.value` | `qgis-change` |
-| `<qgis-distance>` | `Distance` | `unit`, `.min`, `.max`, `.step`, `.value` | `qgis-change` |
-| `<qgis-choice>` | `Choice` | `.choices`, `.value`, `nullable` | `qgis-change` (typed value) |
-| `<qgis-file-input>`, `<qgis-directory-input>` | `FileInput`, `DirectoryInput` | `.pick` (a `FileRef` picker), `.filters`, `.value` | `qgis-change` (a `FileRef` or `null`) |
-| `<qgis-job-progress>` | `Progress` | `status`, `.fraction`, `message`, `.store`, `.cancel` | `qgis-cancel` |
-| `<qgis-log-view>` | `Log` | `.lines`, `limit`, `.store`, `clearable` | - |
-| `<qgis-run-button>` | `RunButton` | `.form` or `.operation` + `.input`, `pending-label` | `qgis-run`, `qgis-result` |
+| `<qgis-layer-picker>` | `LayerPicker` | `.qgis`, `geometry`, `nullable`, `required` | `qgis-change` |
+| `<qgis-field-picker>` | `FieldPicker` | `.qgis`, `.layer` or `.of` (a layer picker to follow), `nullable`, `required` | `qgis-change` |
+| `<qgis-crs-picker>` | `CrsPicker` | `.suggestions`, `.value`, `required` | `qgis-change` |
+| `<qgis-distance>` | `Distance` | `unit`, `.min`, `.max`, `.step`, `.value`, `required` | `qgis-change` |
+| `<qgis-choice>` | `Choice` | `.options` (alias `.choices`), `.value`, `nullable`, `required` | `qgis-change` (typed value) |
+| `<qgis-file-input>`, `<qgis-directory-input>` | `FileInput`, `DirectoryInput` | `.pick` (a `FileRef` picker), `.filters`, `.value`, `required` | `qgis-change` (a `FileRef` or `null`) |
+| `<qgis-job-progress>` | `JobProgress` | `status`, `.fraction`, `message`, `.store`, `.cancel`, `cancellable` | `qgis-cancel` |
+| `<qgis-log-view>` | `LogView` | `.lines`, `limit`, `.store`, `clearable` | - |
+| `<qgis-run-button>` | `RunButton` | `.form` or `.operation` + `.input`, `text` (alias of `label`), `pending-label` | `qgis-run`, `qgis-result` |
+
+#### The keyword forms, both spellings
+
+A component reads the same in Python and in a page for the names both
+catalogues have (TASK-108 AC #4). The Python keyword is the constructor
+argument of `qgis_sdk.ui`; the web spelling is the element property (the
+`.prop` binding in Lit, the prop of a wrapper), with the attribute where one
+exists. What one side has and the other does not is said so, not papered
+over.
+
+| Component | Python keyword | Web property | Note |
+| --- | --- | --- | --- |
+| every input | `name=` | `name` | the field name; `data-qgis-sdk` on the web, `objectName` `form/<name>` natively |
+| every component | `label=` | `label` | derived from the name natively; empty renders none on the web |
+| every input | `required=` | `required` | the control gets `required`/`aria-required` on the web; `Form.submit()` refuses an empty required field natively |
+| every input | `value=` | `.value` | same shape as the wire model (`FileRef`, `AUTHORITY:CODE`, the typed choice) |
+| - | - | `disabled`, `error`, `nullable`, `placeholder` | web only: the page's own state; a native component is disabled through its widget, an error is the form's |
+| `Choice` | `options=` | `.options` | `.choices` stays as an alias |
+| `LayerPicker` | `kind=` (`vector`/`raster`/`any`) | - | the web picker lists vector layers; `geometry` (web only) narrows by geometry type |
+| `FieldPicker` | `of=<LayerPicker>` | `.of=${picker}` or `.layer="<id>"` | `of` follows the picker's `qgis-change`; `layer` takes the id directly |
+| `FileInput` | `filters=` | `.filters` | the same glob strings |
+| `Distance` | - | `unit`, `.min`, `.max`, `.step` | natively a `Distance` is metres with the host's spin box; the web input says its unit |
+| `JobProgress` | `cancellable=` | `cancellable` | the web button also needs a `.cancel` callback to call |
+| `LogView` | `limit=` | `limit` | `clearable` (web) is `clear()` (native) |
+| `Button`/`RunButton` | `text=` | `text` (alias of `label`) | the caption |
+| `RunButton` | `action_id=`, `values=`, `progress=` | `.form` or `.operation` + `.input` | the web button runs a store; the native one dispatches an action id through `ctx.actions` |
+| `Form` | `fields=`, `action_id=` | `.store` (`formStore(qgis, actionId)`) | the web form reads its fields from the action's schema in the store |
+
+A wrapper (`./react`, `./vue`, `./svelte`) forwards every property above;
+`ELEMENT_PROPS` in the package lists them per tag and a test keeps it equal
+to the elements' reactive properties.
 
 `import "@archont561/qgis-sdk-ui/define"` registers the whole catalogue
 (`DEFINED` lists what it registered); `defineElements(registry?)` from the
@@ -753,6 +784,10 @@ package rather than a change to this one; see
 for it except being its peer. `qgis-sdk new --web` opts in through one import
 (`--ui-dependency` pins it); `release.py` knows the `ui` scope and refuses a
 UI release whose bridge peer range excludes the workspace bridge.
+TASK-108 adds the Python keyword spellings to the elements (`.options` on
+`<qgis-choice>` with `.choices` as the alias, `required` on every input,
+`cancellable` on `<qgis-job-progress>`, `text` on `<qgis-run-button>`,
+`.of` on `<qgis-field-picker>`); nothing existing changed meaning.
 
 **Processing from a page (TASK-109, decision-64).** Four new host operations
 (`algorithms.providers/list/describe/run`) and two grants (`algorithms.read`,

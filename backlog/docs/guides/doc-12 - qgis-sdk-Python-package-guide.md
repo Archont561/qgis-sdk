@@ -821,16 +821,40 @@ attribute). Every catalogue class takes its arguments by keyword for this
 `Button(text=)`, `ResultTable(columns=)`, `Custom(widget=)`); the
 positional `Name("name", ...)` forms are unchanged, and an explicit name
 wins over the attribute's. A component without a name refuses to attach or
-snapshot and says what to do. `Form` keeps keying its fields by name, so
-inputs inside a `Form` are named explicitly.
+snapshot and says what to do.
+
+A `Form` takes declared inputs too: `Form([value, note], action_id="ping")`
+in the class body keys its fields by name the first time anything asks
+(`fields`, `values()`, `attach`) - by then the inputs have their attribute
+names - and refuses two of one name then. The form's copy holds the
+window's copies of the inputs, and a field's change reaches the window's
+form, not the prototype. `Form.for_action` still needs `ctx` and so a
+`build()`; `Form.from_schema(schema)` can be declared.
+
+`initial` reaches the declared inputs by name: the default `build()` sets
+every declared `Input` (at any depth - inside a declared `Form`, `Group` or
+`Row` too) whose name is a key of `self.initial`, and refuses a key no
+declared input carries (`PingDialog has no input 'typo'; it has: ...`), the
+way `Form.for_action(initial=)` does. An author's `build()` reads
+`self.initial` as it pleases, as before.
+
+A snapshot node of a declared component carries `"attribute"`, the class
+attribute it came from, next to `"name"` - the two differ only when the
+name was given explicitly (`explicit = Button("named")`) - which is what an
+agent that reads the snapshot back can address in the source.
 
 `@on(component)` on a component the class does not declare is refused when
 the surface opens unless `build()` placed that very object in the tree.
-`qgis-sdk check` leaves these targets to the host (and resolves a
-module-level `NAME = "..."` constant for `UI002`). Mixing is fine: an
-author's `build()` sees the copies (`Column("root", [self.note, ...])`),
-and `BufferDialog` in the example keeps `build()` because its form needs
-`ctx`, while `ResultsDock` is declared.
+`qgis-sdk check` reads the declarative form as far as the source shows it
+(`UI005`): an `@on(attribute)` whose attribute is a string or a number, or a
+bare name the class never binds, and a `Custom` declared with a widget
+built at class definition (`Custom(widget=QLabel(...))`); a call it cannot
+see into (`helper = make_button()`) and a module-level name are left to the
+host, and a module-level `NAME = "..."` constant resolves for `UI002`.
+Mixing is fine: an author's `build()` sees the copies
+(`Column("root", [self.note, ...])`), and `BufferDialog` in the example
+keeps `build()` because `Form.for_action` needs `ctx`, while `ResultsDock`
+and the scaffold's `PingDialog` are declared.
 
 ### Containers, feedback, buttons and `Custom`
 
@@ -1648,13 +1672,18 @@ toolbox entry `<plugin>:buffer`. It combines with `--web`.
 ### Native UI starter: `--ui native`
 
 `qgis-sdk new --ui native` adds `<plugin>/ui.py` with `PingDialog`, a
-`Dialog` subclass bound to `Plugins/<Title>` whose `build()` is plain PyQt
-(the only place Qt is imported), lists it on the class (`surfaces =
-(PingDialog,)`) and binds a no-input `open_ping` action to the toolbar that
-calls `self.ctx.ui.open(PingDialog, initial={"value": 7})`; the dialog's
-button calls `self.ctx.actions.ping(value=...)`. `tests/test_plugin.py`
+`Dialog` subclass bound to `Plugins/<Title>` in the declarative form: a
+`Number` (`form/value`), a `Form([value], action_id="ping")`, a `Button`
+(`buttons/ping`) and a `LogView` over `ctx.log` as class attributes, no
+`build()` and no Qt import anywhere in the package; `@on(ping).clicked`
+submits the form and logs the answer. `plugin.py` lists it on the class
+(`surfaces = (PingDialog,)`) and binds a no-input `open_ping` action to the
+toolbar that calls `self.ctx.ui.open(PingDialog, initial={"value": 7})`,
+which the default `build()` seeds into `form/value`. `tests/test_plugin.py`
 gains a test that runs the action under `FakeUi` and asserts what was
-opened. The README gets a "Native UI" section naming `UI001`, `UI003` and `ICON001`, and points at `Form.for_action` as the Qt-free way to build the same window.
+opened. The README gets a "Native UI" section naming `UI001`-`UI005` and
+`ICON001`, and says in one sentence that a `build()` returning any QWidget
+(plain PyQt, imported inside the method) is the escape hatch.
 It combines with `--algorithm` and `--web`; the `QGIS_SDK_DEVTOOLS=1`
 harness scaffolds this variant so `qgis-sdk dev` inside real QGIS Desktop
 proves the toolbar action opens the dialog and an edit to `ui.py` is what
@@ -1746,6 +1775,7 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | `UI002` | A `Dialog`/`Dock` subclass with `ui = "file.ui"` has an `@on(name)` whose `name` is not an `objectName` the Designer file declares, or the file is not next to the module. The wiring would refuse the surface when it opens; the finding lists the names the file does declare. |
 | `UI003` | A method carrying `@toolbar`/`@menu`/`@shortcut` and `@action` takes inputs beyond `self`; a button collects nothing. Drop the inputs, or bind a surface that collects them and calls `self.ctx.actions.<id>(...)`. |
 | `UI004` (warning) | A module of the plugin package that is *declared native* still imports `qgis.PyQt`, `PyQt5/6` or `PySide2/6` when it loads: the exemption lifts `QGIS001`, but Qt at module level defeats the fakes (`build_surface`, `ui_snapshot`) and `check`'s inspection of that module. Keep Qt inside `build()`; the catalogue needs no Qt import. |
+| `UI005` | The declarative form, read statically: `@on(attribute)` in a `Dialog`/`Dock` subclass names a class attribute that is a string, a number or a literal container rather than a component, or a bare name the class never binds; or a `Custom` declared on the class holds a widget built when the class is defined (`Custom(widget=QLabel(...))`), which cannot be copied for each window. Assign a catalogue component to the attribute (or pass the `objectName` as a string), and give `Custom` the widget class or a factory. A call the checker cannot see into and a module-level name are left to the host. |
 | `ICON001` | `@toolbar(icon="...")` names something that is not a file under `<package>/icons/` (a bare file name is required). |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
@@ -2186,6 +2216,15 @@ declarative form* above.
   Tools`); it read `field Tools` before.
 - `ResultsDock` in the example is declared; its button is `buttons/fixture`
   (was `buttons/open`) and the table `self.results` (was `self.table`).
+- Adoption (TASK-108): `Form` accepts unnamed inputs and keys them by name
+  lazily (`Form._fields` resolves on first use; a form of inputs that never
+  get a name refuses when read); the default `build()` seeds declared
+  inputs from `initial` and refuses an unknown key
+  (`qgis_sdk.ui.declarative.apply_initial`, `declared_inputs`); snapshot
+  nodes of declared components carry `"attribute"` (`Component.attribute`);
+  `qgis-sdk check` gained `UI005`; the scaffold's `PingDialog` is declared
+  (`form/value`, `buttons/ping`, `feedback/answers`; it was `value`, `ping`
+  and `answer` built in PyQt).
 
 **Any registered algorithm (decision-64; TASK-109).** See *Any registered
 algorithm* above. Nothing existing breaks; what is new:
