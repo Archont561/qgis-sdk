@@ -1,10 +1,10 @@
 ---
 id: TASK-32
 title: Prepare and qualify 0.7.0 release
-status: To Do
+status: In Progress
 assignee: []
-created_date: 2026-10-16 12:02
-updated_date: '2026-10-27T19:00:00Z'
+created_date: '2026-10-16 12:02'
+updated_date: '2026-10-27 19:43'
 labels: []
 milestone: m-6
 dependencies:
@@ -32,11 +32,11 @@ Explicit release gate for the UI toolkit release (m-6, decision-46), not evidenc
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Required 0.7.0 work (TASK-68, TASK-69, TASK-96, TASK-70, TASK-108, TASK-109, TASK-110, TASK-43) has verified outcomes and test/artifact evidence: Python suite, tests/scripts, the example, the scaffold-web and reference harnesses, Storybook build; the doc-12/doc-13 0.7.0 migration notes cover every added or renamed name.
+- [x] #1 Required 0.7.0 work (TASK-68, TASK-69, TASK-96, TASK-70, TASK-108, TASK-109, TASK-110, TASK-43) has verified outcomes and test/artifact evidence: Python suite, tests/scripts, the example, the scaffold-web and reference harnesses, Storybook build; the doc-12/doc-13 0.7.0 migration notes cover every added or renamed name.
 - [ ] #2 Use valid SemVer and prereleases such as 0.7.0-rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves with it) and keep protocol versions independent.
-- [ ] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a 0.6 project reports what changed rather than crashing.
+- [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a 0.6 project reports what changed rather than crashing.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
-- [ ] #5 The bridge pair becomes a triple and is confirmed with evidence: the next @archont561/qgis-sdk minor (store core, ./vue and ./svelte adapters) and the first @archont561/qgis-sdk-ui release are gated with the same run - Bun tests across every adapter's Vitest project, typecheck, Biome, Storybook build, release.py verify-versions agreeing on the contract version in both languages and on the UI package's bridge peer range - and stamped and tagged (ts-v*, ui-v*) on the same merge commit only on the same explicit authorization; HOST_FINGERPRINT, HOST_SCHEMA_VERSION and BRIDGE_PROTOCOL_VERSION are shown unchanged, and the record states that both packages ran against the 0.7.0 runtime.
+- [x] #5 The bridge pair becomes a triple and is confirmed with evidence: the next @archont561/qgis-sdk minor (store core, ./vue and ./svelte adapters) and the first @archont561/qgis-sdk-ui release are gated with the same run - Bun tests across every adapter's Vitest project, typecheck, Biome, Storybook build, release.py verify-versions agreeing on the contract version in both languages and on the UI package's bridge peer range - and stamped and tagged (ts-v*, ui-v*) on the same merge commit only on the same explicit authorization; HOST_FINGERPRINT, HOST_SCHEMA_VERSION and BRIDGE_PROTOCOL_VERSION are shown unchanged, and the record states that both packages ran against the 0.7.0 runtime.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -45,6 +45,8 @@ Explicit release gate for the UI toolkit release (m-6, decision-46), not evidenc
 2026-10-26: AC 5 rewritten for decision-47 - the gate now covers three artifacts (Python, bridge, qgis-sdk-ui).
 
 2026-10-27: TASK-73 and TASK-77 re-scoped to m-7 (see m-6); the gate no longer waits on them. TASK-108, TASK-109 and TASK-110 landed in this milestone and are added as dependencies so AC #1's evidence list is complete.
+
+2026-10-27: gate run on main a161d4b, recorded in doc-14 '0.7.0 release gate (2026-10-27)'. AC 1, 3 and 5 are evidenced there (suites, harnesses, Storybook, verify-versions across three scopes, check on a 0.6 project under locally stamped 0.7.0 tools). AC 2 waits for the stamp pull request (0.7.0 / 0.5.0 / 0.1.0, the ui peer range to >=0.5.0 <0.6.0, the migration-note headings), AC 4 for explicit publishing approval. Rehearsals: python-v0.7.0-rc.1 failed (release-tool defect, fixed in #116), python-v0.7.0-rc.2, ts-v0.5.0-rc.1 and ui-v0.1.0-rc.3 green.
 <!-- SECTION:NOTES:END -->
 
 ## Comments

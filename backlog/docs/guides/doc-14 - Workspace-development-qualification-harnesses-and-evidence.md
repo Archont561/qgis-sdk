@@ -1182,7 +1182,21 @@ reproduces the failing stamp-then-verify in `tests/scripts` and, replayed
 on the real tree, `stamp` + `verify-versions --scope python` at
 `0.7.0-rc.1` now agree on all nine entries. Since a tag is never moved,
 the second rehearsal is `python-v0.7.0-rc.2` on the merge commit that
-carries the fix (recorded below when run).
+carries the fix.
+
+**Second Python rehearsal (2026-10-27, after PR #116 merged as
+`a161d4b`).** `python-v0.7.0-rc.2` on `a161d4b`, `release.yml` run
+[40568446905](https://github.com/Archont561/qgis-sdk/actions/runs/40568446905),
+every job green: `build` stamped `0.7.0-rc.2`, "Verify the stamped
+manifests" passed, three wheels built and twine-checked, three Conda
+outputs built; `pypi` ran "Verify the wheel without uploading" with its
+three publish steps skipped, `conda` skipped the prefix.dev upload, both
+as prerelease; `github-release` published the prerelease with
+`qgis_sdk-0.7.0rc2`, `qgis_sdk_runtime-0.7.0rc2`, `qgis_sdk_tools-0.7.0rc2`
+wheels, `qgis-sdk-0.7.0rc2-pyhe696c0e_0.conda`,
+`qgis-sdk-runtime-0.7.0rc2-pyh4616a5c_0.conda`,
+`qgis-sdk-tools-0.7.0rc2-pyh4616a5c_0.conda` and `SHA256SUMS`. PyPI still
+lists `qgis-sdk` up to 0.6.0. All three trains of the triple are proven.
 
 Open for the stamp pull request of the real triple, found while
 rehearsing: `packages/qgis-sdk-ui/package.json` peers on
@@ -1191,6 +1205,107 @@ will refuse once the bridge is stamped `0.5.0`; the range moves to
 `>=0.5.0 <0.6.0` by hand in that pull request (no `stamp` scope owns it,
 by design - the components declare which bridge they were qualified
 with).
+
+## 0.7.0 release gate (2026-10-27)
+
+What was run on `main` `a161d4b` (the PR #116 merge; TASK-32's
+dependencies all landed by `ee7ab78`, the re-scope by `2427e37`) on
+Linux x86-64 with QGIS 4.2.3 (Qt 6.11.2), CPython 3.14.8 in the locked
+Pixi environment and CPython 3.11.2 for the clean installs, Bun 1.4.2.
+Every line is a command that ran here; nothing is inferred from CI
+except where a run id is given. The tree is **unstamped**: manifests
+still say 0.6.0 / 0.4.0 / 0.1.0, so artifact names below carry 0.6.0.
+Stamping, tagging and publishing wait for an explicit "Release 0.7.0".
+
+- **Required work.** TASK-68, 69, 96, 70, 108, 109, 110 and 43 are Done
+  (PRs #101–#114, each green on `checks`, macOS and Windows); TASK-73 and
+  TASK-77 left the milestone unopened (PR #115, re-scope above). On
+  `a161d4b` the `main` runs `CI` 40568427871, `docs` 40568427854 and
+  `autorelease` 40568427794 are green. Open targets stay blockers, not
+  promises: the Windows and macOS QGIS rows and the display-server
+  Desktop GUI row are TASK-33, now in m-11 with TASK-99.
+- **Scope.** `release.py plan --trigger push` from `python-v0.6.0` /
+  `ts-v0.4.0` reads the sixteen merges since 0.6.0 as `0.6.1` / `0.4.1`
+  and skips the `ui` train, as the alignment rule says it must; `--bump
+  minor` plans `python-v0.7.0` and `ts-v0.5.0`. The minor is a decision,
+  not a planner result: the UI toolkit (sixteen `feat` commits on the
+  Python side, among them the removal of the `NativeForms` spelling the
+  0.7.0 migration notes document), the bridge's store core with the
+  `./vue` and `./svelte` adapters and `algorithms.run`, and the first
+  `@archont561/qgis-sdk-ui` 0.1.0 whose peer range names the bridge
+  minor it was qualified with. Contract version 1 and `HOST_FINGERPRINT`
+  `sha256:16790dc8…` are unchanged since 0.6.0: a 0.6 page talks to a
+  0.7 host.
+- **Static gate.** `lint-python` clean, `format-python-check` 338 files,
+  `lint-github-actions` clean, `biome-check` 177 files, `typecheck`
+  (bridge and components) clean, `test-release-tool` / `tests/scripts`
+  262 passed.
+- **Suites.** Root `bun run test` 10/10 tasks: config 6, docs 34, bridge
+  310 (16 files, every adapter's project), alias 12, components 100 (14
+  files, `--conditions=browser`), ui alias 13, Python 1989 passed / 48
+  skipped inside turbo and 1964 passed / 48 skipped as the standalone
+  `pytest tests -q -x` from `packages/qgis-sdk-python`. Storybook
+  `storybook:build` completed (`storybook-static`, 16 entries).
+- **Harnesses, one file per process.** `QGIS_SDK_SCAFFOLD_WEB=1`
+  `test_scaffold_web_native.py` 8 passed (generated vanilla, React, Vue
+  and Svelte pages installed, tested and built against the workspace
+  bridge and components, then driven in a real `QWebEngineView`);
+  `QGIS_SDK_REFERENCE=1` `test_reference_example_native.py` 5 passed;
+  `QGIS_SDK_BUILD_INSTALL=1` `test_bundle_native.py` 1 passed;
+  `test_desktop_host_native.py` 4 passed; `QGIS_SDK_SCAFFOLD_DESKTOP=1`
+  `tests/scripts/test_qualification_scaffold.py` 10 passed; the
+  reference example `test-reference-example` 20 pure + 7 QGIS passed.
+- **Artifacts.** `bun run build` built the bridge (7 entries, each
+  reaching its own framework only), the alias, the components and the
+  example page, and `build-python` three wheels, all twine `PASSED`
+  (`verify-python`): `qgis_sdk-0.6.0-py3-none-any.whl` (`69976a57…`),
+  `qgis_sdk_runtime-0.6.0-py3-none-any.whl` (`1201c063…`, 106 modules,
+  MIT `LICENSE` in `dist-info/licenses`),
+  `qgis_sdk_tools-0.6.0-py3-none-any.whl` (`d41e3903…`). `build:conda`
+  fails here because conda-forge is unreachable from the sandbox; the
+  `python-v0.7.0-rc.2` run above built the three Conda outputs from this
+  tree's recipe, so that step is attested by the run.
+- **Clean install.** A fresh CPython 3.11.2 `venv` with only the three
+  wheels: `pip check` clean (`typer 0.27.3` the one third-party
+  dependency); `qgis-sdk new fresh_plugin --ui native --web vanilla`
+  writes `qgis-sdk-runtime>=0.6,<0.7`, `qgis-sdk-tools>=0.6,<0.7`,
+  `"@archont561/qgis-sdk": "0.4.0"` and `"@archont561/qgis-sdk-ui":
+  "0.1.0"` (the committed scaffold pins the stamp moves); `check` on it
+  is clean (4 files); `targets` prints the four-row support matrix.
+- **A 0.6 project under the 0.7 tools (AC 3).** A second venv with
+  `pip install qgis-sdk==0.6.0` from PyPI scaffolded `old_plugin`
+  (`qgis-sdk-runtime>=0.6,<0.7`, bridge pin `0.4.0`); its own `check` is
+  clean. The tools at HEAD on that project: clean on the unstamped tree
+  (the runtime is still 0.6.0), and on a tree stamped `0.7.0` locally
+  (then reverted) `check` reports exactly the two version findings and
+  nothing else - `VERSION001` (the pin is outside the runtime range this
+  tools release supports, `>=0.7.0,<0.8`) and `VERSION004` (declares
+  `>=0.6,<0.7` but the importable runtime is 0.7.0), each with its
+  remediation - rather than crashing. The remaining 0.6 → 0.7 renames
+  are documented in the doc-12 0.7.0 notes and are not something `check`
+  detects (no rule reads plugin source for removed names).
+- **Verify.** `verify-versions` agrees on 0.6.0 for the nine Python
+  entries, 0.4.0 for the four bridge entries and 0.1.0 for the ui
+  manifests, contract version 1 across both languages. The `ui` scope's
+  peer range `>=0.4.0 <0.5.0` holds the bridge at HEAD today and will
+  refuse it once the bridge is stamped 0.5.0: the stamp pull request
+  moves it to `>=0.5.0 <0.6.0` (the rehearsal finding above).
+- **Licences.** MIT `LICENSE` in each wheel's `dist-info/licenses` and in
+  the two npm tarballs the rehearsals packed; `DEP001` still refuses
+  third-party code inside a plugin.
+- **Migration notes.** doc-12 carries *0.7.0 migration notes (in
+  progress)* and doc-13 *Next minor (unreleased) migration notes*,
+  published with the Draft badge; the stamp pull request drops the
+  qualifiers so the site publishes them as 0.7.0 / 0.5.0 notes together
+  with the manifests.
+- **Not run here.** The Conda build (above); `pixi run -e bun bun run
+  coverage` (the 90 % gates run in CI on every pull request and were
+  green on #116).
+- **Approval.** Not given by this record. The real triple is three tags
+  on the stamp pull request's merge commit - `python-v0.7.0`,
+  `ts-v0.5.0`, `ui-v0.1.0` - and the first clean `ui-v0.1.0` is the first
+  real publish of `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (deprecate
+  the `0.0.0` placeholders after it, owner-side).
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
