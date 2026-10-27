@@ -11,7 +11,7 @@ generates the typed page-side schema and the Processing catalogue; and
 writes an installable ZIP with the runtime vendored inside. The tools never
 install anything into a QGIS.
 
-> Status: `0.6.0`, experimental `0.x`. The tools version freely; each
+> Status: `0.7.0`, experimental `0.x`. The tools version freely; each
 > release names the `qgis-sdk-runtime` range it was tested with.
 
 ## Installation

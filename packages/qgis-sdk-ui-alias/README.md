@@ -13,8 +13,8 @@ each control and a `<label for>` works; each carries `data-qgis-sdk` and
 of `qs-` utilities bound to `--qgis-sdk-*` tokens the host palette fills.
 `./react`, `./vue` and `./svelte` wrap the same elements.
 
-> Status: `0.1.0`, experimental; the first npm release follows the
-> `ui-v*` tag under this name and the unscoped alias `qgis-sdk-ui`. `lit`
+> Status: `0.1.0`, experimental; the first npm release, under this name
+> and the unscoped alias `qgis-sdk-ui`, is the `ui-v0.1.0` tag. `lit`
 > is the only dependency, `@archont561/qgis-sdk` a peer; `./react` needs
 > `react` and `@lit/react`, `./vue` needs `vue`, `./svelte` needs
 > `svelte`, `./uno` needs `@unocss/preset-mini`.

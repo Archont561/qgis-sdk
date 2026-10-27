@@ -1306,6 +1306,42 @@ Stamping, tagging and publishing wait for an explicit "Release 0.7.0".
   `ts-v0.5.0`, `ui-v0.1.0` - and the first clean `ui-v0.1.0` is the first
   real publish of `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (deprecate
   the `0.0.0` placeholders after it, owner-side).
+- **Stamp and artifacts (2026-10-27, the stamp pull request).** On the
+  gate record's merge `a7d8d5a`: `release.py stamp --scope python
+  --version 0.7.0` moved the kit, runtime and tools manifests, the kit's
+  exact pins, the tools' runtime range (`>=0.7.0,<0.8`), the recipe's
+  three versions and the example's windows (`>=0.7,<0.8`); `stamp --scope
+  typescript --version 0.5.0` moved `package.json`, the alias (and its
+  pin on the scoped package) and the scaffold pin `SDK_NPM_VERSION`. By
+  hand, as announced above: the components' and their alias's peer range
+  on `@archont561/qgis-sdk` to `>=0.5.0 <0.6.0`, the doc-12 heading to
+  *0.7.0 migration notes* and the doc-13 heading to *0.5.0 migration
+  notes* (the site now publishes `python-migration/v0-7` and
+  `typescript-migration/v0-5` without the Draft badge), the READMEs' and
+  the two guides' status lines, and one test literal
+  (`test_scaffold_web.py`, `0.4.0` → `0.5.0`). `verify-versions` agrees on
+  0.7.0 for the nine Python entries, 0.5.0 for the four bridge entries,
+  0.1.0 for the four ui entries with the peer range holding the bridge,
+  contract version 1 in both languages. On the stamped tree: the static
+  gate clean, root `bun run test` 10/10 (bridge 310, components 100,
+  Python 1989 passed / 48 skipped), `tests/scripts` 262, harnesses
+  scaffold web 8, reference 5, bundle 1, scaffold desktop 10, reference
+  example 20 + 7, `docs-build` 71 pages and 6470 links clean.
+  `build-python` + `verify-python` (twine) pass on
+  `qgis_sdk-0.7.0-py3-none-any.whl` (`262a32c4…`, pins
+  `qgis-sdk-runtime==0.7.0` and `qgis-sdk-tools==0.7.0`),
+  `qgis_sdk_runtime-0.7.0-py3-none-any.whl` (`fe409110…`, 106 modules,
+  no dependency, MIT `LICENSE` in `dist-info/licenses`) and
+  `qgis_sdk_tools-0.7.0-py3-none-any.whl` (`862f1118…`,
+  `qgis-sdk-runtime>=0.7.0,<0.8` and `typer==0.27.3`). A fresh CPython
+  3.11.2 `venv` with only the three wheels: `pip check` clean; `qgis-sdk
+  new --ui native --web vanilla` writes `qgis-sdk-runtime>=0.7,<0.8`,
+  `qgis-sdk-tools>=0.7,<0.8`, `"@archont561/qgis-sdk": "0.5.0"` and
+  `"@archont561/qgis-sdk-ui": "0.1.0"`, and `check` is clean; the same
+  installed tools on a project scaffolded by `qgis-sdk==0.6.0` from PyPI
+  report `VERSION001` and `VERSION004` with their remediations and
+  nothing else. The three tags follow on this pull request's merge
+  commit, each only on explicit authorization.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
