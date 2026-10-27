@@ -2,11 +2,13 @@
 
 **Unscoped alias of [`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk).**
 
-Every entry point re-exports the scoped package at the exact same version:
-`qgis-sdk`, `qgis-sdk/bridge`, `qgis-sdk/host`, `qgis-sdk/react`,
-`qgis-sdk/vue`, `qgis-sdk/svelte` and `qgis-sdk/testing`. There is no code of its own; pick whichever name reads
-better in your project. The Python package of the same name is on
-[PyPI](https://pypi.org/project/qgis-sdk/).
+There is no code of its own. Every entry point of the scoped package has its
+counterpart here, and the manifest pins the dependency to the exact same
+version, so `qgis-sdk@X` installs `@archont561/qgis-sdk@X` under the shorter name. Pick
+whichever reads better in your project; both names publish from one tag.
+
+> Status: experimental `0.x`; released with every `@archont561/qgis-sdk` release, at
+> the same version, under the same license.
 
 ## Installation
 
@@ -18,16 +20,23 @@ npm install qgis-sdk
 ## Example
 
 ```ts
-import { BridgeClient } from "qgis-sdk/bridge";
-import { createHost } from "qgis-sdk/host";
+import { QgisSdk } from "qgis-sdk";
+import { useOperation } from "qgis-sdk/react";
+import { createBridgeHarness } from "qgis-sdk/testing";
+import schema from "./bridge.schema";
+
+const qgis = QgisSdk.fromBridgeSchema(schema);
 ```
+
+Entry points: `qgis-sdk`, `qgis-sdk/bridge`, `qgis-sdk/host`, `qgis-sdk/react`,
+`qgis-sdk/vue`, `qgis-sdk/svelte`, `qgis-sdk/testing`.
 
 ## Documentation
 
 - [TypeScript package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) -
-  exports, the transport client, host namespaces, generated clients, streams,
-  the stores, the React, Vue and Svelte bindings and testing against a
-  scripted host.
+  the scoped package's guide; everything in it applies under this name.
+- [`@archont561/qgis-sdk`](https://github.com/Archont561/qgis-sdk/tree/main/packages/qgis-sdk-typescript) -
+  the package this one re-exports, and its own README.
 
 ## License
 

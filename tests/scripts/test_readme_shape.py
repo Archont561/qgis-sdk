@@ -26,8 +26,27 @@ READMES = (
     ROOT / "packages" / "qgis-sdk-runtime" / "README.md",
     ROOT / "packages" / "qgis-sdk-tools" / "README.md",
     ROOT / "packages" / "qgis-sdk-typescript" / "README.md",
+    ROOT / "packages" / "qgis-sdk-ui" / "README.md",
     ROOT / "packages" / "qgis-sdk-alias" / "README.md",
+    ROOT / "packages" / "qgis-sdk-ui-alias" / "README.md",
     ROOT / "packages" / "config" / "README.md",
+    ROOT / "examples" / "simple" / "README.md",
+)
+
+# The two unscoped aliases are one README: the same words with the names
+# swapped. Only the `## Example` section (the entry points differ) may diverge.
+EXAMPLE_SECTION = re.compile(r"## Example\n.*?(?=\n## )", re.DOTALL)
+ALIASES = (
+    (
+        ROOT / "packages" / "qgis-sdk-alias" / "README.md",
+        "qgis-sdk",
+        "qgis-sdk-typescript",
+    ),
+    (
+        ROOT / "packages" / "qgis-sdk-ui-alias" / "README.md",
+        "qgis-sdk-ui",
+        "qgis-sdk-ui",
+    ),
 )
 
 # The only sections a landing page may have. A new kind of section is a
@@ -83,7 +102,31 @@ def test_a_readme_stays_within_the_line_budget(path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("path", READMES[:4], ids=lambda p: str(p.relative_to(ROOT)))
+@pytest.mark.parametrize("path", READMES, ids=lambda p: str(p.relative_to(ROOT)))
+def test_a_readme_carries_a_status_line_and_a_license(path: Path) -> None:
+    """The landing-page fields every README has, in the order decision-29 gives."""
+    text = path.read_text(encoding="utf-8")
+    assert "\n> Status:" in text, f"{path.name}: no `> Status:` line"
+    assert text.rstrip().endswith("## License\n\nMIT"), f"{path.name}: License last"
+    assert text.index("> Status:") < text.index("## ")
+
+
+def test_the_two_aliases_share_one_readme() -> None:
+    """Same prose, names swapped; only the `## Example` section may differ."""
+    normalised = []
+    for path, alias, scoped_dir in ALIASES:
+        text = EXAMPLE_SECTION.sub("## Example", path.read_text(encoding="utf-8"))
+        text = text.replace("Archont561/qgis-sdk/", "<repo>/")  # the repository
+        text = text.replace("%20qgis-sdk-", "%20<kit>-")  # the guides' file names
+        text = text.replace(f"packages/{scoped_dir}", "packages/<scoped-dir>")
+        text = text.replace(f"@archont561/{alias}", "<scoped>").replace(
+            alias, "<alias>"
+        )
+        normalised.append(text)
+    assert normalised[0] == normalised[1]
+
+
+@pytest.mark.parametrize("path", READMES, ids=lambda p: str(p.relative_to(ROOT)))
 def test_a_published_readme_points_at_the_guides(path: Path) -> None:
     """The READMEs that are landing pages link to where the prose went."""
     text = path.read_text(encoding="utf-8")
