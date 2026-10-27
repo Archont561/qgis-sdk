@@ -3,9 +3,10 @@ id: TASK-112
 title: >-
   Read pyproject.toml once in the tools: one loader and one table walk behind
   every check
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-27 21:55'
+updated_date: '2026-10-27 22:04'
 labels: []
 milestone: m-7
 dependencies: []
@@ -22,7 +23,13 @@ Audit 2026-10-27 (clean-code core-dry-extraction, core-dry-single-source). The t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 qgis_sdk_tools.project exposes one pyproject loader and one table walk; grep for tomllib.loads in src/qgis_sdk_tools returns a single site and the inline _CONFIG_TABLE loops in bundle/validate.py and check/project.py are gone.
-- [ ] #2 Every existing test under packages/qgis-sdk-python/tests and tests/scripts passes without edits to its expectations (the diagnostics and return values of each caller are unchanged).
-- [ ] #3 The unused _IMPORT_PREFIX constant in bundle/vendor.py is removed and the rewrite tests still cover both the from-form and the import-form.
+- [x] #1 Every existing test under packages/qgis-sdk-python/tests and tests/scripts passes without edits to its expectations (the diagnostics and return values of each caller are unchanged).
+- [x] #2 The unused _IMPORT_PREFIX constant in bundle/vendor.py is removed and the rewrite tests still cover both the from-form and the import-form.
+- [x] #3 qgis_sdk_tools.manifest (a leaf module, so check/versions.py can use it without the project.py <-> check cycle) exposes one pyproject loader and one table walk; grep for tomllib.loads in src/qgis_sdk_tools returns that single site and the inline _CONFIG_TABLE loops in bundle/validate.py and check/project.py are gone.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Done on the audit branch: manifest.py holds read_pyproject()/table(); project.py, bundle/validate.py, check/project.py, check/versions.py (4 sites) and devtools/installs.py call them; _IMPORT_PREFIX removed. grep tomllib.loads -> manifest.py only. Gates: ruff lint/format clean, Python suite 1968 passed / 48 skipped (4 new tests in tests/test_manifest.py), tests/scripts 262 passed.
+<!-- SECTION:NOTES:END -->

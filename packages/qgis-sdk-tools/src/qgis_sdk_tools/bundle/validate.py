@@ -22,12 +22,12 @@ from __future__ import annotations
 
 import ast
 import sys
-import tomllib
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Final
 
 from qgis_sdk_tools.check import Diagnostic
+from qgis_sdk_tools.manifest import read_pyproject, table
 
 #: Import roots a QGIS Python always has, beyond the standard library.
 HOST_ROOTS: Final = frozenset(
@@ -50,20 +50,14 @@ _CONFIG_TABLE: Final = ("tool", "qgis-sdk", "build")
 
 def external_dependencies(root: Path) -> tuple[tuple[str, ...], list[Diagnostic]]:
     """``[tool.qgis-sdk.build] external``: roots the target QGIS is declared to ship."""
-    pyproject = root / "pyproject.toml"
-    if not pyproject.is_file():
-        return (), []
     relative = Path("pyproject.toml")
-    try:
-        data: object = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError:
-        return (), []  # check_project already reported CONFIG001
-    for key in _CONFIG_TABLE:
-        if not isinstance(data, dict):
-            return (), []
-        data = data.get(key)
-        if data is None:
-            return (), []
+    manifest, _malformed = read_pyproject(root / relative)
+    if manifest is None:
+        return (), []  # absent, or check_project already reported CONFIG001
+    parent = table(manifest, *_CONFIG_TABLE[:-1])
+    if parent is None or _CONFIG_TABLE[-1] not in parent:
+        return (), []
+    data = parent[_CONFIG_TABLE[-1]]
     if not isinstance(data, dict):
         return (), [_config(relative, "[tool.qgis-sdk.build] must be a table")]
     names = data.get("external", [])
