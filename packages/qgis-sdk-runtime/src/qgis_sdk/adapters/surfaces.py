@@ -34,7 +34,7 @@ from qgis_sdk.models import QgisSdkError, QgisSdkUiError
 from qgis_sdk.resources import icon_path
 from qgis_sdk.ui.actions import ViewActions
 from qgis_sdk.ui.components import Component
-from qgis_sdk.ui.surfaces import Dock, Surface, describe_surface
+from qgis_sdk.ui.surfaces import Surface, describe_surface
 
 __all__ = [
     "DOCK_VISIBLE_SETTING",
@@ -165,7 +165,7 @@ class SurfaceHost:
         _runtime, context = self._require_attached()
         context.scope.ensure_open()
         bound = self._registered(surface)
-        if issubclass(surface, Dock):
+        if bound.surface.kind == "dock":
             dock = self._ensure_dock(bound, initial)
             dock.widget.show()
             dock.widget.raise_()
@@ -186,7 +186,7 @@ class SurfaceHost:
         if settings is None:
             return
         for bound in self._bindings.surfaces:
-            if not issubclass(bound.cls, Dock):
+            if bound.surface.kind != "dock":
                 continue
             if settings.get(dock_visible_setting(bound.id)) == "true":
                 self._ensure_dock(bound, None).widget.show()
@@ -249,6 +249,7 @@ class SurfaceHost:
             layers=context.layers if context.has("layers") else None,
             project=context.project if context.has("project") else None,
             files=context.files if context.has("files") else None,
+            log=context.log if context.has("log") else None,
         )
         return ui, scope
 
@@ -261,11 +262,22 @@ class SurfaceHost:
         self._openings += 1
         view_id = f"{self._plugin_id}.{bound.id}#{self._openings}"
         ui, scope = self._ui_context(view_id, close)
-        instance = bound.cls()
-        instance.ctx = ui
-        instance.initial = MappingProxyType(dict(initial or {}))
+        values = MappingProxyType(dict(initial or {}))
         try:
-            widget = instance.build()
+            if issubclass(bound.cls, Surface):
+                instance = bound.cls()
+                instance.ctx = ui
+                instance.initial = values
+                widget = instance.build()
+            else:
+                # The widget form (decision-55): the class is the widget and
+                # takes the context; ``initial`` is set when it can be.
+                instance = bound.cls(ui)
+                try:
+                    instance.initial = values
+                except AttributeError:  # pragma: no cover - a slotted widget
+                    pass
+                widget = instance
             if isinstance(widget, Component):
                 # A catalogue component is state until mounted: bind it to
                 # this opening's context (unless build() already did) and
@@ -354,9 +366,11 @@ class SurfaceHost:
             toggle.setChecked(visible)
             toggle.blockSignals(False)
 
-    def _dispose(self, surface: Surface, scope: Any) -> None:
+    def _dispose(self, surface: Any, scope: Any) -> None:
         try:
-            surface.on_close()
+            on_close = getattr(surface, "on_close", None)
+            if callable(on_close):
+                on_close()
         finally:
             if not scope.closed:
                 scope.close()
@@ -422,7 +436,7 @@ class DesktopBindings:
             action = QAction(text, parent)
             action.setObjectName(f"{self._plugin_id}.{entry.id}")
             placed = _Placed(action, entry)
-            is_dock = isinstance(entry, BoundSurface) and issubclass(entry.cls, Dock)
+            is_dock = isinstance(entry, BoundSurface) and entry.surface.kind == "dock"
             if is_dock:
                 action.setCheckable(True)
                 action.toggled.connect(

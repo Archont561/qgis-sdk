@@ -51,6 +51,7 @@ __all__ = [
     "Colour",
     "Column",
     "Component",
+    "Container",
     "CrsPicker",
     "DirectoryInput",
     "Distance",
@@ -838,8 +839,13 @@ class Button(Component):
         self.click()
 
 
-class Column(Component):
-    """Components stacked top to bottom; the plain container of the catalogue."""
+class Container(Component):
+    """A component made of others; the base of every layout in the catalogue.
+
+    Children are attached, mounted into the container's layout and disposed
+    with it; two children sharing an ``objectName`` are refused at
+    construction so a snapshot and a ``find`` are unambiguous.
+    """
 
     def __init__(
         self, name: str, children: Sequence[Component], *, label: str | None = None
@@ -848,6 +854,11 @@ class Column(Component):
         self._children = tuple(children)
         seen: set[str] = set()
         for child in self._children:
+            if not isinstance(child, Component):
+                raise QgisSdkUiError(
+                    f"{self._describe()}: children must be components, "
+                    f"got {type(child).__name__}"
+                )
             if child.object_name in seen:
                 raise QgisSdkUiError(
                     f"{self._describe()}: two children named {child.object_name!r}"
@@ -862,7 +873,7 @@ class Column(Component):
         for child in self._children:
             if child.name == name:
                 return child
-            if isinstance(child, Column):
+            if isinstance(child, Container):
                 try:
                     return child.find(name)
                 except QgisSdkUiError:
@@ -873,3 +884,7 @@ class Column(Component):
         node = super().snapshot()
         node["children"] = [child.snapshot() for child in self._children]
         return node
+
+
+class Column(Container):
+    """Components stacked top to bottom; the plain container of the catalogue."""

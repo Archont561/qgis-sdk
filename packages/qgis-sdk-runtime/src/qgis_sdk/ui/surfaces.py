@@ -51,7 +51,9 @@ __all__ = [
     "Surface",
     "SurfaceDescription",
     "describe_surface",
+    "is_dock",
     "is_surface_class",
+    "is_widget_surface",
 ]
 
 #: Where a ``Dock`` may sit; the names QGIS uses, not Qt's enum.
@@ -129,12 +131,32 @@ class SurfaceDescription:
 
 
 def is_surface_class(value: object) -> bool:
-    """Whether ``value`` is a ``Dialog``/``Dock`` subclass (not the bases)."""
+    """Whether ``value`` is a surface class: a ``Dialog``/``Dock`` subclass or a widget surface.
+
+    The widget form (decision-55) is a plain class - typically a ``QWidget``
+    subclass the author already has - that declares ``kind = "dialog"`` or
+    ``kind = "dock"`` and takes the ``UiContext`` as its one constructor
+    argument; it is accepted without inheriting from the SDK.
+    """
+    if not isinstance(value, type):
+        return False
+    if issubclass(value, Surface):
+        return value not in (Surface, Dialog, Dock)
+    return is_widget_surface(value)
+
+
+def is_widget_surface(value: object) -> bool:
+    """Whether ``value`` is a surface in the widget form (``kind`` declared, no base)."""
     return (
         isinstance(value, type)
-        and issubclass(value, Surface)
-        and value not in (Surface, Dialog, Dock)
+        and not issubclass(value, Surface)
+        and getattr(value, "kind", None) in ("dialog", "dock")
     )
+
+
+def is_dock(cls: type) -> bool:
+    """Whether a surface class is a dock, whichever form it takes."""
+    return describe_surface(cls).kind == "dock"
 
 
 def describe_surface(cls: type) -> SurfaceDescription:
@@ -142,16 +164,31 @@ def describe_surface(cls: type) -> SurfaceDescription:
     if not is_surface_class(cls):
         name = getattr(cls, "__name__", repr(cls))
         raise QgisSdkDeclarationError(
-            f"{name} is not a surface: subclass qgis_sdk.ui.Dialog or qgis_sdk.ui.Dock"
+            f"{name} is not a surface: subclass qgis_sdk.ui.Dialog or qgis_sdk.ui.Dock, "
+            'or declare kind = "dialog"/"dock" on a widget class'
         )
     given_id = cls.__dict__.get("id", None) or _inherited(cls, "id")
     given_title = cls.__dict__.get("title", None) or _inherited(cls, "title")
+    if not isinstance(given_id, str | None):
+        given_id = None
+    if not isinstance(given_title, str | None):
+        given_title = None
     validate_given(given_id, given_title)
     surface_id = given_id if given_id is not None else derive_id(cls.__name__)
     title = given_title if given_title is not None else derive_title(cls.__name__)
-    area = cls.area if issubclass(cls, Dock) else None
-    modal = bool(getattr(cls, "modal", False)) if issubclass(cls, Dialog) else False
-    return SurfaceDescription(surface_id, title, cls.kind, area, modal)
+    kind: SurfaceKind = cls.kind
+    if kind == "dock":
+        area = str(getattr(cls, "area", "right"))
+        if area not in DOCK_AREAS:
+            raise QgisSdkDeclarationError(
+                f"{cls.__name__}: dock area must be one of "
+                f"{', '.join(DOCK_AREAS)}, got {area!r}"
+            )
+        modal = False
+    else:
+        area = None
+        modal = bool(getattr(cls, "modal", False))
+    return SurfaceDescription(surface_id, title, kind, area, modal)
 
 
 def _inherited(cls: type, attribute: str) -> str | None:

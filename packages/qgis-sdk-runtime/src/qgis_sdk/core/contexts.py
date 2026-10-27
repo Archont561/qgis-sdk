@@ -23,6 +23,7 @@ from qgis_sdk.services import (
     DesktopAccess,
     Files,
     Layers,
+    Log,
     Network,
     Notifications,
     Processing,
@@ -139,6 +140,7 @@ class PluginContext(_Context):
         "_desktop",
         "_files",
         "_layers",
+        "_log",
         "_network",
         "_processing",
         "_project",
@@ -162,6 +164,7 @@ class PluginContext(_Context):
         "processing",
         "ui",
         "files",
+        "log",
     )
 
     notifications: Notifications
@@ -177,6 +180,9 @@ class PluginContext(_Context):
     processing: Capability[Processing] = Capability()
     ui: Capability[Ui] = Capability()
     files: Capability[Files] = Capability()
+    #: Structured records under the plugin's tag (decision-63); the
+    #: ``LogView`` component watches it.
+    log: Capability[Log] = Capability()
 
     def __init__(
         self,
@@ -193,6 +199,7 @@ class PluginContext(_Context):
         processing: Processing | None = None,
         ui: Ui | None = None,
         files: Files | None = None,
+        log: Log | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -208,6 +215,7 @@ class PluginContext(_Context):
             _processing=processing,
             _ui=ui,
             _files=files,
+            _log=log,
         )
 
     def with_services(self, **services: Any) -> PluginContext:
@@ -243,6 +251,7 @@ class UiContext(_Context):
         "_actions",
         "_files",
         "_layers",
+        "_log",
         "_network",
         "_project",
         "_settings",
@@ -251,7 +260,15 @@ class UiContext(_Context):
         "view",
     )
 
-    _capability_names = ("network", "actions", "settings", "layers", "project", "files")
+    _capability_names = (
+        "network",
+        "actions",
+        "settings",
+        "layers",
+        "project",
+        "files",
+        "log",
+    )
 
     notifications: Notifications
     view: ViewControl
@@ -264,6 +281,7 @@ class UiContext(_Context):
     layers: Capability[Layers] = Capability()
     project: Capability[Project] = Capability()
     files: Capability[Files] = Capability()
+    log: Capability[Log] = Capability()
 
     def __init__(
         self,
@@ -276,6 +294,7 @@ class UiContext(_Context):
         layers: Layers | None = None,
         project: Project | None = None,
         files: Files | None = None,
+        log: Log | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -287,6 +306,7 @@ class UiContext(_Context):
             _layers=layers,
             _project=project,
             _files=files,
+            _log=log,
         )
 
 

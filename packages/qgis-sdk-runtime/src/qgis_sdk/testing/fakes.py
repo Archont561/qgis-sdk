@@ -26,7 +26,13 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 from qgis_sdk.resources import require_style
-from qgis_sdk.services import Layers, Notification, NotificationsBase
+from qgis_sdk.services import (
+    Layers,
+    LogBase,
+    LogRecord,
+    Notification,
+    NotificationsBase,
+)
 
 if TYPE_CHECKING:
     from qgis_sdk.providers import Provider
@@ -317,6 +323,29 @@ class RecordingNotifications(NotificationsBase):
         self._scope.ensure_open()
         self.messages.append(notification.message)
         self.records.append(notification)
+
+
+class RecordingLog(LogBase):
+    """A ``Log`` backend that keeps every record it was given.
+
+    ``records`` is the full :class:`LogRecord` list in order; ``messages``
+    the message texts alone, whatever their level. ``plugin`` is the tag
+    the records carry, ``"test"`` unless a test names its plugin.
+    """
+
+    def __init__(self, scope: ResourceScope, plugin: str = "test") -> None:
+        super().__init__(plugin)
+        self._scope = scope
+        self.records: list[LogRecord] = []
+
+    @property
+    def messages(self) -> list[str]:
+        """The message text of every record, in order."""
+        return [record.message for record in self.records]
+
+    def _deliver(self, record: LogRecord) -> None:
+        self._scope.ensure_open()
+        self.records.append(record)
 
 
 class FakeProviderRegistration:

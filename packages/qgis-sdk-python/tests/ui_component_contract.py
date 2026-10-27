@@ -14,13 +14,23 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from qgis_sdk.core import ResourceScope, UiContext
+from qgis_sdk import action, plugin
+from qgis_sdk.core import (
+    JobContext,
+    PluginContext,
+    PluginRuntime,
+    ResourceScope,
+    UiContext,
+)
+from qgis_sdk.jobs import JobHandle, JobService, job
 from qgis_sdk.models import FileRef, QgisSdkFormError, QgisSdkUiError
 from qgis_sdk.testing import (
     FakeFiles,
     FakeLayers,
     FakeProject,
     FakeViewControl,
+    FakeWorkers,
+    RecordingLog,
     RecordingNotifications,
 )
 from qgis_sdk.ui import (
@@ -37,22 +47,68 @@ from qgis_sdk.ui import (
     Text,
     Toggle,
 )
+from qgis_sdk.ui.actions import ViewActions
 
 GEOJSON = """{"type": "FeatureCollection", "features": [{"type": "Feature",
 "properties": {"name": "a", "kind": "b"}, "geometry": {"type": "Point",
 "coordinates": [21.0, 52.2]}}]}"""
 
 
+@job(id="slow_sum", title="Slow sum")
+def slow_sum(ctx: JobContext, a: int, b: int, fail: bool = False) -> int:
+    ctx.progress.report(0.5)
+    if fail:
+        raise ValueError("no sum today")
+    return a + b
+
+
+@plugin(id="catalogue", title="Catalogue")
+class CataloguePlugin:
+    """The actions the button contract presses: one plain, one job."""
+
+    ctx: PluginContext
+    jobs: JobService
+    calls: list[tuple[str, dict]]
+
+    @action(id="buffer", title="Buffer")
+    def buffer(self, distance: float, note: str = "") -> str:
+        self.calls.append(("buffer", {"distance": distance, "note": note}))
+        return f"{distance}:{note}"
+
+    @action
+    def sum_slowly(self, a: int, b: int, fail: bool = False) -> JobHandle:
+        return self.jobs.delay(slow_sum, a=a, b=b, fail=fail)
+
+
 class Rendering:
     """One backend of the contract: a context and a way to attach a component."""
 
     def __init__(
-        self, ctx: UiContext, scope: ResourceScope, dataset: Path, *, native: bool
+        self,
+        ctx: UiContext,
+        scope: ResourceScope,
+        dataset: Path,
+        *,
+        native: bool,
+        runtime: PluginRuntime | None = None,
     ) -> None:
         self.ctx = ctx
         self.scope = scope
         self.dataset = dataset
         self.native = native
+        self.runtime = runtime
+
+    @property
+    def plugin(self) -> CataloguePlugin:
+        """The running plugin instance behind ``ctx.actions``."""
+        assert self.runtime is not None
+        instance = self.runtime.instance
+        assert isinstance(instance, CataloguePlugin)
+        return instance
+
+    def tick(self) -> None:
+        """Advance the plugin's jobs one step, as the host timer would."""
+        self.plugin.jobs.tick()
 
     def attach(self, component: Component) -> Component:
         component.attach(self.ctx)
@@ -82,28 +138,42 @@ def make_rendering(
         context = native_plugin_context(
             scope, settings_prefix="components", notifications=notifications
         )
-        ctx = UiContext(
-            notifications,
-            FakeViewControl(),
-            scope,
-            layers=context.layers,
-            project=context.project,
-            files=context.files,
-        )
     else:
         layers = FakeLayers(scope)
         layers.register(
             dataset, name="sites", geometry_type="point", field_names=("name", "kind")
         )
-        ctx = UiContext(
+        context = PluginContext(
             notifications,
-            FakeViewControl(),
             scope,
             layers=layers,
             project=FakeProject(layers, scope),
             files=FakeFiles(scope),
+            log=RecordingLog(scope, "catalogue"),
         )
-    yield Rendering(ctx, scope, dataset, native=backend == "native")
+    runtime = PluginRuntime(CataloguePlugin, context)
+    runtime.start()
+    instance = runtime.instance
+    assert isinstance(instance, CataloguePlugin)
+    instance.jobs = JobService(scope, workers=FakeWorkers(), gui_thread=lambda: False)
+    instance.calls = []
+    # The view's scope is a child of the plugin's, as under the host: closing
+    # the window detaches its components while the plugin's services live on.
+    view_scope = scope.child()
+    ctx = UiContext(
+        notifications,
+        FakeViewControl(),
+        view_scope,
+        actions=ViewActions(runtime, view_id="catalogue.test#1"),
+        layers=context.layers,
+        project=context.project,
+        files=context.files,
+        log=context.log,
+    )
+    yield Rendering(
+        ctx, view_scope, dataset, native=backend == "native", runtime=runtime
+    )
+    runtime.unload()
     if not scope.closed:
         scope.close()
     if backend == "native":
