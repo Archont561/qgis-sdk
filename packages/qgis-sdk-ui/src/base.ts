@@ -27,6 +27,7 @@ export abstract class QgisSdkElement extends LitElement {
 		name: { type: String, reflect: true },
 		label: { type: String },
 		disabled: { type: Boolean, reflect: true },
+		required: { type: Boolean },
 		error: { type: String },
 	};
 
@@ -35,6 +36,11 @@ export abstract class QgisSdkElement extends LitElement {
 	/** The visible label; empty renders none. */
 	declare public label: string;
 	declare public disabled: boolean;
+	/**
+	 * The Python catalogue's `required=`: an input marks its control
+	 * `required`/`aria-required`; elements without a control ignore it.
+	 */
+	declare public required: boolean;
 	/** A message to show under the control, from a form or the page. */
 	declare public error: string;
 
@@ -46,6 +52,7 @@ export abstract class QgisSdkElement extends LitElement {
 		this.name = "";
 		this.label = "";
 		this.disabled = false;
+		this.required = false;
 		this.error = "";
 		counter += 1;
 		this.controlId = `qgis-sdk-${counter}`;

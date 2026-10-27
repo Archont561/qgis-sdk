@@ -33,6 +33,7 @@ export class QgisRunButton extends QgisSdkElement {
 		operation: { attribute: false },
 		input: { attribute: false },
 		pendingLabel: { type: String, attribute: "pending-label" },
+		text: { type: String },
 	};
 
 	declare public form: AnyFormStore | null;
@@ -49,6 +50,15 @@ export class QgisRunButton extends QgisSdkElement {
 		this.operation = null;
 		this.input = undefined;
 		this.pendingLabel = "";
+	}
+
+	/** The Python `Button(text=)`: the caption, the same property as `label`. */
+	public get text(): string {
+		return this.label;
+	}
+
+	public set text(value: string) {
+		this.label = value;
 	}
 
 	/** The call is in flight. */

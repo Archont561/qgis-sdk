@@ -30,6 +30,11 @@ const NONE = "";
  * so the `layers.read` grant is checked before any call; without a layer it
  * waits, saying so.
  */
+/** What `of` needs of a layer picker: its value and its change event. */
+export interface LayerPickerLike extends EventTarget {
+	readonly value: string | null;
+}
+
 export class QgisFieldPicker extends QgisSdkElement {
 	public static readonly tagName: string = "qgis-field-picker";
 	public static override properties: PropertyDeclarations = {
@@ -75,6 +80,24 @@ export class QgisFieldPicker extends QgisSdkElement {
 		return this.query?.refresh() ?? Promise.resolve(undefined);
 	}
 
+	/**
+	 * The Python `FieldPicker(of=)`: a `<qgis-layer-picker>` to follow. Its
+	 * current value becomes `layer` at once and on every `qgis-change` it
+	 * raises; `null` stops following and keeps the last layer.
+	 */
+	public get of(): LayerPickerLike | null {
+		return this.followed;
+	}
+
+	public set of(picker: LayerPickerLike | null) {
+		this.follow(picker);
+	}
+
+	public override disconnectedCallback(): void {
+		super.disconnectedCallback();
+		this.follow(null);
+	}
+
 	protected override willUpdate(changed: PropertyValues): void {
 		super.willUpdate(changed);
 		if (changed.has("qgis") || changed.has("layer")) {
@@ -107,6 +130,8 @@ export class QgisFieldPicker extends QgisSdkElement {
 				id=${this.controlId}
 				name=${ifDefined(this.name === "" ? undefined : this.name)}
 				?disabled=${this.disabled || state.status !== "ok"}
+				?required=${this.required}
+				aria-required=${ifDefined(this.required ? "true" : undefined)}
 				aria-busy=${ifDefined(state.status === "loading" ? "true" : undefined)}
 				aria-invalid=${ifDefined(message === "" ? undefined : "true")}
 				aria-describedby=${ifDefined(describedBy(this.errorId, message))}
@@ -129,6 +154,25 @@ export class QgisFieldPicker extends QgisSdkElement {
 					: nothing
 			}
 			${errorPart(this.errorId, message)}`;
+	}
+
+	private followed: LayerPickerLike | null = null;
+	private readonly onLayerChange = (): void => {
+		if (this.followed !== null) {
+			this.layer = this.followed.value;
+		}
+	};
+
+	private follow(picker: LayerPickerLike | null): void {
+		if (this.followed === picker) {
+			return;
+		}
+		this.followed?.removeEventListener("qgis-change", this.onLayerChange);
+		this.followed = picker;
+		if (picker !== null) {
+			picker.addEventListener("qgis-change", this.onLayerChange);
+			this.layer = picker.value;
+		}
 	}
 
 	private onChange(event: Event): void {
