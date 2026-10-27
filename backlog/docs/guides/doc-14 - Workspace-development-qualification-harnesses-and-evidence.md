@@ -1060,6 +1060,37 @@ Do not use a `workflow_dispatch` of `release.yml` with `tag=python-v0.4.0`
 as a rehearsal: 0.4.0 is a clean version, so the runtime and tools steps
 would publish for real.
 
+## UI release train rehearsal (TASK-110, 2026-10-27)
+
+The `ui` job landed with PR #109 (`803232c`). The sandbox token cannot
+dispatch workflows, so the job was exercised with one prerelease tag, which
+the workflow treats as a dry run:
+
+```sh
+git tag -a ui-v0.1.0-rc.1 803232c -m "@archont561/qgis-sdk-ui 0.1.0-rc.1 (rehearsal) ..."
+git push origin ui-v0.1.0-rc.1
+```
+
+`release.yml` run [40531699064](https://github.com/Archont561/qgis-sdk/actions/runs/40531699064):
+
+| Job | Outcome |
+| --- | --- |
+| `build` | green: classify (`ui` true, every other flag false, prerelease true) -> stamp `0.1.0-rc.1` for scope `ui` (the components' package.json, the `qgis-sdk-ui` alias and its pin, `UI_NPM_VERSION`) -> verify-versions (`ui` manifests agree, peer range holds the bridge) -> bridge and components built -> `ui-package`, `ui-alias-package`, `bridge-package` artifacts |
+| `ui` | **failed** at "Pack the UI tarball and check what it holds": npm 12.2.0 (the OIDC-capable pin) prints `npm pack --dry-run --json` as an object keyed by package name where npm 10 printed a one-element array, so the check found nothing to destructure. Every later step skipped; nothing was published |
+| `pypi`, `conda`, `npm`, `github-packages`, `github-release` | skipped (scope `ui` ships none of them) |
+
+The failure is what a rehearsal is for: the fix (`fix(release)`: the check
+accepts either shape and names an output without a file list) was
+reproduced and then rehearsed locally under npm 12.2.0 - the pack check
+(24 files, all under `dist/` plus `package.json`, `README.md`, `LICENSE`),
+the alias smoke install (`qgis-sdk-ui`: 31 exports mirrored, `/define` 1,
+both stylesheets `@import` the scoped ones) and `npm publish --dry-run
+--tag next`. A tag is never moved, so the second rehearsal is
+`ui-v0.1.0-rc.2` on the merge commit that carries the fix; its outcome is
+recorded below when it runs. npm lists `@archont561/qgis-sdk-ui` and
+`qgis-sdk-ui` at the owner's `0.0.0` reservation placeholders only,
+confirming nothing uploaded.
+
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
 profile, while `test_webchannel_native.py` and `test_webengine_native.py`

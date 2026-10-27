@@ -121,8 +121,11 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   declarative-surface adoption follow-ups are [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md), next.
   TASK-108 landed in PR #108 (`6efc4fc`: declared scaffold starter, `UI005`,
   `Form` over declared inputs, web keyword forms, doc-13 two-spelling
-  table); TASK-108 is Done. TASK-110 opens next and also ships the unscoped
-  `qgis-sdk-ui` alias, since npm holds both names under trusted publishing.
+  table); TASK-108 is Done. TASK-110 landed in PR #109 (`803232c`: the
+  `ui` job, `stamp --scope ui` over the alias and `UI_NPM_VERSION`, the
+  unscoped `qgis-sdk-ui` alias since npm holds both names); TASK-110 is
+  Done. Its `ui-v0.1.0-rc.1` rehearsal failed on npm 12's `pack --json`
+  shape and is re-run as `rc.2` with the fix (doc-14).
 - **Sprint 5: [TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md).** Pulled forward from m-10 on instruction
   (2026-10-27; [decision-64](../../decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md)): `ctx.algorithms.list/describe/run` over any
   algorithm the host registry holds, `qgis-sdk processing generate`
