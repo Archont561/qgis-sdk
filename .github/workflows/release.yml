@@ -542,7 +542,13 @@ jobs:
           npm pkg delete devDependencies scripts
           npm pack --dry-run --json > ../ui-pack.json
           node - <<'EOF'
-          const [pack] = JSON.parse(require("node:fs").readFileSync("../ui-pack.json", "utf8"));
+          // npm 10 printed a one-element array; npm 12 prints an object keyed
+          // by package name (the ui-v0.1.0-rc.1 rehearsal found the change).
+          const parsed = JSON.parse(require("node:fs").readFileSync("../ui-pack.json", "utf8"));
+          const pack = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+          if (!pack || !Array.isArray(pack.files)) {
+            throw new Error(`npm pack --dry-run --json returned no file list: ${JSON.stringify(parsed).slice(0, 200)}`);
+          }
           const allowed = (path) =>
             path.startsWith("dist/") || ["package.json", "README.md", "LICENSE"].includes(path);
           const outside = pack.files.map((f) => f.path).filter((path) => !allowed(path));
