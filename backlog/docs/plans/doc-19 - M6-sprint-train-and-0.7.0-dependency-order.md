@@ -112,8 +112,13 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   `createBridgeHarness` with portable stories as fixtures, the `ui` scope in
   `release.py` (`stamp`, `verify-versions` peer-range check, `plan`),
   `files` whitelist, README per decision-29; the Tier 1 templates opt in
-  through one import; decision-16 promoted. The webengine palette test
-  needs a QGIS host (Linux CI has one).
+  through one import; decision-16 promoted. Landed in PR #106 (elements,
+  wrappers, palette handshake, `ui` scope, scaffold opt-in) and PR #107
+  (`3a2bbcb`: Storybook with the stories as fixtures, the pack test, the
+  WebEngine computed-style check in the scaffold-web harness, CI and docs);
+  TASK-70 is Done. The `release.yml` `ui` publish job and the scaffold UI
+  pin stamp are [TASK-110](../../tasks/task-110%20-%20Publish-archont561-qgis-sdk-ui-from-release.yml-and-stamp-the-scaffold-UI-pin.md), before the gate; the
+  declarative-surface adoption follow-ups are [TASK-108](../../tasks/task-108%20-%20Adopt-the-declarative-surface-form-across-the-scaffold-the-web-mirror-and-the-snapshot-tooling.md), next.
 - **Sprint 5: [TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md).** Pulled forward from m-10 on instruction
   (2026-10-27; [decision-64](../../decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md)): `ctx.algorithms.list/describe/run` over any
   algorithm the host registry holds, `qgis-sdk processing generate`
@@ -122,8 +127,8 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
   `native`/`qgis`/`gdal`/`3d`/`pdal`, the `algorithms.*` host operations
   and grants, `runAlgorithm` typed by the generated registry. PR #106
   merged as `d3e930e` (CI, autorelease and publish-sandbox green, no tag);
-  TASK-109 is Done. TASK-70's Storybook, docs and closure finish right
-  after it.
+  TASK-109 is Done. TASK-70's Storybook, docs and closure followed in
+  PR #107.
 - **Sprint 6: TASK-43.** The Starlight site from the backlog guides with
   the Storybook static build mounted under it, deployed by a `docs.yml`
   workflow to GitHub Pages; the root README gains the docs badge and link

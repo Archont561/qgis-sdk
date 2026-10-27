@@ -3,10 +3,10 @@ id: TASK-70
 title: >-
   Create @archont561/qgis-sdk-ui: web components on the store core, React, Vue
   and Svelte wrappers, palette tokens and Storybook
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T08:52:00Z'
-updated_date: '2026-10-27 13:51'
+updated_date: '2026-10-27 14:10'
 labels: []
 milestone: m-6
 dependencies:
@@ -39,4 +39,6 @@ decision-47 points 3 and 5 (absorbing decision-46 points 4 and 5 and decision-16
 2026-10-26: ACs 5-7 added - Lit light DOM, UnoCSS compiled to style.css, data-part/data-qgis-sdk hooks (decision-47 amendment).
 
 Resumed 2026-10-27 after TASK-109 (PR #106). This slice (70d): Storybook 10 (web-components-vite, a11y addon, light/dark switcher in .storybook/preview.ts) with 21 stories over every element against createBridgeHarness; tests/stories.test.ts composes them through storybook/preview-api (render, refusal without grant, label association, focus order ending on the run button); tests/pack.test.ts (npm pack --dry-run: dist/README/LICENSE only, every exports target, lit the one dependency); define.ts exports DEFINED so dist/define.d.ts ships; the scaffold-web harness reads the computed --qgis-sdk-bg/--qgis-sdk-fg and data-qgis-sdk-theme back inside WebEngine against palette_theme() (8 passed with QGIS_SDK_SCAFFOLD_WEB=1); CI builds the Storybook (pixi storybook-build), uploads UI coverage under the qgis-sdk-ui flag and runs the UI tests on macOS/Windows; decision-16 accepted with a status review naming the tokens as the theme surface; doc-13 gains the Components section; README per decision-29. Local gates: UI typecheck, 93 bun tests, coverage, biome, actionlint, ruff, tests/scripts 226. Static Storybook in the docs site waits for TASK-43; the release.yml ui publish job and the scaffold UI pin stamp are TASK-110.
+
+Merged 2026-10-27 as PR #107 (3a2bbcb); main CI green (checks incl. Storybook build and UI coverage upload, cross-platform macOS/Windows with the UI tests). Done. Follow-ups: TASK-110 (release.yml ui publish job, scaffold UI pin stamp), TASK-43 (static Storybook in the docs site).
 <!-- SECTION:NOTES:END -->
