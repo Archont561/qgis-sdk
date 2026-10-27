@@ -6,6 +6,8 @@
 			"!!**/src/generated",
 			"!!**/dist",
 			"!!**/storybook-static",
+			"!!apps/docs/public/storybook",
+			"!!apps/docs/.astro",
 			"!!**/coverage",
 			"!!**/build",
 			"!!**/tests/contracts/generated",
@@ -23,5 +25,18 @@
 			"!!**/.agents",
 			"!!**/node_modules"
 		]
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.astro"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUnusedVariables": "off",
+						"noUnusedImports": "off"
+					}
+				}
+			}
+		}
+	]
 }

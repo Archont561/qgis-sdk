@@ -1,0 +1,104 @@
+name: docs
+
+# The documentation site (TASK-43): apps/docs renders the backlog guides and
+# the qgis-sdk-ui Storybook into one static site. Pull requests build it and
+# check every internal link; pushes to main build it the same way and deploy
+# it to GitHub Pages at https://archont561.github.io/qgis-sdk/.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/docs/**"
+      - "backlog/docs/guides/**"
+      - "packages/qgis-sdk-ui/**"
+      - "packages/qgis-sdk-typescript/**"
+      - "packages/*/package.json"
+      - "packages/qgis-sdk-python/pyproject.toml"
+      - "bun.lock"
+      - "pixi.lock"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "apps/docs/**"
+      - "backlog/docs/guides/**"
+      - "packages/qgis-sdk-ui/**"
+      - "packages/qgis-sdk-typescript/**"
+      - "packages/*/package.json"
+      - "packages/qgis-sdk-python/pyproject.toml"
+      - "bun.lock"
+      - "pixi.lock"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a superseded pull-request build is cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build and check the site
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        id: s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # `lastUpdated` on a generated page is the last commit of the guide it
+          # renders, which needs the history.
+          fetch-depth: 0
+
+      - name: Set up Pixi
+        id: s02
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          environments: bun
+          cache: true
+          locked: true
+
+      - name: Install JavaScript dependencies
+        id: s03
+        run: pixi run -e bun install-js
+
+      # Builds the bridge, the Storybook and then the site (apps/docs/dist).
+      - name: Build the site
+        id: s04
+        run: pixi run -e bun docs-build
+
+      - name: Check internal links
+        id: s05
+        run: pixi run -e bun bun run --filter '@workspace/docs' check-links
+
+      - name: Upload the site
+        id: s06
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: apps/docs/dist
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        id: s01
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+        with:
+          enablement: true
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

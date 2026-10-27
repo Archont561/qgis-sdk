@@ -136,6 +136,21 @@ cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archo
 # The static Storybook of qgis-sdk-ui; its own `build` runs first.
 cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk-ui' storybook:build"
 
+# The documentation site (TASK-43): the Storybook of qgis-sdk-ui is built
+# first so `apps/docs` can copy it under /storybook/, then the Astro build
+# renders the backlog guides and the hand-written pages into apps/docs/dist.
+[feature.bun.tasks.docs-build]
+cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk-ui' storybook:build && bun run --filter '@workspace/docs' build"
+
+# Every internal link and fragment of the built site resolves (TASK-43 AC 1).
+[feature.bun.tasks.docs-link-check]
+cmd = "bun run --filter '@workspace/docs' check-links"
+depends-on = ["docs-build"]
+
+# The site from source with reload, on 0.0.0.0:4321.
+[feature.bun.tasks.docs-dev]
+cmd = "bun run --filter '@workspace/docs' dev"
+
 [feature.bun.tasks.turbo-test]
 cmd = "bun run test"
 

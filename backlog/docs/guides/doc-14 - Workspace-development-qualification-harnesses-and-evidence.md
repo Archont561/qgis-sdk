@@ -76,6 +76,9 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 | Typecheck | `pixi run -e bun typecheck` | TypeScript bridge typecheck |
 | Lint Python | `pixi run lint-python` | Ruff lint across the whole checkout |
 | Format check Python | `pixi run format-python-check` | Ruff format check across the whole checkout |
+| Docs site | `pixi run -e bun docs-build` | The bridge, the Storybook and the Astro site into `apps/docs/dist` |
+| Docs links | `pixi run -e bun docs-link-check` | Builds, then checks every internal link and fragment of the site |
+| Docs dev | `pixi run -e bun docs-dev` | The site from source with reload on `0.0.0.0:4321` |
 
 Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 
@@ -94,8 +97,46 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 | `packages/qgis-sdk-ui` | The `@archont561/qgis-sdk-ui` web components (Lit, light DOM), their wrappers, stories and Bun tests |
 | `packages/qgis-sdk-ui-alias` | Unscoped npm alias `qgis-sdk-ui`: re-export files, `@import` stylesheets, manifest and Bun tests that pin it to the components |
 | `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
+| `apps/docs` | The documentation site (Astro Starlight): generator, hand-written start pages, link check and Bun tests; deployed to GitHub Pages |
 | `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
 | `scripts` | Repository-root developer scripts (restore) |
+
+## Documentation site
+
+[archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/) is
+`apps/docs`, an Astro Starlight site ([TASK-43](../../tasks/task-43%20-%20Publish-a-Starlight-documentation-site-from-the-backlog-guides.md),
+[decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal-and-hold-reference-prose-in-backlog-guides-until-the-docs-site.md)).
+Its reference pages are generated, never edited:
+
+- `apps/docs/scripts/generate.ts` renders this guide, doc-12 and doc-13 into
+  `src/content/docs/{workspace,python,typescript}/` - one page per `##`
+  section, the preamble as the directory's index, sub-headings moved up one
+  level. Same-guide and cross-guide anchors become site routes; links to
+  decisions, tasks and plans point at the repository on GitHub. Each page's
+  "Edit page" opens the guide, and its `lastUpdated` is the guide's last
+  commit. The generated directories are ignored by git. A link whose anchor
+  no guide has is reported by the generator and fails the link check.
+- The same script copies `packages/qgis-sdk-ui/storybook-static` to
+  `public/storybook/` when it exists, so the site serves the Storybook at
+  `/storybook/`; `docs-build` builds it first.
+- `src/content/docs/start/` (installation, first plugin, concepts) and the
+  landing page are the hand-written part, kept short and pointing into the
+  generated pages. `site.ts` holds the URL, base and repository; the
+  versions on the landing page are read from the workspace manifests when
+  the Astro config loads.
+- `scripts/check-links.ts` walks `dist/` and resolves every internal `href`,
+  `src` and fragment against the built files, with no network. `bun test` in
+  `apps/docs` covers the renderer and the checker; `bun run coverage` holds
+  them to the workspace's 90%.
+- `starlight-llms-markdown` emits `/llms.txt`, `/llms-full.txt` and a `.md`
+  twin of every page; `site` and `base` give Starlight's bundled sitemap and
+  canonical URLs; `public/robots.txt` names the sitemap.
+- `.github/workflows/docs.yml` builds and link-checks the site on pull
+  requests that touch it, the guides or the UI package, and deploys it from
+  `main` with `actions/deploy-pages`. Astro runs under Bun (`bun --bun astro`)
+  so the build needs no Node beyond the Pixi `bun` environment; Starlight's
+  `<Tabs>` component is avoided because it parses its own output through a
+  native binding Bun's isolated `node_modules` cannot resolve from a chunk.
 
 ## Contributing
 

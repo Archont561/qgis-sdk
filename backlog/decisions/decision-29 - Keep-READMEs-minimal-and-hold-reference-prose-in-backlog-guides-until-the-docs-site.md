@@ -60,3 +60,17 @@ of pixi-sandbox's Astro Starlight docs.
   resolve to the matching guide section; the notes are not rewritten.
 - Two things wait for TASK-43: a README-shape check, and the day the guides
   become site pages rather than backlog records.
+
+## Status review (2026-10-27)
+
+TASK-43 shipped the site: `apps/docs` (Astro Starlight) renders doc-12,
+doc-13 and doc-14 one page per `##` section at
+[archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/),
+deployed from `main` by `.github/workflows/docs.yml`, with the qgis-sdk-ui
+Storybook under `/storybook/`. Point 3 is therefore in force as written: the
+guides stay the source (the site's pages are generated, never edited; their
+"Edit page" link opens the guide), the root README carries the site badge and
+link, and the README-shape check (`tests/scripts/test_readme_shape.py`) keeps
+every README in shape 1. The package READMEs keep linking the guides on
+GitHub as well, so a reader of the PyPI or npm page reaches the prose with or
+without the site. Nothing in the decision changes.
