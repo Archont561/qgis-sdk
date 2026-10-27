@@ -156,7 +156,7 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
     assert package["name"] == "field_tools-web"
     assert package["private"] is True
     assert package["type"] == "module"
-    assert package["dependencies"][SDK_NPM_PACKAGE] == SDK_NPM_VERSION == "0.4.0"
+    assert package["dependencies"][SDK_NPM_PACKAGE] == SDK_NPM_VERSION == "0.5.0"
     assert package["dependencies"][UI_NPM_PACKAGE] == UI_NPM_VERSION == "0.1.0"
     assert package["scripts"] == {
         "dev": "vite",

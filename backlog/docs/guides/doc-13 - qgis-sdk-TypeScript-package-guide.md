@@ -12,12 +12,13 @@ and `QgisSdk`, the framework-free stores with their React, Vue and Svelte
 bindings, the `@archont561/qgis-sdk-ui` components and the scripted test host.
 The documentation site at
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
-renders it one page per section. Status at the time of writing: `0.4.0` is the released version (`ts-v0.4.0`,
-tagged with `python-v0.6.0` on one merge commit as the 0.6.0 pair; packages
-version independently,
+renders it one page per section. Status at the time of writing: `0.5.0` is the released version (`ts-v0.5.0`,
+tagged with `python-v0.7.0` and `ui-v0.1.0` on one merge commit as the 0.7.0
+triple; packages version independently,
 [decision-25](../../decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md));
-it carries the root-entry change and the `QgisSdk` entry point described
-below and in the 0.4.0 migration notes. `0.3.0` was the first version under
+it carries the framework-free stores with the `./vue` and `./svelte`
+adapters and `algorithms.run`, described below and in the 0.5.0 migration
+notes; `0.4.0` brought the root entry and the `QgisSdk` entry point. `0.3.0` was the first version under
 this name. Through `0.2.0` the package was published as
 `@archont561/qgis-sdk-bridge`; it is `@archont561/qgis-sdk` from `0.3.0` on
 ([decision-33](../../decisions/decision-33%20-%20Rename-the-npm-package-to-archont561-qgis-sdk-and-suffix-the-package-directories.md)).
@@ -823,7 +824,7 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
 
-## Next minor (unreleased) migration notes
+## 0.5.0 migration notes
 
 **`@archont561/qgis-sdk-ui` 0.1.0 (decision-47 point 3).** A new
 package rather than a change to this one; see

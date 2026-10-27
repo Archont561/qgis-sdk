@@ -10,7 +10,7 @@ without QGIS or Qt, so a plugin is testable from source. `qgis-sdk` is a
 code-free kit that installs [`qgis-sdk-runtime`](../qgis-sdk-runtime) and
 [`qgis-sdk-tools`](../qgis-sdk-tools) at matching versions.
 
-> Status: `0.6.0`, experimental `0.x`. Each `0.Y.0` carries migration
+> Status: `0.7.0`, experimental `0.x`. Each `0.Y.0` carries migration
 > notes; nothing is promised stable before `1.0.0`.
 
 ## Installation

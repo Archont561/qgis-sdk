@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qgis-sdk-tools"
-version = "0.6.0"
+version = "0.7.0"
 description = "The qgis-sdk developer tools: new, check, test, dev and build for qgis-sdk plugin projects."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,7 @@ authors = [{ name = "QGIS SDK contributors" }]
 # The tools import the runtime (decision-35) and declare the range they were
 # tested against; the range is the tools release's promise to a developer, so
 # it moves on purpose, with a tools release, never implicitly.
-dependencies = ["qgis-sdk-runtime>=0.6.0,<0.7", "typer==0.27.3"]
+dependencies = ["qgis-sdk-runtime>=0.7.0,<0.8", "typer==0.27.3"]
 
 [project.scripts]
 qgis-sdk = "qgis_sdk_tools.__main__:main"

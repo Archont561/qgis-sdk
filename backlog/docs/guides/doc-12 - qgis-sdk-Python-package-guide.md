@@ -12,11 +12,12 @@ surfaces, Processing, the bridge host side, networking, scoped jobs, the
 project scaffold and the `qgis-sdk` command, with the migration notes of every
 release at the end. The documentation site at
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)
-renders it one page per section. Status at the time of writing: Python `0.6.0`
-(`python-v0.6.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
-and prefix.dev) released as a pair with the bridge `@archont561/qgis-sdk`
-`0.4.0` (`ts-v0.4.0`), both tagged on one merge commit; the previous pair was
-`0.5.0` + `0.3.0`.
+renders it one page per section. Status at the time of writing: Python `0.7.0`
+(`python-v0.7.0`: `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` on PyPI
+and prefix.dev) released as a triple with the bridge `@archont561/qgis-sdk`
+`0.5.0` (`ts-v0.5.0`) and the web components `@archont561/qgis-sdk-ui`
+`0.1.0` (`ui-v0.1.0`), all tagged on one merge commit; the previous pair was
+`0.6.0` + `0.4.0`.
 
 Companion guides: [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)
 (TypeScript bridge) and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
@@ -2148,7 +2149,7 @@ published for the bridge, and no `ts-v*` tag exists.
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
 
-## 0.7.0 migration notes (in progress)
+## 0.7.0 migration notes
 
 **Parameter kinds (decision-46 point 1).** Six kinds join
 `LayerInput`/`CrsInput`/`Metres`: `FileInput(filters=)`, `DirectoryInput()`,

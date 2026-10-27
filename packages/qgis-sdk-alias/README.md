@@ -11,7 +11,7 @@ stream, the curated host namespaces (`layers`, `project`, `files`,
 bindings over them, and a scripted harness for tests. Every exported error
 begins with `QgisSdk` and carries a stable wire `code`.
 
-> Status: `0.4.0`, experimental `0.x`. Published as
+> Status: `0.5.0`, experimental `0.x`. Published as
 > `@archont561/qgis-sdk-bridge` through `0.2.0`; this name continues from
 > `0.3.0`, and `qgis-sdk` on npm is its unscoped alias. `./host`, `./react`,
 > `./vue`, `./svelte` and `./testing` are opt-in entry points.

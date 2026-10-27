@@ -11,7 +11,7 @@ WebEngine bridge host side. `qgis_sdk.adapters.desktop.host()` is the
 nothing of the host. The pure layers import without QGIS or Qt; a plugin
 built with `qgis-sdk build` vendors a private copy and installs nothing.
 
-> Status: `0.6.0`, experimental `0.x`. Each `0.Y.0` carries migration
+> Status: `0.7.0`, experimental `0.x`. Each `0.Y.0` carries migration
 > notes; nothing is promised stable before `1.0.0`.
 
 ## Installation

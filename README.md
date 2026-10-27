@@ -17,8 +17,8 @@ description, the native windows, the Processing algorithms, the bridge
 allowlist and the typed page-side client from those same declarations. The
 pure layers import without QGIS or Qt, so a plugin is testable from source.
 
-> Status: experimental `0.x` - Python kit `0.6.0`, TypeScript SDK `0.4.0`,
-> web components `0.1.0` (first release pending). Every `0.Y.0` carries
+> Status: experimental `0.x` - Python kit `0.7.0`, TypeScript SDK `0.5.0`,
+> web components `0.1.0`, released together as the 0.7.0 triple. Every `0.Y.0` carries
 > migration notes; nothing is promised stable before `1.0.0`.
 
 | Package | What it is | Install |
