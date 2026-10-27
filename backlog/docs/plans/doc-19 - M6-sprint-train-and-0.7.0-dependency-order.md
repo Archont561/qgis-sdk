@@ -154,3 +154,15 @@ what this milestone adds ([decision-46](../../decisions/decision-46%20-%20Ship-U
 - Confirm the bridge version the UI package will peer-range on (0.4.0 or
   later) once `ts-v0.4.0` exists; the task AC already refuses a range that
   excludes the workspace bridge.
+
+## 5. Re-scope before the gate (2026-10-27)
+
+Sprint 2 as written above carried TASK-73 (console session) and TASK-77
+(externals probe and pure-Python vendoring) in the same pull request as
+TASK-68. The train as run never opened them: sprints 1-5 and the docs
+site landed as TASK-68, 69, 96, 70, 109, 108, 110 and 43, and both tasks
+were still To Do when the gate came due. They move to m-7
+([doc-21](doc-21%20-%20M7-sprint-train-and-0.8.0-dependency-order.md) section 5) rather than holding 0.7.0: neither is UI-toolkit work, neither
+depends on or unblocks anything in m-6 (their dependencies TASK-63 and
+TASK-64 are Done), neither touches the wire, and what is on `main` is
+qualified and unreleased. The TASK-32 gate no longer lists them.

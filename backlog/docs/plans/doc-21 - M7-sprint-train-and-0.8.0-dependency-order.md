@@ -69,3 +69,18 @@ from 0.7.0: the catalogue and `LogView`, the console session
   number; the m-7 body's sprint train is amended, not this history.
 - Point 5 of decision-49 (native MCP in the runtime) stays unbuilt unless a
   client that cannot launch `uvx` is named.
+
+## 5. Tasks re-scoped in from m-6 (2026-10-27)
+
+TASK-73 (`qgis_sdk.console`, decision-48) and TASK-77 (externals with a
+startup probe and pure-Python vendoring, decision-50) arrive from m-6
+unopened ([doc-19](doc-19%20-%20M6-sprint-train-and-0.7.0-dependency-order.md) section 5). Placement:
+
+| Task | Depends on | Language | Where in the train |
+| --- | --- | --- | --- |
+| TASK-73 console session | TASK-63, TASK-64 (Done) | Python | with sprint 2: the console and `dev --agent` are the two human-facing doors onto the same dispatcher, authority and grants, and TASK-75's developer-mode tests reuse the console harness |
+| TASK-77 externals and vendoring | TASK-64 (Done) | Python (tools) | its own small pull request anywhere before the TASK-78 gate; nothing in m-7 depends on it |
+
+Neither changes `packages/qgis-sdk-typescript`, so m-7's "no bridge
+release" statement stands. TASK-78's dependencies and AC evidence now
+include both.
