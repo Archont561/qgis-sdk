@@ -30,6 +30,11 @@ const NEUTRAL = [
 	"qgis-sdk.ts",
 	"schema.ts",
 	"stores.ts",
+	"stores/base.ts",
+	"stores/operation.ts",
+	"stores/stream.ts",
+	"stores/form.ts",
+	"stores/host-query.ts",
 	"validate.ts",
 	"webchannel.ts",
 ];
