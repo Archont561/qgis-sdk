@@ -23,9 +23,7 @@ from qgis_sdk_tools.testing import FakeCliRuntime
 from typer.testing import CliRunner
 
 ROOT = Path(__file__).resolve().parents[3]
-GUIDE = (
-    ROOT / "backlog" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
-)
+GUIDE = ROOT / "apps" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
 
 LINUX = Host(
     os="linux", arch="x86-64", python="3.14", qgis="4.2", qt="6.11", chromium="140"

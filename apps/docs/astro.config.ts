@@ -18,7 +18,12 @@ export default defineConfig({
 	site: SITE,
 	base: BASE,
 	trailingSlash: "always",
-	vite: { define: { __QGIS_SDK_VERSIONS__: JSON.stringify(versions) } },
+	vite: {
+		define: {
+			__QGIS_SDK_VERSIONS__: JSON.stringify(versions),
+			__QGIS_SDK_STORYBOOK__: JSON.stringify(storybook),
+		},
+	},
 	integrations: [
 		starlight({
 			title: TITLE,
@@ -26,7 +31,7 @@ export default defineConfig({
 			logo: { src: "./src/assets/logo.svg", alt: "" },
 			favicon: "/favicon.svg",
 			social: [{ icon: "github", label: "GitHub", href: REPOSITORY }],
-			// Generated pages carry their own `editUrl` (the backlog guide they
+			// Generated pages carry their own `editUrl` (the guide source they
 			// render); this base serves the hand-written pages under src/.
 			editLink: { baseUrl: `${REPOSITORY}/edit/main/apps/docs/` },
 			lastUpdated: true,
@@ -41,6 +46,10 @@ export default defineConfig({
 						{ slug: "start/first-plugin" },
 						{ slug: "start/concepts" },
 					],
+				},
+				{
+					label: "Guides",
+					items: [{ autogenerate: { directory: "guides" } }],
 				},
 				// The migration notes render into a sibling directory and are routed
 				// under the guide with `slug`, so they can sit in one collapsed
@@ -106,6 +115,7 @@ export default defineConfig({
 				starlightLlmsMarkdown({
 					sectionLabels: {
 						start: "Start here",
+						guides: "Guides",
 						python: "Python package guide",
 						"python/migration": "Python migration notes",
 						typescript: "TypeScript SDK guide",

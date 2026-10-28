@@ -1,0 +1,12 @@
+---
+import { BASE } from "../../site";
+
+const available = __QGIS_SDK_STORYBOOK__;
+---
+
+{available && <section aria-labelledby="demo-title" class="demo">
+  <h2 id="demo-title">Try the web components</h2>
+  <p>This interactive form runs against a scripted host, not a live QGIS session. Try the controls or explore the component stories.</p>
+  <iframe title="Interactive buffer form using a scripted host" src={`${BASE}/storybook/iframe.html?id=form--buffer&viewMode=story`} loading="lazy"></iframe>
+  <p><a href={`${BASE}/storybook/?path=/story/form--buffer`}>Open the component Storybook</a></p>
+</section>}

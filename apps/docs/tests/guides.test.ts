@@ -1,5 +1,5 @@
 /**
- * The guide renderer: backlog guides in, Starlight pages out.
+ * The guide renderer: reference guides in, Starlight pages out.
  *
  * A guide is one long markdown file (doc-12 is 2,500 lines). The site shows
  * it as one page per `##` section under a per-guide directory, with the
@@ -37,7 +37,7 @@ type: guide
 # qgis-sdk Python package guide
 
 The reference prose for the \`qgis-sdk\` Python package; see
-[decision-29](../../decisions/decision-29%20-%20Keep-READMEs-minimal.md) and
+[decision-29](../../../backlog/decisions/decision-29%20-%20Keep-READMEs-minimal.md) and
 [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md#transport-client).
 
 ## Installation
@@ -52,8 +52,8 @@ See [Scoped jobs](#scoped-jobs) and [the picker](#layer-picker).
 
 ## Desktop host: \`host()\` and the project manifest
 
-Intro paragraph with a [task](../../tasks/task-1%20-%20Scaffold.md) and a
-[plan](../plans/doc-17%20-%20Train.md).
+Intro paragraph with a [task](../../../backlog/tasks/task-1%20-%20Scaffold.md) and a
+[plan](../../../backlog/docs/plans/doc-17%20-%20Train.md).
 
 ### Layer picker
 
@@ -189,7 +189,7 @@ describe("renderGuides", () => {
 	test("every page edits the guide it came from, not the generated file", () => {
 		for (const [path, content] of byPath) {
 			expect(content, path).toContain(
-				'editUrl: "https://github.com/Archont561/qgis-sdk/edit/main/backlog/docs/guides/doc-1',
+				'editUrl: "https://github.com/Archont561/qgis-sdk/edit/main/apps/docs/guides/doc-1',
 			);
 		}
 	});
@@ -253,7 +253,7 @@ describe("renderGuides", () => {
 		expect(pages.warnings).toContainEqual({
 			guide: "doc-12",
 			page: "desktop-host-host-and-the-project-manifest",
-			link: "../../tasks/task-1%20-%20Scaffold.md",
+			link: "../../../backlog/tasks/task-1%20-%20Scaffold.md",
 			reason: "cites a process record; the link was dropped",
 		});
 		const rules = renderGuides(
@@ -261,7 +261,7 @@ describe("renderGuides", () => {
 				{
 					guide: PYTHON,
 					markdown:
-						"# T\n\n## A\n\nSee [AGENTS.md](../../../AGENTS.md), [skills](../../../.agents/skills/tdd/SKILL.md) and [m-6](../../milestones/m-6%20-%200.7.0.md).\n",
+						"# T\n\n## A\n\nSee [AGENTS.md](../../../AGENTS.md), [skills](../../../.agents/skills/tdd/SKILL.md) and [m-6](../../../backlog/milestones/m-6%20-%200.7.0.md).\n",
 				},
 			],
 			{ base: "", repository: "https://github.com/o/r" },
@@ -285,7 +285,7 @@ describe("renderGuides", () => {
 				{
 					guide: PYTHON,
 					markdown:
-						"# T\n\n## A\n\nSee [doc-26](../specifications/doc-26%20-%20Authority.md#assets).\n",
+						"# T\n\n## A\n\nSee [doc-26](../../../backlog/docs/specifications/doc-26%20-%20Authority.md#assets).\n",
 				},
 			],
 			{ base: "", repository: "https://github.com/o/r" },
@@ -447,7 +447,7 @@ describe("migration notes", () => {
 });
 
 describe("GUIDES", () => {
-	test("names the three backlog guides decision-29 made the reference source", () => {
+	test("names the three reference guides", () => {
 		expect(GUIDES.map((g) => [g.id, g.section])).toEqual([
 			["doc-12", "python"],
 			["doc-13", "typescript"],

@@ -54,11 +54,11 @@ pixi run -e bun bun run coverage   # the 90% gates CI uses
 
 ## Documentation
 
-**[archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)** - getting started, the three guides below as pages, and the component Storybook; rendered from the backlog guides by `apps/docs` on every push to `main`.
+**[archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/)** - getting started, the three guides below as pages, and the component Storybook; rendered from the reference guides in `apps/docs` on every push to `main`.
 
-- [Python package guide](backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) - declarations, the UI catalogue, services, Processing, the scaffold, the command, migration notes
-- [TypeScript package guide](backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) - `QgisSdk`, host namespaces, stores, bindings, the components, testing
-- [Workspace, harnesses and qualification evidence](backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md) - environments, release scopes, harnesses, release gates
+- [Python package guide](https://archont561.github.io/qgis-sdk/python/) - declarations, the UI catalogue, services, Processing, the scaffold, the command, migration notes
+- [TypeScript package guide](https://archont561.github.io/qgis-sdk/typescript/) - `QgisSdk`, host namespaces, stores, bindings, the components, testing
+- [Workspace, harnesses and qualification evidence](https://archont561.github.io/qgis-sdk/contributing/workspace/) - environments, release scopes, harnesses, release gates
 - [Decisions](backlog/decisions) and the [roadmap](backlog/docs/plans/doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md); the [reference plugin](examples/simple) is the smallest complete project
 
 Contributors start with [AGENTS.md](AGENTS.md).

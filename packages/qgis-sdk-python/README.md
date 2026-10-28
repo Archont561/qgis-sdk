@@ -58,13 +58,13 @@ never written into the project.
 
 ## Documentation
 
-- [Python package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) -
+- [Python package guide](https://archont561.github.io/qgis-sdk/python/) -
   declarations, the UI catalogue, services, Processing, the bridge host
   side, the scaffold, the command, release and migration notes.
 - [TypeScript SDK](https://www.npmjs.com/package/@archont561/qgis-sdk) and
   [web components](https://github.com/Archont561/qgis-sdk/tree/main/packages/qgis-sdk-ui) -
   the page side of a `QWebEngineView` interface.
-- [Workspace, harnesses and qualification evidence](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md).
+- [Workspace, harnesses and qualification evidence](https://archont561.github.io/qgis-sdk/contributing/workspace/).
 
 ## License
 

@@ -36,10 +36,10 @@ qgis-sdk targets                                             # the support matri
 
 ## Documentation
 
-- [Python package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) -
+- [Python package guide](https://archont561.github.io/qgis-sdk/python/) -
   the scaffold, project checks and their rule ids, `test`, `dev`, `build`,
   the generators, release and migration notes.
-- [Workspace, harnesses and qualification evidence](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md) -
+- [Workspace, harnesses and qualification evidence](https://archont561.github.io/qgis-sdk/contributing/workspace/) -
   the support matrix and how each command is qualified.
 
 ## License

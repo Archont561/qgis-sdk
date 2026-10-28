@@ -22,6 +22,7 @@ hero:
 
 import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 import { versions } from "../../versions";
+import Demo from "../../components/Demo.astro";
 
 <p style="text-align:center">
   <code class="install-chip">pip install qgis-sdk</code>
@@ -76,6 +77,15 @@ import { versions } from "../../versions";
     runtime vendored inside - nothing to install on the user's QGIS.
   </li>
 </ol>
+
+<Demo />
+
+## Guides
+
+<CardGrid>
+  <LinkCard title="Test and run a plugin" description="Check a project on fakes, then qualify it on a QGIS host." href="/qgis-sdk/guides/test-a-plugin/" />
+  <LinkCard title="Add a web UI" description="Scaffold a web-backed plugin, test both sides and run it in QGIS." href="/qgis-sdk/guides/web-plugin/" />
+</CardGrid>
 
 ## Read the reference
 

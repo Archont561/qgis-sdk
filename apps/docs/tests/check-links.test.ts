@@ -23,12 +23,14 @@ beforeAll(async () => {
 		`<html><body>
 			<a href="/qgis-sdk/python/">guide</a>
 			<a href="/qgis-sdk/python/installation/#from-pypi">anchor</a>
+			<a href="/qgis-sdk/python/installation/?foo=bar&amp;view=docs#from-pypi">query and anchor</a>
 			<a href="/qgis-sdk/python/installation/">page</a>
 			<a href="/qgis-sdk/llms.txt">file</a>
 			<a href="/qgis-sdk/favicon.svg">asset</a>
 			<a href="https://example.com/">external</a>
 			<a href="mailto:x@example.com">mail</a>
 			<a href="#top">self</a>
+			<a href="?view=docs#top">self with query</a>
 			<a id="top"></a>
 			<img src="/qgis-sdk/_astro/logo.svg">
 		</body></html>`,

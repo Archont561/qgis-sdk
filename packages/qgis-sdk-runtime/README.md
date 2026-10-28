@@ -52,7 +52,7 @@ class Example:
 
 ## Documentation
 
-- [Python package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) -
+- [Python package guide](https://archont561.github.io/qgis-sdk/python/) -
   declarations, the UI catalogue and the declared surface form, services,
   Processing, the bridge host side, release and migration notes.
 - [TypeScript SDK](https://www.npmjs.com/package/@archont561/qgis-sdk) and

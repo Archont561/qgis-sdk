@@ -47,9 +47,9 @@ const { outputs } = await runAlgorithm(qgis, "native:centroids", { INPUT: buffer
 
 ## Documentation
 
-- [Python package guide](../../backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) -
+- [Python package guide](https://archont561.github.io/qgis-sdk/python/) -
   every API the plugin uses.
-- [Workspace, harnesses and qualification evidence](../../backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md) -
+- [Workspace, harnesses and qualification evidence](https://archont561.github.io/qgis-sdk/contributing/workspace/) -
   "Reference plugin through the toolchain": the harness that runs this
   project end to end inside a real `QWebEngineView`.
 
