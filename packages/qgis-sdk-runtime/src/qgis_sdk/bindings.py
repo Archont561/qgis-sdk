@@ -13,11 +13,11 @@ trigger something*, and nothing else. The decorators stack in any order on an
     @menu("Plugins/Field tools")
     class BufferDialog(Dialog): ...
 
-They mark, never wrap (decision-10): the method stays the plain function it
-was and the class gains one attribute. Bindings are host metadata: they are
-not part of :func:`qgis_sdk.describe_plugin`, the bridge schema or the host
-fingerprint, so adding a toolbar button does not move the wire. Tests and
-``qgis-sdk check`` read them through :func:`describe_bindings`.
+They mark and add a ``describe()`` convenience without wrapping: the method
+stays the plain function it was. Bindings are host metadata and are omitted
+from the serialized bridge schema and host fingerprint, so adding a toolbar
+button does not move the wire. The unified :func:`qgis_sdk.describe` exposes
+them; :func:`describe_bindings` remains available for existing callers.
 
 What is refused, and how: a ``@job`` ("bind an ``@action`` that submits the
 job"), a ``@stream``, and - when the ``@plugin`` class is created - a plain
@@ -33,16 +33,19 @@ from __future__ import annotations
 import inspect
 import itertools
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Final, Literal, TypeVar
 
 from qgis_sdk.declarations import (
     BINDING_ORDER_ATTRIBUTE,
     BINDINGS_ATTRIBUTE,
+    PLUGIN_ATTRIBUTE,
     ActionDescription,
     QgisSdkDeclarationError,
+    attach_describe,
     bindings_of,
     describe_plugin,
+    register_describer_enricher,
 )
 from qgis_sdk.ui.surfaces import (
     SurfaceDescription,
@@ -243,6 +246,7 @@ def _bind(target: Any, binding: Binding, decorator: str) -> Any:
         raise QgisSdkDeclarationError(
             f"{decorator} binds an @action method or a Dialog/Dock subclass"
         )
+    attach_describe(target)
     existing = bindings_of(target)
     if not existing:
         setattr(target, BINDING_ORDER_ATTRIBUTE, next(_sequence))
@@ -311,3 +315,10 @@ def _listed_surfaces(cls: type) -> Sequence[type]:
                 f"{cls.__name__}.surfaces: {name} is not a Dialog/Dock subclass"
             )
     return tuple(listed)
+
+
+def _enrich_plugin_description(cls: type, description: Any) -> Any:
+    return replace(description, bindings=describe_bindings(cls))
+
+
+register_describer_enricher(PLUGIN_ATTRIBUTE, _enrich_plugin_description)

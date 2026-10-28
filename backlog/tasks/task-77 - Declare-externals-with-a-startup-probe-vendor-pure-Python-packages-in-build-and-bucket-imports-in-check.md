@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-27T18:59:00Z'
+updated_date: '2026-10-28 15:59'
 labels: []
 milestone: m-7
 dependencies:
@@ -32,4 +32,6 @@ decision-50. [tool.qgis-sdk.build] external accepts tables {import, requirement,
 
 <!-- SECTION:NOTES:BEGIN -->
 Re-scoped 2026-10-27 from m-6 (0.7.0) to m-7 (0.8.0): externals and pure-Python vendoring are a build feature with no UI-toolkit dependency; it blocks nothing in m-6 and nothing in m-6 blocks it, and 0.7.0 ships what is already qualified. Lands in m-7 as its own small pull request before the gate.
+
+Session follow-up: the owner requested an opt-in, end-user-approved dependency installation option. TASK-123 is a policy spike only; decision-50 remains in force and TASK-77 must not install packages unless a later decision explicitly revises that policy.
 <!-- SECTION:NOTES:END -->

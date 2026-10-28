@@ -17,7 +17,6 @@ code-free kit that installs [`qgis-sdk-runtime`](../qgis-sdk-runtime) and
 
 ```sh
 pip install qgis-sdk                            # runtime + tools
-pip install "qgis-sdk[controlled-deployment]"   # optional Pydantic adapter
 pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ```
 

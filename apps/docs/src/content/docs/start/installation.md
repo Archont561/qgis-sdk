@@ -23,8 +23,6 @@ With pip, into any environment:
 
 ```sh
 pip install qgis-sdk
-# with the optional Pydantic controlled-deployment adapter:
-pip install "qgis-sdk[controlled-deployment]"
 ```
 
 With Pixi, from the prefix.dev channel:

@@ -14,6 +14,9 @@ from qgis_sdk.declarations._contract import QgisSdkDeclarationError
 
 T = TypeVar("T")
 
+# Shared marker lets descriptions include UI wiring without importing UI.
+WIRES_ATTRIBUTE = "__qgis_sdk_wires__"
+
 
 @dataclass(frozen=True)
 class Metadata:
@@ -145,13 +148,45 @@ def function_metadata(function: Any, id: str | None, title: str | None) -> Metad
     return _declared_metadata(function, id, title, suffixed=True)
 
 
+def attach_describe(target: Any) -> None:
+    """Install a collision-safe convenience entry point without wrapping target."""
+    absent = object()
+    existing = inspect.getattr_static(target, "describe", absent)
+    underlying = existing.__func__ if isinstance(existing, classmethod) else existing
+    if getattr(underlying, "__qgis_sdk_describer__", False):
+        return
+    if existing is not absent:
+        raise QgisSdkDeclarationError(
+            f"{getattr(target, '__name__', target)!r} already defines 'describe'; "
+            "rename it to use the SDK's description method"
+        )
+    if inspect.isclass(target):
+
+        def describe_class(cls: type) -> Any:
+            from qgis_sdk.declarations import describe
+
+            return describe(cls)
+
+        describe_class.__qgis_sdk_describer__ = True  # type: ignore[attr-defined]
+        target.describe = classmethod(describe_class)
+    else:
+
+        def describe_function() -> Any:
+            from qgis_sdk.declarations import describe
+
+            return describe(target)
+
+        describe_function.__qgis_sdk_describer__ = True  # type: ignore[attr-defined]
+        target.describe = describe_function
+
+
 def mark_function(
     function: Any, attribute: str, declared: Metadata, decorator: str
 ) -> None:
     """Record ``declared`` on a plain function under ``attribute``.
 
-    The function is left otherwise untouched: not wrapped, not bound, no
-    attribute beyond the marker (decision-10 applied to functions). A class
+    The function is not wrapped or bound. It gains a convenience ``describe``
+    attribute alongside the marker; calls remain ordinary Python calls. A class
     is refused with the way forward, because ``@job`` used to take one.
     """
     if inspect.isclass(function):
@@ -166,6 +201,7 @@ def mark_function(
         raise QgisSdkDeclarationError(
             f"{declared.id}: duplicate {decorator} declaration"
         )
+    attach_describe(function)
     setattr(function, attribute, declared)
 
 
@@ -197,8 +233,8 @@ def method_metadata(method: Any, id: str | None, title: str | None) -> Metadata:
 def mark_class(cls: Any, attribute: str, declared: Metadata, decorator: str) -> None:
     """Record ``declared`` on ``cls`` under ``attribute`` - the one marker pattern.
 
-    The class is left otherwise untouched: no base class, no injected method
-    (decision-6, decision-10). A marker set on a parent is not the child's own
+    The class gains only the ``describe`` convenience method, not a base class
+    or wrapper. A marker set on a parent is not the child's own
     declaration, which is why every describer reads ``vars(cls)`` and not
     ``getattr``.
     """
@@ -208,6 +244,7 @@ def mark_class(cls: Any, attribute: str, declared: Metadata, decorator: str) -> 
         raise QgisSdkDeclarationError(
             f"{declared.id}: duplicate {decorator} declaration"
         )
+    attach_describe(cls)
     setattr(cls, attribute, declared)
 
 

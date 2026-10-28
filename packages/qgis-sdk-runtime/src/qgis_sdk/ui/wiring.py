@@ -1,8 +1,8 @@
 """``@on`` and ``@subscribe``: connect a surface's methods after ``build()``.
 
 decision-55 keeps decorators to marking: ``@on("distance").changed`` and
-``@subscribe("progress")`` attach a record to the method and nothing else,
-so the method stays a plain method a test calls directly with a fake
+``@subscribe("progress")`` attach a record and ``describe()`` to the method,
+without wrapping it, so a test calls it directly with a fake
 context. Once the host (or :func:`qgis_sdk.testing.build_surface`) has the
 built tree, :func:`wire_surface` reads the records, finds each named node
 - a catalogue component by ``name`` or a Qt widget by ``objectName`` in a
@@ -23,6 +23,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, TypeVar
 
+from qgis_sdk.declarations import (
+    WIRES_ATTRIBUTE,
+    attach_describe,
+    register_predicate_describer,
+)
 from qgis_sdk.models import QgisSdkUiError
 
 from .components import Component, Container
@@ -35,6 +40,7 @@ __all__ = [
     "WIRES_ATTRIBUTE",
     "OnMarker",
     "Wire",
+    "WiringDescription",
     "on",
     "subscribe",
     "wire_surface",
@@ -43,7 +49,6 @@ __all__ = [
 
 T = TypeVar("T", bound=Callable[..., Any])
 
-WIRES_ATTRIBUTE = "__qgis_sdk_wires__"
 
 #: The catalogue signals ``@on(name).<signal>`` accepts, each mapped to the
 #: component's subscription method.
@@ -108,6 +113,24 @@ class Wire:
         return _shown(self.target)
 
 
+@dataclass(frozen=True, slots=True)
+class WiringDescription:
+    """The UI and stream connections declared on a surface handler."""
+
+    handler: str
+    wires: tuple[Wire, ...]
+
+
+def _describe_wiring(method: Any) -> WiringDescription:
+    return WiringDescription(method.__name__, tuple(getattr(method, WIRES_ATTRIBUTE)))
+
+
+register_predicate_describer(
+    lambda value: inspect.isfunction(value) and WIRES_ATTRIBUTE in vars(value),
+    _describe_wiring,
+)
+
+
 def _shown(target: str | Component) -> str:
     if isinstance(target, str):
         return repr(target)
@@ -117,6 +140,7 @@ def _shown(target: str | Component) -> str:
 def _mark(method: T, wire: Wire) -> T:
     if not inspect.isfunction(method):
         raise QgisSdkUiError(f"@{wire.kind} marks an instance method")
+    attach_describe(method)
     wires = list(getattr(method, WIRES_ATTRIBUTE, ()))
     wires.append(wire)
     setattr(method, WIRES_ATTRIBUTE, tuple(wires))

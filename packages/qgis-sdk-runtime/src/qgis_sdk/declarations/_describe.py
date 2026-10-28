@@ -9,12 +9,11 @@ from typing import (
 from qgis_sdk.declarations._contract import QgisSdkDeclarationError
 from qgis_sdk.declarations._descriptions import (
     ActionDescription,
-    Description,
     PluginDescription,
     StreamDescription,
 )
-from qgis_sdk.declarations._metadata import Metadata, declared_metadata
-from qgis_sdk.declarations._plugin import PLUGIN_ATTRIBUTE, _StreamMetadata
+from qgis_sdk.declarations._metadata import WIRES_ATTRIBUTE, Metadata, declared_metadata
+from qgis_sdk.declarations._plugin import PLUGIN_ATTRIBUTE, _StreamMetadata, bindings_of
 from qgis_sdk.declarations._schemas import (
     _require_plain_method,
     _require_self_first,
@@ -43,6 +42,8 @@ def _describe_action(
         name,
         object_schema(properties, required),
         result,
+        bindings=bindings_of(method),
+        wires=tuple(vars(method).get(WIRES_ATTRIBUTE, ())),
     )
 
 
@@ -65,6 +66,7 @@ def _describe_stream(
         name,
         object_schema(properties, required),
         events,
+        wires=tuple(vars(method).get(WIRES_ATTRIBUTE, ())),
     )
 
 
@@ -73,12 +75,12 @@ def type_name(annotation: Any) -> str:
     return getattr(annotation, "__name__", str(annotation))
 
 
-_DESCRIBERS: dict[str, Callable[[type], Description]] = {}
+_DESCRIBERS: dict[str, Callable[[Any], Any]] = {}
+_PREDICATE_DESCRIBERS: list[tuple[Callable[[Any], bool], Callable[[Any], Any]]] = []
+_DESCRIBER_ENRICHERS: dict[str, Callable[[Any, Any], Any]] = {}
 
 
-def register_describer(
-    attribute: str, describer: Callable[[type], Description]
-) -> None:
+def register_describer(attribute: str, describer: Callable[[Any], Any]) -> None:
     """Teach :func:`describe` the marker a decorator sets and who reads it.
 
     Each decorating module registers itself when imported; a class can only
@@ -88,21 +90,48 @@ def register_describer(
     _DESCRIBERS[attribute] = describer
 
 
-def describe(cls: Any) -> Description:
-    """Describe whatever ``cls`` declares - a plugin class, a job or an algorithm.
+def register_predicate_describer(
+    predicate: Callable[[Any], bool], describer: Callable[[Any], Any]
+) -> None:
+    """Register an object-kind describer without importing higher layers."""
+    _PREDICATE_DESCRIBERS.append((predicate, describer))
 
-    The narrow forms (``describe_plugin`` and friends) return the concrete type;
-    this one answers for any decorated class or job function and returns the
-    protocol.
+
+def register_describer_enricher(
+    attribute: str, enricher: Callable[[Any, Any], Any]
+) -> None:
+    """Enrich unified introspection without changing a lower-layer wire schema."""
+    _DESCRIBER_ENRICHERS[attribute] = enricher
+
+
+def describe(cls: Any) -> Any:
+    """Describe a plugin, action, stream, job, algorithm, provider or UI surface.
+
+    A decorated UI handler describes its wires. Action and surface descriptions
+    expose stacked bindings; plugin descriptions expose their registered surfaces
+    and bindings through ``bindings``. These host metadata fields are not part
+    of bridge serialization. Description inspects trusted author code and may
+    resolve/evaluate type annotations; it never invokes the target handler.
     """
-    if not (inspect.isclass(cls) or inspect.isfunction(cls)):
-        raise QgisSdkDeclarationError("describe requires a class or a function")
-    for attribute, describer in _DESCRIBERS.items():
-        if attribute in vars(cls):
+    if inspect.ismethod(cls):
+        cls = cls.__func__
+    if inspect.isclass(cls) or inspect.isfunction(cls):
+        for attribute, describer in _DESCRIBERS.items():
+            if attribute in vars(cls):
+                result = describer(cls)
+                enrich = _DESCRIBER_ENRICHERS.get(attribute)
+                return enrich(cls, result) if enrich is not None else result
+    for predicate, describer in _PREDICATE_DESCRIBERS:
+        if predicate(cls):
             return describer(cls)
+    if not (inspect.isclass(cls) or inspect.isfunction(cls)):
+        raise QgisSdkDeclarationError(
+            "describe requires a class or a function, or a Provider"
+        )
     raise QgisSdkDeclarationError(
         "describe requires a class declared with @plugin, or a function "
-        "declared with @job or @provider.algorithm"
+        "declared with @job or @provider.algorithm; actions, streams, UI "
+        "surfaces and wired UI handlers are also supported"
     )
 
 
@@ -155,4 +184,14 @@ def describe_plugin(cls: type) -> PluginDescription:
     )
 
 
+def _describe_action_function(method: Any) -> ActionDescription:
+    return _describe_action(method.__name__, method, method.__qgis_sdk_action__)
+
+
+def _describe_stream_function(method: Any) -> StreamDescription:
+    return _describe_stream(method.__name__, method, method.__qgis_sdk_stream__)
+
+
 register_describer(PLUGIN_ATTRIBUTE, describe_plugin)
+register_describer("__qgis_sdk_action__", _describe_action_function)
+register_describer("__qgis_sdk_stream__", _describe_stream_function)

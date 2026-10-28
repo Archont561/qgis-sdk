@@ -67,6 +67,9 @@ try:
         report[f"{name}_started"] = bool(qgis.utils.startPlugin(name))
         held = qgis.utils.plugins[name]
         report[f"{name}_ping"] = held.runtime.actions["ping"](41) + 1
+        plugin_class = held.runtime._plugin_class
+        report[f"{name}_description"] = plugin_class.describe().id
+        report[f"{name}_action_description"] = plugin_class.ping.describe().id
         report[f"{name}_runtime_module"] = type(held.runtime).__module__
         report[f"{name}_mark"] = sys.modules[f"{name}._vendor.qgis_sdk"].VENDORED_MARK
     runtimes = [type(qgis.utils.plugins[n].runtime) for n in PLUGINS]
@@ -146,6 +149,8 @@ def test_two_built_plugins_load_from_their_own_vendored_runtimes(
         assert report[f"{name}_loaded"] is True
         assert report[f"{name}_started"] is True
         assert report[f"{name}_ping"] == 42
+        assert report[f"{name}_description"] == name
+        assert report[f"{name}_action_description"] == "ping"
         assert report[f"{name}_runtime_module"].startswith(
             f"{name}.{VENDOR_PACKAGE}.qgis_sdk."
         )

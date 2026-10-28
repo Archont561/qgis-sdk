@@ -40,7 +40,7 @@ Pixi keeps the toolchains separate:
 - `build`: Python packaging and test tools without QGIS.
 - `bun`: Bun and JavaScript workspace tooling, isolated from the Python environments.
 
-Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis, pytest-cov, and Pydantic 2.14.1 are pinned as PyPI wheels (matching the package `dev` extra); Pydantic is present in development only to exercise the opt-in adapter and is not a required package runtime dependency. The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk-runtime/src` and `packages/qgis-sdk-tools/src`.
+Python development dependencies, including pytest, Rich, and Typer, are pinned in the Pixi Python feature. Hypothesis and pytest-cov are pinned as PyPI wheels (matching the package `dev` extra). The workspace package is not an editable Pixi dependency so the sandbox publisher can pack wheels only; `PYTHONPATH` includes `packages/qgis-sdk-runtime/src` and `packages/qgis-sdk-tools/src`.
 
 ## Reproducible sandbox
 
@@ -169,9 +169,9 @@ pixi install -e build
 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests
 ```
 
-The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis, pytest-cov, and Pydantic 2.14.1 as wheels; Pydantic is needed only to test the optional adapter. The workspace packages are loaded from `packages/qgis-sdk-runtime/src` and `packages/qgis-sdk-tools/src` on `PYTHONPATH` rather than installed as Pixi path dependencies; `packages/qgis-sdk-python` is the code-free `qgis-sdk` kit that owns the shared test suite, the developer scripts and the three-output Conda recipe.
+The Python development dependencies are declared in this package's `dev` extra. Pixi pins its Python tools and installs Hypothesis and pytest-cov as wheels. The workspace packages are loaded from `packages/qgis-sdk-runtime/src` and `packages/qgis-sdk-tools/src` on `PYTHONPATH` rather than installed as Pixi path dependencies; `packages/qgis-sdk-python` is the code-free `qgis-sdk` kit that owns the shared test suite, the developer scripts and the three-output Conda recipe.
 
-The checked contract-generation examples live in `tests/contract_sample/` and are run via the workspace's `sdk:generate` package script; see [Contract generation (checked example)](#contract-generation-checked-example). Mashumaro remains a separate test-only schema-export example. The Pydantic example uses the optional adapter, emits its own request/reader/writer schemas, and is checked against the same Python/Ajv case corpus. Neither example is a general SDK generator or public operation.
+The checked contract-generation examples live in `tests/contract_sample/` and are run via the workspace's `sdk:generate` package script; see [Contract generation (checked example)](#contract-generation-checked-example). Mashumaro remains a test-only schema-export example, not a general SDK generator or public operation.
 
 ## Test layers
 
@@ -212,11 +212,9 @@ pixi run -e bun bun run coverage
 pixi run -e bun typecheck
 ```
 
-The `sdk:generate` package script keeps two schema examples separate. The test-only Mashumaro exporter uses ordinary dataclasses in `packages/qgis-sdk-python/tests/contract_sample/models.py`; the optional controlled-deployment exporter uses the adapter and fixtures in `packages/qgis-sdk-python/tests/contract_sample/pydantic_*`. Each emits request, result-reader, and result-writer Draft 2020-12 schemas. The bridge's locally installed `json2ts` (`json-schema-to-typescript==16.0.0`) generates checked-in TypeScript declarations under `packages/qgis-sdk-typescript/tests/contracts/`. No `npx`/`bunx` download is needed during generation. Python's test-only `jsonschema` oracle and bridge Ajv2020 tests check the same 40 cases against both schema sets with coercion and mutation disabled; generation drift and TypeScript required/nullable distinctions are checked in the normal suite.
+The test-only Mashumaro exporter uses ordinary dataclasses in `packages/qgis-sdk-python/tests/contract_sample/models.py` to emit request, result-reader and result-writer Draft 2020-12 schemas. The bridge's locally installed `json2ts` (`json-schema-to-typescript==16.0.0`) generates checked-in TypeScript declarations under `packages/qgis-sdk-typescript/tests/contracts/`. Python's test-only `jsonschema` oracle and bridge Ajv2020 tests check the case corpus without coercion or mutation; generation drift and TypeScript required/nullable distinctions are checked in the normal suite.
 
-`qgis_sdk.adapters.pydantic.PydanticContractAdapter` is a narrow optional prototype for controlled deployments: strict JSON request validation, typed handler dispatch, result serialization, and separate reader/writer schemas. `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` implements the agreed finite JavaScript-safe integer range while accepting integral JSON numbers such as `2.0`. Its safe structured errors expose paths and validator codes, not rejected values. Pydantic is not imported by the default SDK modules or included in the base runtime; an administrator or developer must explicitly provision the `qgis-sdk[controlled-deployment]` extra. No startup installer is provided. Pydantic's native core and the `jsonschema` oracle remain outside ordinary plugin runtime dependencies.
-
-These examples are **not** public SDK operations, a general SDK generator, or usable standalone frontend validators, and Pydantic is not selected as a mandatory production backend. The default Mashumaro decoder still coerces values and drops unknown fields, so it must not be used as the strict request boundary. Broader constraint/union support, WebEngine CSP-safe validators, and version/compatibility handshakes still need implementation. Windows/QGIS installation coexistence, Desktop/WebEngine behavior, and Conda/package delivery remain unqualified before any product-level native-runtime decision.
+This example is **not** a public SDK operation, a general SDK generator, or a standalone frontend validator. The default Mashumaro decoder still coerces values and drops unknown fields, so it must not be used as the strict request boundary. The former Pydantic prototype and its separate schema example are retired (decision-67).
 
 ## Build artifacts
 
@@ -311,12 +309,10 @@ The support promise itself is one machine-readable source, `qgis_sdk_tools.targe
 
 | Requirement | Linux (`linux-64`) | macOS (`macos-latest` arm64) | Windows (`windows-latest` x86-64) |
 | :-- | :-- | :-- | :-- |
-| QGIS-free Python SDK + `PydanticContractAdapter` (`pydantic==2.14.1`) | Qualified (CPython 3.14.8 & 3.11.2) | Qualified in CI (`pip`, CPython 3.14) | Qualified in CI (`pip`, CPython 3.14) |
 | TypeScript bridge (`packages/qgis-sdk-typescript`) | Qualified (Bun 1.4.2, 95 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 95 tests) | Qualified in CI (Bun 1.4.2, 95 tests) |
 | QGIS with Python bindings | Qualified (Pixi `default`, QGIS 4.2.3) | Blocker: no macOS QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) | Blocker: no Windows QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) |
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
-| Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`, `plugin_coexistence_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
-| Two-plugin `pydantic` / `pydantic_core` coexistence in QGIS Desktop | Qualified on Linux (`plugin_coexistence_smoke.py`, TASK-33 AC #3) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
+| Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
 | QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Display-server Desktop GUI + in-Desktop `QWebEngineView` rendering | Blocker: no display server or `Xvfb` in sandbox/CI (`offscreen` renders no widgets, TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) |
 | Chromium sandbox | Disabled by headless flags above | N/A | N/A |
@@ -371,8 +367,7 @@ a small fixture plugin whose `__init__.py` is the one line `qgis-sdk build` stag
 `context_factory`, installs it into a clean throwaway profile, and lets the **QGIS
 Desktop application's own plugin manager** load, start and unload it. The fixture
 belongs to this harness rather than to the scaffolded project, so the host contract
-is proven without depending on the scaffold; `scripts/plugin_coexistence_smoke.py`
-binds its SDK plugin the same way.
+is proven without depending on the scaffold.
 
 ```sh
 pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smoke.py
@@ -486,16 +481,10 @@ certificate authority.
 
 ### Optional native-runtime plugin coexistence (TASK-33 AC #3)
 
-QGIS plugins share one embedded Python interpreter and `sys.modules` table inside the
-Desktop process. `scripts/plugin_coexistence_smoke.py` proves that an SDK plugin using
-`qgis_sdk.adapters.pydantic.PydanticContractAdapter` (`pydantic==2.14.1` and its native
-`pydantic_core` extension) coexists cleanly with a pre-existing non-SDK plugin that
-already imports and validates with Pydantic:
-
-```sh
-pixi run -e default python packages/qgis-sdk-python/scripts/plugin_coexistence_smoke.py
-QGIS_SDK_PLUGIN_COEXISTENCE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_coexistence.py
-```
+**Historical evidence only:** the Pydantic-specific SDK adapter and its
+coexistence harness have been removed. The following report records a past test
+of 0.7.0-era code and does not qualify a current SDK adapter or general
+third-party package compatibility in QGIS.
 
 ```json
 {
@@ -522,12 +511,12 @@ QGIS_SDK_PLUGIN_COEXISTENCE=1 pixi run -e default pytest -c packages/qgis-sdk-py
 }
 ```
 
-The harness installs both plugins into a clean throwaway profile, loads and starts the
-neighbor plugin first so `pydantic` and `pydantic_core._pydantic_core` are already in
-`sys.modules`, loads and starts the SDK plugin alongside it, confirms both share the
-identical native module objects, exercises strict request validation and rejection in
-`PydanticContractAdapter` while the neighbor also validates payloads, and verifies that
-unloading the SDK plugin closes its `ResourceScope` while leaving the neighbor plugin
+The retired harness installed both plugins into a clean throwaway profile, loaded and started the
+neighbor plugin first so `pydantic` and `pydantic_core._pydantic_core` were already in
+`sys.modules`, loaded and started the SDK plugin alongside it, confirmed both shared the
+identical native module objects, exercised strict request validation and rejection in
+`PydanticContractAdapter` while the neighbor also validated payloads, and verified that
+unloading the SDK plugin closed its `ResourceScope` while leaving the neighbor plugin
 loaded and functional.
 
 ### Load and unload evidence for the scaffolded project

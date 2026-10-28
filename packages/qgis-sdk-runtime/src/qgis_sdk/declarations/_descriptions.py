@@ -1,7 +1,7 @@
 """Description objects: what a described plugin, action or stream serialises to."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import (
     Any,
     Protocol,
@@ -58,10 +58,21 @@ class ActionDescription:
     handler: str
     request: dict[str, Any]
     result: dict[str, Any]
+    # UI bindings are introspection metadata, not part of the bridge contract.
+    bindings: tuple[Any, ...] = field(default=(), repr=False, compare=False)
+    wires: tuple[Any, ...] = field(default=(), repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return an independent JSON-compatible value."""
-        return _json_copy(vars(self))
+        """Return the unchanged bridge representation (without UI bindings)."""
+        return _json_copy(
+            {
+                "id": self.id,
+                "title": self.title,
+                "handler": self.handler,
+                "request": self.request,
+                "result": self.result,
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -78,10 +89,19 @@ class StreamDescription:
     handler: str
     request: dict[str, Any]
     events: dict[str, dict[str, Any]]
+    wires: tuple[Any, ...] = field(default=(), repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
-        """Return an independent JSON-compatible value."""
-        return _json_copy(vars(self))
+        """Return the unchanged stream wire representation."""
+        return _json_copy(
+            {
+                "id": self.id,
+                "title": self.title,
+                "handler": self.handler,
+                "request": self.request,
+                "events": self.events,
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -93,6 +113,8 @@ class PluginDescription:
     actions: tuple[ActionDescription, ...]
     schema_version: int = PLUGIN_DESCRIPTION_SCHEMA_VERSION
     streams: tuple[StreamDescription, ...] = ()
+    # Unified introspection may attach host bindings without altering the wire.
+    bindings: Any = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the transport representation."""

@@ -4,6 +4,10 @@ title: Separate models services core and runtime adapters
 date: '2026-10-16 07:43'
 status: accepted
 ---
+> **Amended:** [decision-66](decision-66%20-%20Unify-declaration-introspection-with-describe-and-declaration-methods.md) adds a collision-safe `.describe()` convenience to decorated targets, while preserving plain, unwrapped author calls.
+
+> **Amended:** [decision-67](decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md) retires the optional Pydantic adapter and `controlled-deployment` extras for a future Python minor release. Historical descriptions below reflect the original decision.
+
 ## Context
 
 The SDK needs clear responsibilities for plugin declarations, context capabilities, execution, QGIS integration, and optional web UI. Authors should not need Plugin inheritance or PyQGIS plumbing for ordinary workflows. The existing package is a scaffold; this is a proposed architecture, not an implemented API.

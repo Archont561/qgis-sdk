@@ -4,6 +4,8 @@ title: Run offloaded job steps as QgsTasks under QgsTaskManager and keep the ste
 date: '2026-10-26'
 status: accepted
 ---
+> **0.9.0 planning:** The step-offload execution model below is amended for planned 0.9.0 whole-job worker execution by [decision-65](decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md). The text below records the earlier decision and implementation.
+
 ## Context
 
 The owner wants jobs scheduled through QGIS's task manager. Today a `@job`

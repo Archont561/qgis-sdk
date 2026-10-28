@@ -31,13 +31,16 @@ a binding (:mod:`qgis_sdk.bindings`) or ``ctx.ui.open(Surface)``.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal
 
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
+    attach_describe,
+    bindings_of,
     derive_id,
     derive_title,
+    register_predicate_describer,
     validate_given,
 )
 from qgis_sdk.models import QgisSdkUiError
@@ -117,6 +120,9 @@ class Surface:
         """Hook the behaviour mixins chain through after ``build()``."""
 
 
+attach_describe(Surface)
+
+
 class Dialog(Surface):
     """A window opened fresh every time: by a binding or by ``ctx.ui.open``."""
 
@@ -156,6 +162,7 @@ class SurfaceDescription:
     kind: SurfaceKind
     area: str | None
     modal: bool
+    bindings: tuple[Any, ...] = field(default=(), repr=False, compare=False)
 
 
 def load_ui(cls: type, parent: Any = None) -> Any:
@@ -236,7 +243,7 @@ def describe_surface(cls: type) -> SurfaceDescription:
     else:
         area = None
         modal = bool(getattr(cls, "modal", False))
-    return SurfaceDescription(surface_id, title, kind, area, modal)
+    return SurfaceDescription(surface_id, title, kind, area, modal, bindings_of(cls))
 
 
 def _inherited(cls: type, attribute: str) -> str | None:
@@ -248,3 +255,6 @@ def _inherited(cls: type, attribute: str) -> str | None:
         if value is not None:
             return value
     return None
+
+
+register_predicate_describer(is_surface_class, describe_surface)

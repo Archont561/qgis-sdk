@@ -7,6 +7,8 @@ created_date: '2026-10-16 14:05'
 
 # TASK-12 — archived backend evidence and direct-generator review
 
+> **Later amendment:** [decision-67](../../decisions/decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md) retires the Pydantic adapter, extras and their tests. References below to the former prototype and its qualification describe historical observations, not current support.
+
 **Status (2026-10-16):** No production validation or TypeScript generation backend has been selected. At the user's request, the entire experimental `packages/qgis-sdk-python/tests/spikes/` tree (DTO fixtures, Python tests, JSON Schema snapshots, JS harness, and its test-only dependency manifests) was removed from the checkout. The old apischema/TypeAdapter and direct-generator observations below remain **historical results**, not checks a fresh checkout can rerun. A separate, durable **test-only** mashumaro → JSON Schema → `json2ts`/Ajv contract example was subsequently added (see below); its development dependencies are now pinned in the Pixi/Bun locks, but no candidate was added to SDK **runtime** dependencies. The QGIS-free `ResourceScope` Hypothesis and BDD tests also remain in the normal test suite.
 
 ## The SDK requirements
@@ -491,12 +493,15 @@ Environment: Linux x86_64, Pixi `default` environment Python **3.14.8**, QGIS
 | :-- | :-- |
 | apischema 0.19.0 vs Pydantic TypeAdapter 2.14.1 comparison, 25-case corpus, Ajv 8.20.0 parity, `json-schema-to-typescript` 16.0.0 generation | **Historical.** The harness was removed on 2026-10-16 at the user's request; reproducing it means rebuilding the harness, not running a test. |
 | Direct Python-to-TS generator assessment (three projects) | **Historical** install/probe observations; none of the tools is installed or locked. |
-| Pydantic binary-wheel build/install probe and PyQGIS co-import smoke | **Historical**, and now superseded for environment purposes: Pydantic comes from the Pixi pins. |
+| Pydantic binary-wheel build/install probe and PyQGIS co-import smoke | **Historical**; Pydantic is no longer a Pixi dependency. |
 | Durable mashumaro → JSON Schema → `json2ts`/Ajv sample: 40 shared cases, schema/type drift checks, Hypothesis serialization, BDD | **Reproducible:** `tests/contract_sample/`, `tests/test_contract_*.py`, bridge `contracts.test.ts`. |
-| Durable Pydantic slice: strict request validation, typed handler dispatch, result serialization, `SafeJsonInteger` bounds, missing/unqualified-dependency errors, BDD/Hypothesis, generated-schema/Ajv parity | **Reproducible:** `tests/test_pydantic_*.py`, `tests/contract_sample/pydantic_*`, bridge Pydantic schema/type tests. |
+| Durable Pydantic slice: strict request validation, typed handler dispatch, result serialization, `SafeJsonInteger` bounds, missing/unqualified-dependency errors, BDD/Hypothesis, generated-schema/Ajv parity | **Historical**; the adapter, fixtures and tests were removed by decision-67. |
 | QGIS Desktop lifecycle, WebEngine, Windows/macOS, clean-prefix plugin coexistence, Conda delivery | **Not performed.** Still open (see below). |
 
 ### Outcome recorded by the spike
+
+The original outcome below is historical; decision-67 later retired the optional
+Pydantic candidate and its extra.
 
 Pure-Python-first ordinary plugin distribution ([ADR-3](../../decisions/decision-3%20-%20Development-and-distribution-artifacts-are-separate.md))
 is unchanged, and **no mandatory runtime backend is selected**. Pydantic

@@ -1,10 +1,4 @@
-"""One writer and one CLI shape, shared by both contract examples.
-
-How a schema is named, serialised and line-ended is a single representation here:
-the mashumaro and Pydantic examples export the same bytes for the same reason, and
-the determinism tests compare those bytes directly. A second copy of the writer is
-what lets one example drift while the checked-in schemas still look fine.
-"""
+"""Write the checked contract example's schemas deterministically."""
 
 import argparse
 import json

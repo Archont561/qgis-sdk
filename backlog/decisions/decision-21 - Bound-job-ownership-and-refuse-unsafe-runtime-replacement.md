@@ -4,6 +4,8 @@ title: Bound job ownership and refuse unsafe runtime replacement
 date: '2026-10-16 09:05'
 status: accepted
 ---
+> **0.9.0 planning:** The ownership and cooperative-cancellation principles remain in force; planned 0.9.0 dispatch and worker delivery are clarified by [decision-65](decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md). The text below records the earlier decision and implementation.
+
 ## Context
 
 Jobs outlive individual callbacks, cancellation is cooperative, and deleting old runtime resources while code still runs is unsafe. The initial reference slice does not need automatic retry orchestration.

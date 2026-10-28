@@ -8,14 +8,12 @@
   <a href="https://github.com/Archont561/qgis-sdk/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
 </p>
 
-**A Python-first foundation for QGIS plugins: plain classes in, a loadable
-plugin out - with a typed TypeScript SDK and web components for interfaces
-hosted in `QWebEngineView`.**
+**The next-generation SDK for effortless QGIS plugin authoring.**
 
-Declare a plugin on plain Python classes; the SDK derives the plugin
-description, the native windows, the Processing algorithms, the bridge
-allowlist and the typed page-side client from those same declarations. The
-pure layers import without QGIS or Qt, so a plugin is testable from source.
+Build QGIS plugins in Python with less boilerplate: declare actions once, test
+plugin logic without QGIS, and use the same actions in native and web
+interfaces. Generate typed TypeScript clients, run your plugin from source,
+and build an installable ZIP with its own private SDK runtime.
 
 > Status: experimental `0.x` - Python kit `0.7.0`, TypeScript SDK `0.5.0`,
 > web components `0.1.0`, released together as the 0.7.0 triple. Every `0.Y.0` carries
