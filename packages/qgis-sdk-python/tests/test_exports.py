@@ -70,6 +70,23 @@ def test_run_export_removes_the_staging_directory_on_failure(tmp_path: Path) -> 
     assert list(tmp_path.iterdir()) == []
 
 
+def test_publish_without_overwrite_fails_closed_when_hard_links_are_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "out.geojson"
+    plan = exports.plan_export(destination, overwrite=False)
+
+    def refuse_link(*args: object) -> None:
+        raise OSError("hard links unavailable")
+
+    monkeypatch.setattr(exports.os, "link", refuse_link)
+    with pytest.raises(QgisSdkExportFailedError, match="hard links unavailable"):
+        exports.run_export(plan, lambda partial: partial.write_text("{}"))
+
+    assert not destination.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_a_writer_that_produces_nothing_is_a_failure(tmp_path: Path) -> None:
     plan = exports.plan_export(tmp_path / "out.geojson", overwrite=False)
 

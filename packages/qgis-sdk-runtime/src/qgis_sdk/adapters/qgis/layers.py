@@ -13,6 +13,7 @@ from pathlib import Path
 from qgis.core import (
     Qgis,
     QgsCoordinateTransformContext,
+    QgsProviderRegistry,
     QgsVectorFileWriter,
     QgsVectorLayer,
 )
@@ -33,6 +34,9 @@ GEOMETRY_TYPES: dict[int, GeometryType] = {
     Qgis.GeometryType.Polygon: "polygon",
 }
 NO_GEOMETRY: GeometryType = "none"
+# These OGR drivers have a directly identifiable local dataset. Indirect
+# providers (notably VRT) can refer to other files and must fail closed.
+_LOCAL_SOURCE_DRIVERS = frozenset({"GeoJSON", "GPKG", "ESRI Shapefile"})
 
 __all__ = ["NativeLayers"]
 
@@ -48,6 +52,7 @@ class NativeLayers:
     def __init__(self, scope: ResourceScope) -> None:
         self._scope = scope
         self._layers: dict[str, QgsVectorLayer] = {}
+        self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
         scope.on_close(self._release)
 
     def open_vector(self, source: Path) -> VectorLayerInfo:
@@ -57,6 +62,7 @@ class NativeLayers:
         if not layer.isValid():
             raise QgisSdkLayerNotFoundError(str(source))
         self._layers[layer.id()] = layer
+        self._export_sources[layer.id()] = _capture_source(layer)
         return _describe(layer)
 
     def list_layers(self) -> tuple[VectorLayerInfo, ...]:
@@ -79,13 +85,14 @@ class NativeLayers:
     ) -> VectorExport:
         """Write the layer with ``QgsVectorFileWriter`` under the shared policy.
 
-        The writer targets the staged path :func:`qgis_sdk.export_policy.run_export`
-        hands it, so a GeoPackage journal or a half-written file never appears
-        at the destination; the commit is the policy's single rename.
+        The writer targets a staged path, so a GeoPackage journal or a
+        half-written file never appears at the destination. The shared policy
+        checks the source before writing and immediately before committing.
         """
         self._scope.ensure_open()
         layer = self._require(layer_id)
         plan = export_policy.plan_export(destination, overwrite=overwrite)
+        plan = export_policy.protect_source(plan, self._export_sources[layer_id])
         options = QgsVectorFileWriter.SaveVectorOptions()
         options.driverName = plan.driver
         options.fileEncoding = "UTF-8"
@@ -121,6 +128,34 @@ class NativeLayers:
     def _release(self) -> None:
         """Drop this runtime's references; the scope closes exactly once."""
         self._layers.clear()
+        self._export_sources.clear()
+
+
+def _capture_source(layer: QgsVectorLayer) -> export_policy.SourceIdentity | None:
+    """Identify only qualified direct local datasets; leave others unexportable."""
+    try:
+        provider = layer.dataProvider()
+        if (
+            layer.providerType() != "ogr"
+            or provider.storageType() not in _LOCAL_SOURCE_DRIVERS
+        ):
+            return None
+        decoded = QgsProviderRegistry.instance().decodeUri(
+            layer.providerType(), layer.source()
+        )
+        path = decoded.get("path")
+        if (
+            not isinstance(path, str)
+            or not path
+            or "://" in path
+            or decoded.get("vsiPrefix")
+        ):
+            return None
+        return export_policy.capture_source(Path(path))
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+        # A source that cannot be decoded remains readable, but cannot be
+        # exported because its physical dataset cannot be protected safely.
+        return None
 
 
 def _describe(layer: QgsVectorLayer) -> VectorLayerInfo:

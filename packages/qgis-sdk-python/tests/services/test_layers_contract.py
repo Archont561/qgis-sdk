@@ -77,6 +77,18 @@ def test_selection_of_an_unknown_layer_is_refused(services: Services) -> None:
 # --- explicit export (decision-19: permanent results are an explicit act) ---
 
 
+def _register_fake_source(services: Services, source: Path) -> None:
+    register = getattr(services.layers, "register", None)
+    if register is not None:
+        register(
+            source,
+            name="source",
+            geometry_type=conftest.FIXTURE_GEOMETRY,
+            field_names=conftest.FIXTURE_FIELDS,
+            crs=conftest.FIXTURE_CRS,
+        )
+
+
 def test_export_writes_the_named_destination_and_describes_it(
     services: Services, tmp_path: Path
 ) -> None:
@@ -112,6 +124,326 @@ def test_export_leaves_the_source_dataset_untouched(
     services.layers.export_vector(info.id, tmp_path / "exported.geojson")
 
     assert services.dataset.read_bytes() == before
+
+
+@pytest.mark.parametrize("relative_destination", [False, True])
+def test_export_refuses_to_replace_its_source_even_with_overwrite(
+    services: Services,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative_destination: bool,
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    original = source.read_bytes()
+    inode = source.stat().st_ino
+    monkeypatch.chdir(tmp_path)
+    destination = Path(source.name) if relative_destination else source
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, destination, overwrite=True)
+
+    assert source.read_bytes() == original
+    assert source.stat().st_ino == inode
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["source.geojson"]
+
+
+def test_export_from_a_stable_source_symlink_to_an_unrelated_destination(
+    services: Services, tmp_path: Path
+) -> None:
+    dataset = tmp_path / "dataset.geojson"
+    dataset.write_bytes(services.dataset.read_bytes())
+    source = tmp_path / "source.geojson"
+    try:
+        source.symlink_to(dataset)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"symbolic links unavailable: {error}")
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    original = dataset.read_bytes()
+    destination = tmp_path / "output.geojson"
+
+    result = services.layers.export_vector(info.id, destination)
+
+    assert Path(result.path) == destination
+    assert destination.is_file()
+    assert dataset.read_bytes() == original
+    assert source.is_symlink()
+
+
+def test_export_refuses_a_retargeted_source_symlink(
+    services: Services, tmp_path: Path
+) -> None:
+    first = tmp_path / "first.geojson"
+    second = tmp_path / "second.geojson"
+    first.write_bytes(services.dataset.read_bytes())
+    second.write_bytes(services.dataset.read_bytes())
+    source = tmp_path / "source.geojson"
+    try:
+        source.symlink_to(first)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"symbolic links unavailable: {error}")
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    source.unlink()
+    source.symlink_to(second)
+    before = second.read_bytes()
+    inode = second.stat().st_ino
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, second, overwrite=True)
+
+    assert second.read_bytes() == before
+    assert second.stat().st_ino == inode
+    assert source.is_symlink()
+
+
+def test_export_rechecks_a_retargeted_source_symlink_before_commit(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first.geojson"
+    second = tmp_path / "second.geojson"
+    first.write_bytes(services.dataset.read_bytes())
+    second.write_bytes(services.dataset.read_bytes())
+    source = tmp_path / "source.geojson"
+    try:
+        source.symlink_to(first)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"symbolic links unavailable: {error}")
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    before = second.read_bytes()
+    inode = second.stat().st_ino
+    run_export = exports.run_export
+
+    def retarget_during_write(plan: exports.ExportPlan, write: object) -> None:
+        def write_then_retarget(partial: Path) -> None:
+            partial.write_text("new contents", encoding="utf-8")
+            source.unlink()
+            source.symlink_to(second)
+
+        run_export(plan, write_then_retarget)
+
+    monkeypatch.setattr(exports, "run_export", retarget_during_write)
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, second, overwrite=True)
+
+    assert second.read_bytes() == before
+    assert second.stat().st_ino == inode
+    assert source.is_symlink()
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "first.geojson",
+        "second.geojson",
+        "source.geojson",
+    ]
+
+
+def test_export_refuses_a_hard_link_to_its_source(
+    services: Services, tmp_path: Path
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    alias = tmp_path / "alias.geojson"
+    alias.hardlink_to(source)
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    original = source.read_bytes()
+    inode = source.stat().st_ino
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, alias, overwrite=True)
+
+    assert source.read_bytes() == alias.read_bytes() == original
+    assert source.stat().st_ino == alias.stat().st_ino == inode
+
+
+def test_export_refuses_when_the_opened_source_cannot_be_verified(
+    services: Services, tmp_path: Path
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    source.unlink()
+    destination = tmp_path / "output.geojson"
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, destination)
+
+    assert not destination.exists()
+    assert not list(tmp_path.iterdir())
+
+
+def test_export_refuses_when_the_source_file_was_replaced(
+    services: Services, tmp_path: Path
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    replacement = tmp_path / "replacement.geojson"
+    replacement.write_bytes(services.dataset.read_bytes())
+    replacement.replace(source)
+    destination = tmp_path / "output.geojson"
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, destination)
+
+    assert not destination.exists()
+
+
+def test_export_remembers_a_relative_source_after_working_directory_changes(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    monkeypatch.chdir(tmp_path)
+    _register_fake_source(services, Path("source.geojson"))
+    info = services.layers.open_vector(Path("source.geojson"))
+    monkeypatch.chdir(tmp_path.parent)
+    before = source.read_bytes()
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, source, overwrite=True)
+
+    assert source.read_bytes() == before
+
+
+def test_export_refuses_when_a_relative_source_resolves_to_a_different_file(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    for directory in (first, second):
+        (directory / "source.geojson").write_bytes(services.dataset.read_bytes())
+    monkeypatch.chdir(first)
+    source = Path("source.geojson")
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    monkeypatch.chdir(second)
+    destination = second / source
+    before = destination.read_bytes()
+    inode = destination.stat().st_ino
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, destination, overwrite=True)
+
+    assert destination.read_bytes() == before
+    assert destination.stat().st_ino == inode
+
+
+def test_export_rechecks_source_alias_before_committing(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    destination = tmp_path / "output.geojson"
+    original = source.read_bytes()
+    run_export = exports.run_export
+
+    def create_alias_during_write(plan: exports.ExportPlan, write: object) -> None:
+        def write_then_alias(partial: Path) -> None:
+            partial.write_text("new contents", encoding="utf-8")
+            destination.hardlink_to(source)
+
+        run_export(plan, write_then_alias)
+
+    monkeypatch.setattr(exports, "run_export", create_alias_during_write)
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, destination, overwrite=True)
+
+    assert destination.samefile(source)
+    assert source.read_bytes() == original
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "output.geojson",
+        "source.geojson",
+    ]
+
+
+def test_export_refuses_to_replace_a_geopackage_container(
+    services: Services, tmp_path: Path
+) -> None:
+    source = tmp_path / "source.gpkg"
+    original_layer = services.layers.open_vector(services.dataset)
+    services.layers.export_vector(original_layer.id, source)
+    register = getattr(services.layers, "register", None)
+    if register is not None:
+        layer_name = "source"
+    else:
+        import sqlite3
+
+        with sqlite3.connect(source) as db:
+            layer_name = db.execute("SELECT table_name FROM gpkg_contents").fetchone()[
+                0
+            ]
+    uri = Path(f"{source}|layername={layer_name}")
+    if register is not None:
+        register(
+            uri,
+            name="source",
+            geometry_type=conftest.FIXTURE_GEOMETRY,
+            field_names=conftest.FIXTURE_FIELDS,
+            crs=conftest.FIXTURE_CRS,
+            dataset_path=source,
+        )
+    info = services.layers.open_vector(uri)
+    before = source.read_bytes()
+    inode = source.stat().st_ino
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, source, overwrite=True)
+
+    assert source.read_bytes() == before
+    assert source.stat().st_ino == inode
+
+
+def test_export_refuses_a_symbolic_link_to_its_source(
+    services: Services, tmp_path: Path
+) -> None:
+    source = tmp_path / "source.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    alias = tmp_path / "alias.geojson"
+    try:
+        alias.symlink_to(source)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"symbolic links unavailable: {error}")
+    _register_fake_source(services, source)
+    info = services.layers.open_vector(source)
+    original = source.read_bytes()
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, alias, overwrite=True)
+
+    assert alias.is_symlink()
+    assert source.read_bytes() == original
+
+
+def test_export_does_not_overwrite_a_file_created_during_writing(
+    services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    info = services.layers.open_vector(services.dataset)
+    destination = tmp_path / "output.geojson"
+    run_export = exports.run_export
+
+    def create_destination(plan: exports.ExportPlan, write: object) -> None:
+        def write_then_create(partial: Path) -> None:
+            partial.write_text("new export", encoding="utf-8")
+            destination.write_text("created by another process", encoding="utf-8")
+
+        run_export(plan, write_then_create)
+
+    monkeypatch.setattr(exports, "run_export", create_destination)
+    with pytest.raises(QgisSdkExportRefusedError, match="overwrite"):
+        services.layers.export_vector(info.id, destination)
+
+    assert destination.read_text(encoding="utf-8") == "created by another process"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["output.geojson"]
 
 
 def test_export_refuses_an_existing_destination_without_overwrite(

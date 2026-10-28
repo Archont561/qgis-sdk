@@ -43,7 +43,16 @@ class Layers(Protocol):
         format follows its suffix (``.geojson`` or ``.gpkg``), an existing file
         is replaced only with ``overwrite=True``, and a failure leaves no
         partial output - the policy in :mod:`qgis_sdk.exports`. Raises
-        ``QgisSdkExportRefusedError`` before writing and
-        ``QgisSdkExportFailedError`` after a writer failure.
+        ``QgisSdkExportRefusedError`` if the destination aliases the source,
+        the source cannot be verified, or overwrite was not granted; a staged
+        export is checked again before commit. Native verification currently
+        supports direct local GeoJSON, GeoPackage and ESRI Shapefile datasets;
+        indirect and unverified providers are refused. Retargeted source
+        symlinks or relative paths that resolve differently are also refused;
+        reopen the layer using the intended source before exporting. Publishing
+        without overwrite needs hard-link support on the destination filesystem.
+        Concurrent external filesystem changes between the last check and
+        commit are not excluded; callers must keep source and paths stable.
+        Writer or commit failures raise ``QgisSdkExportFailedError``.
         """
         ...

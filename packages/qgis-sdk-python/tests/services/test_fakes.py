@@ -11,7 +11,11 @@ from pathlib import Path
 
 import pytest
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.models import QgisSdkLayerNotFoundError, QgisSdkStyleIncompatibleError
+from qgis_sdk.models import (
+    QgisSdkExportRefusedError,
+    QgisSdkLayerNotFoundError,
+    QgisSdkStyleIncompatibleError,
+)
 from qgis_sdk.testing import (
     FakeLayers,
     FakeSettings,
@@ -29,6 +33,26 @@ def _opened_layer(layers: FakeLayers) -> str:
         field_names=("id", "value"),
     )
     return layers.open_vector(source).id
+
+
+def test_export_refuses_when_a_virtual_source_becomes_a_real_file(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.geojson"
+    alias = tmp_path / "alias.geojson"
+    layers = FakeLayers(ResourceScope())
+    layers.register(source, name="source", geometry_type="point", field_names=())
+    info = layers.open_vector(source)
+    source.write_text("original", encoding="utf-8")
+    alias.hardlink_to(source)
+    inode = source.stat().st_ino
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        layers.export_vector(info.id, alias, overwrite=True)
+
+    assert source.read_text(encoding="utf-8") == "original"
+    assert alias.samefile(source)
+    assert source.stat().st_ino == inode
 
 
 def test_recorded_notifications_are_readable_in_order() -> None:

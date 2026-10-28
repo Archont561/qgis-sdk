@@ -417,6 +417,29 @@ A runtime that is not running refuses with `the plugin is not running
 (state new)`. Nothing here kills a thread or closes a scope: the host
 decides whether to `unload()`.
 
+### Exporting a layer safely
+
+`ctx.layers.export_vector(layer_id, destination, overwrite=False)` writes a
+GeoJSON or GeoPackage export. It refuses the source dataset itself, including
+relative paths, symbolic links, hard links and the containing GeoPackage, even
+when `overwrite=True`. If the source is missing, changed or cannot be identified,
+the export is refused. The native adapter currently verifies direct local OGR
+GeoJSON, GeoPackage and ESRI Shapefile sources; indirect sources such as VRT and
+other unverified providers are refused rather than guessed. Opening those sources
+is unchanged. Choose a verified local source before exporting. If a source
+symlink is retargeted or a relative source resolves differently after the working
+directory changes, reopen the intended dataset (preferably by absolute path)
+before exporting.
+
+The output is staged beside the destination and the source identity is checked
+again before commit. With no overwrite permission, publication requires
+filesystem hard-link support and atomically refuses an output created during the
+write. With `overwrite=True`, a different existing file may be replaced. Keep
+source and destination paths stable during an export: the checks cannot prevent
+another process changing the filesystem between the final check and commit.
+These guarantees apply to `Layers.export_vector`, not arbitrary Processing output
+destinations (see the separate Processing safety limitations).
+
 ## Desktop host: `host()` and the project manifest
 
 Since 0.6.0 a plugin project carries no `metadata.txt`, no `classFactory`

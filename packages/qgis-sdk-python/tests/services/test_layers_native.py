@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import conftest
 import pytest
-from qgis_sdk.models import BufferRequest
+from qgis_sdk.models import BufferRequest, QgisSdkExportRefusedError
 
 pytestmark = pytest.mark.qgis
 
@@ -44,6 +44,61 @@ def test_the_export_reopens_with_every_feature_and_the_source_crs(
     assert set(reopened.field_names) >= set(info.field_names)
     assert _feature_count(destination) == _feature_count(native_services.dataset)
     assert sorted(p.name for p in tmp_path.iterdir()) == [destination.name]
+
+
+@pytest.mark.parametrize("destination_is_source", [True, False])
+def test_a_virtual_dataset_with_an_indirect_source_is_refused(
+    native_services: Services, tmp_path: Path, destination_is_source: bool
+) -> None:
+    source = tmp_path / "points.geojson"
+    source.write_bytes(native_services.dataset.read_bytes())
+    vrt = tmp_path / "virtual.vrt"
+    vrt.write_text(
+        '<OGRVRTDataSource><OGRVRTLayer name="points">'
+        '<SrcDataSource relativeToVRT="1">points.geojson</SrcDataSource>'
+        "</OGRVRTLayer></OGRVRTDataSource>",
+        encoding="utf-8",
+    )
+    info = native_services.layers.open_vector(vrt)
+    original = source.read_bytes()
+    inode = source.stat().st_ino
+
+    destination = source if destination_is_source else tmp_path / "other.geojson"
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        native_services.layers.export_vector(info.id, destination, overwrite=True)
+
+    assert source.read_bytes() == original
+    assert source.stat().st_ino == inode
+    if not destination_is_source:
+        assert not destination.exists()
+
+
+def test_a_local_shapefile_can_be_exported_without_changing_its_files(
+    native_services: Services, tmp_path: Path
+) -> None:
+    from qgis.core import (
+        QgsCoordinateTransformContext,
+        QgsVectorFileWriter,
+        QgsVectorLayer,
+    )
+
+    fixture = QgsVectorLayer(str(native_services.dataset), "source", "ogr")
+    options = QgsVectorFileWriter.SaveVectorOptions()
+    options.driverName = "ESRI Shapefile"
+    source = tmp_path / "source.shp"
+    error, *_ = QgsVectorFileWriter.writeAsVectorFormatV3(
+        fixture, str(source), QgsCoordinateTransformContext(), options
+    )
+    assert error == QgsVectorFileWriter.WriterError.NoError
+    before = {path.name: path.read_bytes() for path in tmp_path.glob("source.*")}
+    info = native_services.layers.open_vector(source)
+
+    result = native_services.layers.export_vector(info.id, tmp_path / "export.geojson")
+
+    assert Path(result.path).is_file()
+    assert {
+        path.name: path.read_bytes() for path in tmp_path.glob("source.*")
+    } == before
 
 
 def test_a_processing_output_can_be_exported(
