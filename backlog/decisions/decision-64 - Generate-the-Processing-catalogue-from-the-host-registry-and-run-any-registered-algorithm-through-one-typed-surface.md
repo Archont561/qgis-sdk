@@ -67,6 +67,18 @@ source for the catalogue, and it is only readable inside QGIS.
    snapshot; `run` answers from outputs the test scripted and records the
    call, exactly like the bridge harness.
 
+## Safety correction (TASK-119, unreleased)
+
+Point 1's original claims that every provider is non-destructive and that all
+writes can be removed on failure were too broad: Processing providers execute
+trusted code and can modify inputs or write outside SDK-owned directories.
+Named destinations now fail closed except for one new local GeoJSON or
+GeoPackage vector output, staged and published without overwriting. Existing
+files and unsupported named outputs are refused; omitted outputs remain
+SDK-allocated. Cleanup of SDK-owned directories is best-effort. A provider's
+other side effects are outside the SDK's control. This changes named-destination
+compatibility; see the Python guide's unreleased migration notes.
+
 ## Consequences
 
 - Any installed provider is reachable the day it is installed; typing for it

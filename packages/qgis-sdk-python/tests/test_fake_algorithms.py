@@ -21,6 +21,7 @@ from qgis_sdk.models import (
     ProviderInfo,
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmNotFoundError,
+    QgisSdkAlgorithmRejectedError,
     QgisSdkScopeClosedError,
 )
 from qgis_sdk.processing import native
@@ -39,6 +40,52 @@ def world():
     layers.register(LINES, name="lines", geometry_type="line", field_names=("id",))
     files = FakeFiles(scope)
     return scope, layers, files, FakeAlgorithms(layers, scope, files=files)
+
+
+@pytest.mark.parametrize(
+    "parameters,params",
+    [
+        ((ParameterInfo(name="../../outside", kind="sink"),), {}),
+        ((ParameterInfo(name="OUTPUT", kind="sink", extension="../../evil"),), {}),
+        ((ParameterInfo(name="CON", kind="sink"),), {}),
+        (
+            (
+                ParameterInfo(name="OUT", kind="sink"),
+                ParameterInfo(name="out", kind="sink"),
+            ),
+            {},
+        ),
+        (
+            (
+                ParameterInfo(name="A", kind="sink"),
+                ParameterInfo(name="B", kind="sink"),
+            ),
+            {"A": "first.gpkg", "B": "second.gpkg"},
+        ),
+    ],
+)
+def test_unsafe_provider_destinations_are_refused_before_running(
+    world, parameters, params
+) -> None:
+    scope, layers, _, _ = world
+    info = AlgorithmInfo(
+        id="test:unsafe",
+        provider="test",
+        name="unsafe",
+        label="Unsafe",
+        parameters=parameters,
+    )
+    algorithms = FakeAlgorithms(
+        layers, scope, catalogue=Catalogue(qgis_version="x", algorithms=(info,))
+    )
+    called = []
+    algorithms.script_run("test:unsafe", lambda run: called.append(run) or {})
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError):
+        algorithms.run("test:unsafe", params)
+
+    assert called == []
+    assert algorithms.runs == []
 
 
 def test_list_and_describe_read_the_shipped_snapshot(world) -> None:
@@ -104,6 +151,23 @@ def test_runs_are_recorded_and_answered_in_script_order(world) -> None:
     assert (
         algorithms.runs == [AlgorithmRun("native:centroids", {"INPUT": points.id})] * 3
     )
+
+
+def test_a_fake_accepts_a_new_named_output_but_does_not_write_it(
+    world, tmp_path: Path
+) -> None:
+    _, layers, _, algorithms = world
+    points = layers.open_vector(POINTS)
+    algorithms.script_run("native:centroids", {"OUTPUT": LINES})
+    destination = tmp_path / "output.geojson"
+
+    result = algorithms.run(
+        "native:centroids", {"INPUT": points.id, "OUTPUT": str(destination)}
+    )
+
+    assert result.vector("OUTPUT").name == "lines"
+    assert not destination.exists()
+    assert algorithms.runs[-1].params["OUTPUT"] == str(destination)
 
 
 def test_a_callable_script_sees_the_run(world) -> None:
