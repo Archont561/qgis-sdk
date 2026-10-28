@@ -4,6 +4,8 @@ title: Use runtime bound Celery inspired local jobs
 date: '2026-10-16 08:05'
 status: accepted
 ---
+> **0.9.0 planning:** Submission and synchronous late replay are amended for the planned 0.9.0 worker-first named registry by [decision-65](decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md). The text below records the earlier decision and implementation.
+
 ## Context
 
 Long-running downloads/imports/computation need typed results, progress, retries and ownership. Celery provides familiar submission ergonomics, but a QGIS plugin is not automatically a distributed worker.

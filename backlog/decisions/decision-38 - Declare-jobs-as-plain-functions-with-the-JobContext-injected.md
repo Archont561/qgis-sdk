@@ -4,6 +4,8 @@ title: Declare jobs as plain functions with the JobContext injected
 date: '2026-10-25 22:30'
 status: accepted
 ---
+> **0.9.0 planning:** The submission and context described here are amended for the planned 0.9.0 worker-first named registry by [decision-65](decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md). The text below records the earlier decision and implementation.
+
 ## Context
 
 [decision-13](decision-13%20-%20Use-runtime-bound-Celery-inspired-local-jobs.md)

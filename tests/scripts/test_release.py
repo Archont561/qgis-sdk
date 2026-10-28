@@ -78,8 +78,6 @@ ALIAS_PACKAGE_JSON = (
 KIT_PYPROJECT = (
     '[project]\nname = "qgis-sdk"\nversion = "0.1.0"\n'
     'dependencies = [\n  "qgis-sdk-runtime==0.1.0",\n  "qgis-sdk-tools==0.1.0",\n]\n\n'
-    "[project.optional-dependencies]\n"
-    'controlled-deployment = ["qgis-sdk-runtime[controlled-deployment]==0.1.0"]\n'
 )
 RUNTIME_PYPROJECT = '[project]\nname = "qgis-sdk-runtime"\nversion = "0.1.0"\n'
 TOOLS_PYPROJECT = (
@@ -1542,7 +1540,6 @@ def test_stamp_pins_the_kit_to_the_runtime_and_the_tools_it_releases_with(
     kit = files["pyproject"].read_text()
     assert '"qgis-sdk-runtime==0.5.0"' in kit
     assert '"qgis-sdk-tools==0.5.0"' in kit
-    assert '"qgis-sdk-runtime[controlled-deployment]==0.5.0"' in kit
     assert "0.1.0" not in kit
 
 
@@ -1595,7 +1592,6 @@ def test_read_kit_pins_and_tools_range_round_trip():
     assert release_module.read_kit_pins(KIT_PYPROJECT) == (
         ("qgis-sdk-runtime", Version.parse("0.1.0")),
         ("qgis-sdk-tools", Version.parse("0.1.0")),
-        ("qgis-sdk-runtime[controlled-deployment]", Version.parse("0.1.0")),
     )
     assert release_module.read_tools_runtime_range(TOOLS_PYPROJECT) == (
         Version.parse("0.1.0"),
@@ -1755,7 +1751,6 @@ def test_verify_versions_reports_the_tools_runtime_range(tmp_path, monkeypatch, 
         "tools pyproject.toml",
         "kit pin qgis-sdk-runtime",
         "kit pin qgis-sdk-tools",
-        "kit pin qgis-sdk-runtime[controlled-deployment]",
         "recipe.yaml",
         "recipe runtime_version",
         "recipe tools_version",

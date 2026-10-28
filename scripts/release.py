@@ -1623,7 +1623,6 @@ _TOOLS_MANIFESTS = ("tools pyproject.toml", "recipe tools_version")
 _KIT_PIN_MANIFESTS = (
     "kit pin qgis-sdk-runtime",
     "kit pin qgis-sdk-tools",
-    "kit pin qgis-sdk-runtime[controlled-deployment]",
 )
 # A `python-v*` release stamps the whole kit at one version.
 _PYTHON_MANIFESTS = (

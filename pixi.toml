@@ -19,10 +19,9 @@ hatchling = "==1.32.4"
 hypothesis = "==6.169.4"
 pytest-cov = "==7.1.0"
 pytest-bdd = "==9.0.0"
-# Test-only contract export/oracle plus the optional controlled-deployment adapter.
+# Test-only contract export and schema oracle.
 mashumaro = "==3.23"
 jsonschema = "==4.26.0"
-pydantic = "==2.14.1"
 
 [feature.python.activation.env]
 # Absolute, so a task or a `qgis-sdk test` subprocess that runs in another

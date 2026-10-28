@@ -88,7 +88,7 @@ def job(
 
     ``@job`` alone derives the id and title from the function name, the way
     ``@plugin`` does for a class; ``id=`` and ``title=`` override either one.
-    Nothing is injected at decoration time: the runtime passes the context
+    The decorator adds ``describe()`` but does not wrap the function; the runtime passes the context
     when it runs the attempt, so a test calls the function directly with a
     fake. ``async def`` is allowed and suspends on the scheduler at each
     ``await``.

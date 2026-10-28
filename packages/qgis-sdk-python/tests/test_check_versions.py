@@ -165,8 +165,7 @@ def test_the_kit_and_extras_and_dependency_groups_count_as_runtime_pins(
     (root / "pyproject.toml").write_text(
         BASE.replace(
             AUTHORS,
-            AUTHORS
-            + 'dependencies = ["qgis-sdk[controlled-deployment]==0.3.0", "typer"]\n'
+            AUTHORS + 'dependencies = ["qgis-sdk[example-extra]==0.3.0", "typer"]\n'
             "[project.optional-dependencies]\n"
             'dev = ["qgis-sdk-runtime>=0.4,<0.5"]\n'
             "[dependency-groups]\n"
@@ -179,7 +178,7 @@ def test_the_kit_and_extras_and_dependency_groups_count_as_runtime_pins(
 
     messages = [d.message for d in report.diagnostics if d.rule == "VERSION001"]
     assert len(messages) == 2
-    assert any("qgis-sdk[controlled-deployment]==0.3.0" in m for m in messages)
+    assert any("qgis-sdk[example-extra]==0.3.0" in m for m in messages)
     assert any("qgis-sdk-runtime>=0.4,<0.5" in m for m in messages)
 
 

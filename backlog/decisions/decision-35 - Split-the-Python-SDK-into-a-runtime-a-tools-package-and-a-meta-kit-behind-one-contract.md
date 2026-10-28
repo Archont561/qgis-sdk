@@ -4,6 +4,8 @@ title: Split the Python SDK into a runtime, a tools package and a meta kit behin
 date: '2026-10-25 15:10'
 status: accepted
 ---
+> **Amended:** [decision-67](decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md) retires the optional Pydantic adapter and `controlled-deployment` extras for a future Python minor release. Historical descriptions below reflect the original decision.
+
 ## Context
 
 `qgis-sdk` is one wheel holding two things with opposite lifecycles. The code

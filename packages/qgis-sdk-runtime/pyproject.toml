@@ -15,8 +15,5 @@ authors = [{ name = "QGIS SDK contributors" }]
 # here would have to be vendored too.
 dependencies = []
 
-[project.optional-dependencies]
-controlled-deployment = ["pydantic==2.14.1"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/qgis_sdk"]

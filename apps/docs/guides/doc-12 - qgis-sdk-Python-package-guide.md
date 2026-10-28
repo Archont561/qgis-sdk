@@ -29,8 +29,6 @@ Install from [PyPI](https://pypi.org/project/qgis-sdk/) or from the [`prefix.dev
 
 ```sh
 pip install qgis-sdk
-# or with the optional Pydantic controlled-deployment adapter:
-pip install "qgis-sdk[controlled-deployment]"
 # or in a Pixi workspace via the prefix.dev Conda channel:
 pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ```
@@ -102,7 +100,7 @@ Declare structure on plain classes; keep behavior in ordinary instance methods:
 ```python
 from dataclasses import dataclass
 
-from qgis_sdk import action, describe_plugin, plugin
+from qgis_sdk import action, describe, plugin
 
 
 @dataclass
@@ -118,12 +116,13 @@ class Tools:
         return request.count
 
 
-description = describe_plugin(Tools)
+description = describe(Tools)  # also Tools.describe()
 print(description.to_json())
 ```
 
-`plugin` and `action` attach metadata and return their original targets. No base
-class, constructor rewrite, host imports or runtime registration is required.
+`plugin` and `action` attach metadata and a `describe()` convenience method,
+then return their original targets. No base class, constructor rewrite, host
+imports or runtime registration is required.
 
 ### Ids and titles default from the name
 
@@ -172,12 +171,32 @@ Python code only**, not untrusted modules. Put DTOs in module scope so postponed
 annotations resolve normally; function-local forward-reference names are not
 reconstructed from vanished local scopes.
 
-`describe_algorithm` and `describe_job` follow the same rules, and
-`qgis_sdk.declarations.describe(target)` picks the right one from the
-decorator marker when a tool does not know which kind it holds. All four
-descriptions share the `Description` protocol, so one `to_json()` canonical form
-(sorted keys, compact separators, no NaN) feeds the bridge generator's
-fingerprint and every CLI dump.
+Use the same helper for plugins, actions, streams, algorithms, jobs, providers,
+surfaces and UI handlers. Decorated targets also have `.describe()`:
+
+```python
+from qgis_sdk import describe
+
+plugin_info = describe(Tools)               # also Tools.describe()
+action_info = describe(Tools.run)           # also Tools.run.describe()
+# describe(buffer) or buffer.describe() for a @provider.algorithm function
+print(plugin_info.bindings)                  # registered surfaces and bindings
+print(action_info.bindings)                  # stacked toolbar/menu/shortcut
+```
+
+The descriptions remain kind-specific: actions carry `request` and `result`,
+algorithms have `qualified_id` and `kinds`, and UI handlers expose `wires`.
+The existing narrow `describe_plugin`, `describe_algorithm` and `describe_job`
+remain available. Plugin, algorithm, job and provider descriptions implement
+`Description` with canonical `to_json()`. UI bindings and handler wires are
+**local introspection metadata**; they do not appear in the plugin bridge's
+`to_dict()`/`to_json()` output and do not change its fingerprint. Standalone
+surface and wiring descriptions are not bridge documents.
+
+Adding `.describe()` reserves that name on decorated classes and functions.
+An existing author-defined `describe` is not overwritten: decoration fails
+with a migration message. Type checkers may not infer the dynamically added
+method; `describe(target)` is always available without a dynamic attribute.
 
 ### Version 1 description contract
 
@@ -237,10 +256,8 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin`, and the shared describer surface the other declaration layers build on: `describe(target)` dispatches on the `@plugin`/`@job`/`@provider.algorithm` marker, and every description (`PluginDescription`, `AlgorithmDescription`, `JobDescription`, `ProviderDescription`) satisfies the `Description` protocol (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorators attach metadata without wrapping the class |
+| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin` and the shared `describe(target)` dispatcher; plugin, algorithm, job and provider descriptions satisfy `Description` (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorated targets gain `describe()` without wrapping |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
-| `adapters.pydantic` | Optional controlled-deployment adapter; Pydantic is imported only when the adapter is constructed |
-| `adapters.pydantic_types` | Explicit Pydantic field annotation for finite JavaScript-safe integers |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
@@ -318,7 +335,7 @@ The package root exports nothing beyond the declarations API, which is what `tes
 import qgis_sdk
 
 print(qgis_sdk.__all__)
-# ['ActionDescription', 'PluginDescription', 'QgisSdkDeclarationError', 'action', 'describe_plugin', 'plugin']
+# Includes 'describe', 'action', 'plugin', 'toolbar', 'menu' and 'shortcut'.
 ```
 
 Importing the package with native modules forbidden is the real wiring check, so a placeholder API is no longer needed to prove it.
@@ -596,8 +613,11 @@ file name under the package's `icons/` directory, resolved through
 `qgis_sdk.resources.icon_path`. `describe_bindings(cls)` is the pure view:
 `entries` lists the registered surfaces (in `surfaces` order) then the bound
 actions, each with its `bindings`; `typed_without_surface` names bound actions
-that take inputs. `describe_plugin` output and `HOST_FINGERPRINT` do not
-change: bindings are placement, not contract.
+that take inputs. The unified `describe(cls).bindings` exposes the same view,
+and `describe(cls.action).bindings` describes a single action. Binding decorators
+on a function need an `@action` declaration before the function can be described;
+they can be stacked in either order. Serialized plugin output and
+`HOST_FINGERPRINT` do not change: bindings are placement, not contract.
 
 **The trigger rule.** A placed action for a *surface* opens it. A placed
 action for an *action* calls the handler with no arguments; an action that
@@ -732,7 +752,7 @@ surface shows); import the one you mean, or alias.
 A surface's methods are connected to its widgets *after* `build()` and
 disconnected when the window goes, by the host under QGIS and by
 `build_surface` under the fake (decision-55 point 2). Nothing is connected
-by hand and nothing is wrapped: the decorators only mark the method, so a
+by hand and nothing is wrapped: the decorators mark the method and add `describe()`, so a
 test calls it directly.
 
 ```python
@@ -1067,7 +1087,7 @@ styles the output before presenting it. A context without the service a call
 needs refuses by name (`QgisSdkUnsupportedCapabilityError("algorithms")`)
 before anything runs.
 
-Nothing is injected at decoration time, so a unit test needs no runner: call
+No execution context is injected at decoration time, so a unit test needs no runner: call
 `buffer(fake_context, layer_id=..., distance=..., crs=...)` with an
 `AlgorithmContext` built over the `qgis_sdk.testing` fakes.
 
@@ -1542,7 +1562,7 @@ handle.on_failure(lambda error: label.setText(str(error)))
 handle.on_cancelled(lambda: label.setText("cancelled"))
 ```
 
-The decorator injects nothing: `add` stays the function you wrote, so a unit
+The decorator adds `describe()` but does not wrap `add`, so a unit
 test calls `add(fake_context, left=1, right=2)` directly. A bare `@job`
 derives the id and title from the function name the way `@plugin` does for a
 class; `async def` is allowed and suspends on the scheduler at every `await`,
@@ -2043,9 +2063,20 @@ a test passes `qgis_sdk_tools.testing.FakeCliRuntime(cwd=..., env=...)` as
 
 ## Optional controlled-deployment adapter
 
-`qgis_sdk.adapters.pydantic.PydanticContractAdapter` provides a narrow JSON-request → strict validation → typed handler → result-serialization slice for deployments that explicitly provision Pydantic. Models use standard-library dataclasses with Pydantic configuration; `qgis_sdk.adapters.pydantic_types.SafeJsonInteger` provides the agreed finite ±9007199254740991 wire bound, which both it and the schema generator take from the one `qgis_sdk.models.MAX_SAFE_INTEGER` constant while accepting integral JSON numbers such as `2.0`. Request, result-reader, and result-writer schemas remain distinct. Validation errors expose structured field paths and validator codes without copying rejected input values.
+**Unreleased breaking change:** the optional Pydantic adapter and the
+`controlled-deployment` extras are retired in the next Python minor release.
+The last published `0.7.0` packages still contain them. Remove imports of
+`qgis_sdk.adapters.pydantic` and `qgis_sdk.adapters.pydantic_types` and remove
+the extra from installation requirements. No drop-in replacement is provided
+for `PydanticContractAdapter` or `SafeJsonInteger`: migrate to supported SDK
+declarations and their validation where applicable, or explicitly implement,
+provision and test your own Pydantic integration. SDK contract integer limits
+remain available as `qgis_sdk.models.MAX_SAFE_INTEGER`.
 
-Pydantic **is not a base runtime dependency**. The explicit `controlled-deployment` extra pins `pydantic==2.14.1` (which installs native `pydantic-core`); administrators/developers provision it in their managed environment. The SDK never downloads or installs it at startup, and ordinary QGIS-free imports work without it. The adapter is a prototype, not a mandatory production backend selection. Current persistent tests exercise Linux with CPython 3.14.8 (which carries PyQGIS in the workspace), the QGIS-free suite on CPython 3.11.2 (the minimum supported version), and GitHub Actions `macos-latest` (`arm64`) and `windows-latest` (`x86_64`) on CPython 3.14 (`pip install -e "packages/qgis-sdk-python[dev]"`). In-process coexistence with another Pydantic-using plugin inside the real QGIS 4.2.3 Desktop application is proven on Linux by `scripts/plugin_coexistence_smoke.py`; Windows/macOS QGIS installations, display-server Desktop/WebEngine rendering, and Conda delivery remain explicit qualification gates.
+This does not prevent a plugin from using a separately provisioned Pydantic
+package; it removes the SDK's adapter and dependency extra. Historical release
+and qualification records below describe the old release, not current support.
+See [decision-67](../../../backlog/decisions/decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md).
 
 ## 0.1.0 experimental release and migration policy
 
@@ -2079,7 +2110,7 @@ Pydantic **is not a base runtime dependency**. The explicit `controlled-deployme
   `PluginDescription`, `QgisSdkDeclarationError`, `action`, `describe_plugin`,
   `plugin`), plus the explicit submodules `qgis_sdk.models`, `qgis_sdk.services`,
   `qgis_sdk.core`, `qgis_sdk.adapters.desktop`, `qgis_sdk.adapters.webengine`,
-  `qgis_sdk.adapters.pydantic`, `qgis_sdk.adapters.pydantic_types`, and
+  the then-optional Pydantic modules (retired in the next Python minor), and
   `qgis_sdk.scaffold` (`qgis-sdk new` CLI, spelled `scaffold` until 0.3.0). All packages and the repository root
   are licensed under MIT (`LICENSE`).
 
@@ -2498,9 +2529,8 @@ release ([doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and
   `qgis_sdk_tools` from `qgis-sdk-tools`; the kit has no code. No two wheels
   write the same top-level directory, so the three coexist in one
   environment and `pip check` is clean.
-- **The `controlled-deployment` extra** lives on the runtime
-  (`qgis-sdk-runtime[controlled-deployment]`); `qgis-sdk[controlled-deployment]`
-  still works and forwards to it.
+- **Historical extra.** The `controlled-deployment` extra shipped in 0.5.0;
+  it is retired in the next Python minor release (see above).
 - **Versions.** Until the contract freeze the three release together under
   the `python` scope at one version (`python-vX` publishes three wheels and
   three Conda outputs); `runtime-vX` and `tools-vX` tags exist for a release

@@ -18,6 +18,8 @@ type: enhancement
 ordinal: 49000
 ---
 
+> **Later amendment:** [decision-66](../decisions/decision-66%20-%20Unify-declaration-introspection-with-describe-and-declaration-methods.md) adds `.describe()` to decorated targets. This task records the original no-method constraint; bridge serialization and narrow helpers remain compatible.
+
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->

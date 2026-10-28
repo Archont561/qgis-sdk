@@ -4,6 +4,10 @@ title: Use dataclass authoring and schema driven TypeScript generation
 date: '2026-10-16 07:43'
 status: accepted
 ---
+> **Amended:** [decision-66](decision-66%20-%20Unify-declaration-introspection-with-describe-and-declaration-methods.md) adds a collision-safe `.describe()` convenience to decorated targets, while preserving plain, unwrapped author calls.
+
+> **Amended:** [decision-67](decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md) retires the optional Pydantic adapter and `controlled-deployment` extras for a future Python minor release. Historical descriptions below reflect the original decision.
+
 ## Context
 
 Authors want ordinary dataclasses and familiar Python typing rather than mandatory model inheritance or parallel hand-maintained TS interfaces. Static interfaces alone do not validate messages at runtime. Native validator dependencies also affect QGIS plugin ABI/platform packaging.

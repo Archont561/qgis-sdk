@@ -40,48 +40,16 @@ function declarationPath(name: ContractName): string {
 	);
 }
 
-function pydanticSchemaPath(name: ContractName): string {
-	return fileURLToPath(
-		new URL(
-			`pydantic/generated/schemas/pydantic-${name}.schema.json`,
-			contractsDir,
-		),
-	);
-}
-
-function pydanticDeclarationPath(name: ContractName): string {
-	return fileURLToPath(
-		new URL(
-			`pydantic/generated/types/pydantic-${name}.schema.d.ts`,
-			contractsDir,
-		),
-	);
-}
-
 const validators = Object.fromEntries(
 	contractNames.map((name) => [
 		name,
 		ajv.compile(JSON.parse(readFileSync(schemaPath(name), "utf8"))),
 	]),
 );
-const pydanticValidators = Object.fromEntries(
-	contractNames.map((name) => [
-		name,
-		ajv.compile(JSON.parse(readFileSync(pydanticSchemaPath(name), "utf8"))),
-	]),
-);
 
 for (const sample of cases) {
 	test(sample.name, () => {
 		const validate = validators[sample.schema];
-		expect(validate).toBeDefined();
-		const value = structuredClone(sample.value);
-		expect(validate(value)).toBe(sample.valid);
-		expect(value).toEqual(sample.value);
-	});
-
-	test(`Pydantic schema: ${sample.name}`, () => {
-		const validate = pydanticValidators[sample.schema];
 		expect(validate).toBeDefined();
 		const value = structuredClone(sample.value);
 		expect(validate(value)).toBe(sample.valid);
@@ -96,31 +64,10 @@ test("only the declared TypeScript bindings are checked in", () => {
 	);
 });
 
-test("only the declared Pydantic schemas and bindings are checked in", () => {
-	const schemasDir = fileURLToPath(
-		new URL("pydantic/generated/schemas/", contractsDir),
-	);
-	const typesDir = fileURLToPath(
-		new URL("pydantic/generated/types/", contractsDir),
-	);
-	expect(readdirSync(schemasDir).sort()).toEqual(
-		contractNames.map((name) => `pydantic-${name}.schema.json`).sort(),
-	);
-	expect(readdirSync(typesDir).sort()).toEqual(
-		contractNames.map((name) => `pydantic-${name}.schema.d.ts`).sort(),
-	);
-});
-
 for (const name of contractNames) {
 	test(`${name} TypeScript declaration matches its JSON Schema`, async () => {
 		const generated = await compileFromFile(schemaPath(name));
 		const checkedIn = readFileSync(declarationPath(name), "utf8");
-		expect(checkedIn).toBe(generated);
-	});
-
-	test(`Pydantic ${name} TypeScript declaration matches its JSON Schema`, async () => {
-		const generated = await compileFromFile(pydanticSchemaPath(name));
-		const checkedIn = readFileSync(pydanticDeclarationPath(name), "utf8");
 		expect(checkedIn).toBe(generated);
 	});
 }

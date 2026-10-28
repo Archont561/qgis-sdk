@@ -11,6 +11,7 @@ from qgis_sdk.declarations._contract import STREAM_EVENT_KINDS, QgisSdkDeclarati
 from qgis_sdk.declarations._metadata import (
     Metadata,
     T,
+    attach_describe,
     declare_class,
     method_metadata,
     validate_given,
@@ -109,6 +110,7 @@ def action(
             raise QgisSdkDeclarationError("@action requires an instance method")
         declared = method_metadata(method, id, title)
         _require_undeclared(method, declared.id, "@action")
+        attach_describe(method)
         method.__qgis_sdk_action__ = declared
         return method
 
@@ -158,6 +160,7 @@ def stream(
         declared = method_metadata(method, id, title)
         _require_undeclared(method, declared.id, "@stream")
         refuse_bindings(method, "@stream")
+        attach_describe(method)
         method.__qgis_sdk_stream__ = _StreamMetadata(
             declared.id, declared.title, dict(events)
         )

@@ -9,6 +9,8 @@ from qgis_sdk.declarations._describe import (
     describe,
     describe_plugin,
     register_describer,
+    register_describer_enricher,
+    register_predicate_describer,
     type_name,
 )
 from qgis_sdk.declarations._descriptions import (
@@ -19,8 +21,10 @@ from qgis_sdk.declarations._descriptions import (
     canonical_json,
 )
 from qgis_sdk.declarations._metadata import (
+    WIRES_ATTRIBUTE,
     Metadata,
     T,
+    attach_describe,
     class_decorator,
     class_metadata,
     declare_class,
@@ -64,6 +68,7 @@ __all__ = [
     "PLUGIN_ATTRIBUTE",
     "PLUGIN_DESCRIPTION_SCHEMA_VERSION",
     "STREAM_EVENT_KINDS",
+    "WIRES_ATTRIBUTE",
     "WIRE_KIND_KEYWORD",
     "WIRE_SCHEMA_ATTRIBUTE",
     "WIRE_VALUE_METHOD",
@@ -75,6 +80,7 @@ __all__ = [
     "StreamDescription",
     "T",
     "action",
+    "attach_describe",
     "bindings_of",
     "canonical_json",
     "check_field_parents",
@@ -97,6 +103,8 @@ __all__ = [
     "plugin",
     "refuse_bindings",
     "register_describer",
+    "register_describer_enricher",
+    "register_predicate_describer",
     "resolve_hints",
     "resolve_kind",
     "schema_for",

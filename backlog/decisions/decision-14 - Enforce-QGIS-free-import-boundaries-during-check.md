@@ -4,6 +4,8 @@ title: Enforce QGIS free import boundaries during check
 date: '2026-10-16 08:05'
 status: accepted
 ---
+> **Amended:** [decision-67](decision-67%20-%20Retire-the-optional-Pydantic-controlled-deployment-adapter.md) retires the optional Pydantic adapter and `controlled-deployment` extras for a future Python minor release. Historical descriptions below reflect the original decision.
+
 ## Context
 
 Pure declaration inspection and logic tests must run without QGIS. Deferring an import changes when it executes, not whether a runtime can resolve it.

@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-28 16:24'
 labels: []
 milestone: m-11
 dependencies:
@@ -27,3 +28,9 @@ decision-62. doc-26 (specification): principals, assets, trust boundaries, one t
 - [ ] #2 check --security prints the effective matrix for the example plugin and SEC001 fires on a fixture with an unused grant (pure tests).
 - [ ] #3 SECURITY.md is at the root and linked from the README within decision-29's shape; decisions 23, 27, 48, 49, 51, 52, 54, 55 carry a status review pointing at doc-26.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ecosystem research: TASK-132 evaluates a discoverable check rule catalog and other QGIS diagnostics; coordinate with this security scope without broadening it implicitly.
+<!-- SECTION:NOTES:END -->

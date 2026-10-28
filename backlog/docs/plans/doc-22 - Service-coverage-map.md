@@ -9,7 +9,14 @@ created_date: '2026-10-26 10:20'
 **Status:** Source of truth for "what is mapped" ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md) point 5). Updated
 in the same change as any service work; a `tests/scripts` check that every
 host operation appears here lands with [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md). An area not listed is out of
-scope by decision, not by omission.
+scope by decision, not by omission; explicitly marked proposals below still
+require a decision before being added to the committed service scope.
+
+**Safety warning:** the existing vector export and generic Processing entries
+below have known data-safety gaps: [TASK-118](../../tasks/task-118%20-%20Prevent-layer-exports-from-replacing-their-source-dataset.md)
+and [TASK-119](../../tasks/task-119%20-%20Enforce-honest-Processing-output-safety-for-explicit-destinations.md).
+Their presence in the matrix records implemented components, not proof that
+their documented non-destructive guarantees hold in every case.
 
 Legend — contract: Protocol in `services/`; models: plain models, no native
 handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
@@ -28,7 +35,7 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Processing (any provider, 0.7.0) | `algorithms.providers/list/describe/run`, generated `qgis_sdk.processing.*` | ✓ | `AlgorithmInfo`, `AlgorithmRun`, `RunResult` | ✓ (snapshot + `script_run`) | ✓ | `algorithms.providers/list/describe/run` | `algorithms.read`, `algorithms.run` | complete ([TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md), decision-64); models and batch in TASK-94 |
 | Network | get/post/request, blocking + async, limits | ✓ | ✓ | ✓ | ✓ | `network.fetch` stream | ✓ | complete |
 | Notifications | `info` | ✓ | — | ✓ | ✓ | `notifications.info` | ✓ | levels in 0.7.0 (TASK-68) |
-| Workers / jobs | `offload`, `@job` | ✓ | — | ✓ | `QThreadPool` → `QgsTaskManager` (TASK-82) | n/a | n/a | complete; adapter changes in 0.9.0 |
+| Workers / jobs | `offload`, `@job` | ✓ | — | ✓ | `QThreadPool` → `QgsTaskManager` (TASK-82) | n/a | n/a | existing step model; worker-first named jobs and lint planned for 0.9.0 (TASK-115–117; decision-65) |
 | Desktop | `desktop.iface` (opaque) | ✓ | — | ✓ | ✓ | never | n/a | escape hatch by design |
 
 ## Planned
@@ -49,6 +56,18 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Log | `ctx.log` debug/info/warning/error, correlation ids, agent log stream (decision-63) | [TASK-106](../../tasks/task-106%20-%20Add-ctx.log-crash-capture-into-it-the-Report-a-problem-surface-and-qgis-sdk-diagnose-with-no-telemetry.md) (minimum in [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md)) | 1.0.0 | planned |
 | i18n | `qgis.host.i18n` locale and strings (decision-60) | [TASK-103](../../tasks/task-103%20-%20Add-i18n-through-Qt-catalogues-shared-with-the-page-and-the-accessibility-rule-UI005.md) | 1.0.0 | planned |
 | Grant vocabulary | `<service>.<operation>` across web, agent, console; `check --grants` | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) | 0.10.0 | planned |
+
+## Proposals awaiting a decision
+
+These are exploratory tasks, not accepted APIs or release commitments.
+
+| Area | Proposal | Task | Target |
+| --- | --- | --- | --- |
+| Custom expressions | Plugin-owned registration of custom expression functions, separate from evaluate/validate | [TASK-128](../../tasks/task-128%20-%20Explore-owned-custom-QGIS-expression-function-declarations.md) | unassigned |
+| QGIS validity checks | Owned registration and lifecycle of layout and other validity checks | [TASK-129](../../tasks/task-129%20-%20Explore-owned-QGIS-layout-and-other-validity-check-declarations.md) | unassigned |
+
+See the [session synthesis](doc-28%20-%20Session-synthesis-worker-jobs-API-ergonomics-and-PyQGIS-safety.md)
+for UI, dependency injection and other proposals and their status.
 
 ## Out of scope by decision
 

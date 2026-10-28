@@ -49,6 +49,7 @@ from qgis_sdk.declarations import (
     derive_title,
     mark_function,
     metadata,
+    register_predicate_describer,
     validate_given,
 )
 
@@ -128,7 +129,8 @@ class Provider:
         The function is described immediately, so a missing context
         parameter, an input no host could render or a result that is not a
         layer all fail here rather than during the first execution. Nothing is
-        wrapped or injected: a test calls the function with a fake context.
+        wrapped: it gains ``describe()`` and a test calls the original function
+        with a fake context.
 
         ``@provider.algorithm`` alone derives the id and title from the
         function name. The derived id is the plain snake_case name - the
@@ -248,3 +250,8 @@ def declared_providers(plugin_class: type) -> tuple[Provider, ...]:
             )
         seen[provider.id] = provider
     return tuple(listed)
+
+
+register_predicate_describer(
+    lambda value: isinstance(value, Provider), Provider.describe
+)

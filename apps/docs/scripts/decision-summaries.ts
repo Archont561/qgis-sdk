@@ -72,4 +72,7 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	62: "One authority and threat model document names principals, assets and boundaries, and every check and grant refers to it.",
 	63: "A structured plugin log service with crash capture and a diagnostics bundle, and no telemetry.",
 	64: "The Processing catalogue is generated from the host registry, and any registered algorithm runs through one typed surface.",
+	65: "In the 0.9.0 design, whole registered jobs run on workers and are submitted by name through owner-scoped handles.",
+	66: "A single describe helper and declaration methods expose kind-specific metadata, including local UI bindings, without changing the bridge contract.",
+	67: "The optional Pydantic controlled-deployment adapter and extras are retired in a future Python minor release; third-party integrations remain plugin-owned.",
 };

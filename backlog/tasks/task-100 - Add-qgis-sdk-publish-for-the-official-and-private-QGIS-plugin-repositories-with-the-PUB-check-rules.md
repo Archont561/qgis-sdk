@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-28 16:24'
 labels: []
 milestone: m-11
 dependencies:
@@ -27,3 +28,9 @@ decision-58 points 1, 2 and 5. qgis-sdk publish --repository qgis|<dir>|<url> up
 - [ ] #2 Every PUB rule has a pure test with a failing and a passing project; build refuses on a finding and renders the changelog from commits.
 - [ ] #3 doc-12 documents publishing, the private repository layout and the official repository's rules it mirrors.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ecosystem research: evaluate exact built ZIP validation, checksum reporting, explicit prerelease/experimental handling, private repository indexes and optional translation-service integration. Do not silently rebuild the artifact during publish.
+<!-- SECTION:NOTES:END -->

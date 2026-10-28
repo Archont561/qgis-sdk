@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-28 15:59'
 labels: []
 milestone: m-9
 dependencies:
@@ -24,7 +24,9 @@ decision-54 point 3. features.iterate(layer_id, filter=, fields=, page=) with a 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Iteration pages deterministically over the fake and a native layer with the same contract tests, filters are applied server-side (request inspection), geometry round-trips in all three encodings, and an editing session commits or rolls back atomically and dies with its view (native + stateful tests).
+- [ ] #1 Iteration pages deterministically over fake and native layers with server-side filters and bounded size; geometry round-trips in all three encodings. Editing commits or rolls back for supported provider configurations, refuses or clearly reports unsupported guarantees, and is disposed with its view; native and stateful tests define the evidence.
 - [ ] #2 The host operations stream pages to the page under a grant with the bounded size enforced, evaluate/validate work from the console and the agent, and the regenerated manifest is typed in generated/host.ts.
-- [ ] #3 doc-22 rows complete; doc-12/doc-13 document the service and the paging limits.
+- [ ] #3 doc-22 rows complete; doc-12/doc-13 document the service, paging limits and tested provider-specific atomicity boundaries.
+- [ ] #4 Decide whether a Python context-manager convenience complements explicit sessions; specify already-editing and nested sessions, commit and rollback failure, cancellation, scope closure, undo and concurrent changes, without promising multi-provider atomicity unsupported by the host.
+- [ ] #5 Assess Pythonic feature, geometry part and vertex iteration including empty, multipart, wrong-type and invalid-index behavior; specify supported forms and bounded wire paging, compare native QGIS 4, and test fake/native behavior.
 <!-- AC:END -->

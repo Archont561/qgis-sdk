@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T11:13:00Z'
+updated_date: '2026-10-28 16:24'
 labels: []
 milestone: m-11
 dependencies:
@@ -27,3 +28,9 @@ decision-60. qgis_sdk.i18n.tr used by the declarations and offered to authors; Q
 - [ ] #2 extract/compile round-trip a fixture plugin's strings including web t() calls; I18N001 and UI005 fire on fixtures; every catalogue input exposes an accessible name (pure + native tests).
 - [ ] #3 doc-12/doc-13 document the translator workflow with Qt Linguist and the accessibility rules; the example ships one translation.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Ecosystem research: evaluate Qt tool discovery with actionable missing-tool diagnostics, unfinished translation reporting and deterministic check mode; keep native and web strings in the same catalog workflow.
+<!-- SECTION:NOTES:END -->
