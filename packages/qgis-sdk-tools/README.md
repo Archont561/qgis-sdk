@@ -1,15 +1,11 @@
 # qgis-sdk-tools
 
-**The `qgis-sdk` command: `new`, `check`, `test`, `dev`, `build`, `bridge`,
-`processing` and `targets`.**
+**From Python idea to QGIS plugin, without the boilerplate.**
 
-Scaffolds a loadable plugin project with a declared native dialog and,
-optionally, a Vite web page; reports what would stop a project from loading
-in QGIS or from being tested without it; runs its tests QGIS-free or inside
-QGIS; starts it from source in a real QGIS Desktop with reload on save;
-generates the typed page-side schema and the Processing catalogue; and
-writes an installable ZIP with the runtime vendored inside. The tools never
-install anything into a QGIS.
+Scaffold, check, test, run and build with the `qgis-sdk` command. Develop
+against QGIS with reload on save, generate typed web and Processing contracts,
+and ship a ZIP with a private SDK runtime. The tools never install anything
+into QGIS.
 
 > Status: `0.7.0`, experimental `0.x`. The tools version freely; each
 > release names the `qgis-sdk-runtime` range it was tested with.
@@ -24,14 +20,15 @@ pip install qgis-sdk-tools      # the command alone, with the runtime it tested
 ## Example
 
 ```sh
-qgis-sdk new field_tools --title "Field Tools" --web react   # pyproject.toml, the plugin, a dialog, tests/, web/
-qgis-sdk check field_tools                                   # pyproject, syntax, imports, UI rules, runtime version
-qgis-sdk test field_tools                                    # pytest QGIS-free; --target qgis|desktop for the native layers
-qgis-sdk dev field_tools                                     # inside QGIS Desktop, reloading on save, Vite with HMR
-qgis-sdk bridge generate --out web/src/bridge.schema.ts      # the typed schema QgisSdk.fromBridgeSchema reads
+qgis-sdk new field_tools --title "Field Tools" --web react   # create a project
+cd field_tools
+qgis-sdk check                                              # project, syntax, imports and UI rules
+qgis-sdk test                                               # pure tests; --target qgis|desktop for native tests
+qgis-sdk dev                                                # QGIS Desktop with reload and Vite HMR
+qgis-sdk bridge generate --out web/src/bridge.schema.ts     # typed web client schema
 qgis-sdk processing generate --provider native --web-out web/src/processing.schema.ts
-qgis-sdk build field_tools                                   # dist/field_tools-<version>.zip, metadata.txt and classFactory rendered
-qgis-sdk targets                                             # the support matrix, and where this host stands in it
+qgis-sdk build                                              # dist/field_tools-<version>.zip
+qgis-sdk targets                                            # support matrix
 ```
 
 ## Documentation

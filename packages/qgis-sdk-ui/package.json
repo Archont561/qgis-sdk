@@ -1,7 +1,7 @@
 {
 	"name": "@archont561/qgis-sdk-ui",
 	"version": "0.1.0",
-	"description": "Light-DOM web components for QGIS SDK web views: form, pickers, progress and log on the @archont561/qgis-sdk store core, with React, Vue and Svelte wrappers and palette tokens.",
+	"description": "Ready-made web components for QGIS plugin interfaces.",
 	"license": "MIT",
 	"type": "module",
 	"main": "./dist/index.js",

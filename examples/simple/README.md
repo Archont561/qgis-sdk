@@ -1,7 +1,6 @@
 # simple
 
-**The smallest complete qgis-sdk plugin, and the local GIS workflow the SDK
-is qualified against.**
+**One QGIS plugin, two interfaces: see the SDK in action.**
 
 Open a bundled point dataset, read the host's selection, buffer it through
 Processing into a new styled layer and export that layer to a directory the

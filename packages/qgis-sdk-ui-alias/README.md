@@ -1,17 +1,11 @@
 # @archont561/qgis-sdk-ui
 
-**Light-DOM web components for QGIS plugin pages, on the
-[`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk)
-store core - the web half of the SDK's UI catalogue.**
+**Build QGIS plugin interfaces faster with ready-made web components.**
 
-A form over a declared action, layer, field and CRS pickers, file and
-directory inputs, a distance, a choice, a progress bar, a log and a run
-button, each named and keyworded as its native counterpart. Every element
-is a Lit element rendering into itself, so the page's stylesheet reaches
-each control and a `<label for>` works; each carries `data-qgis-sdk` and
-`data-part="label|control|error"` hooks. Styling is a compiled `style.css`
-of `qs-` utilities bound to `--qgis-sdk-*` tokens the host palette fills.
-`./react`, `./vue` and `./svelte` wrap the same elements.
+Forms, layer and CRS pickers, progress and more connect to the
+[`@archont561/qgis-sdk`](https://www.npmjs.com/package/@archont561/qgis-sdk)
+store core. Light-DOM elements support page styling and QGIS palette tokens,
+with React, Vue and Svelte integrations for your web UI.
 
 > Status: `0.1.0`, experimental; the first npm release, under this name
 > and the unscoped alias `qgis-sdk-ui`, is the `ui-v0.1.0` tag. `lit`

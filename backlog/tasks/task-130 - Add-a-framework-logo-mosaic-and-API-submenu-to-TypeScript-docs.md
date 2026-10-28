@@ -4,6 +4,7 @@ title: Add a framework logo mosaic and API submenu to TypeScript docs
 status: To Do
 assignee: []
 created_date: '2026-10-28 16:07'
+updated_date: '2026-10-28 17:04'
 labels: []
 dependencies: []
 references:
@@ -31,4 +32,5 @@ The owner wants a TypeScript documentation submenu showing supported frameworks 
 - [ ] #3 Cards are real accessible links usable by mouse, touch and keyboard, with descriptive names, visible focus, appropriate image alternatives, sufficient contrast and responsive layout in supported light/dark themes; logos use attributable, appropriately licensed assets stored locally, and functionality does not depend on third-party runtime requests.
 - [ ] #4 Preserve existing TypeScript guide URLs, migration and historical redirects, edit links and searchability. Avoid duplicate sidebar entries and generated-file overwrites; ensure all destinations and assets honor the /qgis-sdk/ GitHub Pages base and trailing-slash conventions.
 - [ ] #5 Add automated coverage for navigation, framework-to-destination mappings, supported labels and local assets, including a representative responsive/keyboard accessibility check where the test harness permits; run docs tests, production docs build and internal-link checks with no broken links.
+- [ ] #6 Coordinate the framework selector with TASK-138; make installation and SDK API routes easy to find while preserving the distinction between shipped adapters and supported scaffold templates.
 <!-- AC:END -->

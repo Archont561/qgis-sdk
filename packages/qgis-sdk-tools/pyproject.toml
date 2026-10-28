@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "qgis-sdk-tools"
 version = "0.7.0"
-description = "The qgis-sdk developer tools: new, check, test, dev and build for qgis-sdk plugin projects."
+description = "Scaffold, test and ship QGIS plugins from the command line."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
