@@ -4,7 +4,7 @@ title: Prepare and qualify 0.8.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-27T19:00:00Z'
+updated_date: '2026-10-28 17:39'
 labels: []
 milestone: m-7
 dependencies:
@@ -15,6 +15,7 @@ dependencies:
   - TASK-79
   - TASK-73
   - TASK-77
+  - TASK-140
 type: chore
 ordinal: 78000
 ---
@@ -32,6 +33,7 @@ Explicit release gate for the agent-access release (m-7, decision-49), not evide
 - [ ] #3 Validate compatibility, licenses (including the mcp package and its tree in the extra), generated-file consistency and clean installation; the runtime still declares no dependencies.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [ ] #5 The expected zero bridge delta is confirmed rather than assumed: no file under packages/qgis-sdk-typescript changed, no npm version is consumed, and the plugin-description contract version and HOST_FINGERPRINT still agree across both languages.
+- [ ] #6 Review TASK-140 FastAPI-style authoring spike for the requested 0.8.0 target; if implementation is approved for this release include its compatibility and migration and qualification evidence and revisit the expected unchanged bridge before release.
 <!-- AC:END -->
 
 ## Implementation Notes
