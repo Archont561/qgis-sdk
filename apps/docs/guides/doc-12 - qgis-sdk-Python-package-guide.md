@@ -1127,14 +1127,15 @@ typing subset. `AlgorithmDescription` carries `parameters`, `required`,
 
 #### Non-destructive by construction (decision-19)
 
-`Algorithms.execute` writes a *new* output and opens it as a layer the runtime
-owns; no method edits the source dataset. A run that fails deletes its own
-temporary directory before re-raising, so no partial output survives a failure,
-and the intermediate reprojection a buffer needs is scaffolding that never
-outlives the run either. `invoke` adds the output to the project only after the
-function returned, the result matched its declared type *and* cancellation was
-not requested in between; a failure or cancellation at any point leaves the
-project as it was.
+`Algorithms.execute` directs the built-in buffer and centroid operations to a
+new SDK-owned output, then opens it as a layer. The SDK attempts to remove its
+run directory on failure and its intermediate buffer reprojection on success;
+filesystem cleanup can itself fail. The reference native algorithms are tested
+for source preservation, but Processing providers are trusted code, not a
+sandbox: the SDK cannot prevent a provider from editing inputs or writing
+elsewhere, or roll back those side effects. `invoke` adds the returned output to
+the project only after success, type validation and a cancellation check; an
+algorithm or provider may still have its own project side effects.
 
 #### Explicit CRS and units where a distance is involved
 
@@ -1176,18 +1177,36 @@ stats.value("COUNT")                    # 3
 report = stats.file("OUTPUT_HTML_FILE")  # a read-only FileRef; ctx.files.resolve(report)
 ```
 
-The rules are the ones `execute` already follows. The request is validated
-against the algorithm's own description **before any data is read**
-(`QgisSdkAlgorithmRejectedError` lists every reason; an unknown id is
-`QgisSdkAlgorithmNotFoundError`). A layer input is the id of a layer this
-runtime owns, a `FileRef`, or a path the plugin already holds. A destination
-left out is allocated under a fresh run directory and comes back owned: a
-vector sink as a `VectorLayerInfo`, a raster, file, folder or HTML report as
-a `FileRef` minted through `ctx.files` with read only, and a number, string
-or boolean as itself. A run that fails removes that directory and raises
-`QgisSdkAlgorithmFailedError` - no partial output survives (decision-19).
-`run` is synchronous on the GUI thread, like `processing.run`; a long
-algorithm belongs in a `@job`.
+The request is validated against the algorithm's description before execution
+(`QgisSdkAlgorithmRejectedError` describes a refusal; an unknown id is
+`QgisSdkAlgorithmNotFoundError`). A layer input is an owned layer id, a
+`FileRef`, or a path the plugin already holds. A destination left out is
+allocated under a fresh SDK-owned run directory: vector sinks return as
+`VectorLayerInfo`, files and folders as read-only `FileRef` objects, and scalar
+outputs as values.
+
+**Named destination safety (unreleased change).** A run may name at most one
+new local GeoJSON or GeoPackage vector destination, as a path string or a
+write-authorized `FileRef`. Existing files, including input aliases and
+write-granted files with overwrite permission, are refused; so are multiple,
+remote, memory, folder, raster and other named destinations. The native adapter
+writes to a private directory beside the destination, verifies a single readable
+independent file with no sidecars, then atomically publishes it without replacing
+an existing name. This requires hard-link support; a `FileRef` write grant is
+rechecked before publication. Leave a destination unspecified and export the
+resulting vector with `ctx.layers.export_vector` when you need
+explicit overwrite consent; for other output types use SDK-allocated output and
+handle publication separately with suitable safeguards.
+
+Cleanup of SDK-owned run and staging directories is best-effort. The SDK never
+intentionally deletes an existing destination, but a complete file already
+published may remain if later result conversion fails. Keep paths stable during a
+run. Processing providers are trusted code and can modify inputs, project state
+or other files outside the SDK's directories; the SDK cannot prevent or roll
+back such side effects. The fake uses scripted answers and validates destination
+requests but does not run Processing or prove filesystem behavior. `run` is
+synchronous on the GUI thread, like `processing.run`; a long algorithm belongs
+in a `@job`.
 
 #### The generated modules
 
@@ -1285,7 +1304,7 @@ of `Provider` instances, or lists one id twice, is refused when the
 
 A marker on a type it does not fit (`Annotated[int, LayerParameter()]`), a `Literal` of non-strings, a `FieldInput` whose `of` is not a layer input of the same declaration, or a bare `FileRef` input without `FileInput`/`DirectoryInput` is refused at declaration with the input name. A dataclass or a list input is still refused for an algorithm (a toolbox has no widget for it); an action may declare one. `FileRef` (`qgis_sdk.models`) is the branded reference of decision-20: the toolbox mints it from the dialog's picker through the host authority for the duration of the run, a page sends the ref the host minted and the handler receives the `FileRef` object, and a wrong-kind ref (a `file` where a `directory` was declared) is refused before the handler runs. Resolving a ref to a path from plugin code arrives with the `FileInput` component of the `Form` helper.
 
-The bridge builds an `AlgorithmContext` over the dialog's feedback and calls the function through the same `invoke` an action uses, then copies the produced layer's features into the destination the user chose, so the temporary output the operation wrote stays the SDK's business and the source dataset is never touched. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
+The bridge builds an `AlgorithmContext` over the dialog's feedback and calls the function through the same `invoke` an action uses, then copies the produced layer's features into the destination the user chose. That QGIS sink is separate from `Algorithms.run`'s staged named destinations; the SDK does not verify that the chosen sink is distinct from every input or roll back provider side effects. `FlagNoThreading` is deliberate: worker-thread execution of these adapters has not been qualified, so the bridge asks QGIS to run on the thread it was qualified on rather than claim a safety it cannot demonstrate.
 
 `providers` and the bridge stay inside the same rules as the rest of the layer: no QGIS import in `qgis_sdk.providers`, and the native bridge (`qgis_sdk.adapters.qgis.NativeProcessing`) is only importable where PyQGIS exists. `qgis_sdk.testing.FakeProcessing` is the registry double for a pure test of the lifecycle.
 
@@ -2202,6 +2221,20 @@ published for the bridge, and no `ts-v*` tag exists.
   `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
+
+## Next minor (unreleased) migration notes
+
+### Processing destinations
+
+`Algorithms.run` no longer forwards arbitrary named destinations directly to
+Processing. Use an omitted destination for an SDK-owned output, or provide one
+new local `.geojson` or `.gpkg` vector destination. Existing files (even with an
+overwrite-enabled `FileRef`), multiple named destinations, memory/remote URIs,
+raster, folder and other named outputs are refused. For intentional vector
+replacement, run into an allocated output and use `Layers.export_vector` with
+explicit overwrite consent. Other formats need a separately qualified
+publication workflow. See [Processing output safety](#safe-outputs) for the
+provider trust and cleanup limitations.
 
 ## 0.7.0 migration notes
 

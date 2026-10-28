@@ -34,7 +34,7 @@ from qgis_sdk.models import (
     VectorLayerInfo,
     validate_parameters,
 )
-from qgis_sdk.processing.runs import coerce_run, output_class
+from qgis_sdk.processing.runs import coerce_run, output_class, plan_destinations
 from qgis_sdk.resources import require_style
 from qgis_sdk.services import (
     Layers,
@@ -169,6 +169,11 @@ class FakeAlgorithms:
         run = coerce_run(request, params)
         info = self.describe(run.algorithm)
         validate_parameters(info, run.params)
+        plan_destinations(
+            info,
+            run.params,
+            lambda ref: self._file_service().resolve(ref, operation="write"),
+        )
         for parameter in info.parameters:
             value = run.params.get(parameter.name)
             if value is None or parameter.kind not in LAYER_KINDS:

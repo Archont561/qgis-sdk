@@ -10,12 +10,12 @@ and buffers there. The caller states the CRS; the adapter never picks one, and i
 refuses a working CRS that is geographic or whose units are not metres rather
 than converting behind the caller's back (decision-19).
 
-**Outputs are new files.** No step writes to the source dataset: the source is
-passed to Processing as an input, and every output is a file under this
-execution's working directory. The produced file is handed to ``NativeLayers``,
-so the output is a layer this runtime owns exactly like any other - which is also
-what makes adding it to the project possible later. A run that fails deletes its
-own directory before re-raising, so no partial output survives an exception.
+**Output ownership.** Omitted destinations are allocated in a run directory;
+a qualified named vector destination is staged beside its destination and
+published without replacement. Cleanup is best-effort and limited to the
+SDK-owned directories. Registered Processing providers are trusted code and
+may modify inputs or write elsewhere; their side effects are not sandboxed or
+rolled back by this adapter.
 
 Reading cancellation and progress is ``invoke``'s job at phase boundaries. This
 adapter deliberately does not claim to abort a native operation mid-flight: a
@@ -24,6 +24,7 @@ feedback bridge that raises inside QGIS's own loop has not been qualified here.
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -31,7 +32,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem
+from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsVectorLayer
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
@@ -53,7 +54,12 @@ from qgis_sdk.models import (
     VectorLayerInfo,
     validate_parameters,
 )
-from qgis_sdk.processing.runs import coerce_run, destination_path, output_class
+from qgis_sdk.processing.runs import (
+    coerce_run,
+    destination_path,
+    output_class,
+    plan_destinations,
+)
 
 from .layers import NativeLayers
 
@@ -169,24 +175,141 @@ class NativeAlgorithms:
         run = coerce_run(request, params)
         info = self.describe(run.algorithm)
         validate_parameters(info, run.params)
+        explicit = plan_destinations(
+            info, run.params, lambda ref: self._resolve(ref, "write")
+        )
         processing = _processing()
         self._runs += 1
         run_directory = self._root / f"run-{self._runs}"
-        run_directory.mkdir()
         try:
-            native_params = self._native_parameters(info, run.params, run_directory)
+            run_directory.mkdir()
+        except OSError as error:
+            raise QgisSdkAlgorithmFailedError(
+                run.algorithm, "cannot create a new run directory"
+            ) from error
+        stage: Path | None = None
+        try:
+            staged: dict[str, Path] = {}
+            if explicit:
+                name, destination = next(iter(explicit.items()))
+                try:
+                    stage = Path(
+                        tempfile.mkdtemp(
+                            prefix=f".{destination.name}.", dir=destination.parent
+                        )
+                    )
+                except OSError as error:
+                    raise QgisSdkAlgorithmFailedError(
+                        run.algorithm, "cannot create the output staging directory"
+                    ) from error
+                staged[name] = stage / destination.name
+            native_params = self._native_parameters(
+                info, run.params, run_directory, staged
+            )
             try:
                 raw = processing.run(run.algorithm, native_params)
             except Exception as error:  # QgsProcessingException and friends
                 raise QgisSdkAlgorithmFailedError(run.algorithm, str(error)) from error
+            if explicit:
+                raw = self._publish_explicit(
+                    run.algorithm, raw, run.params, explicit, staged, stage
+                )
             outputs = self._convert_outputs(info, raw)
         except BaseException:
             shutil.rmtree(run_directory, ignore_errors=True)
             raise
+        finally:
+            if stage is not None:
+                shutil.rmtree(stage, ignore_errors=True)
         return RunResult(algorithm=run.algorithm, outputs=outputs)
 
+    def _publish_explicit(
+        self,
+        algorithm: str,
+        raw: Mapping[str, Any],
+        params: Mapping[str, object],
+        explicit: Mapping[str, Path],
+        staged: Mapping[str, Path],
+        stage: Path | None,
+    ) -> dict[str, Any]:
+        """Publish only the single verified file, without replacing a name."""
+        name, destination = next(iter(explicit.items()))
+        partial = staged[name]
+        if not isinstance(raw, Mapping):
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the provider returned invalid outputs"
+            )
+        value = raw.get(name)
+        if (
+            stage is None
+            or not isinstance(value, str)
+            or Path(value) != partial
+            or partial.is_symlink()
+            or not partial.is_file()
+        ):
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the provider did not produce the staged vector file"
+            )
+        try:
+            independent = partial.stat().st_nlink == 1
+        except OSError as error:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the staged vector file cannot be verified"
+            ) from error
+        if not independent:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the staged vector file is not an independent file"
+            )
+        probe = QgsVectorLayer(str(partial), "export validation", "ogr")
+        valid = probe.isValid()
+        driver = probe.dataProvider().storageType() if valid else None
+        del probe
+        if not valid:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the staged vector file is not readable"
+            )
+        expected = {".gpkg": "GPKG", ".geojson": "GeoJSON"}[destination.suffix.lower()]
+        if driver != expected:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the staged vector file has an unexpected format"
+            )
+        try:
+            staged_files = set(stage.iterdir())
+        except OSError as error:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the output staging directory cannot be verified"
+            ) from error
+        if staged_files != {partial}:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the staged output has unsupported sidecars"
+            )
+        self._scope.ensure_open()
+        value = params.get(name)
+        if isinstance(value, FileRef) and self._resolve(value, "write") != destination:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the output write grant changed during processing"
+            )
+        try:
+            os.link(partial, destination)
+        except FileExistsError as error:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm, "the destination already exists; choose a new file"
+            ) from error
+        except OSError as error:
+            raise QgisSdkAlgorithmFailedError(
+                algorithm,
+                "cannot safely publish the output; hard-link support is required",
+            ) from error
+        result = dict(raw)
+        result[name] = str(destination)
+        return result
+
     def _native_parameters(
-        self, info: AlgorithmInfo, params: Mapping[str, object], run_directory: Path
+        self,
+        info: AlgorithmInfo,
+        params: Mapping[str, object],
+        run_directory: Path,
+        staged: Mapping[str, Path],
     ) -> dict[str, Any]:
         """Owned layer ids become layer handles, refs become paths, missing
         destinations are allocated; everything else is passed as given."""
@@ -194,14 +317,16 @@ class NativeAlgorithms:
         for parameter in info.parameters:
             value = params.get(parameter.name)
             if parameter.destination:
-                if value is None:
+                if parameter.name in staged:
+                    native[parameter.name] = str(staged[parameter.name])
+                elif value is None:
                     native[parameter.name] = str(
                         destination_path(run_directory, parameter)
                     )
-                elif isinstance(value, FileRef):
-                    native[parameter.name] = str(self._resolve(value, "write"))
                 else:
-                    native[parameter.name] = value
+                    raise QgisSdkAlgorithmRejectedError(
+                        info.id, [f"{parameter.name} was not safely staged"]
+                    )
                 continue
             if value is None:
                 continue

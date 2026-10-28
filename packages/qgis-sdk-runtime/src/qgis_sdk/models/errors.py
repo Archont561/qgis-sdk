@@ -280,8 +280,8 @@ class QgisSdkAlgorithmNotFoundError(QgisSdkError):
 class QgisSdkAlgorithmFailedError(QgisSdkError):
     """Processing ran the algorithm and it failed.
 
-    ``detail`` is the message Processing reported; what the run wrote before
-    failing has been removed (decision-19).
+    ``detail`` describes the failure. SDK-owned staging is cleaned up on a
+    best-effort basis; external provider side effects cannot be rolled back.
     """
 
     code = "algorithm_failed"

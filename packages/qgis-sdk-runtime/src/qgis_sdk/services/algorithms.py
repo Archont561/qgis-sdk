@@ -19,18 +19,20 @@ from qgis_sdk.models import (
 class Algorithms(Protocol):
     """Run any algorithm the host's Processing registry holds.
 
-    Every guarantee here is one decision-19 makes about destructive
-    workflows, now for the whole registry (decision-64):
+    Omitted destination parameters are allocated under an SDK-owned run
+    directory. A single explicit destination may name a new local GeoJSON or
+    GeoPackage vector file; existing files and unsupported destinations are
+    refused. The native adapter stages and validates the named output before
+    publishing it without overwrite. On failure it attempts to remove its own
+    staging and run directories, never a pre-existing destination. If result
+    conversion fails after publication, the published file may remain.
 
-    * ``run`` never edits an input. Destination parameters the caller leaves
-      out are allocated under a run directory this service owns; vector
-      destinations come back as layers this runtime owns, everything else on
-      disk as a readable :class:`~qgis_sdk.models.FileRef`, numbers and
-      strings as they are.
-    * A failed run leaves no partial output behind. Implementations remove
-      what the run wrote before raising ``QgisSdkAlgorithmFailedError``.
-    * Outputs are separate: adding one to the project is the caller's
-      decision and happens only after success.
+    Providers execute trusted code, not in a sandbox: arbitrary algorithms can
+    modify inputs or write elsewhere, and the SDK cannot roll back those side
+    effects. Keep source and destination paths stable during execution. Vector
+    outputs are owned layers; other outputs on disk are readable
+    :class:`~qgis_sdk.models.FileRef` objects where available. Adding a layer
+    to the project is the caller's decision after success.
 
     ``describe`` and ``list`` read the registry's own description (the
     :class:`~qgis_sdk.models.Catalogue` shape), so an installed third-party

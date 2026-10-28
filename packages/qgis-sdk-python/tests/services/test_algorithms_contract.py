@@ -8,6 +8,7 @@ a CRS database, so they are the native adapter's own tests.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -190,6 +191,115 @@ def test_scalar_and_file_outputs_come_back_typed(services: Services) -> None:
     assert services.files is not None
     assert services.files.resolve(report).is_file()
     assert "OUTPUT_HTML_FILE" in set(result)
+
+
+def test_an_explicit_output_cannot_replace_the_input_dataset(
+    services: Services, tmp_path: Path
+) -> None:
+    source = tmp_path / "input.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    register = getattr(services.layers, "register", None)
+    if register is not None:
+        register(
+            source, name="input", geometry_type="point", field_names=("id", "value")
+        )
+    info = services.layers.open_vector(source)
+    before = source.read_bytes()
+    inode = source.stat().st_ino
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError):
+        services.algorithms.run(
+            "native:centroids", {"INPUT": info.id, "OUTPUT": str(source)}
+        )
+
+    assert source.read_bytes() == before
+    assert source.stat().st_ino == inode
+
+
+@pytest.mark.parametrize("alias_kind", ["hardlink", "symlink", "unrelated"])
+def test_an_explicit_existing_destination_is_preserved(
+    services: Services, tmp_path: Path, alias_kind: str
+) -> None:
+    source = tmp_path / "input.geojson"
+    source.write_bytes(services.dataset.read_bytes())
+    register = getattr(services.layers, "register", None)
+    if register is not None:
+        register(
+            source, name="input", geometry_type="point", field_names=("id", "value")
+        )
+    info = services.layers.open_vector(source)
+    destination = tmp_path / "existing.geojson"
+    if alias_kind == "hardlink":
+        destination.hardlink_to(source)
+    elif alias_kind == "symlink":
+        try:
+            destination.symlink_to(source)
+        except (OSError, NotImplementedError) as error:
+            pytest.skip(f"symbolic links unavailable: {error}")
+    else:
+        destination.write_text("unrelated user data", encoding="utf-8")
+    source_before = source.read_bytes()
+    output_before = destination.read_bytes()
+    output_inode = destination.stat().st_ino
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError):
+        services.algorithms.run(
+            "native:centroids", {"INPUT": info.id, "OUTPUT": str(destination)}
+        )
+
+    assert source.read_bytes() == source_before
+    assert destination.read_bytes() == output_before
+    assert destination.stat().st_ino == output_inode
+    if alias_kind == "symlink":
+        assert destination.is_symlink()
+
+
+@pytest.mark.parametrize(
+    "destination", ["memory:", "output.shp", "https://example.org/output.gpkg"]
+)
+def test_unverifiable_or_unsupported_explicit_destinations_are_refused(
+    services: Services, destination: str
+) -> None:
+    source = services.layers.open_vector(services.dataset)
+    with pytest.raises(QgisSdkAlgorithmRejectedError):
+        services.algorithms.run(
+            "native:centroids", {"INPUT": source.id, "OUTPUT": destination}
+        )
+
+
+def test_multiple_named_destinations_are_refused_before_writing(
+    services: Services, tmp_path: Path
+) -> None:
+    source = services.layers.open_vector(services.dataset)
+    first, second = tmp_path / "first.gpkg", tmp_path / "second.gpkg"
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError, match="at most one"):
+        services.algorithms.run(
+            "native:extractbyexpression",
+            {
+                "INPUT": source.id,
+                "EXPRESSION": "1 = 1",
+                "OUTPUT": str(first),
+                "FAIL_OUTPUT": str(second),
+            },
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_existing_file_ref_is_not_overwritten_even_with_a_write_grant(
+    services: Services, tmp_path: Path
+) -> None:
+    source = services.layers.open_vector(services.dataset)
+    destination = tmp_path / "existing.geojson"
+    destination.write_text("user data", encoding="utf-8")
+    assert services.files is not None
+    ref = services.files.grant_file(destination, operations=("write",), overwrite=True)
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError):
+        services.algorithms.run("native:centroids", {"INPUT": source.id, "OUTPUT": ref})
+
+    assert destination.read_text(encoding="utf-8") == "user data"
 
 
 def test_an_unknown_layer_input_is_refused_by_the_generic_run(
