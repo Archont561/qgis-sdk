@@ -32,7 +32,7 @@ def bridge_generate(
     plugin: Annotated[
         str | None,
         typer.Option(
-            help="Plugin class as module:Attribute, described without QGIS; "
+            help="Plugin application as module:app, described without QGIS; "
             "defaults to [tool.qgis-sdk] plugin in ./pyproject.toml."
         ),
     ] = None,
