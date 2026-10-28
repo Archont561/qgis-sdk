@@ -10,11 +10,12 @@ lives here, once:
 * :func:`plan_export` checks the destination before anything is written: a
   known suffix, an existing parent directory, not a directory itself, and
   ``overwrite`` for a file that is already there.
-* :func:`run_export` stages the writer's output in a fresh directory **beside**
-  the destination, commits it with one ``os.replace`` when the writer returned,
-  and removes the staging directory whatever happened. A failure therefore
-  leaves the destination exactly as it was - absent, or still the old file when
-  ``overwrite`` was requested - and no partial file, journal or sidecar behind.
+* :func:`protect_source` refuses an unknown or changed source, or a destination
+  that aliases it, before writing and again immediately before the commit.
+* :func:`run_export` stages output beside the destination, then replaces it
+  when overwrite was allowed or atomically creates a hard link when it was not.
+  It removes the staging directory on failure or success. Publishing without
+  overwrite requires a filesystem that supports hard links.
 
 Nothing here imports QGIS, so the policy is tested in the pure suite and the
 contract suite holds both backends to it.
@@ -46,6 +47,8 @@ class ExportPlan:
 
     destination: Path
     driver: str
+    source: SourceIdentity | None = None
+    overwrite: bool = False
 
 
 def plan_export(destination: Path, *, overwrite: bool) -> ExportPlan:
@@ -67,7 +70,86 @@ def plan_export(destination: Path, *, overwrite: bool) -> ExportPlan:
         reasons.append("the destination's directory does not exist")
     if reasons:
         raise QgisSdkExportRefusedError(str(destination), reasons)
-    return ExportPlan(destination=destination, driver=driver or "")
+    return ExportPlan(destination=destination, driver=driver or "", overwrite=overwrite)
+
+
+@dataclass(frozen=True, slots=True)
+class SourceIdentity:
+    """Resolved identity and the provider's original path, possibly relative.
+
+    Re-resolving the original reference detects retargeted symlinks and a
+    changed working directory, both of which can change what a provider reads.
+    """
+
+    path: Path
+    device: int | None
+    inode: int | None
+    reference: Path
+
+
+def capture_source(
+    source: Path, *, allow_virtual: bool = False
+) -> SourceIdentity | None:
+    """Capture the opened file's identity; an unknown source must fail closed."""
+    try:
+        path = Path(source).resolve(strict=not allow_virtual)
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            if allow_virtual:
+                return SourceIdentity(path, None, None, Path(source))
+            return None
+        if not path.is_file():
+            return None
+        return SourceIdentity(path, info.st_dev, info.st_ino, Path(source))
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def refuse_source_destination(source: SourceIdentity | None, destination: Path) -> None:
+    """Fail closed unless the destination is distinct from the opened file."""
+    destination = Path(destination)
+    try:
+        if source is None:
+            raise ValueError(
+                "the layer's source dataset cannot be verified; "
+                "open a direct local GeoJSON, GeoPackage or ESRI Shapefile instead"
+            )
+        if source.reference.resolve() != source.path:
+            raise ValueError("the layer's source path has changed; reopen the layer")
+        if source.device is not None:
+            info = source.path.stat()
+            if (info.st_dev, info.st_ino) != (source.device, source.inode):
+                raise ValueError("the layer's source dataset has changed")
+        else:
+            try:
+                source.reference.stat()
+            except FileNotFoundError:
+                pass
+            else:
+                raise ValueError(
+                    "the layer's virtual source has appeared; reopen the layer"
+                )
+        same = source.path == destination.resolve()
+        if not same and source.device is not None:
+            try:
+                info = destination.stat()
+            except FileNotFoundError:
+                pass
+            else:
+                same = (info.st_dev, info.st_ino) == (source.device, source.inode)
+        if same:
+            raise ValueError("the destination is the layer's source dataset")
+    except (OSError, RuntimeError, ValueError) as error:
+        raise QgisSdkExportRefusedError(
+            str(destination), [f"source safety check failed: {error}"]
+        ) from error
+
+
+def protect_source(plan: ExportPlan, source: SourceIdentity | None) -> ExportPlan:
+    """Validate the source now and retain it for the pre-commit recheck."""
+    refuse_source_destination(source, plan.destination)
+    return ExportPlan(plan.destination, plan.driver, source, plan.overwrite)
 
 
 def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
@@ -76,9 +158,11 @@ def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
     ``write`` receives the path it must produce: the destination's own file
     name inside a staging directory next to it, so a writer that creates
     sidecars (a GeoPackage journal, for one) creates them in the staging
-    directory too. The commit is a single ``os.replace``; the staging directory
-    is removed on every exit path. A writer raising an SDK error passes
-    through; any other exception becomes :class:`QgisSdkExportFailedError`.
+    directory too. Overwrite commits with ``os.replace``; without overwrite,
+    ``os.link`` atomically refuses a destination created during the write.
+    The staging directory is removed on every exit path. A writer raising an SDK
+    error passes through; other writer and commit errors become
+    :class:`QgisSdkExportFailedError`.
     """
     destination = plan.destination
     staging = Path(
@@ -96,6 +180,21 @@ def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
             raise QgisSdkExportFailedError(
                 str(destination), "the writer produced no file"
             )
-        os.replace(partial, destination)
+        if plan.source is not None:
+            refuse_source_destination(plan.source, destination)
+        try:
+            if plan.overwrite:
+                os.replace(partial, destination)
+            else:
+                # The staging file is on the same filesystem. Creating the link
+                # atomically refuses even a destination created during writing.
+                os.link(partial, destination)
+        except FileExistsError as error:
+            raise QgisSdkExportRefusedError(
+                str(destination),
+                ["the destination exists; pass overwrite=True to replace it"],
+            ) from error
+        except OSError as error:
+            raise QgisSdkExportFailedError(str(destination), str(error)) from error
     finally:
         shutil.rmtree(staging, ignore_errors=True)

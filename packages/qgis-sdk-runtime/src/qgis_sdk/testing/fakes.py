@@ -241,6 +241,7 @@ class FakeLayers:
         self._datasets: dict[str, dict[str, object]] = {}
         self._layers: dict[str, VectorLayerInfo] = {}
         self._sources: dict[str, Path] = {}
+        self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
         self._selections: dict[str, tuple[int, ...]] = {}
         scope.on_close(self._release)
 
@@ -252,9 +253,11 @@ class FakeLayers:
         geometry_type: GeometryType,
         field_names: Sequence[str],
         crs: str | None = None,
+        dataset_path: Path | None = None,
     ) -> None:
-        """Declare a dataset this fake can open; setup, not part of the contract."""
+        """Declare a dataset; ``dataset_path`` models a container URI's file."""
         self._datasets[str(source)] = {
+            "source": Path(dataset_path) if dataset_path is not None else Path(source),
             "name": name,
             "geometry_type": geometry_type,
             "field_names": tuple(field_names),
@@ -276,7 +279,12 @@ class FakeLayers:
             crs=declared["crs"],  # type: ignore[arg-type]
         )
         self._layers[layer_id] = info
-        self._sources[layer_id] = Path(source)
+        dataset_path = Path(declared["source"])  # type: ignore[arg-type]
+        captured = export_policy.capture_source(dataset_path, allow_virtual=True)
+        self._export_sources[layer_id] = captured
+        self._sources[layer_id] = (
+            captured.path if captured is not None else dataset_path
+        )
         self._selections[layer_id] = ()
         return info
 
@@ -317,6 +325,7 @@ class FakeLayers:
         self._require(layer_id)
         plan = export_policy.plan_export(destination, overwrite=overwrite)
         source = self._sources[layer_id]
+        plan = export_policy.protect_source(plan, self._export_sources[layer_id])
 
         def write(partial: Path) -> None:
             if source.is_file():
@@ -330,6 +339,7 @@ class FakeLayers:
     def _release(self) -> None:
         self._layers.clear()
         self._sources.clear()
+        self._export_sources.clear()
         self._selections.clear()
 
     def _require(self, layer_id: str) -> VectorLayerInfo:
