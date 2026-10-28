@@ -7,7 +7,8 @@ from typing import Annotated, Literal
 import pytest
 from qgis_sdk.algorithms import describe_algorithm, parameter_kind
 from qgis_sdk.core import AlgorithmContext, JobContext
-from qgis_sdk.declarations import QgisSdkDeclarationError, plugin
+from qgis_sdk.declarations import QgisSdkDeclarationError
+from qgis_sdk.declarations._plugin import plugin
 from qgis_sdk.models import (
     CrsInput,
     CrsParameter,
@@ -17,7 +18,8 @@ from qgis_sdk.models import (
     MetresParameter,
     VectorLayerInfo,
 )
-from qgis_sdk.providers import Provider, ProviderDescription, declared_providers
+from qgis_sdk.providers import Provider, ProviderDescription
+from qgis_sdk.providers import _declared_providers as declared_providers
 from sample_algorithms import buffer_layer, sample_provider
 
 

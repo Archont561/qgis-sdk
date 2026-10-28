@@ -1,9 +1,9 @@
 ---
 title: QGIS SDK
-description: A Python-first foundation for QGIS plugins - plain classes in, a loadable plugin out - with a typed TypeScript SDK and web components for interfaces hosted in QWebEngineView.
+description: A Python-first foundation for QGIS plugins - application functions in, a loadable plugin out - with a typed TypeScript SDK and web components for interfaces hosted in QWebEngineView.
 template: splash
 hero:
-  tagline: Declare a plugin on plain Python classes. The SDK derives the plugin description, the native windows, the Processing algorithms, the bridge allowlist and the typed page-side client from those same declarations - and the pure layers import without QGIS, so a plugin is testable from source.
+  tagline: Declare a plugin with a Python application and ordinary functions. The SDK derives the plugin description, the native windows, the Processing algorithms, the bridge allowlist and the typed page-side client from those same declarations - and the pure layers import without QGIS, so a plugin is testable from source.
   image:
     file: ../../assets/logo.svg
   actions:
@@ -36,7 +36,7 @@ import Demo from "../../components/Demo.astro";
 
 <CardGrid stagger>
   <Card title="One declaration, every host" icon="puzzle">
-    `@plugin`, `@action` and a `Dialog` or `Dock` built from the UI catalogue
+    `QgisSdkPlugin`, its actions and a `Dialog` or `Dock` built from the UI catalogue
     describe the plugin once. QGIS gets `metadata.txt` and a `classFactory`
     from `build`; a web page gets a typed `QgisSdk` from the same declarations.
   </Card>

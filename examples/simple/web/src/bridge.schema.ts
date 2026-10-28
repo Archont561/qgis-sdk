@@ -81,7 +81,7 @@ export interface Operations {
 /** The declared streams by id: what goes in and the events that come out. */
 export type Streams = Record<never, never>;
 
-/** The declaration `describe_plugin` emitted, carrying the types above. */
+/** The declaration `describe(app)` emitted, carrying the types above. */
 const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations, Streams>({
 	"schema_version": 1,
 	"id": "simple",

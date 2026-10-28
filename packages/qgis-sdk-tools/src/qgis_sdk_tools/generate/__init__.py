@@ -1,6 +1,6 @@
 """Generate a typed TypeScript client from one plugin description.
 
-The input is the object ``describe_plugin`` already produces
+The input is the object ``describe(app)`` produces
 ([decision-26](../../../../../backlog/decisions/decision-26%20-%20Derive-the-bridge-allowlist-and-the-generated-client-from-one-declared-manifest.md)):
 the plugin's id, its actions, and the request/result schemas each action
 declares. The output is one module with the value types, a nested operations

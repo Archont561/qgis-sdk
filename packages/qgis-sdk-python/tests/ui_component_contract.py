@@ -14,7 +14,6 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from qgis_sdk import action, plugin
 from qgis_sdk.core import (
     JobContext,
     PluginContext,
@@ -22,6 +21,7 @@ from qgis_sdk.core import (
     ResourceScope,
     UiContext,
 )
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobHandle, JobService, job
 from qgis_sdk.models import FileRef, QgisSdkFormError, QgisSdkUiError
 from qgis_sdk.testing import (
@@ -151,7 +151,7 @@ def make_rendering(
             files=FakeFiles(scope),
             log=RecordingLog(scope, "catalogue"),
         )
-    runtime = PluginRuntime(CataloguePlugin, context)
+    runtime = PluginRuntime._from_plugin_class(CataloguePlugin, context)
     runtime.start()
     instance = runtime.instance
     assert isinstance(instance, CataloguePlugin)

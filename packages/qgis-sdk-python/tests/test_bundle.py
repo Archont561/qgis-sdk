@@ -111,7 +111,7 @@ class TestArchiveLayout:
             vendored_init = zf.read(f"{vendor}/__init__.py").decode()
         assert "qgis-sdk" in notice and "MIT" in notice
         assert result.runtime_version in notice
-        assert f"from {PLUGIN}.{VENDOR_PACKAGE}.qgis_sdk import action, plugin" in (
+        assert f"from {PLUGIN}.{VENDOR_PACKAGE}.qgis_sdk import QgisSdkPlugin" in (
             plugin_source
         )
         assert "from qgis_sdk" not in plugin_source
@@ -222,9 +222,7 @@ class TestHostArtifacts:
             f"from {PLUGIN}.{VENDOR_PACKAGE}.qgis_sdk.adapters.desktop import host"
             in init
         )
-        assert init.rstrip().endswith(
-            "classFactory = host('field_tools.plugin:FieldToolsPlugin')"
-        )
+        assert init.rstrip().endswith("classFactory = host('field_tools.plugin:app')")
         assert source.read_text(encoding="utf-8") == '"""Mine."""\n\nVALUE = 1\n'
         ast.parse(init)
 
@@ -248,7 +246,7 @@ class TestHostArtifacts:
         with zipfile.ZipFile(result.archive) as zf:
             init = zf.read("web_tools/__init__.py").decode()
         assert (
-            "classFactory = host('web_tools.plugin:WebToolsPlugin', "
+            "classFactory = host('web_tools.plugin:app', "
             "placement='dialog', grants=('layers.list', 'project.layer_ids'))"
         ) in init
 
@@ -358,7 +356,7 @@ class TestValidation:
     ) -> None:
         manifest = project / "pyproject.toml"
         manifest.write_text(
-            manifest.read_text(encoding="utf-8").replace("FieldToolsPlugin", "Nope"),
+            manifest.read_text(encoding="utf-8").replace("plugin:app", "plugin:Nope"),
             encoding="utf-8",
         )
 
@@ -498,7 +496,7 @@ class TestRewriteImports:
             "import qgis_sdk\n"
             "import qgis_sdk.core.scope as scope_module\n"
             "import qgis_sdk.jobs\n"
-            "from qgis_sdk import action, plugin\n"
+            "from qgis_sdk import QgisSdkPlugin, QgisSdkPlugin\n"
             "from qgis_sdk.core import (\n"
             "    PluginContext,\n"
             "    ResourceScope,\n"
@@ -517,7 +515,7 @@ class TestRewriteImports:
             "import my_plugin._vendor.qgis_sdk.core.scope as scope_module\n"
             "import my_plugin._vendor.qgis_sdk.jobs; "
             "from my_plugin._vendor import qgis_sdk\n"
-            "from my_plugin._vendor.qgis_sdk import action, plugin\n"
+            "from my_plugin._vendor.qgis_sdk import QgisSdkPlugin, QgisSdkPlugin\n"
             "from my_plugin._vendor.qgis_sdk.core import (\n"
             "    PluginContext,\n"
             "    ResourceScope,\n"

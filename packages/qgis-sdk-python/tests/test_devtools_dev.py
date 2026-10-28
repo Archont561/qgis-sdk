@@ -84,7 +84,7 @@ class TestInspect:
         manifest = project / "pyproject.toml"
         manifest.write_text(
             manifest.read_text(encoding="utf-8").replace(
-                "field_tools.plugin:FieldToolsPlugin", "other.plugin:OtherPlugin"
+                "field_tools.plugin:app", "other.plugin:app"
             ),
             encoding="utf-8",
         )
@@ -166,7 +166,7 @@ class TestDesktopPlan:
         assert plan.env["QGIS_PLUGINPATH"] == os.pathsep.join((str(host), "/elsewhere"))
         assert (host / "field_tools" / "metadata.txt").is_file()
         init = (host / "field_tools" / "__init__.py").read_text(encoding="utf-8")
-        assert "classFactory = host('field_tools.plugin:FieldToolsPlugin')" in init
+        assert "classFactory = host('field_tools.plugin:app')" in init
         assert str((root / "field_tools").as_posix()) in init
         assert not (root / "field_tools" / "metadata.txt").exists()
         assert plan.env["PYTHONHOME"] == str(install.prefix)

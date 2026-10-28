@@ -35,7 +35,7 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     (package / "plugin.py").write_text(
         textwrap.dedent(
             """
-            from qgis_sdk import action, menu, plugin, toolbar
+            from qgis_sdk import QgisSdkPlugin, menu, toolbar
             from qgis_sdk.core import PluginContext, ResourceScope
             from qgis_sdk.ui import Dialog
 
@@ -46,23 +46,21 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
                     raise AssertionError("never built without a GUI")
 
 
-            @plugin(id="hosted", title="Hosted tools")
-            class HostedPlugin:
-                ctx: PluginContext
-                surfaces = [PingDialog]
+            app = QgisSdkPlugin(id="hosted", title="Hosted tools")
+            app.add_surface(PingDialog)
 
-                @action(id="ping", title="Ping")
-                def ping(self, value: int) -> int:
-                    return value
+            @app.action(id="ping", title="Ping")
+            def ping(ctx: PluginContext, value: int) -> int:
+                return value
 
-                @toolbar
-                @action(id="open_ping", title="Open ping")
-                def open_ping(self) -> None:
-                    self.ctx.ui.open(PingDialog)
+            @toolbar
+            @app.action(id="open_ping", title="Open ping")
+            def open_ping(ctx: PluginContext) -> None:
+                ctx.ui.open(PingDialog)
 
-                @action(id="layers", title="Layers")
-                def layers(self) -> list[str]:
-                    return list(self.ctx.project.layer_ids())
+            @app.action(id="layers", title="Layers")
+            def layers(ctx: PluginContext) -> list[str]:
+                return list(ctx.project.layer_ids())
 
 
             class Recording:
@@ -80,14 +78,12 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
                 return PluginContext(notifications=NOTIFICATIONS, scope=ResourceScope())
 
 
-            @plugin(id="hosted.custom", title="Custom context")
-            class CustomContextPlugin:
-                ctx: PluginContext
-                context_factory = staticmethod(_own_context)
+            custom_app = QgisSdkPlugin(id="hosted.custom", title="Custom context")
+            custom_app.context_factory = _own_context
 
-                @action(id="say", title="Say")
-                def say(self, text: str) -> None:
-                    self.ctx.notifications.info(text)
+            @custom_app.action(id="say", title="Say")
+            def say(ctx: PluginContext, text: str) -> None:
+                ctx.notifications.info(text)
 
 
             not_a_class = 3
@@ -107,7 +103,7 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_host_returns_a_class_factory_that_runs_the_plugin_without_qgis(
     project: Path,
 ) -> None:
-    class_factory = host(f"{PACKAGE}.plugin:HostedPlugin")
+    class_factory = host(f"{PACKAGE}.plugin:app")
 
     assert class_factory.__name__ == "classFactory"
     held = class_factory(None)
@@ -134,7 +130,7 @@ def test_host_returns_a_class_factory_that_runs_the_plugin_without_qgis(
 def test_a_bare_interpreter_places_no_binding_and_refuses_ui_by_name(
     project: Path,
 ) -> None:
-    held = host(f"{PACKAGE}.plugin:HostedPlugin")(None)
+    held = host(f"{PACKAGE}.plugin:app")(None)
 
     assert [entry.id for entry in held.bindings.entries] == ["ping_dialog", "open_ping"]
     assert held.surfaces is None
@@ -152,7 +148,7 @@ def test_a_bare_interpreter_places_no_binding_and_refuses_ui_by_name(
 def test_the_bare_context_drops_messages_and_scopes_settings_by_plugin_id(
     project: Path,
 ) -> None:
-    held = host(f"{PACKAGE}.plugin:HostedPlugin")(None)
+    held = host(f"{PACKAGE}.plugin:app")(None)
 
     assert isinstance(held.context, PluginContext)
     assert isinstance(held.context.notifications, MessageBarNotifications)
@@ -168,7 +164,7 @@ def test_a_context_factory_class_attribute_replaces_the_default(
     import importlib
 
     module = importlib.import_module(f"{PACKAGE}.plugin")
-    held = host(f"{PACKAGE}.plugin:CustomContextPlugin")(None)
+    held = host(f"{PACKAGE}.plugin:custom_app")(None)
     held.initGui()
     try:
         held.runtime.actions["say"]("hello")
@@ -180,7 +176,7 @@ def test_a_context_factory_class_attribute_replaces_the_default(
 
 
 def test_show_view_without_a_declared_page_is_refused(project: Path) -> None:
-    held = host(f"{PACKAGE}.plugin:HostedPlugin")(None)
+    held = host(f"{PACKAGE}.plugin:app")(None)
 
     with pytest.raises(QgisSdkHostError, match="declares no page"):
         held.show_view()
@@ -188,7 +184,7 @@ def test_show_view_without_a_declared_page_is_refused(project: Path) -> None:
 
 def test_a_page_is_remembered_but_not_opened_until_asked(project: Path) -> None:
     class_factory = host(
-        f"{PACKAGE}.plugin:HostedPlugin",
+        f"{PACKAGE}.plugin:app",
         placement="dock",
         grants=["layers.read", "project.layer_ids"],
     )
@@ -203,11 +199,11 @@ def test_a_page_is_remembered_but_not_opened_until_asked(project: Path) -> None:
 @pytest.mark.parametrize(
     ("spec", "message"),
     [
-        (f"{PACKAGE}.plugin", "pkg.module:Class"),
-        (":HostedPlugin", "pkg.module:Class"),
+        (f"{PACKAGE}.plugin", "pkg.module:app"),
+        (":app", "pkg.module:app"),
         ("no_such_module_anywhere:Plugin", "cannot import"),
         (f"{PACKAGE}.plugin:Missing", "no attribute"),
-        (f"{PACKAGE}.plugin:not_a_class", "not a class"),
+        (f"{PACKAGE}.plugin:not_a_class", "not a QgisSdkPlugin"),
     ],
 )
 def test_bad_specs_fail_by_name(project: Path, spec: str, message: str) -> None:
@@ -218,19 +214,17 @@ def test_bad_specs_fail_by_name(project: Path, spec: str, message: str) -> None:
 def test_an_undeclared_class_is_refused_before_any_class_factory_exists(
     project: Path,
 ) -> None:
-    from qgis_sdk.declarations import QgisSdkDeclarationError
-
-    with pytest.raises(QgisSdkDeclarationError):
+    with pytest.raises(QgisSdkHostError, match="not a QgisSdkPlugin"):
         host(f"{PACKAGE}.plugin:Recording")
 
 
 def test_unknown_placement_and_grants_are_refused_by_host(project: Path) -> None:
     with pytest.raises(QgisSdkHostError, match="placement must be one of"):
-        host(f"{PACKAGE}.plugin:HostedPlugin", placement="window")
+        host(f"{PACKAGE}.plugin:app", placement="window")
     with pytest.raises(QgisSdkHostError, match="unknown host grant 'layers.nope'"):
-        host(f"{PACKAGE}.plugin:HostedPlugin", placement="dock", grants=["layers.nope"])
+        host(f"{PACKAGE}.plugin:app", placement="dock", grants=["layers.nope"])
     with pytest.raises(QgisSdkHostError, match="grants need a page"):
-        host(f"{PACKAGE}.plugin:HostedPlugin", grants=["layers.list"])
+        host(f"{PACKAGE}.plugin:app", grants=["layers.list"])
 
 
 def test_the_plugin_module_is_imported_through_the_builtin_import_hook(
@@ -255,6 +249,6 @@ def test_the_plugin_module_is_imported_through_the_builtin_import_hook(
         monkeypatch.delitem(sys.modules, name)
     monkeypatch.setattr(builtins, "__import__", tracking)
 
-    resolve_plugin_spec(f"{PACKAGE}.plugin:HostedPlugin")
+    resolve_plugin_spec(f"{PACKAGE}.plugin:app")
 
     assert f"{PACKAGE}.plugin" in seen

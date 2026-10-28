@@ -159,15 +159,15 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
                        'qgis_sdk.adapters.webengine',
                        'qgis_sdk.testing'):
             importlib.import_module(module)
-        from qgis_sdk import action, describe_plugin, plugin
+        from qgis_sdk import QgisSdkPlugin, describe
+        from qgis_sdk.core import PluginContext
 
-        @plugin(id='isolated', title='Isolated')
-        class Example:
-            @action(id='run', title='Run')
-            def run(self, count: int) -> str:
-                raise AssertionError('inspection dispatched a handler')
+        app = QgisSdkPlugin(id='isolated', title='Isolated')
+        @app.action(id='run', title='Run')
+        def run(ctx: PluginContext, count: int) -> str:
+            raise AssertionError('inspection dispatched a handler')
 
-        assert describe_plugin(Example).actions[0].id == 'run'
+        assert describe(app).actions[0].id == 'run'
         assert 'qgis' not in sys.modules
         assert 'pydantic' not in sys.modules
         print('native-free')

@@ -122,6 +122,10 @@ def check_bindings(
     except SyntaxError:
         return  # SYNTAX001 is the import checker's to report
     names = _Names(tree)
+    if directory is not None and package_directory is not None:
+        names.applications.update(
+            _imported_applications(tree, directory, package_directory)
+        )
     if not names.bindings and names.modules == () and not names.surfaces:
         return
     for node in ast.walk(tree):
@@ -137,12 +141,51 @@ def check_bindings(
             yield from _check_declared(node, names, path)
 
 
+def _imported_applications(
+    tree: ast.Module, directory: Path, package_directory: Path
+) -> set[str]:
+    """Find directly imported local plugins without importing project code."""
+    found: set[str] = set()
+    package = package_directory.resolve()
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or not node.module:
+            continue
+        if node.level:
+            base = directory
+            for _ in range(node.level - 1):
+                base = base.parent
+            parts = node.module.split(".")
+        else:
+            parts = node.module.split(".")
+            if parts[0] != package.name:
+                continue
+            base = package
+            parts = parts[1:]
+        module = base.joinpath(*parts)
+        candidates = (module.with_suffix(".py"), module / "__init__.py")
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if not resolved.is_relative_to(package) or not resolved.is_file():
+                continue
+            try:
+                imported = ast.parse(resolved.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, SyntaxError):
+                break
+            applications = _Names(imported).applications
+            found.update(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name in applications
+            )
+            break
+    return found
+
+
 class _Names:
     """How this module spells ``toolbar``, ``menu``, ``shortcut`` and ``action``."""
 
     def __init__(self, tree: ast.Module) -> None:
         self.bindings: dict[str, str] = {}
-        self.action: set[str] = set()
         self.surfaces: set[str] = set()
         self.on: set[str] = set()
         #: Module-level ``NAME = "literal"`` assignments, for ``@on(NAME)``.
@@ -174,13 +217,41 @@ class _Names:
                     local = alias.asname or alias.name
                     if alias.name in _BINDINGS:
                         self.bindings[local] = alias.name
-                    elif alias.name == "action":
-                        self.action.add(local)
             elif isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name in _SOURCES:
                         modules.append(alias.asname or alias.name)
         self.modules = tuple(modules)
+        constructors = {
+            alias.asname or alias.name
+            for statement in tree.body
+            if isinstance(statement, ast.ImportFrom) and statement.module == "qgis_sdk"
+            for alias in statement.names
+            if alias.name == "QgisSdkPlugin"
+        }
+        self.applications: set[str] = set()
+        for statement in tree.body:
+            if not isinstance(statement, ast.Assign | ast.AnnAssign) or not isinstance(
+                statement.value, ast.Call
+            ):
+                continue
+            target = statement.value.func
+            is_constructor = isinstance(target, ast.Name) and target.id in constructors
+            is_constructor |= (
+                isinstance(target, ast.Attribute)
+                and isinstance(target.value, ast.Name)
+                and target.value.id in self.modules
+                and target.attr == "QgisSdkPlugin"
+            )
+            if is_constructor:
+                targets = (
+                    statement.targets
+                    if isinstance(statement, ast.Assign)
+                    else [statement.target]
+                )
+                self.applications.update(
+                    name.id for name in targets if isinstance(name, ast.Name)
+                )
 
     def is_surface(self, node: ast.ClassDef) -> bool:
         """Whether the class subclasses ``Dialog``/``Dock`` as this module spells them."""
@@ -222,16 +293,21 @@ class _Names:
         if isinstance(target, ast.Name):
             if target.id in self.bindings:
                 return self.bindings[target.id]
-            if target.id in self.action:
-                return "action"
             return None
         if (
             isinstance(target, ast.Attribute)
             and isinstance(target.value, ast.Name)
             and target.value.id in self.modules
-            and target.attr in (*_BINDINGS, "action")
+            and target.attr in _BINDINGS
         ):
             return target.attr
+        if (
+            isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Name)
+            and target.value.id in self.applications
+            and target.attr == "action"
+        ):
+            return "action"
         return None
 
 

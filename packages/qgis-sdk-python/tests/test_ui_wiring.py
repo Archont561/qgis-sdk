@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from qgis_sdk import action, plugin, stream
 from qgis_sdk.core import (
     JobContext,
     PluginContext,
@@ -24,6 +23,7 @@ from qgis_sdk.core import (
     ResourceScope,
     UiContext,
 )
+from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.testing import (
@@ -126,7 +126,7 @@ def scope() -> Iterator[ResourceScope]:
 @pytest.fixture
 def runtime(scope: ResourceScope) -> Iterator[PluginRuntime]:
     context = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
-    runtime = PluginRuntime(WiringPlugin, context)
+    runtime = PluginRuntime._from_plugin_class(WiringPlugin, context)
     runtime.start()
     instance = runtime.instance
     assert isinstance(instance, WiringPlugin)
@@ -359,7 +359,7 @@ def test_a_failing_or_malformed_stream_ends_with_an_error_event(
             yield  # pragma: no cover
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
+    runtime = PluginRuntime._from_plugin_class(
         Broken, PluginContext(notifications=RecordingNotifications(scope), scope=scope)
     )
     runtime.start()

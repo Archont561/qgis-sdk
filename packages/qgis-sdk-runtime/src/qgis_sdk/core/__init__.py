@@ -2,7 +2,6 @@
 
 from .contexts import AlgorithmContext, JobContext, PluginContext, UiContext
 from .runtime import (
-    PluginFactory,
     PluginRuntime,
     PluginRuntimeState,
     QgisSdkPluginLifecycleError,
@@ -24,7 +23,6 @@ __all__ = [
     "JobContext",
     "JobState",
     "PluginContext",
-    "PluginFactory",
     "PluginRuntime",
     "PluginRuntimeState",
     "QgisSdkPluginLifecycleError",

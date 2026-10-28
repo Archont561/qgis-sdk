@@ -45,8 +45,8 @@ def test_the_plugin_lists_the_provider_and_wires_the_action() -> None:
     plugin_module = content_of(plan, "demo_tools/plugin.py")
     algorithms = content_of(plan, "demo_tools/algorithms.py")
 
-    assert "providers = (algorithms.provider,)" in plugin_module
-    assert '@action(id="buffer"' in plugin_module
+    assert "app.add_provider(algorithms.provider)" in plugin_module
+    assert '@app.action(id="buffer"' in plugin_module
     assert "invoke(" in plugin_module
     assert 'Provider(id="demo_tools", title="Demo Tools")' in algorithms
     assert "@provider.algorithm(" in algorithms
@@ -143,7 +143,7 @@ def test_the_cli_flag_writes_the_algorithm_module(tmp_path: Path) -> None:
     assert (target / "demo_tools" / "algorithms.py").is_file()
     assert "demo_tools/algorithms.py" in result.output
     manifest = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
-    assert manifest["tool"]["qgis-sdk"]["plugin"] == "demo_tools.plugin:DemoToolsPlugin"
+    assert manifest["tool"]["qgis-sdk"]["plugin"] == "demo_tools.plugin:app"
 
 
 @pytest.mark.parametrize("web", [None, "vanilla"])

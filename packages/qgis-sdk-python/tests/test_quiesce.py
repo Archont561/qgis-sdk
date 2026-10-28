@@ -12,7 +12,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pytest
-from qgis_sdk import action, plugin
 from qgis_sdk.core import (
     JobContext,
     PluginContext,
@@ -21,6 +20,7 @@ from qgis_sdk.core import (
     QuiesceOutcome,
     ResourceScope,
 )
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobService, job
 from qgis_sdk.models import QgisSdkScopeClosedError
 from qgis_sdk.testing import FakeWorkers
@@ -129,7 +129,7 @@ class TestJobService:
 class TestPluginRuntime:
     def test_a_running_plugin_without_work_is_safe_and_stays_running(self) -> None:
         context = PluginContext(notifications=Notes(), scope=ResourceScope())
-        runtime = PluginRuntime(Tools, context)
+        runtime = PluginRuntime._from_plugin_class(Tools, context)
         runtime.start()
 
         outcome = runtime.quiesce()
@@ -141,7 +141,7 @@ class TestPluginRuntime:
     def test_stuck_work_refuses_and_resume_restores_the_old_revision(self) -> None:
         scope = ResourceScope()
         context = PluginContext(notifications=Notes(), scope=scope)
-        runtime = PluginRuntime(Tools, context)
+        runtime = PluginRuntime._from_plugin_class(Tools, context)
         runtime.start()
         workers = FakeWorkers()
         jobs = JobService(scope, workers=workers)
@@ -160,7 +160,7 @@ class TestPluginRuntime:
 
     def test_a_plugin_that_is_not_running_refuses_with_its_state(self) -> None:
         context = PluginContext(notifications=Notes(), scope=ResourceScope())
-        runtime = PluginRuntime(Tools, context)
+        runtime = PluginRuntime._from_plugin_class(Tools, context)
 
         outcome = runtime.quiesce()
 

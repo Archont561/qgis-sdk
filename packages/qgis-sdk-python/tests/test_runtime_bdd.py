@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 
 import pytest
 from pytest_bdd import given, scenarios, then, when
-from qgis_sdk import action, plugin
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
@@ -12,6 +11,7 @@ from qgis_sdk.core import (
     QgisSdkPluginLifecycleError,
     ResourceScope,
 )
+from qgis_sdk.declarations._plugin import action, plugin
 
 scenarios("features/runtime_lifecycle.feature")
 
@@ -51,7 +51,7 @@ def declared_plugin_recording_context() -> RuntimeScenario:
             return value
 
     context = plugin_context()
-    return RuntimeScenario(context, PluginRuntime(Recorded, context))
+    return RuntimeScenario(context, PluginRuntime._from_plugin_class(Recorded, context))
 
 
 @when("the runtime starts")
@@ -97,7 +97,9 @@ def failing_plugin_with_resources() -> RuntimeScenario:
             pass
 
     context = plugin_context()
-    return RuntimeScenario(context, PluginRuntime(Broken, context), released=released)
+    return RuntimeScenario(
+        context, PluginRuntime._from_plugin_class(Broken, context), released=released
+    )
 
 
 @when("its runtime start is attempted")
@@ -149,7 +151,7 @@ def running_plugin_with_two_resources() -> RuntimeScenario:
             pass
 
     context = plugin_context()
-    runtime = PluginRuntime(Owned, context)
+    runtime = PluginRuntime._from_plugin_class(Owned, context)
     runtime.start()
     return RuntimeScenario(context, runtime, released=released)
 

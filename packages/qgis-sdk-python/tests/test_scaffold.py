@@ -95,7 +95,7 @@ def test_options_trim_the_text_they_are_given() -> None:
         {"name": "Ana", "email": "ana@example.invalid"}
     ]
     assert manifest["project"]["description"].startswith("Field Tools:")
-    assert '@plugin(id="demo_tools", title="Field Tools")' in content_of(
+    assert 'app = QgisSdkPlugin(id="demo_tools", title="Field Tools")' in content_of(
         plan, "demo_tools/plugin.py"
     )
 
@@ -151,7 +151,7 @@ def test_the_manifest_declares_the_plugin_class_and_qgis_facts() -> None:
     assert manifest["project"]["dependencies"] == [runtime_line]
     assert manifest["dependency-groups"] == {"dev": [tools_line]}
     assert manifest["tool"]["qgis-sdk"] == {
-        "plugin": "demo_tools.plugin:DemoToolsPlugin",
+        "plugin": "demo_tools.plugin:app",
         "qgis-minimum-version": "4.0",
         "experimental": True,
     }
@@ -208,8 +208,8 @@ def test_generated_python_is_parsable_and_uses_the_sdk_framework_explicitly() ->
     )
 
     ast.parse(module)
-    assert "@plugin(id=" in module
-    assert "@action(id=" in module
+    assert "QgisSdkPlugin(id=" in module
+    assert "@app.action(id=" in module
     assert "ctx: PluginContext" in module
     assert "import qgis" not in module
 
@@ -235,7 +235,7 @@ def test_the_generated_project_runs_in_a_bare_interpreter_without_qgis(
     result = run_generated_project(
         project,
         "from qgis_sdk.adapters.desktop import host;"
-        "plugin = host('demo_tools.plugin:DemoToolsPlugin')(None);"
+        "plugin = host('demo_tools.plugin:app')(None);"
         "plugin.initGui();"
         "print(plugin.runtime.state.value);"
         "print(plugin.runtime.actions['ping'](7));"
@@ -258,7 +258,7 @@ def test_instantiating_the_generated_project_loads_no_native_module(
         project,
         "import sys;"
         "from qgis_sdk.adapters.desktop import host;"
-        "host('demo_tools.plugin:DemoToolsPlugin')(None);"
+        "host('demo_tools.plugin:app')(None);"
         "print('qgis' in sys.modules, 'PyQt6' in sys.modules)",
     )
 

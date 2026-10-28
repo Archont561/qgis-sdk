@@ -36,14 +36,14 @@ except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"the surface host needs QGIS: {error}", allow_module_level=True)
 
 PACKAGE = "surface_tools"
-SPEC = f"{PACKAGE}.plugin:SurfaceTools"
+SPEC = f"{PACKAGE}.plugin:app"
 
 PLUGIN = """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from qgis_sdk import action, menu, plugin, shortcut, toolbar
+from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
 from qgis_sdk.core import JobContext, PluginContext, ResourceScope
 from qgis_sdk.jobs import JobHandle, JobService, job
 from qgis_sdk.testing import FakeFiles, FakeWorkers, RecordingNotifications
@@ -76,7 +76,9 @@ def slow_sum(ctx: JobContext, a: int, b: int) -> Total:
 
 
 def build_context(iface: object) -> PluginContext:
+    global JOBS
     scope = ResourceScope()
+    JOBS = JobService(scope, workers=FakeWorkers(), gui_thread=lambda: False)
     return PluginContext(
         notifications=RecordingNotifications(scope),
         scope=scope,
@@ -85,47 +87,42 @@ def build_context(iface: object) -> PluginContext:
     )
 
 
-@plugin(id="surface_tools", title="Surface tools")
-class SurfaceTools:
-    ctx: PluginContext
-    context_factory = staticmethod(build_context)
-    surfaces = [BufferDialog, LayerPanel, NoteDialog]
+app = QgisSdkPlugin(id="surface_tools", title="Surface tools")
+app.context_factory = build_context
+for surface in (BufferDialog, LayerPanel, NoteDialog):
+    app.add_surface(surface)
 
-    def __init__(self) -> None:
-        self.jobs = JobService(
-            self.ctx.scope, workers=FakeWorkers(), gui_thread=lambda: False
-        )
+@toolbar(icon="count.svg")
+@shortcut("Ctrl+Alt+K")
+@app.action(id="count", title="Count")
+def count(ctx: PluginContext) -> int:
+    CALLS.append("count")
+    return len(CALLS)
 
-    @toolbar(icon="count.svg")
-    @shortcut("Ctrl+Alt+K")
-    @action
-    def count(self) -> int:
-        CALLS.append("count")
-        return len(CALLS)
+@menu("Vector/Surface tools")
+@app.action(id="typed", title="Typed")
+def typed(ctx: PluginContext, distance: float) -> float:
+    CALLS.append("typed")
+    return distance
 
-    @menu("Vector/Surface tools")
-    @action
-    def typed(self, distance: float) -> float:
-        CALLS.append("typed")
-        return distance
+@toolbar(text="Sum")
+@app.action(id="start_sum", title="Start sum")
+def start_sum(ctx: PluginContext) -> JobHandle:
+    return JOBS.delay(slow_sum, a=1, b=2)
 
-    @toolbar(text="Sum")
-    @action
-    def start_sum(self) -> JobHandle:
-        return self.jobs.delay(slow_sum, a=1, b=2)
+@app.action(id="buffer", title="Buffer")
+def buffer_selection(ctx: PluginContext, distance: float) -> str:
+    CALLS.append(f"buffer:{distance}")
+    return f"buffered {distance}"
 
-    @action(id="buffer", title="Buffer")
-    def buffer_selection(self, distance: float) -> str:
-        CALLS.append(f"buffer:{distance}")
-        return f"buffered {distance}"
+@app.action(id="open_buffer", title="Open buffer")
+def open_buffer(ctx: PluginContext) -> None:
+    ctx.ui.open(BufferDialog, initial={"distance": 5})
 
-    @action
-    def open_buffer(self) -> None:
-        self.ctx.ui.open(BufferDialog, initial={"distance": 5})
+@app.action(id="notify", title="Notify")
+def notify(ctx: PluginContext) -> None:
+    ctx.notifications.with_action("Count", "count").success("Done")
 
-    @action
-    def notify(self) -> None:
-        self.ctx.notifications.with_action("Count", "count").success("Done")
 """
 
 UI = """
@@ -359,7 +356,7 @@ def test_triggering_a_typed_action_without_a_surface_is_refused_by_name(
 
 
 def test_a_job_submitting_action_reports_on_the_message_bar(
-    qgis_app: Any, desktop: Any, iface: FakeIface
+    qgis_app: Any, desktop: Any, iface: FakeIface, modules: tuple[Any, Any]
 ) -> None:
     start = next(
         a for a in iface.toolbar if a.objectName() == "surface_tools.start_sum"
@@ -376,7 +373,7 @@ def test_a_job_submitting_action_reports_on_the_message_bar(
         ]
 
     assert progress_bars() == ["surface_tools.start_sum.progress"]
-    jobs = desktop.runtime.instance.jobs
+    jobs = modules[0].JOBS
     texts: list[str] = []
     for _ in range(20):
         jobs.tick()

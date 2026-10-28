@@ -28,33 +28,31 @@ def test_a_bound_typed_action_is_ui003_whatever_the_stacking_order(
     tmp_path: Path,
 ) -> None:
     source = """
-        from qgis_sdk import action, menu, plugin, shortcut, toolbar
+        from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
+        app = QgisSdkPlugin(id="x", title="X")
 
+        @toolbar
+        @app.action(id="typed", title="Typed")
+        def typed(ctx, distance: float, note: str = "") -> None: ...
 
-        @plugin(id="x", title="X")
-        class X:
-            @toolbar
-            @action
-            def typed(self, distance: float, note: str = "") -> None: ...
+        @app.action(id="below", title="Below")
+        @menu("Vector/X")
+        @shortcut("F9")
+        def below(ctx, *, layer_id: str) -> None: ...
 
-            @action
-            @menu("Vector/X")
-            @shortcut("F9")
-            def below(self, *, layer_id: str) -> None: ...
+        @toolbar
+        @app.action(id="plain", title="Plain")
+        def plain(ctx) -> None: ...
 
-            @toolbar
-            @action
-            def plain(self) -> None: ...
-
-            @action
-            def unbound(self, value: int) -> int: ...
+        @app.action(id="unbound", title="Unbound")
+        def unbound(ctx, value: int) -> int: ...
         """
     typed = (
-        "UI003:9:typed is bound to the Desktop (@toolbar) but takes inputs "
+        "UI003:7:typed is bound to the Desktop (@toolbar) but takes inputs "
         "(distance, note); nothing collects them"
     )
     below = (
-        "UI003:14:below is bound to the Desktop (@menu, @shortcut) but takes "
+        "UI003:12:below is bound to the Desktop (@menu, @shortcut) but takes "
         "inputs (layer_id); nothing collects them"
     )
     assert findings(source, tmp_path=tmp_path) == [typed, below]
@@ -64,18 +62,17 @@ def test_aliases_and_module_imports_are_recognised(tmp_path: Path) -> None:
     source = """
         import qgis_sdk as sdk
         from qgis_sdk.bindings import toolbar as button
+        group = sdk.QgisSdkPlugin()
 
+        @button
+        @group.action(id="one", title="One")
+        def one(ctx, a: int) -> None: ...
 
-        class X:
-            @button
-            @sdk.action
-            def one(self, a: int) -> None: ...
-
-            @sdk.menu("Plugins/X")
-            @sdk.action
-            def two(self, b: int) -> None: ...
+        @sdk.menu("Plugins/X")
+        @group.action(id="two", title="Two")
+        def two(ctx, b: int) -> None: ...
         """
-    assert [f.split(":")[1] for f in findings(source, tmp_path=tmp_path)] == ["9", "13"]
+    assert [f.split(":")[1] for f in findings(source, tmp_path=tmp_path)] == ["8", "12"]
 
 
 def test_a_binding_from_elsewhere_is_not_ours(tmp_path: Path) -> None:
@@ -93,30 +90,27 @@ def test_a_binding_from_elsewhere_is_not_ours(tmp_path: Path) -> None:
 
 def test_a_missing_icon_is_icon001_on_actions_and_surfaces(tmp_path: Path) -> None:
     source = """
-        from qgis_sdk import action, toolbar
+        from qgis_sdk import QgisSdkPlugin, toolbar
         from qgis_sdk.ui import Dialog
-
+        app = QgisSdkPlugin(id="x", title="X")
 
         @toolbar(icon="present.svg")
         class Present(Dialog): ...
 
-
         @toolbar(icon="missing.svg")
         class Missing(Dialog): ...
 
+        @toolbar(icon="../escape.svg", text="Run")
+        @app.action(id="run", title="Run")
+        def run(ctx) -> None: ...
 
-        class X:
-            @toolbar(icon="../escape.svg", text="Run")
-            @action
-            def run(self) -> None: ...
-
-            @toolbar(text="No icon")
-            @action
-            def plain(self) -> None: ...
+        @toolbar(text="No icon")
+        @app.action(id="plain", title="Plain")
+        def plain(ctx) -> None: ...
         """
     assert findings(source, icons=("present.svg",), tmp_path=tmp_path) == [
-        "ICON001:10:@toolbar icon 'missing.svg' is not a file under pkg/icons/",
-        "ICON001:15:@toolbar icon '../escape.svg' is not a file under pkg/icons/",
+        "ICON001:9:@toolbar icon 'missing.svg' is not a file under pkg/icons/",
+        "ICON001:12:@toolbar icon '../escape.svg' is not a file under pkg/icons/",
     ]
 
 
@@ -172,7 +166,7 @@ def test_check_project_reports_both_rules_with_remediation(tmp_path: Path) -> No
             dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]
 
             [tool.qgis-sdk]
-            plugin = "field_tools.plugin:FieldTools"
+            plugin = "field_tools.plugin:app"
             qgis-minimum-version = "4.0"
             """
         ),
@@ -184,17 +178,16 @@ def test_check_project_reports_both_rules_with_remediation(tmp_path: Path) -> No
     (package / "plugin.py").write_text(
         textwrap.dedent(
             """
-            from qgis_sdk import action, plugin, toolbar
+            from qgis_sdk import QgisSdkPlugin, toolbar
             from qgis_sdk.core import PluginContext
 
 
-            @plugin(id="field_tools", title="Field tools")
-            class FieldTools:
-                ctx: PluginContext
+            app = QgisSdkPlugin(id="field_tools", title="Field tools")
 
-                @toolbar(icon="buffer.svg")
-                @action
-                def buffer(self, distance: float) -> None: ...
+
+            @toolbar(icon="buffer.svg")
+            @app.action(id="buffer", title="Buffer")
+            def buffer(ctx: PluginContext, distance: float) -> None: ...
             """
         ),
         encoding="utf-8",
@@ -208,7 +201,7 @@ def test_check_project_reports_both_rules_with_remediation(tmp_path: Path) -> No
     assert "self.ctx.actions.buffer(" in by_rule["UI003"].remediation
     assert "field_tools/icons/buffer.svg" in by_rule["ICON001"].remediation
     rendered = by_rule["ICON001"].render()
-    assert rendered.startswith("field_tools/plugin.py:10:")
+    assert rendered.startswith("field_tools/plugin.py:9:")
 
 
 UI_FILE = """\

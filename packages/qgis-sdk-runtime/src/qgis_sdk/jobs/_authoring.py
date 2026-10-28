@@ -87,7 +87,7 @@ def job(
         def sum_numbers(ctx: JobContext, a: int, b: int = 0) -> SumResult: ...
 
     ``@job`` alone derives the id and title from the function name, the way
-    ``@plugin`` does for a class; ``id=`` and ``title=`` override either one.
+    a declaration does for a named function; ``id=`` and ``title=`` override either one.
     The decorator adds ``describe()`` but does not wrap the function; the runtime passes the context
     when it runs the attempt, so a test calls the function directly with a
     fake. ``async def`` is allowed and suspends on the scheduler at each

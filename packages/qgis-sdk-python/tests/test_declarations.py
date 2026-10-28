@@ -3,7 +3,9 @@
 import json
 
 import pytest
-from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin
+from qgis_sdk import QgisSdkDeclarationError
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.declarations._schemas import _schema
 
 
@@ -474,7 +476,7 @@ def _watching_plugin():
     from collections.abc import Iterator
     from dataclasses import dataclass
 
-    from qgis_sdk import stream
+    from qgis_sdk.declarations._plugin import stream
 
     @dataclass(frozen=True)
     class Change:
@@ -569,7 +571,7 @@ def test_an_action_only_plugin_still_serializes_an_empty_stream_list():
 
 
 def test_a_stream_may_be_a_generator_and_its_return_annotation_is_not_the_wire():
-    from qgis_sdk import stream
+    from qgis_sdk.declarations._plugin import stream
 
     @plugin(id="p", title="P")
     class Plugin:
@@ -596,7 +598,7 @@ def test_a_stream_may_be_a_generator_and_its_return_annotation_is_not_the_wire()
     ],
 )
 def test_a_stream_declares_only_the_event_kinds_the_wire_carries(events, message):
-    from qgis_sdk import stream
+    from qgis_sdk.declarations._plugin import stream
 
     def watch(self) -> None:
         pass
@@ -613,7 +615,7 @@ def test_a_stream_declares_only_the_event_kinds_the_wire_carries(events, message
 
 
 def test_a_stream_id_shares_the_namespace_with_actions():
-    from qgis_sdk import stream
+    from qgis_sdk.declarations._plugin import stream
 
     @plugin(id="p", title="P")
     class Plugin:
@@ -630,7 +632,7 @@ def test_a_stream_id_shares_the_namespace_with_actions():
 
 
 def test_a_method_cannot_be_both_an_action_and_a_stream():
-    from qgis_sdk import stream
+    from qgis_sdk.declarations._plugin import stream
 
     with pytest.raises(QgisSdkDeclarationError, match="duplicate"):
 
@@ -648,7 +650,7 @@ def test_a_method_cannot_be_both_an_action_and_a_stream():
 
 
 def test_an_async_stream_is_refused_like_an_async_action():
-    from qgis_sdk import stream
+    from qgis_sdk.declarations._plugin import stream
 
     namespace = {}
     exec("async def watch(self) -> None: pass", namespace)  # noqa: S102

@@ -151,7 +151,7 @@ def inspect_project(root: Path) -> DevProject:
 def stage_host(project: DevProject) -> Path:
     """Write the generated host package under ``.qgis-sdk/dev/host``; return that dir.
 
-    Imports the plugin class once, in this interpreter, to read its title
+    Imports the plugin application once, in this interpreter, to read its title
     and providers for ``metadata.txt`` - the same facts ``build`` renders,
     so the two files are byte-identical.
     """

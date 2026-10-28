@@ -43,9 +43,9 @@ def test_the_plugin_lists_the_surface_and_binds_the_opening_action() -> None:
     plugin_module = content_of(plan, "demo_tools/plugin.py")
     ui_module = content_of(plan, "demo_tools/ui.py")
 
-    assert "surfaces = (PingDialog,)" in plugin_module
+    assert "app.add_surface(PingDialog)" in plugin_module
     assert '@toolbar(text="Demo Tools")' in plugin_module
-    assert "self.ctx.ui.open(PingDialog" in plugin_module
+    assert "ctx.ui.open(PingDialog" in plugin_module
     assert '@menu("Plugins/Demo Tools")' in ui_module
     assert "class PingDialog(Dialog):" in ui_module
     # The declarative form (TASK-108 AC #1): components on the class, a Form
@@ -88,7 +88,7 @@ def test_the_starter_dialog_opens_under_the_fake_with_its_initial_value(
 
     scope = ResourceScope()
     runtime = PluginRuntime(
-        plugin_module.DemoToolsPlugin,
+        plugin_module.app,
         PluginContext(notifications=RecordingNotifications(scope), scope=scope),
     )
     runtime.start()

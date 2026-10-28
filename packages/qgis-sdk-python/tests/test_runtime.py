@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import pytest
-from qgis_sdk import QgisSdkDeclarationError, action, plugin, stream
+from qgis_sdk import QgisSdkDeclarationError
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
@@ -14,6 +14,7 @@ from qgis_sdk.core import (
     QgisSdkPluginLifecycleError,
     ResourceScope,
 )
+from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.models import QgisSdkScopeClosedError
 
 
@@ -40,7 +41,7 @@ class Tools:
 
 def test_start_constructs_the_plugin_with_the_explicit_context() -> None:
     context = plugin_context()
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
 
     assert runtime.state is PluginRuntimeState.NEW
     assert runtime.instance is None
@@ -78,7 +79,9 @@ def test_explicit_instance_factory_receives_context_without_calling_the_construc
         instance.ctx = received
         return instance
 
-    instance = PluginRuntime(FactoryTools, context, instance_factory=factory).start()
+    instance = PluginRuntime._from_plugin_class(
+        FactoryTools, context, instance_factory=factory
+    ).start()
 
     assert factory_calls == [context]
     assert instance.ctx is context
@@ -95,7 +98,7 @@ def test_runtime_rejects_an_undeclared_class_without_constructing_it() -> None:
             constructed.append(True)
 
     with pytest.raises(QgisSdkDeclarationError):
-        PluginRuntime(Plain, context)
+        PluginRuntime._from_plugin_class(Plain, context)
 
     assert constructed == []
 
@@ -105,7 +108,7 @@ def test_runtime_rejects_an_already_disposed_context() -> None:
     context.scope.close()
 
     with pytest.raises(QgisSdkScopeClosedError):
-        PluginRuntime(Tools, context)
+        PluginRuntime._from_plugin_class(Tools, context)
 
 
 def test_starting_twice_does_not_construct_twice() -> None:
@@ -122,7 +125,7 @@ def test_starting_twice_does_not_construct_twice() -> None:
         def noop(self) -> None:
             pass
 
-    runtime = PluginRuntime(Counted, plugin_context())
+    runtime = PluginRuntime._from_plugin_class(Counted, plugin_context())
     runtime.start()
 
     with pytest.raises(QgisSdkPluginLifecycleError) as caught:
@@ -135,7 +138,7 @@ def test_starting_twice_does_not_construct_twice() -> None:
 
 def test_actions_are_read_only_and_cleared_on_unload() -> None:
     context = plugin_context()
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
     instance = runtime.start()
 
     with pytest.raises(TypeError):
@@ -154,7 +157,7 @@ def test_unload_closes_the_owned_scope_once_and_is_repeatable() -> None:
     context = plugin_context()
     released: list[str] = []
     context.scope.on_close(lambda: released.append("closed"))
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
     runtime.start()
 
     runtime.unload()
@@ -169,7 +172,7 @@ def test_unload_before_start_still_disposes_registered_resources() -> None:
     context = plugin_context()
     released: list[str] = []
     context.scope.on_close(lambda: released.append("registered"))
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
 
     runtime.unload()
 
@@ -194,7 +197,7 @@ def test_unload_disposes_owned_resources_in_reverse_registration_order() -> None
         def run(self) -> None:
             pass
 
-    runtime = PluginRuntime(Owned, plugin_context())
+    runtime = PluginRuntime._from_plugin_class(Owned, plugin_context())
     runtime.start()
 
     runtime.unload()
@@ -219,7 +222,7 @@ def test_partial_startup_failure_disposes_owned_resources_and_reraises() -> None
         def run(self) -> None:
             pass
 
-    runtime = PluginRuntime(Broken, context)
+    runtime = PluginRuntime._from_plugin_class(Broken, context)
 
     with pytest.raises(ValueError, match="author construction failed"):
         runtime.start()
@@ -245,7 +248,7 @@ def test_factory_returning_another_type_fails_binding_and_cleans_up() -> None:
         ctx.scope.on_close(lambda: released.append("registered"))
         return object()
 
-    runtime = PluginRuntime(Tools, context, instance_factory=factory)
+    runtime = PluginRuntime._from_plugin_class(Tools, context, instance_factory=factory)
 
     with pytest.raises(QgisSdkPluginLifecycleError) as caught:
         runtime.start()
@@ -275,7 +278,7 @@ def test_startup_cleanup_failure_is_attached_to_the_original_error() -> None:
             pass
 
     with pytest.raises(ValueError, match="startup") as caught:
-        PluginRuntime(Cleanup, context).start()
+        PluginRuntime._from_plugin_class(Cleanup, context).start()
 
     assert isinstance(caught.value.__cause__, ExceptionGroup)
     assert [str(error) for error in caught.value.__cause__.exceptions] == ["cleanup"]
@@ -287,7 +290,7 @@ def test_unload_reports_cleanup_failures_but_stays_stopped() -> None:
     attempted: list[str] = []
     context.scope.on_close(lambda: attempted.append("first"))
     context.scope.on_close(lambda: (_ for _ in ()).throw(RuntimeError("cleanup")))
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
     runtime.start()
 
     with pytest.raises(ExceptionGroup) as caught:
@@ -316,7 +319,7 @@ def test_start_after_unload_is_rejected_without_constructing() -> None:
         def noop(self) -> None:
             pass
 
-    runtime = PluginRuntime(Stopped, plugin_context())
+    runtime = PluginRuntime._from_plugin_class(Stopped, plugin_context())
     runtime.unload()
 
     with pytest.raises(QgisSdkPluginLifecycleError):
@@ -327,7 +330,7 @@ def test_start_after_unload_is_rejected_without_constructing() -> None:
 
 def test_start_rejects_a_context_disposed_after_construction() -> None:
     context = plugin_context()
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
     context.scope.close()
 
     with pytest.raises(QgisSdkScopeClosedError):
@@ -346,7 +349,7 @@ def test_non_callable_action_binding_fails_and_cleans_up() -> None:
         instance.run = None  # type: ignore[attr-defined]
         return instance
 
-    runtime = PluginRuntime(Tools, context, instance_factory=factory)
+    runtime = PluginRuntime._from_plugin_class(Tools, context, instance_factory=factory)
 
     with pytest.raises(QgisSdkPluginLifecycleError) as caught:
         runtime.start()
@@ -370,7 +373,7 @@ def test_declared_streams_are_bound_beside_the_actions_and_cleared_on_unload() -
             for index in range(count):
                 yield {"kind": "data", "payload": index}
 
-    runtime = PluginRuntime(Watch, plugin_context())
+    runtime = PluginRuntime._from_plugin_class(Watch, plugin_context())
     assert dict(runtime.streams) == {}
 
     runtime.start()
@@ -399,7 +402,7 @@ def test_non_callable_stream_binding_names_the_stream() -> None:
         def ticks(self) -> None:
             return None
 
-    runtime = PluginRuntime(Watch, plugin_context())
+    runtime = PluginRuntime._from_plugin_class(Watch, plugin_context())
     with pytest.raises(QgisSdkPluginLifecycleError, match="stream 'ticks'"):
         runtime.start()
     assert runtime.state is PluginRuntimeState.FAILED
@@ -420,7 +423,7 @@ def test_the_context_is_a_class_attribute_while_running_and_gone_after_unload() 
             return type(self.ctx).__name__
 
     assert "ctx" not in vars(Tools)
-    runtime = PluginRuntime(Tools, context)
+    runtime = PluginRuntime._from_plugin_class(Tools, context)
     assert "ctx" not in vars(Tools), "binding happens at start, not construction"
 
     instance = runtime.start()
@@ -443,7 +446,7 @@ def test_a_failed_start_leaves_no_context_on_the_class() -> None:
             raise ValueError("startup")
 
     with pytest.raises(ValueError, match="startup"):
-        PluginRuntime(Failing, plugin_context()).start()
+        PluginRuntime._from_plugin_class(Failing, plugin_context()).start()
 
     assert "ctx" not in vars(Failing)
 
@@ -455,7 +458,7 @@ def test_a_constructor_that_still_expects_the_context_gets_a_migration_hint() ->
             self.ctx = ctx
 
     with pytest.raises(QgisSdkPluginLifecycleError) as caught:
-        PluginRuntime(Legacy, plugin_context()).start()
+        PluginRuntime._from_plugin_class(Legacy, plugin_context()).start()
 
     assert "constructed with no arguments" in str(caught.value)
     assert "ctx" in str(caught.value)
@@ -469,7 +472,7 @@ def test_a_type_error_raised_inside_the_constructor_is_not_rewritten() -> None:
             raise TypeError("my own mistake")
 
     with pytest.raises(TypeError, match="my own mistake"):
-        PluginRuntime(Explodes, plugin_context()).start()
+        PluginRuntime._from_plugin_class(Explodes, plugin_context()).start()
 
 
 def test_the_most_recently_started_runtime_owns_the_class_attribute() -> None:
@@ -484,8 +487,8 @@ def test_the_most_recently_started_runtime_owns_the_class_attribute() -> None:
     class Shared:
         ctx: PluginContext
 
-    first = PluginRuntime(Shared, plugin_context())
-    second = PluginRuntime(Shared, plugin_context())
+    first = PluginRuntime._from_plugin_class(Shared, plugin_context())
+    second = PluginRuntime._from_plugin_class(Shared, plugin_context())
     first.start()
     second.start()
 
@@ -509,6 +512,8 @@ def test_the_instance_factory_sees_the_context_on_the_class_as_well() -> None:
         assert vars(Tools)["ctx"] is received
         return Tools()
 
-    instance = PluginRuntime(Tools, context, instance_factory=factory).start()
+    instance = PluginRuntime._from_plugin_class(
+        Tools, context, instance_factory=factory
+    ).start()
 
     assert instance.ctx is context

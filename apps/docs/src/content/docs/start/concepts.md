@@ -5,15 +5,15 @@ sidebar:
   order: 3
 ---
 
-One declaration drives every host: the same Python class describes the
+One declaration drives every host: the same plugin object describes the
 plugin to QGIS, to the test fakes and to a web page. These are the terms the
 guides rely on.
 
 ## Plugin and action
 
-A **plugin** is a plain class marked `@plugin(id=..., title=...)`. An
-**action** is a method on it marked `@action(id=..., title=...)`: a named,
-typed operation with keyword parameters. Actions are headless; they know
+A **plugin** is a `QgisSdkPlugin(id=..., title=...)`. An **action** is a function
+registered with `@app.action(id=..., title=...)`: a named, typed operation
+whose first argument is an injected `PluginContext`. Actions are headless; they know
 nothing about buttons or pages. Everything a user can trigger - a toolbar
 button, a native form, a web page call, a Processing algorithm - ends in an
 action. See [Declarations](/qgis-sdk/python/declarations/).

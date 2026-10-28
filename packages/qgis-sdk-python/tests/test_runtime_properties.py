@@ -4,13 +4,13 @@ from dataclasses import dataclass, field
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from qgis_sdk import action, plugin
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
     PluginRuntimeState,
     ResourceScope,
 )
+from qgis_sdk.declarations._plugin import action, plugin
 
 
 @dataclass
@@ -44,7 +44,7 @@ def test_repeated_unload_releases_each_owned_resource_exactly_once(
     )
     for index in range(cleanup_count):
         context.scope.on_close(lambda index=index: released.append(index))
-    runtime = PluginRuntime(PropertyPlugin, context)
+    runtime = PluginRuntime._from_plugin_class(PropertyPlugin, context)
     runtime.start()
 
     for _ in range(unload_calls):

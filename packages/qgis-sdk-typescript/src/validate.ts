@@ -1,5 +1,5 @@
 /**
- * Validate a value against the schema subset `describe_plugin` emits.
+ * Validate a value against the schema subset `describe(app)` emits.
  *
  * This is the TypeScript side of `qgis_sdk.bridge.schema`: the same closed
  * dialect (objects with `properties`/`required`/`additionalProperties`, arrays

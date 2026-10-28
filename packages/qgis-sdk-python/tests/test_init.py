@@ -8,15 +8,12 @@ def test_public_surface_is_the_declarations_and_bindings_api() -> None:
         "ActionDescription",
         "PluginDescription",
         "QgisSdkDeclarationError",
+        "QgisSdkPlugin",
         "StreamDescription",
-        "action",
         "describe",
         "describe_bindings",
-        "describe_plugin",
         "menu",
-        "plugin",
         "shortcut",
-        "stream",
         "toolbar",
     ]
 

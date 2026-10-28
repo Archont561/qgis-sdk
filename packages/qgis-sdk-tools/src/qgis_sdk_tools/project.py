@@ -1,7 +1,7 @@
 """``[tool.qgis-sdk]`` and ``[project]``: the one description of a plugin project.
 
 decision-43: an author's project holds no ``metadata.txt``, no ``classFactory``
-and no ``webview.py``. ``pyproject.toml`` names the plugin class and the
+and no ``webview.py``. ``pyproject.toml`` names the plugin application and the
 few QGIS-only facts, and ``build`` and ``dev`` derive the host artifacts from
 it. This module reads that configuration and reports what is missing or
 malformed, with the same :class:`Diagnostic` shape ``check`` prints; it
@@ -17,7 +17,7 @@ imports nothing of the project.
     dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]
 
     [tool.qgis-sdk]
-    plugin = "field_tools.plugin:FieldTools"
+    plugin = "field_tools.plugin:app"
     qgis-minimum-version = "4.0"
     experimental = true
 
@@ -36,7 +36,7 @@ Rules reported here:
     the plugin is. A project scaffolded before decision-43 sees this once,
     beside ``META001``/``ENTRY002`` for the files it still carries.
 ``CONFIG001``
-    an entry has the wrong shape (``plugin`` not ``pkg.module:Class``, a
+    an entry has the wrong shape (``plugin`` not ``pkg.module:app``, a
     placement that is neither ``dock`` nor ``dialog``, grants that are not
     a list of strings, a passthrough key that is not a string, ...).
 ``META002``
@@ -141,7 +141,7 @@ class ProjectConfig:
 
     @property
     def class_name(self) -> str:
-        """The class half of ``spec``."""
+        """The attribute half of ``spec``."""
         return self.spec.partition(":")[2]
 
     @property
@@ -180,8 +180,8 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
     if not isinstance(spec, str) or _PLUGIN_SPEC.match(spec) is None:
         return None, (
             _config(
-                f"[tool.qgis-sdk] plugin must be 'pkg.module:Class', got {spec!r}",
-                'plugin = "field_tools.plugin:FieldTools"',
+                f"[tool.qgis-sdk] plugin must be 'pkg.module:app', got {spec!r}",
+                'plugin = "field_tools.plugin:app"',
             ),
         )
 
@@ -380,8 +380,8 @@ def _missing_plugin(message: str) -> Diagnostic:
         column=0,
         message=message,
         remediation=(
-            "Name the plugin class in pyproject.toml: `[tool.qgis-sdk] plugin = "
-            '"<package>.plugin:<Class>"`. `build` and `dev` derive metadata.txt '
+            "Name the plugin application in pyproject.toml: `[tool.qgis-sdk] plugin = "
+            '"<package>.plugin:app"`. `build` and `dev` derive metadata.txt '
             "and classFactory from it (decision-43)."
         ),
     )

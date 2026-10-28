@@ -3,19 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from qgis_sdk import (
-    QgisSdkDeclarationError,
-    action,
-    describe_bindings,
-    describe_plugin,
-    menu,
-    plugin,
-    shortcut,
-    stream,
-    toolbar,
-)
+from qgis_sdk import QgisSdkDeclarationError, menu, shortcut, toolbar
 from qgis_sdk.bindings import MenuBinding, ShortcutBinding, ToolbarBinding, bindings_of
+from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
 from qgis_sdk.core import PluginContext
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.jobs import job
 from qgis_sdk.ui import Dialog, Dock
 
@@ -179,7 +172,7 @@ def test_a_class_that_is_not_a_surface_is_refused() -> None:
         class _NotASurface:
             pass
 
-    with pytest.raises(QgisSdkDeclarationError, match="binds an @action method"):
+    with pytest.raises(QgisSdkDeclarationError, match="binds an application action"):
         toolbar(42)
 
 

@@ -1,7 +1,7 @@
 """One plugin runtime over the SDK fakes: the pure half of every test here.
 
 ``classFactory`` is what `qgis-sdk build` and `qgis-sdk dev` bind for QGIS
-(decision-43): ``host()`` over the class ``pyproject.toml`` names. Outside a
+(decision-43): ``host()`` over the application ``pyproject.toml`` names. Outside a
 ``QgsApplication`` it hands the plugin a bare context, inside one every
 curated service - which is why the ``qgis`` tests call the very same entry.
 """
@@ -28,10 +28,10 @@ from qgis_sdk.testing import (
     FakeStyles,
     RecordingNotifications,
 )
-from simple.plugin import FIXTURE, SimplePlugin
+from simple.plugin import FIXTURE, app
 
 WORKING_CRS = "EPSG:3857"
-classFactory = host("simple.plugin:SimplePlugin", placement="dock")
+classFactory = host("simple.plugin:app", placement="dock")
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +84,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         styles=styles,
         algorithms=algorithms,
     )
-    factory = create_class_factory(SimplePlugin, context_factory=lambda _: context)
+    factory = create_class_factory(app, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)
     adapter.initGui()
     try:

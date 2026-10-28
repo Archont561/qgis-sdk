@@ -2585,7 +2585,7 @@ EXAMPLE_PYPROJECT = (
     'dev = ["qgis-sdk-tools>=0.1,<0.2"]\n'
     "\n"
     "[tool.qgis-sdk]\n"
-    'plugin = "simple.plugin:SimplePlugin"\n'
+    'plugin = "simple.plugin:app"\n'
 )
 
 

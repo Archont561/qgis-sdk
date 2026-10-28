@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin
+from qgis_sdk import QgisSdkDeclarationError
 from qgis_sdk.bridge.host import host_description
 from qgis_sdk.bridge.protocol import HOST_SCHEMA_VERSION
 from qgis_sdk.core import (
@@ -13,6 +13,8 @@ from qgis_sdk.core import (
     PluginRuntimeState,
     ResourceScope,
 )
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider
 from qgis_sdk.testing import FakeProcessing, RecordingNotifications
@@ -44,7 +46,7 @@ def test_start_registers_every_listed_provider_and_unload_removes_them() -> None
 
     scope = ResourceScope()
     processing = FakeProcessing(scope)
-    runtime = PluginRuntime(Owner, _context(scope, processing))
+    runtime = PluginRuntime._from_plugin_class(Owner, _context(scope, processing))
 
     assert runtime.providers == (tools, sample_provider)
     assert (processing.registered, runtime.registered_providers) == ((), ())
@@ -71,7 +73,7 @@ def test_the_same_class_over_a_host_without_processing_registers_nothing() -> No
     class Owner:
         providers = (sample_provider,)
 
-    runtime = PluginRuntime(Owner, _context(ResourceScope(), None))
+    runtime = PluginRuntime._from_plugin_class(Owner, _context(ResourceScope(), None))
 
     runtime.start()
 
@@ -94,9 +96,9 @@ def test_two_plugins_sharing_a_provider_id_are_refused_by_name() -> None:
 
     scope = ResourceScope()
     processing = FakeProcessing(scope)
-    PluginRuntime(One, _context(scope.child(), processing)).start()
+    PluginRuntime._from_plugin_class(One, _context(scope.child(), processing)).start()
 
-    other = PluginRuntime(Two, _context(scope.child(), processing))
+    other = PluginRuntime._from_plugin_class(Two, _context(scope.child(), processing))
     with pytest.raises(QgisSdkDeclarationError, match="'shared' is already registered"):
         other.start()
 
@@ -115,7 +117,9 @@ def test_a_refused_start_removes_what_it_had_already_registered() -> None:
     class Late:
         providers = (_tools("fresh"), _tools("taken"))
 
-    runtime = PluginRuntime(Late, _context(scope.child(), processing))
+    runtime = PluginRuntime._from_plugin_class(
+        Late, _context(scope.child(), processing)
+    )
     with pytest.raises(QgisSdkDeclarationError, match="'taken' is already registered"):
         runtime.start()
 
@@ -130,7 +134,7 @@ def test_a_bad_providers_attribute_is_refused_when_the_runtime_is_built() -> Non
         providers = sample_provider
 
     with pytest.raises(QgisSdkDeclarationError, match="Typo.providers must be a list"):
-        PluginRuntime(Typo, _context(ResourceScope(), None))
+        PluginRuntime._from_plugin_class(Typo, _context(ResourceScope(), None))
 
 
 def test_unload_is_still_a_safe_no_op_after_a_refused_start() -> None:
@@ -142,7 +146,9 @@ def test_unload_is_still_a_safe_no_op_after_a_refused_start() -> None:
     class Late:
         providers = (_tools("taken"),)
 
-    runtime = PluginRuntime(Late, _context(scope.child(), processing))
+    runtime = PluginRuntime._from_plugin_class(
+        Late, _context(scope.child(), processing)
+    )
     with pytest.raises(QgisSdkDeclarationError):
         runtime.start()
 

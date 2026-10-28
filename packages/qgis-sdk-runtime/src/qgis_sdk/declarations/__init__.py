@@ -7,7 +7,6 @@ from qgis_sdk.declarations._contract import (
 )
 from qgis_sdk.declarations._describe import (
     describe,
-    describe_plugin,
     register_describer,
     register_describer_enricher,
     register_predicate_describer,
@@ -45,11 +44,8 @@ from qgis_sdk.declarations._plugin import (
     PLUGIN_ATTRIBUTE,
     WIRE_SCHEMA_ATTRIBUTE,
     WIRE_VALUE_METHOD,
-    action,
     bindings_of,
-    plugin,
     refuse_bindings,
-    stream,
     validate_plugin_bindings,
 )
 from qgis_sdk.declarations._schemas import (
@@ -79,7 +75,6 @@ __all__ = [
     "QgisSdkDeclarationError",
     "StreamDescription",
     "T",
-    "action",
     "attach_describe",
     "bindings_of",
     "canonical_json",
@@ -92,7 +87,6 @@ __all__ = [
     "derive_id",
     "derive_title",
     "describe",
-    "describe_plugin",
     "function_metadata",
     "keyword_inputs",
     "mark_class",
@@ -100,7 +94,6 @@ __all__ = [
     "metadata",
     "method_metadata",
     "object_schema",
-    "plugin",
     "refuse_bindings",
     "register_describer",
     "register_describer_enricher",
@@ -108,7 +101,6 @@ __all__ = [
     "resolve_hints",
     "resolve_kind",
     "schema_for",
-    "stream",
     "type_name",
     "validate_given",
     "validate_plugin_bindings",

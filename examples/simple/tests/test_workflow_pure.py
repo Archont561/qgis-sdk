@@ -11,18 +11,18 @@ from pathlib import Path
 
 import pytest
 from conftest import WORKING_CRS, FakeHost, classFactory
-from qgis_sdk import describe_plugin
+from qgis_sdk import describe
 from qgis_sdk.models import (
     QgisSdkAlgorithmRejectedError,
     QgisSdkExportRefusedError,
     QgisSdkUnsupportedCapabilityError,
 )
-from simple.plugin import EXPORT_DIRECTORY_KEY, SimplePlugin
+from simple.plugin import EXPORT_DIRECTORY_KEY, app
 from simple.workflow import LocalGisWorkflow
 
 
 def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
-    description = describe_plugin(SimplePlugin)
+    description = describe(app)
 
     assert sorted(a.id for a in description.actions) == [
         "buffer",

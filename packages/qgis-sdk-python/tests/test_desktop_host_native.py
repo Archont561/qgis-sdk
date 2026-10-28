@@ -37,22 +37,19 @@ except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"the hosted page needs Qt WebEngine: {error}", allow_module_level=True)
 
 PACKAGE = "granted_tools"
-SPEC = f"{PACKAGE}.plugin:GrantedPlugin"
+SPEC = f"{PACKAGE}.plugin:app"
 GRANTED = "project.layer_ids"
 NOT_GRANTED = "layers.list"
 
 PLUGIN = """
-from qgis_sdk import action, plugin
+from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.core import PluginContext
 
+app = QgisSdkPlugin(id="granted", title="Granted tools")
 
-@plugin(id="granted", title="Granted tools")
-class GrantedPlugin:
-    ctx: PluginContext
-
-    @action(id="ping", title="Ping")
-    def ping(self, value: int) -> int:
-        return value
+@app.action(id="ping", title="Ping")
+def ping(ctx: PluginContext, value: int) -> int:
+    return value
 """
 
 PAGE = """<!doctype html><html><body>

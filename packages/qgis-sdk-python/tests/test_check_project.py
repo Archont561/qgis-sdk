@@ -22,7 +22,7 @@ authors = [{ name = "Jane", email = "jane@example.org" }]
 dependencies = ["qgis-sdk-runtime>=0.1,<99"]
 
 [tool.qgis-sdk]
-plugin = "field_tools.plugin:FieldTools"
+plugin = "field_tools.plugin:app"
 qgis-minimum-version = "3.40"
 """
 
@@ -132,7 +132,7 @@ version = "0.1.0"
 dependencies = ["qgis-sdk-runtime>=0.1,<99"]
 
 [tool.qgis-sdk]
-plugin = "field_tools.plugin:FieldTools"
+plugin = "field_tools.plugin:app"
 """
     report = check_project(project(tmp_path, pyproject=short))
 
@@ -153,7 +153,7 @@ def test_an_author_without_an_email_is_meta002_for_the_email(tmp_path: Path) -> 
 @pytest.mark.parametrize(
     ("extra", "fragment"),
     [
-        ('plugin = "field_tools.plugin"\n', "pkg.module:Class"),
+        ('plugin = "field_tools.plugin"\n', "pkg.module:app"),
         ("experimental = 'yes'\n", "experimental must be true or false"),
         ('[tool.qgis-sdk.web]\nplacement = "window"\n', "placement must be"),
         ('[tool.qgis-sdk.web]\ngrants = "layers.list"\n', "grants must be a list"),
@@ -164,11 +164,11 @@ def test_an_author_without_an_email_is_meta002_for_the_email(tmp_path: Path) -> 
 def test_a_malformed_tool_table_is_config001(
     tmp_path: Path, extra: str, fragment: str
 ) -> None:
-    text = PYPROJECT.replace('plugin = "field_tools.plugin:FieldTools"\n', "") + extra
+    text = PYPROJECT.replace('plugin = "field_tools.plugin:app"\n', "") + extra
     if "plugin =" not in extra:
         text = text.replace(
             "[tool.qgis-sdk]\n",
-            '[tool.qgis-sdk]\nplugin = "field_tools.plugin:FieldTools"\n',
+            '[tool.qgis-sdk]\nplugin = "field_tools.plugin:app"\n',
         )
 
     report = check_project(project(tmp_path, pyproject=text))

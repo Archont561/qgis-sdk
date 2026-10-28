@@ -33,16 +33,16 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native wiring needs QGIS: {error}", allow_module_level=True)
 
-from qgis_sdk import action, plugin, stream
 from qgis_sdk.adapters.qgis import native_plugin_context
 from qgis_sdk.adapters.surfaces import SurfaceHost
-from qgis_sdk.bindings import describe_bindings
+from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
 from qgis_sdk.core import (
     JobContext,
     PluginContext,
     PluginRuntime,
     ResourceScope,
 )
+from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.testing import FakeWorkers
 from qgis_sdk.ui import (
@@ -248,7 +248,9 @@ def host(qgis_app: Any, tmp_path: Path) -> Iterator[tuple[SurfaceHost, WiredPlug
         title="Wired",
         bindings=describe_bindings(WiredPlugin),
     )
-    runtime = PluginRuntime(WiredPlugin, context.with_services(ui=host))
+    runtime = PluginRuntime._from_plugin_class(
+        WiredPlugin, context.with_services(ui=host)
+    )
     host.attach(runtime, context)
     runtime.start()
     instance = runtime.instance

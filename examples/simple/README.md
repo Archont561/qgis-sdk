@@ -10,7 +10,7 @@ Processing provider (`algorithms.py`: `simple:buffer`, `simple:centroid`),
 native windows - a `BufferDialog` built in pure PyQt and a declared
 `ResultsDock` - and `web/` is the Vite page; both front ends drive the same
 handlers. There is no `metadata.txt`, `classFactory` or view module in the
-source: `pyproject.toml` names the plugin class and the page's placement
+source: `pyproject.toml` names the plugin application and the page's placement
 and grants, and `build` and `dev` derive what QGIS needs.
 
 > Status: written by `qgis-sdk new` (vanilla page, dock placement, bun)
@@ -33,9 +33,9 @@ qgis-sdk build                      # dist/simple-<version>.zip
 ## Example
 
 ```python
-@action(id="buffer", title="Buffer in a projected CRS")
-def buffer(self, layer_id: LayerInput, distance_metres: Metres, working_crs: CrsInput) -> VectorLayerInfo:
-    return self.workflow.buffer(layer_id, distance_metres, working_crs)  # one handler, two front ends
+@app.action(id="buffer", title="Buffer in a projected CRS")
+def buffer(ctx: PluginContext, layer_id: LayerInput, distance_metres: Metres, working_crs: CrsInput) -> VectorLayerInfo:
+    return LocalGisWorkflow(ctx).buffer(layer_id, distance_metres, working_crs)  # one handler, two front ends
 ```
 
 ```ts

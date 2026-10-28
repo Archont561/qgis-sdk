@@ -115,6 +115,10 @@ def describe(cls: Any) -> Any:
     """
     if inspect.ismethod(cls):
         cls = cls.__func__
+    if inspect.isclass(cls) and PLUGIN_ATTRIBUTE in vars(cls):
+        raise QgisSdkDeclarationError(
+            "describe requires a QgisSdkPlugin, not a plugin class"
+        )
     if inspect.isclass(cls) or inspect.isfunction(cls):
         for attribute, describer in _DESCRIBERS.items():
             if attribute in vars(cls):
@@ -126,12 +130,11 @@ def describe(cls: Any) -> Any:
             return describer(cls)
     if not (inspect.isclass(cls) or inspect.isfunction(cls)):
         raise QgisSdkDeclarationError(
-            "describe requires a class or a function, or a Provider"
+            "describe requires a QgisSdkPlugin, a declared function or surface, or a Provider"
         )
     raise QgisSdkDeclarationError(
-        "describe requires a class declared with @plugin, or a function "
-        "declared with @job or @provider.algorithm; actions, streams, UI "
-        "surfaces and wired UI handlers are also supported"
+        "describe requires a QgisSdkPlugin, a function registered as an action or stream, "
+        "a job, algorithm, provider, UI surface or wired UI handler"
     )
 
 
@@ -184,6 +187,13 @@ def describe_plugin(cls: type) -> PluginDescription:
     )
 
 
+def _describe_lowered_plugin(cls: type) -> PluginDescription:
+    """Describe and enrich an internally lowered application class."""
+    result = describe_plugin(cls)
+    enrich = _DESCRIBER_ENRICHERS.get(PLUGIN_ATTRIBUTE)
+    return enrich(cls, result) if enrich is not None else result
+
+
 def _describe_action_function(method: Any) -> ActionDescription:
     return _describe_action(method.__name__, method, method.__qgis_sdk_action__)
 
@@ -192,6 +202,5 @@ def _describe_stream_function(method: Any) -> StreamDescription:
     return _describe_stream(method.__name__, method, method.__qgis_sdk_stream__)
 
 
-register_describer(PLUGIN_ATTRIBUTE, describe_plugin)
 register_describer("__qgis_sdk_action__", _describe_action_function)
 register_describer("__qgis_sdk_stream__", _describe_stream_function)

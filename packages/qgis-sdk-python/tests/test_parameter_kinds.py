@@ -13,12 +13,9 @@ from typing import Annotated, Literal
 import pytest
 from qgis_sdk.algorithms import describe_algorithm, invoke, parameter_kind
 from qgis_sdk.core import AlgorithmContext
-from qgis_sdk.declarations import (
-    QgisSdkDeclarationError,
-    action,
-    describe_plugin,
-    plugin,
-)
+from qgis_sdk.declarations import QgisSdkDeclarationError
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import (
     Colour,
     ColourParameter,

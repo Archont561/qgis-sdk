@@ -93,14 +93,14 @@ class ScaffoldOptions:
     """Whether the project starts with a Processing provider and one algorithm.
 
     ``--algorithm`` adds ``<plugin>/algorithms.py`` - a ``Provider`` with a
-    ``buffer`` function (decision-42) - lists it on the plugin class and
+    ``buffer`` function (decision-42) - adds it to the application and
     exposes it as an action, with a starter test over the SDK fakes.
     """
     ui: str | None = None
     """``"native"`` for a bound Dialog in pure PyQt (decision-55), else ``None``.
 
     ``--ui native`` adds ``<plugin>/ui.py`` with one ``Dialog`` subclass whose
-    ``build()`` is plain PyQt, lists it in ``surfaces``, binds it to the
+    ``build()`` is plain PyQt, registers it on the application, binds it to the
     Plugins menu, binds one no-input action to the toolbar that opens it,
     and adds a starter test over ``FakeUi``.
     """

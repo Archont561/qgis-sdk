@@ -310,7 +310,7 @@ def describe_plugin_spec(spec: str) -> dict[str, Any]:
 
     The working directory goes on ``sys.path`` first, so the command runs from the
     plugin's own root without an installed copy or an activated environment. The
-    import is trusted author code: like ``describe_plugin``, this is a build step
+    import is trusted author code: like ``describe(app)``, this is a build step
     for the developer's own plugin, not a sandbox.
     """
     module_name, separator, attribute = spec.partition(":")
@@ -331,10 +331,12 @@ def describe_plugin_spec(spec: str) -> dict[str, Any]:
         target = getattr(target, part, None)
         if target is None:
             raise QgisSdkBridgeError(f"{module_name!r} has no attribute {attribute!r}")
-    from qgis_sdk.declarations import QgisSdkDeclarationError, describe_plugin
+    from qgis_sdk import QgisSdkDeclarationError, QgisSdkPlugin, describe
 
     try:
-        return describe_plugin(target).to_dict()
+        if not isinstance(target, QgisSdkPlugin):
+            raise QgisSdkDeclarationError("plugin spec must name a QgisSdkPlugin")
+        return describe(target).to_dict()
     except QgisSdkDeclarationError as error:
         raise QgisSdkBridgeError(str(error)) from error
 

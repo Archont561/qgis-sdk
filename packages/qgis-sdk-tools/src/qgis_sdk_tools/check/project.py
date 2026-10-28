@@ -83,7 +83,7 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
     packages = list(_check_packages(root))
     diagnostics.extend(packages)
     if not any(d.rule == "PROJECT001" for d in packages):
-        # The plugin class, the metadata.txt values and the page (decision-43).
+        # The plugin application, the metadata.txt values and the page (decision-43).
         from qgis_sdk_tools.project import load_project
 
         diagnostics.extend(load_project(root)[1])

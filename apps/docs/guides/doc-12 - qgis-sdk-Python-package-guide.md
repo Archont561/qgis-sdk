@@ -95,108 +95,76 @@ The companion TypeScript package [`@archont561/qgis-sdk`](https://www.npmjs.com/
 
 ## Declarations
 
-Declare structure on plain classes; keep behavior in ordinary instance methods:
+Declare an application and register ordinary functions. The first argument is
+an injected `PluginContext`; it is not part of the request sent over the bridge.
+Plugin `id` and `title` are optional; actions and streams require both.
 
 ```python
 from dataclasses import dataclass
-
-from qgis_sdk import action, describe, plugin
-
+from qgis_sdk import QgisSdkPlugin, describe
+from qgis_sdk.core import PluginContext
 
 @dataclass
 class RunRequest:
     count: int
     label: str | None = None
 
+reports = QgisSdkPlugin(id="example.reports")
 
-@plugin(id="example.tools", title="Example tools")
-class Tools:
-    @action(id="run", title="Run")
-    def run(self, request: RunRequest) -> int:
-        return request.count
+@reports.action(id="run", title="Run")
+def run(ctx: PluginContext, request: RunRequest) -> int:
+    return request.count
 
+app = QgisSdkPlugin(id="example.tools", title="Example tools")
+app.include(reports)
 
-description = describe(Tools)  # also Tools.describe()
-print(description.to_json())
+print(describe(app).to_json())   # app.describe() uses the same implementation
+print(describe(run).bindings)   # run.describe() also works
 ```
 
-`plugin` and `action` attach metadata and a `describe()` convenience method,
-then return their original targets. No base class, constructor rewrite, host
-imports or runtime registration is required.
+`app.include(reports)` snapshots the child's actions, streams, surfaces and
+providers into the parent. It creates no child runtime: the parent's identity,
+context, grants, lifecycle and authority apply to all included declarations.
+The child must not have a `context_factory`. IDs are not prefixed. Duplicate
+action/stream IDs or handler names, surface IDs, provider IDs, repeated
+inclusion (including a shared descendant), and cycles are rejected without
+partially changing the parent. Later additions to a child are not included in
+an earlier snapshot; functions and their decorator metadata are shared objects.
+No global current plugin or module scanning is used. Registration keeps each
+function intact so it can also be called directly with a fake context.
+
+Use `@app.stream(id=..., title=..., events=...)` for generator streams. Actions
+and streams share an ID namespace. Provider algorithms and jobs retain their
+own default ID and title rules.
 
 ### Ids and titles default from the name
 
-Every declaration decorator (`@plugin`, `@action`, `@stream`, `@job`,
-`@provider.algorithm`) takes `id=` and `title=` as optional keywords and
-derives whichever is missing from the decorated name
-([decision-30](../../../backlog/decisions/decision-30%20-%20Derive-declaration-ids-and-titles-from-names-deterministically-never-randomly.md)),
-so the class and method decorators also work bare:
+`QgisSdkPlugin()` derives its ID from the declaring module's qualified name;
+the title is derived from the last component (or the package component when
+the last component is `plugin`). Explicit `id=` and `title=` override these
+defaults independently. Pass an explicit ID in `__main__` or when the module
+name is unavailable. Moving or renaming a module changes the generated ID,
+and multiple instances in one module get the same default ID. Use explicit,
+stable IDs for published plugins and to distinguish same-module instances.
+Actions and streams still require explicit IDs and titles.
 
-```python
-@plugin                       # id "field_tools_<6 hex>", title "Field Tools"
-class FieldTools:
-    @action                   # id "list_layers", title "List layers"
-    def list_layers(self) -> list[str]: ...
-
-    @action(id="layers.count")  # explicit id, derived title "Count layers"
-    def count_layers(self) -> int: ...
-```
-
-- A **class** id (`@plugin`) and a **job** id (`@job`) is the snake_case name
-  plus `_` and six hex digits of `sha256("<module>.<qualname>")`. The suffix
-  keeps two plugins or jobs that share a name apart without being random: the
-  same class in the same module derives the same id on every import, so
-  generated clients and the contract fingerprint stay valid until the class
-  itself is renamed or moved. Pin `id=` before publishing a contract you do
-  not want to track the class name.
-- A **provider algorithm** id (`@provider.algorithm`) is the plain snake_case
-  function name, without a suffix: the provider is its namespace and refuses a
-  duplicate, and the toolbox shows `field_tools:buffer` rather than a hash.
-- A **method** id (action, stream) is the plain method name, without a suffix:
-  it is already unique inside its class, and the TypeScript client spells it as
-  a property (`client.list_layers(...)`), so it stays an identifier. Leading
-  underscores are dropped. Use a dotted `id=` to group actions into namespaces.
-- A **title** keeps CamelCase words (`FieldTools` -> "Field Tools") and reads a
-  snake_case name as a sentence (`list_layers` -> "List layers").
-- An explicit `id=` or `title=` is validated when the decorator is called, before
-  the class exists, exactly as before; `derive_id` and `derive_title` in
-  `qgis_sdk.declarations` expose the conversion for tools that need it.
-  `Provider(...)` itself has no class to derive from and keeps requiring both.
 ### What does `describe_plugin` do, and not do?
 
-`describe_plugin` does not instantiate the class, dispatch handlers, evaluate
-properties, or call dataclass default factories. It resolves annotations with
-`typing.get_type_hints`, which may evaluate forward references: inspect **trusted
-Python code only**, not untrusted modules. Put DTOs in module scope so postponed
-annotations resolve normally; function-local forward-reference names are not
-reconstructed from vanished local scopes.
+`describe_plugin` was removed with the class API; use the unified `describe`.
+`describe(app)`, `app.describe()`, `describe(run)` and `run.describe()` use the
+same dispatcher. It also describes jobs, algorithms, providers, surfaces and UI
+handlers. A plugin description exposes registered surfaces and bindings; an
+action description exposes its stacked toolbar/menu/shortcut bindings and UI
+wires. These are local metadata, not additions to the bridge JSON contract.
+Wires execute on handlers declared on a `Dialog` or `Dock`; attaching `@on`
+to an application action records its metadata but does not automatically
+connect the action to a surface. Use a surface handler and call
+`self.ctx.actions.<id>(...)` to dispatch an application action.
 
-Use the same helper for plugins, actions, streams, algorithms, jobs, providers,
-surfaces and UI handlers. Decorated targets also have `.describe()`:
-
-```python
-from qgis_sdk import describe
-
-plugin_info = describe(Tools)               # also Tools.describe()
-action_info = describe(Tools.run)           # also Tools.run.describe()
-# describe(buffer) or buffer.describe() for a @provider.algorithm function
-print(plugin_info.bindings)                  # registered surfaces and bindings
-print(action_info.bindings)                  # stacked toolbar/menu/shortcut
-```
-
-The descriptions remain kind-specific: actions carry `request` and `result`,
-algorithms have `qualified_id` and `kinds`, and UI handlers expose `wires`.
-The existing narrow `describe_plugin`, `describe_algorithm` and `describe_job`
-remain available. Plugin, algorithm, job and provider descriptions implement
-`Description` with canonical `to_json()`. UI bindings and handler wires are
-**local introspection metadata**; they do not appear in the plugin bridge's
-`to_dict()`/`to_json()` output and do not change its fingerprint. Standalone
-surface and wiring descriptions are not bridge documents.
-
-Adding `.describe()` reserves that name on decorated classes and functions.
-An existing author-defined `describe` is not overwritten: decoration fails
-with a migration message. Type checkers may not infer the dynamically added
-method; `describe(target)` is always available without a dynamic attribute.
+Description does not invoke handlers or dataclass default factories. Annotation
+resolution can execute forward references: inspect **trusted Python code only**.
+Put DTOs in module scope so postponed annotations resolve. An author-defined
+`describe` attribute is not overwritten; registration fails rather than replacing it.
 
 ### Version 1 description contract
 
@@ -222,14 +190,12 @@ than silently weakened. No validation dependency or runtime backend is selected.
 
 #### What makes a valid action?
 
-Each action must be an ordinary synchronous instance method with first parameter
-`self`, annotated inputs and an explicit result annotation (`-> None` for no
-result). Inputs may be positional-or-keyword or keyword-only; variadic and
-positional-only inputs, static/class/property actions, coroutines and generators
-are unsupported. Constructor dependencies are not described. The request schema
-is an object keyed by parameter name (the example has a `request` property).
-Inherited actions follow Python MRO and ordinary overrides; each inspected class
-must have its own `@plugin` metadata. Duplicate action IDs are errors.
+Each action must be a synchronous function whose first positional parameter is
+annotated `PluginContext`, followed by annotated inputs and an explicit result
+annotation (`-> None` for no result). Inputs may be positional-or-keyword or
+keyword-only; variadic and positional-only inputs are unsupported. Generator
+streams use the same injected context and require declared event types. The
+context is omitted from the request schema. Duplicate IDs are errors.
 
 #### Defaults, nullability and unknown properties
 
@@ -248,7 +214,7 @@ Invalid declarations raise `QgisSdkDeclarationError` (a `QgisSdkError` with code
 `invalid_declaration`), naming the action/binding/field where applicable. IDs must
 match `[a-zA-Z][a-zA-Z0-9_.-]*` and titles must be nonblank strings. The public API
 is experimental 0.x. Runtime dispatch, lifecycle hooks, native UI declarations,
-bridge routing and TypeScript generation are separate follow-up work.
+bridge routing and TypeScript generation use the resulting declarations.
 
 ## Pure contract layer
 
@@ -256,14 +222,14 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 
 | Module | Current contract |
 | :-- | :-- |
-| `declarations` | `@plugin`, `@action`, `@stream`, `describe_plugin` and the shared `describe(target)` dispatcher; plugin, algorithm, job and provider descriptions satisfy `Description` (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorated targets gain `describe()` without wrapping |
+| `declarations` | `QgisSdkPlugin` and the shared `describe(target)` dispatcher; plugin, algorithm, job and provider descriptions satisfy `Description` (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorated targets gain `describe()` without wrapping |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery |
-| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - the `providers = [...]` a `@plugin` class lists |
+| `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - providers explicitly added to an application |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types |
 
 SDK-defined Python exceptions always begin with `QgisSdk` (including the base and internal subclasses). No unprefixed aliases are exported; their `code` strings remain independent of class names. Built-in exceptions such as `ExceptionGroup` retain their standard names.
@@ -302,7 +268,7 @@ instead of handing back `None`, and every one of them refuses on a closed
 scope ([decision-39](../../../backlog/decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md)).
 `ctx.has("workers")` and `ctx.capabilities` are the probes for code that must
 ask rather than use; a typo in `has()` is a `ValueError`, not a `False`. A
-handler therefore writes `self.ctx.project.layer_ids()` and a page calls
+handler therefore writes `ctx.project.layer_ids()` and a page calls
 `host.project.layerIds()`, and when the host built the bridge with
 `HostServices.from_context(ctx)` both read the same object:
 
@@ -335,55 +301,37 @@ The package root exports nothing beyond the declarations API, which is what `tes
 import qgis_sdk
 
 print(qgis_sdk.__all__)
-# Includes 'describe', 'action', 'plugin', 'toolbar', 'menu' and 'shortcut'.
+# Includes 'QgisSdkPlugin', 'describe', 'toolbar', 'menu' and 'shortcut'.
 ```
 
 Importing the package with native modules forbidden is the real wiring check, so a placeholder API is no longer needed to prove it.
 
 ## Scoped plugin runtime
 
-`PluginRuntime` owns one decorated plain class for the plugin lifetime:
+`PluginRuntime` owns one application for its lifetime. Each runtime has an
+independent context and resource scope, even when two runtimes use the same app:
 
 ```python
-from qgis_sdk import action, plugin
+from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
 
-@plugin(id="example.tools", title="Example tools")
-class Tools:
-    ctx: PluginContext           # bound by the runtime; the annotation is for the type checker
+app = QgisSdkPlugin(id="example.tools", title="Example tools")
 
-    def __init__(self) -> None:
-        self.ctx.scope.on_close(lambda: print("disposed"))
-
-    @action(id="run", title="Run")
-    def run(self, value: int) -> int:
-        return value
-
+@app.action(id="run", title="Run")
+def run(ctx: PluginContext, value: int) -> int:
+    return value
 
 context = PluginContext(notifications=..., scope=ResourceScope())
-runtime = PluginRuntime(Tools, context)
-instance = runtime.start()   # sets Tools.ctx = context, then calls Tools() once
-runtime.actions["run"](3)    # read-only action ID -> bound method
-runtime.unload()             # closes the owned scope once and removes Tools.ctx
-runtime.unload()             # safe no-op
+runtime = PluginRuntime(app, context)
+runtime.start()
+runtime.actions["run"](3)
+runtime.unload()
 ```
 
-The context is a **class attribute, not a constructor argument** (decision-31).
-`start()` sets `plugin_class.ctx` to the runtime's `PluginContext` before
-constructing the class with no arguments, so `self.ctx` is available everywhere
-including `__init__`; `unload()` (and a failed start) removes the attribute
-again, so the class is plain outside a running lifecycle and never retains a
-closed scope. Annotate `ctx: PluginContext` in the class body for IDEs and type
-checkers — it declares the attribute without initialising it, exactly like a
-dataclass field. A constructor that still takes `ctx` fails `start()` with a
-`QgisSdkPluginLifecycleError` that says so. One class runs under one runtime at
-a time; the most recently started runtime owns the attribute. Pass
-`PluginRuntime(..., instance_factory=factory)` when a plugin needs custom
-dependencies: the factory still receives the context, and `ctx` is already
-bound on the class when it runs. Declarations are validated at construction
-time, but no author code runs until `start()`. After construction, every declared action must resolve to a callable
-on the instance; otherwise `QgisSdkPluginLifecycleError`
-(`code="invalid_plugin_lifecycle"`) is raised and startup is rolled back.
+The host supplies `PluginContext`; it is injected into each handler and never
+exposed as a bridge input. Register scope cleanup through `ctx.scope` and use
+explicit fake contexts to test handlers directly. The runtime uses a private
+lowering implementation; authors do not construct a plugin class.
 
 `PluginRuntimeState` is `new`, `running`, `stopped` or `failed`. `start()` is
 valid only from `new`; starting twice or restarting a stopped runtime raises
@@ -445,7 +393,7 @@ destinations (see the separate Processing safety limitations).
 Since 0.6.0 a plugin project carries no `metadata.txt`, no `classFactory`
 and no view module
 ([decision-43](../../../backlog/decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md)).
-`pyproject.toml` names the class and the tools derive what QGIS
+`pyproject.toml` names the application and the tools derive what QGIS
 needs from it:
 
 ```toml
@@ -457,7 +405,7 @@ authors = [{ name = "Ada", email = "ada@example.test" }]
 dependencies = ["qgis-sdk-runtime>=0.6,<0.7"]   # the runtime `build` resolves
 
 [tool.qgis-sdk]
-plugin = "field_tools.plugin:FieldToolsPlugin"  # the class QGIS runs
+plugin = "field_tools.plugin:app"  # the application QGIS runs
 qgis-minimum-version = "4.0"
 experimental = true
 # qgis-prefix = "/path/to/qgis"                 # where `test`/`dev` find QGIS
@@ -476,15 +424,15 @@ runtime half - the `classFactory` QGIS calls:
 ```python
 from qgis_sdk.adapters.desktop import host
 
-classFactory = host("field_tools.plugin:FieldToolsPlugin", placement="dock")
+classFactory = host("field_tools.plugin:app", placement="dock")
 ```
 
-It resolves the class (a typo fails by name, with `QgisSdkHostError`),
-validates it with `describe_plugin`, and returns a factory. The
+It resolves the application (a typo fails by name, with `QgisSdkHostError`),
+validates its declarations, and returns a factory. The
 `DesktopHost` it makes starts the runtime from `initGui()`, registers the
-class's `providers` with Processing, and unloads everything from `unload()`
+application's providers with Processing, and unloads everything from `unload()`
 (safe to repeat). The context comes from one of two places: a
-`context_factory(iface)` class attribute on the plugin class when the author
+`context_factory(iface)` attribute on the application when the author
 wants to assemble services; otherwise `default_context`, which is
 `native_plugin_context(iface, ...)` whenever a `QgsApplication` is running
 and a bare `PluginContext` (messages dropped, settings scoped by plugin id)
@@ -502,7 +450,7 @@ channel at all. `qgis-sdk dev` serves the same page from
 Vite when it has started one (`QGIS_SDK_DEV_SERVER`). `host.view` is the
 widget while it is open, `None` after `unload()`.
 
-`create_class_factory(Tools, context_factory=...)` and
+`create_class_factory(app, context_factory=...)` and
 `DesktopLifecycleAdapter` remain for a plugin that supplies its own entry
 point; `host()` is built on them. Neither imports Qt at module level; the
 adapter never serialises `iface`.
@@ -585,17 +533,20 @@ agents read and the tests that drive a window find widgets by `objectName`.
 
 ## Desktop bindings and native surfaces
 
-A plugin reaches the QGIS Desktop in two ways, both declared on the class and
-both headless until a host places them (decisions 45 and 55): a *binding*
-puts an action or a surface on the toolbar, under a menu or behind a shortcut,
-and a *surface* is a plain `Dialog` or `Dock` subclass whose `build()` returns
-the widget to show. Nothing an author writes outside `build()` imports Qt.
+A plugin reaches QGIS Desktop through bindings and registered native surfaces.
+A binding places an action or surface on the toolbar, under a menu or behind a
+shortcut; a surface is a `Dialog` or `Dock` subclass. `@app.surface` registers
+and returns the original class, so it stacks with bindings in either order.
+For a class declared in another module, `app.add_surface(TheSurface)` also works.
 
 ```python
-from qgis_sdk import action, menu, plugin, shortcut, toolbar
+from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
+from qgis_sdk.core import PluginContext
 from qgis_sdk.ui import Button, Dialog, Dock, on
 
+app = QgisSdkPlugin(id="field_tools", title="Field tools")
 
+@app.surface
 @menu("Plugins/Field tools")
 class BufferDialog(Dialog):
     title = "Buffer a layer"
@@ -607,40 +558,25 @@ class BufferDialog(Dialog):
     def buffer(self) -> None:
         self.ctx.actions.buffer(layer_id=self.initial["layer_id"], distance=25)
 
-
+@app.surface
 class LayerPanel(Dock, area="left"):
     def build(self): ...
 
+@toolbar(icon="buffer.svg", text="Buffer")
+@shortcut("Ctrl+Alt+B")
+@app.action(id="open_buffer", title="Open buffer")
+def open_buffer(ctx: PluginContext) -> None:
+    ctx.ui.open(BufferDialog, initial={"layer_id": ctx.project.layer_ids()[0]})
 
-@plugin(id="field_tools", title="Field tools")
-class FieldTools:
-    surfaces = (BufferDialog, LayerPanel)
-
-    @toolbar(icon="buffer.svg", text="Buffer")
-    @shortcut("Ctrl+Alt+B")
-    @action
-    def open_buffer(self) -> None:
-        self.ctx.ui.open(BufferDialog, initial={"layer_id": self.ctx.project.layer_ids()[0]})
-
-    @action
-    def buffer(self, layer_id: str, distance: float) -> str: ...
+@app.action(id="buffer", title="Buffer")
+def buffer(ctx: PluginContext, layer_id: str, distance: float) -> str: ...
 ```
 
-**Bindings.** `@toolbar` (bare or `@toolbar(icon="name.svg", text="...")`),
-`@menu("Top/Sub")` and `@shortcut("Ctrl+Alt+B")` stack in any order on an
-`@action` method and on a `Dialog`/`Dock` subclass, and repeat for a second
-place. They are refused with a message on anything else: a `@job` ("bind an
-`@action` that submits the job"), a `@stream`, a plain method (`@plugin`
-reports it at class creation) or a class that is not a surface. `icon` is a
-file name under the package's `icons/` directory, resolved through
-`qgis_sdk.resources.icon_path`. `describe_bindings(cls)` is the pure view:
-`entries` lists the registered surfaces (in `surfaces` order) then the bound
-actions, each with its `bindings`; `typed_without_surface` names bound actions
-that take inputs. The unified `describe(cls).bindings` exposes the same view,
-and `describe(cls.action).bindings` describes a single action. Binding decorators
-on a function need an `@action` declaration before the function can be described;
-they can be stacked in either order. Serialized plugin output and
-`HOST_FINGERPRINT` do not change: bindings are placement, not contract.
+`@toolbar`, `@menu` and `@shortcut` stack with `@app.action` in either order
+or apply to a surface class. `describe_bindings(app)` and
+`describe(app).bindings` report placements and registered surfaces; an action's
+own `describe()` reports its stacked bindings. Bindings are not serialized into
+the bridge contract. Icon paths are relative to the package's `icons/` directory.
 
 **The trigger rule.** A placed action for a *surface* opens it. A placed
 action for an *action* calls the handler with no arguments; an action that
@@ -666,7 +602,7 @@ and `unload` removes it. `self.ctx.view.request_close()` closes a dialog or
 hides a dock.
 
 **`ctx.ui.open` and `UiContext.actions`.** From an action,
-`self.ctx.ui.open(Surface, initial={...})` opens a registered surface (an
+`ctx.ui.open(Surface, initial={...})` opens a registered surface (an
 unlisted class is refused by name); outside QGIS Desktop the `ui` service is
 absent and `ctx.ui` raises `QgisSdkUnsupportedCapabilityError` naming it.
 Inside a surface, `self.ctx.actions.<id>(**values)` (or
@@ -679,7 +615,7 @@ refused, so a double-click cannot submit twice. `ctx.actions.ids` and
 `ctx.actions.running("<id>")` are the introspection.
 
 **Testing without QGIS.** `qgis_sdk.testing.FakeUi(scope,
-plugin_class=...)` stands in for the service: `ctx.ui.open(...)` records an
+app=app)` stands in for the service: `ctx.ui.open(...)` records an
 `OpenedSurface` (`surface`, `initial`, `id`) instead of building anything,
 and `FakeViewControl` records `request_close`. `qgis-sdk new --ui native`
 writes this shape with a passing starter test; `qgis-sdk check` adds `UI002`,
@@ -815,7 +751,7 @@ opens, naming both; `qgis-sdk check` reports the Designer-file case
 statically as `UI002`.
 
 **`@subscribe(stream, **request)`** subscribes the method to one of the
-plugin's `@stream` methods for the view's lifetime with the request
+application's `@app.stream` functions for the view's lifetime with the request
 validated the way a page's subscribe is (unknown or ill-typed arguments
 refused by name). The method receives a `StreamEvent(stream, kind,
 payload, echo, terminal)`: `kind` is the declared event kind, `"complete"`
@@ -1094,9 +1030,9 @@ holds - the `PluginContext` of an action, the `JobContext` of a job, or the
 adds the output to `ctx.project` after success:
 
 ```python
-# inside an @action on a @plugin class
+# inside an @app.action function
 output = invoke(
-    buffer, self.ctx, layer_id=source_id, distance=500.0, crs="EPSG:3857"
+    buffer, ctx, layer_id=source_id, distance=500.0, crs="EPSG:3857"
 )
 # invoke already added `output` to the project - after success only.
 ```
@@ -1250,42 +1186,20 @@ render from a catalogue a reader already wrote.
 
 ## Providers: algorithms in the QGIS Processing toolbox
 
-A provider is both the namespace an algorithm is declared in and what makes it
-*visible*. A `@plugin` class lists the providers it owns, and the runtime does
-the rest:
+A provider is both an algorithm namespace and the registration that makes its
+algorithms visible. Add it explicitly to the application:
 
 ```python
-from qgis_sdk import plugin
-from qgis_sdk.core import PluginContext
-
-
-@plugin(id="field_tools", title="Field tools")
-class FieldTools:
-    ctx: PluginContext
-
-    providers = [tools]  # a tuple also works; Ruff's RUF012 prefers one
+from qgis_sdk import QgisSdkPlugin
+app = QgisSdkPlugin(id="field_tools", title="Field tools")
+app.add_provider(tools)  # a Provider declared in your algorithms module
 ```
 
-While the plugin runs inside QGIS, `PluginRuntime.start()` registers every
-listed provider with `QgsApplication.processingRegistry()` through the
-context's `processing` capability (the native context built by
-`native_plugin_context` carries it), so `field_tools:buffer` appears in the
-toolbox, the modeler and `processing.run(...)`; `unload()` removes them again,
-and a start that fails removes whatever it had registered. Over the fakes or a
-standalone Qt host the context has no `processing`, and the same class
-registers nothing. Two plugins that list providers with the same id are
-refused by name when the second one starts. `runtime.providers` and
-`runtime.registered_providers` tell a host or a test what is listed and what is
-currently advertised; `describe_plugin` does not change, because a provider is
-a host-side registration rather than a page-callable operation.
-
-Declaration is validated **when it happens**: the function must take the
-`AlgorithmContext` first, every input must map to a host parameter kind, the
-result must be the produced `VectorLayerInfo`, and the id must be unique inside
-the provider. A mistake fails at import time, not on the first run, and a
-refused function keeps no marker. `providers = ...` that is not a list or tuple
-of `Provider` instances, or lists one id twice, is refused when the
-`PluginRuntime` is built.
+In QGIS, startup registers the owned providers with Processing and unload removes
+them. Startup rolls back on a duplicate provider ID. Over a context without the
+Processing capability no provider is registered. `runtime.providers` and
+`runtime.registered_providers` report owned and currently registered providers.
+Provider registration does not add bridge-callable actions to `describe(app)`.
 
 `Annotated` markers say what an input *means* to the host while the wire schema keeps describing the stored value. The aliases are the usual spelling; the long form (`Annotated[str, LayerParameter()]`, `Annotated[float, MetresParameter(minimum=1.0)]`) describes identically and is how you add a bound. Each kind is complete across hosts (decision-46 point 1): one marker, one widget family in `qgis_sdk.ui`, one Processing parameter, one `x-qgis-sdk` annotation on the wire. `qgis_sdk.models.parameter_kinds()` is the registry the describers, the form rule and the Processing adapter all read.
 
@@ -1349,7 +1263,7 @@ reply = dispatcher.dispatch(binding, request)     # never raises
 - **Trusted identity only.** `ViewBinding` is minted by the host; a forged
   `view_id` or `generation` inside the payload is ignored, and
   `advance_generation()` retires every live binding with `stale_generation`.
-- **Subscriptions.** `@stream` on the plugin or `register_stream(operation,
+- **Subscriptions.** `@app.stream` on the application or `register_stream(operation,
   factory)` on the dispatcher declares a stream, and `dispatch` accepts
   `{"kind": "subscribe"}`. Frames carry a per-subscription
   `seq`, the queue is bounded (`MAX_QUEUED_EVENTS`), a pushed stream that
@@ -1374,7 +1288,7 @@ no Qt, no handler ever runs - and the page builds its `QgisSdk` on it
 the TypeScript side is in [doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md)):
 
 ```console
-$ qgis-sdk bridge generate --plugin my_plugin.bridge:MyPlugin
+$ qgis-sdk bridge generate --plugin my_plugin.bridge:app
 wrote web/src/bridge.schema.ts
 ```
 
@@ -1396,7 +1310,7 @@ wrote web/src/bridge.schema.ts
   (`sites.summary` is `qgis.sites.summary`), so the generator refuses an id
   that is a prefix of another declared id and one whose first segment is a
   `QgisSdk` member (`client`, `host`, `schema`, `ready`, `close`).
-- **Streams come from the same declarations (decision-28).** `@stream(id=...,
+- **Streams come from the same declarations (decision-28).** `@app.stream(id=...,
   events={"data": SiteChange, "progress": ScanProgress})` marks a method that
   returns an iterator of `StreamEvent`s; its request schema is bound like an
   action's, and each declared event kind is a dataclass schema. The runtime
@@ -1606,8 +1520,7 @@ handle.on_cancelled(lambda: label.setText("cancelled"))
 
 The decorator adds `describe()` but does not wrap `add`, so a unit
 test calls `add(fake_context, left=1, right=2)` directly. A bare `@job`
-derives the id and title from the function name the way `@plugin` does for a
-class; `async def` is allowed and suspends on the scheduler at every `await`,
+derives its id and title from the function name; `async def` is allowed and suspends on the scheduler at every `await`,
 a plain `def` runs in one step on the driving thread, a generator is refused.
 `ctx.jobs.delay(add, left=1, right=2)` is the one-call spelling of `bind` then
 `delay`; there is no ambient `add.delay(...)`, because the owner is always
@@ -1767,9 +1680,8 @@ There is no `metadata.txt` and no `classFactory` in the project (decision-43):
 `qgis-sdk-runtime` requirement) and `[tool.qgis-sdk]` (`plugin`,
 `qgis-minimum-version`, `experimental`); `build` renders `metadata.txt` from
 them and `build`/`dev` bind `classFactory` through `host()`. `<plugin>/plugin.py`
-is one `@plugin` class with two `@action`s and a `ctx: PluginContext`
-annotation, and imports no Qt or QGIS module. `tests/test_plugin.py` runs
-`host("<plugin>.plugin:<Class>")(None)` through start, action and unload
+is one `QgisSdkPlugin` with two actions receiving a `PluginContext`, and imports no Qt or QGIS module. `tests/test_plugin.py` runs
+`host("<plugin>.plugin:app")(None)` through start, action and unload
 without QGIS. Tests pin that the generated project imports nothing native.
 
 ### Choosing Desktop or standalone Qt mode
@@ -1780,7 +1692,7 @@ The README the scaffold writes teaches both modes; they differ in one thing, whe
 | Mode | How it runs | What the SDK sees |
 | :-- | :-- | :-- |
 | Desktop | copy `<plugin>/` into a profile's `python/plugins/` and enable it under Plugins, Manage and Install Plugins, or launch `qgis --profiles-path <dir> --profile <name>` | `iface` is present, so `context.desktop` succeeds and messages reach the real message bar |
-| Standalone Qt | call `host("<plugin>.plugin:<Class>")(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so reading `context.desktop` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
+| Standalone Qt | call `host("<plugin>.plugin:app")(None)` from a plain Qt application or the starter tests, with `QT_QPA_PLATFORM=offscreen` for a display-free run | no `iface`, so reading `context.desktop` raises `QgisSdkUnsupportedCapabilityError` (`code="unsupported_capability"`) instead of inventing a host, and informational messages are dropped |
 
 The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
@@ -1794,7 +1706,7 @@ unload through the SDK runtime with no QGIS installation at all.
 Metres, working_crs: CrsInput) -> VectorLayerInfo`, the same shape as
 `examples/simple` (decision-42) - lists it on the class
 (`providers = (algorithms.provider,)`) and exposes the same operation as a
-`buffer` action through `invoke(algorithms.buffer_layer, self.ctx, ...)`.
+`buffer` action through `invoke(algorithms.buffer_layer, ctx, ...)`.
 `tests/test_plugin.py` gains a fourth test that runs the function over
 `FakeLayers`/`FakeAlgorithms`/`FakeProject` and asserts the exact
 `BufferRequest` Processing would have received. `build` renders
@@ -1813,7 +1725,7 @@ toolbox entry `<plugin>:buffer`. It combines with `--web`.
 `build()` and no Qt import anywhere in the package; `@on(ping).clicked`
 submits the form and logs the answer. `plugin.py` lists it on the class
 (`surfaces = (PingDialog,)`) and binds a no-input `open_ping` action to the
-toolbar that calls `self.ctx.ui.open(PingDialog, initial={"value": 7})`,
+toolbar that calls `ctx.ui.open(PingDialog, initial={"value": 7})`,
 which the default `build()` seeds into `form/value`. `tests/test_plugin.py`
 gains a test that runs the action under `FakeUi` and asserts what was
 opened. The README gets a "Native UI" section naming `UI001`-`UI005` and
@@ -1898,8 +1810,8 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | `QGIS001` | `qgis`, `PyQt5/6` or `PySide2/6` is imported when the module loads: module scope, a class body, a `try`, a `with` or a module-level `if` all count. Imports inside a function and under `if TYPE_CHECKING:` are fine. |
 | `ARCH001` | `qgis_sdk.adapters.qgis` (the PyQGIS-backed adapters) is imported when a pure module loads; let `host()` build the context, or reach the adapter inside the function that runs in QGIS. |
 | `PROJECT001` | No directory with an `__init__.py` under the root (other than `tests/`). |
-| `PROJECT002` | No `pyproject.toml`, or no `[tool.qgis-sdk] plugin = "<package>.plugin:<Class>"` in it; `build` and `dev` derive `metadata.txt` and `classFactory` from that line (decision-43). |
-| `CONFIG001` | `[tool.qgis-sdk]`, `[tool.qgis-sdk.check]`, `[tool.qgis-sdk.web]` or `[tool.qgis-sdk.metadata]` in `pyproject.toml` is malformed (`plugin` not `pkg.module:Class`, `placement` not `dock`/`dialog`, `grants` not a list of strings, a passthrough value that is not a scalar). |
+| `PROJECT002` | No `pyproject.toml`, or no `[tool.qgis-sdk] plugin = "<package>.plugin:app"` in it; `build` and `dev` derive `metadata.txt` and `classFactory` from that line (decision-43). |
+| `CONFIG001` | `[tool.qgis-sdk]`, `[tool.qgis-sdk.check]`, `[tool.qgis-sdk.web]` or `[tool.qgis-sdk.metadata]` in `pyproject.toml` is malformed (`plugin` not `pkg.module:app`, `placement` not `dock`/`dialog`, `grants` not a list of strings, a passthrough value that is not a scalar). |
 | `META001` | The plugin package has a hand-written `metadata.txt`; `build` renders it, so delete the file (or move extra keys under `[tool.qgis-sdk.metadata]`). |
 | `META002` | `pyproject.toml` lacks a key `metadata.txt` needs: `[project] name`, `version`, `description`, `authors[0].name`/`.email`, or `[tool.qgis-sdk] qgis-minimum-version`. |
 | `ENTRY002` | A module of the plugin package defines or imports `classFactory`; `build` and `dev` bind it through `host()`. |
@@ -1908,7 +1820,7 @@ code is `1` when any error was found and `2` when the path is not a directory.
 | `VERSION004` | The installed `qgis-sdk-runtime` does not satisfy the project's requirement. The finding names both and the `pip install` line; the tools never install. |
 | `UI001` | A method of a `Dialog`/`Dock` subclass constructs an interactive Qt or QGIS widget (`QPushButton`, `QLineEdit`, `QSpinBox`, `QgsMapLayerComboBox`, ... - `qgis_sdk_tools.check.ui.INTERACTIVE_WIDGETS`) and never calls `setObjectName` on the name holding it; a constructor passed straight to `addWidget` is flagged too. Name it, or use a `qgis_sdk.ui` component, which names its widget (`form/<field>`, `buttons/<name>`). |
 | `UI002` | A `Dialog`/`Dock` subclass with `ui = "file.ui"` has an `@on(name)` whose `name` is not an `objectName` the Designer file declares, or the file is not next to the module. The wiring would refuse the surface when it opens; the finding lists the names the file does declare. |
-| `UI003` | A method carrying `@toolbar`/`@menu`/`@shortcut` and `@action` takes inputs beyond `self`; a button collects nothing. Drop the inputs, or bind a surface that collects them and calls `self.ctx.actions.<id>(...)`. |
+| `UI003` | An application action carrying `@toolbar`/`@menu`/`@shortcut` takes inputs beyond `ctx`; a button collects nothing. Drop the inputs, or bind a surface that collects them and calls `self.ctx.actions.<id>(...)`. |
 | `UI004` (warning) | A module of the plugin package that is *declared native* still imports `qgis.PyQt`, `PyQt5/6` or `PySide2/6` when it loads: the exemption lifts `QGIS001`, but Qt at module level defeats the fakes (`build_surface`, `ui_snapshot`) and `check`'s inspection of that module. Keep Qt inside `build()`; the catalogue needs no Qt import. |
 | `UI005` | The declarative form, read statically: `@on(attribute)` in a `Dialog`/`Dock` subclass names a class attribute that is a string, a number or a literal container rather than a component, or a bare name the class never binds; or a `Custom` declared on the class holds a widget built when the class is defined (`Custom(widget=QLabel(...))`), which cannot be copied for each window. Assign a catalogue component to the attribute (or pass the `objectName` as a string), and give `Custom` the widget class or a factory. A call the checker cannot see into and a module-level name are left to the host. |
 | `ICON001` | `@toolbar(icon="...")` names something that is not a file under `<package>/icons/` (a bare file name is required). |
@@ -2064,11 +1976,11 @@ argument parsing over `qgis_sdk_tools.bundle.build_plugin`). In order:
    the package and were never candidates). Into the staged copy only -
    the source tree is untouched - go the two artifacts QGIS needs
    (decision-43): `metadata.txt`, rendered from `pyproject.toml` with every
-   key QGIS requires plus `hasProcessingProvider` from the class's
-   `providers` and the `[tool.qgis-sdk.metadata]` passthrough; and, appended
+   key QGIS requires plus `hasProcessingProvider` from the application's
+   providers and the `[tool.qgis-sdk.metadata]` passthrough; and, appended
    to `<plugin>/__init__.py`, `classFactory = host("<spec>", placement=...,
    grants=...)` importing `host` from the vendored runtime. The plugin
-   class is imported once, in isolation, to read its title and providers
+   application is imported once, in isolation, to read its title and providers
    (an import error is a plain build error). The runtime `qgis_sdk` - every
    module except `qgis_sdk.testing` - is copied to
    `<plugin>/_vendor/qgis_sdk` with a `NOTICE` (the requirement the project
@@ -2223,6 +2135,26 @@ published for the bridge, and no `ts-v*` tag exists.
   and `--scope typescript --version 0.2.0`.
 
 ## Next minor (unreleased) migration notes
+
+### Application authoring replaces plugin classes
+
+The public `plugin`, `action`, `stream` and `describe_plugin` imports have been
+removed. Replace a decorated plugin class with `app = QgisSdkPlugin(id=..., title=...)`
+and turn each action or stream method into a module function registered with
+`@app.action(...)` or `@app.stream(...)`. Give each function a first positional
+`ctx: PluginContext` argument and use `ctx` rather than `self.ctx`. Actions
+and streams need explicit IDs and titles; plugin metadata can default from the
+module, but explicit stable IDs are recommended. Register surfaces with
+`@app.surface` or `app.add_surface(...)` and providers with `app.add_provider(...)`;
+compose other `QgisSdkPlugin` objects using `app.include(child)`. Change the manifest and bridge generation target from
+`module:Class` to `module:app`, and use `describe(app)` or `app.describe()`.
+`PluginRuntime`, `DesktopLifecycleAdapter`, `create_class_factory` and
+`describe_bindings` now take an application rather than a plugin class;
+`FakeUi(scope, app=app)` checks its registered surfaces in pure tests. The
+class-specific `PluginFactory`, `instance_factory` and `declared_providers`
+APIs have been removed. For per-host context construction, assign
+`app.context_factory`. The old class-constructor hooks have no direct replacement;
+construct testable dependencies in the context factory or in ordinary functions.
 
 ### Processing destinations
 

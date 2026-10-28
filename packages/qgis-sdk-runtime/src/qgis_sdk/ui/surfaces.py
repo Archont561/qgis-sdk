@@ -14,9 +14,9 @@ class the author writes and lists on the plugin::
     class LayerPanel(Dock, area="right"):
         def build(self): ...
 
-    @plugin(id="field_tools", title="Field tools")
-    class FieldTools:
-        surfaces = [BufferDialog, LayerPanel]
+    app = QgisSdkPlugin(id="field_tools", title="Field tools")
+    app.add_surface(BufferDialog)
+    app.add_surface(LayerPanel)
 
 Nothing here imports Qt. The base classes carry metadata (``title``, the dock
 ``area``) and the two hooks the host calls: ``build()`` once the instance has
@@ -155,7 +155,7 @@ class Dock(Surface):
 
 @dataclass(frozen=True, slots=True)
 class SurfaceDescription:
-    """What a host needs to place one surface; never part of ``describe_plugin``."""
+    """What a host needs to place one surface; never part of bridge JSON."""
 
     id: str
     title: str

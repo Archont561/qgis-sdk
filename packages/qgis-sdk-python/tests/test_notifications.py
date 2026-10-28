@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
-from qgis_sdk.declarations import action, plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import QgisSdkScopeClosedError
 from qgis_sdk.services import LEVELS, Notification, NotificationAction, Notifications
 from qgis_sdk.testing import RecordingNotifications
@@ -72,7 +72,7 @@ def test_pressing_the_button_runs_the_plugin_action_with_its_arguments() -> None
 
     scope = ResourceScope()
     notifications = RecordingNotifications(scope)
-    runtime = PluginRuntime(
+    runtime = PluginRuntime._from_plugin_class(
         Demo, PluginContext(notifications=notifications, scope=scope)
     )
     runtime.start()

@@ -14,10 +14,12 @@ from typing import Any
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
-from qgis_sdk import QgisSdkDeclarationError, action, describe_plugin, plugin, stream
+from qgis_sdk import QgisSdkDeclarationError
 from qgis_sdk.algorithms import describe_algorithm
 from qgis_sdk.core import AlgorithmContext, JobContext
 from qgis_sdk.declarations import derive_id, derive_title
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.jobs import describe_job, job
 from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider
