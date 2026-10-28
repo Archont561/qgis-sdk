@@ -1,15 +1,11 @@
 # @archont561/qgis-sdk
 
-**The TypeScript SDK for QGIS plugin interfaces hosted in `QWebEngineView`:
-one typed object over the plugin's own declarations.**
+**Bring typed QGIS plugin actions to your web UI.**
 
-The page side of [`qgis-sdk`](https://pypi.org/project/qgis-sdk/). A page
-builds `QgisSdk` from the schema `qgis-sdk bridge generate` renders from the
-plugin's Python declarations and gets one typed method per action and
-stream, the curated host namespaces (`layers`, `project`, `files`,
-`algorithms`, ...), framework-free stores and React, Vue and Svelte
-bindings over them, and a scripted harness for tests. Every exported error
-begins with `QgisSdk` and carries a stable wire `code`.
+Build a `QgisSdk` client from your Python plugin's generated schema, call
+its actions and streams, and use granted host services. Framework-free stores
+and React, Vue and Svelte bindings help build interfaces in `QWebEngineView`;
+a scripted host lets you test them without QGIS.
 
 > Status: `0.5.0`, experimental `0.x`. Published as
 > `@archont561/qgis-sdk-bridge` through `0.2.0`; this name continues from

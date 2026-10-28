@@ -1,14 +1,12 @@
 # qgis-sdk
 
-**The Python developer kit for QGIS plugins: the runtime a plugin imports
-and the command that scaffolds, checks, tests, runs and builds it.**
+**The next-generation Python SDK for effortless QGIS plugin authoring.**
 
-Declare a plugin on plain classes and let the SDK derive the rest: the JSON
-description a web view reads, the native windows, the Processing algorithms,
-the bridge allowlist and the typed TypeScript client. The pure layers import
-without QGIS or Qt, so a plugin is testable from source. `qgis-sdk` is a
-code-free kit that installs [`qgis-sdk-runtime`](../qgis-sdk-runtime) and
-[`qgis-sdk-tools`](../qgis-sdk-tools) at matching versions.
+Turn Python actions into QGIS plugins with less boilerplate. Test plugin logic
+without QGIS, build native and web interfaces over the same actions, and ship
+an installable ZIP. This developer kit brings together the
+[`qgis-sdk-runtime`](https://pypi.org/project/qgis-sdk-runtime/) and
+[`qgis-sdk-tools`](https://pypi.org/project/qgis-sdk-tools/) at matching versions.
 
 > Status: `0.7.0`, experimental `0.x`. Each `0.Y.0` carries migration
 > notes; nothing is promised stable before `1.0.0`.

@@ -1,15 +1,11 @@
 # qgis-sdk-runtime
 
-**What a qgis-sdk plugin imports inside QGIS: declarations, the UI
-catalogue, the services and the adapters - standard library only.**
+**The runtime that brings your Python plugin to life in QGIS.**
 
-Plain classes carry the plugin: `@plugin` and `@action` declare it, a
-`Dialog` or `Dock` declares its native window from the catalogue, `ctx`
-reaches layers, Processing, files, settings, network, the log and the
-WebEngine bridge host side. `qgis_sdk.adapters.desktop.host()` is the
-`classFactory` a built plugin binds, so a project carries the plugin and
-nothing of the host. The pure layers import without QGIS or Qt; a plugin
-built with `qgis-sdk build` vendors a private copy and installs nothing.
+Declare actions and native surfaces with plain Python, then reach QGIS
+capabilities through scoped services. Pure layers import without QGIS or Qt;
+`qgis-sdk build` vendors a private runtime into the plugin ZIP. The runtime
+has no third-party Python dependencies; QGIS and Qt are supplied by the host.
 
 > Status: `0.7.0`, experimental `0.x`. Each `0.Y.0` carries migration
 > notes; nothing is promised stable before `1.0.0`.

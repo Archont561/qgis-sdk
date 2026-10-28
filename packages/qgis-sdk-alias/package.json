@@ -1,7 +1,7 @@
 {
 	"name": "qgis-sdk",
 	"version": "0.5.0",
-	"description": "Unscoped alias of @archont561/qgis-sdk, the TypeScript SDK for QGIS plugin interfaces hosted in QWebEngineView.",
+	"description": "Typed QGIS plugin actions for your web UI. Alias of @archont561/qgis-sdk.",
 	"license": "MIT",
 	"type": "module",
 	"main": "./index.js",

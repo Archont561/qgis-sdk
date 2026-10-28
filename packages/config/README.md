@@ -1,7 +1,6 @@
 # @workspace/config
 
-**The TypeScript and Bunup configuration every package in this workspace
-extends.**
+**Shared TypeScript and Bunup defaults for the QGIS SDK workspace.**
 
 A private workspace package: strict shared `tsconfig` defaults, a library
 variant with declarations and an app variant for browser pages, and the
