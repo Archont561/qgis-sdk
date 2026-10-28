@@ -1,4 +1,4 @@
-"""Lifecycle ownership for one plain author class and its runtime scope."""
+"""Lifecycle ownership for one application and its runtime scope."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from qgis_sdk.declarations import PluginDescription, describe_plugin
+from qgis_sdk.declarations import PluginDescription, QgisSdkDeclarationError
+from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.models import QgisSdkError, QgisSdkScopeClosedError
 from qgis_sdk.services import ProviderRegistration
 
@@ -16,19 +17,14 @@ from .contexts import PluginContext
 from .scope import QuiesceOutcome
 
 if TYPE_CHECKING:
+    from qgis_sdk.core._application import QgisSdkPlugin
     from qgis_sdk.providers import Provider
 
-PluginFactory = Callable[[PluginContext], object]
-"""Construct a plugin instance from the context supplied by the runtime."""
+_PluginFactory = Callable[[PluginContext], object]
+"""Internal factory for a lowered plugin instance."""
 
-CONTEXT_ATTRIBUTE = "ctx"
-"""The class attribute a running runtime binds its :class:`PluginContext` to.
-
-An author class annotates it (``ctx: PluginContext``) for the type checker and
-reads ``self.ctx`` anywhere, including ``__init__``; the runtime sets it on the
-class before construction and removes it again on unload, so the class is plain
-outside a running lifecycle and never retains a closed scope.
-"""
+_CONTEXT_ATTRIBUTE = "ctx"
+"""Context slot on each private lowered runtime class."""
 
 _EMPTY_ACTIONS: Mapping[str, Callable[..., object]] = MappingProxyType({})
 
@@ -49,28 +45,45 @@ class PluginRuntimeState(StrEnum):
 
 
 class PluginRuntime:
-    """Construct and dispose one plain plugin class without rewriting it.
+    """Own one :class:`QgisSdkPlugin` and its context for a lifecycle.
 
-    The context is bound as the ``ctx`` class attribute (:data:`CONTEXT_ATTRIBUTE`)
-    for the duration of the lifecycle, and the class is constructed with no
-    arguments (decision-31). The default construction is ``plugin_class()``; an
-    explicit factory still receives the context and can supply custom
-    dependencies. Declarations are validated at construction time, but no
-    author code runs until :meth:`start`.
-
-    The providers the class lists in ``providers = [...]`` (decision-42) are
-    validated here too. :meth:`start` registers them with the host's
-    Processing registry when the context carries ``processing``; over a
-    context without one the same class registers nothing. :meth:`unload`
-    removes them again, and a failed start removes whatever it had registered.
+    The runtime creates a private lowered instance for each application runtime,
+    validates declarations and providers at construction, and injects the given
+    context into registered functions. :meth:`start` registers providers when
+    Processing is available; :meth:`unload` releases them and owned resources.
+    A failed start rolls back its registrations.
     """
 
     def __init__(
         self,
+        app: QgisSdkPlugin,
+        context: PluginContext,
+    ) -> None:
+        from qgis_sdk.core._application import QgisSdkPlugin
+
+        if not isinstance(app, QgisSdkPlugin):
+            raise QgisSdkDeclarationError("PluginRuntime requires a QgisSdkPlugin")
+        self._initialize(app._plugin_class(), context)
+
+    @classmethod
+    def _from_plugin_class(
+        cls,
         plugin_class: type,
         context: PluginContext,
         *,
-        instance_factory: PluginFactory | None = None,
+        instance_factory: _PluginFactory | None = None,
+    ) -> PluginRuntime:
+        """Internal entry point for already lowered classes."""
+        runtime = cls.__new__(cls)
+        runtime._initialize(plugin_class, context, instance_factory=instance_factory)
+        return runtime
+
+    def _initialize(
+        self,
+        plugin_class: type,
+        context: PluginContext,
+        *,
+        instance_factory: _PluginFactory | None = None,
     ) -> None:
         self._plugin_class = plugin_class
         self._context = context
@@ -230,12 +243,12 @@ class PluginRuntime:
         to run under one runtime at a time, and rebinding rather than refusing
         means a runtime that was never unloaded cannot poison the class.
         """
-        setattr(self._plugin_class, CONTEXT_ATTRIBUTE, self._context)
+        setattr(self._plugin_class, _CONTEXT_ATTRIBUTE, self._context)
 
     def _unbind_context(self) -> None:
         """Remove ``plugin_class.ctx`` again, but only if it is still ours."""
-        if vars(self._plugin_class).get(CONTEXT_ATTRIBUTE) is self._context:
-            delattr(self._plugin_class, CONTEXT_ATTRIBUTE)
+        if vars(self._plugin_class).get(_CONTEXT_ATTRIBUTE) is self._context:
+            delattr(self._plugin_class, _CONTEXT_ATTRIBUTE)
 
     def _construct(self) -> object:
         factory = self._instance_factory
@@ -248,8 +261,8 @@ class PluginRuntime:
                 raise
             raise QgisSdkPluginLifecycleError(
                 f"Plugin {self._description.id!r}: the class is constructed with no "
-                f"arguments; read the context from the {CONTEXT_ATTRIBUTE!r} class "
-                f"attribute (annotate `{CONTEXT_ATTRIBUTE}: PluginContext`) instead "
+                f"arguments; read the context from the {_CONTEXT_ATTRIBUTE!r} class "
+                f"attribute (annotate `{_CONTEXT_ATTRIBUTE}: PluginContext`) instead "
                 "of a constructor parameter"
             ) from error
 
@@ -305,6 +318,6 @@ def _declared_providers(plugin_class: type) -> tuple[Provider, ...]:
     ``qgis_sdk.providers`` imports this package, so the lookup is deferred to
     construction time; the module is pure and always importable.
     """
-    from qgis_sdk.providers import declared_providers
+    from qgis_sdk.providers import _declared_providers as validate_providers
 
-    return declared_providers(plugin_class)
+    return validate_providers(plugin_class)

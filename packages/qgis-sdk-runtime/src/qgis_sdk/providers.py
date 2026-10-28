@@ -18,11 +18,11 @@ to a host parameter kind, the result has to be the produced layer, and the id
 has to be unique inside the provider. A mistake therefore fails at import time,
 which is where a plugin author can still see it.
 
-A ``@plugin`` class lists the providers it owns in ``providers = [tools]``.
+An application owns a provider through ``app.add_provider(tools)``.
 ``PluginRuntime.start()`` registers them with the host's Processing registry
 when the context carries one (``ctx.processing``), so ``field_tools:buffer``
 appears in the toolbox, the modeler and ``processing.run``; ``unload()``
-removes them. Outside QGIS the same class registers nothing. This module stays
+removes them. Outside QGIS the same application registers nothing. This module stays
 QGIS-free; only the adapter knows about the toolbox.
 """
 
@@ -57,16 +57,14 @@ __all__ = [
     "CRS_PARAMETER",
     "LAYER_PARAMETER",
     "METRES_PARAMETER",
-    "PROVIDERS_ATTRIBUTE",
     "Provider",
     "ProviderDescription",
-    "declared_providers",
 ]
 
 T = TypeVar("T", bound=Callable[..., Any])
 
-PROVIDERS_ATTRIBUTE = "providers"
-"""The class attribute a ``@plugin`` class lists its providers in."""
+_PROVIDERS_ATTRIBUTE = "providers"
+"""Private attribute on a lowered application class."""
 
 
 @dataclass(frozen=True)
@@ -223,15 +221,15 @@ class Provider:
         )
 
 
-def declared_providers(plugin_class: type) -> tuple[Provider, ...]:
-    """Return the providers a ``@plugin`` class lists, validated.
+def _declared_providers(plugin_class: type) -> tuple[Provider, ...]:
+    """Return the providers a lowered application class lists, validated.
 
     ``providers`` is optional; when present it is a list or tuple of
     :class:`Provider` instances with distinct ids. Anything else is refused
     naming the class, so a typo (``providers = tools``) fails when the runtime
     is built rather than registering nothing in silence.
     """
-    listed = getattr(plugin_class, PROVIDERS_ATTRIBUTE, None)
+    listed = getattr(plugin_class, _PROVIDERS_ATTRIBUTE, None)
     if listed is None:
         return ()
     name = getattr(plugin_class, "__name__", repr(plugin_class))
@@ -239,13 +237,13 @@ def declared_providers(plugin_class: type) -> tuple[Provider, ...]:
         isinstance(provider, Provider) for provider in listed
     ):
         raise QgisSdkDeclarationError(
-            f"{name}.{PROVIDERS_ATTRIBUTE} must be a list of Provider instances"
+            f"{name}.{_PROVIDERS_ATTRIBUTE} must be a list of Provider instances"
         )
     seen: dict[str, Provider] = {}
     for provider in listed:
         if provider.id in seen:
             raise QgisSdkDeclarationError(
-                f"{name}.{PROVIDERS_ATTRIBUTE}: provider id {provider.id!r} is "
+                f"{name}.{_PROVIDERS_ATTRIBUTE}: provider id {provider.id!r} is "
                 "listed twice"
             )
         seen[provider.id] = provider

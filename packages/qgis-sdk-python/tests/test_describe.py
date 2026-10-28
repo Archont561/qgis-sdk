@@ -12,19 +12,19 @@ import json
 from dataclasses import dataclass
 
 import pytest
+from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.algorithms import AlgorithmDescription, describe_algorithm
 from qgis_sdk.core import AlgorithmContext, JobContext
 from qgis_sdk.declarations import (
     Description,
     PluginDescription,
     QgisSdkDeclarationError,
-    action,
     canonical_json,
     declare_class,
     describe,
-    describe_plugin,
-    plugin,
 )
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobDescription, describe_job, job
 from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider, ProviderDescription
@@ -66,7 +66,12 @@ def registered(ctx: AlgorithmContext, value: int) -> VectorLayerInfo:
 @pytest.mark.parametrize(
     ("cls", "expected_type", "narrow"),
     [
-        pytest.param(Plugin, PluginDescription, describe_plugin, id="plugin"),
+        pytest.param(
+            QgisSdkPlugin(id="app", title="App"),
+            PluginDescription,
+            lambda app: app.describe(),
+            id="app",
+        ),
         pytest.param(
             registered, AlgorithmDescription, describe_algorithm, id="algorithm"
         ),
@@ -83,11 +88,11 @@ def test_describe_dispatches_to_the_narrow_describer(
 
 
 def test_describe_refuses_an_undecorated_class_a_function_and_a_non_class() -> None:
-    with pytest.raises(QgisSdkDeclarationError, match="class declared with @plugin"):
+    with pytest.raises(QgisSdkDeclarationError, match="requires a QgisSdkPlugin"):
         describe(Inputs)
-    with pytest.raises(QgisSdkDeclarationError, match="@job or @provider.algorithm"):
+    with pytest.raises(QgisSdkDeclarationError, match="requires a QgisSdkPlugin"):
         describe(lambda ctx: None)
-    with pytest.raises(QgisSdkDeclarationError, match="requires a class or a function"):
+    with pytest.raises(QgisSdkDeclarationError, match="requires a QgisSdkPlugin"):
         describe(object())  # type: ignore[arg-type]
 
 
@@ -155,5 +160,5 @@ def test_a_subclass_does_not_inherit_the_marker_as_its_own_declaration() -> None
 
     with pytest.raises(QgisSdkDeclarationError, match="requires a class with @plugin"):
         describe_plugin(Child)
-    with pytest.raises(QgisSdkDeclarationError, match="class declared with @plugin"):
+    with pytest.raises(QgisSdkDeclarationError, match="requires a QgisSdkPlugin"):
         describe(Child)

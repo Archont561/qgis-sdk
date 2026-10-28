@@ -2,26 +2,26 @@
 
 decision-45 and decision-55: a binding says *where QGIS shows a way to
 trigger something*, and nothing else. The decorators stack in any order on an
-``@action`` method or on a ``Dialog``/``Dock`` subclass::
+application action function or on a ``Dialog``/``Dock`` subclass::
 
     @toolbar(icon="buffer.svg")
     @menu("Vector/Field tools")
     @shortcut("Ctrl+Alt+B")
-    @action
-    def buffer_selection(self) -> None: ...
+    @app.action(id="buffer_selection", title="Buffer selection")
+    def buffer_selection(ctx: PluginContext) -> None: ...
 
     @menu("Plugins/Field tools")
     class BufferDialog(Dialog): ...
 
-They mark and add a ``describe()`` convenience without wrapping: the method
+They mark and add a ``describe()`` convenience without wrapping: the action
 stays the plain function it was. Bindings are host metadata and are omitted
 from the serialized bridge schema and host fingerprint, so adding a toolbar
 button does not move the wire. The unified :func:`qgis_sdk.describe` exposes
 them; :func:`describe_bindings` remains available for existing callers.
 
-What is refused, and how: a ``@job`` ("bind an ``@action`` that submits the
-job"), a ``@stream``, and - when the ``@plugin`` class is created - a plain
-method that never became an ``@action``. The trigger rule the Desktop host
+Bindings refuse jobs and streams; bind an application action that submits the
+job or opens a surface for the stream. A plain unregistered function cannot be
+placed by the host. The trigger rule the Desktop host
 applies is decision-55's: an action without inputs runs on the GUI thread; one
 that returns a job handle reports through the message bar; a *typed* action
 bound without a surface of its own is a ``UI003`` finding, and the host
@@ -34,7 +34,7 @@ import inspect
 import itertools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Final, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Literal, TypeVar
 
 from qgis_sdk.declarations import (
     BINDING_ORDER_ATTRIBUTE,
@@ -44,14 +44,17 @@ from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     attach_describe,
     bindings_of,
-    describe_plugin,
     register_describer_enricher,
 )
+from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.ui.surfaces import (
     SurfaceDescription,
     describe_surface,
     is_surface_class,
 )
+
+if TYPE_CHECKING:
+    from qgis_sdk.core._application import QgisSdkPlugin
 
 __all__ = [
     "BINDINGS_ATTRIBUTE",
@@ -228,7 +231,7 @@ def _bind(target: Any, binding: Binding, decorator: str) -> Any:
     if inspect.isclass(target):
         if not is_surface_class(target):
             raise QgisSdkDeclarationError(
-                f"{decorator} binds an @action method or a Dialog/Dock subclass; "
+                f"{decorator} binds an application action or a Dialog/Dock subclass; "
                 f"{target.__name__} is neither"
             )
     elif inspect.isfunction(target):
@@ -244,7 +247,7 @@ def _bind(target: Any, binding: Binding, decorator: str) -> Any:
             )
     else:
         raise QgisSdkDeclarationError(
-            f"{decorator} binds an @action method or a Dialog/Dock subclass"
+            f"{decorator} binds an application action or a Dialog/Dock subclass"
         )
     attach_describe(target)
     existing = bindings_of(target)
@@ -258,14 +261,21 @@ def _order_of(target: object) -> int:
     return int(vars(target).get(BINDING_ORDER_ATTRIBUTE, 0))
 
 
-def describe_bindings(cls: type) -> BindingsDescription:
-    """Read the bound actions and the registered surfaces of a plugin class.
+def describe_bindings(app: QgisSdkPlugin) -> BindingsDescription:
+    """Read the bound actions and registered surfaces of an application.
 
-    Separate from ``describe_plugin`` on purpose: bindings never reach the
-    wire. Actions are reported only when bound; every surface in
-    ``surfaces = [...]`` is reported, bound or not, because ``ctx.ui.open``
-    reaches the unbound ones. Refusals name the member.
+    Bindings never reach the wire. Only bound actions are reported, but all
+    registered surfaces are included because ``ctx.ui.open`` can reach them.
     """
+    from qgis_sdk.core._application import QgisSdkPlugin
+
+    if not isinstance(app, QgisSdkPlugin):
+        raise QgisSdkDeclarationError("describe_bindings requires a QgisSdkPlugin")
+    return _describe_lowered_bindings(app._plugin_class())
+
+
+def _describe_lowered_bindings(cls: type) -> BindingsDescription:
+    """Read bindings from an internally lowered application class."""
     description = describe_plugin(cls)
     members: dict[str, Any] = {}
     for base in reversed(cls.__mro__):
@@ -318,7 +328,7 @@ def _listed_surfaces(cls: type) -> Sequence[type]:
 
 
 def _enrich_plugin_description(cls: type, description: Any) -> Any:
-    return replace(description, bindings=describe_bindings(cls))
+    return replace(description, bindings=_describe_lowered_bindings(cls))
 
 
 register_describer_enricher(PLUGIN_ATTRIBUTE, _enrich_plugin_description)

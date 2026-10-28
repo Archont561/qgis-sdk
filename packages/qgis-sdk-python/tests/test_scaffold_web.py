@@ -387,10 +387,7 @@ def test_the_starter_tests_open_the_page_the_way_build_binds_it(
     write_scaffold(options(web="vanilla", placement="dock"), project)
     test = (project / "tests" / "test_plugin.py").read_text(encoding="utf-8")
 
-    assert (
-        'classFactory = host("field_tools.plugin:FieldToolsPlugin", placement="dock")'
-        in test
-    )
+    assert 'classFactory = host("field_tools.plugin:app", placement="dock")' in test
     gitignore = (project / ".gitignore").read_text(encoding="utf-8")
     assert ".qgis-sdk/" in gitignore  # the dev host package lives there
 

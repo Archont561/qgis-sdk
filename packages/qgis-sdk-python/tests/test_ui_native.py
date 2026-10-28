@@ -20,7 +20,7 @@ from typing import Literal
 
 import pytest
 from qgis_sdk.core import PluginRuntime, ResourceScope, UiContext
-from qgis_sdk.declarations import action, plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import (
     Colour as ColourInput,
 )
@@ -136,7 +136,7 @@ def ctx(qgis_app, tmp_path: Path) -> Iterator[UiContext]:
     dataset = tmp_path / "sites.geojson"
     dataset.write_text(GEOJSON, encoding="utf-8")
     context.project.add_layer(context.layers.open_vector(dataset).id)
-    runtime = PluginRuntime(FormDemo, context)
+    runtime = PluginRuntime._from_plugin_class(FormDemo, context)
     runtime.start()
     yield UiContext(
         notifications,

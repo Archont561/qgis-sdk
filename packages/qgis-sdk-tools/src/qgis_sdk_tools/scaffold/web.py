@@ -15,7 +15,9 @@ from __future__ import annotations
 import json
 from typing import Final
 
-from qgis_sdk.declarations import action, describe_plugin, plugin
+from qgis_sdk import QgisSdkPlugin, describe
+from qgis_sdk.core import PluginContext
+from qgis_sdk.models import CrsInput, LayerInput, Metres, VectorLayerInfo
 from qgis_sdk.processing.codegen import emit_typescript_module
 from qgis_sdk.processing.snapshot import core_catalogue
 
@@ -32,7 +34,7 @@ __all__ = [
     "install_command",
     "plan_web",
     "script_command",
-    "template_plugin_class",
+    "template_plugin_app",
 ]
 
 LF: Final = "\n"
@@ -88,25 +90,36 @@ def script_command(package_manager: PackageManager, script: str) -> tuple[str, .
     return (package_manager, "run", script)
 
 
-def template_plugin_class(options: ScaffoldOptions) -> type:
-    """The declarations ``plugin.py`` carries, as a class the generator can read.
+def template_plugin_app(options: ScaffoldOptions) -> QgisSdkPlugin:
+    """The declarations emitted by the starter plugin module."""
+    app = QgisSdkPlugin(id=options.plugin, title=options.title)
 
-    This mirrors ``PLUGIN_MODULE`` in :mod:`.generate` action for action; the
-    scaffold test that runs ``bridge generate --check`` against a written
-    project is what keeps the two in step.
-    """
+    @app.action(id="ping", title="Ping")
+    def ping(ctx: PluginContext, value: int) -> int:
+        return value
 
-    @plugin(id=options.plugin, title=options.title)
-    class Template:
-        @action(id="ping", title="Ping")
-        def ping(self, value: int) -> int:
-            return value
+    @app.action(id="project_layers", title="Project layers")
+    def project_layers(ctx: PluginContext) -> list[str]:
+        return []
 
-        @action(id="project_layers", title="Project layers")
-        def project_layers(self) -> list[str]:
-            return []
+    if options.algorithm:
 
-    return Template
+        @app.action(id="buffer", title="Buffer a layer")
+        def buffer(
+            ctx: PluginContext,
+            layer_id: LayerInput,
+            distance_metres: Metres,
+            working_crs: CrsInput,
+        ) -> VectorLayerInfo:
+            raise NotImplementedError("schema template only")
+
+    if options.ui == "native":
+
+        @app.action(id="open_ping", title="Open ping")
+        def open_ping(ctx: PluginContext) -> None:
+            pass
+
+    return app
 
 
 def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
@@ -122,7 +135,7 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
         ("web/.gitignore", "node_modules/\n"),
         (
             "web/src/bridge.schema.ts",
-            generate_schema_typescript(describe_plugin(template_plugin_class(options))),
+            generate_schema_typescript(describe(template_plugin_app(options))),
         ),
         (
             "web/src/processing.schema.ts",
@@ -162,7 +175,7 @@ PROCESSING_BINDINGS_COMMAND: Final = (
 def bindings_command() -> str:
     """The drift check the project's CI runs, from the project root.
 
-    The plugin class comes from ``[tool.qgis-sdk] plugin`` in the project's
+    The plugin application comes from ``[tool.qgis-sdk] plugin`` in the project's
     ``pyproject.toml`` (decision-43), so the first command names only the
     output; the second reads the Processing registry of the project's QGIS
     install (decision-64).

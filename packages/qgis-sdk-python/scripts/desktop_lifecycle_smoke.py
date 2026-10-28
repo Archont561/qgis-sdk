@@ -33,6 +33,13 @@ SOURCE_ROOTS = (
     PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src",
     PROJECT_ROOT.parent / "qgis-sdk-tools" / "src",
 )
+# Handler annotations are resolved from module globals. Keep this import pure,
+# and make the source tree available when the script is launched standalone.
+for _root in reversed(SOURCE_ROOTS):
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+
+from qgis_sdk.core import PluginContext
 
 
 def qgis_python_path(prefix: Path) -> Path:
@@ -140,9 +147,9 @@ def _run_lifecycle(prefix: Path) -> LifecycleReport:
     application = QgsApplication([b"qgis-sdk-lifecycle-smoke"], True)
     application.initQgis()
 
-    from qgis_sdk import action, plugin
+    from qgis_sdk import QgisSdkPlugin
     from qgis_sdk.adapters.desktop import DesktopLifecycleAdapter
-    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.core import ResourceScope
 
     released: list[str] = []
 
@@ -150,28 +157,23 @@ def _run_lifecycle(prefix: Path) -> LifecycleReport:
         def info(self, message: str) -> None:
             del message
 
-    @plugin(id="qualification.lifecycle", title="Lifecycle qualification")
-    class LifecyclePlugin:
-        ctx: PluginContext
+    app = QgisSdkPlugin(id="qualification.lifecycle", title="Lifecycle qualification")
 
-        def __init__(self) -> None:
-            self.ctx.scope.on_close(lambda: released.append("action"))
-            self.ctx.scope.on_close(lambda: released.append("signal"))
-            self.ctx.scope.on_close(lambda: released.append("dock"))
-            self.ctx.scope.on_close(lambda: released.append("work"))
-
-        @action(id="ping", title="Ping")
-        def ping(self, value: int) -> int:
-            return value
+    @app.action(id="ping", title="Ping")
+    def ping(ctx: PluginContext, value: int) -> int:
+        return value
 
     def context_factory(iface: object) -> PluginContext:
         del iface  # a real Desktop iface is not available in this harness
-        return PluginContext(notifications=Notifications(), scope=ResourceScope())
+        scope = ResourceScope()
+        for name in ("action", "signal", "dock", "work"):
+            scope.on_close(lambda name=name: released.append(name))
+        return PluginContext(notifications=Notifications(), scope=scope)
 
     qgis_initialised = True
     try:
         adapter = DesktopLifecycleAdapter(
-            LifecyclePlugin, iface=None, context_factory=context_factory
+            app, iface=None, context_factory=context_factory
         )
         adapter.initGui()
         plugin_started = adapter.runtime.state.value == "running"

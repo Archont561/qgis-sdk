@@ -21,19 +21,23 @@ to skip the question) and writes:
 
 | Path | What it is |
 | :-- | :-- |
-| `pyproject.toml` | The project *is* the plugin: name, version, `qgis-sdk-runtime` dependency, `[tool.qgis-sdk]` with the plugin class, placement and grants. |
-| `my_tools/plugin.py` | A `@plugin` class with one `@action` and a `surfaces` tuple. |
-| `my_tools/surfaces.py` | A `Dialog` declared from the UI catalogue, opened by a toolbar action. |
+| `pyproject.toml` | The project *is* the plugin: name, version, `qgis-sdk-runtime` dependency, `[tool.qgis-sdk]` with the plugin application, placement and grants. |
+| `my_tools/plugin.py` | A `QgisSdkPlugin` with action functions and a typed context. |
+| `my_tools/ui.py` | With `--ui native`, a `Dialog` declared from the UI catalogue. |
 | `tests/` | pytest on the SDK fakes; runs without QGIS. |
 | `web/` | Only with `--web`: a Vite page on `@archont561/qgis-sdk` with the generated `bridge.schema.ts`. |
 
 ## What does the plugin look like?
 
 ```python
-from qgis_sdk import action, menu, plugin
+from qgis_sdk import QgisSdkPlugin, menu
+from qgis_sdk.core import PluginContext
 from qgis_sdk.ui import Button, Dialog, Form, LogView, Number, on
 
 
+app = QgisSdkPlugin(id="my_tools", title="My Tools")
+
+@app.surface
 @menu("Plugins/My Tools")
 class PingDialog(Dialog):
     title = "Ping"
@@ -47,18 +51,13 @@ class PingDialog(Dialog):
         self.ctx.log.info("pong", value=self.form.submit())
 
 
-@plugin(id="my_tools", title="My Tools")
-class MyTools:
-    surfaces = (PingDialog,)
-
-    @action(id="ping", title="Ping")
-    def ping(self, value: int) -> int:
-        return value
+@app.action(id="ping", title="Ping")
+def ping(ctx: PluginContext, value: int) -> int:
+    return value
 ```
 
-Plain classes: the decorators mark, they never wrap. `ctx` is bound by the
-runtime when QGIS loads the plugin and by the fakes under test, so the same
-class runs in both.
+The decorator keeps the original function. The host injects `ctx` during
+execution; tests can call the function directly with a fake `PluginContext`.
 
 ## How do I check and test it without QGIS?
 
@@ -93,8 +92,7 @@ manager like any other plugin; nothing else is installed on that machine.
 
 ## Where next
 
-- [Declarations](/qgis-sdk/python/declarations/) - everything `@plugin` and
-  `@action` accept.
+- [Declarations](/qgis-sdk/python/declarations/) - application and action registration.
 - [Desktop bindings and native surfaces](/qgis-sdk/python/desktop-bindings-and-native-surfaces/) -
   the UI catalogue, `Dialog` and `Dock`, `@on`, forms.
 - [Project scaffold](/qgis-sdk/python/project-scaffold/) - every file `new`

@@ -2,16 +2,16 @@
 
 decision-43: the author's package carries no ``metadata.txt`` and no
 ``classFactory``. This module renders both from :class:`ProjectConfig` plus
-the two facts only the plugin class knows - its ``title`` and whether it
+the two facts only the application knows - its ``title`` and whether it
 lists ``providers`` - so the two commands agree byte for byte:
 
 * :func:`render_metadata` - the ``metadata.txt`` QGIS reads;
 * :func:`class_factory_source` - the lines ``build`` appends to the staged
-  ``<plugin>/__init__.py``: ``classFactory = host("pkg.module:Class", ...)``;
+  ``<plugin>/__init__.py``: ``classFactory = host("pkg.module:app", ...)``;
 * :func:`write_dev_host` - the package ``dev`` stages under
   ``.qgis-sdk/dev/host/<plugin>/`` so QGIS loads the sources in place.
 
-:func:`introspect_plugin` imports the plugin class once, isolated, to read
+:func:`introspect_plugin` imports the application once, isolated, to read
 those facts; ``check`` never calls it (decision-8).
 """
 
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Final
 
 from qgis_sdk.adapters.desktop import QgisSdkHostError, resolve_plugin_spec
-from qgis_sdk.declarations import QgisSdkDeclarationError, describe_plugin
+from qgis_sdk.declarations import QgisSdkDeclarationError, describe
 from qgis_sdk.models import QgisSdkError
 
 from .project import ProjectConfig
@@ -51,14 +51,14 @@ LF: Final = "\n"
 
 
 class QgisSdkArtifactError(QgisSdkError):
-    """The plugin class cannot be read: the import or the declaration failed."""
+    """The application cannot be read: the import or the declaration failed."""
 
     code = "artifact_invalid"
 
 
 @dataclass(frozen=True, slots=True)
 class PluginFacts:
-    """What only the class says and ``metadata.txt`` needs."""
+    """What only the application says and ``metadata.txt`` needs."""
 
     id: str
     title: str
@@ -66,7 +66,7 @@ class PluginFacts:
 
 
 def introspect_plugin(config: ProjectConfig) -> PluginFacts:
-    """Import the class ``config.spec`` names and read its title and providers.
+    """Import the application ``config.spec`` names and read its title and providers.
 
     The project root goes first on ``sys.path`` for the import and leaves
     again; the package's modules are evicted from ``sys.modules`` before and
@@ -75,8 +75,8 @@ def introspect_plugin(config: ProjectConfig) -> PluginFacts:
     """
     with _isolated(config.root, config.plugin):
         try:
-            plugin_class = resolve_plugin_spec(config.spec)
-            description = describe_plugin(plugin_class)
+            app = resolve_plugin_spec(config.spec)
+            description = describe(app)
         except (QgisSdkHostError, QgisSdkDeclarationError) as error:
             raise QgisSdkArtifactError(
                 f"[tool.qgis-sdk] plugin = {config.spec!r}: {error}"
@@ -85,7 +85,7 @@ def introspect_plugin(config: ProjectConfig) -> PluginFacts:
             raise QgisSdkArtifactError(
                 f"importing {config.module!r} failed: {type(error).__name__}: {error}"
             ) from error
-        providers = getattr(plugin_class, "providers", ()) or ()
+        providers = app.providers
         try:
             has_providers = len(tuple(providers)) > 0
         except TypeError as error:
@@ -123,7 +123,7 @@ def _isolated(root: Path, package: str) -> Iterator[None]:
 def render_metadata(config: ProjectConfig, facts: PluginFacts) -> str:
     """The ``metadata.txt`` for the plugin: every key QGIS requires, then extras.
 
-    ``name`` is the class title, ``about`` the passthrough value or the
+    ``name`` is the application title, ``about`` the passthrough value or the
     description, ``hasProcessingProvider`` follows ``providers``. Passthrough
     keys follow in the order written; a multi-line value continues indented,
     the way QGIS's parser reads it.

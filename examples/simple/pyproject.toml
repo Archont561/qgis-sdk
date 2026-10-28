@@ -15,9 +15,9 @@ dependencies = ["qgis-sdk-runtime>=0.7,<0.8"]
 dev = ["qgis-sdk-tools>=0.7,<0.8"]
 
 [tool.qgis-sdk]
-# The class QGIS runs; `build` and `dev` bind classFactory to it through
+# The application QGIS runs; `build` and `dev` bind classFactory through
 # qgis_sdk.adapters.desktop.host().
-plugin = "simple.plugin:SimplePlugin"
+plugin = "simple.plugin:app"
 qgis-minimum-version = "4.0"
 experimental = true
 # Where QGIS is, when `qgis-sdk test` and `qgis-sdk dev` should not discover it

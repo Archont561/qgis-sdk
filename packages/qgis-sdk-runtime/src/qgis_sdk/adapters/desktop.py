@@ -4,8 +4,8 @@ Two layers. :class:`DesktopLifecycleAdapter` and :func:`create_class_factory`
 delegate construction and disposal to :class:`PluginRuntime` and know nothing
 about QGIS: the host passes ``iface`` and a ``context_factory`` supplies the
 typed capabilities. :func:`host` is what a generated plugin binds
-(decision-43): ``classFactory = host("pkg.plugin:Class")`` resolves the
-author's class, builds the context the running host can offer - every
+(decision-43): ``classFactory = host("pkg.plugin:app")`` resolves the
+author's application, builds the context the running host can offer - every
 curated service inside QGIS, a bare context that refuses ``ctx.desktop`` by
 name anywhere else - and, when the project declares a page, owns the toolbar
 button and the page view. Nothing here imports QGIS or Qt at module level,
@@ -22,8 +22,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from qgis_sdk.bindings import BindingsDescription, describe_bindings
-from qgis_sdk.core import PluginContext, PluginFactory, PluginRuntime, ResourceScope
-from qgis_sdk.declarations import describe_plugin
+from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+from qgis_sdk.core._application import QgisSdkPlugin
+from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import QgisSdkError
 from qgis_sdk.services import Notification, NotificationsBase
 
@@ -44,10 +45,10 @@ __all__ = [
     "resolve_plugin_spec",
 ]
 
-ContextFactory = Callable[[object], PluginContext]
+ContextFactory = Callable[[object | None], PluginContext]
 """Build the plugin context from the host's opaque Desktop ``iface``."""
 
-#: A plugin class may bind this to a callable ``(iface) -> PluginContext`` to
+#: An application may bind this to a callable ``(iface) -> PluginContext`` to
 #: replace :func:`default_context`; the only hook :func:`host` offers.
 CONTEXT_FACTORY_ATTRIBUTE: Final = "context_factory"
 #: The directory, inside the plugin package, a built page lives in.
@@ -66,22 +67,21 @@ class DesktopLifecycleAdapter:
 
     def __init__(
         self,
-        plugin_class: type,
-        iface: object,
+        app: QgisSdkPlugin,
+        iface: object | None,
         *,
         context_factory: ContextFactory,
-        instance_factory: PluginFactory | None = None,
     ) -> None:
+        if not isinstance(app, QgisSdkPlugin):
+            raise QgisSdkDeclarationError(
+                "DesktopLifecycleAdapter requires a QgisSdkPlugin"
+            )
         self._iface = iface
         self._context = context_factory(iface)
-        self._runtime = PluginRuntime(
-            plugin_class,
-            self._context,
-            instance_factory=instance_factory,
-        )
+        self._runtime = PluginRuntime(app, self._context)
 
     @property
-    def iface(self) -> object:
+    def iface(self) -> object | None:
         """Return the opaque host interface; never serialize or expose it."""
         return self._iface
 
@@ -105,20 +105,16 @@ class DesktopLifecycleAdapter:
 
 
 def create_class_factory(
-    plugin_class: type,
+    app: QgisSdkPlugin,
     *,
     context_factory: ContextFactory,
-    instance_factory: PluginFactory | None = None,
-) -> Callable[[object], DesktopLifecycleAdapter]:
-    """Return a QGIS ``classFactory(iface)`` callable for one plugin class."""
+) -> Callable[[object | None], DesktopLifecycleAdapter]:
+    """Return a QGIS ``classFactory(iface)`` callable for one application."""
+    if not isinstance(app, QgisSdkPlugin):
+        raise QgisSdkDeclarationError("create_class_factory requires a QgisSdkPlugin")
 
-    def class_factory(iface: object) -> DesktopLifecycleAdapter:
-        return DesktopLifecycleAdapter(
-            plugin_class,
-            iface,
-            context_factory=context_factory,
-            instance_factory=instance_factory,
-        )
+    def class_factory(iface: object | None) -> DesktopLifecycleAdapter:
+        return DesktopLifecycleAdapter(app, iface, context_factory=context_factory)
 
     return class_factory
 
@@ -198,8 +194,8 @@ def default_context(
     return PluginContext(notifications=notifications, scope=scope)
 
 
-def resolve_plugin_spec(spec: str) -> type:
-    """Import ``pkg.module:Class`` and return the class; typos fail by name.
+def resolve_plugin_spec(spec: str) -> QgisSdkPlugin:
+    """Import ``pkg.module:app`` and return the application; typos fail by name.
 
     The module is imported through the builtin ``__import__`` rather than
     ``importlib``: QGIS tracks a plugin's modules by wrapping that builtin
@@ -209,8 +205,8 @@ def resolve_plugin_spec(spec: str) -> type:
     module_name, separator, attribute = spec.partition(":")
     if not separator or not module_name.strip() or not attribute.strip():
         raise QgisSdkHostError(
-            f"host() expects 'pkg.module:Class', got {spec!r} "
-            "(for example field_tools.plugin:FieldTools)"
+            f"host() expects 'pkg.module:app', got {spec!r} "
+            "(for example field_tools.plugin:app)"
         )
     try:
         __import__(module_name)
@@ -222,8 +218,8 @@ def resolve_plugin_spec(spec: str) -> type:
         target = getattr(target, part, None)
         if target is None:
             raise QgisSdkHostError(f"{module_name!r} has no attribute {attribute!r}")
-    if not isinstance(target, type):
-        raise QgisSdkHostError(f"{spec!r} is not a class")
+    if not isinstance(target, QgisSdkPlugin):
+        raise QgisSdkHostError(f"{spec!r} is not a QgisSdkPlugin")
     return target
 
 
@@ -241,7 +237,7 @@ class DesktopHost:
 
     def __init__(
         self,
-        plugin_class: type,
+        app: QgisSdkPlugin,
         iface: object | None,
         *,
         context_factory: ContextFactory,
@@ -262,9 +258,7 @@ class DesktopHost:
         self._package_directory = package_directory or assets.parent
         self._action: Any | None = None
         self._view: Any | None = None
-        self._bindings = (
-            bindings if bindings is not None else describe_bindings(plugin_class)
-        )
+        self._bindings = bindings if bindings is not None else describe_bindings(app)
         self._surfaces: SurfaceHost | None = None
         self._desktop_bindings: DesktopBindings | None = None
         if qgis_is_running():
@@ -284,7 +278,7 @@ class DesktopHost:
             )
             context_factory = _with_ui(context_factory, self._surfaces)
         self._adapter = DesktopLifecycleAdapter(
-            plugin_class, iface, context_factory=context_factory
+            app, iface, context_factory=context_factory
         )
 
     @property
@@ -407,7 +401,7 @@ def _bind_notification_actions(
 def _with_ui(factory: ContextFactory, surfaces: SurfaceHost) -> ContextFactory:
     """Wrap ``factory`` so the context gains ``ui`` unless the author set one."""
 
-    def with_ui(iface: object) -> PluginContext:
+    def with_ui(iface: object | None) -> PluginContext:
         context = factory(iface)
         if context.has("ui"):
             return context
@@ -422,19 +416,19 @@ def host(
     placement: str | None = None,
     grants: Sequence[str] = (),
 ) -> Callable[[object | None], DesktopHost]:
-    """Return the ``classFactory`` for the plugin class ``spec`` names.
+    """Return the ``classFactory`` for the application ``spec`` names.
 
     ``qgis-sdk build`` and ``qgis-sdk dev`` write the one line that calls
     this; an author never does. ``placement`` (``dock`` or ``dialog``) comes
     from ``[tool.qgis-sdk.web]`` and turns the page on; ``grants`` names the
     curated host operations the page may call - grants such as
     ``layers.read`` or single operation ids - none by default; the host
-    keeps the operation ids they select. A class attribute
-    ``context_factory`` on the plugin class replaces :func:`default_context`.
+    keeps the operation ids they select. A callable
+    ``context_factory`` on the application replaces :func:`default_context`.
     """
-    plugin_class = resolve_plugin_spec(spec)
-    description = describe_plugin(plugin_class)
-    bindings = describe_bindings(plugin_class)
+    app = resolve_plugin_spec(spec)
+    description = app.describe()
+    bindings = description.bindings
     if placement is not None and placement not in PLACEMENTS:
         raise QgisSdkHostError(
             f"placement must be one of {', '.join(PLACEMENTS)}, got {placement!r}"
@@ -449,19 +443,17 @@ def host(
             raise QgisSdkHostError(str(error)) from error
     if granted and placement is None:
         raise QgisSdkHostError("grants need a page; set placement as well")
-    factory: ContextFactory | None = getattr(
-        plugin_class, CONTEXT_FACTORY_ATTRIBUTE, None
-    )
+    factory: ContextFactory | None = getattr(app, CONTEXT_FACTORY_ATTRIBUTE, None)
     if factory is None:
         factory = functools.partial(
             default_context, plugin_id=description.id, title=description.title
         )
-    package_directory = _package_directory(plugin_class)
+    package_directory = _package_directory(spec.partition(":")[0])
     assets = package_directory / ASSETS_DIRECTORY
 
     def classFactory(iface: object | None) -> DesktopHost:
         return DesktopHost(
-            plugin_class,
+            app,
             iface,
             context_factory=factory,
             title=description.title,
@@ -476,17 +468,17 @@ def host(
     return classFactory
 
 
-def _package_directory(plugin_class: type) -> Path:
-    """The top-level package directory the class's module lives under.
+def _package_directory(module_name: str) -> Path:
+    """The top-level package directory the application's module lives under.
 
     Read from the module's file, not the package's ``__file__``: under
     ``qgis-sdk dev`` the package's ``__init__`` is the generated host module
     in ``.qgis-sdk/dev/host`` while the sources - and ``web/`` - stay put.
     """
-    module = importlib.import_module(plugin_class.__module__)
+    module = importlib.import_module(module_name)
     file = getattr(module, "__file__", None)
     if file is None:
-        raise QgisSdkHostError(f"{plugin_class.__module__} has no file to locate web/")
-    depth = plugin_class.__module__.count(".")
+        raise QgisSdkHostError(f"{module_name} has no file to locate web/")
+    depth = module_name.count(".")
     path = Path(file).resolve()
     return path.parents[max(depth - 1, 0)] if depth else path.parent

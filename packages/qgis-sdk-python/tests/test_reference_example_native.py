@@ -263,11 +263,9 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
     exports.mkdir()
     QgsProject.instance().removeAllMapLayers()
 
-    desktop = host(f"{PLUGIN}.plugin:SimplePlugin", placement="dock")(None)
+    desktop = host(f"{PLUGIN}.plugin:app", placement="dock")(None)
     desktop.initGui()
-    desktop.runtime.instance.ctx.settings.set(
-        plugin_module.EXPORT_DIRECTORY_KEY, str(exports)
-    )
+    desktop.context.settings.set(plugin_module.EXPORT_DIRECTORY_KEY, str(exports))
     widget = desktop.show_view()
     try:
         page = widget.widget().page()
@@ -308,7 +306,7 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
 
         # The native dialog for the same action, dispatched to the same handler.
         surfaces_module = importlib.import_module(f"{PLUGIN}.surfaces")
-        dialog = desktop.runtime.instance.ctx.ui.open(surfaces_module.BufferDialog)
+        dialog = desktop.context.ui.open(surfaces_module.BufferDialog)
         dialog.form.field("layer_id").widget.setLayer(source_layer)
         dialog.form.field("distance_metres").widget.setValue(500.0)
         dialog.form.field("working_crs").widget.setCrs(web_output.crs())
@@ -319,7 +317,7 @@ def test_the_page_and_the_native_dialog_share_one_workflow(
             for layer in QgsProject.instance().mapLayers().values()
             if layer not in (source_layer, web_output)
         )
-        native_output = desktop.runtime.instance.ctx.layers.layer(native_output.id())
+        native_output = desktop.context.layers.layer(native_output.id())
 
         native_layer = QgsProject.instance().mapLayer(native_output.id)
         assert native_output.geometry_type == "polygon"

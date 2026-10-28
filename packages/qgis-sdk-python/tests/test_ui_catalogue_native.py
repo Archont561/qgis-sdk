@@ -91,11 +91,11 @@ def test_custom_accepts_a_built_widget_and_reparents_it(rendering: Rendering) ->
 
 
 def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
-    from qgis_sdk import plugin
     from qgis_sdk.adapters.qgis import native_plugin_context
     from qgis_sdk.adapters.surfaces import SurfaceHost
-    from qgis_sdk.bindings import describe_bindings
+    from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
     from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+    from qgis_sdk.declarations._plugin import plugin
 
     seen: list[object] = []
 
@@ -125,7 +125,9 @@ def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
         title="Legacy tools",
         bindings=describe_bindings(LegacyTools),
     )
-    runtime = PluginRuntime(LegacyTools, context.with_services(ui=host))
+    runtime = PluginRuntime._from_plugin_class(
+        LegacyTools, context.with_services(ui=host)
+    )
     host.attach(runtime, context)
     runtime.start()
     try:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import pytest
-from qgis_sdk import action, plugin
+from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.adapters.desktop import DesktopLifecycleAdapter, create_class_factory
 from qgis_sdk.core import (
     PluginContext,
@@ -23,13 +23,12 @@ class RecordingNotifications:
         self.messages.append(message)
 
 
-@plugin(id="example.desktop", title="Desktop example")
-class DesktopTools:
-    ctx: PluginContext
+desktop_app = QgisSdkPlugin(id="example.desktop", title="Desktop example")
 
-    @action(id="run", title="Run")
-    def run(self, value: int) -> int:
-        return value
+
+@desktop_app.action(id="run", title="Run")
+def run(ctx: PluginContext, value: int) -> int:
+    return value
 
 
 @dataclass
@@ -46,7 +45,7 @@ def test_adapter_builds_the_context_from_iface_and_delegates_lifecycle() -> None
     iface = FakeIface()
 
     adapter = DesktopLifecycleAdapter(
-        DesktopTools, iface=iface, context_factory=context_factory
+        desktop_app, iface=iface, context_factory=context_factory
     )
 
     assert adapter.iface is iface
@@ -66,7 +65,7 @@ def test_adapter_builds_the_context_from_iface_and_delegates_lifecycle() -> None
 
 def test_class_factory_helper_returns_a_qgis_entry_point() -> None:
     iface = FakeIface()
-    class_factory = create_class_factory(DesktopTools, context_factory=context_factory)
+    class_factory = create_class_factory(desktop_app, context_factory=context_factory)
 
     adapter = class_factory(iface)
 
@@ -82,14 +81,14 @@ def test_context_factory_receives_the_iface() -> None:
         received.append(received_iface)
         return context_factory(received_iface)
 
-    DesktopLifecycleAdapter(DesktopTools, iface=iface, context_factory=factory)
+    DesktopLifecycleAdapter(desktop_app, iface=iface, context_factory=factory)
 
     assert received == [iface]
 
 
 def test_init_gui_twice_is_rejected_without_reconstructing() -> None:
     adapter = DesktopLifecycleAdapter(
-        DesktopTools, iface=FakeIface(), context_factory=context_factory
+        desktop_app, iface=FakeIface(), context_factory=context_factory
     )
     adapter.initGui()
     instance = adapter.runtime.instance
@@ -106,7 +105,7 @@ def test_unload_before_init_gui_disposes_the_owned_scope() -> None:
     )
 
     adapter = DesktopLifecycleAdapter(
-        DesktopTools, iface=FakeIface(), context_factory=lambda iface: context
+        desktop_app, iface=FakeIface(), context_factory=lambda iface: context
     )
     adapter.unload()
 

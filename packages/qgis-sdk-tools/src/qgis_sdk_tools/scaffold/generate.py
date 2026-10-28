@@ -23,25 +23,23 @@ PLUGIN_MODULE = '''"""{title}: a minimal qgis-sdk plugin."""
 
 from __future__ import annotations
 
-from qgis_sdk import action, plugin{ui_names}
+from qgis_sdk import QgisSdkPlugin{ui_names}
 {algorithm_imports}from qgis_sdk.core import PluginContext
 {algorithm_models}{ui_imports}
 
-@plugin(id="{plugin}", title="{title}")
-class {class_name}Plugin:
-    """Declared actions only: no Qt imports and no framework glue to memorise."""
-
-    ctx: PluginContext  # bound by the runtime while the plugin is loaded
+app = QgisSdkPlugin(id="{plugin}", title="{title}")
 {algorithm_providers}{ui_surfaces}
-    @action(id="ping", title="Ping")
-    def ping(self, value: int) -> int:
-        """Return the value unchanged so a caller can prove the round trip."""
-        return value
 
-    @action(id="project_layers", title="Project layers")
-    def project_layers(self) -> list[str]:
-        """The same project service a web view reaches as ``host.project``."""
-        return list(self.ctx.project.layer_ids())
+@app.action(id="ping", title="Ping")
+def ping(ctx: PluginContext, value: int) -> int:
+    """Return the value unchanged so a caller can prove the round trip."""
+    return value
+
+
+@app.action(id="project_layers", title="Project layers")
+def project_layers(ctx: PluginContext) -> list[str]:
+    """The same project service a web view reaches as ``host.project``."""
+    return list(ctx.project.layer_ids())
 {algorithm_action}{ui_action}'''
 
 UI_IMPORTS = """
@@ -49,17 +47,16 @@ from .ui import PingDialog
 """
 
 UI_SURFACES = """
-    #: The surfaces this plugin shows (decision-55); ``ctx.ui.open`` and the
-    #: bindings on the classes reach exactly these.
-    surfaces = (PingDialog,)
+app.add_surface(PingDialog)
 """
 
 UI_ACTION = '''
-    @toolbar(text="{title}")
-    @action(id="open_ping", title="Open ping")
-    def open_ping(self) -> None:
-        """A bound, no-input action: the toolbar button opens the dialog."""
-        self.ctx.ui.open(PingDialog, initial={{"value": 7}})
+
+@toolbar(text="{title}")
+@app.action(id="open_ping", title="Open ping")
+def open_ping(ctx: PluginContext) -> None:
+    """A bound, no-input action: the toolbar button opens the dialog."""
+    ctx.ui.open(PingDialog, initial={{"value": 7}})
 '''
 
 UI_MODULE = '''"""{title}: native surfaces, plain classes built in pure PyQt (decision-55).
@@ -108,27 +105,23 @@ from . import algorithms
 """
 
 ALGORITHM_PROVIDERS = """
-    #: The Processing provider this plugin owns; the toolbox shows its
-    #: algorithms as ``{plugin}:<id>`` while the plugin is loaded.
-    providers = (algorithms.provider,)
+app.add_provider(algorithms.provider)
 """
 
 ALGORITHM_ACTION = '''
-    @action(id="buffer", title="Buffer a layer")
-    def buffer(
-        self,
-        layer_id: LayerInput,
-        distance_metres: Metres,
-        working_crs: CrsInput,
-    ) -> VectorLayerInfo:
-        """Run the same algorithm the toolbox offers, from a native or web surface."""
-        return invoke(
-            algorithms.buffer_layer,
-            self.ctx,
-            layer_id=layer_id,
-            distance_metres=distance_metres,
-            working_crs=working_crs,
-        )
+
+@app.action(id="buffer", title="Buffer a layer")
+def buffer(
+    ctx: PluginContext,
+    layer_id: LayerInput,
+    distance_metres: Metres,
+    working_crs: CrsInput,
+) -> VectorLayerInfo:
+    """Run the same algorithm the toolbox offers, from a native or web surface."""
+    return invoke(
+        algorithms.buffer_layer, ctx, layer_id=layer_id,
+        distance_metres=distance_metres, working_crs=working_crs,
+    )
 '''
 
 ALGORITHMS_MODULE = '''"""The Processing algorithms {title} owns (decision-42).
@@ -173,12 +166,12 @@ lifecycle against the SDK's own refusals.
 """
 
 import pytest
-from qgis_sdk import describe_plugin
+from qgis_sdk import describe
 from qgis_sdk.adapters.desktop import host
 
-from {plugin}.plugin import {class_name}Plugin
+from {plugin}.plugin import app
 
-classFactory = host("{plugin}.plugin:{class_name}Plugin"{host_arguments})
+classFactory = host("{plugin}.plugin:app"{host_arguments})
 
 
 def test_the_plugin_starts_and_unloads_without_a_host() -> None:
@@ -193,7 +186,7 @@ def test_the_plugin_starts_and_unloads_without_a_host() -> None:
 
 
 def test_declared_actions_are_the_plugins_public_surface() -> None:
-    description = describe_plugin({class_name}Plugin)
+    description = describe(app)
 
     assert [action.id for action in description.actions] == [{action_ids}]
 
@@ -213,30 +206,18 @@ def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
 UI_TEST = """
 
 def test_the_bound_action_opens_the_dialog_under_the_fake_ui() -> None:
-    from qgis_sdk import describe_bindings
-    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+    from qgis_sdk.core import PluginContext, ResourceScope
     from qgis_sdk.testing import FakeUi, RecordingNotifications
-
+    from {plugin}.plugin import open_ping
     from {plugin}.ui import PingDialog
 
-    bindings = describe_bindings({class_name}Plugin)
-    assert [entry.id for entry in bindings.entries] == ["ping_dialog", "open_ping"]
-    assert bindings.typed_without_surface == ()
-
     scope = ResourceScope()
-    ui = FakeUi(scope, plugin_class={class_name}Plugin)
-    context = PluginContext(
-        notifications=RecordingNotifications(scope), scope=scope, ui=ui
-    )
-    runtime = PluginRuntime({class_name}Plugin, context)
-    runtime.start()
-    try:
-        runtime.actions["open_ping"]()
-    finally:
-        runtime.unload()
-
+    ui = FakeUi(scope)
+    context = PluginContext(notifications=RecordingNotifications(scope), scope=scope, ui=ui)
+    open_ping(context)
     assert [opened.surface for opened in ui.opened] == [PingDialog]
     assert dict(ui.opened[0].initial) == {{"value": 7}}
+    scope.close()
 """
 
 ALGORITHM_TEST = '''
@@ -310,9 +291,9 @@ dependencies = ["{runtime_requirement}"]
 dev = ["{tools_requirement}"]
 
 [tool.qgis-sdk]
-# The class QGIS runs; `build` and `dev` bind classFactory to it through
+# The application QGIS runs; `build` and `dev` bind classFactory to it through
 # qgis_sdk.adapters.desktop.host().
-plugin = "{plugin}.plugin:{class_name}Plugin"
+plugin = "{plugin}.plugin:app"
 qgis-minimum-version = "{qgis_minimum_version}"
 experimental = true
 # Where QGIS is, when `qgis-sdk test` and `qgis-sdk dev` should not discover it
@@ -502,13 +483,12 @@ def _class_name(plugin: str) -> str:
 
 def _readme(options: ScaffoldOptions) -> str:
     plugin = options.plugin
-    class_name = _class_name(plugin)
     return f"""# {options.title}
 
 A minimal [qgis-sdk](https://pypi.org/project/qgis-sdk/) plugin generated by
-`qgis-sdk new`. `{plugin}/plugin.py` holds the whole design: one `@plugin`
-class with its `@action`s, and nothing else - no Qt or QGIS import, no
-`classFactory`, no `metadata.txt`. `pyproject.toml` names the class
+`qgis-sdk new`. `{plugin}/plugin.py` holds the application and its actions,
+without Qt or QGIS imports, `classFactory`, or `metadata.txt`.
+`pyproject.toml` names the application
 (`[tool.qgis-sdk] plugin`) and the few facts QGIS needs; `qgis-sdk build` and
 `qgis-sdk dev` derive the QGIS entry from them. Replace the generated author
 and email in `[project]` before publishing anywhere.
@@ -550,7 +530,7 @@ offer:
 ```python
 from qgis_sdk.adapters.desktop import host
 
-plugin = host("{plugin}.plugin:{class_name}Plugin")(None)
+plugin = host("{plugin}.plugin:app")(None)
 plugin.initGui()
 ```
 

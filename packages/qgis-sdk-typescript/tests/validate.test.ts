@@ -3,7 +3,7 @@
  * the same dialect, the same asymmetry, and a declaration fault is thrown
  * rather than reported as an issue in the value.
  *
- * The schemas here are what `describe_plugin` emits for the Python types the
+ * The schemas here are what `describe(app)` emits for the Python types the
  * acceptance criterion names: primitives, `list`/`tuple`, `X | None`,
  * `Literal`, and a nested dataclass.
  */

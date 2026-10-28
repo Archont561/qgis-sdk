@@ -6,7 +6,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 import pytest
-from qgis_sdk import action, describe_plugin, plugin
 from qgis_sdk.core import (
     JobContext,
     PluginContext,
@@ -14,6 +13,8 @@ from qgis_sdk.core import (
     ResourceScope,
     UiContext,
 )
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.models import QgisSdkUiError, QgisSdkUnsupportedCapabilityError
 from qgis_sdk.testing import (
@@ -78,7 +79,11 @@ def scope() -> Iterator[ResourceScope]:
 
 @pytest.fixture
 def ui(scope: ResourceScope) -> FakeUi:
-    return FakeUi(scope, plugin_class=FieldTools)
+    from qgis_sdk import QgisSdkPlugin
+
+    app = QgisSdkPlugin(id="field_tools", title="Field tools")
+    app.add_surface(BufferDialog)
+    return FakeUi(scope, app=app)
 
 
 @pytest.fixture
@@ -86,7 +91,7 @@ def runtime(scope: ResourceScope, ui: FakeUi) -> Iterator[PluginRuntime]:
     context = PluginContext(
         notifications=RecordingNotifications(scope), scope=scope, ui=ui
     )
-    runtime = PluginRuntime(FieldTools, context)
+    runtime = PluginRuntime._from_plugin_class(FieldTools, context)
     runtime.start()
     instance = runtime.instance
     assert isinstance(instance, FieldTools)
@@ -122,7 +127,7 @@ def test_the_fake_refuses_a_surface_the_plugin_does_not_list(
 
 def test_a_host_without_a_gui_refuses_ui_by_name(scope: ResourceScope) -> None:
     context = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
-    runtime = PluginRuntime(FieldTools, context)
+    runtime = PluginRuntime._from_plugin_class(FieldTools, context)
     runtime.start()
 
     assert context.has("ui") is False

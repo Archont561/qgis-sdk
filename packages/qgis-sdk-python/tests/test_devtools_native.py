@@ -66,7 +66,7 @@ DEADLINE = 30.0
 NATIVE_TESTS = """import pytest
 from qgis_sdk.adapters.desktop import host
 
-classFactory = host("field_tools.plugin:FieldToolsPlugin")
+classFactory = host("field_tools.plugin:app")
 
 
 @pytest.mark.qgis
@@ -355,7 +355,7 @@ def test_the_page_served_by_vite_updates_in_place_and_keeps_its_bridge(
 ) -> None:
     monkeypatch.setenv(DEV_SERVER_ENV, vite)
     monkeypatch.syspath_prepend(str(web_project))
-    desktop = host("web_tools.plugin:WebToolsPlugin", placement="dialog")(None)
+    desktop = host("web_tools.plugin:app", placement="dialog")(None)
     desktop.initGui()
     widget = desktop.show_view()
     app_ts = web_project / "web" / "src" / "app.ts"

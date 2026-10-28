@@ -75,4 +75,5 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	65: "In the 0.9.0 design, whole registered jobs run on workers and are submitted by name through owner-scoped handles.",
 	66: "A single describe helper and declaration methods expose kind-specific metadata, including local UI bindings, without changing the bridge contract.",
 	67: "The optional Pydantic controlled-deployment adapter and extras are retired in a future Python minor release; third-party integrations remain plugin-owned.",
+	68: "Proposed: explore additive plugin application objects and explicit action groups while preserving class-based plugins and the bridge contract.",
 };

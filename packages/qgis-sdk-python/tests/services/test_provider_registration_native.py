@@ -1,6 +1,6 @@
 """Real QGIS: a plugin's providers appear in Processing while it runs, and execute.
 
-This is the acceptance test for TASK-39 and TASK-63. A ``@plugin`` class lists
+This is the acceptance test for TASK-39 and TASK-63. A ``QgisSdkPlugin`` registers
 the shared sample provider; starting its runtime over the native context
 puts ``sample:buffer`` in ``QgsApplication.processingRegistry()``, running it
 through ``processing.run`` the way a user or the modeler would goes through the
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import pytest
-from qgis_sdk import plugin
+from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.algorithms import describe_algorithm
 from qgis_sdk.core import AlgorithmContext, PluginContext, PluginRuntime, ResourceScope
 from qgis_sdk.models import (
@@ -56,7 +56,7 @@ def _processing(native_services: Services):
     )
 
 
-def _runtime(native_services: Services, plugin_class: type) -> PluginRuntime:
+def _runtime(native_services: Services, app: QgisSdkPlugin) -> PluginRuntime:
     context = PluginContext(
         notifications=native_services.notifications,
         scope=native_services.scope.child(),
@@ -65,20 +65,17 @@ def _runtime(native_services: Services, plugin_class: type) -> PluginRuntime:
         algorithms=native_services.algorithms,
         processing=_processing(native_services),
     )
-    return PluginRuntime(plugin_class, context)
+    return PluginRuntime(app, context)
 
 
-@plugin(id="sample_owner", title="Sample owner")
-class SampleOwner:
-    """The one line a plugin writes to put its algorithms in the toolbox."""
-
-    providers = (sample_provider,)
+sample_app = QgisSdkPlugin(id="sample_owner", title="Sample owner")
+sample_app.add_provider(sample_provider)
 
 
 @pytest.fixture
 def running(native_services: Services):
     """Start a plugin that lists the sample provider; always unload it."""
-    runtime = _runtime(native_services, SampleOwner)
+    runtime = _runtime(native_services, sample_app)
     runtime.start()
     try:
         yield runtime
@@ -103,7 +100,7 @@ def test_start_advertises_the_provider_with_both_algorithms(running) -> None:
 
 
 def test_unload_removes_the_algorithms_again(native_services: Services) -> None:
-    runtime = _runtime(native_services, SampleOwner)
+    runtime = _runtime(native_services, sample_app)
     runtime.start()
     assert _algorithm_ids("sample")
 
@@ -218,11 +215,10 @@ def test_a_second_plugin_with_the_same_provider_id_is_refused_by_name(
 
     twin = Provider(id="sample", title="Another sample")
 
-    @plugin(id="twin", title="Twin")
-    class Twin:
-        providers = (twin,)
+    twin_app = QgisSdkPlugin(id="twin", title="Twin")
+    twin_app.add_provider(twin)
 
-    other = _runtime(native_services, Twin)
+    other = _runtime(native_services, twin_app)
     with pytest.raises(QgisSdkDeclarationError, match="'sample' is already"):
         other.start()
 
@@ -244,11 +240,10 @@ def test_the_toolbox_calls_the_function_through_the_same_context_type(
         seen.append(ctx)
         return ctx.algorithms.execute(CentroidRequest(layer_id))
 
-    @plugin(id="user", title="User plugin")
-    class UserPlugin:
-        providers = (provider,)
+    user_app = QgisSdkPlugin(id="user", title="User plugin")
+    user_app.add_provider(provider)
 
-    runtime = _runtime(native_services, UserPlugin)
+    runtime = _runtime(native_services, user_app)
     runtime.start()
     try:
         assert _algorithm_ids("usertest") == ["usertest:copy"]
@@ -307,13 +302,12 @@ def test_the_new_kinds_become_their_processing_parameters_and_values(
         )
         return ctx.algorithms.execute(CentroidRequest(layer_id))
 
-    @plugin(id="kinds_owner", title="Kinds owner")
-    class KindsOwner:
-        providers = (provider,)
+    kinds_app = QgisSdkPlugin(id="kinds_owner", title="Kinds owner")
+    kinds_app.add_provider(provider)
 
     table = tmp_path / "lookup.csv"
     table.write_text("a,b\n")
-    runtime = _runtime(native_services, KindsOwner)
+    runtime = _runtime(native_services, kinds_app)
     runtime.start()
     try:
         algorithm = QgsApplication.processingRegistry().algorithmById("kinds:classify")
@@ -374,7 +368,7 @@ def test_a_plugin_over_a_context_without_processing_registers_nothing(
         scope=ResourceScope(),
         algorithms=native_services.algorithms,
     )
-    runtime = PluginRuntime(SampleOwner, context)
+    runtime = PluginRuntime(sample_app, context)
 
     runtime.start()
     try:

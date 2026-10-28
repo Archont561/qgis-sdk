@@ -13,7 +13,9 @@ import math
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
-from qgis_sdk.declarations import ActionDescription, action, describe_plugin, plugin
+from qgis_sdk.declarations import ActionDescription
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import QgisSdkFormError
 from qgis_sdk.ui.form_fields import FieldSpec, _coerce, coerce_values, form_fields
 

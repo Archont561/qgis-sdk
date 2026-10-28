@@ -21,11 +21,15 @@ pixi add --channel https://prefix.dev/archont561/archont561 qgis-sdk
 ## Example
 
 ```python
-from qgis_sdk import action, plugin
+from qgis_sdk import QgisSdkPlugin
+from qgis_sdk.core import PluginContext
 from qgis_sdk.models import LayerInput, Metres, VectorLayerInfo
 from qgis_sdk.ui import Button, Dialog, Form, LayerPicker, Number, on
 
 
+app = QgisSdkPlugin(id="field.tools", title="Field tools")
+
+@app.surface
 class BufferDialog(Dialog):
     title = "Buffer"
     layer_id = LayerPicker(kind="vector", required=True)
@@ -38,14 +42,10 @@ class BufferDialog(Dialog):
         self.ctx.log.info("buffered", layer=self.form.submit().id)
 
 
-@plugin(id="field.tools", title="Field tools")
-class FieldTools:
-    surfaces = (BufferDialog,)
-
-    @action(id="buffer", title="Buffer")
-    def buffer(self, layer_id: LayerInput, distance: Metres) -> VectorLayerInfo:
-        params = {"INPUT": layer_id, "DISTANCE": distance}
-        return self.ctx.algorithms.run("native:buffer", params).vector("OUTPUT")
+@app.action(id="buffer", title="Buffer")
+def buffer(ctx: PluginContext, layer_id: LayerInput, distance: Metres) -> VectorLayerInfo:
+    params = {"INPUT": layer_id, "DISTANCE": distance}
+    return ctx.algorithms.run("native:buffer", params).vector("OUTPUT")
 ```
 
 `qgis-sdk new <directory>` writes a project on this API; `check`, `test`,

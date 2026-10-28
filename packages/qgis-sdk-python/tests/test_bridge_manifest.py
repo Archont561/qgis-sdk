@@ -14,7 +14,8 @@ from typing import Any, Literal
 
 import pytest
 from qgis_sdk.bridge import BridgeOperation, Dispatcher
-from qgis_sdk.declarations import action, describe_plugin, plugin, stream
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.models import FileInput, FileRef
 from qgis_sdk.models.errors import QgisSdkBridgeError
 

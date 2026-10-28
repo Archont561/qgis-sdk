@@ -49,7 +49,7 @@ def test_the_example_project_has_the_scaffold_shape_and_no_host_artifact() -> No
 
     assert set(example) == set(scaffolded)  # the same top-level tables
     assert set(example["tool"]) == set(scaffolded["tool"])
-    assert example["tool"]["qgis-sdk"]["plugin"] == "simple.plugin:SimplePlugin"
+    assert example["tool"]["qgis-sdk"]["plugin"] == "simple.plugin:app"
     assert example["tool"]["qgis-sdk"]["web"] == scaffolded["tool"]["qgis-sdk"]["web"]
     assert example["tool"]["pytest"] == scaffolded["tool"]["pytest"]
     for name in HOST_ARTIFACTS:

@@ -95,7 +95,7 @@ export interface Streams {
 	readonly "sites.watch": { readonly request: SitesWatchRequest; readonly event: SitesWatchEvent };
 }
 
-/** The declaration `describe_plugin` emitted, carrying the types above. */
+/** The declaration `describe(app)` emitted, carrying the types above. */
 const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations, Streams>({
 	"schema_version": 1,
 	"id": "org.example.sites",

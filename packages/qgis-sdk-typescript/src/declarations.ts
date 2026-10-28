@@ -4,7 +4,7 @@
  * Mirrors the QGIS-free `qgis_sdk.models` and `qgis_sdk.declarations`
  * (`schema_version = 1`) contracts without importing browser or Qt globals.
  * `parsePluginDescription` is the browser-side reader of what
- * `describe_plugin(cls).to_json()` emits; `qgis-sdk bridge generate` is the
+ * `describe(app).to_json()` emits; `qgis-sdk bridge generate` is the
  * build-time one.
  */
 
@@ -233,7 +233,7 @@ function parseStreamDescription(raw: unknown): StreamDescription {
 }
 
 /**
- * Parse and validate a version 1 `PluginDescription` emitted by `describe_plugin`.
+ * Parse and validate a version 1 `PluginDescription` emitted by `describe(app)`.
  */
 export function parsePluginDescription(
 	input: string | Readonly<Record<string, unknown>>,

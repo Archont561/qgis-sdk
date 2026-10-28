@@ -94,7 +94,10 @@ def test_the_choices_reach_the_generated_files(tmp_path: Path) -> None:
     assert not (target / "field_tools" / "metadata.txt").exists()
     assert "# Field Survey Tools" in (target / "README.md").read_text(encoding="utf-8")
     plugin_module = (target / "field_tools" / "plugin.py").read_text(encoding="utf-8")
-    assert '@plugin(id="field_tools", title="Field Survey Tools")' in plugin_module
+    assert (
+        'app = QgisSdkPlugin(id="field_tools", title="Field Survey Tools")'
+        in plugin_module
+    )
 
 
 def test_dry_run_prints_the_plan_and_touches_nothing(tmp_path: Path) -> None:

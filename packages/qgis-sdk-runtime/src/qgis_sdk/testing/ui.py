@@ -1,10 +1,10 @@
 """Fakes for the UI contracts, and a way to build a surface without Qt.
 
 ``FakeUi`` is what a pure test hands a ``PluginContext`` as ``ui``: an action
-that calls ``self.ctx.ui.open(BufferDialog, initial={...})`` is observed as
+that calls ``ctx.ui.open(BufferDialog, initial={...})`` is observed as
 one :class:`OpenedSurface` record, and nothing is built - ``build()`` is the
-author's Qt code and runs only under a host. Given the plugin class, the fake
-also refuses a surface the class does not list, exactly as the Desktop does.
+author's Qt code and runs only under a host. Given the application, the fake
+also refuses a surface it does not register, exactly as the Desktop does.
 
 :func:`fake_ui_context` assembles the ``UiContext`` a surface sees, over
 recording fakes; :func:`build_surface` runs a surface's ``build()`` under it
@@ -17,7 +17,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from qgis_sdk.core._application import QgisSdkPlugin
 
 from qgis_sdk.core import ResourceScope, UiContext
 from qgis_sdk.models import QgisSdkUiError
@@ -53,10 +56,10 @@ class FakeUi:
     """Record ``open`` calls; refuse unregistered surfaces when a plugin is known."""
 
     def __init__(
-        self, scope: ResourceScope, *, plugin_class: type | None = None
+        self, scope: ResourceScope, *, app: QgisSdkPlugin | None = None
     ) -> None:
         self._scope = scope
-        self._plugin_class = plugin_class
+        self._app = app
         self._opened: list[OpenedSurface] = []
 
     @property
@@ -71,16 +74,15 @@ class FakeUi:
         if not is_surface_class(surface):
             name = getattr(surface, "__name__", repr(surface))
             raise QgisSdkUiError(f"{name} is not a Dialog/Dock subclass")
-        if self._plugin_class is not None:
+        if self._app is not None:
             from qgis_sdk.bindings import describe_bindings
 
             if all(
                 bound.cls is not surface
-                for bound in describe_bindings(self._plugin_class).surfaces
+                for bound in describe_bindings(self._app).surfaces
             ):
                 raise QgisSdkUiError(
-                    f"{surface.__name__} is not registered: list it in "
-                    f"{self._plugin_class.__name__}.surfaces"
+                    f"{surface.__name__} is not registered: use app.add_surface(...)"
                 )
         record = OpenedSurface(surface, MappingProxyType(dict(initial or {})))
         self._opened.append(record)

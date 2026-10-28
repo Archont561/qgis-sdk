@@ -3,7 +3,7 @@
 The question is *when* an import runs, not whether it appears (decision-14):
 a statement in the module body, a class body, a ``try``, a ``with`` or a
 module-level ``if`` runs when the module is imported, so a pure test or
-``describe_plugin`` cannot import that module without QGIS. A statement
+``describe(app)`` cannot import that module without QGIS. A statement
 inside a function runs when the function is called, and a statement under
 ``if TYPE_CHECKING:`` never runs. Only the source is read; nothing is imported.
 

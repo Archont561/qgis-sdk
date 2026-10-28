@@ -15,7 +15,8 @@ from typing import Literal
 
 import pytest
 from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope, UiContext
-from qgis_sdk.declarations import action, describe_plugin, plugin
+from qgis_sdk.declarations._describe import describe_plugin
+from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import (
     Colour as ColourInput,
 )
@@ -113,7 +114,7 @@ def ctx(tmp_path: Path) -> Iterator[UiContext]:
     )
     project = FakeProject(layers, scope)
     project.add_layer(layers.open_vector(dataset).id)
-    runtime = PluginRuntime(
+    runtime = PluginRuntime._from_plugin_class(
         FormDemo, PluginContext(notifications=notifications, scope=scope, layers=layers)
     )
     runtime.start()

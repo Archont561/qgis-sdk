@@ -20,10 +20,14 @@ pip install qgis-sdk           # the developer kit: runtime + tools
 ## Example
 
 ```python
-from qgis_sdk import action, menu, plugin
+from qgis_sdk import QgisSdkPlugin, menu
+from qgis_sdk.core import PluginContext
 from qgis_sdk.ui import Button, Dialog, Form, LogView, Number, on
 
 
+app = QgisSdkPlugin(id="example", title="Example")
+
+@app.surface
 @menu("Plugins/Example")
 class PingDialog(Dialog):
     title = "Ping"
@@ -37,13 +41,9 @@ class PingDialog(Dialog):
         self.ctx.log.info("pong", value=self.form.submit())
 
 
-@plugin(id="example", title="Example")
-class Example:
-    surfaces = (PingDialog,)
-
-    @action(id="ping", title="Ping")
-    def ping(self, value: int) -> int:
-        return value
+@app.action(id="ping", title="Ping")
+def ping(ctx: PluginContext, value: int) -> int:
+    return value
 ```
 
 ## Documentation

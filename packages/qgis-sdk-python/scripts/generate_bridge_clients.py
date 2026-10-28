@@ -47,9 +47,9 @@ sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-tools" / "src"))
 sys.path.insert(0, str(PROJECT_ROOT.parent / "qgis-sdk-runtime" / "src"))
 sys.path.insert(0, str(PROJECT_ROOT / "tests"))
 
-from contract_sample.bridge_plugin import SitesPlugin
+from contract_sample.bridge_plugin import app as sites_app
+from qgis_sdk import describe
 from qgis_sdk.bridge.host import host_description
-from qgis_sdk.declarations import describe_plugin
 from qgis_sdk_tools.generate import (
     check_generated,
     generate_host_typescript,
@@ -69,12 +69,12 @@ def artifacts() -> list[tuple[Path, dict, object]]:
     return [
         (
             PLUGIN_CLIENT_PATH,
-            describe_plugin(SitesPlugin).to_dict(),
+            describe(sites_app).to_dict(),
             generate_typescript,
         ),
         (
             PLUGIN_SCHEMA_PATH,
-            describe_plugin(SitesPlugin).to_dict(),
+            describe(sites_app).to_dict(),
             generate_sample_schema,
         ),
         (HOST_CLIENT_PATH, host_description(), generate_host_typescript),

@@ -74,7 +74,7 @@ The one line ``qgis-sdk build`` appends to a staged ``__init__.py``
 
 from qgis_sdk.adapters.desktop import host
 
-classFactory = host("{FIXTURE_PLUGIN}.plugin:LifecycleProbe")
+classFactory = host("{FIXTURE_PLUGIN}.plugin:app")
 '''
 
 FIXTURE_METADATA: Final = """[general]
@@ -97,7 +97,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from qgis_sdk import action, plugin
+from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.ui import Button, Column, Dialog, Form
 
@@ -148,21 +148,15 @@ def build_context(iface: object) -> PluginContext:
     )
 
 
-@plugin(id="{FIXTURE_ID}", title="{FIXTURE_TITLE}")
-class LifecycleProbe:
-    """Record the context it was given and answer one round-trip action."""
+app = QgisSdkPlugin(id="{FIXTURE_ID}", title="{FIXTURE_TITLE}")
+app.context_factory = build_context
+app.add_surface(PingDialog)
 
-    ctx: PluginContext
-    context_factory = staticmethod(build_context)
-    surfaces = (PingDialog,)
+@app.action(id="ping", title="Ping")
+def ping(ctx: PluginContext, value: int) -> int:
+    """Return the value unchanged so a caller can prove the round trip."""
+    return value
 
-    def __init__(self) -> None:
-        OBSERVED["context"] = self.ctx
-
-    @action(id="ping", title="Ping")
-    def ping(self, value: int) -> int:
-        """Return the value unchanged so a caller can prove the round trip."""
-        return value
 '''
 
 FIXTURE_FILES: Final = {
@@ -256,7 +250,7 @@ try:
     payload["runtime_running"] = adapter.runtime.state.value == "running"
 
     module = importlib.import_module(plugin + ".plugin")
-    context = module.OBSERVED["context"]
+    context = adapter.context
     payload["native_context_matches"] = context.desktop.iface is host
 
     # The notifications service must reach the host's own bar, not a stand-in.

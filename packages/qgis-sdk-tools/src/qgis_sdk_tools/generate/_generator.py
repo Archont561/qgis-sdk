@@ -368,7 +368,7 @@ class _Generator:
         lines.extend(self._schema_map_lines())
         lines.extend(
             [
-                "/** The declaration `describe_plugin` emitted, carrying the types above. */",
+                "/** The declaration `describe(app)` emitted, carrying the types above. */",
                 (
                     "const schema: BridgeSchema<Operations, Streams> = "
                     "defineBridgeSchema<Operations, Streams>({"

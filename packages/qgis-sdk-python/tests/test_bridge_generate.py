@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from contract_sample.bridge_plugin import SitesPlugin
+from contract_sample.bridge_plugin import app as sites_app
+from qgis_sdk import describe
 from qgis_sdk.bridge.host import host_description
-from qgis_sdk.declarations import describe_plugin
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk_tools.__main__ import app
 from qgis_sdk_tools.generate import (
@@ -44,7 +44,7 @@ runner = CliRunner()
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = PROJECT_ROOT / "scripts" / "generate_bridge_clients.py"
 
-SAMPLE = describe_plugin(SitesPlugin).to_dict()
+SAMPLE = describe(sites_app).to_dict()
 
 
 def _generator():
@@ -308,26 +308,26 @@ def test_the_cli_reports_an_unimportable_module() -> None:
     assert "cannot import" in result.output
 
 
-def test_the_cli_describes_a_plugin_class_from_the_working_directory(
+def test_the_cli_describes_an_application_from_the_working_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The documented workflow: run it from the plugin's own root, no install."""
-    monkeypatch.chdir(Path(__file__).parent)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "project.py").write_text(
+        "from qgis_sdk import QgisSdkPlugin\n"
+        "from qgis_sdk.core import PluginContext\n"
+        "app = QgisSdkPlugin(id='sites', title='Sites')\n"
+        "@app.action(id='double', title='Double')\n"
+        "def double(ctx: PluginContext, value: int) -> int: return value * 2\n",
+        encoding="utf-8",
+    )
     target = tmp_path / "sites.ts"
     result = runner.invoke(
-        app,
-        [
-            "bridge",
-            "generate",
-            "--plugin",
-            "contract_sample.bridge_plugin:SitesPlugin",
-            "--out",
-            str(target),
-        ],
+        app, ["bridge", "generate", "--plugin", "project:app", "--out", str(target)]
     )
     assert result.exit_code == 0, result.output
-    # A name that is not *.schema.ts selects the legacy client, with a note.
-    assert target.read_text(encoding="utf-8") == generate_typescript(SAMPLE)
+    assert target.read_text(encoding="utf-8") == generate_typescript(
+        describe_plugin_spec("project:app")
+    )
     assert "legacy client module" in result.output
 
 

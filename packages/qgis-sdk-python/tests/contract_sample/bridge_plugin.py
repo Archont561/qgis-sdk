@@ -16,7 +16,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from qgis_sdk.declarations import action, plugin, stream
+from qgis_sdk import QgisSdkPlugin
+from qgis_sdk.core import PluginContext
 
 
 @dataclass(frozen=True)
@@ -62,38 +63,40 @@ class ScanProgress:
     total: int
 
 
-@plugin(id="org.example.sites", title="Sites")
-class SitesPlugin:
-    """Three actions and one stream that between them cover the emitted surface."""
+app = QgisSdkPlugin(id="org.example.sites", title="Sites")
 
-    @action(id="sites.summary", title="Summarize one layer")
-    def summary(
-        self,
-        layer_id: str,
-        limit: int = 100,
-        mode: Literal["fast", "exact"] = "fast",
-        label: str | None = None,
-    ) -> Summary:
-        return Summary(total=limit, largest=layer_id, mode=mode)
 
-    @action(id="sites.details", title="Describe one layer")
-    def details(self, layer_id: str, options: DetailsOptions) -> Details:
-        return Details(layer_id=layer_id, field_names=("a", "b"), options=options)
+@app.action(id="sites.summary", title="Summarize one layer")
+def summary(
+    ctx: PluginContext,
+    layer_id: str,
+    limit: int = 100,
+    mode: Literal["fast", "exact"] = "fast",
+    label: str | None = None,
+) -> Summary:
+    return Summary(total=limit, largest=layer_id, mode=mode)
 
-    @action(id="sites.refresh", title="Refresh the panel")
-    def refresh(self) -> Summary:
-        """No inputs at all: the generated method's argument is optional."""
-        return Summary(total=0, largest="")
 
-    @stream(
-        id="sites.watch",
-        title="Watch one layer for changes",
-        events={"data": SiteChange, "progress": ScanProgress},
-    )
-    def watch(self, layer_id: str, every_ms: int = 500) -> Iterator[Any]:
-        """A stream beside the actions: typed data and progress events."""
-        yield {"kind": "progress", "payload": ScanProgress(done=0, total=1)}
-        yield SiteChange(layer_id=layer_id, change="added", count=every_ms)
+@app.action(id="sites.details", title="Describe one layer")
+def details(ctx: PluginContext, layer_id: str, options: DetailsOptions) -> Details:
+    return Details(layer_id=layer_id, field_names=("a", "b"), options=options)
+
+
+@app.action(id="sites.refresh", title="Refresh the panel")
+def refresh(ctx: PluginContext) -> Summary:
+    """No inputs at all: the generated method's argument is optional."""
+    return Summary(total=0, largest="")
+
+
+@app.stream(
+    id="sites.watch",
+    title="Watch one layer for changes",
+    events={"data": SiteChange, "progress": ScanProgress},
+)
+def watch(ctx: PluginContext, layer_id: str, every_ms: int = 500) -> Iterator[Any]:
+    """A stream beside the actions: typed data and progress events."""
+    yield {"kind": "progress", "payload": ScanProgress(done=0, total=1)}
+    yield SiteChange(layer_id=layer_id, change="added", count=every_ms)
 
 
 __all__ = [
@@ -101,6 +104,6 @@ __all__ = [
     "DetailsOptions",
     "ScanProgress",
     "SiteChange",
-    "SitesPlugin",
     "Summary",
+    "app",
 ]
