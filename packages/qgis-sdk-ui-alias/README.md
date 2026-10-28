@@ -61,7 +61,7 @@ QGIS palette once the handshake answered.
 
 ## Documentation
 
-- [TypeScript package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) -
+- [TypeScript package guide](https://archont561.github.io/qgis-sdk/typescript/) -
   the elements, their properties in both spellings, the wrappers, the
   `--qgis-sdk-*` variables and the `./uno` preset.
 - [Storybook](https://archont561.github.io/qgis-sdk/storybook/) - every

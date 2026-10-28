@@ -1,6 +1,6 @@
 name: docs
 
-# The documentation site (TASK-43): apps/docs renders the backlog guides and
+# The documentation site (TASK-43): apps/docs renders the reference guides and
 # the qgis-sdk-ui Storybook into one static site. Pull requests build it and
 # check every internal link; pushes to main build it the same way and deploy
 # it to GitHub Pages at https://archont561.github.io/qgis-sdk/.
@@ -9,7 +9,7 @@ on:
     branches: [main]
     paths:
       - "apps/docs/**"
-      - "backlog/docs/guides/**"
+      - "backlog/decisions/**"
       - "packages/qgis-sdk-ui/**"
       - "packages/qgis-sdk-typescript/**"
       - "packages/*/package.json"
@@ -20,7 +20,7 @@ on:
   pull_request:
     paths:
       - "apps/docs/**"
-      - "backlog/docs/guides/**"
+      - "backlog/decisions/**"
       - "packages/qgis-sdk-ui/**"
       - "packages/qgis-sdk-typescript/**"
       - "packages/*/package.json"

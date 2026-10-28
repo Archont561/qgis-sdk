@@ -1,9 +1,9 @@
 /**
- * Render the backlog guides into Starlight pages.
+ * Render the reference guides into Starlight pages.
  *
- * decision-29 made `backlog/docs/guides/doc-12`, `doc-13` and `doc-14` the
- * reference prose and kept every README minimal; the site is where that prose
- * is read. Nothing here is hand-maintained: each guide is split into one page
+ * decision-29 named `doc-12`, `doc-13` and `doc-14` the reference prose;
+ * their source now lives under `apps/docs/guides`. READMEs stay minimal;
+ * the site is where that prose is read. Nothing here is hand-maintained: each guide is split into one page
  * per `##` section under a directory of its own, the preamble becomes that
  * directory's index, sub-headings move up one level so the page title is the
  * only H1, and the links the guides write for the backlog are rewritten:
@@ -19,7 +19,7 @@ import { posix } from "node:path";
 export interface Guide {
 	/** The backlog document id, e.g. `doc-12`. */
 	readonly id: string;
-	/** The file name under `backlog/docs/guides/`. */
+	/** The file name under `apps/docs/guides/`. */
 	readonly file: string;
 	/** The site directory the guide renders into, e.g. `python`. */
 	readonly section: string;
@@ -161,7 +161,7 @@ export interface RenderWarning {
 	readonly reason: string;
 }
 
-const GUIDES_DIR = "backlog/docs/guides";
+const GUIDES_DIR = "apps/docs/guides";
 
 /** GitHub's heading anchor: lower-case, punctuation dropped, spaces to hyphens. */
 export function slugify(heading: string): string {

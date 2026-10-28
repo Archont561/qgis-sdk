@@ -2,8 +2,7 @@
 
 A README carries a pitch, a status line, installation, one example, pointers
 and the license - and nothing that explains, qualifies or records evidence.
-That prose belongs in ``backlog/docs/guides/`` until the documentation site
-(TASK-43) renders it. The old shape crept in one section at a time, each task
+That prose belongs in the documentation site, sourced in ``apps/docs/guides/``. The old shape crept in one section at a time, each task
 appending the paragraph that proved its acceptance criteria, so the guard is a
 closed set of allowed section headings and a line budget rather than a review
 habit.
@@ -57,7 +56,6 @@ MAX_LINES = 80
 
 FENCE = re.compile(r"```.*?```", re.DOTALL)
 HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
-GUIDES = ROOT / "backlog" / "docs" / "guides"
 
 
 def _prose(path: Path) -> str:
@@ -78,7 +76,7 @@ def test_a_readme_has_one_title_and_only_landing_page_sections(path: Path) -> No
     unexpected = sorted(set(sections) - ALLOWED_SECTIONS)
     assert not unexpected, (
         f"{path.relative_to(ROOT)} grew a section outside the decision-29 shape: "
-        f"{unexpected}. Reference prose goes in backlog/docs/guides/."
+        f"{unexpected}. Reference prose goes in apps/docs/guides/."
     )
     deeper = [title for level, title in headings if level >= 3]
     assert not deeper, f"{path.name}: a landing page has no subsections, found {deeper}"
@@ -118,7 +116,9 @@ def test_a_published_readme_points_at_the_guides(path: Path) -> None:
     """The READMEs that are landing pages link to where the prose went."""
     text = path.read_text(encoding="utf-8")
     assert "## Documentation" in text, f"{path.name}: no Documentation section"
-    guides = sorted(p.name for p in GUIDES.glob("doc-*.md"))
-    assert guides, "backlog/docs/guides/ is empty"
-    linked = [name for name in guides if name.replace(" ", "%20") in text]
-    assert linked, f"{path.name} links none of {guides}"
+    urls = (
+        "https://archont561.github.io/qgis-sdk/python/",
+        "https://archont561.github.io/qgis-sdk/typescript/",
+        "https://archont561.github.io/qgis-sdk/contributing/workspace/",
+    )
+    assert any(url in text for url in urls), f"{path.name} links no published guide"

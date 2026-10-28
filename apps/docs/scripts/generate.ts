@@ -1,7 +1,7 @@
 /**
  * Write the generated half of `src/content/docs/` before `astro dev|build`.
  *
- * - the three backlog guides, one directory each plus a `<section>-migration`
+ * - the three reference guides, one directory each plus a `<section>-migration`
  *   sibling for the migration notes (see `lib/guides.ts`);
  * - `reference/design-decisions.md`, one curated table over the decision
  *   records (see `lib/decisions.ts` and `decision-summaries.ts`);
@@ -25,7 +25,7 @@ import { GUIDES, type GuideInput, renderGuides } from "./lib/guides";
 
 const DOCS_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(DOCS_DIR, "../../..");
-const GUIDES_DIR = join(ROOT, "backlog/docs/guides");
+const GUIDES_DIR = join(ROOT, "apps/docs/guides");
 const DECISIONS_DIR = join(ROOT, "backlog/decisions");
 const DECISIONS_PAGE = "reference/design-decisions.md";
 const CONTENT_DIR = join(DOCS_DIR, "../src/content/docs");
@@ -33,11 +33,14 @@ const STORYBOOK_SOURCE = join(ROOT, "packages/qgis-sdk-ui/storybook-static");
 const STORYBOOK_TARGET = join(DOCS_DIR, "../public/storybook");
 
 async function lastCommitDate(path: string): Promise<string | undefined> {
-	const proc = Bun.spawn(["git", "log", "-1", "--format=%cs", "--", path], {
-		cwd: ROOT,
-		stdout: "pipe",
-		stderr: "ignore",
-	});
+	const proc = Bun.spawn(
+		["git", "log", "--follow", "-1", "--format=%cs", "--", path],
+		{
+			cwd: ROOT,
+			stdout: "pipe",
+			stderr: "ignore",
+		},
+	);
 	const date = (await new Response(proc.stdout).text()).trim();
 	return (await proc.exited) === 0 && date !== "" ? date : undefined;
 }

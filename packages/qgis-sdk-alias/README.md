@@ -44,13 +44,13 @@ composables and the Svelte stores; `./testing` scripts a host without QGIS.
 
 ## Documentation
 
-- [TypeScript package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-13%20-%20qgis-sdk-TypeScript-package-guide.md) -
+- [TypeScript package guide](https://archont561.github.io/qgis-sdk/typescript/) -
   exports, `QgisSdk`, the transport client, host namespaces, streams, the
   stores, the React, Vue and Svelte bindings, Processing from a page and
   testing against a scripted host.
 - [`@archont561/qgis-sdk-ui`](https://github.com/Archont561/qgis-sdk/tree/main/packages/qgis-sdk-ui) -
   the web components on these stores.
-- [Python package guide](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-12%20-%20qgis-sdk-Python-package-guide.md) -
+- [Python package guide](https://archont561.github.io/qgis-sdk/python/) -
   the host half of every surface above.
 
 ## License

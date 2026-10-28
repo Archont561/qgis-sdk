@@ -32,7 +32,7 @@ export default { ...bunupPreset, entry: ["src/index.ts"] };
 
 ## Documentation
 
-- [Workspace, harnesses and qualification evidence](https://github.com/Archont561/qgis-sdk/blob/main/backlog/docs/guides/doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md) -
+- [Workspace, harnesses and qualification evidence](https://archont561.github.io/qgis-sdk/contributing/workspace/) -
   environments, the Pixi and Bun tasks and the repository layout.
 
 ## License

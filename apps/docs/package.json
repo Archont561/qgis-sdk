@@ -6,7 +6,7 @@
 	"scripts": {
 		"generate": "bun run scripts/generate.ts",
 		"dev": "bun run generate && bun --bun astro dev --host 0.0.0.0",
-		"build": "bun run generate && bun --bun astro build",
+		"build": "bun run generate && bun --bun astro build && bun run scripts/redirects.ts",
 		"check-links": "bun run scripts/check-links.ts",
 		"preview": "bun --bun astro preview",
 		"test": "bun test",

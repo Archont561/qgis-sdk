@@ -105,3 +105,12 @@
 .versions code {
 	color: var(--sl-color-white);
 }
+
+/* An actual component story, clearly labelled as a scripted-host demo. */
+.demo iframe {
+	width: 100%;
+	min-height: 28rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	background: #fff;
+}

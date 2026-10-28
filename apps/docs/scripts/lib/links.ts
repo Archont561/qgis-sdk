@@ -122,7 +122,8 @@ export async function checkLinks(
 				continue; // external
 			}
 			checked += 1;
-			const [pathPart, fragment] = href.split("#", 2);
+			const [pathAndQuery, fragment] = href.split("#", 2);
+			const pathPart = pathAndQuery?.split("?", 1)[0] ?? "";
 			if (pathPart === "") {
 				if (fragment && !ids.has(decodeURIComponent(fragment))) {
 					broken.push({

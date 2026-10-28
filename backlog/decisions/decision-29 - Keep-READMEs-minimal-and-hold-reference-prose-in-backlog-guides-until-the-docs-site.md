@@ -74,3 +74,13 @@ link, and the README-shape check (`tests/scripts/test_readme_shape.py`) keeps
 every README in shape 1. The package READMEs keep linking the guides on
 GitHub as well, so a reader of the PyPI or npm page reaches the prose with or
 without the site. Nothing in the decision changes.
+
+## Amendment (2026-10-28): site-owned guide sources
+
+The owner approved moving the reference sources after the docs-site audit.
+The three guides now live under `apps/docs/guides/` and the site generator
+renders them from there; generated page edit links point to those sources.
+The old backlog records remain as compatibility indexes, with their historical
+heading anchors linking to the corresponding sections of the new sources, not
+as duplicate reference prose. Published README links point to the site. The
+README shape and the role of the three guides otherwise remain unchanged.
