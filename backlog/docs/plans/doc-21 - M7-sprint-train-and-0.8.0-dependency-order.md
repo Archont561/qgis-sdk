@@ -84,3 +84,12 @@ unopened ([doc-19](doc-19%20-%20M6-sprint-train-and-0.7.0-dependency-order.md) s
 Neither changes `packages/qgis-sdk-typescript`, so m-7's "no bridge
 release" statement stands. TASK-78's dependencies and AC evidence now
 include both.
+
+## 6. Authoring spike added to the gate (2026-10-28)
+
+[TASK-140](../../tasks/task-140%20-%20Spike-a-FastAPI-style-plugin-application-and-action-groups-for-0.8.0.md)
+is a further TASK-78 dependency. It evaluates an additive FastAPI-style plugin
+application and action groups for 0.8.0; it does not itself approve or deliver
+implementation. If implementation is approved for this release, the gate must
+revisit the expected unchanged bridge and qualify compatibility and migration.
+The worker-first named jobs refactor remains targeted to 0.9.0.
