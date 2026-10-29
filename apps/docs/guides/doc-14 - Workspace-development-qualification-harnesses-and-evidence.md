@@ -1390,6 +1390,176 @@ Stamping, tagging and publishing wait for an explicit "Release 0.7.0".
   `qgis-sdk-ui` on npm (and the `0.0.0` / `0.0.0-stage` ones that remain
   from earlier releases).
 
+## 0.8.0 release gate (2026-10-29)
+
+What was run on `main` `a362044` (the PR #139 merge, sixty-three commits
+after the 0.7.0 release point `e9b2ce8`) on Linux x86-64 with QGIS 4.2.3
+(Qt 6.11.2), CPython 3.14.8 in the locked Pixi environment, CPython
+3.11.2 for the purity lane and the clean installs, Bun 1.4.2. Every line
+is a command that ran on this checkout at that commit; nothing is
+inferred from CI. The tree is **unstamped**: the manifests still say
+0.7.0 / 0.5.0 / 0.1.0, so the artifact names below carry 0.7.0.
+Stamping, tagging and publishing wait for an explicit "Release 0.8.0".
+
+- **Required work (AC 1).** TASK-32, 73, 74, 75, 77, 79 and 140 are
+  Done; TASK-73 (console session) and TASK-77 (externals probe and
+  vendoring) were re-scoped in from m-6 and their evidence is below.
+  **TASK-76** - the third task AC 1 names - was withdrawn with
+  decision-49 (doc-4): the agent *user* mode went with it, so external
+  clients reach a plugin through TASK-74's HTTP API and the MCP list a
+  user's install offers names only declared actions and streams.
+- **Scope.** `release.py plan` reads `v0.8.0` for `all` and `python` and
+  **`ts-v0.6.0` for `typescript`**; `ui` is skipped (no release-worthy
+  commit since `ui-v0.1.0`). The minor is a decision, not a planner
+  result: sixty-three commits, among them three breaking ones
+  (`c278dec`, `9397dee`, `114c5fd`), the plugin HTTP API and MCP serve,
+  the console session, the externals probe and the first `mcp` extra.
+- **The `mcp` extra (AC 2).** Added in `6db189a`, after the 0.7.0 release
+  point, so **0.8.0 is the first release where `pip install
+  "qgis-sdk[mcp]"` resolves**: PyPI's 0.7.0 kit wheel carries only
+  `controlled-deployment` and `dev`, and its tools wheel no extra at all.
+  The range this train records is `mcp==2.3.0` - the tools wheel
+  declares `Provides-Extra: mcp` with `Requires-Dist: mcp==2.3.0`, the
+  kit declares `Provides-Extra: mcp` with `Requires-Dist:
+  qgis-sdk-tools[mcp]==0.7.0`, and the kit's `dev` extra pins the same
+  `mcp==2.3.0`. The extra's pin is inside the kit scope
+  `verify-versions` reads (`read_kit_pins` returns runtime, tools and
+  tools[mcp], all 0.7.0), and a dry run of `stamp_kit_pins` with 0.8.0
+  rewrites it to `qgis-sdk-tools[mcp]==0.8.0`; `stamp_tools_runtime_range`
+  gives `qgis-sdk-runtime>=0.8.0,<0.9`.
+- **Python suite with the extra (AC 1).** The locked Pixi environment
+  does not carry `mcp` (no dependency of the workspace); installing the
+  extra's pinned `mcp 2.3.0` into it with the environment's own `pip`
+  changes the run from 2170 passed / 59 skipped / 7 deselected to
+  **2173 passed, 56 skipped, 7 deselected** in 138 s - the three tests
+  that skip without the extra run: `test_mcp_cli.py` 6 passed, including
+  the real stdio client (`test_stdio_server_exposes_and_runs_cli_commands`,
+  a spawned `qgis-sdk mcp` over `StdioServerParameters`) and the
+  read-only derivation `test_act_is_developer_only_in_the_tool_list`
+  (`tool_names(developer=False)` drops only `ui_act`).
+  `test_package_extras_are_optional_and_the_kit_forwards_to_tools`
+  covers the extra's shape. The smoke lane (`-m smoke`, excluded from
+  the suite above by `addopts`) is 7 passed, 4 skipped, 2225 deselected.
+- **One MCP mode, not two.** `serve()` has a single mode: it serves the
+  developer vocabulary over stdio, and the read-only inventory is derived
+  from it (`tool_names(developer=False)`) rather than served by a second
+  entry point. AC 1's "both modes" is therefore evidenced as the served
+  list plus the derivation, and doc-12 documents it that way; no
+  `--read-only` flag was added.
+- **Purity lane.** CPython 3.11.2 with `mcp 2.3.0`, `pytest -m pure` in
+  `packages/qgis-sdk-python/tests`: **1995 passed, 22 skipped, 68
+  deselected**. The lane is sensitive to the pin: pytest 9.2.0 with
+  hypothesis 6.170.13 fails 38 tests, while the manifest's `9.1.1` /
+  `6.169.4` is green - a dependency-drift finding, not a code finding.
+- **Static gate.** `lint-python` clean, `format-python-check` 406 files,
+  `lint-github-actions` clean (actionlint, every workflow),
+  `lint-repository` 9/9 Alint rules (generated files fresh, README
+  mirrors, pins), `biome-check` 192 files, `typecheck` (bridge and
+  components) exit 0, `test-release-tool` **286 passed** plus its four
+  Alint rules, and `bridge generate --check` reports `web/src/bridge.schema.ts
+  is up to date` both for the reference plugin's page (`simple.plugin:app`)
+  and for the host catalogue in `examples/simple`.
+- **Suites.** Root `bun run test --force` **10/10 tasks** with no cache:
+  config 6, docs 42, bridge 266 (16 files), bridge alias 12, components
+  100 (14 files, `--conditions=browser`), ui alias 13, simple-web 6,
+  Python 2173 passed / 56 skipped inside turbo. `bun run coverage`
+  **6/6 tasks**: the Python side 95.70 % (20781 statements, 893 missed)
+  against the 90 % gate, with the 0.8.0 suite inside it. The MCP server
+  itself lives in the spawned client's process, so its measured share
+  (`qgis_sdk_tools/mcp.py`, 35 %) is the part the client never enters.
+- **Harnesses, one file per process.** `QGIS_SDK_SCAFFOLD_WEB=1`
+  `test_scaffold_web_native.py` **8 passed** (vanilla, React, Vue and
+  Svelte pages generated, installed, tested, built and driven in a real
+  `QWebEngineView`); `QGIS_SDK_REFERENCE=1`
+  `test_reference_example_native.py` **5 passed**; `QGIS_SDK_DEVTOOLS=1`
+  `test_devtools_native.py` **9 passed** (the dev server's HMR marker
+  and its bridge, after TASK-77 retargeted the module at the
+  application API); `QGIS_SDK_BUILD_INSTALL=1` `test_bundle_native.py`
+  **1 passed** - two built ZIPs unpacked into a fresh profile's
+  `python/plugins` the way *Install from ZIP* does and started inside
+  QGIS Desktop offscreen with every `qgis_sdk` import refused, so each
+  runs from its own vendored tree; `test_desktop_host_native.py` **4
+  passed**; `test-reference-example` **20 pure + 7 QGIS**.
+- **Artifacts (AC 4).** `release-build-python` built three wheels and
+  `twine check` passed on all of them (unstamped names):
+  `qgis_sdk-0.7.0`, `qgis_sdk_runtime-0.7.0` (no `Requires-Dist` at all,
+  so the runtime still declares no dependencies) and
+  `qgis_sdk_tools-0.7.0` (`qgis-sdk-runtime>=0.7.0,<0.8`,
+  `typer==0.27.3`).
+- **Clean install (AC 3).** A fresh CPython 3.11.2 `venv` with the three
+  wheels: 12 distributions, `pip check` clean. The same `venv` after
+  `pip install "qgis-sdk[mcp]==0.7.0"`: 40 distributions (adding
+  `mcp 2.3.0` and `mcp-types 2.3.0` and their tree), `pip check` clean,
+  and `qgis-sdk mcp --help` renders "Serve SDK command tools over MCP
+  stdio (requires the mcp extra)". Without the extra the command is
+  absent and the documented refusal test covers the message. One
+  installation trap worth recording: `pip install "qgis-sdk[mcp] @
+  file://...kit...whl" --find-links dist/pypi/tools` still resolved
+  `qgis-sdk-tools==0.7.0` from the index, which has no extra, so pip
+  warned and the extra did nothing - install the local tools wheel
+  first. A 0.7.0 user sees the same warning until 0.8.0 ships.
+- **Scaffold.** From the installed 0.7.0 wheels, `qgis-sdk new
+  fresh_plugin --ui native --web vanilla` writes
+  `qgis-sdk-runtime>=0.7,<0.8`, `qgis-sdk-tools>=0.7,<0.8` and
+  `"@archont561/qgis-sdk": "0.5.0"`, and `check` is clean on its four
+  files.
+- **Compatibility and the TypeScript delta (AC 5).** The expected zero
+  bridge delta is **false as written**: 27 files changed in
+  `packages/qgis-sdk-typescript` between `e9b2ce8` and HEAD - the bridge
+  split into `src/bridge/{client,errors,frames,protocol}.ts` and
+  `src/stores/{base,form,host-query,operation,stream}.ts`, two breaking
+  commits (`c278dec` removes two bridge errors nothing throws, `9397dee`
+  unifies introspection and retires the Pydantic adapter) and the
+  Pydantic `generate:contract-types` leg removed. The wire is
+  unchanged: `HOST_FINGERPRINT` is `sha256:16790dc8...` exactly as at
+  the 0.7.0 tag, `HOST_SCHEMA_VERSION = 1` and
+  `BRIDGE_PROTOCOL_VERSION = 1`, so a 0.5.0 page keeps working against
+  an 0.8 host. The train therefore **includes `ts-v0.6.0`** (owner
+  decision): the bridge is versioned and qualified with the Python pair
+  rather than left at an unchanged 0.5.0 while its own sources moved.
+  The ui components' peer range `>=0.5.0 <0.6.0` holds the bridge at
+  0.5.0 today and refuses a stamped 0.6.0, so the stamp pull request
+  moves it to `>=0.6.0 <0.7.0` (and the scaffold's `SDK_NPM_VERSION`)
+  in the same commit.
+- **Verify.** `verify-versions` agrees on 0.7.0 for the Python scope
+  (runtime, tools and the kit, which carries three pins: runtime, tools
+  and tools[mcp]), 0.5.0 for the TypeScript scope (up to the stamp),
+  0.1.0 for the ui manifests, and plugin description contract version 1
+  across the Python declarations and the TypeScript bridge.
+- **Licences (AC 3).** The 40 distributions the extra installs are
+  MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, ISC or PSF-2.0 only - no
+  copyleft - and the `mcp` tree itself is MIT (`mcp`, `mcp-types`,
+  `annotated-types`, `pydantic`, `jsonschema`, `anyio`). `DEP001` still
+  refuses third-party code inside a plugin.
+- **Docs.** `docs-build` renders 79 pages, and `docs-link-check`
+  resolves **7922 internal links on 119 pages with 0 broken**. doc-12
+  carries the 0.8.0 notes for every added name (the application API and
+  `module:app`, the plugin HTTP API *and* its security model, `qgis-sdk
+  mcp` and the developer-only vocabulary, processing destinations) plus
+  the console section, and doc-13 holds the next minor's draft.
+- **TASK-141 (AC 6).** Still **In Progress** with its own AC 4 open:
+  visible GUI, other platforms and Conda packaging stay unqualified.
+  This gate moves that AC forward with what can be measured here - the
+  desktop host harness 4 passed, the ZIP-install harness 1 passed in
+  real QGIS offscreen, the devtools harness 9 passed, and full workspace
+  coverage - but does not close it, and this record does not claim
+  cross-platform or visible-GUI qualification.
+- **Stamp steps this train must not miss.** `stamp --scope python
+  --version 0.8.0` moves the kit, runtime and tools manifests, the kit's
+  three exact pins (the `[mcp]` extra included), the tools' runtime
+  range (`>=0.8.0,<0.9`), the recipe's three versions and the example's
+  windows (`>=0.8,<0.9`); `stamp --scope typescript --version 0.6.0`
+  moves `package.json`, the alias and its pin and the scaffold pin
+  `SDK_NPM_VERSION`; by hand, the components' and their alias's peer
+  range, the two migration-note headings, the READMEs' and the guides'
+  status lines and the one test literal the scaffold pins assert.
+- **Not run here.** `build:conda` (conda-forge is unreachable from the
+  sandbox, as in the 0.7.0 gate: TLS handshake EOF); the Windows and
+  macOS QGIS rows (m-11, TASK-33); a visible-GUI Desktop session.
+- **Approval.** Not given by this record. The train is two tags on the
+  stamp pull request's merge commit - `python-v0.8.0` and `ts-v0.6.0` -
+  and each is cut only on an explicit release instruction.
+
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
 profile, while `test_webchannel_native.py` and `test_webengine_native.py`

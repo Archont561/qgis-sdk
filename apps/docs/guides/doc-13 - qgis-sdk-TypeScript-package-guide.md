@@ -832,7 +832,31 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
 
+## Next minor (unreleased) migration notes
+
+**Two bridge error classes are gone.** `QgisSdkBridgeSequenceError` and
+`QgisSdkBridgeStreamEndedError` left the `./bridge` entry: no code path
+constructed either, because a missed frame arrives as the stream
+terminal's `{ kind: "gap" }` and an end as its terminal frame. Switch on
+the terminal's `kind`, as the [stores](#stores-the-framework-free-core)
+already do, and drop any `instanceof` checks for the two.
+
+**Deeper module paths stay internal.** The entry split into
+`src/bridge/{client,errors,frames,protocol}.ts` and
+`src/stores/{base,form,host-query,operation,stream}.ts` behind the same
+`@archont561/qgis-sdk/bridge`, `./react`, `./vue` and `./svelte` exports,
+so an import from the package keeps working; a deep import into `src/`
+was never public.
+
+**The wire is unchanged.** `HOST_FINGERPRINT` (`sha256:16790dc8...`),
+`HOST_SCHEMA_VERSION` (1) and `BRIDGE_PROTOCOL_VERSION` (1) carry the
+values 0.5.0 had, so a page built against a 0.5 host needs no edit. The
+Python side of the same release is in
+[doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md) under *Next minor
+(unreleased) migration notes*.
+
 ## 0.5.0 migration notes
+
 
 **`@archont561/qgis-sdk-ui` 0.1.0 (decision-47 point 3).** A new
 package rather than a change to this one; see
