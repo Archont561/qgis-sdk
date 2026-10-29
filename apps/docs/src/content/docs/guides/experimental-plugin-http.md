@@ -77,6 +77,12 @@ for frame in client.stream("my_stream", {}):
     print(frame)
 ```
 
+Calls are serialized per plugin runtime. A second request waits for its turn
+for up to the server's deadline and then fails with `503` and the `host_busy`
+code; it never runs inside another handler, and a handler that opens a modal
+dialog cannot be re-entered. Requests that arrive while a handler is running
+therefore queue rather than interleave.
+
 At the HTTP level, `GET /plugin` returns the filtered description,
 `POST /actions/<id>` calls an action with a JSON object, and
 `POST /streams/<id>` returns server-sent events. Every request needs the bearer
