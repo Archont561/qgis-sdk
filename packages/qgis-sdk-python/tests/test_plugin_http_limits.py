@@ -366,7 +366,7 @@ def test_slow_header_trickle_hits_an_absolute_deadline(tmp_path: Path):
                 sock.close()
             assert closed, "a client must not hold a request open by trickling bytes"
             status = _eventually(
-                lambda: _call(server.port, token, "echo", {"value": "x"})[0]
+                lambda: _probe_status(server.port, token, "echo", {"value": "x"})
             )
             assert status == 200, "the connection slot must return after the deadline"
     finally:
