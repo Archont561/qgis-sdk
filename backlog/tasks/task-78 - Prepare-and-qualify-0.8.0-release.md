@@ -4,7 +4,7 @@ title: Prepare and qualify 0.8.0 release
 status: In Progress
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-29 23:20'
+updated_date: '2026-10-29 23:45'
 labels: []
 milestone: m-7
 dependencies:
@@ -47,5 +47,8 @@ Explicit release gate for the plugin HTTP access release (m-7), not evidence of 
 
 
 2026-10-29 (stamp pull request, on 951ec3f): owner said "release". stamp --scope python 0.8.0 moved the three manifests, the kit's three exact pins (tools[mcp] included), the tools' range >=0.8.0,<0.9, the recipe's three versions and the example's windows; stamp --scope typescript 0.6.0 moved package.json, the alias and SDK_NPM_VERSION. By hand: the ui peer range >=0.6.0 <0.7.0 in the scoped package and its alias, the one SDK_NPM_VERSION literal in test_scaffold_web.py, the doc-12/doc-13 migration headings, and the README status lines. verify-versions agrees on 0.8.0 / 0.6.0 / 0.1.0 and contract v1. Stamped-tree evidence in doc-14 under 'Stamp and artifacts' and 'On the stamped tree': 10/10 Bun tasks, Python 2173/56, coverage 95.70 %, purity 1995/22, all six harnesses, docs 8096 links 0 broken, three 0.8.0 wheels with twine checks, four npm tarballs, a clean 12-distribution install whose [mcp] extra resolves with no warning for the first time, and a 0.7.0-scaffolded project reporting exactly VERSION001 and VERSION004. One finding: the alias mirror test is what catches the ui peer range, because the alias is not a stamp target - both files must move. AC 2 is done; AC 4 stays open until the tags run.
+
+
+2026-10-29 (rehearsal): the stamp PR (#141) merged as d7adb9ae. python-v0.8.0-rc.1 (run 40972199140) and ts-v0.6.0-rc.1 (run 40972199246) on that commit are both green: the Python run stamped 0.8.0-rc.1, passed the stamped-manifest verification, built and twine-checked three wheels and three Conda outputs, ran the PyPI verify step with every publish step skipped, and published a prerelease with the wheels, the .conda files and SHA256SUMS; the TypeScript run stamped 0.6.0-rc.1, packed and smoke-tested the bridge and alias tarballs, ran the npm dry-run with both publish steps skipped, and published a prerelease with both tarballs and SHA256SUMS. Nothing reached a registry: PyPI still ends at 0.7.0 and npm's latest is still 0.5.0. Recorded in doc-14 under '0.8.0 rehearsal (2026-10-29)'. The real pair (python-v0.8.0, ts-v0.6.0 on d7adb9ae) and AC 4 wait for the release instruction.
 
 <!-- SECTION:NOTES:END -->
