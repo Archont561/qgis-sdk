@@ -19,8 +19,9 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
+from qgis_sdk.adapters.palette import palette_theme
 from qgis_sdk.bindings import (
     BindingsDescription,
     BoundAction,
@@ -38,6 +39,9 @@ from qgis_sdk.ui.declarative import materialise
 from qgis_sdk.ui.streams import ViewStreams
 from qgis_sdk.ui.surfaces import Surface, describe_surface
 from qgis_sdk.ui.wiring import wire_surface
+
+if TYPE_CHECKING:
+    from qgis_sdk.adapters.snapshot import SurfaceCapture
 
 __all__ = [
     "DOCK_VISIBLE_SETTING",
@@ -206,6 +210,60 @@ class SurfaceHost:
     def docks(self) -> Mapping[type, OpenDock]:
         """The dock instances built so far, by surface class."""
         return MappingProxyType(self._docks)
+
+    # -- snapshots ----------------------------------------------------------------
+
+    def snapshot(
+        self, surface_id: str | None = None, *, screenshot: bool = True
+    ) -> tuple[SurfaceCapture, ...]:
+        """Capture the surfaces this plugin opened (decision-51).
+
+        Only this host's own surfaces are visible: a dialog it showed or a
+        dock it built and left visible. ``surface_id`` selects one and raises
+        for an unknown id; by default every open surface is captured.
+        """
+        from qgis_sdk.adapters.snapshot import capture_surface
+
+        opened = self._opened_surfaces()
+        if surface_id is not None:
+            chosen = [entry for entry in opened if entry[0] == surface_id]
+            if not chosen:
+                known = ", ".join(entry[0] for entry in opened) or "none"
+                raise QgisSdkUiError(
+                    f"no open surface named {surface_id!r} (open: {known})"
+                )
+        else:
+            chosen = opened
+        theme = palette_theme()
+        palette = theme["palette"] if theme is not None else None
+        return tuple(
+            capture_surface(
+                widget,
+                surface_id=name,
+                kind=kind,
+                title=title,
+                screenshot=screenshot,
+                palette=palette,
+            )
+            for name, kind, title, widget in chosen
+        )
+
+    def _opened_surfaces(self) -> list[tuple[str, str, str, Any]]:
+        entries: list[tuple[str, str, str, Any]] = []
+        for dialog in self.dialogs:
+            description = describe_surface(type(dialog.surface))
+            entries.append(
+                (description.id, description.kind, description.title, dialog.widget)
+            )
+        for dock in self.docks.values():
+            visible = getattr(dock.widget, "isVisible", None)
+            if not callable(visible) or not visible():
+                continue
+            description = describe_surface(type(dock.surface))
+            entries.append(
+                (description.id, description.kind, description.title, dock.widget)
+            )
+        return entries
 
     # -- ctx.ui --------------------------------------------------------------------
 
