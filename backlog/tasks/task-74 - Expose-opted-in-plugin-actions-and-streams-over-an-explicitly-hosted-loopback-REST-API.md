@@ -26,14 +26,25 @@ The boundary is deliberate: MCP in `qgis-sdk-tools` serves developers and agents
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The host explicitly starts and closes the server; construction neither listens nor creates a token, the token is private and removed on close, non-loopback binds, foreign Host headers, browser Origins, wrong tokens and unknown action or stream IDs are refused, and only one endpoint may serve a runtime (pure tests).
+- [x] #1 The host explicitly starts and closes the server; construction neither listens nor creates a token, the token is private and removed on close, non-loopback binds, foreign Host headers, browser Origins, wrong tokens and unknown action or stream IDs are refused, and only one endpoint may serve a runtime (pure tests).
 - [ ] #2 An allowlisted action dispatches on the QGIS owner thread; a queued call past its deadline fails with the documented busy error and is withdrawn before it can run, and a reload fails in-flight calls with the host-reloaded error without running withdrawn work (pure and native tests).
 - [ ] #3 Streams deliver ordered SSE frames, honour the event-stream capacity limit, bound frame size and buffered bytes, and dispose their subscription on client disconnect or server close (pure and native tests).
-- [ ] #4 The Python client and CLI call a live plugin and stream events without importing the runtime; the CLI MCP inventory contains no plugin REST commands (tests at the public seams).
+- [x] #4 The Python client and CLI call a live plugin and stream events without importing the runtime; the CLI MCP inventory contains no plugin REST commands (tests at the public seams).
 - [ ] #5 Real QGIS qualification covers owner-thread dispatch and teardown/reload, the built plugin vendors `qgis_sdk.http` only on explicit import, and no `qgis_sdk.agent` module, agent checker, guide or test remains.
 <!-- AC:END -->
 
-## Implementation Plan
+## Implementation notes
+
+2026-10-29: pure-side qualification covers explicit start/close, token
+permissions and removal, `Host`/`Origin`/token refusal, one endpoint per
+runtime, failed-start recovery, busy-deadline withdrawal, reload withdrawal,
+client/CLI calls and MCP exclusion (AC 1 and 4). Dispatch is serialized per
+runtime: a second call waits or fails with `host_busy` and never runs inside a
+handler that pumps a nested event loop. Transport-limit coverage added for
+connection overload, absolute read deadlines, truncated/oversized bodies, SSE
+capacity, stalled readers and oversized frames. Native reload and stream
+teardown qualification (AC 2, 3, 5) is still outstanding.
+
 
 <!-- SECTION:PLAN:BEGIN -->
 Keep the transport hardened: absolute read/write deadlines, bounded connections and SSE buffers, cleanup that survives scheduler failure, and token/reservation release on every failure path. Qualify native dispatch, disconnect cleanup and reload with real QGIS before checking acceptance criteria. Document the endpoint and the MCP boundary in `guides/experimental-plugin-http.md` and `guides/cli-mcp.md`.
