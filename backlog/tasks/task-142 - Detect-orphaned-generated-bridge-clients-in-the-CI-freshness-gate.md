@@ -1,10 +1,10 @@
 ---
 id: TASK-142
 title: Detect orphaned generated bridge clients in the CI freshness gate
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-29 07:28'
-updated_date: '2026-10-29 08:28'
+updated_date: '2026-10-29 08:53'
 labels: []
 milestone: m-2
 dependencies: []
@@ -38,5 +38,11 @@ Exercise the actual CI generated-client gate in isolated Git trees; detect orpha
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Isolated Git fixtures invoke the real CI helper and generator for clean, stopped, changed, removed and renamed outputs, including all three owned artifacts and non-destructive handling of unrelated files. Both generator modes report orphaned .ts files with the exact sample/host source headers under the two owned output directories; files outside that scope or without those headers are not classified. The existing TypeScript Git-status sweep, reference schema and real-QGIS Processing snapshot checks remain in place. Local validation: 285 script tests passed; workspace coverage 6/6 tasks (Python 1,984 passed, 63 skipped, 96.90%); generator --check and CI gate passed; docs link check 7,042 links, 0 broken; Ruff, actionlint and repository policy passed. Processing snapshot passed with a pre-existing missing PDAL HDF plugin dependency warning. Leave task In Progress until merge.
+Isolated Git fixtures invoke the real CI helper and generator for clean, stopped, changed, removed and renamed outputs, including all three owned artifacts and non-destructive handling of unrelated files. Both generator modes report orphaned .ts files with the exact sample/host source headers under the two owned output directories; files outside that scope or without those headers are not classified. The existing TypeScript Git-status sweep, reference schema and real-QGIS Processing snapshot checks remain in place. Local validation: 285 script tests passed; workspace coverage 6/6 tasks (Python 1,984 passed, 63 skipped, 96.90%); generator --check and CI gate passed; docs link check 7,042 links, 0 broken; Ruff, actionlint and repository policy passed. Processing snapshot passed with a pre-existing missing PDAL HDF plugin dependency warning.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Implemented and verified in PR #133, merged as efd769357b12bed6bb2d1226d9a3ca23bd1fea41. The freshness gate now reports orphaned owned bridge clients without deleting unrelated files.
+<!-- SECTION:FINAL_SUMMARY:END -->
