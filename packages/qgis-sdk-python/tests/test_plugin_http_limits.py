@@ -682,6 +682,28 @@ def _raw(port, method, path, headers, body):
         connection.close()
 
 
+def _drain(response, chunk: int = 4096):
+    """Read a stream to keep its frame buffer from overflowing, and discard it.
+
+    A session that nobody reads fills ``_FrameBuffer`` (256 frames / 2 MB),
+    overflows, and is disposed - which is correct behaviour, and it frees the
+    session budget. This test is about the *budget*, so its sessions have to
+    stay alive: an unread stream made the 65th opening succeed whenever one of
+    the first 64 had overflowed first, which was timing- and load-dependent.
+    """
+
+    def read() -> None:
+        try:
+            while response.read(chunk):
+                pass
+        except (OSError, ValueError):
+            pass  # the connection the test closes underneath the reader
+
+    reader = threading.Thread(target=read, daemon=True, name="drain-stream")
+    reader.start()
+    return reader
+
+
 def _open_stream(port, token, stream):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
     try:
@@ -785,6 +807,7 @@ def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
 
     runtime = _runtime(app)
     streams = []
+    draining = []
     try:
         with PluginHttpServer(
             runtime,
@@ -799,6 +822,7 @@ def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
                 response = _open_stream(server.port, token, "watch")
                 streams.append(response)
                 assert response.status == 200, "the budget must hold 64 sessions"
+                draining.append(_drain(response))
             refused = _open_stream(server.port, token, "watch")
             streams.append(refused)
             assert refused.status == 503, "an exhausted budget must not look like 400"
@@ -806,6 +830,8 @@ def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
     finally:
         for response in streams:
             response.close()
+        for reader in draining:
+            reader.join(timeout=5)
         runtime.unload()
 
 
