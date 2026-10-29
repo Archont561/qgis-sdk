@@ -4,7 +4,7 @@ title: Prepare and qualify 0.8.0 release
 status: In Progress
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-29 18:40'
+updated_date: '2026-10-29 19:10'
 labels: []
 milestone: m-7
 dependencies:
@@ -41,5 +41,8 @@ Explicit release gate for the plugin HTTP access release (m-7), not evidence of 
 2026-10-27: TASK-73 and TASK-77 re-scoped in from m-6; the gate's evidence covers the console session and the externals probe/vendoring too.
 
 2026-10-29: gate run on main a362044, recorded in doc-14 '0.8.0 release gate (2026-10-29)'. AC 1, 3, 5 and 6 are evidenced there: the Python suite with the mcp extra (2173 passed / 56 skipped / 7 deselected, the three tests that skip without the extra included), tests/scripts 286, the static gate, the ten-task Bun suite and the coverage gate (95.70 % Python), the scaffold-web / reference / devtools / build-install / desktop-host harnesses, the 40-distribution clean install with the extra, licences across the whole mcp tree, the 7582-link docs build. AC 1's third task TASK-76 was withdrawn, and its 'both modes' is one served list plus the read-only derivation. AC 5 was rewritten: the measured delta is 27 files with two breaking commits, so the owner included ts-v0.6.0 in the train instead of recording the bridge as unchanged. AC 2 still waits for the stamp pull request (0.8.0 for the Python trio with the kit's mcp extra pin moving, ts 0.6.0, the ui components' peer range to >=0.6.0 <0.7.0, the scaffold pin, the migration-note headings); AC 4 waits for explicit publishing approval. Two tags are planned, python-v0.8.0 and ts-v0.6.0, on one merge commit.
+
+
+2026-10-29 (after the gate): stamp rehearsal on the same tree, reverted afterwards. Both stamps move eight files; the kit's pins read 0.8.0 including tools[mcp], the tools' range >=0.8.0,<0.9 and the example's windows >=0.8,<0.9. verify-versions then fails only on the components' peer range and agrees on all five scopes once it moves to >=0.6.0 <0.7.0. The stamped wheels build and twine-check as 0.8.0, a fresh venv scaffolds >=0.8,<0.9 with bridge 0.6.0 and checks clean, a 0.7-scaffolded project under those tools reports exactly VERSION001 and VERSION004, and the stamped purity lane fails six tests that are all the one SDK_NPM_VERSION literal in test_scaffold_web.py. That literal, the peer range and the two migration-note headings are the stamp PR's code change. The rc.1 pair (python-v0.8.0-rc.1, ts-v0.6.0-rc.1 on the stamp merge commit) and what each run must show are written down in doc-14 under '0.8.0 rehearsal and tag plan'; AC 2 still waits for the actual stamp, AC 4 for the release instruction.
 
 <!-- SECTION:NOTES:END -->
