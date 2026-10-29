@@ -1,0 +1,80 @@
+# Repository policy only: language lint, typechecks, generated-code freshness,
+# and built-site link checks remain owned by their existing tools.
+version: 1
+
+rules:
+  - id: root-readme
+    kind: file_exists
+    paths: ["README.md"]
+    root_only: true
+    level: error
+    message: "Keep the repository landing page at README.md."
+
+  - id: root-license
+    kind: file_exists
+    paths: ["LICENSE"]
+    root_only: true
+    level: error
+    message: "Keep the repository license at LICENSE."
+
+  # The unscoped npm aliases publish their scoped package's README unchanged.
+  - id: bridge-readme-mirror
+    kind: cross_file
+    source:
+      file: packages/qgis-sdk-typescript/README.md
+    targets:
+      - file: packages/qgis-sdk-alias/README.md
+    relation: identical
+    level: error
+
+  - id: ui-readme-mirror
+    kind: cross_file
+    source:
+      file: packages/qgis-sdk-ui/README.md
+    targets:
+      - file: packages/qgis-sdk-ui-alias/README.md
+    relation: identical
+    level: error
+
+  - id: bridge-readme-alias-name
+    kind: cross_file
+    source:
+      file: packages/qgis-sdk-typescript/README.md
+      extract: { regex: '(?s)\A.*?(bun add qgis-sdk).*\z' }
+    targets:
+      - file: packages/qgis-sdk-alias/README.md
+        extract: { regex: '(?s)\A.*?(bun add qgis-sdk).*\z' }
+    level: error
+
+  - id: ui-readme-alias-name
+    kind: cross_file
+    source:
+      file: packages/qgis-sdk-ui/README.md
+      extract: { regex: '(?s)\A.*?(bun add qgis-sdk-ui).*\z' }
+    targets:
+      - file: packages/qgis-sdk-ui-alias/README.md
+        extract: { regex: '(?s)\A.*?(bun add qgis-sdk-ui).*\z' }
+    level: error
+
+  - id: immutable-actions
+    kind: pinned_references
+    paths:
+      - ".github/workflows/*.yml"
+      - ".github/workflows/*.yaml"
+      - "action.yml"
+      - "action.yaml"
+      - "**/action.yml"
+      - "**/action.yaml"
+    format: github_actions
+    level: error
+    message: "Pin external actions and workflows to full commit SHAs, and container images to digests."
+
+  - id: no-merge-markers
+    kind: no_merge_conflict_markers
+    paths: ["**/*"]
+    level: error
+
+  - id: no-bidi-controls
+    kind: no_bidi_controls
+    paths: ["**/*"]
+    level: error

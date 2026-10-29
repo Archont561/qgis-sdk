@@ -90,6 +90,7 @@ The only milestone that changes bridge source, and the only one that releases th
 - [TASK-7](../../tasks/task-7%20-%20Add-layered-pytest-support-and-BDD-fixtures.md): Add layered pytest support and BDD fixtures
 - [TASK-15](../../tasks/task-15%20-%20Implement-scoped-local-jobs-and-typed-result-handles.md): Implement scoped local jobs and typed result handles — moved from 0.2.0
 - [TASK-17](../../tasks/task-17%20-%20Generate-checked-in-TypeScript-contracts-clients-and-validators.md): Generate checked in TypeScript contracts clients and validators — **bridge source**
+- [TASK-142](../../tasks/task-142%20-%20Detect-orphaned-generated-bridge-clients-in-the-CI-freshness-gate.md): Detect orphaned generated bridge clients in the CI freshness gate — follow-up to TASK-17
 - [TASK-18](../../tasks/task-18%20-%20Add-thin-React-bindings-and-isolated-frontend-test-harnesses.md): Add thin React bindings and isolated frontend test harnesses — **bridge source**
 - [TASK-20](../../tasks/task-20%20-%20Enforce-scoped-file-network-and-browser-resource-authority.md): Enforce scoped file network and browser resource authority — **bridge source**
 - [TASK-29](../../tasks/task-29%20-%20Prepare-and-qualify-0.3.0-release.md): Prepare and qualify 0.3.0 release

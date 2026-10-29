@@ -22,21 +22,23 @@ pytest-bdd = "==9.0.0"
 # Test-only contract export and schema oracle.
 mashumaro = "==3.23"
 jsonschema = "==4.26.0"
+# Repository policy and workflow tests are also run in the build environment.
+alint = "==0.20.1"
+pyyaml = "==6.0.3"
 
 [feature.python.activation.env]
 # Absolute, so a task or a `qgis-sdk test` subprocess that runs in another
 # working directory (the reference example) still imports the source tree.
 PYTHONPATH = "$PIXI_PROJECT_ROOT/packages/qgis-sdk-runtime/src:$PIXI_PROJECT_ROOT/packages/qgis-sdk-tools/src"
 
-[feature.python.tasks.test-skill-creator]
-cmd = "pytest -q .agents/skills/skill-creator/tests"
-
 # Release train entrypoints (TASK-35): the stdlib-only release tool now lives
 # as scripts/release.py, resolved from __file__ so every pixi run task and
 # workflow step invokes identical, locally-testable commands with no
 # PYTHONPATH or locked dependency beyond the build environment.
 [feature.python.tasks.test-release-tool]
-cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q"
+# The README mirror checks also belong to this QGIS-free suite; their policy
+# lives in Alint rather than a duplicate pytest implementation.
+cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q && alint check --only bridge-readme-mirror --only ui-readme-mirror --only bridge-readme-alias-name --only ui-readme-alias-name ."
 
 # The reference plugin (examples/simple) through its own
 # `qgis-sdk test`: the pure target on the SDK fakes, then the `qgis` target
@@ -111,6 +113,12 @@ cmd = "ruff format --check ."
 
 [feature.utils.tasks.lint-github-actions]
 cmd = "actionlint .github/workflows/*.yml"
+
+[feature.utils.tasks.lint-repository]
+cmd = "alint check ."
+
+[feature.utils.tasks.test-alint-policy]
+cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/alint -q"
 
 [feature.qgis.dependencies]
 qgis = "==4.2.3"

@@ -8,17 +8,17 @@ on:
   # (everything inside the jobs uses `github.event.repository.default_branch`).
   push:
     branches: [main]
-    # Docs-only and backlog-only changes cannot move a test, a build or a release.
-    # These are the paths relock.yml ignores; the two lists are spelled out per
-    # trigger instead of shared through an anchor because GitHub parses `on:` with its
-    # own quirks, and that cannot be checked locally while runners are unusable.
+    # Backlog, agent instructions and skills do not require the SDK test suite.
+    # The lists are spelled out per trigger instead of shared through an anchor.
     paths-ignore:
       - "backlog/**"
       - "AGENTS.md"
+      - ".agents/skills/**"
   pull_request:
     paths-ignore:
       - "backlog/**"
       - "AGENTS.md"
+      - ".agents/skills/**"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +33,8 @@ concurrency:
   cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 jobs:
-  checks:
+  linux:
+    name: Linux checks
     runs-on: ubuntu-latest
     # Bound the job: the Actions default is 360 minutes, and a run hung on a step that
     # never finishes is not a result anybody is waiting for.
@@ -78,10 +79,6 @@ jobs:
         id: s07
         run: pixi run -e default format-python-check
 
-      - name: Test skill-creator tooling
-        id: s08
-        run: pixi run -e default test-skill-creator
-
       - name: Test release tooling
         id: s09
         run: pixi run -e default test-release-tool
@@ -90,31 +87,12 @@ jobs:
         id: s10
         run: pixi run -e default release-verify-versions
 
-      # The generated clients are source: it is reviewed like any other file, and
-      # nothing may edit it by hand. A stale copy fails here with the command that
-      # regenerates it, and the `git status` sweep catches a file the generator
-      # renamed or stopped writing, which a byte comparison alone would miss.
-      # (TASK-17 AC 3)
+      # Regenerate the three bridge artifacts, inspect the TypeScript tree for
+      # changes, then check the reference page's generated schema. TASK-142 tracks
+      # the separate case where the generator stops writing an existing artifact.
       - name: Check the generated bridge clients are current
         id: s19
-        run: |
-          python packages/qgis-sdk-python/scripts/generate_bridge_clients.py
-          # All three artifacts: the plugin client and schema module under tests,
-          # and the host module the package ships under src. A generator that
-          # stopped writing one of them shows up as an unexpected deletion, not
-          # as a stale byte comparison.
-          generated=$(git status --porcelain -- packages/qgis-sdk-typescript)
-          if [ -n "$generated" ]; then
-            git --no-pager diff -- packages/qgis-sdk-typescript
-            echo "::error title=generated client is stale::Run \`python packages/qgis-sdk-python/scripts/generate_bridge_clients.py\` and commit the result."
-            exit 1
-          fi
-          # The reference page's schema module is generated the way a plugin
-          # author's is: by `bridge generate --check` from the project root
-          # (TASK-66 AC 1).
-          (cd examples/simple && pixi run -e default python -m qgis_sdk_tools \
-            bridge generate \
-            --out web/src/bridge.schema.ts --check)
+        run: python scripts/ci.py check-generated
 
       # The Processing snapshot the runtime ships (qgis_sdk/processing) is
       # generated from the pinned QGIS by the same reader and emitters
@@ -124,9 +102,7 @@ jobs:
         id: s22
         env:
           QT_QPA_PLATFORM: offscreen
-        run: |
-          pixi run -e default python \
-            packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check
+        run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check
 
       # The default environment carries the QGIS feature, so this is the only
       # place the native layers actually execute against real Qt and QGIS: the
@@ -144,38 +120,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QGIS_SDK_NATIVE_SERVICES: "1"
-        run: |
-          set -o pipefail
-          log=native-layers.log
-          status=0
-          pixi run -e default python -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m native -q -rs 2>&1 | tee "$log" || status=$?
-          if [ "$status" -eq 0 ]; then
-            exit 0
-          fi
-          # pytest 9 exits 5 when a module skips itself during import, which is
-          # the honest outcome on a host without usable Qt and QGIS bindings, so
-          # that case is a warning carrying the reason rather than a red build.
-          reason=$(grep -o "native \(forms\|networking\|WebEngine\|WebChannel\|jobs\) need.*" "$log" | head -1 || true)
-          if [ "$status" -eq 5 ] && [ -n "$reason" ]; then
-            echo "::warning::native layers did not run: $reason"
-            exit 0
-          fi
-          # Log archives are not reliably downloadable from every client, so the
-          # evidence goes into an annotation instead: one red step that says only
-          # "exit code 1" has already cost this project a rerun.
-          annotate() {
-            local title="$1" body="$2"
-            body="${body//'%'/'%25'}"
-            body="${body//$'\r'/}"
-            body="${body//$'\n'/'%0A'}"
-            printf '::error title=%s::%s\n' "$title" "$body"
-          }
-          # `run:` uses bash -e, so a failing substitution would abort before the
-          # annotation is printed; every capture here is allowed to fail.
-          environment=$(pixi run -e default python -c 'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())' 2>&1 | tail -20 || true)
-          annotate "native layers: environment" "$environment"
-          annotate "native layers: pytest" "$(tail -60 "$log" || true)"
-          exit "$status"
+        run: pixi run -e default python scripts/ci.py native
 
       # The reference plugin is a plugin project, not part of the SDK suite: it
       # runs through its own `qgis-sdk test`, the pure target on the SDK fakes
@@ -200,6 +145,14 @@ jobs:
         id: s13
         run: pixi run -e default lint-github-actions
 
+      - name: Check repository policy
+        id: s25
+        run: pixi run -e default lint-repository
+
+      - name: Test repository policy
+        id: s26
+        run: pixi run -e default test-alint-policy
+
       - name: Typecheck TypeScript
         id: s14
         run: pixi run -e bun typecheck
@@ -212,21 +165,54 @@ jobs:
         id: s23
         run: pixi run -e bun storybook-build
 
+      # A red job whose report is only "exit code 1" costs a rerun to diagnose,
+      # and the log archive is not reachable from every client. Every step above
+      # carries an id so this can name the one that actually failed.
+      - name: Report the failed step
+        id: s18
+        if: failure()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: python scripts/ci.py report-steps
+
+  # Coverage is the longest Linux step. Run it in parallel with the other gates
+  # on a separate runner: each job restores its own locked environments and
+  # builds its own artifacts, avoiding shared dist/ and coverage directories.
+  coverage:
+    name: Linux coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        id: s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Pixi
+        id: s02
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          environments: >-
+            default
+            bun
+          cache: true
+          locked: true
+
+      - name: Install JavaScript dependencies
+        id: s03
+        run: pixi run -e bun install-js
+
       - name: Check coverage for all packages
         id: coverage
-        run: |
-          set -o pipefail
-          pixi run -e bun bun run coverage 2>&1 | tee coverage-output.log
+        run: >-
+          python scripts/ci.py run-log coverage-output.log --
+          pixi run -e bun bun run coverage
 
       - name: Annotate the coverage failure
         id: s15
         if: failure() && steps.coverage.outcome == 'failure'
-        run: |
-          # The job log is not always retrievable, but annotations are: surface
-          # the failing lines so a red coverage step says what broke.
-          grep -nE 'FAILED|ERROR|Error|error:|Coverage|TOTAL|no tests ran' coverage-output.log \
-            | tail -40 | cut -c1-900 \
-            | while IFS= read -r line; do echo "::error::$line"; done
+        run: python scripts/ci.py annotate-coverage coverage-output.log
 
       - name: Upload Python coverage
         id: s16
@@ -260,12 +246,6 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  # Portable Python/TypeScript suites on the other supported host platforms.
-  # This is compatibility evidence only: it is not QGIS Desktop, WebEngine or
-  # plugin-coexistence qualification (see TASK-33), and it does not repeat the
-  # coverage gate or Codecov uploads owned by `checks`.
-
-
       # A red job whose report is only "exit code 1" costs a rerun to diagnose,
       # and the log archive is not reachable from every client. Every step above
       # carries an id so this can name the one that actually failed.
@@ -274,14 +254,28 @@ jobs:
         if: failure()
         env:
           STEPS: ${{ toJSON(steps) }}
-        run: |
-          python3 - <<'PY'
-          import json, os
-          steps = json.loads(os.environ["STEPS"])
-          for name, info in steps.items():
-              if info.get("conclusion") not in ("success", "skipped", None):
-                  print(f"::error title=failed step::{name}")
-          PY
+        run: python scripts/ci.py report-steps
+
+  # Preserve the existing required `checks` status while ensuring a failed,
+  # cancelled, or unexpectedly skipped Linux job cannot pass the aggregate.
+  checks:
+    needs: [linux, coverage]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report Linux job results
+        run: >-
+          echo "Linux checks: ${{ needs.linux.result }}; Linux coverage: ${{ needs.coverage.result }}"
+
+      - name: Require both Linux jobs to succeed
+        if: ${{ needs.linux.result != 'success' || needs.coverage.result != 'success' }}
+        run: exit 1
+
+  # Portable Python/TypeScript suites on the other supported host platforms.
+  # This is compatibility evidence only: it is not QGIS Desktop, WebEngine or
+  # plugin-coexistence qualification (see TASK-33), and it does not repeat the
+  # coverage gate or Codecov uploads owned by the Linux coverage job.
   cross-platform:
     name: cross-platform (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -291,7 +285,7 @@ jobs:
         os: [macos-latest, windows-latest]
     # A push to the default branch is the merge of a head that already passed this
     # matrix: macOS bills 10x and Windows 2x to re-test a tree that is already green.
-    # `checks` keeps running on every push to main because its coverage artifact and
+    # The Linux jobs keep running on every push to main because coverage and
     # commit-message provenance are what the release path reads. PR runs and
     # `workflow_dispatch` release runs are untouched, so a release cut without a pull
     # request still builds both hosts.
@@ -346,12 +340,11 @@ jobs:
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
 
-      - name: Test Python SDK and skill tooling
+      - name: Test Python SDK
         shell: bash
         run: >-
           python -m pytest -c packages/qgis-sdk-python/pyproject.toml
-          packages/qgis-sdk-python/tests .agents/skills/skill-creator/tests -q
-          --junitxml=python-tests.xml
+          packages/qgis-sdk-python/tests -q --junitxml=python-tests.xml
 
       # Job logs are served from a blob host that some networks cannot read, so
       # report the counts and every failure as annotations the API can return.
@@ -361,17 +354,14 @@ jobs:
 
       - name: Test TypeScript bridge
         shell: bash
-        run: |
-          # bun writes its summary to stderr; keep both streams and bun's status.
-          set -o pipefail
-          bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests 2>&1 | tee bun-tests.log
+        run: >-
+          python scripts/ci.py run-log bun-tests.log --
+          bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests
 
       - name: Report TypeScript test results
         if: ${{ !cancelled() }}
         shell: bash
-        run: |
-          summary=$(grep -Eo '[0-9]+ pass' bun-tests.log | head -1 || true)
-          echo "::notice::bun test: ${summary:-no summary line}"
+        run: python scripts/ci.py report-bun bun-tests.log --title "bun test"
 
       # The UI elements import the bridge's built entry, so the bridge is
       # built first; `--conditions=browser` is what `@lit/react` needs under
@@ -380,15 +370,9 @@ jobs:
       # the alias to the scoped package file for file.
       - name: Test qgis-sdk-ui
         shell: bash
-        run: |
-          set -o pipefail
-          bun run --filter '@archont561/qgis-sdk' build
-          bun run --filter '@archont561/qgis-sdk-ui' build
-          bun test --conditions=browser packages/qgis-sdk-ui/tests packages/qgis-sdk-ui-alias/tests 2>&1 | tee bun-ui-tests.log
+        run: python scripts/ci.py bun-ui
 
       - name: Report qgis-sdk-ui test results
         if: ${{ !cancelled() }}
         shell: bash
-        run: |
-          summary=$(grep -Eo '[0-9]+ pass' bun-ui-tests.log | head -1 || true)
-          echo "::notice::bun test (qgis-sdk-ui): ${summary:-no summary line}"
+        run: python scripts/ci.py report-bun bun-ui-tests.log --title "bun test (qgis-sdk-ui)"

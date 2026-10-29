@@ -3121,3 +3121,150 @@ def test_release_workflow_publishes_the_ui_train(monkeypatch):
     assert release_steps["Download UI tarball artifact"]["with"]["name"] == (
         "ui-npm-tgz"
     )
+
+
+def test_ui_github_packages_release_uses_the_qualified_scoped_tarball():
+    """A UI tag publishes the tested scoped tarball, never the npm-only alias."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
+    jobs = workflow["jobs"]
+    job = jobs["github-packages-ui"]
+    assert set(job["needs"]) == {"build", "ui"}
+    assert "needs.build.outputs.ui == 'true'" in job["if"]
+    assert "needs.ui.result == 'success'" in job["if"]
+    assert job["permissions"] == {"contents": "read", "packages": "write"}
+    assert job["env"]["NODE_AUTH_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
+    steps = {step.get("name"): step for step in job["steps"]}
+    assert steps["Download qualified UI tarballs"]["with"]["name"] == "ui-npm-tgz"
+    assert steps["Set up Node for GitHub Packages"]["with"]["registry-url"] == (
+        "https://npm.pkg.github.com"
+    )
+    assert steps["Dry-run UI GitHub Packages publish"]["if"] == (
+        "needs.build.outputs.prerelease == 'true'"
+    )
+    assert "--dry-run" in steps["Dry-run UI GitHub Packages publish"]["run"]
+    assert "--tag next" in steps["Dry-run UI GitHub Packages publish"]["run"]
+    publish = steps["Publish UI to GitHub Packages"]
+    assert publish["if"] == "needs.build.outputs.prerelease == 'false'"
+    assert "@archont561/qgis-sdk-ui@" in publish["run"]
+    for step in (steps["Dry-run UI GitHub Packages publish"], publish):
+        assert (
+            "ui-packages/ui/archont561-qgis-sdk-ui-${RELEASE_VERSION}.tgz"
+            in step["run"]
+        )
+        assert "ui-alias/" not in step["run"]
+    release = jobs["github-release"]
+    assert "github-packages-ui" in release["needs"]
+    assert "needs.github-packages-ui.result == 'success'" in release["if"]
+    assert "needs.github-packages-ui.result == 'skipped'" in release["if"]
+
+
+@pytest.mark.parametrize(
+    ("step_name", "version", "existing", "expected_commands", "publish_status"),
+    [
+        ("Dry-run UI GitHub Packages publish", "0.2.0-rc.1", "", ["publish"], 0),
+        ("Publish UI to GitHub Packages", "0.2.0", "0.2.0", ["view"], 0),
+        ("Publish UI to GitHub Packages", "0.2.0", "", ["view", "publish"], 0),
+        ("Publish UI to GitHub Packages", "0.2.0", "", ["view", "publish"], 42),
+    ],
+)
+def test_ui_github_packages_shell_uses_only_scoped_tarball(
+    tmp_path, step_name, version, existing, expected_commands, publish_status
+):
+    """Exercise the real workflow shell with an offline npm stub, not a registry."""
+    import os
+    import subprocess
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
+    steps = {s.get("name"): s for s in workflow["jobs"]["github-packages-ui"]["steps"]}
+    tarball = tmp_path / "ui-packages" / "ui" / f"archont561-qgis-sdk-ui-{version}.tgz"
+    tarball.parent.mkdir(parents=True)
+    tarball.write_bytes(b"test only")
+    alias = tmp_path / "ui-packages" / "ui-alias" / f"qgis-sdk-ui-{version}.tgz"
+    alias.parent.mkdir()
+    alias.write_bytes(b"not for GitHub Packages")
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    npm = stub_dir / "npm"
+    npm.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$NPM_CALLS"\n'
+        'if [ "$1" = view ]; then\n'
+        '  if [ -n "$EXISTING_VERSION" ]; then printf "%s\\n" "$EXISTING_VERSION"; exit 0; fi\n'
+        '  exit 1\nfi\nexit "$PUBLISH_STATUS"\n',
+        encoding="utf-8",
+    )
+    npm.chmod(0o755)
+    calls = tmp_path / "npm-calls"
+    env = {
+        **os.environ,
+        "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
+        "NPM_CALLS": str(calls),
+        "EXISTING_VERSION": existing,
+        "PUBLISH_STATUS": str(publish_status),
+        "RELEASE_VERSION": version,
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+    }
+    result = subprocess.run(
+        [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-e",
+            "-o",
+            "pipefail",
+            "-c",
+            steps[step_name]["run"],
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == publish_status, result.stderr
+    commands = calls.read_text().splitlines()
+    assert [command.split()[0] for command in commands] == expected_commands
+    assert all("https://npm.pkg.github.com" in command for command in commands)
+    if "publish" in expected_commands:
+        publish = next(
+            command for command in commands if command.startswith("publish ")
+        )
+        assert str(tarball.relative_to(tmp_path)) in publish
+        assert "ui-alias/" not in publish
+        assert ("--dry-run" in publish) == ("-rc." in version)
+        assert ("--tag next" in publish) == ("-rc." in version)
+
+
+def test_ui_github_packages_refuses_a_missing_scoped_tarball(tmp_path):
+    import os
+    import subprocess
+
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
+    steps = {s.get("name"): s for s in workflow["jobs"]["github-packages-ui"]["steps"]}
+    # No npm is needed: the missing file must stop the step before any publish.
+    result = subprocess.run(
+        [
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-e",
+            "-o",
+            "pipefail",
+            "-c",
+            steps["Publish UI to GitHub Packages"]["run"],
+        ],
+        cwd=tmp_path,
+        env={**os.environ, "RELEASE_VERSION": "0.2.0"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
