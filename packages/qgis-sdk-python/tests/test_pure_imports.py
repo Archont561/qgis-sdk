@@ -121,6 +121,20 @@ def test_the_runtime_tree_never_imports_the_tools_tree() -> None:
             )
 
 
+def test_the_runtime_tree_never_reaches_for_synthetic_input() -> None:
+    """Driving a surface is tooling; what a plugin vendors never synthesises input.
+
+    decision-51 point 4: ``act`` ships in ``qgis_sdk_tools``, where ``QtTest``
+    and a developer's QGIS are, and a plugin ZIP carries neither. So the user
+    facing side of a surface - the tree, the screenshot, the declared link -
+    has no way to press anything.
+    """
+    for file in sorted(SOURCE_ROOT.rglob("*.py")):
+        assert "QtTest" not in file.read_text(encoding="utf-8"), (
+            f"{file.relative_to(SOURCE_ROOT)} reaches QtTest"
+        )
+
+
 def test_the_tools_tree_imports_the_runtime_the_stdlib_and_its_declared_deps() -> None:
     files = sorted(TOOLS_ROOT.rglob("*.py"))
     assert files, "missing src/qgis_sdk_tools"

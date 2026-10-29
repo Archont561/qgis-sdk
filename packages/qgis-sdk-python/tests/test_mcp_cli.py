@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from qgis_sdk_tools.__main__ import app
 from qgis_sdk_tools.testing import FakeCliRuntime
 from typer.testing import CliRunner
@@ -49,8 +50,6 @@ def test_regular_cli_import_does_not_eagerly_import_mcp(tmp_path: Path):
 def test_stdio_server_exposes_and_runs_cli_commands(tmp_path: Path):
     import os
 
-    import pytest
-
     pytest.importorskip("mcp")
     import anyio
     from mcp import ClientSession
@@ -90,6 +89,11 @@ def test_stdio_server_exposes_and_runs_cli_commands(tmp_path: Path):
                 "qgis_sdk_test",
                 "qgis_sdk_dev",
                 "qgis_sdk_targets",
+                "qgis_sdk_ui_list",
+                "qgis_sdk_ui_open",
+                "qgis_sdk_ui_snapshot",
+                "qgis_sdk_ui_act",
+                "qgis_sdk_ui_diff",
             }
             # The tool inventory stays aligned when the CLI adds a command.
             import typer
@@ -148,6 +152,26 @@ def test_stdio_server_exposes_and_runs_cli_commands(tmp_path: Path):
             assert missing.is_error
 
     anyio.run(exercise)
+
+
+def test_act_is_developer_only_in_the_tool_list():
+    """decision-51 point 4: reading is offered, driving is not.
+
+    The MCP server is developer tooling, so it serves the whole list. A
+    deployment without that tooling keeps ``ui list``/``open``/``snapshot``/
+    ``diff`` and loses ``ui act`` - the one tool that synthesises input into an
+    open window - so no client that is not a developer's ever sees it.
+    """
+    pytest.importorskip("mcp")
+    from qgis_sdk_tools.mcp import DEVELOPER_ONLY, tool_names
+
+    assert "ui_act" in DEVELOPER_ONLY
+    served = set(tool_names())
+    assert {"ui_list", "ui_open", "ui_snapshot", "ui_diff", "ui_act"} <= served
+    read_only = set(tool_names(developer=False))
+    assert {"ui_list", "ui_open", "ui_snapshot", "ui_diff"} <= read_only
+    assert not DEVELOPER_ONLY & read_only
+    assert served - read_only == DEVELOPER_ONLY
 
 
 def test_package_extras_are_optional_and_the_kit_forwards_to_tools():
