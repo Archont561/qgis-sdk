@@ -718,3 +718,40 @@ def test_the_frame_buffer_bounds_aggregate_bytes_not_just_one_frame():
     with pytest.raises(Full):
         buffer.put_nowait(frame)
     assert buffer.get(timeout=1) == frame, "the buffer stays usable after a refusal"
+
+
+def test_start_refuses_a_platform_without_private_token_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The documented support boundary: no Windows ACL implementation yet."""
+    from types import SimpleNamespace
+
+    from qgis_sdk.http import PluginHttpServer, QgisSdkHttpError, _server
+
+    app = QgisSdkPlugin(id="platform", title="Platform")
+
+    @app.action(id="echo", title="Echo")
+    def echo(ctx: PluginContext, value: str) -> str:
+        return value
+
+    runtime = _runtime(app)
+    token_file = tmp_path / "token"
+    try:
+        server = PluginHttpServer(
+            runtime,
+            post=lambda callback: callback(),
+            token_file=token_file,
+            actions=("echo",),
+        )
+        # Patch the module's view of the platform, not the process's.
+        monkeypatch.setattr(_server, "os", SimpleNamespace(name="nt"))
+        with pytest.raises(QgisSdkHttpError, match="POSIX"):
+            server.start()
+        assert not token_file.exists(), "a refused start must not leave a token"
+        # The refusal does not consume the runtime: the same server starts once
+        # the platform check passes again.
+        monkeypatch.undo()
+        server.start()
+        assert server.port
+    finally:
+        runtime.unload()
