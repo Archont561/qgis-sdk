@@ -3,10 +3,10 @@ id: TASK-74
 title: >-
   Expose opted-in plugin actions and streams over an explicitly hosted loopback
   REST API for clients outside QGIS
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-29 13:34'
+updated_date: '2026-10-29T14:38:00Z'
 labels: []
 milestone: m-7
 dependencies:
@@ -62,4 +62,12 @@ Keep the transport hardened: absolute read/write deadlines, bounded connections 
 <!-- SECTION:PLAN:END -->
 
 2026-10-29 scope decision (POSIX only): creating the token file relies on POSIX permissions, and Windows credential storage is not implemented. Rather than start a listener whose token another local account could read, PluginHttpServer.start() refuses on a non-POSIX platform with a QgisSdkHttpError that names the limitation and leaves no token or listener. test_start_refuses_a_platform_without_private_token_permissions pins the refusal and proves it does not consume the runtime, so the same server starts once the check passes. The boundary is documented in guides/experimental-plugin-http.md and the 0.8.0 migration notes (doc-12). This is a deliberate scope decision for 0.8.0, not an unfinished fix.
+
+2026-10-29: delivered in PR #135, rebase-merged to main as 2c0930b. Follow-up audit of this surface filed TASK-143 to TASK-148; all six were fixed and merged in the same PR. Windows token ACLs remain out of scope by decision (POSIX-only boundary, TASK-74 notes).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Plugin actions and streams are exposed over an explicitly hosted loopback REST API with a Python and CLI client, serialized dispatch on the QGIS owner thread, a 503 error table, and documented 0.8.0 access notes; merged as 2c0930b.
+<!-- SECTION:FINAL_SUMMARY:END -->

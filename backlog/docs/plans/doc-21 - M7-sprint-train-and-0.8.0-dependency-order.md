@@ -6,9 +6,11 @@ created_date: '2026-10-26 09:55'
 ---
 # M7 sprint train and 0.8.0 dependency order
 
-**Status:** Planning. This document orders work the m-7 tasks already
-declare; it adds no scope. Sprint membership lives here and in the milestone
-body, not in task fields ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
+**Status:** Sprints 1 and 2 delivered on 2026-10-29 (PR #135, merge
+`2c0930b`); TASK-79, TASK-73, TASK-77 and the TASK-78 gate remain. This
+document orders work the m-7 tasks already declare; it adds no scope. Sprint
+membership lives here and in the milestone body, not in task fields
+([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
 **Baseline:** measured at the start of sprint 1 and recorded here.
 
@@ -37,22 +39,31 @@ from 0.7.0: the catalogue and `LogView`, the console session
 
 ## 3. Sprint train
 
-- **Sprint 1: TASK-74.** `qgis_sdk.http`: explicitly started stdlib
-  `http.server` on `127.0.0.1`, private token file, `Host`/`Origin` checks,
-  allowlisted discovery, actions and SSE streams, host-busy deadline and the
-  one-at-a-time re-entrancy guard; every dispatch on the QGIS owner thread.
+- **Sprint 1: TASK-74 — delivered** (PR #135, merge `2c0930b`; audit
+  follow-ups TASK-143–148 fixed in the same pull request). `qgis_sdk.http`:
+  explicitly started stdlib `http.server` on `127.0.0.1`, a private token
+  file, `Host`/`Origin` checks, allowlisted discovery, actions and SSE
+  streams, a host-busy deadline and the one-at-a-time re-entrancy guard; every
+  dispatch on the QGIS owner thread.
   Clients live in `qgis-sdk-tools` (`plugin describe|call|stream` and the
   Python `PluginClient`). No new runtime dependency, no bridge change, and
   no plugin REST through MCP.
-- **Sprint 2: TASK-75.** The `[mcp]` extra on a tested range of the `mcp`
-  package; `qgis-sdk mcp` exposing the developer CLI commands over stdio,
-  lazily loaded with an availability check, structured output limits and
-  managed dev sessions. Plugin REST commands are explicitly excluded.
-  **TASK-79** rides as a second series: the snapshot module with the role
-  table and stable ids, `dev.ui.*`, the `ui_snapshot` fixture and the CLI
-  capture.
-- **Gate: TASK-78.** Python-only release `python-v0.8.0`; the zero bridge
-  delta shown, not assumed. Only on an explicit "Release 0.8.0".
+- **Sprint 2: TASK-75 — delivered** (same pull request). The `[mcp]` extra
+  on a tested range of the `mcp` package; `qgis-sdk mcp` exposing the
+  developer CLI commands over stdio, lazily loaded with an availability
+  check, structured output limits and managed dev sessions. Plugin REST
+  commands are explicitly excluded.
+  **TASK-79 — open, next in the train** — rides as a second series: the
+  snapshot module with the role table and stable ids, `dev.ui.*`, the
+  `ui_snapshot` fixture and the CLI capture.
+- **Sprint 3: TASK-73 and TASK-77 — open.** The console session reuses the
+  curated services the HTTP API already reaches; TASK-73's AC 2 names the
+  `QGIS_SDK_DESKTOP_ADAPTER` harness, which the smoke suite replaced, so that
+  criterion is re-worded before implementation. TASK-77 has no dependents and
+  slots in anywhere before the gate.
+- **Gate: TASK-78 — open, blocked on TASK-73, TASK-77 and TASK-79.**
+  Python-only release `python-v0.8.0`; the zero bridge delta shown, not
+  assumed. Only on an explicit "Release 0.8.0".
 
 ## 4. Hygiene to do at sprint start
 
