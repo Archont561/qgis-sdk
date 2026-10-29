@@ -182,6 +182,12 @@ Sprint order in [doc-21](doc-21%20-%20M7-sprint-train-and-0.8.0-dependency-order
 - [TASK-111](../../tasks/task-111%20-%20Split-the-eight-longest-hand-written-source-files-into-packages-behind-unchanged-barrels.md): Split the eight longest hand-written source files into packages behind unchanged barrels (housekeeping, no API or wire change)
 - [TASK-112](../../tasks/task-112%20-%20Read-pyproject.toml-once-in-the-tools-one-loader-and-one-table-walk-behind-every-check.md): Read pyproject.toml once in the tools: one loader and one table walk behind every check (audit follow-up, behaviour-preserving)
 - [TASK-113](../../tasks/task-113%20-%20Make-bridge.streams-the-single-owner-of-the-stream-event-vocabulary-and-the-event-split-seam.md): Make bridge.streams the single owner of the stream event vocabulary and the event-split seam (audit follow-up, no wire change)
+- [TASK-143](../../tasks/task-143%20-%20Raise-PluginClientError-when-a-plugin-action-response-has-no-value.md): Raise `PluginClientError` when a plugin action response has no value (audit follow-up)
+- [TASK-144](../../tasks/task-144%20-%20Answer-a-plugin-HTTP-capacity-refusal-with-503-instead-of-400.md): Answer a plugin HTTP capacity refusal with 503 instead of 400 (audit follow-up)
+- [TASK-145](../../tasks/task-145%20-%20Parse-plugin-HTTP-request-bodies-once-for-actions-and-streams.md): Parse plugin HTTP request bodies once for actions and streams (audit follow-up, behaviour-preserving)
+- [TASK-146](../../tasks/task-146%20-%20Let-the-native-modal-test-observe-queued-work-without-private-queue-state.md): Let the native modal test observe queued work without private queue state (audit follow-up)
+- [TASK-147](../../tasks/task-147%20-%20Keep-the-tail-of-MCP-command-output-so-failures-stay-diagnosable.md): Keep the tail of MCP command output so failures stay diagnosable (audit follow-up)
+- [TASK-148](../../tasks/task-148%20-%20Report-an-oversized-plugin-client-response-instead-of-a-JSON-parse-failure.md): Report an oversized plugin client response instead of a JSON parse failure (audit follow-up)
 
 ### 0.9.0
 
