@@ -1640,43 +1640,34 @@ Stamping, tagging and publishing wait for an explicit "Release 0.8.0".
   `ts-v0.6.0` - are cut after the rehearsal described in the next
   section, and `ui-v0.1.0` is not re-tagged.
 
-## 0.8.0 rehearsal and tag plan (2026-10-29, not run)
+## 0.8.0 rehearsal (2026-10-29)
 
-The 0.7.0 rehearsal is the template (above): a tag is never moved, so a
-rehearsal that fails is followed by the next `-rc.N` on the commit that
-carries the fix. For this train, after the gate record and the stamp
-pull request merge and the gate record's explicit authorization arrives:
+After the stamp pull request merged as `d7adb9ae`, the pair was rehearsed
+on that commit with one annotated prerelease tag each (annotations carry
+the rehearsal notes; a tag is never moved). The 0.7.0 rehearsal above is
+the template, including its lesson: a failed rehearsal gets the next
+`-rc.N` on the commit that carries the fix.
 
 ```sh
-git tag -a python-v0.8.0-rc.1 <stamp merge commit> -m "qgis-sdk 0.8.0-rc.1 (rehearsal) ..."
-git tag -a ts-v0.6.0-rc.1 <stamp merge commit> -m "@archont561/qgis-sdk 0.6.0-rc.1 (rehearsal) ..."
+git tag -a python-v0.8.0-rc.1 d7adb9ae -m "qgis-sdk 0.8.0-rc.1 (rehearsal) ..."
+git tag -a ts-v0.6.0-rc.1 d7adb9ae -m "@archont561/qgis-sdk 0.6.0-rc.1 (rehearsal) ..."
 git push origin python-v0.8.0-rc.1 ts-v0.6.0-rc.1
 ```
 
-What each run has to show, on the pattern the 0.7.0 rc runs set:
+| Tag | `release.yml` run | Outcome |
+| --- | --- | --- |
+| `python-v0.8.0-rc.1` | [40972199140](https://github.com/Archont561/qgis-sdk/actions/runs/40972199140) | every job green: `build` stamped `0.8.0-rc.1` for scope `python`, "Verify the stamped manifests and the shared contract" passed (the example-window defect class `python-v0.7.0-rc.1` hit does not recur), the support matrix was recorded, three wheels built and twine-checked, three Conda outputs built; `pypi` ran "Verify the wheel without uploading" with all three publish steps skipped; `conda` skipped the prefix.dev upload; `github-release` published the prerelease with the three wheels, the three `.conda` files and `SHA256SUMS` |
+| `ts-v0.6.0-rc.1` | [40972199246](https://github.com/Archont561/qgis-sdk/actions/runs/40972199246) | every job green: `build` stamped `0.6.0-rc.1` and built the bridge; `npm` packed the bridge and alias tarballs, smoke-tested the alias against the bridge tarball and ran its publish dry-run with both publish steps skipped; `github-packages` ran its dry-run; `github-release` published the prerelease with `archont561-qgis-sdk-0.6.0-rc.1.tgz`, `qgis-sdk-0.6.0-rc.1.tgz` and `SHA256SUMS` |
 
-- `python-v0.8.0-rc.1`: `build` stamps `0.8.0-rc.1`, the stamped-manifest
-  verification passes, three wheels build and twine-check, three Conda
-  outputs build; `pypi` runs its verify-without-uploading step with the
-  publish steps skipped; `conda` skips the prefix.dev upload;
-  `github-release` publishes the prerelease with the three wheels, the
-  three `.conda` files and `SHA256SUMS`. **The one defect class to watch
-  is the one `python-v0.7.0-rc.1` hit**: an `-rc.N` against the example's
-  clean-minor window (`test_verify_versions_reads_the_example_window_on_release_segments`
-  covers the fix, and `0.8.0-rc.1` is the first Python prerelease to
-  exercise it since).
-- `ts-v0.6.0-rc.1`: `build` stamps `0.6.0-rc.1`, `npm` and
-  `github-packages` publish nothing and run their dry-runs under dist-tag
-  `next`, `github-release` publishes the prerelease with both tarballs and
-  `SHA256SUMS`; npm keeps `latest` where it is.
-- Afterwards: PyPI's `qgis-sdk` still ends at 0.7.0 and npm's `latest`
-  still points at 0.5.0, which is the proof the rehearsal published
-  nothing.
+Nothing was published to a registry, which is the point of the rehearsal:
+PyPI still serves `qgis-sdk` up to 0.7.0 and npm still serves
+`@archont561/qgis-sdk`'s `latest` at 0.5.0, with neither 0.8.0 nor 0.6.0
+listed. Both trains of the pair are proven end to end.
 
-Then the real pair, only on an explicit release instruction and only on
-the stamp pull request's merge commit: `python-v0.8.0` and `ts-v0.6.0`.
-`ui-v0.1.0` is not re-tagged: the `ui` scope is skipped for this train,
-and its 0.1.0 stays the release it was.
+**The real pair** is `python-v0.8.0` and `ts-v0.6.0` on the same commit
+`d7adb9ae`, cut only on the owner's release instruction; `ui-v0.1.0` is
+not re-tagged, because the `ui` scope is skipped for this train and its
+0.1.0 stays the release it was.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
