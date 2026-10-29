@@ -138,9 +138,10 @@ def test_the_built_page_answers_a_ping_inside_qgis(
     )
     monkeypatch.syspath_prepend(str(root))
     _forget(plugin)  # the other manager's project used the same package name
-    class_name = "".join(part.capitalize() for part in plugin.split("_")) + "Plugin"
 
-    desktop = host(f"{plugin}.plugin:{class_name}", placement=placement)(None)
+    # The scaffold's module-level application, the only public entry point
+    # since the class-based authoring API was retired (TASK-141).
+    desktop = host(f"{plugin}.plugin:app", placement=placement)(None)
     desktop.initGui()
     widget = desktop.show_view()
     try:
