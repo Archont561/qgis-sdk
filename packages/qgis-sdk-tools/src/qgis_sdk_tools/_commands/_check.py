@@ -30,6 +30,13 @@ def check(
     as_json: Annotated[
         bool, typer.Option("--json", help="Print the report as JSON.")
     ] = False,
+    imports: Annotated[
+        bool,
+        typer.Option(
+            "--imports",
+            help="Print every import root with the bucket it sorts into.",
+        ),
+    ] = False,
 ) -> None:
     """Read a plugin project and report problems; import, install and change nothing."""
     runtime: CliRuntime = ctx.obj
@@ -44,6 +51,10 @@ def check(
     else:
         for diagnostic in report.diagnostics:
             typer.echo(diagnostic.render(), file=runtime.out)
+        if imports and report.imports is not None:
+            listing = report.imports.render()
+            if listing:
+                typer.echo(listing, file=runtime.out)
         count = len(report.diagnostics)
         problems = (
             "no problems"

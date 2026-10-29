@@ -29,6 +29,10 @@ imports nothing of the project.
     placement = "dock"            # or "dialog"
     grants = ["layers.read"]      # host grants or operation ids the page may use
 
+    [tool.qgis-sdk.build]         # what the ZIP may assume and what it carries
+    external = ["pandas", { import = "numpy", requirement = "numpy>=1.26" }]
+    vendor = ["shapely"]          # pure-Python distributions, copied into _vendor/
+
 Rules reported here:
 
 ``PROJECT002``
@@ -65,6 +69,8 @@ from qgis_sdk_tools.manifest import read_pyproject, table
 __all__ = [
     "GENERATED_METADATA_KEYS",
     "PLACEMENTS",
+    "BuildConfig",
+    "ExternalPackage",
     "ProjectConfig",
     "QgisSdkProjectError",
     "WebConfig",
@@ -120,6 +126,38 @@ class WebConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ExternalPackage:
+    """One ``[tool.qgis-sdk.build] external`` entry (decision-50 point 1).
+
+    ``import_name`` is the root the plugin imports (``pandas``);
+    ``requirement`` is what the user has to install (``pandas>=2``), defaulting
+    to the root; ``reason`` is the sentence the startup probe shows beside it.
+    """
+
+    import_name: str
+    requirement: str | None = None
+    reason: str | None = None
+
+    @property
+    def install_requirement(self) -> str:
+        """What an install command on the user's machine has to name."""
+        return self.requirement or self.import_name
+
+
+@dataclass(frozen=True, slots=True)
+class BuildConfig:
+    """``[tool.qgis-sdk.build]``: declared externals and vendored distributions."""
+
+    external: tuple[ExternalPackage, ...] = ()
+    vendor: tuple[str, ...] = ()
+
+    @property
+    def external_roots(self) -> tuple[str, ...]:
+        """The import roots the build may leave to the target QGIS."""
+        return tuple(item.import_name for item in self.external)
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectConfig:
     """What ``pyproject.toml`` says about the plugin, validated."""
 
@@ -133,6 +171,7 @@ class ProjectConfig:
     experimental: bool = True
     metadata: Mapping[str, str] = field(default_factory=dict)
     web: WebConfig | None = None
+    build: BuildConfig = field(default_factory=BuildConfig)
 
     @property
     def module(self) -> str:
@@ -214,6 +253,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
         experimental = True
     metadata = _passthrough(tool.get("metadata"), findings)
     web = _web(tool.get("web"), findings)
+    build = _build(tool.get("build"), findings)
     config = ProjectConfig(
         root=root,
         spec=spec,
@@ -225,6 +265,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
         experimental=experimental,
         metadata=metadata,
         web=web,
+        build=build,
     )
     return config, tuple(findings)
 
@@ -370,6 +411,181 @@ def _web(value: object, findings: list[Diagnostic]) -> WebConfig | None:
             )
         )
     return WebConfig(placement=placement, grants=tuple(dict.fromkeys(grants)))
+
+
+_BUILD_KEYS: Final = frozenset({"external", "vendor"})
+_EXTERNAL_KEYS: Final = frozenset({"import", "requirement", "reason"})
+_IMPORT_ROOT: Final = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_DISTRIBUTION_NAME: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _build(value: object, findings: list[Diagnostic]) -> BuildConfig:
+    """``[tool.qgis-sdk.build]``; an unknown key is a typed-in-the-wrong-place key."""
+    if value is None:
+        return BuildConfig()
+    if not isinstance(value, dict):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk.build] must be a table",
+                '[tool.qgis-sdk.build]\nexternal = ["pandas"]',
+            )
+        )
+        return BuildConfig()
+    for key in sorted(set(value) - _BUILD_KEYS):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] has no key `{key}` (only external, vendor)",
+                '[tool.qgis-sdk.build]\nexternal = ["pandas"]',
+            )
+        )
+    return BuildConfig(
+        external=_external(value.get("external"), findings),
+        vendor=_vendor(value.get("vendor"), findings),
+    )
+
+
+def _external(value: object, findings: list[Diagnostic]) -> tuple[ExternalPackage, ...]:
+    """The declared externals: bare import roots, or tables adding detail."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk.build] external must be a list of import roots "
+                "or tables",
+                'external = ["pandas", { import = "numpy", requirement = '
+                '"numpy>=1.26", reason = "raster maths" }]',
+            )
+        )
+        return ()
+    declared: list[ExternalPackage] = []
+    seen: set[str] = set()
+    for item in value:
+        package = _external_entry(item, findings)
+        if package is None:
+            continue
+        if package.import_name in seen:
+            findings.append(
+                _config(
+                    "[tool.qgis-sdk.build] external names "
+                    f"`{package.import_name}` twice",
+                    "List each import root once.",
+                )
+            )
+            continue
+        seen.add(package.import_name)
+        declared.append(package)
+    return tuple(declared)
+
+
+def _external_entry(item: object, findings: list[Diagnostic]) -> ExternalPackage | None:
+    if isinstance(item, str):
+        return _named_external(item, findings)
+    if not isinstance(item, dict):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk.build] external entries are import roots or "
+                f"tables, got {item!r}",
+                'external = [{ import = "pandas", requirement = "pandas>=2" }]',
+            )
+        )
+        return None
+    for key in sorted(set(item) - _EXTERNAL_KEYS):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external entry has no key `{key}` "
+                "(only import, requirement, reason)",
+                '[tool.qgis-sdk.build]\nexternal = [{ import = "pandas" }]',
+            )
+        )
+    name = item.get("import")
+    if not isinstance(name, str):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk.build] external entry needs `import`",
+                'external = [{ import = "pandas", requirement = "pandas>=2" }]',
+            )
+        )
+        return None
+    package = _named_external(name, findings)
+    if package is None:
+        return None
+    requirement = item.get("requirement")
+    if requirement is not None and (
+        not isinstance(requirement, str) or not requirement.strip()
+    ):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external `{name}` requirement must be "
+                "a requirement string",
+                'requirement = "pandas>=2"',
+            )
+        )
+        requirement = None
+    reason = item.get("reason")
+    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external `{name}` reason must be a sentence",
+                'reason = "reads spreadsheets"',
+            )
+        )
+        reason = None
+    return ExternalPackage(
+        import_name=package.import_name,
+        requirement=requirement.strip() if isinstance(requirement, str) else None,
+        reason=reason.strip() if isinstance(reason, str) else None,
+    )
+
+
+def _named_external(name: str, findings: list[Diagnostic]) -> ExternalPackage | None:
+    if _IMPORT_ROOT.match(name.strip()) is None:
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external entry {name!r} is not an import "
+                "root (one identifier, such as `pandas`)",
+                'external = ["pandas"]',
+            )
+        )
+        return None
+    return ExternalPackage(import_name=name.strip())
+
+
+def _vendor(value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
+    """The distributions the build copies into ``<plugin>/_vendor``."""
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(n, str) for n in value):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk.build] vendor must be a list of distribution names",
+                'vendor = ["shapely"]',
+            )
+        )
+        return ()
+    declared: list[str] = []
+    seen: set[str] = set()
+    for name in (n.strip() for n in value):
+        if _DISTRIBUTION_NAME.match(name) is None:
+            findings.append(
+                _config(
+                    f"[tool.qgis-sdk.build] vendor entry {name!r} is not a "
+                    "distribution name",
+                    'vendor = ["shapely"]',
+                )
+            )
+            continue
+        if name.lower() in seen:
+            findings.append(
+                _config(
+                    f"[tool.qgis-sdk.build] vendor names `{name}` twice",
+                    "List each distribution once.",
+                )
+            )
+            continue
+        seen.add(name.lower())
+        declared.append(name)
+    return tuple(declared)
 
 
 def _missing_plugin(message: str) -> Diagnostic:

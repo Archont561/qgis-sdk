@@ -16,11 +16,20 @@ from __future__ import annotations
 
 import ast
 import os
+import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from qgis_sdk_tools.distributions import (
+    Distribution,
+    QGisSdkDistributionError,
+    normalize,
+    read_distribution,
+)
 from qgis_sdk_tools.manifest import read_pyproject, table
 
+from .buckets import HOST_ROOTS, BucketReport, bucket_imports, import_findings
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
 from .imports import check_source
 from .ui import check_bindings
@@ -29,6 +38,9 @@ from .versions import (
     check_runtime_pins,
     check_runtime_requirement,
 )
+
+if TYPE_CHECKING:  # imported by the caller: this module is imported by it
+    from qgis_sdk_tools.project import ProjectConfig
 
 __all__ = ["EXCLUDED_DIRECTORIES", "REQUIRED_METADATA_KEYS", "check_project"]
 
@@ -82,11 +94,16 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
 
     packages = list(_check_packages(root))
     diagnostics.extend(packages)
+    imports = None
     if not any(d.rule == "PROJECT001" for d in packages):
         # The plugin application, the metadata.txt values and the page (decision-43).
         from qgis_sdk_tools.project import load_project
 
-        diagnostics.extend(load_project(root)[1])
+        config, findings = load_project(root)
+        diagnostics.extend(findings)
+        if config is not None:
+            imports, bucket_findings = _buckets(root, config)
+            diagnostics.extend(bucket_findings)
     # What the project pins against what this release supports (decision-35),
     # and whether the runtime this interpreter would ship is one it declares.
     diagnostics.extend(check_runtime_pins(root))
@@ -110,7 +127,119 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         )
 
     diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
-    return CheckReport(root=root, diagnostics=tuple(diagnostics), files_checked=files)
+    return CheckReport(
+        root=root,
+        diagnostics=tuple(diagnostics),
+        files_checked=files,
+        imports=imports,
+    )
+
+
+def _buckets(
+    root: Path, config: ProjectConfig
+) -> tuple[BucketReport | None, tuple[Diagnostic, ...]]:
+    """Sort the plugin's imports; declared vendored distributions must be there.
+
+    A declared ``vendor`` distribution that is not installed cannot have its
+    import roots read, and a compiled one cannot be vendored at all, so both
+    are reported here rather than when the build first copies files
+    (``DEP004`` names the missing one, ``DEP003`` the compiled one).
+    """
+    package = root / config.plugin
+    if not package.is_dir():
+        return None, ()
+    vendored: list[str] = []
+    distributions = []
+    findings: list[Diagnostic] = []
+    for name in config.build.vendor:
+        try:
+            distribution = read_distribution(name)
+        except QGisSdkDistributionError as error:
+            findings.append(_declared("DEP004", str(error), name, vendored=False))
+            continue
+        distributions.append(distribution)
+        if not distribution.is_pure:
+            findings.append(
+                _declared(
+                    "DEP003",
+                    f"`{distribution.name}` ships compiled extensions "
+                    f"(`{distribution.compiled[0].as_posix()}` is one); it "
+                    "cannot be vendored",
+                    name,
+                    vendored=True,
+                )
+            )
+        vendored.extend(distribution.roots)
+    findings.extend(_requirement_findings(distributions, config))
+    report = bucket_imports(
+        root,
+        config.plugin,
+        tuple(_python_files(package)),
+        external=config.build.external_roots,
+        vendored=vendored,
+    )
+    findings.extend(import_findings(report))
+    return report, tuple(findings)
+
+
+def _requirement_findings(
+    distributions: Sequence[Distribution], config: ProjectConfig
+) -> tuple[Diagnostic, ...]:
+    """``DEP004`` for a vendored requirement that is neither vendored nor external.
+
+    A vendored package carries its dependencies with it or assumes the target
+    QGIS has them (decision-50 point 2); anything else fails on a clean QGIS
+    with an ``ImportError`` from inside the copy, which is exactly what the
+    author has to decide about here.
+    """
+    available = {normalize(item.name) for item in distributions}
+    available.update(normalize(root) for root in config.build.external_roots)
+    available.update(normalize(name) for name in HOST_ROOTS)
+    available.update(names for names in sys.stdlib_module_names)
+    findings: list[Diagnostic] = []
+    for distribution in distributions:
+        for requirement in distribution.requires:
+            if normalize(requirement) in available:
+                continue
+            findings.append(
+                Diagnostic(
+                    rule="DEP004",
+                    path=Path("pyproject.toml"),
+                    line=0,
+                    column=0,
+                    message=(
+                        f"vendored `{distribution.name}` requires "
+                        f"`{requirement}`, which is neither vendored nor "
+                        "declared external"
+                    ),
+                    remediation=(
+                        f"Add `{requirement}` to `[tool.qgis-sdk.build] vendor` "
+                        "when it is pure Python, or to `external` when every "
+                        "QGIS you target ships it."
+                    ),
+                )
+            )
+    return tuple(findings)
+
+
+def _declared(rule: str, message: str, name: str, *, vendored: bool) -> Diagnostic:
+    remediation = (
+        "Vendor it, or declare it under `[tool.qgis-sdk.build] external` with "
+        "the requirement the startup probe shows - a declaration costs a "
+        "message bar, never a traceback"
+        if not vendored
+        else "Declare it external (`pandas`, `scipy`, `shapely` and similar "
+        "compiled packages are never vendored); the startup probe explains a "
+        "missing one to the user"
+    )
+    return Diagnostic(
+        rule=rule,
+        path=Path("pyproject.toml"),
+        line=0,
+        column=0,
+        message=message,
+        remediation=remediation,
+    )
 
 
 def _python_files(root: Path) -> Iterator[Path]:

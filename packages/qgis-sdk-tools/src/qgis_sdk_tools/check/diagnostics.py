@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from qgis_sdk.models import QgisSdkError
+
+if TYPE_CHECKING:  # a report carries the buckets; the module cannot import this one
+    from .buckets import BucketReport
 
 __all__ = ["CheckReport", "Diagnostic", "QgisSdkCheckError", "Severity"]
 
@@ -64,6 +67,7 @@ class CheckReport:
     root: Path
     diagnostics: tuple[Diagnostic, ...]
     files_checked: int
+    imports: BucketReport | None = None
 
     @property
     def ok(self) -> bool:
@@ -77,4 +81,5 @@ class CheckReport:
             "ok": self.ok,
             "files_checked": self.files_checked,
             "diagnostics": [d.to_json() for d in self.diagnostics],
+            "imports": None if self.imports is None else self.imports.to_json(),
         }
