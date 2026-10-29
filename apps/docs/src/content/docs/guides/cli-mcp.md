@@ -47,7 +47,9 @@ that already require it.
 
 Most calls return `exit_code`, `stdout`, `stderr`, `timed_out`, and `truncated`.
 A nonzero exit code is a CLI failure even if the MCP call itself succeeded.
-Each output stream is capped at 256 KiB, and calls are stopped after 300 seconds.
+Each output stream keeps its most recent 256 KiB, and calls are stopped after
+300 seconds; when `truncated` is true the beginning of that stream was dropped,
+because the end is what diagnoses a failure.
 `qgis_sdk_dev` starts a long-running session and returns a `session_id`;
 `qgis_sdk_dev_status` reads its recent output and `qgis_sdk_dev_stop` stops and
 forgets it. The server attempts to stop sessions during orderly shutdown;

@@ -58,6 +58,18 @@ class GuiQueue:
         self._scheduled = False
         self._closed = False
 
+    @property
+    def pending(self) -> int:
+        """Requests waiting for their turn behind the work the owner runs."""
+        with self._lock:
+            return len(self._items)
+
+    @property
+    def busy(self) -> bool:
+        """Whether the owner thread is running queued work right now."""
+        with self._lock:
+            return self._active
+
     def close(self) -> None:
         """Withdraw queued work and fail active callers without undoing effects."""
         with self._lock:

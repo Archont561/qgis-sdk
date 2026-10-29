@@ -755,3 +755,55 @@ def test_start_refuses_a_platform_without_private_token_permissions(
         assert server.port
     finally:
         runtime.unload()
+
+
+def test_error_codes_map_to_one_status_table():
+    """Retryable conditions answer 503 and every other code answers 400."""
+    from qgis_sdk.http import PluginHttpServer
+
+    def status(code):
+        return PluginHttpServer._error_status({"error": {"code": code, "message": ""}})
+
+    assert status("host_busy") == 503
+    assert status("host_reloaded") == 503
+    assert status("capacity") == 503
+    assert status("invalid_request") == 400
+    assert status("operation_failed") == 400
+    assert status("something_new") == 400
+
+
+def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
+    """An exhausted session budget is a retryable condition, not bad input."""
+    from qgis_sdk.http import PluginHttpServer
+
+    app = QgisSdkPlugin(id="session_budget", title="Session budget")
+
+    @app.stream(id="watch", title="Watch", events={"data": int})
+    def watch(ctx: PluginContext) -> Iterator[dict]:
+        while True:
+            yield {"kind": "data", "payload": 1}
+
+    runtime = _runtime(app)
+    streams = []
+    try:
+        with PluginHttpServer(
+            runtime,
+            post=lambda callback: callback(),
+            token_file=tmp_path / "token",
+            actions=("watch",),
+            max_connections=130,
+            max_event_streams=128,
+        ) as server:
+            token = (tmp_path / "token").read_text().strip()
+            for _ in range(64):
+                response = _open_stream(server.port, token, "watch")
+                streams.append(response)
+                assert response.status == 200, "the budget must hold 64 sessions"
+            refused = _open_stream(server.port, token, "watch")
+            streams.append(refused)
+            assert refused.status == 503, "an exhausted budget must not look like 400"
+            assert json.loads(refused.read())["error"]["code"] == "capacity"
+    finally:
+        for response in streams:
+            response.close()
+        runtime.unload()

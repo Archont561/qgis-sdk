@@ -8,6 +8,10 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
+# The server never emits a larger response, so a longer body means the client
+# and the host disagree; say so instead of failing inside the JSON parser.
+_RESPONSE_LIMIT = 1024 * 1024
+
 
 class PluginClientError(Exception):
     """The local plugin server refused a request or could not be reached."""
@@ -55,7 +59,7 @@ class PluginClient:
                 connection.close()
             raise PluginClientError(str(error)) from error
         if response.status != 200:
-            body = response.read(1024 * 1024).decode("utf-8", errors="replace")
+            body = response.read(_RESPONSE_LIMIT).decode("utf-8", errors="replace")
             connection.close()
             raise PluginClientError(f"Plugin HTTP {response.status}: {body}")
         return connection, response
@@ -63,11 +67,17 @@ class PluginClient:
     def _json(self, method: str, path: str, payload: dict | None = None) -> dict:
         connection, response = self._open(method, path, payload)
         try:
-            value = json.loads(response.read(1024 * 1024))
-        except (ValueError, OSError, http.client.HTTPException) as error:
+            body = response.read(_RESPONSE_LIMIT + 1)
+        except (OSError, http.client.HTTPException) as error:
             raise PluginClientError(str(error)) from error
         finally:
             connection.close()
+        if len(body) > _RESPONSE_LIMIT:
+            raise PluginClientError(f"Plugin response exceeds {_RESPONSE_LIMIT} bytes")
+        try:
+            value = json.loads(body)
+        except ValueError as error:
+            raise PluginClientError(str(error)) from error
         if not isinstance(value, dict):
             raise PluginClientError("Invalid plugin response")
         return value
@@ -78,9 +88,10 @@ class PluginClient:
 
     def call(self, action: str, arguments: dict) -> object:
         """Invoke one exposed action with JSON arguments."""
-        return self._json("POST", "/actions/" + quote(action, safe=""), arguments)[
-            "value"
-        ]
+        reply = self._json("POST", "/actions/" + quote(action, safe=""), arguments)
+        if "value" not in reply:
+            raise PluginClientError("Plugin response has no value")
+        return reply["value"]
 
     def stream(self, stream: str, arguments: dict) -> Iterator[dict]:
         """Yield stream frames. Close the iterator early to disconnect."""
@@ -91,11 +102,13 @@ class PluginClient:
             if response.getheader("Content-Type") != "text/event-stream":
                 raise PluginClientError("Invalid stream response")
             while True:
-                line = response.readline(1024 * 1024 + 1)
+                line = response.readline(_RESPONSE_LIMIT + 1)
                 if not line:
                     raise PluginClientError("Stream ended without a terminal frame")
-                if len(line) > 1024 * 1024:
-                    raise PluginClientError("Stream frame too large")
+                if len(line) > _RESPONSE_LIMIT:
+                    raise PluginClientError(
+                        f"Stream frame exceeds {_RESPONSE_LIMIT} bytes"
+                    )
                 if line.startswith(b"data: "):
                     frame = json.loads(line[6:])
                     if not isinstance(frame, dict):

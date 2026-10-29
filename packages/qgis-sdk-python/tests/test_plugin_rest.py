@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import os
 import stat
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -524,3 +526,151 @@ def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
     queued.pop()()
     assert seen == []
     server.close()
+
+
+def test_pending_requests_and_busy_expose_queue_state(tmp_path: Path):
+    """The dispatch state is readable without touching private queue internals."""
+    from qgis_sdk.http import PluginHttpServer
+
+    app = QgisSdkPlugin(id="rest_pending", title="REST pending")
+    entered = threading.Event()
+    released = threading.Event()
+
+    @app.action(id="hold", title="Hold")
+    def hold(ctx: PluginContext) -> str:
+        entered.set()
+        assert released.wait(10)
+        return "released"
+
+    @app.action(id="after", title="After")
+    def after(ctx: PluginContext) -> str:
+        return "after"
+
+    scope = ResourceScope()
+    runtime = PluginRuntime(
+        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
+    )
+    runtime.start()
+    token_file = tmp_path / "token"
+    responses = []
+    holders = []
+    try:
+        with PluginHttpServer(
+            runtime,
+            post=lambda callback: callback(),
+            token_file=token_file,
+            actions=("hold", "after"),
+            deadline=10,
+        ) as server:
+            token = token_file.read_text().strip()
+            assert server.pending_requests == 0
+            assert server.busy is False
+            holders.append(
+                threading.Thread(
+                    target=lambda: responses.append(
+                        request(
+                            server.port, "POST", "/actions/hold", token=token, body={}
+                        )
+                    ),
+                    daemon=True,
+                )
+            )
+            holders[0].start()
+            assert entered.wait(10)
+            assert server.busy is True
+            holders.append(
+                threading.Thread(
+                    target=lambda: responses.append(
+                        request(
+                            server.port, "POST", "/actions/after", token=token, body={}
+                        )
+                    ),
+                    daemon=True,
+                )
+            )
+            holders[1].start()
+            deadline = time.monotonic() + 10
+            while server.pending_requests == 0 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            assert server.pending_requests == 1, "the second call never queued"
+            assert responses == [], "queued work must not run inside the first call"
+            released.set()
+            for thread in holders:
+                thread.join(timeout=10)
+            assert not any(thread.is_alive() for thread in holders)
+            assert [status for status, _ in responses] == [200, 200]
+            assert server.pending_requests == 0
+            assert server.busy is False
+    finally:
+        for thread in holders:
+            thread.join(timeout=1)
+        runtime.unload()
+
+
+@contextlib.contextmanager
+def _stub_response(payload: bytes):
+    """Serve one fixed JSON body from a throwaway loopback listener."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_a_response_without_a_value_is_a_client_error(tmp_path: Path):
+    """A 200 body that omits the value must not escape as a bare KeyError."""
+    from qgis_sdk_tools.rest import PluginClient, PluginClientError
+
+    token_file = tmp_path / "token"
+    token_file.write_text("x" * 32, encoding="ascii")
+    with _stub_response(b'{"ok": true}') as url:
+        client = PluginClient(url, token_file=token_file)
+        with pytest.raises(PluginClientError, match="no value"):
+            client.call("echo", {"value": "unused"})
+
+
+def test_an_oversized_response_names_the_bound(tmp_path: Path):
+    """An oversized body is reported as too large, not as broken JSON."""
+    from qgis_sdk_tools.rest import PluginClient, PluginClientError
+
+    token_file = tmp_path / "token"
+    token_file.write_text("x" * 32, encoding="ascii")
+    payload = json.dumps({"value": "x" * (2 * 1024 * 1024)}).encode()
+    with _stub_response(payload) as url:
+        client = PluginClient(url, token_file=token_file)
+        with pytest.raises(PluginClientError, match="exceeds 1048576 bytes"):
+            client.call("echo", {})
+
+
+def test_a_response_exactly_at_the_bound_still_parses(tmp_path: Path):
+    """The bound rejects only bodies that actually exceed it."""
+    from qgis_sdk_tools.rest import PluginClient
+
+    token_file = tmp_path / "token"
+    token_file.write_text("x" * 32, encoding="ascii")
+    filler = 1024 * 1024 - len('{"value": ""}')
+    payload = json.dumps({"value": "x" * filler}).encode()
+    assert len(payload) == 1024 * 1024
+    with _stub_response(payload) as url:
+        client = PluginClient(url, token_file=token_file)
+        assert client.call("echo", {}) == "x" * filler

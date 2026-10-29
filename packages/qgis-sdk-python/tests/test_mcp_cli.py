@@ -167,3 +167,28 @@ def test_package_extras_are_optional_and_the_kit_forwards_to_tools():
         not dependency.startswith("mcp") for dependency in tools_project["dependencies"]
     )
     assert all("[mcp]" not in dependency for dependency in kit_project["dependencies"])
+
+
+def test_captured_output_keeps_the_tail_of_a_long_stream():
+    """The diagnostic end of an oversized stream must survive the cap."""
+    import asyncio
+
+    import pytest
+
+    pytest.importorskip("mcp")
+    from qgis_sdk_tools import mcp
+
+    async def capture():
+        stream = asyncio.StreamReader()
+        stream.feed_data(b"noise\n" + b"x" * (mcp._LIMIT + 1024) + b"\nTRACEBACK\n")
+        stream.feed_eof()
+        output = bytearray()
+        truncated = [False]
+        await mcp._capture(stream, output, truncated)
+        return bytes(output), truncated[0]
+
+    output, truncated = asyncio.run(capture())
+    assert truncated is True
+    assert output.endswith(b"\nTRACEBACK\n"), "the tail is what diagnoses a failure"
+    assert len(output) == mcp._LIMIT
+    assert b"noise" not in output
