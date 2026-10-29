@@ -90,6 +90,13 @@ therefore queue rather than interleave. A call made from the thread that is
 already running plugin work is refused immediately, so it cannot block the
 owner thread until the deadline.
 
+Closing the listener withdraws queued work, and the callers it withdrew still
+answer `503` with the `host_reloaded` code. Those replies are written before the
+connections are shut down: `close()` waits for the handlers already running, for
+up to `close_grace` seconds (2 by default), and only then does it sever the
+sockets. A handler still running after the grace is cut off, so a close never
+hangs on a stuck action.
+
 Refusals carry `{"error": {"code": ..., "message": ...}}`. `host_busy`,
 `host_reloaded` and the per-plugin `capacity` session budget answer `503`,
 because waiting or retrying can succeed; malformed input and failed operations
