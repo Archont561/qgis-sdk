@@ -42,7 +42,7 @@ from .form_fields import (
     form_fields,
     schema_fields,
 )
-from .snapshot import snapshot_names, ui_snapshot
+from .snapshot import canonical_json, snapshot_names, surface_snapshot, ui_snapshot
 from .streams import StreamEvent, ViewStreams, ViewSubscription
 from .surfaces import (
     DOCK_AREAS,
@@ -101,6 +101,7 @@ __all__ = [
     "ViewActions",
     "ViewStreams",
     "ViewSubscription",
+    "canonical_json",
     "coerce_value",
     "coerce_values",
     "describe_surface",
@@ -114,6 +115,7 @@ __all__ = [
     "schema_fields",
     "snapshot_names",
     "subscribe",
+    "surface_snapshot",
     "ui_snapshot",
     "wire_surface",
     "wires_of",
