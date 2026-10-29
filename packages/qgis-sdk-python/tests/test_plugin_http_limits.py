@@ -278,15 +278,16 @@ def test_connection_limit_rejects_overload_and_recovers(tmp_path: Path):
             token_file=tmp_path / "token",
             actions=("echo",),
             max_connections=2,
+            request_read_timeout=2,
         ) as server:
             token = (tmp_path / "token").read_text().strip()
             try:
+                # Silent connections hold both handler slots without sending a
+                # request line, which is how a slow or hostile client behaves.
                 for _ in range(2):
-                    sock = socket.create_connection(
-                        ("127.0.0.1", server.port), timeout=3
+                    stalled.append(
+                        socket.create_connection(("127.0.0.1", server.port), timeout=3)
                     )
-                    sock.sendall(b"POST /actions/echo HTTP/1.1\r\nHost: ")
-                    stalled.append(sock)
                 time.sleep(0.2)
                 assert _call(server.port, token, "echo", {"value": "x"})[0] == 503
             finally:
