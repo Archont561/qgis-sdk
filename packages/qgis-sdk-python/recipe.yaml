@@ -11,10 +11,10 @@ schema_version: 1
 # ships; the others are rebuilt and skipped as already published.
 
 context:
-  version: "0.7.0"
-  runtime_version: "0.7.0"
-  tools_version: "0.7.0"
-  tools_runtime_requirement: "qgis-sdk-runtime>=0.7.0,<0.8"
+  version: "0.8.0"
+  runtime_version: "0.8.0"
+  tools_version: "0.8.0"
+  tools_runtime_requirement: "qgis-sdk-runtime>=0.8.0,<0.9"
 
 recipe:
   name: qgis-sdk-kit

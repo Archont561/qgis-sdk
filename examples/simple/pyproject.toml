@@ -9,10 +9,10 @@ authors = [{ name = "qgis-sdk", email = "qgis-sdk@example.invalid" }]
 requires-python = ">=3.11"
 # The runtime the plugin is written for; `build` vendors the installed one and
 # `check` reports a mismatch (VERSION004). `qgis-sdk` itself never installs.
-dependencies = ["qgis-sdk-runtime>=0.7,<0.8"]
+dependencies = ["qgis-sdk-runtime>=0.8,<0.9"]
 
 [dependency-groups]
-dev = ["qgis-sdk-tools>=0.7,<0.8"]
+dev = ["qgis-sdk-tools>=0.8,<0.9"]
 
 [tool.qgis-sdk]
 # The application QGIS runs; `build` and `dev` bind classFactory through

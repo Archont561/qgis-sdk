@@ -1579,9 +1579,66 @@ Stamping, tagging and publishing wait for an explicit "Release 0.8.0".
 - **Not run here.** `build:conda` (conda-forge is unreachable from the
   sandbox, as in the 0.7.0 gate: TLS handshake EOF); the Windows and
   macOS QGIS rows (m-11, TASK-33); a visible-GUI Desktop session.
-- **Approval.** Not given by this record. The train is two tags on the
-  stamp pull request's merge commit - `python-v0.8.0` and `ts-v0.6.0` -
-  and each is cut only on an explicit release instruction.
+- **Stamp and artifacts (2026-10-29, the stamp pull request).** On the
+  gate record's merge `951ec3f`: `release.py stamp --scope python
+  --version 0.8.0` moved the kit, runtime and tools manifests, the kit's
+  three exact pins (runtime, tools and `tools[mcp]`, all `==0.8.0`), the
+  tools' runtime range (`>=0.8.0,<0.9`), the recipe's three versions and
+  the example's windows (`>=0.8,<0.9`); `stamp --scope typescript
+  --version 0.6.0` moved `package.json`, the alias (and its pin) and the
+  scaffold pin `SDK_NPM_VERSION`. By hand, as the rehearsal predicted:
+  the components' peer range on `@archont561/qgis-sdk` to `>=0.6.0
+  <0.7.0` **in both the scoped package and its alias** (the alias's copy
+  is not a stamp target and only the alias mirror test caught it, which
+  failed the first stamped `bun run test --force`), `test_scaffold_web.py`'s
+  one literal (`0.5.0` → `0.6.0`), the doc-12 heading to *0.8.0 migration
+  notes* and the doc-13 heading to *0.6.0 migration notes* (the site now
+  publishes `python-migration/v0-8` and `typescript-migration/v0-6`
+  without the Draft badge), and the status lines of the README and the
+  five package READMEs. `verify-versions` agrees on 0.8.0 for the Python
+  scope, 0.6.0 for the TypeScript scope, 0.1.0 for the ui manifests with
+  the peer range holding the bridge, and contract version 1 in both
+  languages.
+- **On the stamped tree.** Static gate clean (ruff 406 files, actionlint,
+  Alint 9/9, Biome 192 files, typecheck exit 0), `test-release-tool` 286
+  passed plus its four Alint rules, `bridge generate --check` up to date
+  for the reference plugin's page. Root `bun run test --force` **10/10**:
+  config 6, docs 42, bridge 266, alias 12, components 100, ui alias 13,
+  simple-web 6, Python 2173 passed / 56 skipped (the first run of the
+  stamped tree failed only the alias mirror test, above). `bun run
+  coverage` 6/6 with the Python side at 95.70 %; the CPython 3.11.2
+  purity lane 1995 passed / 22 skipped. Harnesses, one file per process:
+  scaffold-web 8, reference 5, devtools 9, build-install 1, desktop host
+  4, reference example 20 pure + 7 QGIS. `docs-build` 80 pages and
+  `docs-link-check` 8096 links on 120 pages, 0 broken.
+- **Stamped artifacts.** `build-python` + `verify-python` pass on
+  `qgis_sdk-0.8.0-py3-none-any.whl` (`0b390cf8…`, pins
+  `qgis-sdk-runtime==0.8.0` and `qgis-sdk-tools==0.8.0`, extras `dev`
+  and `mcp` with `Requires-Dist: qgis-sdk-tools[mcp]==0.8.0`),
+  `qgis_sdk_runtime-0.8.0-py3-none-any.whl` (`f7828256…`, 129 modules,
+  no `Requires-Dist` at all, MIT `LICENSE` in `dist-info/licenses`) and
+  `qgis_sdk_tools-0.8.0-py3-none-any.whl` (`b61c3d33…`,
+  `qgis-sdk-runtime<0.9,>=0.8.0`, `typer==0.27.3`, extra `mcp` with
+  `mcp==2.3.0`). `bun pm pack` produced `archont561-qgis-sdk-0.6.0.tgz`
+  (`c7604ed5…`, 7 entries), `qgis-sdk-0.6.0.tgz` (`8734dc55…`), and the
+  two unchanged ui tarballs at 0.1.0 (`3d6767ff…`, `54d74d9f…`) whose
+  peer range now reads `>=0.6.0 <0.7.0`; all four carry their `LICENSE`.
+- **A clean 0.8.0 install.** Fresh CPython 3.11.2 `venv` with only the
+  three wheels: 12 distributions, `pip check` clean; `qgis-sdk new --ui
+  native --web vanilla` writes `qgis-sdk-runtime>=0.8,<0.9`,
+  `qgis-sdk-tools>=0.8,<0.9` and `"@archont561/qgis-sdk": "0.6.0"`, and
+  `check` is clean. `pip install "qgis-sdk[mcp]==0.8.0"` in the same
+  venv resolves `mcp 2.3.0` and `mcp-types 2.3.0` **with no "does not
+  provide the extra" warning** - the first release where that works -
+  `pip check` stays clean and `qgis-sdk mcp --help` renders. A project
+  scaffolded by the published `qgis-sdk==0.7.0` under those tools
+  reports exactly `VERSION001` and `VERSION004` with their remediations
+  and nothing else.
+- **Approval.** The gate itself records none. The owner's "release"
+  instruction covers the stamp pull request and its record here; the two
+  tags on that pull request's merge commit - `python-v0.8.0` and
+  `ts-v0.6.0` - are cut after the rehearsal described in the next
+  section, and `ui-v0.1.0` is not re-tagged.
 
 ## 0.8.0 rehearsal and tag plan (2026-10-29, not run)
 

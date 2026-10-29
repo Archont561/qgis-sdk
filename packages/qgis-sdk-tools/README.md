@@ -7,7 +7,7 @@ against QGIS with reload on save, generate typed web and Processing contracts,
 and ship a ZIP with a private SDK runtime. The tools never install anything
 into QGIS.
 
-> Status: `0.7.0`, experimental `0.x`. The tools version freely; each
+> Status: `0.8.0`, experimental `0.x`. The tools version freely; each
 > release names the `qgis-sdk-runtime` range it was tested with.
 
 ## Installation
