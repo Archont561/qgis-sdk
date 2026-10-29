@@ -32,13 +32,6 @@ READMES = (
     ROOT / "examples" / "simple" / "README.md",
 )
 
-# An unscoped alias publishes its scoped package's README, byte for byte:
-# one README per npm package, whichever name it was installed under.
-ALIASES = (
-    (ROOT / "packages" / "qgis-sdk-alias", ROOT / "packages" / "qgis-sdk-typescript"),
-    (ROOT / "packages" / "qgis-sdk-ui-alias", ROOT / "packages" / "qgis-sdk-ui"),
-)
-
 # The only sections a landing page may have. A new kind of section is a
 # decision, not an edit: amend decision-29 and this set together.
 ALLOWED_SECTIONS = frozenset(
@@ -98,17 +91,6 @@ def test_a_readme_carries_a_status_line_and_a_license(path: Path) -> None:
     assert "\n> Status:" in text, f"{path.name}: no `> Status:` line"
     assert text.rstrip().endswith("## License\n\nMIT"), f"{path.name}: License last"
     assert text.index("> Status:") < text.index("## ")
-
-
-@pytest.mark.parametrize(("alias", "scoped"), ALIASES, ids=lambda p: p.name)
-def test_an_alias_readme_is_its_scoped_packages_readme(
-    alias: Path, scoped: Path
-) -> None:
-    """The alias ships the scoped README unchanged, and that README names both."""
-    assert (alias / "README.md").read_bytes() == (scoped / "README.md").read_bytes()
-    text = (scoped / "README.md").read_text(encoding="utf-8")
-    unscoped = alias.name.removesuffix("-alias")
-    assert f"bun add {unscoped}" in text, f"{scoped.name}/README.md: name the alias"
 
 
 @pytest.mark.parametrize("path", READMES, ids=lambda p: str(p.relative_to(ROOT)))

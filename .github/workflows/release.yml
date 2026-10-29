@@ -31,7 +31,8 @@ name: release
 # `ui-v*` tags are the web components' own train (decision-47, TASK-110):
 # the `ui` job packs `@archont561/qgis-sdk-ui` and its unscoped alias
 # `qgis-sdk-ui`, checks the tarball holds `dist`, `README.md` and `LICENSE`
-# only, and publishes both; it never touches the bridge, PyPI or Conda.
+# only, and publishes both on npm. The same scoped tarball goes to GitHub
+# Packages; this train never publishes the bridge, PyPI or Conda.
 
 on:
   push:
@@ -718,8 +719,66 @@ jobs:
             done
           fi
 
+  # The UI has its own release train: publish only its scoped package to
+  # GitHub Packages, using the exact tarball packed and smoke-tested by `ui`.
+  # The unscoped qgis-sdk-ui alias remains npm-only.
+  github-packages-ui:
+    needs: [build, ui]
+    if: needs.build.outputs.ui == 'true' && needs.ui.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Download qualified UI tarballs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui-npm-tgz
+          path: ui-packages
+
+      - name: Set up Node for GitHub Packages
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@archont561"
+
+      - name: Dry-run UI GitHub Packages publish
+        if: needs.build.outputs.prerelease == 'true'
+        run: |
+          set -o pipefail
+          tarball="ui-packages/ui/archont561-qgis-sdk-ui-${RELEASE_VERSION}.tgz"
+          test -f "$tarball"
+          npm publish --dry-run --registry=https://npm.pkg.github.com --tag next "$tarball" 2>&1 | tee gh-pkg-ui-publish.log
+          echo "GitHub Packages UI publish skipped: ${RELEASE_VERSION} is a prerelease (dry-run only, dist-tag next)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish UI to GitHub Packages
+        if: needs.build.outputs.prerelease == 'false'
+        run: |
+          set -o pipefail
+          tarball="ui-packages/ui/archont561-qgis-sdk-ui-${RELEASE_VERSION}.tgz"
+          test -f "$tarball"
+          if [ "$(npm view "@archont561/qgis-sdk-ui@${RELEASE_VERSION}" version --registry=https://npm.pkg.github.com 2>/dev/null || true)" = "${RELEASE_VERSION}" ]; then
+            echo "GitHub Packages already has @archont561/qgis-sdk-ui@${RELEASE_VERSION}; skipping."
+          else
+            npm publish --registry=https://npm.pkg.github.com "$tarball" 2>&1 | tee gh-pkg-ui-publish.log
+          fi
+
+      - name: Report UI GitHub Packages publish output on failure
+        if: failure()
+        run: |
+          if [ -f gh-pkg-ui-publish.log ]; then
+            grep -iE 'ENEEDAUTH|E40|error' gh-pkg-ui-publish.log | tail -n 15 | while IFS= read -r line; do
+              echo "::error::github-packages UI publish: $line"
+            done
+          fi
+
   github-release:
-    needs: [build, pypi, conda, npm, ui, github-packages]
+    needs: [build, pypi, conda, npm, ui, github-packages, github-packages-ui]
     if: >-
       always() &&
       needs.build.result == 'success' &&
@@ -727,7 +786,8 @@ jobs:
       (needs.conda.result == 'success' || needs.conda.result == 'skipped') &&
       (needs.npm.result == 'success' || needs.npm.result == 'skipped') &&
       (needs.ui.result == 'success' || needs.ui.result == 'skipped') &&
-      (needs.github-packages.result == 'success' || needs.github-packages.result == 'skipped')
+      (needs.github-packages.result == 'success' || needs.github-packages.result == 'skipped') &&
+      (needs.github-packages-ui.result == 'success' || needs.github-packages-ui.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

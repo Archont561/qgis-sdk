@@ -61,7 +61,7 @@ pixi run -e bun bun run build
 pixi run -e bun typecheck
 ```
 
-Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk-python` and `qgis-sdk-typescript`, with repository-root-relative LCOV reports for Codecov.
+Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk-python` and `qgis-sdk-typescript`, with repository-root-relative LCOV reports for Codecov. In CI, Linux coverage runs on its own runner in parallel with the other Linux checks; the `checks` status requires both jobs to succeed. Each job restores its own environments and artifacts, trading extra runner setup for a shorter critical path.
 
 | Task | Command | Purpose |
 | :-- | :-- | :-- |
@@ -71,9 +71,13 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 | Typecheck | `pixi run -e bun typecheck` | TypeScript bridge typecheck |
 | Lint Python | `pixi run lint-python` | Ruff lint across the whole checkout |
 | Format check Python | `pixi run format-python-check` | Ruff format check across the whole checkout |
+| Repository policy | `pixi run lint-repository` | Alint rules in `.alint.yml` |
+| Test repository policy | `pixi run test-alint-policy` | Exercise the actual Alint rules against isolated passing and failing trees |
 | Docs site | `pixi run -e bun docs-build` | The bridge, the Storybook and the Astro site into `apps/docs/dist` |
 | Docs links | `pixi run -e bun docs-link-check` | Builds, then checks every internal link and fragment of the site |
 | Docs dev | `pixi run -e bun docs-dev` | The site from source with reload on `0.0.0.0:4321` |
+
+The Alint policy requires the root README and license, byte-identical scoped and alias READMEs with the alias installation commands, immutable external GitHub Actions and container references, and no merge-conflict markers or bidirectional override controls in non-ignored files. The README mirror rules also run with `pixi run -e default test-release-tool`, alongside the remaining README-shape tests. Alint complements Ruff, Biome, actionlint, typechecking, generated-file checks and the built-site link checker; it does not replace them. CI runs the policy and its fixture tests, subject to the existing workflow path filters.
 
 Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 
@@ -94,7 +98,7 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 | `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
 | `apps/docs` | The documentation site (Astro Starlight): generator, hand-written start pages, link check and Bun tests; deployed to GitHub Pages |
 | `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
-| `scripts` | Repository-root developer scripts (restore) |
+| `scripts` | Repository-root developer scripts, including restore, release and the stdlib-only `ci.py` workflow helpers |
 
 ## Documentation site
 
@@ -240,7 +244,7 @@ release whose manifests disagree.
 | `python` | `python-v` | the kit, runtime and tools `pyproject.toml`, the recipe contexts, the kit pins, the example's windows | three wheels (PyPI), three Conda outputs (prefix.dev) |
 | `runtime`, `tools` | `runtime-v`, `tools-v` | that distribution alone (the tools' runtime range follows the runtime at HEAD) | its wheel and Conda output |
 | `typescript` | `ts-v` | `packages/qgis-sdk-typescript/package.json`, the `qgis-sdk` alias and its exact pin, `SDK_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk` and `qgis-sdk` (npm, GitHub Packages for the scoped name) |
-| `ui` | `ui-v` | `packages/qgis-sdk-ui/package.json`, the `qgis-sdk-ui` alias (`packages/qgis-sdk-ui-alias`) and its exact pin, `UI_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (npm) |
+| `ui` | `ui-v` | `packages/qgis-sdk-ui/package.json`, the `qgis-sdk-ui` alias (`packages/qgis-sdk-ui-alias`) and its exact pin, `UI_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (npm, GitHub Packages for the scoped name) |
 | `all` | `v` | everything the `python` and `typescript` scopes stamp; never the `ui` train | both |
 
 The `ui` train (decision-47, TASK-110) is deliberate: `plan` never picks it
@@ -254,7 +258,11 @@ and fails when the tarball holds anything but `dist/`, `package.json`,
 tarballs next to the bridge built in the same run and checks the alias
 mirrors the scoped exports and `@import`s the scoped stylesheets, then
 publishes the scoped package and the alias after it under trusted
-publishing; an `-rc.N` tag dry-runs both under the `next` dist-tag. The two
+publishing. After the `ui` job succeeds, `github-packages-ui` publishes the
+same qualified scoped tarball to GitHub Packages; the unscoped alias remains
+npm-only. An `-rc.N` tag dry-runs the npm and GitHub Packages publishes under
+the `next` dist-tag. The GitHub Release waits for the GitHub Packages job as
+well as the npm job. The two
 scaffold pins are the versions `qgis-sdk new` writes for a page (decision-41
 for the bridge, `--ui-dependency` for the components), so a tools release
 offers the newest of each it was qualified with; the committed pins are
