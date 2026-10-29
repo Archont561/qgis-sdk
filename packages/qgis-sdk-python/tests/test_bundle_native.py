@@ -67,9 +67,13 @@ try:
         report[f"{name}_started"] = bool(qgis.utils.startPlugin(name))
         held = qgis.utils.plugins[name]
         report[f"{name}_ping"] = held.runtime.actions["ping"](41) + 1
-        plugin_class = held.runtime._plugin_class
-        report[f"{name}_description"] = plugin_class.describe().id
-        report[f"{name}_action_description"] = plugin_class.ping.describe().id
+        # The runtime's validated description, not the private lowered class
+        # (decision-67, TASK-141): the application object is not exposed.
+        held_description = held.runtime.description
+        report[f"{name}_description"] = held_description.id
+        report[f"{name}_action_description"] = next(
+            action.id for action in held_description.actions if action.id == "ping"
+        )
         report[f"{name}_runtime_module"] = type(held.runtime).__module__
         report[f"{name}_mark"] = sys.modules[f"{name}._vendor.qgis_sdk"].VENDORED_MARK
     runtimes = [type(qgis.utils.plugins[n].runtime) for n in PLUGINS]
