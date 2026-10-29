@@ -81,7 +81,9 @@ Calls are serialized per plugin runtime. A second request waits for its turn
 for up to the server's deadline and then fails with `503` and the `host_busy`
 code; it never runs inside another handler, and a handler that opens a modal
 dialog cannot be re-entered. Requests that arrive while a handler is running
-therefore queue rather than interleave.
+therefore queue rather than interleave. A call made from the thread that is
+already running plugin work is refused immediately, so it cannot block the
+owner thread until the deadline.
 
 At the HTTP level, `GET /plugin` returns the filtered description,
 `POST /actions/<id>` calls an action with a JSON object, and
