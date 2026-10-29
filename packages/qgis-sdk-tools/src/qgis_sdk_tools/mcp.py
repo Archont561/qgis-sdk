@@ -63,7 +63,50 @@ _COMMANDS = {
     ),
     "test": ("test", "Run project tests; executes arbitrary project code."),
     "targets": ("targets", "Report the SDK support matrix and host QGIS."),
+    "ui_list": ("ui list", "List the surfaces a plugin declares; starts QGIS."),
+    "ui_open": (
+        "ui open",
+        "Open one surface in the plugin's host and report the window; starts QGIS.",
+    ),
+    "ui_snapshot": (
+        "ui snapshot",
+        "Capture one surface as a structured tree plus a PNG; starts QGIS.",
+    ),
+    "ui_act": (
+        "ui act",
+        (
+            "Drive a surface with synthetic input, then capture it; starts QGIS. "
+            "Developer mode only."
+        ),
+    ),
+    "ui_diff": ("ui diff", "Compare two captures; exits 1 on a structural change."),
 }
+
+DEVELOPER_ONLY = frozenset({"ui_act"})
+"""Tools that act *inside* an open plugin window (decision-51 point 4).
+
+The MCP server is developer tooling - it starts QGIS and drives the plugin's own
+surfaces - so it serves them; what a user's install exposes to a client is the
+plugin's HTTP description (``GET /plugin``), which lists declared actions and
+streams and can name no such tool. Driving a surface exists only here and in
+the probe this module can call, never in the runtime a plugin ZIP vendors.
+"""
+
+
+def tool_names(*, developer: bool = True) -> tuple[str, ...]:
+    """The tools this adapter offers, in registration order.
+
+    ``developer=False`` is the list a deployment without developer tooling would
+    serve: everything that reads - listing, capturing, comparing - stays, and
+    the tool that synthesises input into an open window goes (decision-51
+    point 4). The stdio server always serves it; a user's install never gets
+    this adapter at all, only the plugin's HTTP description.
+    """
+    return tuple(
+        name
+        for name in (*_COMMANDS, "dev", "dev_status", "dev_stop")
+        if developer or name not in DEVELOPER_ONLY
+    )
 
 
 def _keep_tail(output: bytearray, data: bytes, truncated: list[bool]) -> None:
@@ -246,8 +289,10 @@ def serve(root: Path) -> None:
             ),
         )
 
+    offered = set(tool_names())
     for name, (command, description) in _COMMANDS.items():
-        register(name, command, description)
+        if name in offered:
+            register(name, command, description)
 
     @server.tool(
         structured_output=True,

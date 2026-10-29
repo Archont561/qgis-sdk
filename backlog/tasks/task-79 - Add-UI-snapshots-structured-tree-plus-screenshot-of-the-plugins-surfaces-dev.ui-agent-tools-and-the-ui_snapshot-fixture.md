@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T10:01:00Z'
-updated_date: '2026-10-29T14:53:00Z'
+updated_date: '2026-10-29T16:20:00Z'
 labels: []
 milestone: m-7
 dependencies:
@@ -62,5 +62,11 @@ S1 (PNG) - qgis_sdk/adapters/snapshot.py captures with QWidget.grab(), encodes P
 
 S2 (scope) - SurfaceHost.snapshot(surface_id=None, screenshot=True) captures the dialogs it showed plus the docks it left visible, refuses an unknown id, and never reaches outside its own registry. Native tests: packages/qgis-sdk-python/tests/test_ui_surface_snapshot_native.py (7, offscreen), including digest-equals-PNG, byte-identical repeat captures, dock visibility filtering and SurfaceCapture.write(). Full suite: 2041 passed / 58 skipped / 7 deselected; ruff, format, alint clean.
 
-Remaining: S3 dev.ui.list/open/snapshot/act/diff with QTest act, developer-mode gating and qgis-sdk ui snapshot <action> (AC 2); S4 ui_snapshot fixture with approve()/structural diff, the two-plugin isolation test and the doc-12 section (AC 3).
+S3 (tools, CLI) - qgis-sdk ui list/open/snapshot/act/diff, each one writing a request into .qgis-sdk/ui/ and running qgis_sdk_tools.devtools.ui_probe in a QGIS interpreter (the CLI process never touches a widget). ui_probe gained CaptureRequest.open_only and CaptureReport.opened, so open reports the window it produced without writing a capture; act reports the value the widget holds after each step. Steps are NODE:VERB[:VALUE] on the command line and refused with the verb list before QGIS starts. ui_diff gained nothing this slice; qgis_sdk_tools.ui_yaml.to_yaml renders a capture as YAML for reading (--format yaml in the tools only - files on disk stay canonical JSON, and the runtime has no YAML). MCP exposes qgis_sdk_ui_list/open/snapshot/act/diff, with DEVELOPER_ONLY = {ui_act} and tool_names(developer=...) as the gate: the reading tools survive without developer tooling, ui act does not.
+
+S3 (gating, AC 2) - decision-49 was superseded and TASK-76 was withdrawn, so there is no agent user mode to hide act in; the list a user's install does offer is the plugin HTTP description (GET /plugin), which can only name declared actions and streams and has no surface tool. So the gate is now two facts, both tested: test_mcp_cli::test_act_is_developer_only_in_the_tool_list (scripted MCP client vocabulary) and test_pure_imports::test_the_runtime_tree_never_reaches_for_synthetic_input (the vendored runtime never reaches QtTest). The probe's first QTest click aborted the process (qt_assert) because the test's RunButton handed the action None instead of form values - a plugin bug the probe reported correctly, not a probe bug.
+
+Tests: test_ui_cli.py (17, FakeCliRuntime + a fake probe process), test_ui_yaml.py (6, yaml.safe_load round-trip as the oracle), test_ui_probe_native.py (8, real offscreen QgsApplication, plugin started through its generated classFactory), test_mcp_cli.py (6 including the scripted stdio client), test_pure_imports.py (25). apps/docs/src/content/docs/guides/cli-mcp.md lists the five surface tools and says act is developer-only.
+
+Remaining: S4 ui_snapshot fixture with approve()/structural diff, the two-plugin isolation test and the doc-12 section (AC 3).
 <!-- SECTION:NOTES:END -->

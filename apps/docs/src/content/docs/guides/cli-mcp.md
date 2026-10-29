@@ -37,7 +37,12 @@ not require it.
 
 The server exposes `qgis_sdk_new`, `qgis_sdk_scaffold` (deprecated alias),
 `qgis_sdk_bridge_generate`, `qgis_sdk_processing_generate`, `qgis_sdk_check`,
-`qgis_sdk_build`, `qgis_sdk_test`, `qgis_sdk_dev`, and `qgis_sdk_targets`.
+`qgis_sdk_build`, `qgis_sdk_test`, `qgis_sdk_dev`, `qgis_sdk_targets`, and the
+surface tools `qgis_sdk_ui_list`, `qgis_sdk_ui_open`, `qgis_sdk_ui_snapshot`,
+`qgis_sdk_ui_act` and `qgis_sdk_ui_diff`. The surface tools start QGIS: they
+open the plugin's own surfaces from a generated host and capture what the host
+opened. `qgis_sdk_ui_act` is developer-only — it drives a surface with
+synthetic input, which a plugin's runtime never does and never offers.
 Pass `args` as an array of individual CLI argument strings, e.g.
 `{"args": ["--json"]}` to `qgis_sdk_targets` or
 `{"args": ["my-plugin", "--no-input"]}` to `qgis_sdk_new`. Pass

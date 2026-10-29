@@ -20,6 +20,7 @@ from qgis_sdk_tools._commands import _test  # noqa: F401
 from qgis_sdk_tools._commands import _dev  # noqa: F401
 from qgis_sdk_tools._commands import _targets  # noqa: F401
 from qgis_sdk_tools._commands import _plugin  # noqa: F401
+from qgis_sdk_tools._commands import _ui  # noqa: F401
 from qgis_sdk_tools._commands import _mcp  # noqa: F401
 
 # isort: on
