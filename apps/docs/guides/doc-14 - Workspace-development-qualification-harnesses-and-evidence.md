@@ -1531,8 +1531,10 @@ Stamping, tagging and publishing wait for an explicit "Release 0.8.0".
   copyleft - and the `mcp` tree itself is MIT (`mcp`, `mcp-types`,
   `annotated-types`, `pydantic`, `jsonschema`, `anyio`). `DEP001` still
   refuses third-party code inside a plugin.
-- **Docs.** `docs-build` renders 79 pages, and `docs-link-check`
-  resolves **7922 internal links on 119 pages with 0 broken**. doc-12
+- **Docs.** `docs-build` renders 80 pages, and `docs-link-check`
+  resolves **8096 internal links on 120 pages with 0 broken** (7582 on
+  117 before this record and the rehearsal plan were added; the run
+  predates both, which is why its own numbers moved). doc-12
   carries the 0.8.0 notes for every added name (the application API and
   `module:app`, the plugin HTTP API *and* its security model, `qgis-sdk
   mcp` and the developer-only vocabulary, processing destinations) plus
@@ -1553,12 +1555,71 @@ Stamping, tagging and publishing wait for an explicit "Release 0.8.0".
   `SDK_NPM_VERSION`; by hand, the components' and their alias's peer
   range, the two migration-note headings, the READMEs' and the guides'
   status lines and the one test literal the scaffold pins assert.
+- **Stamp rehearsal (AC 2).** Both stamps were run on this tree and then
+  reverted (`git checkout -- .`, and the wheels rebuilt at the unstamped
+  names): `stamp --scope python --version 0.8.0` and `stamp --scope
+  typescript --version 0.6.0` move eight files - the three pyprojects,
+  `recipe.yaml`, `examples/simple/pyproject.toml`, the TypeScript
+  `package.json`, the alias and `scaffold/web.py` - and the kit's pins
+  read `qgis-sdk-runtime==0.8.0`, `qgis-sdk-tools==0.8.0` and
+  `qgis-sdk-tools[mcp]==0.8.0`, the tools' range `>=0.8.0,<0.9`, the
+  example's windows `>=0.8,<0.9`. `verify-versions` then fails on
+  exactly one thing - the components' peer range, with its remediation -
+  and agrees on all five scopes once it moves to `>=0.6.0 <0.7.0`. On
+  the stamped tree the three wheels build and twine-check as `0.8.0`; a
+  fresh CPython 3.11.2 `venv` scaffolds `qgis-sdk-runtime>=0.8,<0.9`,
+  `qgis-sdk-tools>=0.8,<0.9` and `"@archont561/qgis-sdk": "0.6.0"` with
+  `check` clean on four files, while a project scaffolded by the
+  *published* 0.7.0 under those tools reports exactly `VERSION001` and
+  `VERSION004` with their remediations and nothing else. The stamped
+  tree's purity lane fails six tests, all of them the one literal in
+  `test_scaffold_web.py` (`SDK_NPM_VERSION == "0.5.0"`) - that line, the
+  peer range and the two migration-note headings are the whole code
+  change the stamp pull request needs.
 - **Not run here.** `build:conda` (conda-forge is unreachable from the
   sandbox, as in the 0.7.0 gate: TLS handshake EOF); the Windows and
   macOS QGIS rows (m-11, TASK-33); a visible-GUI Desktop session.
 - **Approval.** Not given by this record. The train is two tags on the
   stamp pull request's merge commit - `python-v0.8.0` and `ts-v0.6.0` -
   and each is cut only on an explicit release instruction.
+
+## 0.8.0 rehearsal and tag plan (2026-10-29, not run)
+
+The 0.7.0 rehearsal is the template (above): a tag is never moved, so a
+rehearsal that fails is followed by the next `-rc.N` on the commit that
+carries the fix. For this train, after the gate record and the stamp
+pull request merge and the gate record's explicit authorization arrives:
+
+```sh
+git tag -a python-v0.8.0-rc.1 <stamp merge commit> -m "qgis-sdk 0.8.0-rc.1 (rehearsal) ..."
+git tag -a ts-v0.6.0-rc.1 <stamp merge commit> -m "@archont561/qgis-sdk 0.6.0-rc.1 (rehearsal) ..."
+git push origin python-v0.8.0-rc.1 ts-v0.6.0-rc.1
+```
+
+What each run has to show, on the pattern the 0.7.0 rc runs set:
+
+- `python-v0.8.0-rc.1`: `build` stamps `0.8.0-rc.1`, the stamped-manifest
+  verification passes, three wheels build and twine-check, three Conda
+  outputs build; `pypi` runs its verify-without-uploading step with the
+  publish steps skipped; `conda` skips the prefix.dev upload;
+  `github-release` publishes the prerelease with the three wheels, the
+  three `.conda` files and `SHA256SUMS`. **The one defect class to watch
+  is the one `python-v0.7.0-rc.1` hit**: an `-rc.N` against the example's
+  clean-minor window (`test_verify_versions_reads_the_example_window_on_release_segments`
+  covers the fix, and `0.8.0-rc.1` is the first Python prerelease to
+  exercise it since).
+- `ts-v0.6.0-rc.1`: `build` stamps `0.6.0-rc.1`, `npm` and
+  `github-packages` publish nothing and run their dry-runs under dist-tag
+  `next`, `github-release` publishes the prerelease with both tarballs and
+  `SHA256SUMS`; npm keeps `latest` where it is.
+- Afterwards: PyPI's `qgis-sdk` still ends at 0.7.0 and npm's `latest`
+  still points at 0.5.0, which is the proof the rehearsal published
+  nothing.
+
+Then the real pair, only on an explicit release instruction and only on
+the stamp pull request's merge commit: `python-v0.8.0` and `ts-v0.6.0`.
+`ui-v0.1.0` is not re-tagged: the `ui` scope is skipped for this train,
+and its 0.1.0 stays the release it was.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default
