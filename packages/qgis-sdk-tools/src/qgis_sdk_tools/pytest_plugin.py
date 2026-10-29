@@ -15,6 +15,10 @@ It is small on purpose, and every part of it also works under a direct
 * two fixtures: ``qgis_app`` (a headless ``QgsApplication`` for the ``qgis``
   target, the running one in ``desktop``) and ``qgis_iface`` (Desktop only).
   Outside their target they fail and name the command to run;
+* a third, ``ui_snapshot``: capture a surface and compare it with the one the
+  project approved under ``tests/__snapshots__`` (decision-51). It is created
+  and verified without QGIS - the surface it is given is what needs QGIS - so a
+  test marked ``qgis`` is where it is usually used;
 * in the ``desktop`` target, top-level packages found on ``QGIS_PLUGINPATH``
   win over ``sys.path``, so ``import <plugin>`` is the package QGIS loaded -
   the generated host package of decision-43, which carries ``classFactory`` -
@@ -175,6 +179,25 @@ def qgis_app() -> Iterator[Any]:
         yield app
     finally:
         app.exitQgis()
+
+
+@pytest.fixture
+def ui_snapshot(request: pytest.FixtureRequest) -> Iterator[Any]:
+    """Capture a surface and compare it with the project's approval.
+
+    ``ui_snapshot(surface)`` returns the capture with its difference from
+    ``<test module>/__snapshots__/<surface>.json``; after the test, an
+    unapproved or structurally changed surface fails it with the readable diff
+    (decision-51 point 5). Call ``.approve()`` on what it returned to write the
+    JSON and the PNG - that is the one way an approval changes. The surface is
+    a ``SurfaceCapture`` a host made (only the surfaces the plugin opened, so
+    never another plugin's window) or a widget this test built.
+    """
+    from qgis_sdk_tools.snapshots import SNAPSHOTS_DIRECTORY, Snapshots
+
+    snapshots = Snapshots(request.path.parent / SNAPSHOTS_DIRECTORY)
+    yield snapshots
+    snapshots.verify()
 
 
 @pytest.fixture(scope="session")
