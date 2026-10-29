@@ -9,6 +9,7 @@ probe would have written.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -135,13 +136,13 @@ def test_snapshot_runs_the_probe_in_the_configured_qgis(answering, project, pref
     )
     assert result.exit_code == 0, runtime.stderr
     argv, cwd = runtime.processes[0]
-    assert argv == (str(prefix / "bin" / "python"), "-m", PROBE_ENTRYPOINT)
-    assert cwd == project
+    assert argv == (str(prefix.resolve() / "bin" / "python"), "-m", PROBE_ENTRYPOINT)
+    assert cwd == project.resolve()
     env = runtime.environments[0]
     assert env is not None
     assert env["QGIS_PREFIX_PATH"] == str(prefix.resolve())
     assert env["QT_QPA_PLATFORM"] == "offscreen"
-    assert str(project) in env["PYTHONPATH"].split(":")
+    assert str(project.resolve()) in env["PYTHONPATH"].split(os.pathsep)
     request = requests[0]
     assert request.plugin == "probe_demo"
     assert request.surface == "buffer_dialog"
@@ -151,9 +152,15 @@ def test_snapshot_runs_the_probe_in_the_configured_qgis(answering, project, pref
     assert str(request.out) in runtime.stdout
 
 
-def test_the_request_is_left_in_the_workspace_for_the_next_run(answering, project):
+def test_the_request_is_left_in_the_workspace_for_the_next_run(
+    answering, project, prefix
+):
     runtime, _ = answering()
-    result = runner.invoke(app, ["ui", "snapshot", "buffer_dialog"], obj=runtime)
+    result = runner.invoke(
+        app,
+        ["ui", "snapshot", "buffer_dialog", "--qgis-prefix", str(prefix)],
+        obj=runtime,
+    )
     assert result.exit_code == 0, runtime.stderr
     written = project / STATE_DIRECTORY / "ui" / "request.json"
     assert json.loads(written.read_text(encoding="utf-8"))["surface"] == (
@@ -286,16 +293,28 @@ def test_a_malformed_step_names_the_shape_it_wanted(answering, project):
     assert "NODE:VERB[:VALUE]" in result.stderr
 
 
-def test_a_failing_probe_reports_the_traceback_and_exits_nonzero(answering, project):
+def test_a_failing_probe_reports_the_traceback_and_exits_nonzero(
+    answering, project, prefix
+):
     runtime, _ = answering(exit_code=1, stems=())
-    result = runner.invoke(app, ["ui", "snapshot", "buffer_dialog"], obj=runtime)
+    result = runner.invoke(
+        app,
+        ["ui", "snapshot", "buffer_dialog", "--qgis-prefix", str(prefix)],
+        obj=runtime,
+    )
     assert result.exit_code == 1
     assert "the action refused" in runtime.stderr
 
 
-def test_a_probe_that_wrote_no_report_is_reported_not_ignored(answering, project):
+def test_a_probe_that_wrote_no_report_is_reported_not_ignored(
+    answering, project, prefix
+):
     runtime, _ = answering(stems=(), write_report=False)
-    result = runner.invoke(app, ["ui", "snapshot", "buffer_dialog"], obj=runtime)
+    result = runner.invoke(
+        app,
+        ["ui", "snapshot", "buffer_dialog", "--qgis-prefix", str(prefix)],
+        obj=runtime,
+    )
     assert result.exit_code != 0
     assert "wrote no report" in runtime.stderr
 
