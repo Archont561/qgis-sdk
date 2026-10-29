@@ -46,9 +46,14 @@ from qgis_sdk_tools.check import CheckReport, Diagnostic, check_project
 from qgis_sdk_tools.check.versions import resolve_runtime
 from qgis_sdk_tools.devtools.dev import QgisSdkDevError, inspect_project
 from qgis_sdk_tools.devtools.testrun import package_manager_for
+from qgis_sdk_tools.distributions import (
+    Distribution,
+    QGisSdkDistributionError,
+    read_distribution,
+)
 from qgis_sdk_tools.scaffold.web import script_command
 
-from .validate import check_dependencies, check_web_assets, external_dependencies
+from .validate import check_web_assets
 from .vendor import (
     RUNTIME_PACKAGE,
     notice,
@@ -56,6 +61,8 @@ from .vendor import (
     runtime_files,
     runtime_source,
     runtime_version,
+    stage_vendored,
+    vendored_roots,
 )
 
 __all__ = [
@@ -119,6 +126,7 @@ class BuildResult:
     web: WebOutcome
     external: tuple[str, ...]
     runtime_requirement: str | None = None
+    vendored: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -130,6 +138,7 @@ class BuildResult:
             "runtime_requirement": self.runtime_requirement,
             "web": self.web,
             "external": list(self.external),
+            "vendored": list(self.vendored),
             "report": self.report.to_json(),
         }
 
@@ -159,11 +168,8 @@ def build_plugin(
 
     report = check_project(root)
     diagnostics = list(report.diagnostics)
-    external, config_findings = external_dependencies(root)
-    diagnostics.extend(config_findings)
-    diagnostics.extend(
-        check_dependencies(root, plugin, _plugin_sources(package), external=external)
-    )
+    external = config.build.external_roots
+    vendored = _read_vendored(config.build.vendor)
     web_outcome: WebOutcome = "none"
     if project.web is not None:
         if web:
@@ -190,12 +196,14 @@ def build_plugin(
     resolution = resolve_runtime(root)
     runtime = resolution.installed or runtime_version()
     prefix = f"{plugin}.{VENDOR_PACKAGE}"
+    roots = (RUNTIME_PACKAGE, *vendored_roots(vendored))
     with tempfile.TemporaryDirectory(prefix="qgis-sdk-build-") as staging:
         staged = Path(staging) / plugin
         _stage_plugin(
             package,
             staged,
             prefix=prefix,
+            roots=roots,
             append={
                 "__init__.py": class_factory_source(
                     config,
@@ -212,8 +220,9 @@ def build_plugin(
             prefix=prefix,
             include_http=_imports_optional(_plugin_sources(package), "http"),
         )
+        records = stage_vendored(staged / VENDOR_PACKAGE, vendored, prefix=prefix)
         (staged / VENDOR_PACKAGE / "NOTICE").write_text(
-            notice(runtime, requirement=resolution.requirement),
+            notice(runtime, requirement=resolution.requirement, vendored=records),
             encoding="utf-8",
             newline="\n",
         )
@@ -228,7 +237,24 @@ def build_plugin(
         web=web_outcome,
         external=external,
         runtime_requirement=resolution.requirement,
+        vendored=tuple(name for name, _version in records),
     )
+
+
+def _read_vendored(names: Sequence[str]) -> tuple[Distribution, ...]:
+    """The declared distributions, read from this interpreter's environment.
+
+    ``check_project`` already refused a missing (``DEP004``) or compiled
+    (``DEP003``) one, so a failure here is a race, not a user error, and is
+    reported as the build failing rather than as a finding.
+    """
+    declared: list[Distribution] = []
+    for name in names:
+        try:
+            declared.append(read_distribution(name))
+        except QGisSdkDistributionError as error:
+            raise QgisSdkBuildError(str(error)) from error
+    return tuple(declared)
 
 
 # -- steps ----------------------------------------------------------------------
@@ -290,6 +316,7 @@ def _stage_plugin(
     staged: Path,
     *,
     prefix: str,
+    roots: Sequence[str] = (RUNTIME_PACKAGE,),
     append: Mapping[str, str] | None = None,
 ) -> None:
     """Copy the plugin package, filtered, rewriting its ``qgis_sdk`` imports.
@@ -314,13 +341,17 @@ def _stage_plugin(
                     body = text.rstrip("\n")
                     text = (body + "\n\n\n" if body else "") + extra.pop(filename)
                 target.write_text(
-                    rewrite_imports(text, prefix=prefix), encoding="utf-8", newline="\n"
+                    rewrite_imports(text, prefix=prefix, roots=roots),
+                    encoding="utf-8",
+                    newline="\n",
                 )
             else:
                 shutil.copyfile(source, target)
     for filename, text in extra.items():  # a package without the file at all
         (staged / filename).write_text(
-            rewrite_imports(text, prefix=prefix), encoding="utf-8", newline="\n"
+            rewrite_imports(text, prefix=prefix, roots=roots),
+            encoding="utf-8",
+            newline="\n",
         )
 
 
