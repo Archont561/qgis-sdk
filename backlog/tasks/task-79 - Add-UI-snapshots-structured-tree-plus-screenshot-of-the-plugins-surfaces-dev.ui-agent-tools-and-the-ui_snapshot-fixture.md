@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-10-26T10:01:00Z'
-updated_date: '2026-10-29T14:40:00Z'
+updated_date: '2026-10-29T14:53:00Z'
 labels: []
 milestone: m-7
 dependencies:
@@ -53,4 +53,14 @@ S3 agent tools and CLI - dev.ui.list/open/snapshot/act/diff with act through QTe
 S4 fixture and docs - ui_snapshot fixture with approve() into tests/__snapshots__/, structural change fails with a readable diff, pixel-only change does not, doc-12 section on format and tools. Completes AC 3.
 
 Environment note for the native slices: pixi run sets PYTHONPATH from [activation.env], which overrides qgis-activate.sh, so qgis.core imports only when share/qgis/python and share/qgis/python/plugins are appended to PYTHONPATH (QT_QPA_PLATFORM=offscreen). Verified: qgis 4.2.3 imports that way.
+
+2026-10-29 progress: slices S1 and S2 landed (82ec11c, b7cac82).
+
+S1 (tree) - qgis_sdk/ui/snapshot.py gained surface_snapshot(...) and canonical_json(...): semantic role per node in front of the Qt class, per-role value, label from QLabel.buddy(), enabled/visible/focus, geometry accumulated through parentWidget()/pos() into surface coordinates, declared link for form/<field> and buttons/<name>, and UI001 findings for unnamed actionable widgets (positional id). Pure tests: packages/qgis-sdk-python/tests/test_ui_surface_snapshot.py (6).
+
+S1 (PNG) - qgis_sdk/adapters/snapshot.py captures with QWidget.grab(), encodes PNG through QBuffer, records devicePixelRatio and stores sha256 in the tree as screenshot. Kept out of qgis_sdk.ui on purpose: test_pure_imports forbids Qt in the pure layer and caught the first placement.
+
+S2 (scope) - SurfaceHost.snapshot(surface_id=None, screenshot=True) captures the dialogs it showed plus the docks it left visible, refuses an unknown id, and never reaches outside its own registry. Native tests: packages/qgis-sdk-python/tests/test_ui_surface_snapshot_native.py (7, offscreen), including digest-equals-PNG, byte-identical repeat captures, dock visibility filtering and SurfaceCapture.write(). Full suite: 2041 passed / 58 skipped / 7 deselected; ruff, format, alint clean.
+
+Remaining: S3 dev.ui.list/open/snapshot/act/diff with QTest act, developer-mode gating and qgis-sdk ui snapshot <action> (AC 2); S4 ui_snapshot fixture with approve()/structural diff, the two-plugin isolation test and the doc-12 section (AC 3).
 <!-- SECTION:NOTES:END -->
