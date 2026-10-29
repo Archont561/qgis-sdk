@@ -14,22 +14,16 @@ in ``desktop_smoke_kit``, which ``desktop_adapter_smoke.py`` also uses. This pro
 the Desktop plugin path, not GUI or rendering qualification (see ``doc-8`` and
 TASK-33).
 
-Run it from the workspace root with the default Pixi environment::
-
-    pixi run -e default python packages/qgis-sdk-python/scripts/scaffold_desktop_smoke.py
+Run its pytest smoke test with ``pytest -m smoke``.
 
 The report helpers and the probe source are pure, so the QGIS-free suite can test
 them; the end-to-end run is opt-in through
 ``tests/scripts/test_qualification_scaffold.py``.
 
-Exit codes: 0 = the Desktop lifecycle passed, 1 = it failed or QGIS is unavailable,
-in which case the report's ``error`` field records which, so the gap is reported
-rather than hidden.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import platform
 import shutil
@@ -40,7 +34,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import Final
 
-from desktop_smoke_kit import (
+from smoke_support.desktop_smoke_kit import (
     PING_VALUE,
     REPORT_FILE,
     REQUEST_FILE,
@@ -300,24 +294,3 @@ def run_smoke(
         return replace(failed, error=f"{type(error).__name__}: {error}")
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
-
-
-def main() -> int:
-    """Print the report and exit non-zero when the cycle did not pass."""
-    parser = argparse.ArgumentParser(
-        description="Load and unload a generated plugin in QGIS Desktop (headless)."
-    )
-    parser.add_argument(
-        "--prefix", type=Path, default=None, help="QGIS install prefix."
-    )
-    parser.add_argument(
-        "--plugin", default=DEFAULT_PLUGIN, help="Plugin package name to generate."
-    )
-    arguments = parser.parse_args()
-    report = run_smoke(prefix=arguments.prefix, plugin=arguments.plugin)
-    print(json.dumps(report.to_payload(), indent=2))
-    return 0 if report.passed else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

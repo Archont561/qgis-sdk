@@ -4,22 +4,17 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-from webengine_smoke import (
+from smoke_support import run_isolated_smoke
+from smoke_support.webengine_smoke import (
     CHROMIUM_FLAGS,
     QualificationReport,
     chromium_version,
     headless_environment,
     qgis_python_path,
 )
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-SMOKE_SCRIPT = SCRIPTS_DIR / "webengine_smoke.py"
-SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_SMOKE"
 
 
 def test_headless_environment_selects_the_offscreen_platform() -> None:
@@ -126,19 +121,9 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get(SMOKE_ENV_FLAG) != "1",
-    reason=f"set {SMOKE_ENV_FLAG}=1 to run the real headless QGIS/WebEngine smoke",
-)
+@pytest.mark.smoke
 def test_headless_webengine_smoke_loads_a_page_and_exits_cleanly() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
+    result = run_isolated_smoke("webengine_smoke", timeout=180)
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)

@@ -87,9 +87,10 @@ jobs:
         id: s10
         run: pixi run -e default release-verify-versions
 
-      # Regenerate the three bridge artifacts, inspect the TypeScript tree for
-      # changes, then check the reference page's generated schema. TASK-142 tracks
-      # the separate case where the generator stops writing an existing artifact.
+      # Regenerate bridge artifacts and reject orphaned sample/host outputs with
+      # their generator/source headers in the two owned directories (TASK-142).
+      # The Git status sweep catches other TypeScript tree changes; the reference
+      # page's generated schema is checked separately. No orphan is deleted.
       - name: Check the generated bridge clients are current
         id: s19
         run: python scripts/ci.py check-generated

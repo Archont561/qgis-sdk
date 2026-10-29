@@ -45,4 +45,5 @@ testpaths = ["tests"]
 pythonpath = ["../qgis-sdk-runtime/src", "../qgis-sdk-tools/src"]
 # The layer markers are registered by tests/conftest.py from tests/layers.py;
 # a misspelt layer is an error, not a test that silently runs everywhere.
-addopts = ["--strict-markers"]
+# Smoke probes are opt-in; an explicit `-m smoke` overrides this default.
+addopts = ["--strict-markers", "-m", "not smoke"]

@@ -8,7 +8,7 @@
 # They are not untested - they are measured where they can run:
 #   * `QGIS_SDK_NATIVE_SERVICES=1 pytest tests/services` runs the same contract
 #     suite against the native backends as against the fakes (TASK-25.2, TASK-25.3);
-#   * `scripts/native_services_smoke.py` drives them on a real QGIS host (TASK-25.5).
+#   * the native services smoke test drives them on a real QGIS host (TASK-25.5).
 #
 # CI provisions neither (the Windows/macOS jobs install the QGIS-free package with
 # pip; Linux runners have no QGIS), so leaving them in this report would only

@@ -2,9 +2,9 @@
 
 Two harnesses need the same awkward setup, so it lives here once:
 
-* ``scripts/scaffold_desktop_smoke.py`` proves a *generated* project is loadable
+* the scaffold smoke test proves a *generated* project is loadable
   (TASK-1), and
-* ``scripts/desktop_adapter_smoke.py`` proves the *native lifecycle adapter* starts
+* the adapter smoke test proves the *native lifecycle adapter* starts
   and releases a plugin on a real host (TASK-24).
 
 Both run the Desktop application headless against a clean throwaway profile, hand it
@@ -17,7 +17,7 @@ The probes are static source strings that interpolate nothing. They find their
 inputs by name under ``$QGIS_SDK_DESKTOP_WORKSPACE`` because ``qgis --code <file>``
 treats any trailing argument as a project path, so they take no argv. A harness and
 its sibling both resolve paths from ``__file__``, which is why this module is
-importable by name from ``scripts`` (see ``tests/conftest.py``).
+importable from the ``smoke_support`` test package.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ PLACEHOLDER_DISPLAY: Final = ":99"
 PROFILE_NAME: Final = "sdk-qualification"
 WORKSPACE_ENV_VAR: Final = "QGIS_SDK_DESKTOP_WORKSPACE"
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # The runtime and the tools are separate distributions (decision-35); both go
 # on the path so the probe imports the trees under test.
 SOURCE_ROOTS = (

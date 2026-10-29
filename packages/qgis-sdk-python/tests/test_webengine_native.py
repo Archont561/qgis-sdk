@@ -10,7 +10,7 @@ origin keeps working, so the test cannot pass by blocking everything.
 Everything is loopback; nothing here contacts the internet. The imports are
 guarded like ``test_network_native.py`` so a host without Qt WebEngine reports
 what it lacks instead of failing collection. The Chromium flags are the ones the
-TASK-23 headless harness qualified (``scripts/webengine_smoke.py``).
+TASK-23 headless harness qualified (the WebEngine smoke test).
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Repeatable headless harness for the native layer and project services.
 
-This script starts a real QGIS application, drives ``NativeLayers`` and
+This helper starts a real QGIS application, drives ``NativeLayers`` and
 ``NativeProject`` against the reference fixture dataset, proves that a selection
 made through QGIS is readable through the contract, and proves that closing the
 owner scope releases the layers and refuses further work. It prints a
@@ -14,11 +14,7 @@ It is **not** a Desktop GUI qualification: there is no display, no canvas and no
 widget in this sandbox, and no Windows or macOS claim comes from it. Those remain
 TASK-33.
 
-Run it from the workspace root with the default Pixi environment::
-
-    pixi run -e default python packages/qgis-sdk-python/scripts/native_services_smoke.py
-    # or name a candidate root explicitly, e.g. on a Windows/macOS host
-    pixi run -e default python packages/qgis-sdk-python/scripts/native_services_smoke.py --prefix /opt/qgis
+Run its pytest smoke test with ``pytest -m smoke``.
 
 The report helpers are pure, so the QGIS-free suite tests them; the end-to-end
 run is opt-in through the test suite.
@@ -26,17 +22,15 @@ run is opt-in through the test suite.
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import sys
-from collections.abc import Sequence
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from desktop_lifecycle_smoke import headless_environment, qgis_python_path
+from smoke_support.desktop_lifecycle_smoke import headless_environment, qgis_python_path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # The runtime and the tools are separate distributions (decision-35); both go
 # on the path so the probe imports the trees under test.
 SOURCE_ROOTS = (
@@ -307,28 +301,3 @@ def _run_services(prefix: Path) -> NativeServicesReport:
         theme_unchanged=theme_unchanged,
         qgis_exited=True,
     )
-
-
-def parse_prefix(arguments: Sequence[str]) -> Path | None:
-    """Read an optional ``--prefix`` so a candidate root can be named explicitly."""
-    for index, argument in enumerate(arguments):
-        if argument == "--prefix" and index + 1 < len(arguments):
-            return Path(arguments[index + 1])
-        if argument.startswith("--prefix="):
-            return Path(argument.split("=", 1)[1])
-    return None
-
-
-def main(arguments: Sequence[str] | None = None) -> int:
-    """Run the harness and print its JSON report.
-
-    A host that cannot run the services still exits with a serialisable report and
-    a non-zero status, which is what the QGIS-free test asserts.
-    """
-    report = run_smoke(parse_prefix(sys.argv[1:] if arguments is None else arguments))
-    print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
-    return 0 if report.passed else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

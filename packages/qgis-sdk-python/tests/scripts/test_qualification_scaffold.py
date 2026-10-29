@@ -11,17 +11,16 @@ import ast
 import configparser
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-from desktop_smoke_kit import (
+from smoke_support import run_isolated_smoke
+from smoke_support.desktop_smoke_kit import (
     PROFILE_PROBE,
     desktop_command,
     headless_environment,
 )
-from scaffold_desktop_smoke import (
+from smoke_support.scaffold_desktop_smoke import (
     LIFECYCLE_PROBE,
     DesktopScaffoldReport,
     expected_metadata,
@@ -30,8 +29,6 @@ from scaffold_desktop_smoke import (
 )
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-SMOKE_SCRIPT = SCRIPTS_DIR / "scaffold_desktop_smoke.py"
-SMOKE_ENV_FLAG = "QGIS_SDK_SCAFFOLD_DESKTOP"
 
 
 def ini_fields(text: str) -> dict[str, str]:
@@ -165,19 +162,9 @@ def test_a_run_without_a_qgis_prefix_reports_instead_of_raising(tmp_path: Path) 
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get(SMOKE_ENV_FLAG) != "1",
-    reason=f"set {SMOKE_ENV_FLAG}=1 to load and unload the scaffold in real QGIS Desktop",
-)
+@pytest.mark.smoke
 def test_real_qgis_desktop_loads_and_unloads_the_generated_plugin() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=600,
-        check=False,
-    )
+    result = run_isolated_smoke("scaffold_desktop_smoke", timeout=600)
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)

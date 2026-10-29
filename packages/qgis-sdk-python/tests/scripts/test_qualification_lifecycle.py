@@ -9,19 +9,14 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-from desktop_lifecycle_smoke import (
+from smoke_support import run_isolated_smoke
+from smoke_support.desktop_lifecycle_smoke import (
     LifecycleReport,
     headless_environment,
 )
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-SMOKE_SCRIPT = SCRIPTS_DIR / "desktop_lifecycle_smoke.py"
-SMOKE_ENV_FLAG = "QGIS_SDK_HEADLESS_LIFECYCLE"
 
 
 def successful_report() -> LifecycleReport:
@@ -90,19 +85,9 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get(SMOKE_ENV_FLAG) != "1",
-    reason=f"set {SMOKE_ENV_FLAG}=1 to run the real headless QGIS lifecycle smoke",
-)
+@pytest.mark.smoke
 def test_headless_lifecycle_smoke_starts_and_unloads_a_plugin() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
+    result = run_isolated_smoke("desktop_lifecycle_smoke", timeout=180)
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)

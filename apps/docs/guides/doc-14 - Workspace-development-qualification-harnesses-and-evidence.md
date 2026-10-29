@@ -79,6 +79,8 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 
 The Alint policy requires the root README and license, byte-identical scoped and alias READMEs with the alias installation commands, immutable external GitHub Actions and container references, and no merge-conflict markers or bidirectional override controls in non-ignored files. The README mirror rules also run with `pixi run -e default test-release-tool`, alongside the remaining README-shape tests. Alint complements Ruff, Biome, actionlint, typechecking, generated-file checks and the built-site link checker; it does not replace them. CI runs the policy and its fixture tests, subject to the existing workflow path filters.
 
+The bridge freshness gate regenerates the registered sample and host TypeScript outputs and checks Git status across the bridge package. It also reports, without deleting, `.ts` files in the sample-client and host output directories whose generator and source headers identify those outputs but whose paths are no longer registered. Files with other or missing headers and files outside those directories are not treated as orphans. To retire or rename an output, remove the old file explicitly; use `python packages/qgis-sdk-python/scripts/generate_bridge_clients.py --check` for a non-writing byte and orphan check. The reference plugin schema and QGIS Processing snapshot retain their separate checks.
+
 Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `dev` extra; Pixi installs that local extra through the Python feature. Keep direct Pixi dependency versions exactly pinned in `pixi.toml` and refresh `pixi.lock` when they change. Python build tooling and Twine stay in the Pixi Python feature; Bun remains in its separate environment.
 
 ## Repository layout
@@ -187,15 +189,16 @@ Every test in `packages/qgis-sdk-python/tests` belongs to exactly one layer, and
 | `qt` | a `QApplication` (offscreen) | `pytestmark = pytest.mark.qt` |
 | `qgis` | an initialised `QgsApplication` | `pytestmark = pytest.mark.qgis` |
 | `webengine` | Qt WebEngine and WebChannel under the application | `pytestmark = pytest.mark.webengine` |
-| `desktop` | a real QGIS Desktop, opted in per harness flag | `@pytest.mark.desktop` |
+| `desktop` | a real QGIS Desktop or headless native qualification host | `@pytest.mark.desktop` |
 | `native` | umbrella for `qt`, `qgis`, `webengine`, `desktop` | derived |
+| `smoke` | explicit real-QGIS qualification probes, excluded by default | `@pytest.mark.smoke` |
 
 ```sh
 # the pure half, the way the macOS/Windows matrix runs it (QGIS is not installed there)
 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m pure
 # one native layer, or all of them, offscreen
 QT_QPA_PLATFORM=offscreen pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m webengine
-QT_QPA_PLATFORM=offscreen QGIS_SDK_NATIVE_SERVICES=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m native
+QT_QPA_PLATFORM=offscreen QGIS_SDK_NATIVE_SERVICES=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m 'native and not smoke'
 ```
 
 How the layers stay honest:
@@ -289,11 +292,19 @@ installed the wheel has no `scripts/` directory to point at.
 
 ## Headless QGIS and WebEngine qualification
 
-`scripts/webengine_smoke.py` is a repeatable harness for the headless path QGIS uses to host a `QWebEngineView`. It starts a real QGIS application, loads a page in a real WebEngine view, tears QGIS down again and prints a machine-readable report:
+The `smoke`-marked pytest tests cover the headless path QGIS uses to host a `QWebEngineView`, the scheduler, native services, and Desktop lifecycle probes. They are excluded from the normal suite and require a real QGIS installation. Run all seven explicitly with:
 
 ```sh
-pixi run -e default python packages/qgis-sdk-python/scripts/webengine_smoke.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -m smoke -v -s
 ```
+
+Each probe is isolated from the others so QGIS and Chromium can initialize and shut down safely. Pytest assertions determine success; `-s` shows the diagnostic evidence. To run just the WebEngine test:
+
+```sh
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_webengine.py -m smoke -s
+```
+
+Example evidence from an earlier run:
 
 ```json
 {
@@ -320,7 +331,7 @@ The support promise itself is one machine-readable source, `qgis_sdk_tools.targe
 | TypeScript bridge (`packages/qgis-sdk-typescript`) | Qualified (Bun 1.4.2, 95 tests, 100% cov) | Qualified in CI (Bun 1.4.2, 95 tests) | Qualified in CI (Bun 1.4.2, 95 tests) |
 | QGIS with Python bindings | Qualified (Pixi `default`, QGIS 4.2.3) | Blocker: no macOS QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) | Blocker: no Windows QGIS 4 prefix in CI/sandbox (TASK-33 AC #1) |
 | Qt WebEngine Python bindings (`pyqt6-webengine` 6.11.0) | Qualified headless (`offscreen`, Chromium 140.0.0.0) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
-| Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (`scaffold_desktop_smoke.py`, `desktop_adapter_smoke.py`) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
+| Headless QGIS Desktop plugin manager (`qgis --noplugins --code`) | Qualified (scaffold and adapter smoke tests) | Blocker: requires macOS QGIS Desktop binary | Blocker: requires Windows QGIS Desktop binary |
 | QGIS network transport (`NativeNetworkTransport`: proxy, auth database, certificate trust, redirects, body ceiling) | Qualified headless against loopback servers (`tests/test_network_native.py`, 25 tests; limits from `network_limits_probe.py`) | Blocker: requires macOS QGIS/Qt prefix | Blocker: requires Windows QGIS/Qt prefix |
 | Display-server Desktop GUI + in-Desktop `QWebEngineView` rendering | Blocker: no display server or `Xvfb` in sandbox/CI (`offscreen` renders no widgets, TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) | Blocker: no interactive display session in CI (TASK-33 AC #2) |
 | Chromium sandbox | Disabled by headless flags above | N/A | N/A |
@@ -330,7 +341,7 @@ Without the Chromium flags the WebEngine process fails with `eglInitialize: Fail
 `tests/scripts/test_qualification_webengine.py` covers the harness helpers in the QGIS-free suite. The end-to-end run is opt-in, because it needs a real QGIS installation:
 
 ```sh
-QGIS_SDK_HEADLESS_SMOKE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_webengine.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_webengine.py -m smoke -s
 ```
 
 The headless path is **not** a visible Desktop GUI qualification and does **not** claim universal QGIS 4 support: the Linux sandbox and CI runners have no display server or `Xvfb`, and `pixi.toml` locks `linux-64` only, so no Windows or macOS QGIS 4 installation has been tested. `qgis_sdk.adapters.webengine` therefore only proves that the optional bindings can be located on a qualified host and that a missing installation is reported with an actionable error.
@@ -340,8 +351,10 @@ The headless path is **not** a visible Desktop GUI qualification and does **not*
 The headless lifecycle harness uses a real `QgsApplication` and the adapter:
 
 ```sh
-pixi run -e default python packages/qgis-sdk-python/scripts/desktop_lifecycle_smoke.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_lifecycle.py -m smoke -s
 ```
+
+Example evidence from an earlier run:
 
 ```json
 {
@@ -360,16 +373,16 @@ pixi run -e default python packages/qgis-sdk-python/scripts/desktop_lifecycle_sm
 ```
 
 The harness passes `iface=None`, starts no event loop and does not exercise
-menus, dialogs or docks, so it is the always-runnable fallback and **not** a real
+menus, dialogs or docks, so it is a headless fallback and **not** a real
 Desktop startup/unload qualification. Run the opt-in test with:
 
 ```sh
-QGIS_SDK_HEADLESS_LIFECYCLE=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_lifecycle.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_lifecycle.py -m smoke -s
 ```
 
 ### Real Desktop startup and unload evidence
 
-`scripts/desktop_adapter_smoke.py` supplies the evidence that harness cannot: it writes
+The Desktop adapter smoke test supplies the evidence that harness cannot: it writes
 a small fixture plugin whose `__init__.py` is the one line `qgis-sdk build` stages
 (`classFactory = host("<pkg>.plugin:<Class>")`, decision-43) with its own
 `context_factory`, installs it into a clean throwaway profile, and lets the **QGIS
@@ -378,8 +391,10 @@ belongs to this harness rather than to the scaffolded project, so the host contr
 is proven without depending on the scaffold.
 
 ```sh
-pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smoke.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_desktop_adapter.py -m smoke -s
 ```
+
+Example evidence from an earlier run:
 
 ```json
 {
@@ -416,12 +431,12 @@ this SDK, so a check there would prove the wrong thing.
 The headless-Desktop rules that are easy to get wrong - `QT_QPA_PLATFORM=offscreen`, the
 placeholder `DISPLAY` QGIS needs to consider itself interactive, and `PYTHONHOME` at the
 live prefix so the embedded interpreter can `import sys` - live in
-`scripts/desktop_smoke_kit.py`, shared with the scaffold harness. Offscreen Qt shows no
+`tests/smoke_support/desktop_smoke_kit.py`, shared with the scaffold harness. Offscreen Qt shows no
 window and renders nothing: GUI, canvas, 3D and WebEngine behaviour remain under
 TASK-33, as does every non-Linux candidate.
 
 ```sh
-QGIS_SDK_DESKTOP_ADAPTER=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_desktop_adapter.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_desktop_adapter.py -m smoke -s
 ```
 
 The Qt scheduler harness exercises the `StepScheduler` seam inside a real
@@ -431,8 +446,10 @@ and quiesce blocking on an unresolved handoff. It compares tick latency while a
 worker is blocked against latency while phases are scheduled:
 
 ```sh
-pixi run -e default python packages/qgis-sdk-python/scripts/qt_scheduler_smoke.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scheduler.py -m smoke -s
 ```
+
+Example evidence from an earlier run:
 
 ```json
 {
@@ -448,7 +465,7 @@ The numbers are one Linux/offscreen sample, not a latency guarantee. Run the
 opt-in test with:
 
 ```sh
-QGIS_SDK_QT_SCHEDULER=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scheduler.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scheduler.py -m smoke -s
 ```
 
 The network limits probe measures what
@@ -530,7 +547,7 @@ loaded and functional.
 ### Load and unload evidence for the scaffolded project
 
 A standalone run cannot prove QGIS accepts the package, so
-`scripts/scaffold_desktop_smoke.py` scaffolds into a temporary directory, installs
+the scaffold smoke test creates a project into a temporary directory, installs
 the plugin package into a clean throwaway profile, and runs the **QGIS Desktop
 binary** so that QGIS's own plugin machinery - `qgis.utils.findPlugins`,
 `loadPlugin`, `startPlugin`, `unloadPlugin` - discovers it, parses its
@@ -540,8 +557,7 @@ invokes the declared action and unloads it, with the SDK reporting `running` and
 then `stopped`:
 
 ```sh
-pixi run -e default python packages/qgis-sdk-python/scripts/scaffold_desktop_smoke.py
-QGIS_SDK_SCAFFOLD_DESKTOP=1 pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scaffold.py
+pixi run -e default pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests/scripts/test_qualification_scaffold.py -m smoke -s
 ```
 
 Headless Desktop needs three variables that are easy to get wrong, which is why the

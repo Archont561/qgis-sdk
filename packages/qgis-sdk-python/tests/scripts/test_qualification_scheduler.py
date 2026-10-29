@@ -9,13 +9,10 @@ no display, no real ``iface``, and drives Qt with ``processEvents()``.
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
-from qt_scheduler_smoke import (
+from smoke_support import run_isolated_smoke
+from smoke_support.qt_scheduler_smoke import (
     DECIDING_CRITERIA,
     VERDICT_ADOPT,
     VERDICT_REVIEW,
@@ -27,10 +24,6 @@ from qt_scheduler_smoke import (
     ran_on_a_different_thread,
     summarise_gaps,
 )
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-SMOKE_SCRIPT = SCRIPTS_DIR / "qt_scheduler_smoke.py"
-SMOKE_ENV_FLAG = "QGIS_SDK_QT_SCHEDULER"
 
 
 def test_a_phase_measures_only_the_heartbeats_after_its_own_baseline() -> None:
@@ -195,19 +188,9 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get(SMOKE_ENV_FLAG) != "1",
-    reason=f"set {SMOKE_ENV_FLAG}=1 to run the real headless Qt scheduler smoke",
-)
+@pytest.mark.smoke
 def test_headless_qt_scheduler_smoke_adopts_the_seam() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=240,
-        check=False,
-    )
+    result = run_isolated_smoke("qt_scheduler_smoke", timeout=240)
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)

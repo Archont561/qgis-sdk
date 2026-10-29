@@ -16,11 +16,13 @@ Layers, as pytest markers:
 ``webengine``
     needs Qt WebEngine (a real Chromium) on top of ``qt``;
 ``desktop``
-    the opt-in end-to-end harnesses under ``tests/scripts`` that launch a real
-    QGIS Desktop; each is enabled by its own ``QGIS_SDK_*`` flag.
+    the end-to-end harnesses under ``tests/scripts`` that need a native host;
+    smoke probes are selected explicitly with ``-m smoke``.
 
 ``native`` is added to every test in one of those layers and ``pure`` to every
-other test, so ``-m pure`` is the QGIS-free run and ``-m native`` the rest.
+other test. The default suite excludes smoke; select its QGIS-free and native
+halves with ``-m pure`` and ``-m 'native and not smoke'``. An explicit marker
+expression overrides the default, so ``-m native`` also includes native smoke.
 
 One process holds one application. Whenever the QGIS bindings are importable
 the application is a ``QgsApplication`` - it *is* a ``QApplication``, so the
@@ -127,7 +129,8 @@ LAYER_HELP = {
     "qt": "needs a Qt event loop (a QApplication and the PyQt bindings)",
     "qgis": "needs an initialised QgsApplication and the qgis Python bindings",
     "webengine": "needs Qt WebEngine (a real Chromium) on top of qt",
-    "desktop": "opt-in end-to-end harness against a real QGIS Desktop (QGIS_SDK_* flag)",
+    "desktop": "needs the QGIS Desktop or a headless native qualification host",
+    "smoke": "explicitly selected real QGIS/Qt smoke test",
     "native": "any test in the qt, qgis, webengine or desktop layer (added automatically)",
     "pure": "runs without QGIS, Qt or a display (added automatically)",
 }
