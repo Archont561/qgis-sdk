@@ -1,14 +1,12 @@
 """Repeatable headless QGIS plugin lifecycle harness.
 
-This script starts a real QGIS application, runs the SDK's Desktop lifecycle
+This helper starts a real QGIS application, runs the SDK's Desktop lifecycle
 adapter through ``initGui`` and repeated ``unload``, and prints a
 machine-readable report. It is **not** a Desktop GUI qualification: there is no
 display, no real ``iface`` and no menu/dock integration in this sandbox. The
 real Desktop path remains tracked separately.
 
-Run it from the workspace root with the default Pixi environment::
-
-    pixi run -e default python packages/qgis-sdk-python/scripts/desktop_lifecycle_smoke.py
+Run its pytest smoke test with ``pytest -m smoke``.
 
 The report helpers are pure, so the QGIS-free suite can test them; the
 end-to-end run is opt-in through the test suite.
@@ -16,7 +14,6 @@ end-to-end run is opt-in through the test suite.
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import sys
@@ -26,7 +23,7 @@ from pathlib import Path
 
 HEADLESS_PLATFORM = "offscreen"
 PING_VALUE = 7
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # The runtime and the tools are separate distributions (decision-35); both go
 # on the path so the probe imports the trees under test.
 SOURCE_ROOTS = (
@@ -34,7 +31,7 @@ SOURCE_ROOTS = (
     PROJECT_ROOT.parent / "qgis-sdk-tools" / "src",
 )
 # Handler annotations are resolved from module globals. Keep this import pure,
-# and make the source tree available when the script is launched standalone.
+# and make the source tree available to the isolated test process.
 for _root in reversed(SOURCE_ROOTS):
     if str(_root) not in sys.path:
         sys.path.insert(0, str(_root))
@@ -199,14 +196,3 @@ def _run_lifecycle(prefix: Path) -> LifecycleReport:
         owned_resources_released=owned_resources_released,
         qgis_exited=True,
     )
-
-
-def main() -> int:
-    """Run the smoke and print its report as JSON."""
-    report = run_smoke()
-    print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
-    return 0 if report.passed else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

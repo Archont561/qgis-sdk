@@ -1,6 +1,6 @@
 """Headless Qt scheduler qualification harness for the TASK-13 spike.
 
-This script starts a real QGIS application, drives the SDK's pure
+This helper starts a real QGIS application, drives the SDK's pure
 :class:`~qgis_sdk.core.scheduling.StepScheduler` from a real Qt event loop with a
 real ``QThreadPool`` worker, and prints a machine-readable report covering GUI
 responsiveness, worker-to-GUI thread handoff, cooperative cancellation, late
@@ -10,9 +10,7 @@ It is **not** a QGIS Desktop GUI qualification: there is no display, no real
 ``iface``, and event delivery is driven by ``processEvents()``. Windows, macOS and
 a real Desktop session stay tracked by TASK-33.
 
-Run it from the repository root with the default Pixi environment::
-
-    pixi run -e default python packages/qgis-sdk-python/scripts/qt_scheduler_smoke.py
+Run its pytest smoke test with ``pytest -m smoke``.
 
 The summary and verdict helpers are pure, so the QGIS-free suite can test them;
 the end-to-end run is opt-in through the test suite.
@@ -21,7 +19,6 @@ the end-to-end run is opt-in through the test suite.
 from __future__ import annotations
 
 import contextlib
-import json
 import platform
 import sys
 import time
@@ -47,7 +44,7 @@ DISPOSED_DRAIN_S = 0.2
 POOL_DRAIN_MS = 2000
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-SOURCE_ROOT = SCRIPT_DIR.parents[1] / "qgis-sdk-runtime" / "src"
+SOURCE_ROOT = SCRIPT_DIR.parents[2] / "qgis-sdk-runtime" / "src"
 
 VERDICT_ADOPT = "adopt-scheduler-seam"
 VERDICT_REVIEW = "review-scope-before-async-syntax"
@@ -558,9 +555,7 @@ def run_smoke() -> SchedulerReport:
     """Start a headless QGIS application and report what the run observed."""
     import os
 
-    if str(SCRIPT_DIR) not in sys.path:
-        sys.path.insert(0, str(SCRIPT_DIR))
-    from desktop_lifecycle_smoke import (
+    from smoke_support.desktop_lifecycle_smoke import (
         headless_environment,
         qgis_python_path,
     )
@@ -623,14 +618,3 @@ def _failed_report(error: str, *, qgis_initialised: bool) -> SchedulerReport:
         ),
         error=error,
     )
-
-
-def main() -> int:
-    """Run the smoke and print its report as JSON."""
-    report = run_smoke()
-    print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
-    return 0 if report.passed else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

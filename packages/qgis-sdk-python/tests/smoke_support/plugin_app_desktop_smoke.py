@@ -6,12 +6,11 @@ plugin manager and iface, but does not qualify visible GUI rendering or ZIPs.
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 from pathlib import Path
 
-from desktop_smoke_kit import (
+from smoke_support.desktop_smoke_kit import (
     profile_plugin_dir,
     qgis_executable,
     read_report,
@@ -224,13 +223,3 @@ def run_smoke(prefix: Path | None = None) -> dict[str, object]:
             return {**report, "passed": passed(report)}
         except Exception as error:  # noqa: BLE001 - a failed qualification is reported
             return {"passed": False, "error": f"{type(error).__name__}: {error}"}
-
-
-def main() -> int:
-    report = run_smoke()
-    print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report["passed"] else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

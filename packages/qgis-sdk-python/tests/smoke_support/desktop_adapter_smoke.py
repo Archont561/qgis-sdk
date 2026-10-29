@@ -30,17 +30,12 @@ Shared headless-Desktop rules live in ``desktop_smoke_kit``. Offscreen Qt still 
 no window and renders nothing: this qualifies the plugin and lifecycle path, not GUI
 behaviour (TASK-33 keeps the display-dependent work).
 
-Run it from the workspace root::
+Run its pytest smoke test with ``pytest -m smoke``.
 
-    pixi run -e default python packages/qgis-sdk-python/scripts/desktop_adapter_smoke.py
-
-Exit codes: 0 = the adapter lifecycle passed on a real host, 1 = it failed or QGIS is
-unavailable, and the report's ``error`` field says which.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import platform
 import shutil
@@ -50,7 +45,7 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Final
 
-from desktop_smoke_kit import (
+from smoke_support.desktop_smoke_kit import (
     PING_VALUE,
     REPORT_FILE,
     REQUEST_FILE,
@@ -80,7 +75,7 @@ classFactory = host("{FIXTURE_PLUGIN}.plugin:app")
 FIXTURE_METADATA: Final = """[general]
 name=SDK lifecycle probe
 description=Fixture plugin proving the Desktop adapter lifecycle on a real host.
-about=Written by packages/qgis-sdk-python/scripts/desktop_adapter_smoke.py; never shipped.
+about=Written by packages/qgis-sdk-python/tests/scripts/test_qualification_desktop_adapter.py; never shipped.
 version=0.0.0
 qgisMinimumVersion=4.0
 author=qgis-sdk qualification
@@ -435,21 +430,3 @@ def run_smoke(prefix: Path | None = None) -> DesktopAdapterReport:
         return DesktopAdapterReport.unavailable(f"{type(error).__name__}: {error}")
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
-
-
-def main() -> int:
-    """Print the report and exit non-zero when the host did not confirm everything."""
-    parser = argparse.ArgumentParser(
-        description="Prove the Desktop adapter lifecycle in real QGIS (headless)."
-    )
-    parser.add_argument(
-        "--prefix", type=Path, default=None, help="QGIS install prefix."
-    )
-    arguments = parser.parse_args()
-    report = run_smoke(prefix=arguments.prefix)
-    print(json.dumps(report.to_payload(), indent=2, sort_keys=True))
-    return 0 if report.passed else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

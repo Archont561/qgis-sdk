@@ -1,15 +1,20 @@
 """Opt-in proof inside the real QGIS Desktop executable, offscreen."""
 
 import ast
-import os
+import json
 from pathlib import Path
 
 import pytest
-from plugin_app_desktop_smoke import EVIDENCE_FIELDS, PLUGIN_SOURCE, PROBE, run_smoke
+from smoke_support.plugin_app_desktop_smoke import (
+    EVIDENCE_FIELDS,
+    PLUGIN_SOURCE,
+    PROBE,
+    run_smoke,
+)
 
 
 def test_failed_or_incomplete_evidence_never_passes() -> None:
-    from plugin_app_desktop_smoke import passed
+    from smoke_support.plugin_app_desktop_smoke import passed
 
     assert not passed({})
     payload = dict.fromkeys(EVIDENCE_FIELDS, True)
@@ -33,11 +38,9 @@ def test_missing_qgis_executable_fails_closed(tmp_path: Path) -> None:
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get("QGIS_SDK_PLUGIN_APP_DESKTOP") != "1",
-    reason="set QGIS_SDK_PLUGIN_APP_DESKTOP=1 to launch QGIS Desktop",
-)
+@pytest.mark.smoke
 def test_two_apps_inside_the_real_qgis_plugin_manager() -> None:
     result = run_smoke()
+    print(json.dumps(result, indent=2, sort_keys=True))
     assert result["passed"], result
     assert all(result[field] is True for field in EVIDENCE_FIELDS)

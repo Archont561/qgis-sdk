@@ -28,7 +28,7 @@ NATIVE_COMMAND = [
     "packages/qgis-sdk-python/pyproject.toml",
     "packages/qgis-sdk-python/tests",
     "-m",
-    "native",
+    "native and not smoke",
     "-q",
     "-rs",
 ]
@@ -103,6 +103,11 @@ def check_generated() -> int:
     generator = "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
     code = subprocess.run([sys.executable, generator], cwd=ROOT, check=False).returncode
     if code:
+        print(
+            "::error title=generated client is stale::Bridge generation failed. "
+            "Review the generator output, remove any reported orphan or restore it "
+            "to artifacts(), and commit regenerated files."
+        )
         return status_code(code)
     status = subprocess.run(
         ["git", "status", "--porcelain", "--", "packages/qgis-sdk-typescript"],

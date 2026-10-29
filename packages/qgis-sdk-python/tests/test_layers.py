@@ -4,8 +4,9 @@ Every test in this suite belongs to exactly one layer. The pure layer runs
 without QGIS, Qt or a display; the native layers (``qt``, ``qgis``,
 ``webengine``) need the real bindings and skip themselves with a reason when
 those are absent; ``desktop`` is the opt-in end-to-end harness against a real
-QGIS Desktop. ``-m pure`` and ``-m native`` select the halves, and each native
-layer can be selected on its own.
+QGIS Desktop. The default excludes smoke tests; ``-m pure`` and
+``-m 'native and not smoke'`` select its halves, while ``-m smoke`` opts into
+the isolated qualification probes.
 """
 
 from __future__ import annotations
@@ -82,11 +83,16 @@ def _collect(*args: str) -> tuple[str, ...]:
 def test_pure_and_native_split_the_suite_without_overlap_or_loss() -> None:
     everything = set(_collect())
     pure = set(_collect("-m", "pure"))
-    native = set(_collect("-m", "native"))
+    native = set(_collect("-m", "native and not smoke"))
+    smoke = set(_collect("-m", "smoke"))
+    all_layers = set(_collect("-m", "pure or native"))
 
     assert pure, "the pure layer selected nothing"
+    assert smoke, "the smoke selection found nothing"
     assert pure | native == everything
     assert pure & native == set()
+    assert smoke.isdisjoint(everything)
+    assert pure | native | smoke == all_layers
 
 
 def test_the_pure_selection_never_reaches_a_native_module() -> None:

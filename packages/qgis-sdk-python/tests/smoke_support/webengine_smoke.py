@@ -1,24 +1,21 @@
 """Repeatable headless QGIS and Qt WebEngine qualification harness.
 
-This is the executable half of the TASK-23 headless qualification. It records
+This is the test-support half of the TASK-23 headless qualification. It records
 the environment a headless WebEngine run needs, loads a page in a real
 ``QWebEngineView`` hosted by a real QGIS application, and prints a
 machine-readable report describing what actually ran.
 
-Run it from the workspace root with the default Pixi environment::
-
-    pixi run -e default python packages/qgis-sdk-python/scripts/webengine_smoke.py
+Run its pytest smoke test with ``pytest -m smoke``.
 
 The module is importable without Qt or QGIS: the environment and report
 helpers are pure, so the QGIS-free suite can test them, while the optional
-integration test runs this file as a subprocess.
+smoke test runs the helper in an isolated subprocess.
 
 Platform prerequisites are recorded in ``packages/qgis-sdk-python/README.md``.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import re
@@ -185,14 +182,3 @@ def _run_headless_load(prefix: Path, timeout_ms: int) -> QualificationReport:
         load_finished=bool(finished) and finished[-1],
         qgis_exited=True,
     )
-
-
-def main() -> int:
-    """Run the smoke and print its report as JSON."""
-    report = run_smoke()
-    print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
-    return 0 if report.qualified else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

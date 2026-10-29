@@ -1752,7 +1752,7 @@ Metres, working_crs: CrsInput) -> VectorLayerInfo`, the same shape as
 `FakeLayers`/`FakeAlgorithms`/`FakeProject` and asserts the exact
 `BufferRequest` Processing would have received. `build` renders
 `hasProcessingProvider=yes` from the declaration, and the
-`QGIS_SDK_SCAFFOLD_DESKTOP=1` harness scaffolds this variant so real QGIS
+scaffold Desktop smoke test (`pytest -m smoke`) scaffolds this variant so real QGIS
 Desktop proves the provider is in `processingRegistry()` while the plugin runs
 and gone after unload. The README gets a "Processing" section naming the
 toolbox entry `<plugin>:buffer`. It combines with `--web`.

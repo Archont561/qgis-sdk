@@ -11,14 +11,12 @@ from __future__ import annotations
 import ast
 import configparser
 import json
-import os
-import subprocess
-import sys
 from dataclasses import fields
 from pathlib import Path
 
 import pytest
-from desktop_adapter_smoke import (
+from smoke_support import run_isolated_smoke
+from smoke_support.desktop_adapter_smoke import (
     EVIDENCE_FIELDS,
     FIXTURE_FILES,
     LIFECYCLE_PROBE,
@@ -28,10 +26,6 @@ from desktop_adapter_smoke import (
     request_document,
     run_smoke,
 )
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-SMOKE_SCRIPT = SCRIPTS_DIR / "desktop_adapter_smoke.py"
-SMOKE_ENV_FLAG = "QGIS_SDK_DESKTOP_ADAPTER"
 
 
 def report_payload(**overrides: object) -> dict[str, object]:
@@ -200,19 +194,9 @@ def test_the_unavailable_report_confirms_nothing() -> None:
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get(SMOKE_ENV_FLAG) != "1",
-    reason=f"set {SMOKE_ENV_FLAG}=1 to qualify the Desktop adapter in real QGIS",
-)
+@pytest.mark.smoke
 def test_real_qgis_desktop_qualifies_the_adapter_lifecycle() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=600,
-        check=False,
-    )
+    result = run_isolated_smoke("desktop_adapter_smoke", timeout=600)
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload = json.loads(result.stdout)

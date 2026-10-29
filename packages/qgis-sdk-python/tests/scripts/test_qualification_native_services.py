@@ -8,14 +8,12 @@ service contracts, which says nothing about canvas, widgets or a display.
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from native_services_smoke import (
+from smoke_support import run_isolated_smoke
+from smoke_support.native_services_smoke import (
     EXPECTED_CRS,
     EXPECTED_FIELDS,
     EXPECTED_GEOMETRY,
@@ -23,12 +21,7 @@ from native_services_smoke import (
     FIXTURE_DATASET,
     SELECTED_FEATURES,
     NativeServicesReport,
-    parse_prefix,
 )
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-SMOKE_SCRIPT = SCRIPTS_DIR / "native_services_smoke.py"
-SMOKE_ENV_FLAG = "QGIS_SDK_NATIVE_SERVICES_SMOKE"
 
 
 def successful_report() -> NativeServicesReport:
@@ -130,19 +123,9 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
 
 
 @pytest.mark.desktop
-@pytest.mark.skipif(
-    os.environ.get(SMOKE_ENV_FLAG) != "1",
-    reason=f"set {SMOKE_ENV_FLAG}=1 to run the real native services smoke",
-)
+@pytest.mark.smoke
 def test_native_services_smoke_opens_a_layer_and_releases_it() -> None:
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT)],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
+    result = run_isolated_smoke("native_services_smoke", timeout=180)
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
@@ -164,33 +147,11 @@ def test_native_services_smoke_opens_a_layer_and_releases_it() -> None:
     assert payload["qgis_exited"] is True
 
 
-def test_prefix_argument_is_read_in_both_spellings() -> None:
-    assert parse_prefix([]) is None
-    assert parse_prefix(["--prefix", "/opt/qgis"]) == Path("/opt/qgis")
-    assert parse_prefix(["--prefix=/opt/qgis"]) == Path("/opt/qgis")
-    assert parse_prefix(["--other", "value"]) is None
-
-
-def test_unusable_host_produces_a_report_and_a_non_zero_status(tmp_path: Path) -> None:
-    """A host without QGIS must answer, not skip silently or crash.
-
-    This runs the real script against a prefix that cannot hold QGIS: the run
-    cannot silently pass, and it cannot die with a traceback either. It asserts the
-    contract a caller relies on - serialisable JSON on stdout, every stage false,
-    an error naming the failure, and a non-zero exit.
-    """
-    result = subprocess.run(
-        [sys.executable, str(SMOKE_SCRIPT), "--prefix", str(tmp_path / "no-qgis")],
-        cwd=SCRIPTS_DIR.parents[1],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
-
+def test_unusable_host_produces_a_failed_report(tmp_path: Path) -> None:
+    result = run_isolated_smoke("native_services_smoke", prefix=tmp_path / "no-qgis")
+    assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert result.returncode == 1
     assert payload["passed"] is False
     assert payload["qgis_initialised"] is False
     assert payload["layer_opened"] is False
-    assert payload["error"], "an unusable host must say what went wrong"
+    assert payload["error"]
