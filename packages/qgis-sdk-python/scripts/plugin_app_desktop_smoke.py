@@ -28,6 +28,9 @@ EVIDENCE_FIELDS = (
     "provider_registration",
     "actions_and_dialogs",
     "surface_wire_dispatch",
+    "surface_direct_capabilities",
+    "surface_navigation",
+    "closed_view_capabilities",
     "first_unload_isolated",
     "reload_fresh_module",
     "final_cleanup",
@@ -36,7 +39,7 @@ EVIDENCE_FIELDS = (
 
 PLUGIN_SOURCE = """\
 from qgis.PyQt.QtCore import QThread
-from qgis.PyQt.QtWidgets import QApplication, QPushButton
+from qgis.PyQt.QtWidgets import QApplication, QLabel, QPushButton
 from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
 from qgis_sdk.core import PluginContext
 from qgis_sdk.providers import Provider
@@ -45,7 +48,14 @@ from qgis_sdk.ui import Dialog, on
 calls = []
 closed = []
 wire_results = []
+capability_results = []
 child = QgisSdkPlugin(id="application.NAME.child")
+
+@child.surface
+class Detail(Dialog):
+    title = "Details"
+    def build(self):
+        return QLabel("details")
 
 @child.surface
 class Report(Dialog):
@@ -57,6 +67,8 @@ class Report(Dialog):
     @on("go").clicked
     def run_clicked(self):
         wire_results.append(self.ctx.actions.double(value=21))
+        capability_results.append((self.ctx.desktop.iface, self.ctx.algorithms.describe("native:buffer").id, self.ctx.styles))
+        self.ctx.ui.open(Detail)
     def on_close(self):
         closed.append(True)
 
@@ -122,8 +134,19 @@ try:
             raise RuntimeError("wired button was not mounted")
         button.click()
     result["surface_wire_dispatch"] = all(module.wire_results == [42] for module in modules)
+    result["surface_direct_capabilities"] = all(len(module.capability_results) == 1 and module.capability_results[0][0] is utils.iface and module.capability_results[0][1] == "native:buffer" and module.capability_results[0][2] is plugin.context.styles for plugin, module in zip((first, second), modules))
+    result["surface_navigation"] = all(len(plugin.surfaces.dialogs) == 2 and isinstance(plugin.surfaces.dialogs[1].surface, module.Detail) for plugin, module in zip((first, second), modules))
     result["direct_app_spec_resolved"] = callable(host(names[0] + ".plugin:app"))
+    closed_view_ctx = first.surfaces.dialogs[0].surface.ctx
     unloaded = utils.unloadPlugin(names[0]) and not utils.isPluginLoaded(names[0])
+    from qgis_sdk.models import QgisSdkScopeClosedError
+    closed_refusals = []
+    for name in ("algorithms", "styles", "desktop", "ui"):
+        try:
+            getattr(closed_view_ctx, name)
+        except QgisSdkScopeClosedError:
+            closed_refusals.append(name)
+    result["closed_view_capabilities"] = len(closed_refusals) == 4 and second.surfaces.dialogs[0].surface.ctx.desktop.iface is utils.iface
     result["first_unload_isolated"] = bool(unloaded and first.context.scope.closed and modules[0].closed == [True] and registry.providerById("applicationproofone") is None and registry.providerById("applicationprooftwo") is not None and second.runtime.state.value == "running" and len(second.desktop_bindings.placed) == 1)
     second.desktop_bindings.placed[0].trigger()
     source_path = Path(request["plugins_root"]) / names[0] / "plugin.py"

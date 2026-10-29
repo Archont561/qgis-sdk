@@ -217,6 +217,106 @@ def test_calls_after_unload_are_refused(runtime: PluginRuntime) -> None:
 # -- the contexts ---------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("name", ["algorithms", "styles", "desktop", "ui"])
+def test_surface_capability_absence_and_closed_scope_are_explicit(
+    scope: ResourceScope, name: str
+) -> None:
+    from qgis_sdk.models import QgisSdkScopeClosedError
+    from qgis_sdk.testing import fake_ui_context
+
+    context = fake_ui_context(scope)
+    assert not context.has(name)
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as error:
+        getattr(context, name)
+    assert error.value.capability == name
+
+    view_scope = scope.child()
+    provided = object()
+    view = fake_ui_context(view_scope, **{name: provided})
+    assert getattr(view, name) is provided
+    view_scope.close()
+    assert not scope.closed
+    with pytest.raises(QgisSdkScopeClosedError):
+        getattr(view, name)
+
+
+def test_surface_can_open_another_registered_surface_without_an_action(
+    scope: ResourceScope,
+) -> None:
+    from qgis_sdk import QgisSdkPlugin
+    from qgis_sdk.testing import build_surface, fake_ui_context
+    from qgis_sdk.ui import Button, on
+
+    app = QgisSdkPlugin(id="surface_navigation")
+
+    @app.surface
+    class Detail(Dialog):
+        pass
+
+    @app.surface
+    class Main(Dialog):
+        open_detail = Button(text="Details")
+
+        @on(open_detail).clicked
+        def show_detail(self) -> None:
+            self.ctx.ui.open(Detail, initial={"item": "one"})
+
+    ui = FakeUi(scope, app=app)
+    built = build_surface(Main, fake_ui_context(scope, ui=ui))
+    built.surface.open_detail.click()
+
+    assert ui.opened[0].surface is Detail
+    assert dict(ui.opened[0].initial) == {"item": "one"}
+    with pytest.raises(QgisSdkUiError, match="Unlisted is not registered"):
+        built.surface.ctx.ui.open(Unlisted)
+    assert len(ui.opened) == 1
+
+
+def test_surface_can_reach_its_provided_desktop_without_an_action(
+    scope: ResourceScope,
+) -> None:
+    from qgis_sdk.testing import fake_ui_context
+
+    @dataclass
+    class Desktop:
+        iface: object
+
+    iface = object()
+    context = fake_ui_context(scope, desktop=Desktop(iface))
+    assert context.desktop.iface is iface
+
+
+def test_surface_can_apply_styles_directly_without_an_action(
+    scope: ResourceScope,
+) -> None:
+    from pathlib import Path
+
+    from qgis_sdk.testing import FakeLayers, FakeStyles, fake_ui_context
+
+    layers = FakeLayers(scope)
+    source = Path("fixtures/reference/points.geojson")
+    layers.register(
+        source, name="points", geometry_type="point", field_names=("id", "value")
+    )
+    layer = layers.open_vector(source)
+    styles = FakeStyles(layers, scope)
+    context = fake_ui_context(scope, styles=styles)
+
+    context.styles.apply_style(layer.id, "reference/point-output")
+    assert styles.applied(layer.id) == ("reference/point-output",)
+
+
+def test_surface_can_use_algorithms_directly_without_an_action(
+    scope: ResourceScope,
+) -> None:
+    from qgis_sdk.testing import FakeAlgorithms, FakeLayers, fake_ui_context
+
+    algorithms = FakeAlgorithms(FakeLayers(scope), scope)
+    context = fake_ui_context(scope, algorithms=algorithms)
+
+    assert context.algorithms.describe("native:buffer").id == "native:buffer"
+
+
 def test_ui_context_carries_actions_and_settings_as_capabilities(
     scope: ResourceScope, actions: ViewActions
 ) -> None:

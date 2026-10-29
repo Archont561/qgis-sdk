@@ -245,12 +245,19 @@ class UiContext(_Context):
     (:class:`qgis_sdk.ui.actions.ViewActions`): ``ctx.actions.buffer(...)``
     validates, coerces and dispatches to the runtime's bound handler and
     refuses a second call while the first still runs from this view
-    (decision-55). ``settings`` is the plugin's settings when the host
-    shares them with its surfaces.
+    (decision-55). The host may also share plugin services such as
+    ``algorithms``, ``styles``, ``desktop`` and ``ui`` directly, so surface
+    handlers need not declare actions. ``desktop`` is a native escape hatch.
+    These are the plugin's service objects, not view-owned copies: capability
+    access checks the view scope, but a previously retained service still has
+    its own plugin lifetime. Direct calls are synchronous; the context does
+    not move work to a worker.
     """
 
     __slots__ = (
         "_actions",
+        "_algorithms",
+        "_desktop",
         "_files",
         "_layers",
         "_log",
@@ -258,6 +265,8 @@ class UiContext(_Context):
         "_project",
         "_settings",
         "_streams",
+        "_styles",
+        "_ui",
         "notifications",
         "scope",
         "view",
@@ -266,12 +275,16 @@ class UiContext(_Context):
     _capability_names = (
         "network",
         "actions",
+        "algorithms",
+        "desktop",
         "settings",
         "layers",
         "project",
         "files",
         "log",
         "streams",
+        "styles",
+        "ui",
     )
 
     notifications: Notifications
@@ -279,6 +292,8 @@ class UiContext(_Context):
     scope: ResourceScope
     network: Capability[Network] = Capability()
     actions: Capability[ViewActions] = Capability()
+    algorithms: Capability[Algorithms] = Capability()
+    desktop: Capability[DesktopAccess] = Capability()
     settings: Capability[Settings] = Capability()
     #: What the catalogue's pickers list and the ``FileInput`` mints through
     #: the plugin's own services, handed to its surfaces.
@@ -289,6 +304,8 @@ class UiContext(_Context):
     #: The plugin's ``@stream`` methods, subscribed from this view
     #: (:class:`qgis_sdk.ui.streams.ViewStreams`); ``ctx.on`` is the short form.
     streams: Capability[ViewStreams] = Capability()
+    styles: Capability[Styles] = Capability()
+    ui: Capability[Ui] = Capability()
 
     def __init__(
         self,
@@ -303,6 +320,10 @@ class UiContext(_Context):
         files: Files | None = None,
         log: Log | None = None,
         streams: ViewStreams | None = None,
+        algorithms: Algorithms | None = None,
+        ui: Ui | None = None,
+        styles: Styles | None = None,
+        desktop: DesktopAccess | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
@@ -310,12 +331,16 @@ class UiContext(_Context):
             scope=scope,
             _network=network,
             _actions=actions,
+            _algorithms=algorithms,
+            _desktop=desktop,
             _settings=settings,
             _layers=layers,
             _project=project,
             _files=files,
             _log=log,
             _streams=streams,
+            _styles=styles,
+            _ui=ui,
         )
 
     def on(
