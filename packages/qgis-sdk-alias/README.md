@@ -7,7 +7,7 @@ its actions and streams, and use granted host services. Framework-free stores
 and React, Vue and Svelte bindings help build interfaces in `QWebEngineView`;
 a scripted host lets you test them without QGIS.
 
-> Status: `0.5.0`, experimental `0.x`. Published as
+> Status: `0.6.0`, experimental `0.x`. Published as
 > `@archont561/qgis-sdk-bridge` through `0.2.0`; this name continues from
 > `0.3.0`, and `qgis-sdk` on npm is its unscoped alias. `./host`, `./react`,
 > `./vue`, `./svelte` and `./testing` are opt-in entry points.

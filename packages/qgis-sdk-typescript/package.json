@@ -1,6 +1,6 @@
 {
 	"name": "@archont561/qgis-sdk",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"description": "Typed QGIS plugin actions and host services for your web UI.",
 	"license": "MIT",
 	"type": "module",

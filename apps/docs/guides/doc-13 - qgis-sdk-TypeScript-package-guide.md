@@ -832,7 +832,7 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
 
-## Next minor (unreleased) migration notes
+## 0.6.0 migration notes
 
 **Two bridge error classes are gone.** `QgisSdkBridgeSequenceError` and
 `QgisSdkBridgeStreamEndedError` left the `./bridge` entry: no code path

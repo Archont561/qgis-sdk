@@ -2436,7 +2436,7 @@ published for the bridge, and no `ts-v*` tag exists.
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
 
-## Next minor (unreleased) migration notes
+## 0.8.0 migration notes
 
 ### Application authoring replaces plugin classes
 
