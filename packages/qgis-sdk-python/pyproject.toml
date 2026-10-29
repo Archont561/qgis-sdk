@@ -17,6 +17,8 @@ authors = [{ name = "QGIS SDK contributors" }]
 dependencies = ["qgis-sdk-runtime==0.7.0", "qgis-sdk-tools==0.7.0"]
 
 [project.optional-dependencies]
+# The release stamper keeps this extra aligned with the kit's tools pin.
+mcp = ["qgis-sdk-tools[mcp]==0.7.0"]
 # The workspace's own test suite (packages/qgis-sdk-python/tests), which covers
 # both distributions; installed by the QGIS-free CI matrix and the arena fallback
 # next to editable installs of the runtime and the tools.
@@ -24,6 +26,7 @@ dev = [
 	"hypothesis==6.169.4",
 	"jsonschema==4.26.0",
 	"mashumaro==3.23",
+	"mcp==2.3.0",
 	"pytest==9.1.1",
 	"pytest-cov==7.1.0",
 	"pytest-bdd==9.0.0",

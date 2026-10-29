@@ -15,6 +15,9 @@ authors = [{ name = "QGIS SDK contributors" }]
 # it moves on purpose, with a tools release, never implicitly.
 dependencies = ["qgis-sdk-runtime>=0.7.0,<0.8", "typer==0.27.3"]
 
+[project.optional-dependencies]
+mcp = ["mcp==2.3.0"]
+
 [project.scripts]
 qgis-sdk = "qgis_sdk_tools.__main__:main"
 

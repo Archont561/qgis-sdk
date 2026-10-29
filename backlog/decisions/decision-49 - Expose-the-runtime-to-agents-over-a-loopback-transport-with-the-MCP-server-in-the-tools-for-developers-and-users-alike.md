@@ -2,8 +2,14 @@
 id: decision-49
 title: Expose the runtime to agents over a loopback transport with the MCP server in the tools for developers and users alike
 date: '2026-10-26'
-status: accepted
+status: superseded
 ---
+## Superseded (2026-10-29)
+
+The runtime "agent" concept and its MCP adapter are withdrawn. The boundary is now: **MCP for development** (`qgis-sdk mcp` over the developer CLI, no runtime connection) and **HTTP in the plugin runtime** (an explicitly hosted, authenticated, allowlisted REST API that exposes selected plugin actions and streams to clients outside QGIS). There is no `qgis_sdk.agent` module, no `[tool.qgis-sdk.agent]` metadata, no agent checker and no plugin REST-to-MCP adapter. `qgis_sdk_tools.rest.PluginClient` and `qgis-sdk plugin describe|call|stream` are the clients. TASK-74 carries the replacement scope.
+
+The original reasoning is retained for history: the MCP package is too heavy to vendor into a plugin, which is why the runtime speaks the bridge protocol rather than MCP.
+
 ## Context
 
 The owner wants agents (MCP clients such as Claude Code, Claude Desktop,

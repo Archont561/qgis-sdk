@@ -32,7 +32,7 @@ decision-48. qgis_sdk.console.connect(iface=None, settings_prefix='console', not
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Re-scoped 2026-10-27 from m-6 (0.7.0) to m-7 (0.8.0): the console session is an access surface over the same curated services the loopback agent transport reaches, it blocks nothing in m-6 and nothing in m-6 blocks it, and 0.7.0 ships what is already qualified. Lands in m-7 sprint 2, next to developer mode.
+Re-scoped 2026-10-27 from m-6 (0.7.0) to m-7 (0.8.0): the console session is an access surface over the same curated services the plugin HTTP API reaches, it blocks nothing in m-6 and nothing in m-6 blocks it, and 0.7.0 ships what is already qualified. Lands in m-7 sprint 2.
 
 Session follow-up: TASK-125 explores validated plugin-to-plugin actions. The planned console PluginHandle is not yet implemented and does not by itself authorize cross-plugin calls; avoid concrete isinstance checks across separately vendored SDK copies.
 <!-- SECTION:NOTES:END -->

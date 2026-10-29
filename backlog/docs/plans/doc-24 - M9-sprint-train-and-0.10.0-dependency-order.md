@@ -21,7 +21,7 @@ table for 0.10.0 is `ctx.desktop.iface` today. Authority is three dialects.
 
 | Task | Declared dependencies | Startable |
 | --- | --- | --- |
-| [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) grant vocabulary + coverage map | TASK-76, TASK-73 | after 0.8.0 |
+| [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) grant vocabulary + coverage map | TASK-73 | after 0.8.0 |
 | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) large payloads by reference | TASK-84, TASK-74 | after 84 |
 | [TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md) features + expressions | TASK-84, TASK-102 | after 102 |
 | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) canvas | TASK-84, TASK-81 (app window) | after 84 |

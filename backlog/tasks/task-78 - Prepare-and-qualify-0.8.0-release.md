@@ -11,7 +11,6 @@ dependencies:
   - TASK-32
   - TASK-74
   - TASK-75
-  - TASK-76
   - TASK-79
   - TASK-73
   - TASK-77
@@ -23,7 +22,7 @@ ordinal: 78000
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Explicit release gate for the agent-access release (m-7, decision-49), not evidence of release or permission to publish. Verify milestone work and obtain explicit release authorization. Python-only release: runtime (loopback transport), tools (mcp extra, dev --agent, user-mode generation); the bridge is expected unchanged and that expectation is confirmed, not assumed.
+Explicit release gate for the plugin HTTP access release (m-7), not evidence of release or permission to publish. Verify milestone work and obtain explicit release authorization. Python-only release: runtime (explicit loopback HTTP API for plugin actions and streams), tools (mcp extra and plugin REST clients); the bridge is expected unchanged and that expectation is confirmed, not assumed.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

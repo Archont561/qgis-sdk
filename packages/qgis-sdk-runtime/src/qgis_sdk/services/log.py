@@ -5,7 +5,7 @@
 keyword fields. Where it lands is the host's business - ``QgsMessageLog``
 under the plugin's tag natively, a list under the fake - and a view may
 ``subscribe`` to see the records as they are written (``LogView`` does).
-Crash capture, ``diagnose`` and the agent transport come later (decision-63);
+Crash capture and ``diagnose`` come later (decision-63);
 this module is the minimum the components need.
 """
 

@@ -4,7 +4,7 @@ title: Make official documentation concise and visually guided
 status: To Do
 assignee: []
 created_date: '2026-10-28 16:43'
-updated_date: '2026-10-28 17:03'
+updated_date: '2026-10-29 09:11'
 labels: []
 dependencies: []
 references:
@@ -40,3 +40,9 @@ Rewrite the official documentation to reduce verbosity and make concepts and wor
 - [ ] #11 Reuse existing Starlight cards and steps and tabs where suitable; design a tested durable MDX or generation approach for reusable components in the generated guides instead of editing generated pages.
 - [ ] #12 Coordinate the framework selector with TASK-130 and diagnostic rule cards with TASK-132; preserve stated limitations and do not claim the unresolved safety issues in TASK-118 or TASK-119 are fixed.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Coordinate the first-plugin walkthrough with TASK-135: apps/docs/src/content/docs/start/first-plugin.md is its durable source, with source-excerpt and scaffold-command regression tests in packages/qgis-sdk-python/tests/test_first_plugin_guide.py. Link or reuse it rather than duplicating the action or file tree.
+<!-- SECTION:NOTES:END -->
