@@ -2238,6 +2238,16 @@ opens no socket and creates no token, and only one server may serve a runtime.
   Work queued from the thread already running plugin work is refused at once.
   A reload fails an in-flight call with `host_reloaded` without undoing effects
   it already had.
+- Refusals carry `{"error": {"code": ..., "message": ...}}`. `host_busy`,
+  `host_reloaded` and the per-plugin session `capacity` budget answer `503`,
+  because waiting or retrying can succeed; malformed input and failed
+  operations answer `400`. `PluginClient` raises `PluginClientError` carrying the
+  status for any non-`200` reply, refuses a response larger than 1 MiB instead
+  of parsing a truncated body, and reports a `200` action reply without a
+  `value` as `PluginClientError` rather than leaking a `KeyError`.
+- `PluginHttpServer.pending_requests` and `PluginHttpServer.busy` report the
+  dispatch state without exposing the internal queue: how many requests wait
+  for the owner thread and whether one is running right now.
 - Every dispatch still runs on the QGIS owner thread and through the same
   dispatcher, authority and protocol version as the page and the console. The
   bridge, `BRIDGE_PROTOCOL_VERSION` and `HOST_FINGERPRINT` do not move.

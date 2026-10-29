@@ -66,13 +66,23 @@ _COMMANDS = {
 }
 
 
+def _keep_tail(output: bytearray, data: bytes, truncated: list[bool]) -> None:
+    """Append stream data, keeping the newest bytes up to the limit.
+
+    The tail is what diagnoses a failure - a traceback, a failing summary - so
+    one rule governs both one-shot commands and live dev sessions.
+    """
+    output.extend(data)
+    if len(output) > _LIMIT:
+        del output[:-_LIMIT]
+        truncated[0] = True
+
+
 async def _capture(
     stream: asyncio.StreamReader, output: bytearray, truncated: list[bool]
 ) -> None:
     while data := await stream.read(65536):
-        remaining = _LIMIT - len(output)
-        output.extend(data[:remaining])
-        truncated[0] |= len(data) > remaining
+        _keep_tail(output, data, truncated)
 
 
 async def _finish_readers(tasks: list[asyncio.Task], truncated: list[bool]) -> None:
@@ -180,10 +190,7 @@ class _DevSession:
 
     async def _drain(self, stream: asyncio.StreamReader, output: bytearray) -> None:
         while data := await stream.read(65536):
-            output.extend(data)
-            if len(output) > _LIMIT:
-                del output[:-_LIMIT]
-                self.truncated[0] = True
+            _keep_tail(output, data, self.truncated)
 
     def report(self) -> DevInfo:
         return {

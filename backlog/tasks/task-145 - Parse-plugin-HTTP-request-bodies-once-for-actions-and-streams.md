@@ -1,10 +1,10 @@
 ---
 id: TASK-145
 title: Parse plugin HTTP request bodies once for actions and streams
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-29 13:36'
-updated_date: '2026-10-29 13:36'
+updated_date: '2026-10-29 13:51'
 labels:
   - python
   - refactor
@@ -23,7 +23,19 @@ The Content-Length validation, 413 size limit, JSON parse, short-read check and 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One private helper performs the body read and JSON-object validation for both handlers, and the duplication between _rest_action and _rest_stream is gone; the capacity guard has one implementation.
-- [ ] #2 The behaviour does not change: the existing limits tests (413 oversized, 400 ambiguous Content-Length and non-object payload, truncated body never dispatched, capacity) pass unchanged, and no new test is needed to prove it.
-- [ ] #3 Non-goals: do not restructure the handler class or split _server.py; this is the smallest extraction that removes the copies.
+- [x] #1 One private helper performs the body read and JSON-object validation for both handlers, and the duplication between _rest_action and _rest_stream is gone; the capacity guard has one implementation.
+- [x] #2 The behaviour does not change: the existing limits tests (413 oversized, 400 ambiguous Content-Length and non-object payload, truncated body never dispatched, capacity) pass unchanged, and no new test is needed to prove it.
+- [x] #3 Non-goals: do not restructure the handler class or split _server.py; this is the smallest extraction that removes the copies.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Fixed: Handler._json_object_body() is now the single reader for POST /actions and POST /streams (same Content-Length checks, _MAX_BODY_BYTES 413, JSON parse, short-read and object checks); the 64-session guard is PluginHttpServer._capacity_error() with _MAX_SESSIONS. No behaviour change: the 16 tests in test_plugin_http_limits.py (413 oversized, ambiguous Content-Length, non-object payload, truncated body never dispatched, capacity, deadlines) pass unchanged, as do the 16 in test_plugin_rest.py.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The security-relevant request rules and the session budget have one implementation each; the diff removes 42 duplicated lines without changing an observable behaviour.
+<!-- SECTION:FINAL_SUMMARY:END -->

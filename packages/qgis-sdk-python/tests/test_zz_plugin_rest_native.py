@@ -150,9 +150,7 @@ def test_a_nested_qdialog_defers_a_second_call_until_it_returns(
         def maybe_close():
             # Prove the second request reached the owner queue while the
             # nested loop was running, not merely that the socket was written.
-            with server_box[0]._queue._lock:
-                pending = bool(server_box[0]._queue._items)
-            if pending:
+            if server_box[0].pending_requests:
                 queued_during_modal.set()
                 check.stop()
                 # Force any posted work to run inside this nested loop. A

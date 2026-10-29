@@ -77,6 +77,11 @@ for frame in client.stream("my_stream", {}):
     print(frame)
 ```
 
+The client raises `PluginClientError` carrying the HTTP status for any non-`200`
+reply, refuses a response or stream frame larger than 1 MiB instead of parsing a
+truncated body, and reports a `200` action reply that carries no `value` as
+`PluginClientError` rather than a `KeyError`.
+
 Calls are serialized per plugin runtime. A second request waits for its turn
 for up to the server's deadline and then fails with `503` and the `host_busy`
 code; it never runs inside another handler, and a handler that opens a modal
@@ -84,6 +89,12 @@ dialog cannot be re-entered. Requests that arrive while a handler is running
 therefore queue rather than interleave. A call made from the thread that is
 already running plugin work is refused immediately, so it cannot block the
 owner thread until the deadline.
+
+Refusals carry `{"error": {"code": ..., "message": ...}}`. `host_busy`,
+`host_reloaded` and the per-plugin `capacity` session budget answer `503`,
+because waiting or retrying can succeed; malformed input and failed operations
+answer `400`. `PluginHttpServer.pending_requests` and `PluginHttpServer.busy`
+report the dispatch state without exposing the internal queue.
 
 At the HTTP level, `GET /plugin` returns the filtered description,
 `POST /actions/<id>` calls an action with a JSON object, and

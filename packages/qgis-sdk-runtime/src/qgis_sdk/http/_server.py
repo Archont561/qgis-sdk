@@ -28,6 +28,12 @@ from ._queue import GuiQueue, QgisSdkHostBusyError, QgisSdkHostReloadedError
 _RUNTIME_LOCK = threading.Lock()
 _ACTIVE_RUNTIMES: weakref.WeakSet[Any] = weakref.WeakSet()
 
+# One request body bound and one session budget for every REST entry point.
+_MAX_BODY_BYTES = 1024 * 1024
+_MAX_SESSIONS = 64
+# Retryable server conditions answer 503; anything else is the caller's fault.
+_ERROR_STATUS = {"host_busy": 503, "host_reloaded": 503, "capacity": 503}
+
 
 class _FrameBuffer:
     """A session's outgoing frames, bounded by count and encoded byte size."""
@@ -265,6 +271,16 @@ class PluginHttpServer:
             raise QgisSdkHttpError("the HTTP server is not running")
         return self._http.server_port
 
+    @property
+    def pending_requests(self) -> int:
+        """Requests waiting for their turn on the QGIS owner thread."""
+        return self._queue.pending
+
+    @property
+    def busy(self) -> bool:
+        """Whether the owner thread is running a request right now."""
+        return self._queue.busy
+
     def __enter__(self) -> Self:
         self.start()
         return self
@@ -336,6 +352,38 @@ class PluginHttpServer:
                             self.connection.settimeout(owner._stream_write_timeout)
                         return not self._timed_out
 
+                def _json_object_body(self) -> dict[str, Any] | None:
+                    """Read one bounded JSON-object body, or answer and return None.
+
+                    Both REST entry points accept exactly one unambiguous
+                    Content-Length framing and one JSON object, so those rules
+                    live in one place.
+                    """
+                    lengths = self.headers.get_all("Content-Length") or []
+                    if (
+                        len(lengths) != 1
+                        or not lengths[0].isdigit()
+                        or self.headers.get("Transfer-Encoding")
+                    ):
+                        self.send_error(400)
+                        return None
+                    size = int(lengths[0])
+                    if size > _MAX_BODY_BYTES:
+                        self.send_error(413)
+                        return None
+                    raw = self.rfile.read(size)
+                    if not self._finish_reading():
+                        return None
+                    try:
+                        payload = json.loads(raw)
+                    except (ValueError, UnicodeDecodeError):
+                        self.send_error(400)
+                        return None
+                    if len(raw) != size or not isinstance(payload, dict):
+                        self.send_error(400)
+                        return None
+                    return payload
+
                 def handle(self) -> None:
                     try:
                         super().handle()
@@ -369,40 +417,15 @@ class PluginHttpServer:
                     ):
                         self.send_error(404)
                         return
-                    lengths = self.headers.get_all("Content-Length") or []
-                    if (
-                        len(lengths) != 1
-                        or not lengths[0].isdigit()
-                        or self.headers.get("Transfer-Encoding")
-                    ):
-                        self.send_error(400)
-                        return
-                    size = int(lengths[0])
-                    if size > 1024 * 1024:
-                        self.send_error(413)
-                        return
-                    raw = self.rfile.read(size)
-                    if not self._finish_reading():
-                        return
-                    try:
-                        payload = json.loads(raw)
-                    except (ValueError, UnicodeDecodeError):
-                        self.send_error(400)
-                        return
-                    if len(raw) != size or not isinstance(payload, dict):
-                        self.send_error(400)
+                    payload = self._json_object_body()
+                    if payload is None:
                         return
 
                     def call() -> dict[str, Any]:
                         session_id = secrets.token_urlsafe(24)
-                        with owner._lock:
-                            if len(owner._sessions) >= 64:
-                                return {
-                                    "error": {
-                                        "code": "capacity",
-                                        "message": "Too many sessions",
-                                    }
-                                }
+                        capacity = owner._capacity_error()
+                        if capacity is not None:
+                            return capacity
                         binding = owner._dispatcher.bind(
                             view_id=session_id, origin="http://loopback"
                         )
@@ -459,28 +482,8 @@ class PluginHttpServer:
                     ):
                         self.send_error(404)
                         return
-                    lengths = self.headers.get_all("Content-Length") or []
-                    if (
-                        len(lengths) != 1
-                        or not lengths[0].isdigit()
-                        or self.headers.get("Transfer-Encoding")
-                    ):
-                        self.send_error(400)
-                        return
-                    size = int(lengths[0])
-                    if size > 1024 * 1024:
-                        self.send_error(413)
-                        return
-                    raw = self.rfile.read(size)
-                    if not self._finish_reading():
-                        return
-                    try:
-                        payload = json.loads(raw)
-                    except (ValueError, UnicodeDecodeError):
-                        self.send_error(400)
-                        return
-                    if len(raw) != size or not isinstance(payload, dict):
-                        self.send_error(400)
+                    payload = self._json_object_body()
+                    if payload is None:
                         return
                     if not owner._event_slots.acquire(blocking=False):
                         self.send_error(503)
@@ -490,14 +493,9 @@ class PluginHttpServer:
                     try:
 
                         def subscribe():
-                            with owner._lock:
-                                if len(owner._sessions) >= 64:
-                                    return None, {
-                                        "error": {
-                                            "code": "capacity",
-                                            "message": "Too many sessions",
-                                        }
-                                    }
+                            capacity = owner._capacity_error()
+                            if capacity is not None:
+                                return None, capacity
                             binding = owner._dispatcher.bind(
                                 view_id=session_id, origin="http://loopback"
                             )
@@ -653,7 +651,7 @@ class PluginHttpServer:
     @staticmethod
     def _error_status(payload: dict[str, Any]) -> int:
         code = payload.get("error", {}).get("code")
-        return 503 if code == "host_busy" else 400
+        return _ERROR_STATUS.get(code, 400)
 
     def _report_cleanup_error(self, error: Exception) -> None:
         self._close_error = error
@@ -673,6 +671,13 @@ class PluginHttpServer:
                 self._report_cleanup_error(error)
 
         self._queue.defer(session_id, dispose)
+
+    def _capacity_error(self) -> dict[str, Any] | None:
+        """Refuse a new session once the per-plugin budget is spent."""
+        with self._lock:
+            if len(self._sessions) < _MAX_SESSIONS:
+                return None
+        return {"error": {"code": "capacity", "message": "Too many sessions"}}
 
     def _dispose_session(self, session_id: str) -> bool:
         with self._lock:
