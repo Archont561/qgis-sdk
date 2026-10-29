@@ -1664,10 +1664,55 @@ PyPI still serves `qgis-sdk` up to 0.7.0 and npm still serves
 `@archont561/qgis-sdk`'s `latest` at 0.5.0, with neither 0.8.0 nor 0.6.0
 listed. Both trains of the pair are proven end to end.
 
-**The real pair** is `python-v0.8.0` and `ts-v0.6.0` on the same commit
-`d7adb9ae`, cut only on the owner's release instruction; `ui-v0.1.0` is
-not re-tagged, because the `ui` scope is skipped for this train and its
-0.1.0 stays the release it was.
+**The real pair** was cut on the same commit `d7adb9ae` once the owner
+said "publish"; `ui-v0.1.0` was not re-tagged, because the `ui` scope is
+skipped for this train and its 0.1.0 stays the release it was. See
+*Released afterwards* below.
+
+### Released afterwards (2026-10-29)
+
+`python-v0.8.0` and `ts-v0.6.0` are annotated tags on `d7adb9ae`, the
+stamp pull request's merge commit, and ran `release.yml` twice:
+
+- `python-v0.8.0`, run
+  [40975585654](https://github.com/Archont561/qgis-sdk/actions/runs/40975585654):
+  `build`, `pypi`, `conda` and `github-release` succeeded; the npm and ui
+  jobs skipped. Every publish step ran for real - "Publish
+  qgis-sdk-runtime / qgis-sdk-tools / qgis-sdk to PyPI" and the three
+  prefix.dev uploads - with the prerelease skip step *itself* skipped, as
+  it must be for a stable tag.
+- `ts-v0.6.0`, run
+  [40975585334](https://github.com/Archont561/qgis-sdk/actions/runs/40975585334):
+  `build`, `npm`, `github-packages` and `github-release` succeeded;
+  everything else skipped, with "Publish to npm", "Publish the alias to
+  npm" and "Publish to GitHub Packages" all real.
+
+**PyPI** serves `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools`
+0.8.0 as `latest`, one wheel each, `requires-python >=3.11`, with the
+same digests built here on the stamped tree: `qgis_sdk-0.8.0` `0b390cf8…`,
+`qgis_sdk_runtime-0.8.0` `f7828256…`, `qgis_sdk_tools-0.8.0` `b61c3d33…`
+- the build is reproducible. Installing the published
+`qgis-sdk[mcp]==0.8.0` into a fresh CPython 3.11.2 `venv` resolves
+`mcp 2.3.0` and `mcp-types 2.3.0` with **no "does not provide the
+extra" warning**, `pip check` is clean, and `qgis-sdk mcp --help`
+renders. That venv's `qgis-sdk new --ui native --web vanilla` writes
+`qgis-sdk-runtime>=0.8,<0.9` and `"@archont561/qgis-sdk": "0.6.0"`, and
+`check` is clean on it; `targets` still prints the four-row matrix,
+naming the Windows and macOS QGIS rows *unqualified*.
+
+**npm** serves `@archont561/qgis-sdk` and its alias `qgis-sdk` at 0.6.0 as
+`latest`, 7 exports each, with no dependency on a peer gone wrong. The
+release assets are the three wheels, the three `.conda` files
+(`qgis-sdk-0.8.0-pyh0f40b72_0`, `qgis-sdk-runtime-0.8.0-pyh4616a5c_0`,
+`qgis-sdk-tools-0.8.0-pyh4616a5c_0`) and `SHA256SUMS` for
+`python-v0.8.0`, and both tarballs plus `SHA256SUMS` for `ts-v0.6.0`;
+both releases are published, neither is a prerelease.
+
+**Not verifiable from the sandbox:** the prefix.dev channel and the
+release-asset CDN, which are attested by the run logs only; Conda
+reproducibility, since `build:conda` cannot fetch conda-forge here. The
+`ui` packages stay at 0.1.0 and the owner's earlier note about their
+`0.0.0` placeholders still stands.
 
 **Run the webengine harnesses in separate processes.** The scaffold-web
 harness drives a *generated* plugin's view, which uses Chromium's default

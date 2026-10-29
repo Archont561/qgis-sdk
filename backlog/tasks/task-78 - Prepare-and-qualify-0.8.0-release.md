@@ -1,10 +1,10 @@
 ---
 id: TASK-78
 title: Prepare and qualify 0.8.0 release
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-29 23:45'
+updated_date: '2026-10-30 00:20'
 labels: []
 milestone: m-7
 dependencies:
@@ -30,7 +30,7 @@ Explicit release gate for the plugin HTTP access release (m-7), not evidence of 
 - [x] #1 Required 0.8.0 work (TASK-74 and 75; TASK-76 was withdrawn with decision-49, so the plugin HTTP API is the client outside QGIS and the MCP list covers developer commands only) has verified outcomes and test/artifact evidence: Python suite with the mcp extra, tests/scripts, the devtools and build-install harnesses, the scripted MCP client over stdio plus the read-only derivation of the same list; doc-12 migration notes cover every added name and the security model.
 - [x] #2 Use valid SemVer and prereleases such as 0.8.0-rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves with it); the mcp extra's range is recorded (mcp==2.3.0, and the kit's qgis-sdk-tools[mcp]==0.8.0 pin moves with the stamp).
 - [x] #3 Validate compatibility, licenses (including the mcp package and its tree in the extra), generated-file consistency and clean installation; the runtime still declares no dependencies.
-- [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
+- [x] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks. (Approved with "publish" after the green rc.1 pair; released as python-v0.8.0 and ts-v0.6.0 on d7adb9ae, runs 40975585654 and 40975585334, recorded in doc-14 under "Released afterwards".)
 - [x] #5 The bridge delta is confirmed rather than assumed: 27 files under packages/qgis-sdk-typescript changed (the bridge/store split, c278dec and 9397dee breaking), so the expectation of a zero delta was wrong and the owner put the bridge minor ts-v0.6.0 in this train; the wire is unchanged (HOST_FINGERPRINT sha256:16790dc8..., HOST_SCHEMA_VERSION 1, BRIDGE_PROTOCOL_VERSION 1) and the plugin-description contract version still agrees across both languages.
 - [x] #6 Review TASK-140 FastAPI-style authoring spike for the requested 0.8.0 target; if implementation is approved for this release include its compatibility and migration and qualification evidence and revisit the expected unchanged bridge before release. (Reviewed: TASK-140 is Done, TASK-141 implemented the API and stays In Progress with its own AC 4 open for visible-GUI, other-platform and Conda qualification, which this release does not claim.)
 <!-- AC:END -->
@@ -50,5 +50,8 @@ Explicit release gate for the plugin HTTP access release (m-7), not evidence of 
 
 
 2026-10-29 (rehearsal): the stamp PR (#141) merged as d7adb9ae. python-v0.8.0-rc.1 (run 40972199140) and ts-v0.6.0-rc.1 (run 40972199246) on that commit are both green: the Python run stamped 0.8.0-rc.1, passed the stamped-manifest verification, built and twine-checked three wheels and three Conda outputs, ran the PyPI verify step with every publish step skipped, and published a prerelease with the wheels, the .conda files and SHA256SUMS; the TypeScript run stamped 0.6.0-rc.1, packed and smoke-tested the bridge and alias tarballs, ran the npm dry-run with both publish steps skipped, and published a prerelease with both tarballs and SHA256SUMS. Nothing reached a registry: PyPI still ends at 0.7.0 and npm's latest is still 0.5.0. Recorded in doc-14 under '0.8.0 rehearsal (2026-10-29)'. The real pair (python-v0.8.0, ts-v0.6.0 on d7adb9ae) and AC 4 wait for the release instruction.
+
+
+2026-10-30 (released): owner said "publish". Annotated tags python-v0.8.0 and ts-v0.6.0 on d7adb9ae ran release.yml twice, both green. Python run 40975585654: build, pypi, conda and github-release succeeded (the three PyPI uploads and the three prefix.dev uploads were real, and the prerelease skip step was itself skipped); TypeScript run 40975585334: build, npm, github-packages and github-release succeeded. PyPI serves 0.8.0 as latest for all three distributions with the digests built here (0b390cf8, f7828256, b61c3d33), so the build is reproducible; npm serves @archont561/qgis-sdk and its alias at 0.6.0 as latest; both GitHub Releases are published with wheels, .conda files or tarballs and SHA256SUMS. A fresh venv installing the published qgis-sdk[mcp]==0.8.0 gets mcp 2.3.0 with no extra warning and a clean pip check. AC 4 was the last open criterion; all six are now checked and the task is Done. prefix.dev and the release-asset CDN are attested by the run logs only, and Conda remains unreproducible in the sandbox.
 
 <!-- SECTION:NOTES:END -->
