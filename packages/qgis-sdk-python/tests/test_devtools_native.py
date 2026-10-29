@@ -382,7 +382,13 @@ def test_the_page_served_by_vite_updates_in_place_and_keeps_its_bridge(
             ),
         )
 
-        app_ts.write_text(original.replace("Project layers", "Project layers (edited)"))
+        # Edit text the page actually renders: HMR is proven by the new label
+        # arriving in the live document, not by the file being touched.
+        marker = "<h1>Web Tools</h1>"
+        assert marker in original, "the scaffolded page moved; pick another marker"
+        app_ts.write_text(
+            original.replace(marker, "<h1>Web Tools (edited)</h1>"), encoding="utf-8"
+        )
         _pump(
             qgis_app,
             lambda: (
