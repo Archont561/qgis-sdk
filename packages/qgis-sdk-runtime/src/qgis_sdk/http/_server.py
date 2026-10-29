@@ -84,31 +84,6 @@ class _Session:
                 self.on_overflow()
 
 
-class _DispatchGate:
-    """Serialize dispatch per runtime, refusing re-entry from a nested loop.
-
-    A second caller on another thread waits up to ``timeout`` seconds for its
-    turn; the same thread re-entering while it already dispatches (a handler
-    pumping a nested event loop) is refused immediately instead of deadlocking.
-    """
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._owner: int | None = None
-
-    def enter(self, timeout: float) -> bool:
-        if self._owner == threading.get_ident():
-            return False
-        if not self._lock.acquire(timeout=timeout):
-            return False
-        self._owner = threading.get_ident()
-        return True
-
-    def leave(self) -> None:
-        self._owner = None
-        self._lock.release()
-
-
 class _BoundedHTTPServer(ThreadingHTTPServer):
     """Limit concurrently accepted HTTP handlers without blocking the accept loop."""
 
@@ -268,11 +243,9 @@ class PluginHttpServer:
         self._token = secrets.token_urlsafe(32)
         self._sessions: dict[str, _Session] = {}
         self._lock = threading.Lock()
-        # Dispatch is serialized per runtime: a handler that spins a nested
-        # event loop must not let a second call or subscription dispatch inside
+        # Dispatch is serialized by the queue: a handler that spins a nested
+        # event loop cannot let a second call or subscription dispatch inside
         # it, mirroring ChannelTransport's receiving guard.
-        self._dispatch = _DispatchGate()
-        self._dispatch_timeout = float(deadline)
         self._http: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._identity: tuple[int, int] | None = None
@@ -421,8 +394,6 @@ class PluginHttpServer:
                         return
 
                     def call() -> dict[str, Any]:
-                        if not owner._dispatch.enter(owner._dispatch_timeout):
-                            return owner._busy_another_call()
                         session_id = secrets.token_urlsafe(24)
                         with owner._lock:
                             if len(owner._sessions) >= 64:
@@ -465,10 +436,7 @@ class PluginHttpServer:
                                 else {"error": reply["error"]}
                             )
                         finally:
-                            try:
-                                owner._dispose_session(session_id)
-                            finally:
-                                owner._dispatch.leave()
+                            owner._dispose_session(session_id)
 
                     try:
                         result = owner._queue.call(call)
@@ -522,56 +490,49 @@ class PluginHttpServer:
                     try:
 
                         def subscribe():
-                            if not owner._dispatch.enter(owner._dispatch_timeout):
-                                return None, owner._busy_another_call()
-                            try:
-                                with owner._lock:
-                                    if len(owner._sessions) >= 64:
-                                        return None, {
-                                            "error": {
-                                                "code": "capacity",
-                                                "message": "Too many sessions",
-                                            }
-                                        }
-                                binding = owner._dispatcher.bind(
-                                    view_id=session_id, origin="http://loopback"
-                                )
-                                channel = ChannelTransport(
-                                    owner._dispatcher, binding, lambda _: None
-                                )
-                                session = _Session(
-                                    channel,
-                                    on_overflow=lambda: owner._defer_dispose(
-                                        session_id
-                                    ),
-                                )
-                                channel.send = session.send
-                                with owner._lock:
-                                    owner._sessions[session_id] = session
-                                text = json.dumps(
-                                    {
-                                        "protocol": 1,
-                                        "kind": "subscribe",
-                                        "call_id": secrets.token_hex(8),
-                                        "operation": stream_id,
-                                        "payload": payload,
-                                    }
-                                )
-                                if not channel.receive(text) or not session.replies:
-                                    owner._dispose_session(session_id)
+                            with owner._lock:
+                                if len(owner._sessions) >= 64:
                                     return None, {
                                         "error": {
-                                            "code": "invalid_request",
-                                            "message": "Invalid request",
+                                            "code": "capacity",
+                                            "message": "Too many sessions",
                                         }
                                     }
-                                reply = json.loads(session.replies.pop(0))
-                                if not reply.get("ok"):
-                                    owner._dispose_session(session_id)
-                                    return None, {"error": reply["error"]}
-                                return session, None
-                            finally:
-                                owner._dispatch.leave()
+                            binding = owner._dispatcher.bind(
+                                view_id=session_id, origin="http://loopback"
+                            )
+                            channel = ChannelTransport(
+                                owner._dispatcher, binding, lambda _: None
+                            )
+                            session = _Session(
+                                channel,
+                                on_overflow=lambda: owner._defer_dispose(session_id),
+                            )
+                            channel.send = session.send
+                            with owner._lock:
+                                owner._sessions[session_id] = session
+                            text = json.dumps(
+                                {
+                                    "protocol": 1,
+                                    "kind": "subscribe",
+                                    "call_id": secrets.token_hex(8),
+                                    "operation": stream_id,
+                                    "payload": payload,
+                                }
+                            )
+                            if not channel.receive(text) or not session.replies:
+                                owner._dispose_session(session_id)
+                                return None, {
+                                    "error": {
+                                        "code": "invalid_request",
+                                        "message": "Invalid request",
+                                    }
+                                }
+                            reply = json.loads(session.replies.pop(0))
+                            if not reply.get("ok"):
+                                owner._dispose_session(session_id)
+                                return None, {"error": reply["error"]}
+                            return session, None
 
                         try:
                             session, error = owner._queue.call(subscribe)
@@ -688,15 +649,6 @@ class PluginHttpServer:
         except BaseException:
             self.close()
             raise
-
-    @staticmethod
-    def _busy_another_call() -> dict[str, Any]:
-        return {
-            "error": {
-                "code": "host_busy",
-                "message": "Another call is already running on this plugin",
-            }
-        }
 
     @staticmethod
     def _error_status(payload: dict[str, Any]) -> int:

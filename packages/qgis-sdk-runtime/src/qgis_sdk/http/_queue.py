@@ -51,6 +51,7 @@ class GuiQueue:
         # discarded when the request queue fills or a post is rejected.
         self._cleanups: dict[str, _Work] = {}
         self._active = False
+        self._active_thread: int | None = None
         self._current: _Work | None = None
         self._idle_callbacks: list[Callable[[], None]] = []
         self._retry_timer: threading.Timer | None = None
@@ -104,6 +105,13 @@ class GuiQueue:
         with self._lock:
             if self._closed:
                 raise QgisSdkHostReloadedError("The QGIS host closed")
+            if self._active_thread == threading.get_ident():
+                # Calling back into the owner from work it is already running
+                # would wait for a turn that cannot arrive; refuse at once
+                # instead of blocking the owner thread for the whole deadline.
+                raise QgisSdkHostBusyError(
+                    "The QGIS host is already running work on this thread"
+                )
             if len(self._items) >= 64:
                 raise QgisSdkHostBusyError("The QGIS host request queue is full")
             self._items.append(work)
@@ -171,6 +179,7 @@ class GuiQueue:
             else:
                 return
             self._active = True
+            self._active_thread = threading.get_ident()
             self._current = item
             item.picked.set()
         value = None
@@ -187,6 +196,7 @@ class GuiQueue:
                     item.done.set()
                 self._current = None
                 self._active = False
+                self._active_thread = None
                 idle_callbacks, self._idle_callbacks = self._idle_callbacks, []
                 schedule = bool(self._cleanups or self._items) and not self._scheduled
                 if schedule:

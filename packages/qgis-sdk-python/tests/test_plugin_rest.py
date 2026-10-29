@@ -494,7 +494,12 @@ def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
             callback()
 
     server = PluginHttpServer(
-        runtime, post=post, token_file=tmp_path / "token", actions=("echo",), deadline=2
+        runtime,
+        post=post,
+        token_file=tmp_path / "token",
+        actions=("echo",),
+        # Long enough that only the reload, never the deadline, can end this call.
+        deadline=60,
     )
     server.start()
     token = (tmp_path / "token").read_text().strip()

@@ -206,9 +206,7 @@ def test_an_inline_post_host_still_serializes_concurrent_calls(tmp_path: Path):
         runtime.unload()
 
 
-def test_a_call_from_inside_a_handler_is_refused_rather_than_overlapping(
-    tmp_path: Path,
-):
+def test_a_handler_waiting_on_its_own_api_gets_host_busy(tmp_path: Path):
     import http.client
 
     from qgis_sdk.http import PluginHttpServer
@@ -242,20 +240,48 @@ def test_a_call_from_inside_a_handler_is_refused_rather_than_overlapping(
             post=lambda callback: callback(),
             token_file=tmp_path / "token",
             actions=("outer",),
-            deadline=0.3,
+            deadline=0.5,
         ) as server:
             nested["port"] = server.port
             nested["token"] = (tmp_path / "token").read_text().strip()
             started = time.monotonic()
             status, body = _call(server.port, nested["token"], "outer", {"value": "x"})
             elapsed = time.monotonic() - started
+            # The inner request waits for its turn, then fails rather than
+            # running inside the outer handler; the outer call still succeeds.
             assert status == 200 and json.loads(body) == {"value": "x"}
             inner_status, inner_body = nested["result"]
             assert inner_status == 503
             assert json.loads(inner_body)["error"]["code"] == "host_busy"
-            assert elapsed < 10, "a re-entrant call must not deadlock the listener"
+            assert elapsed < 10, "the listener must not deadlock"
     finally:
         runtime.unload()
+
+
+def test_the_owner_thread_is_refused_promptly_instead_of_waiting(
+    tmp_path: Path,
+):
+    from qgis_sdk.http._queue import GuiQueue, QgisSdkHostBusyError
+
+    outcome: dict = {}
+
+    def work():
+        started = time.monotonic()
+        try:
+            queue.call(lambda: "inner")
+        except QgisSdkHostBusyError as error:
+            outcome["error"] = error
+            outcome["elapsed"] = time.monotonic() - started
+        return "outer"
+
+    queue = GuiQueue(post=lambda callback: callback(), deadline=10)
+    assert queue.call(work) == "outer"
+    assert outcome["error"].code == "host_busy"
+    assert outcome["elapsed"] < 1, (
+        "re-entry from the running work must not burn the whole deadline"
+    )
+    # The queue is usable again once the work returns.
+    assert queue.call(lambda: "later") == "later"
 
 
 def test_connection_limit_rejects_overload_and_recovers(tmp_path: Path):
@@ -288,8 +314,13 @@ def test_connection_limit_rejects_overload_and_recovers(tmp_path: Path):
                     stalled.append(
                         socket.create_connection(("127.0.0.1", server.port), timeout=3)
                     )
-                time.sleep(0.2)
-                assert _call(server.port, token, "echo", {"value": "x"})[0] == 503
+                # A fixed sleep would race connection acceptance under load, so
+                # wait until the slots are actually held.
+                status = _until_busy(
+                    lambda: _probe_status(server.port, token, "echo", {"value": "x"}),
+                    budget=10,
+                )
+                assert status == 503, f"an overloaded listener answered {status}"
             finally:
                 for sock in stalled:
                     sock.close()
@@ -297,7 +328,7 @@ def test_connection_limit_rejects_overload_and_recovers(tmp_path: Path):
             deadline = time.monotonic() + 5
             status = 503
             while status == 503 and time.monotonic() < deadline:
-                status = _call(server.port, token, "echo", {"value": "x"})[0]
+                status = _probe_status(server.port, token, "echo", {"value": "x"})
                 if status == 503:
                     time.sleep(0.05)
             assert status == 200, "capacity must recover after the clients leave"
@@ -594,6 +625,18 @@ def test_an_oversized_sse_frame_closes_and_disposes_the_stream(tmp_path: Path):
         runtime.unload()
 
 
+def _probe_status(port, token, action, payload) -> int:
+    """The status of a call on a listener that may reject by closing.
+
+    An overloaded listener answers 503 and closes without reading the
+    request, so the client can see a broken pipe instead of a response.
+    """
+    try:
+        return _call(port, token, action, payload)[0]
+    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+        return 503
+
+
 def _trickle_until_closed(sock, budget: float = 4.0) -> bool:
     import select
 
@@ -607,6 +650,16 @@ def _trickle_until_closed(sock, budget: float = 4.0) -> bool:
         except OSError:
             return True
     return False
+
+
+def _until_busy(probe, budget: float = 10.0):
+    """Probe until the listener reports overload, never past it."""
+    end = time.monotonic() + budget
+    value = probe()
+    while value != 503 and time.monotonic() < end:
+        time.sleep(0.02)
+        value = probe()
+    return value
 
 
 def _eventually(probe, budget: float = 5.0):
@@ -651,3 +704,17 @@ def socket_connection(port):
     import socket
 
     return socket.create_connection(("127.0.0.1", port), timeout=3)
+
+
+def test_the_frame_buffer_bounds_aggregate_bytes_not_just_one_frame():
+    from queue import Full
+
+    from qgis_sdk.http._server import _FrameBuffer
+
+    buffer = _FrameBuffer()
+    frame = "x" * (512 * 1024 - 8)  # under the per-frame cap
+    for _ in range(4):
+        buffer.put_nowait(frame)
+    with pytest.raises(Full):
+        buffer.put_nowait(frame)
+    assert buffer.get(timeout=1) == frame, "the buffer stays usable after a refusal"

@@ -27,10 +27,10 @@ The boundary is deliberate: MCP in `qgis-sdk-tools` serves developers and agents
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 The host explicitly starts and closes the server; construction neither listens nor creates a token, the token is private and removed on close, non-loopback binds, foreign Host headers, browser Origins, wrong tokens and unknown action or stream IDs are refused, and only one endpoint may serve a runtime (pure tests).
-- [ ] #2 An allowlisted action dispatches on the QGIS owner thread; a queued call past its deadline fails with the documented busy error and is withdrawn before it can run, and a reload fails in-flight calls with the host-reloaded error without running withdrawn work (pure and native tests).
-- [ ] #3 Streams deliver ordered SSE frames, honour the event-stream capacity limit, bound frame size and buffered bytes, and dispose their subscription on client disconnect or server close (pure and native tests).
+- [x] #2 An allowlisted action dispatches on the QGIS owner thread; a queued call past its deadline fails with the documented busy error and is withdrawn before it can run, and a reload fails in-flight calls with the host-reloaded error without running withdrawn work (pure and native tests).
+- [x] #3 Streams deliver ordered SSE frames, honour the event-stream capacity limit, bound frame size and buffered bytes, and dispose their subscription on client disconnect or server close (pure and native tests).
 - [x] #4 The Python client and CLI call a live plugin and stream events without importing the runtime; the CLI MCP inventory contains no plugin REST commands (tests at the public seams).
-- [ ] #5 Real QGIS qualification covers owner-thread dispatch and teardown/reload, the built plugin vendors `qgis_sdk.http` only on explicit import, and no `qgis_sdk.agent` module, agent checker, guide or test remains.
+- [x] #5 Real QGIS qualification covers owner-thread dispatch and teardown/reload, the built plugin vendors `qgis_sdk.http` only on explicit import, and no `qgis_sdk.agent` module, agent checker, guide or test remains.
 <!-- AC:END -->
 
 ## Implementation notes
@@ -40,10 +40,21 @@ permissions and removal, `Host`/`Origin`/token refusal, one endpoint per
 runtime, failed-start recovery, busy-deadline withdrawal, reload withdrawal,
 client/CLI calls and MCP exclusion (AC 1 and 4). Dispatch is serialized per
 runtime: a second call waits or fails with `host_busy` and never runs inside a
-handler that pumps a nested event loop. Transport-limit coverage added for
-connection overload, absolute read deadlines, truncated/oversized bodies, SSE
-capacity, stalled readers and oversized frames. Native reload and stream
-teardown qualification (AC 2, 3, 5) is still outstanding.
+handler that pumps a nested event loop; a call from the thread already running
+work is refused at once. Transport-limit coverage covers connection overload,
+absolute read deadlines, truncated/oversized bodies, SSE capacity, stalled
+readers, oversized frames and the aggregate frame-buffer bound.
+
+Native qualification (AC 2, 3, 5) is in `test_zz_plugin_rest_native.py`: an
+action dispatches on the real QGIS owner thread; a nested `QDialog.exec()`
+queues a second call and never re-enters it (verified by forcing posted work to
+run inside the dialog); a 40-frame stream is produced entirely on the owner
+thread and ends with a terminal frame; reload during a dialog fails the
+in-flight call with `host_reloaded` and disposes the live stream only after the
+dialog returns; close during a dialog keeps the runtime reserved until the
+action unwinds; an off-owner close disposes a live stream on the owner thread
+and removes the token. Each was checked against a deliberately broken
+implementation to confirm the test fails.
 
 
 <!-- SECTION:PLAN:BEGIN -->
