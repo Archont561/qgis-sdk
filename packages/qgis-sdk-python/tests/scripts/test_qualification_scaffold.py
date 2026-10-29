@@ -135,6 +135,11 @@ def test_unavailable_reports_every_stage_as_false() -> None:
     payload = report.to_payload()
     assert set(payload) == {
         "action_result",
+        "console_action_result",
+        "console_actions",
+        "console_algorithms",
+        "console_closed",
+        "console_context_shared",
         "discovered",
         "error",
         "loaded",
@@ -178,6 +183,12 @@ def test_real_qgis_desktop_loads_and_unloads_the_generated_plugin() -> None:
     assert payload["unloaded"] is True
     assert payload["runtime_stopped"] is True
     assert payload["provider_released"] is True
+    # TASK-73: the console route over a built, vendored plugin.
+    assert payload["console_context_shared"] is True
+    assert "ping" in payload["console_actions"]
+    assert any(item.endswith(":buffer") for item in payload["console_algorithms"])
+    assert payload["console_action_result"] == 7
+    assert payload["console_closed"] is True
     assert payload["error"] is None
     assert payload["platform"]
     assert payload["qgis_version"]

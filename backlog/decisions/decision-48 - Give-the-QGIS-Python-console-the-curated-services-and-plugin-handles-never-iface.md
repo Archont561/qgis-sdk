@@ -66,7 +66,8 @@ iface=)` assembles the same `PluginContext` a Desktop plugin gets - `layers`,
   console); `host()` of decision-43 needs no change because
   `DesktopLifecycleAdapter` is what `classFactory` already returns.
 - `PluginRuntime.algorithms` is additive. `ConsoleSession` and
-  `PluginHandle` are new public runtime API, documented in doc-12 with the
-  console recipe; shipped in 0.7.0.
+  `PluginHandle` are new public runtime API (with `QgisSdkConsoleError`,
+  `console_refused`), documented in doc-12 with the console recipe; shipped in
+  0.8.0 - the task was re-scoped from m-6 to m-7 on 2026-10-27.
 - Scheduled as TASK-73 in m-6 (after TASK-63 for provider ids and TASK-64
   for the generated adapter path).

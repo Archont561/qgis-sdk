@@ -100,8 +100,19 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
             del sys.modules[name]
 
 
+@pytest.fixture
+def bare_interpreter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The no-host branch, pinned: the suite runs the native modules too.
+
+    ``qgis_is_running()`` is a process-wide fact, so a process that started a
+    ``QgsApplication`` for the ``qgis`` layer would otherwise hand ``host()``
+    the native context and make "without QGIS" untestable.
+    """
+    monkeypatch.setattr("qgis_sdk.adapters.desktop.qgis_is_running", lambda: False)
+
+
 def test_host_returns_a_class_factory_that_runs_the_plugin_without_qgis(
-    project: Path,
+    project: Path, bare_interpreter: None
 ) -> None:
     class_factory = host(f"{PACKAGE}.plugin:app")
 
@@ -128,7 +139,7 @@ def test_host_returns_a_class_factory_that_runs_the_plugin_without_qgis(
 
 
 def test_a_bare_interpreter_places_no_binding_and_refuses_ui_by_name(
-    project: Path,
+    project: Path, bare_interpreter: None
 ) -> None:
     held = host(f"{PACKAGE}.plugin:app")(None)
 

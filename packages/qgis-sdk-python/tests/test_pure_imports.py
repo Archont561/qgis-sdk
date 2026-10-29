@@ -179,6 +179,7 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
                        'qgis_sdk_tools.check', 'qgis_sdk_tools.cli',
                        'qgis_sdk.core', 'qgis_sdk.jobs',
                        'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
+                       'qgis_sdk.console',
                        'qgis_sdk.adapters.desktop',
                        'qgis_sdk.adapters.webengine',
                        'qgis_sdk.testing'):

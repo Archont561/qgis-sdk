@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from qgis_sdk.environment import DEV_SERVER_ENV
+from qgis_sdk.environment import DEV_REQUEST_ENV, DEV_SERVER_ENV
 from qgis_sdk.models import QgisSdkError
 
 from qgis_sdk_tools.artifacts import (
@@ -73,7 +73,8 @@ __all__ = [
 MODES: Final = ("desktop", "standalone")
 PROFILE_NAME: Final = "dev"
 STATE_DIRECTORY: Final = ".qgis-sdk"
-REQUEST_ENV: Final = "QGIS_SDK_DEV_REQUEST"
+REQUEST_ENV: Final = DEV_REQUEST_ENV
+"""The request file this command writes; the name lives in the runtime (console)."""
 LOOPBACK: Final = "127.0.0.1"
 DESKTOP_PROBE_NAME: Final = "dev-desktop.py"
 STANDALONE_PROBE_NAME: Final = "dev-standalone.py"
@@ -296,6 +297,13 @@ def plan_dev(
                 "(a pyproject.toml change needs a new `qgis-sdk dev`)"
                 if watch
                 else "reload: the Reload button or Ctrl+Shift+R in QGIS; quit QGIS to stop"
+            ),
+            (
+                # decision-48 point 5: the two lines a console needs, printed
+                # where a developer is already looking.
+                f"console: in Plugins > Python Console: import qgis.utils; "
+                f'session = qgis.utils.plugins["{project.plugin}"].console() '
+                f"(or: from qgis_sdk.console import connect; session = connect())"
             ),
         ),
         profile=profile,
