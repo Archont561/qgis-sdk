@@ -3,10 +3,10 @@ id: TASK-79
 title: >-
   Add UI snapshots: structured tree plus screenshot of the plugin's surfaces,
   dev.ui agent tools and the ui_snapshot fixture
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-26T10:01:00Z'
-updated_date: '2026-10-29T16:20:00Z'
+updated_date: '2026-10-29T17:05:00Z'
 labels: []
 milestone: m-7
 dependencies:
@@ -25,9 +25,9 @@ decision-51. qgis_sdk.ui.snapshot: JSON (canonical, diffable) + PNG of one or ev
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A Form snapshot lists every declared field with stable ids, role, value, label and declared link, with a semantic node per catalogue component in front of the Qt role, is byte-identical across two captures, and a custom surface with an unnamed widget yields UI001 (qgis native tests, offscreen).
-- [ ] #2 dev.ui.act fills a form and presses Run through QTest and the action runs with the typed values; a re-snapshot shows the new state; act is absent from a user-mode tools list (devtools harness, scripted MCP client).
-- [ ] #3 ui_snapshot(...).approve() writes JSON and PNG, a structural change fails with a readable diff, a pixel-only change does not; the snapshot never includes widgets outside the plugin's scope (native test with a second plugin loaded); doc-12 documents the format and the tools.
+- [x] #1 A Form snapshot lists every declared field with stable ids, role, value, label and declared link, with a semantic node per catalogue component in front of the Qt role, is byte-identical across two captures, and a custom surface with an unnamed widget yields UI001 (qgis native tests, offscreen).
+- [x] #2 dev.ui.act fills a form and presses Run through QTest and the action runs with the typed values; a re-snapshot shows the new state; act is absent from a user-mode tools list (devtools harness, scripted MCP client).
+- [x] #3 ui_snapshot(...).approve() writes JSON and PNG, a structural change fails with a readable diff, a pixel-only change does not; the snapshot never includes widgets outside the plugin's scope (native test with a second plugin loaded); doc-12 documents the format and the tools.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -68,5 +68,9 @@ S3 (gating, AC 2) - decision-49 was superseded and TASK-76 was withdrawn, so the
 
 Tests: test_ui_cli.py (17, FakeCliRuntime + a fake probe process), test_ui_yaml.py (6, yaml.safe_load round-trip as the oracle), test_ui_probe_native.py (8, real offscreen QgsApplication, plugin started through its generated classFactory), test_mcp_cli.py (6 including the scripted stdio client), test_pure_imports.py (25). apps/docs/src/content/docs/guides/cli-mcp.md lists the five surface tools and says act is developer-only.
 
-Remaining: S4 ui_snapshot fixture with approve()/structural diff, the two-plugin isolation test and the doc-12 section (AC 3).
+S4 (fixture, docs) - qgis_sdk_tools.snapshots.Snapshots is the approval mechanism: ui_snapshot(surface) captures a SurfaceCapture a host made (or a widget the test built, with a name) and compares it with <test module>/__snapshots__/<surface>.json through ui_diff; the pytest fixture verifies on teardown, so a test can still call .approve() - which writes the canonical JSON and the PNG - and a structural change otherwise fails the test with diff.render(); a different screenshot is a pixel difference and passes. A capture with no approval fails naming the two files it expected. Native test: two plugins loaded at once (alpha_host, beta_host), each opening its dialog; the capture of one holds form/alpha and never form/beta, and the other host refuses alpha's id. Docs: a new "Snapshots: the tree, the PNG and the tools" section in doc-12 covers the JSON format (surface/kind/title/size/scale/palette/screenshot/nodes/findings, node id/role/type/value/label/state/geometry/declared), the scope rule, the five CLI commands with their loopback-free probe, --format yaml in the tools only, act being developer-only, and the approve()/diff workflow.
+
+All three acceptance criteria are covered. Tests added across the task: test_ui_surface_snapshot.py (6), test_ui_surface_snapshot_native.py (7), test_ui_diff.py (10), test_ui_probe_native.py (8), test_ui_cli.py (17), test_ui_yaml.py (6), test_ui_snapshots.py (12), test_ui_snapshots_native.py (4), plus the pure-import and MCP-client guards. Full suite: 2101 passed, 59 skipped, 7 deselected.
+
+Remaining: none for S1-S4; the task is complete pending review of the S3+S4 PR.
 <!-- SECTION:NOTES:END -->

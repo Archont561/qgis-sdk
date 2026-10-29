@@ -977,6 +977,109 @@ so a button click under the fake dispatches the plugin's own handler and a
 way; its `test_workflow_qgis.py` opens them under the host and checks the
 same names on the Qt tree.
 
+### Snapshots: the tree, the PNG and the tools
+
+`SurfaceHost.snapshot(surface_id=None, *, screenshot=True)` captures the
+surfaces *this plugin's host* opened: a dialog it showed, a dock it built and
+left visible. That is the whole scope rule (decision-51 point 6) - there is no
+tree-walk of the QGIS main window, so a capture can never hold another plugin's
+window. An unknown id is refused with the ids that are open.
+
+Each capture is canonical JSON (sorted keys, no spaces, one trailing newline)
+plus a PNG taken with `QWidget.grab()` under the offscreen QPA as well, so two
+captures of an unchanged surface are byte-identical:
+
+```json
+{
+  "surface": "buffer_dialog", "kind": "dialog", "title": "Buffer",
+  "size": {"width": 420, "height": 180}, "scale": 1.0,
+  "screenshot": "sha256:...",
+  "nodes": [
+    {"id": "form/distance", "role": "spinbox", "type": "QgsDoubleSpinBox",
+     "value": 25.0, "label": "Distance", "state": {"enabled": true,
+     "visible": true, "focus": false}, "geometry": {"x": 8, "y": 8,
+     "width": 200, "height": 24}, "declared": {"field": "distance"}}
+  ],
+  "findings": []
+}
+```
+
+`role` is the semantic node - `textbox`, `combobox`, `spinbox`, `checkbox`,
+`button`, `label`, `group`, `map`, `crs`, `colour`, `file`, `slider`, … - and
+sits in front of the Qt class in `type`, so a snapshot reads as the catalogue
+component that made it rather than as whatever widget the adapter chose.
+`value` is the role's own value (a spin box's number, a combo box's current
+text, a button's text), `label` comes from `QLabel.buddy()` and the form's rows,
+`geometry` is in surface coordinates, and `declared` links `form/<field>` back
+to the field and `buttons/<name>` to the button. An actionable widget with no
+`objectName` gets a positional id (`#0/1`) and a `UI001` finding, which is the
+same rule `qgis-sdk check` reports before the plugin ever runs.
+
+**Driving a surface from the command line.** The surfaces are Qt objects that
+only exist where the plugin runs, so each command writes a request into
+`.qgis-sdk/ui/` and runs the probe in a QGIS interpreter - the CLI process never
+touches a widget:
+
+```sh
+qgis-sdk ui list                          # the surfaces the plugin declares
+qgis-sdk ui open buffer_dialog            # build it and report the window
+qgis-sdk ui snapshot buffer_dialog        # JSON + PNG, --no-screenshot for the tree alone
+qgis-sdk ui act buffer_dialog \
+    --step form/distance:set:25 --step buttons/run:click
+qgis-sdk ui diff .qgis-sdk/ui/buffer_dialog.json tests/__snapshots__/buffer_dialog.json
+```
+
+`act` sends `click`, `focus`, `select`, `set` and `type` through `QTest` - the
+same event path a user's click takes - and then captures the surface again, so
+the second file (`<surface>.json`, after `<surface>-before.json`) shows the new
+state. It reports the value each widget holds afterwards. `diff` exits `1` when
+anything but the image changed and prints one line per difference. Every
+command takes `--format yaml` for reading; the files on disk are always the
+canonical JSON, and YAML lives in the tools, never in the runtime.
+
+`act` is developer tooling: the runtime a plugin ZIP vendors never mentions
+`QtTest`, and the MCP server marks it `DEVELOPER_ONLY`. The reading tools -
+`list`, `open`, `snapshot`, `diff` - are what a client gets without that
+tooling. Nothing of this reaches the plugin's HTTP API, which can name only
+declared actions and streams.
+
+**Approving a surface in a test.** The `ui_snapshot` fixture captures a surface
+and compares it with what the project approved under the test module's
+`__snapshots__` directory:
+
+```python
+def test_buffer_dialog(ui_snapshot, host):
+    host.open(BufferDialog)
+    ui_snapshot(host.snapshot("buffer_dialog")[0])   # fails with the diff
+```
+
+Pass the `SurfaceCapture` the host made and the capture stays inside the
+plugin's scope; a widget the test built itself also works, with a name:
+`ui_snapshot(dialog, name="standalone")`. After the test the fixture fails any
+surface that changed structurally, and prints where the approval is:
+
+```text
+buffer_dialog (tests/__snapshots__/buffer_dialog.json):
+form/distance: value 0.0 -> 25.0
+```
+
+A different PNG does **not** fail: a screenshot is for a human or an agent to
+look at, and a renderer bump is not a regression. To write or refresh an
+approval, call `approve()` on what the fixture returned - it writes
+`<surface>.json` and `<surface>.png` and the run passes:
+
+```python
+def test_buffer_dialog(ui_snapshot, host):
+    host.open(BufferDialog)
+    ui_snapshot(host.snapshot("buffer_dialog")[0]).approve()
+```
+
+Commit the two files. A snapshot that has no approval fails with the path it
+expected, so a forgotten `approve()` is visible in CI rather than silent.
+`qgis_sdk_tools.ui_diff.diff_snapshots(before, after)` is the comparison behind
+both the fixture and `qgis-sdk ui diff`, and `SnapshotDiff.render()` is the text
+a failure shows.
+
 ### `ctx.log`
 
 `ctx.log.info|warning|error(message, **fields)` is the plugin's structured
