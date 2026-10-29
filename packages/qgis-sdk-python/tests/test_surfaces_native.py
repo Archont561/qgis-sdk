@@ -452,6 +452,11 @@ def test_a_dialog_is_built_with_its_context_bound_shown_and_disposed_on_close(
 
     # UiContext.actions from inside the surface: the same handler, coerced.
     assert opened.surface.ctx.actions.buffer(distance="2") == "buffered 2.0"
+    # The custom context supplies only settings/files; it gains UI navigation,
+    # but no absent plugin capability is silently invented for a surface.
+    assert opened.surface.ctx.has("ui")
+    for capability in ("algorithms", "styles", "desktop"):
+        assert not opened.surface.ctx.has(capability)
     assert plugin_module.CALLS == ["buffer:2.0"]
     with pytest.raises(QgisSdkUiError, match="no action 'explode'"):
         opened.surface.ctx.actions.explode()

@@ -601,6 +601,47 @@ running plugin, created lazily, placed with `iface.addDockWidget` in its
 and `unload` removes it. `self.ctx.view.request_close()` closes a dialog or
 hides a dock.
 
+**Surface-first: services without actions.** A plugin can consist entirely of
+registered surfaces; an action is not needed just to open a dialog or use an
+SDK service. A view's `UiContext` exposes `algorithms`, `styles`, `desktop`
+and `ui` when its host supplies them, in addition to `layers`, `project`,
+`files`, `settings`, `network` and `log`. `ctx.ui.open(...)` opens another
+registered surface, and `ctx.desktop.iface` is the native QGIS escape hatch,
+not a portable or sandboxed interface. For example:
+
+```python
+from qgis_sdk import QgisSdkPlugin, menu
+from qgis_sdk.ui import Button, Dialog, Text, on
+
+app = QgisSdkPlugin(id="field_tools", title="Field tools")
+
+@app.surface
+class Details(Dialog):
+    algorithm = Text()
+
+@app.surface
+@menu("Plugins/Field tools")
+class Tools(Dialog):
+    inspect = Button(text="Inspect buffer")
+
+    @on(inspect).clicked
+    def show_details(self) -> None:
+        algorithm = self.ctx.algorithms.describe("native:buffer")
+        self.ctx.ui.open(Details, initial={"algorithm": algorithm.id})
+```
+
+The Desktop host shares the plugin's service instances with each view, not
+copies. `ctx.has(name)` probes availability; reading an absent capability raises
+`QgisSdkUnsupportedCapabilityError` and reading through a closed view context
+raises `QgisSdkScopeClosedError`. Services retained before the view closes
+still have their own plugin-level lifetime: do not use a retained service or
+schedule callbacks on behalf of a closed view. Opening a second dialog creates
+its own view scope, which does not close just because the first dialog closes.
+Surface handlers and direct algorithm calls are synchronous, usually on the GUI
+thread; `UiContext` does not automatically offload work. Provider registration
+and worker ownership are not exposed by this extension. `fake_ui_context`
+accepts the same capabilities as keyword arguments for pure surface tests.
+
 **`ctx.ui.open` and `UiContext.actions`.** From an action,
 `ctx.ui.open(Surface, initial={...})` opens a registered surface (an
 unlisted class is refused by name); outside QGIS Desktop the `ui` service is

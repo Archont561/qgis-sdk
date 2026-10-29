@@ -305,6 +305,10 @@ class SurfaceHost:
             files=context.files if context.has("files") else None,
             log=context.log if context.has("log") else None,
             streams=streams,
+            algorithms=context.algorithms if context.has("algorithms") else None,
+            styles=context.styles if context.has("styles") else None,
+            desktop=context.desktop if context.has("desktop") else None,
+            ui=context.ui if context.has("ui") else None,
         )
         scope.on_close(streams.dispose)
         return ui, scope

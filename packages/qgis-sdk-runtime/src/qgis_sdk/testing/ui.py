@@ -111,7 +111,9 @@ def fake_ui_context(
     ``notifications`` (a ``RecordingNotifications``), ``view`` (a
     ``FakeViewControl``) and ``log`` (a ``RecordingLog``) are provided
     unless passed; ``layers``, ``project``, ``files``, ``settings``,
-    ``network``, ``actions`` and ``streams`` are carried when given.
+    ``network``, ``actions``, ``streams``, ``algorithms``, ``styles``,
+    ``desktop`` and ``ui`` are carried when given. Shared service objects
+    keep their own scopes; the caller controls their lifetimes.
     ``runtime`` - a started ``PluginRuntime`` - builds ``actions`` and
     ``streams`` as the host would.
     """

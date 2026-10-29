@@ -10,6 +10,76 @@ import pytest
 pytestmark = pytest.mark.qgis
 
 
+def test_surface_only_plugin_gets_services_and_navigates_on_qgis(
+    qgis_app, tmp_path, monkeypatch
+):
+    from qgis_sdk.adapters.desktop import host
+    from qgis_sdk.models import QgisSdkScopeClosedError
+    from test_surfaces_native import FakeIface
+
+    package = tmp_path / "surface_only_native"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "plugin.py").write_text(
+        """from qgis_sdk import QgisSdkPlugin, menu
+from qgis_sdk.ui import Button, Dialog, Text, on
+
+app = QgisSdkPlugin(id="surface_only_native")
+
+@app.surface
+class Detail(Dialog):
+    title = "Detail"
+    origin = Text()
+    close = Button(text="Close")
+
+@app.surface
+@menu("Plugins/Surface only")
+class Main(Dialog):
+    show = Button(text="Show")
+
+    @on(show).clicked
+    def show_detail(self):
+        self.ctx.ui.open(Detail, initial={"origin": "main"})
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    iface = FakeIface()
+    desktop = host("surface_only_native.plugin:app")(iface)
+    try:
+        desktop.initGui()
+        assert desktop.runtime.actions == {}
+        iface.menus["Plugins/Surface only"][0].trigger()
+        (main,) = desktop.surfaces.dialogs
+        ctx = main.surface.ctx
+        assert ctx.desktop.iface is iface
+        assert ctx.algorithms is desktop.context.algorithms
+        assert ctx.styles is desktop.context.styles
+        assert ctx.algorithms.describe("native:buffer").id == "native:buffer"
+        main.surface.show.click()
+        assert len(desktop.surfaces.dialogs) == 2
+        detail = desktop.surfaces.dialogs[1]
+        assert detail.surface.initial["origin"] == "main"
+        main.widget.close()
+        qgis_app.processEvents()
+        assert main.scope.closed
+        assert not detail.scope.closed and not desktop.context.scope.closed
+        for name in ("algorithms", "styles", "desktop", "ui"):
+            with pytest.raises(QgisSdkScopeClosedError):
+                getattr(ctx, name)
+        assert (
+            detail.surface.ctx.algorithms.describe("native:buffer").id
+            == "native:buffer"
+        )
+    finally:
+        desktop.unload()
+        iface.window.close()
+        qgis_app.processEvents()
+        for name in list(sys.modules):
+            if name == "surface_only_native" or name.startswith("surface_only_native."):
+                del sys.modules[name]
+
+
 def test_lowered_apps_run_on_real_qgis_host_and_clean_up(
     qgis_app, tmp_path, monkeypatch
 ):

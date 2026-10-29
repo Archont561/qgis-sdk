@@ -105,8 +105,8 @@ def test_probing_an_unknown_capability_is_a_mistake_not_a_false() -> None:
         scope=ResourceScope(),
     )
 
-    with pytest.raises(ValueError, match="no capability named 'styles'"):
-        context.has("styles")
+    with pytest.raises(ValueError, match="no capability named 'styels'"):
+        context.has("styels")
 
 
 def test_a_capability_read_on_a_closed_scope_is_refused_as_closed() -> None:
