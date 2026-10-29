@@ -1,10 +1,10 @@
 ---
 id: TASK-140
 title: Spike a FastAPI-style plugin application and action groups for 0.8.0
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-28 17:39'
-updated_date: '2026-10-28 20:16'
+updated_date: '2026-10-29 09:03'
 labels: []
 milestone: m-7
 dependencies: []
@@ -62,4 +62,12 @@ Follow-up full workspace coverage after placing the native test alongside the ot
 Real Desktop follow-up: actual QGIS 4.2.3 executable and qgis.utils.iface, Qt 6.11.2/Python 3.14.8 on Linux, clean temporary profile, offscreen. QGIS plugin discovery and manager loaded two prototype directory fixtures; real provider registration, GUI-thread actions/dialogs, independent unload and final cleanup passed. Editing one action from double to triple and QGIS unload/reload produced a fresh module and changed result 42 to 63. Four opt-in harness tests passed. No visible display or ZIP; production SDK module:app remains unsupported, and UI-wire execution, provider algorithms, WebEngine and cross-platform qualification remain open.
 
 Post-Desktop-harness workspace coverage: 6/6 tasks passed, Python 1953 passed, 63 skipped, 96.99%; opt-in real Desktop tests passed separately (4/4). Whole-tree Ruff/format, docs build and link check (7040 links, 0 broken), Backlog doctor and diff check passed.
+
+The spike and subsequent approved QgisSdkPlugin migration landed in PR #130 at f70c67c67c3046927cfb183b383e51fd69ac3f97 with passing PR CI. TASK-141 retains the separate supported-platform and packaging qualification gate.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+The application-authoring spike was completed and informed the approved production migration in PR #130.
+<!-- SECTION:FINAL_SUMMARY:END -->

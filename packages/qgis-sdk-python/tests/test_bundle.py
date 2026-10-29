@@ -555,3 +555,15 @@ def test_the_result_serialises_for_the_cli(project: Path) -> None:
     assert data["runtime_version"] == result.runtime_version
     assert data["runtime_requirement"] == result.runtime_requirement
     assert data["report"]["ok"] is True
+
+
+def test_plugin_http_listener_is_vendored_only_on_static_import(project: Path) -> None:
+    result = build_plugin(project, run=never_run)
+    prefix = f"{PLUGIN}/{VENDOR_PACKAGE}/qgis_sdk/http/"
+    assert not any(name.startswith(prefix) for name in names(result.archive))
+    source = project / PLUGIN / "plugin.py"
+    source.write_text(
+        source.read_text() + "\nfrom qgis_sdk.http import PluginHttpServer\n"
+    )
+    result = build_plugin(project, run=never_run)
+    assert prefix + "_server.py" in names(result.archive)

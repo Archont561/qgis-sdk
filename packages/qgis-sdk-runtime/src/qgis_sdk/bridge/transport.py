@@ -85,9 +85,19 @@ class ChannelTransport:
             self.send(json.dumps(frame, separators=(",", ":"), sort_keys=True))
         return len(frames)
 
+    def stop_waking(self) -> None:
+        """Stop automatic flushes, including a wake deferred by a running call.
+
+        This does not dispose subscriptions or prevent receiving messages; an
+        owner closing during a nested event loop must refuse new messages and
+        dispose the channel after the running call unwinds.
+        """
+        self._woken = False
+        self.dispatcher.unwatch(self.binding)
+
     def dispose(self) -> int:
         """Close every subscription this view opened and stop being woken."""
-        self.dispatcher.unwatch(self.binding)
+        self.stop_waking()
         return self.dispatcher.dispose(self.binding)
 
     def _wake(self) -> None:

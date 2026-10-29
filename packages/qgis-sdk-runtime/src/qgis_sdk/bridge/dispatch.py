@@ -876,7 +876,17 @@ def _keyword_source(
         source = factory(**payload)
         if source is None:
             return None
-        return (_wire_result(item) for item in source)
+
+        def serialize_stream() -> Iterator[Any]:
+            try:
+                for item in source:
+                    yield _wire_result(item)
+            finally:
+                close = getattr(source, "close", None)
+                if close is not None:
+                    close()
+
+        return serialize_stream()
 
     return open_stream
 

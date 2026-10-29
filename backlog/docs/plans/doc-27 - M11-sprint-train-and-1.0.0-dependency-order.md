@@ -22,7 +22,7 @@ surface as refusals or tracebacks. Decisions 56–63 each own one of these.
 | Task | Declared dependencies | Startable |
 | --- | --- | --- |
 | [TASK-99](../../tasks/task-99%20-%20Add-the-native.yml-CI-leg-Windows-and-Linux-QGIS-from-locked-Pixi-environments-every-harness-matrix-transitions.md) `native.yml` leg | TASK-33 | **now** (evidence for every later milestone) |
-| [TASK-105](../../tasks/task-105%20-%20Write-doc-26-Authority-and-threat-model-SECURITY.md-and-qgis-sdk-check-security-with-SEC001.md) doc-26 + `check --security` | TASK-84, TASK-76 | after 0.10.0 sprint 1 |
+| [TASK-105](../../tasks/task-105%20-%20Write-doc-26-Authority-and-threat-model-SECURITY.md-and-qgis-sdk-check-security-with-SEC001.md) doc-26 + `check --security` | TASK-84 | after 0.10.0 sprint 1 |
 | [TASK-97](../../tasks/task-97%20-%20Declare-API-stability-tiers-generate-the-public-API-inventory-add-release.py-verify-api-and-the-deprecated-API001-mechanism.md) tiers + inventory + verify-api | TASK-95 | after 0.11.0 |
 | [TASK-106](../../tasks/task-106%20-%20Add-ctx.log-crash-capture-into-it-the-Report-a-problem-surface-and-qgis-sdk-diagnose-with-no-telemetry.md) `ctx.log`, crash capture, diagnose | TASK-96, TASK-74 | after 0.8.0 |
 | [TASK-104](../../tasks/task-104%20-%20Version-plugin-settings-with-migrations-add-first-run-upgrade-and-reset-hooks-and-document-runtime-isolation.md) settings versioning + hooks | TASK-67 | after 0.6.0 |

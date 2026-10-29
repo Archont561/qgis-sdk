@@ -21,6 +21,7 @@ and recorded in the NOTICE, never installed.
 
 from __future__ import annotations
 
+import ast
 import os
 import shutil
 import stat
@@ -206,7 +207,11 @@ def build_plugin(
         (staged / METADATA_FILE).write_text(
             render_metadata(config, facts), encoding="utf-8", newline="\n"
         )
-        _stage_runtime(staged / VENDOR_PACKAGE, prefix=prefix)
+        _stage_runtime(
+            staged / VENDOR_PACKAGE,
+            prefix=prefix,
+            include_http=_imports_optional(_plugin_sources(package), "http"),
+        )
         (staged / VENDOR_PACKAGE / "NOTICE").write_text(
             notice(runtime, requirement=resolution.requirement),
             encoding="utf-8",
@@ -238,6 +243,30 @@ def _plugin_sources(package: Path) -> list[Path]:
             if filename.endswith(".py"):
                 files.append(Path(directory) / filename)
     return files
+
+
+def _imports_optional(sources: Sequence[Path], module: str) -> bool:
+    """Include an optional listener only for an explicit static import."""
+    qualified = f"qgis_sdk.{module}"
+    for source in sources:
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                if any(
+                    alias.name == qualified or alias.name.startswith(qualified + ".")
+                    for alias in node.names
+                ):
+                    return True
+            elif isinstance(node, ast.ImportFrom) and not node.level:
+                if node.module == qualified or (node.module or "").startswith(
+                    qualified + "."
+                ):
+                    return True
+                if node.module == "qgis_sdk" and any(
+                    alias.name == module for alias in node.names
+                ):
+                    return True
+    return False
 
 
 def _build_web(web: Path, run: RunProcess) -> None:
@@ -295,7 +324,7 @@ def _stage_plugin(
         )
 
 
-def _stage_runtime(vendor: Path, *, prefix: str) -> None:
+def _stage_runtime(vendor: Path, *, prefix: str, include_http: bool) -> None:
     """Copy the runtime under ``vendor/qgis_sdk`` with its imports rewritten."""
     vendor.mkdir(parents=True, exist_ok=True)
     (vendor / "__init__.py").write_text(
@@ -305,6 +334,8 @@ def _stage_runtime(vendor: Path, *, prefix: str) -> None:
     )
     source_root = runtime_source()
     for relative in runtime_files():
+        if relative.parts[0] == "http" and not include_http:
+            continue
         source = source_root / relative
         target = vendor / RUNTIME_PACKAGE / relative
         target.parent.mkdir(parents=True, exist_ok=True)

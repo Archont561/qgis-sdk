@@ -35,9 +35,11 @@ LAYER_ORDER = {
     "network": 2,
     "bridge": 2,
     "files": 2,
+    "http": 3,
     "testing": 3,
 }
 LAYER_PATHS = {
+    "http": SOURCE_ROOT / "http",
     "algorithms": SOURCE_ROOT / "algorithms.py",
     "bindings": SOURCE_ROOT / "bindings.py",
     "bridge": SOURCE_ROOT / "bridge",
@@ -128,6 +130,14 @@ def test_the_tools_tree_imports_the_runtime_the_stdlib_and_its_declared_deps() -
             allowed = top in {"qgis_sdk", "qgis_sdk_tools"}
             allowed = allowed or top in sys.stdlib_module_names
             allowed = allowed or top in TOOLS_DEPENDENCIES
+            # The optional MCP SDK is confined to its lazy entrypoint/adapter.
+            optional_mcp_files = {
+                TOOLS_ROOT / "mcp.py",
+                TOOLS_ROOT / "_commands" / "_mcp.py",
+            }
+            allowed = allowed or (
+                file in optional_mcp_files and top in {"mcp", "typing_extensions"}
+            )
             assert allowed, (
                 f"{file.relative_to(TOOLS_ROOT)}:{line}: forbidden import {module}"
             )
