@@ -807,3 +807,145 @@ def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
         for response in streams:
             response.close()
         runtime.unload()
+
+
+def _port_is_open(server) -> bool:
+    """Whether the listener still reports its port, i.e. close has not begun."""
+    from qgis_sdk.http import QgisSdkHttpError
+
+    try:
+        port = server.port
+    except QgisSdkHttpError:
+        return False
+    return port > 0
+
+
+def test_a_close_delivers_the_reload_reply_before_severing_the_socket(tmp_path: Path):
+    """A withdrawn caller must still receive its 503, not a reset connection.
+
+    The close wakes the caller out of the queue, and that reply has to travel
+    over a socket the same close is about to shut down; the handler is held in
+    the action until the close is already waiting, so only an ordered close can
+    deliver it.
+    """
+    from qgis_sdk.http import PluginHttpServer
+
+    app = QgisSdkPlugin(id="reload_reply", title="Reload reply")
+    entered = threading.Event()
+    release = threading.Event()
+
+    @app.action(id="hold", title="Hold")
+    def hold(ctx: PluginContext) -> str:
+        entered.set()
+        assert release.wait(10), "the test must release the action"
+        return "held"
+
+    runtime = _runtime(app)
+    responses = []
+    errors = []
+    closers = []
+    client = None
+    try:
+        server = PluginHttpServer(
+            runtime,
+            post=lambda callback: callback(),
+            token_file=tmp_path / "token",
+            actions=("hold",),
+            deadline=10,
+            close_grace=10,
+        )
+        server.start()
+        token = (tmp_path / "token").read_text().strip()
+
+        def caller():
+            try:
+                responses.append(_call(server.port, token, "hold", {}))
+            except BaseException as error:  # noqa: BLE001 - relay to the test
+                errors.append(error)
+
+        client = threading.Thread(target=caller, daemon=True)
+        client.start()
+        assert entered.wait(10), "the action never started"
+
+        closers.append(threading.Thread(target=server.close, daemon=True))
+        closers[0].start()
+        # ``port`` refuses once the close has begun; give the close time to
+        # reach the point where it would sever the connections, so only an
+        # ordered close can still deliver the reply after the release.
+        deadline = time.monotonic() + 10
+        while _port_is_open(server):
+            assert time.monotonic() < deadline, "the close never started"
+            time.sleep(0.01)
+        # Longer than serve_forever's poll, so an unordered close has already
+        # shut the connections down by now and an ordered one has not.
+        time.sleep(1.5)
+        released_at = time.monotonic()
+        release.set()
+
+        client.join(timeout=10)
+        assert not client.is_alive()
+        assert not errors, f"the client lost its reply: {errors!r}"
+        status, payload = responses[0]
+        assert status == 503
+        assert json.loads(payload)["error"]["code"] == "host_reloaded"
+        assert time.monotonic() - released_at < 5, "the reply came late, not ordered"
+    finally:
+        release.set()
+        for thread in closers:
+            thread.join(timeout=10)
+        if client is not None:
+            client.join(timeout=5)
+        runtime.unload()
+
+
+def test_a_hung_handler_cannot_hold_a_close_open(tmp_path: Path):
+    """The grace is bounded: a close returns even if an action never finishes."""
+    from qgis_sdk.http import PluginHttpServer
+
+    app = QgisSdkPlugin(id="hung_close", title="Hung close")
+    entered = threading.Event()
+    stuck = threading.Event()
+
+    @app.action(id="never", title="Never")
+    def never(ctx: PluginContext) -> str:
+        entered.set()
+        assert stuck.wait(30), "the test released the stuck action"
+        return "late"
+
+    runtime = _runtime(app)
+    errors = []
+    client = None
+    try:
+        server = PluginHttpServer(
+            runtime,
+            post=lambda callback: callback(),
+            token_file=tmp_path / "token",
+            actions=("never",),
+            deadline=10,
+            close_grace=0.2,
+        )
+        server.start()
+        token = (tmp_path / "token").read_text().strip()
+
+        def caller():
+            try:
+                _call(server.port, token, "never", {})
+            except BaseException as error:  # noqa: BLE001 - the socket is cut
+                errors.append(error)
+
+        client = threading.Thread(target=caller, daemon=True)
+        client.start()
+        assert entered.wait(10), "the action never started"
+
+        started = time.monotonic()
+        server.close()
+        elapsed = time.monotonic() - started
+        assert elapsed < 5, f"a close waited {elapsed:.1f}s for a stuck handler"
+        client.join(timeout=10)
+        assert not client.is_alive()
+        assert errors, "a severed reply must surface as a client error"
+    finally:
+        stuck.set()
+        if client is not None:
+            client.join(timeout=5)
+        runtime.unload()

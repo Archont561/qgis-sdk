@@ -2238,6 +2238,11 @@ opens no socket and creates no token, and only one server may serve a runtime.
   Work queued from the thread already running plugin work is refused at once.
   A reload fails an in-flight call with `host_reloaded` without undoing effects
   it already had.
+- Closing withdraws queued work, and the callers it withdrew answer `503` with
+  `host_reloaded` before the connections are shut down: `close()` waits for the
+  handlers already running, for up to `close_grace` seconds (2 by default). A
+  handler still running after that grace is cut off, so a close never hangs on a
+  stuck action.
 - Refusals carry `{"error": {"code": ..., "message": ...}}`. `host_busy`,
   `host_reloaded` and the per-plugin session `capacity` budget answer `503`,
   because waiting or retrying can succeed; malformed input and failed

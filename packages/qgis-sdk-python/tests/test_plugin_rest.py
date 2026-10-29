@@ -523,7 +523,10 @@ def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
     assert responses[0][0] == 503
     assert json.loads(responses[0][1])["error"]["code"] == "host_reloaded"
     assert not (tmp_path / "token").exists()
-    queued.pop()()
+    # Every callback the stalled host was holding: a withdrawn request must
+    # never reach the action once the runtime is gone.
+    for callback in queued:
+        callback()
     assert seen == []
     server.close()
 

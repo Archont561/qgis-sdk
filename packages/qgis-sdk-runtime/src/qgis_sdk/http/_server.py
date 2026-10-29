@@ -31,6 +31,8 @@ _ACTIVE_RUNTIMES: weakref.WeakSet[Any] = weakref.WeakSet()
 # One request body bound and one session budget for every REST entry point.
 _MAX_BODY_BYTES = 1024 * 1024
 _MAX_SESSIONS = 64
+# How long a close waits for replies already owed to callers it just withdrew.
+_CLOSE_GRACE = 2.0
 # Retryable server conditions answer 503; anything else is the caller's fault.
 _ERROR_STATUS = {"host_busy": 503, "host_reloaded": 503, "capacity": 503}
 
@@ -97,6 +99,8 @@ class _BoundedHTTPServer(ThreadingHTTPServer):
         self._slots = threading.BoundedSemaphore(limit)
         self._connections: set[socket.socket] = set()
         self._connections_lock = threading.Lock()
+        self._idle = threading.Condition(self._connections_lock)
+        self._handlers = 0
         self._closing = False
         super().__init__(address, handler)
 
@@ -127,12 +131,29 @@ class _BoundedHTTPServer(ThreadingHTTPServer):
             raise
 
     def process_request_thread(self, request: Any, client_address: Any) -> None:
+        with self._connections_lock:
+            self._handlers += 1
         try:
             super().process_request_thread(request, client_address)
         finally:
             with self._connections_lock:
                 self._connections.discard(request)
+                self._handlers -= 1
+                if self._handlers == 0:
+                    self._idle.notify_all()
             self._slots.release()
+
+    def wait_idle(self, timeout: float) -> bool:
+        """Wait for the handlers already running to finish, or ``timeout``.
+
+        A close withdraws queued work, which wakes the waiting caller so it can
+        answer ``host_reloaded``. That reply still has to leave over a socket
+        this object is about to shut down, so the caller of a close waits here
+        first. It is a grace, not a guarantee: a handler still running when the
+        time is up is cut off, exactly as before.
+        """
+        with self._connections_lock:
+            return self._idle.wait_for(lambda: self._handlers == 0, timeout)
 
     def server_close(self) -> None:
         with self._connections_lock:
@@ -175,6 +196,7 @@ class PluginHttpServer:
         max_event_streams: int | None = None,
         request_read_timeout: float = 5,
         stream_write_timeout: float = 10,
+        close_grace: float = _CLOSE_GRACE,
         on_cleanup_error: Callable[[Exception], None] | None = None,
     ) -> None:
         if host != "127.0.0.1":
@@ -190,6 +212,13 @@ class PluginHttpServer:
             or deadline <= 0
         ):
             raise QgisSdkHttpError("deadline must be a positive finite number")
+        if (
+            isinstance(close_grace, bool)
+            or not isinstance(close_grace, (int, float))
+            or not math.isfinite(close_grace)
+            or close_grace < 0
+        ):
+            raise QgisSdkHttpError("close_grace must be a non-negative finite number")
         if (
             isinstance(max_connections, bool)
             or not isinstance(max_connections, int)
@@ -260,6 +289,7 @@ class PluginHttpServer:
         self._event_slots = threading.BoundedSemaphore(max_event_streams)
         self._request_read_timeout = float(request_read_timeout)
         self._stream_write_timeout = float(stream_write_timeout)
+        self._close_grace = float(close_grace)
         # Closing the runtime's scope revokes the endpoint as a safety net.
         # The host must still coordinate asynchronous cleanup before unload.
         runtime.instance.ctx.scope.on_close(self.close)
@@ -738,6 +768,10 @@ class PluginHttpServer:
         server = self._http
         if server is not None:
             try:
+                # Closing the queue wakes the callers it withdrew so each can
+                # answer host_reloaded; let those replies leave before the
+                # connections underneath them are shut down.
+                server.wait_idle(self._close_grace)
                 if self._thread is not None and self._thread.is_alive():
                     server.shutdown()
                 server.server_close()
