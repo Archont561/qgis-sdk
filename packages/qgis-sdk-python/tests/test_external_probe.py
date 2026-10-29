@@ -189,7 +189,9 @@ class TestProbe:
         assert "definitely_missing_pkg" in message
         assert "reads the widget" in message
         assert "definitely-missing>=2" in message
-        assert "pip install" in message
+        # The command differs per host (pip, pip3, python3 -m pip); each hint
+        # test below names its own, and every one is an install line.
+        assert "install" in message
 
     def test_a_present_external_constructs_the_plugin(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
