@@ -140,6 +140,24 @@ class PluginRuntime:
             return ()
         return tuple(provider.id for provider in self._providers)
 
+    @property
+    def algorithms(self) -> tuple[str, ...]:
+        """Return the Processing algorithm ids this runtime registered.
+
+        ``provider:algorithm`` - the id ``processing.run`` and the toolbox take -
+        for every algorithm of every provider the host currently advertises. It
+        is empty over a context without ``processing``, before ``start()`` and
+        after ``unload()``, the same moments :attr:`registered_providers` is
+        empty; a console reads it to know what a running plugin added to QGIS.
+        """
+        if not self._registrations:
+            return ()
+        return tuple(
+            f"{provider.id}:{described.id}"
+            for provider in self._providers
+            for described in provider.describe().algorithms
+        )
+
     def start(self) -> object:
         """Construct and bind the plugin once, or raise a typed lifecycle error."""
         if self._state is not PluginRuntimeState.NEW:

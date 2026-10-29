@@ -30,7 +30,7 @@ import shutil
 import sys
 import tempfile
 import zipfile
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Final
 
@@ -74,6 +74,11 @@ payload = {
     "runtime_running": False,
     "action_result": None,
     "provider_registered": False,
+    "console_context_shared": False,
+    "console_actions": [],
+    "console_algorithms": [],
+    "console_action_result": None,
+    "console_closed": False,
     "unloaded": False,
     "runtime_stopped": False,
     "provider_released": False,
@@ -115,6 +120,21 @@ try:
         # `--algorithm`: the provider the plugin lists is in Processing while
         # it runs and gone once it unloads (decision-42).
         payload["provider_registered"] = registry.providerById(plugin) is not None
+
+        # TASK-73: what an installed, vendored plugin offers a console - the
+        # route works without the plugin importing anything for it, and the
+        # session reads the very services the plugin runs on.
+        session = adapter.console()
+        handle = session.plugin(plugin)
+        payload["console_context_shared"] = session.ctx is adapter.context
+        payload["console_actions"] = list(handle.actions)
+        payload["console_algorithms"] = list(handle.algorithms)
+        payload["console_action_result"] = handle.run("ping", value=request["ping_value"])
+        session.close()
+        payload["console_closed"] = bool(
+            session.closed and adapter.runtime.state.value == "running"
+        )
+
         payload["unloaded"] = bool(
             qgis.utils.unloadPlugin(plugin) and not qgis.utils.isPluginLoaded(plugin)
         )
@@ -138,6 +158,11 @@ REPORT_FIELDS: Final = (
     "runtime_running",
     "action_result",
     "provider_registered",
+    "console_context_shared",
+    "console_actions",
+    "console_algorithms",
+    "console_action_result",
+    "console_closed",
     "unloaded",
     "runtime_stopped",
     "provider_released",
@@ -163,6 +188,11 @@ class DesktopScaffoldReport:
     error: str | None = None
     provider_registered: bool = False
     provider_released: bool = False
+    console_context_shared: bool = False
+    console_actions: list[str] = field(default_factory=list)
+    console_algorithms: list[str] = field(default_factory=list)
+    console_action_result: int | None = None
+    console_closed: bool = False
 
     @property
     def passed(self) -> bool:
@@ -174,6 +204,11 @@ class DesktopScaffoldReport:
             and self.runtime_running
             and self.action_result == PING_VALUE
             and self.provider_registered
+            and self.console_context_shared
+            and "ping" in self.console_actions
+            and bool(self.console_algorithms)
+            and self.console_action_result == PING_VALUE
+            and self.console_closed
             and self.unloaded
             and self.runtime_stopped
             and self.provider_released

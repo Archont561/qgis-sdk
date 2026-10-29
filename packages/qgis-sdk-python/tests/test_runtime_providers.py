@@ -68,6 +68,34 @@ def test_start_registers_every_listed_provider_and_unload_removes_them() -> None
     ]
 
 
+def test_algorithms_lists_the_ids_the_registry_advertises_while_running() -> None:
+    """TASK-73: the console reads what a running plugin added to Processing."""
+    tools = _tools()
+
+    @plugin(id="owner", title="Owner")
+    class Owner:
+        providers = (tools, sample_provider)
+
+    scope = ResourceScope()
+    runtime = PluginRuntime._from_plugin_class(
+        Owner, _context(scope, FakeProcessing(scope))
+    )
+
+    assert runtime.algorithms == ()
+
+    runtime.start()
+
+    assert runtime.algorithms == (
+        f"tools:{tools.describe().algorithms[0].id}",
+        "sample:buffer",
+        "sample:centroid",
+    )
+
+    runtime.unload()
+
+    assert runtime.algorithms == ()
+
+
 def test_the_same_class_over_a_host_without_processing_registers_nothing() -> None:
     @plugin(id="owner", title="Owner")
     class Owner:
@@ -80,6 +108,7 @@ def test_the_same_class_over_a_host_without_processing_registers_nothing() -> No
     assert runtime.state is PluginRuntimeState.RUNNING
     assert runtime.providers == (sample_provider,)
     assert runtime.registered_providers == ()
+    assert runtime.algorithms == ()
     runtime.unload()
 
 

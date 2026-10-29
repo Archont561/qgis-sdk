@@ -2089,6 +2089,100 @@ the discovery report, a directory without `[tool.qgis-sdk] plugin` is exit 2
 package, and its pytest plugin makes `import <plugin>` resolve to it inside
 the Desktop run, so a desktop test loads the plugin exactly as QGIS does.
 
+## From the QGIS Python console
+
+Your plugin's curated services are reachable from QGIS's own Python console
+(`Plugins > Python Console`) without the plugin importing anything for you and
+without this package re-exposing `QgisInterface` one method at a time
+(decision-48). There are two routes, and both hand back the same object:
+
+```python
+# 1. the plugin you just started, from QGIS itself
+import qgis.utils
+
+session = qgis.utils.plugins["field_tools"].console()
+
+# 2. the whole Desktop, anywhere `qgis_sdk` is importable
+from qgis_sdk.console import connect
+
+with connect() as session:
+    session.ctx.layers.list_layers()
+    session.plugin("field_tools").run("buffer", distance=25.0)
+```
+
+`qgis-sdk dev` prints both lines when it starts, with the plugin's own name in
+the first. Route 1 needs nothing but the plugin QGIS loaded: it is what
+`classFactory` returned, so an installed, vendored plugin answers it.
+Route 2 builds a `PluginContext` through `native_plugin_context` over
+`qgis.utils.iface` - or over the `iface` passed - and owns the scope it builds.
+
+### `session.ctx`: the services a plugin gets
+
+`ctx` is a full `PluginContext`: `layers`, `project`, `settings`, `styles`,
+`algorithms`, `network`, `processing`, `files`, `log`, `notifications`, and
+`desktop` where the host had an `iface`. A service this host cannot offer
+refuses by name (`QgisSdkUnsupportedCapabilityError`), exactly as it does inside
+a plugin; a standalone `QgsApplication` therefore has a working `ctx.layers` and
+a `ctx.desktop` that says it is unavailable. `iface` itself stays behind
+`ctx.desktop`: there is no proxy object, nothing is imported into the console
+namespace, and no plugin code is `eval`ed.
+
+`session.close()` - or leaving the `with` block - disposes what the session
+started: its subscriptions, temporary outputs and jobs. A second `close()` is a
+no-op, and reading a closed session refuses by name. Sessions never own project
+layers. A session a plugin handed out with `console()` borrows *that plugin's*
+context and scope instead: the console and the plugin read one project and one
+settings prefix, closing the session does not stop the plugin, and the plugin's
+`unload()` closes the session.
+
+### `session.plugin(name)`: one running plugin
+
+`session.plugins()` lists the names QGIS holds; `session.plugin(name)` returns a
+`PluginHandle` with:
+
+| Member | What it gives you |
+| --- | --- |
+| `description` | the validated declaration: id, title, version, actions, streams |
+| `actions`, `streams` | the declared ids, sorted |
+| `surfaces()` | the surface ids the plugin registers |
+| `algorithms` | the Processing ids it registered, `provider:algorithm` (`PluginRuntime.algorithms`) |
+| `state` | `new`, `running`, `stopped` or `failed` |
+| `ctx` | the plugin's own context, the same service instances |
+| `run(action_id, **inputs)` | call one action as a page or a surface would |
+| `open(target)` | open one of its surfaces through its own host |
+| `reload()` | unload and load it again - `qgis-sdk dev` only |
+
+`run` takes the bridge dispatcher's path without the transport (decision-27):
+the value becomes wire data, is checked against the request schema the
+declaration already published, and only then is spread as keyword arguments -
+so a missing field, an unknown one or a wrong type raises the same
+`QgisSdkBridgeError` a page would see, naming the field
+(`payload.distance: expected a number, got a string`). An unknown action refuses
+listing the ids the plugin declares. A handler that raises keeps its own
+exception, traceback and all, because in a console that traceback points at the
+plugin's line. The call runs on the console's thread, so it blocks the GUI
+exactly as pressing the plugin's button does.
+
+`open("buffer_dialog")` reaches a surface by id, by class name
+(`"BufferDialog"`), or by the action id whose surface follows the scaffold's
+naming (`"buffer"` for a `BufferDialog` or a `buffer_dialog`). It opens through
+the plugin's own host, so the window gets the plugin's context, scope and
+lifetime; it belongs on the GUI thread, which the console's thread is. An
+unknown name refuses listing both the surface ids and the action ids.
+
+`reload()` exists only in a QGIS started by `qgis-sdk dev` (`QGIS_SDK_DEV_REQUEST`
+set); an installed plugin refuses by name. Inside a dev session it follows the
+same policy as the Reload button: the running revision is asked to quiesce
+first, and a plugin with work in flight is left as it is rather than cut off
+mid-run.
+
+A handle works across vendored SDK copies: it reads the object QGIS holds by
+attribute, so a plugin built by an older runtime keeps working while it has the
+attributes read here, and a missing one (`algorithms`, `surfaces`, `runtime`)
+refuses by name with "built by an older qgis-sdk" (decision-39). It is a
+developer's view of one plugin, not an authorization for one plugin to call
+another - validated plugin-to-plugin actions are TASK-125.
+
 ## Building an installable ZIP: `qgis-sdk build`
 
 `qgis-sdk build [PATH] [--out DIR] [--no-web] [--json]` writes

@@ -190,6 +190,10 @@ class TestDesktopPlan:
         assert "Ctrl+Shift+R" in plan.notes[1]
         assert "on save" in plan.notes[1]
         assert "generated" in plan.notes[0] and "on QGIS_PLUGINPATH" in plan.notes[0]
+        # TASK-73: the console recipe is printed where the developer is looking.
+        assert plan.notes[2].startswith("console: ")
+        assert 'qgis.utils.plugins["field_tools"].console()' in plan.notes[2]
+        assert "from qgis_sdk.console import connect" in plan.notes[2]
         # The bootstrap imports qgis_sdk_tools inside QGIS's own interpreter.
         sdk_paths = [str(path) for path in sdk_import_paths()]
         assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [

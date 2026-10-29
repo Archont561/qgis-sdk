@@ -79,6 +79,7 @@ class DesktopLifecycleAdapter:
         self._iface = iface
         self._context = context_factory(iface)
         self._runtime = PluginRuntime(app, self._context)
+        self._sessions: list[Any] = []
 
     @property
     def iface(self) -> object | None:
@@ -95,12 +96,30 @@ class DesktopLifecycleAdapter:
         """Return the lifecycle owner for advanced adapters and tests."""
         return self._runtime
 
+    def console(self) -> Any:
+        """Return a console session bound to this plugin's own context.
+
+        The session shares the plugin's service instances - one project, one
+        settings prefix, one ``ctx.desktop`` - so what a developer types in the
+        QGIS Python console reads and changes exactly what the plugin does
+        (decision-48). Closing it does not stop the plugin, and the plugin's
+        unload closes it.
+        """
+        from qgis_sdk import console
+
+        session = console.bind(self)
+        self._sessions.append(session)
+        return session
+
     def initGui(self) -> None:
         """Construct and bind the author plugin once; QGIS calls this."""
         self._runtime.start()
 
     def unload(self) -> None:
         """Dispose owned resources; repeated calls are safe."""
+        sessions, self._sessions = self._sessions, []
+        for session in sessions:
+            session.close()
         self._runtime.unload()
 
 
@@ -293,6 +312,10 @@ class DesktopHost:
     @property
     def context(self) -> PluginContext:
         return self._adapter.context
+
+    def console(self) -> Any:
+        """Return a console session bound to this plugin's context (decision-48)."""
+        return self._adapter.console()
 
     @property
     def placement(self) -> str | None:
