@@ -2197,6 +2197,74 @@ APIs have been removed. For per-host context construction, assign
 `app.context_factory`. The old class-constructor hooks have no direct replacement;
 construct testable dependencies in the context factory or in ordinary functions.
 
+### The plugin HTTP API, and MCP for development only
+
+This release adds one runtime interface for clients outside QGIS and keeps MCP
+strictly on the development side. No released version shipped the experimental
+`qgis_sdk.agent` module, so there is nothing to migrate: it is not part of this
+release, and there is no `[tool.qgis-sdk.agent]` metadata, `AGENT` check rule,
+`dev --agent` mode or consent surface.
+
+**Calling a plugin from outside QGIS.** A host starts the listener itself,
+after `runtime.start()` and on the runtime's owner thread:
+
+```python
+from qgis_sdk.http import PluginHttpServer
+
+server = PluginHttpServer(
+    runtime,
+    post=post_to_owner_thread,
+    token_file=private_directory / "plugin.token",
+    actions=("buffer", "watch_progress"),   # an allowlist, not a view filter
+)
+server.start()
+# ... serve ...
+server.close()
+```
+
+`actions` must name IDs the plugin actually declared; an unknown ID is refused
+at construction. Nothing is exposed that the host does not name, construction
+opens no socket and creates no token, and only one server may serve a runtime.
+
+- New names: `qgis_sdk.http.PluginHttpServer`, `QgisSdkHttpError`;
+  `qgis_sdk_tools.rest.PluginClient`, `PluginClientError`; and the developer
+  commands `qgis-sdk plugin describe|call|stream`.
+- Endpoints: `GET /plugin` (the plugin description filtered to the allowlist),
+  `POST /actions/<id>` (a JSON object in, the action's return value out), and
+  `POST /streams/<id>` (server-sent events, ending with a terminal frame).
+- Calls are serialized per runtime. A second call waits for its turn for up to
+  the server's deadline and then fails with `503` and the `host_busy` code; it
+  never runs inside another handler, including one that opened a modal dialog.
+  Work queued from the thread already running plugin work is refused at once.
+  A reload fails an in-flight call with `host_reloaded` without undoing effects
+  it already had.
+- Every dispatch still runs on the QGIS owner thread and through the same
+  dispatcher, authority and protocol version as the page and the console. The
+  bridge, `BRIDGE_PROTOCOL_VERSION` and `HOST_FINGERPRINT` do not move.
+
+**Security model.** The listener binds to `127.0.0.1` only, refuses a foreign
+`Host` header and any browser `Origin`, and requires a bearer token that the
+host writes to a mode-`0600` file, unlinks on close, and never puts on a
+command line the plugin controls. Connections, request size, read and write
+deadlines, event-stream slots and buffered bytes are all bounded. The allowlist
+is a permission list, not a sandbox: an exposed action runs with the plugin's
+own authority, and the token holder can call anything the host named.
+
+**Support boundary: POSIX only.** Creating a private token file relies on POSIX
+permissions, and Windows credential storage is not implemented. On a non-POSIX
+platform `PluginHttpServer.start()` refuses with a `QgisSdkHttpError` naming the
+limitation, and creates no token or listener, rather than starting one whose
+token another local account could read. This is a deliberate scope decision for
+this release, not a transient bug; every other SDK feature, including the CLI
+MCP server, works on Windows.
+
+**`qgis-sdk mcp`.** `pip install 'qgis-sdk[mcp]'` adds the official `mcp`
+package as an optional extra, and `qgis-sdk mcp` serves the developer CLI
+commands over stdio. The dependency is imported only when that command runs; a
+missing extra exits with the install line. This server never connects to a
+running plugin, and the plugin REST commands are deliberately absent from its
+inventory: use `qgis-sdk plugin` or `PluginClient` for that.
+
 ### Processing destinations
 
 `Algorithms.run` no longer forwards arbitrary named destinations directly to

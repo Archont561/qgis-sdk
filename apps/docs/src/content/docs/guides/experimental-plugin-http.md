@@ -91,6 +91,15 @@ At the HTTP level, `GET /plugin` returns the filtered description,
 token. Only IDs selected by the host are exposed. The directory is not a
 sandbox and the client cannot confer additional access to the process.
 
+## Support boundary
+
+Creating the token file relies on POSIX file permissions. Windows credential
+storage is not implemented, so `start()` refuses on a non-POSIX platform with a
+`QgisSdkHttpError` that names the limitation, and creates no token or listener.
+A host on Windows must not substitute a world-readable token; the rest of the
+SDK, including the CLI MCP server, works there. This is a deliberate scope
+decision for this release, not a transient bug.
+
 Static imports of `qgis_sdk.http` opt the HTTP implementation into a built
 plugin ZIP; it is otherwise excluded. The boundary is deliberate: MCP serves
 developers and agents at the project level, while this HTTP API is the only

@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-10-26T09:48:00Z'
-updated_date: '2026-10-29 12:00'
+updated_date: '2026-10-29 13:34'
 labels: []
 milestone: m-7
 dependencies:
@@ -33,8 +33,9 @@ The boundary is deliberate: MCP in `qgis-sdk-tools` serves developers and agents
 - [x] #5 Real QGIS qualification covers owner-thread dispatch and teardown/reload, the built plugin vendors `qgis_sdk.http` only on explicit import, and no `qgis_sdk.agent` module, agent checker, guide or test remains.
 <!-- AC:END -->
 
-## Implementation notes
+## Implementation Notes
 
+<!-- SECTION:NOTES:BEGIN -->
 2026-10-29: pure-side qualification covers explicit start/close, token
 permissions and removal, `Host`/`Origin`/token refusal, one endpoint per
 runtime, failed-start recovery, busy-deadline withdrawal, reload withdrawal,
@@ -56,7 +57,9 @@ action unwinds; an off-owner close disposes a live stream on the owner thread
 and removes the token. Each was checked against a deliberately broken
 implementation to confirm the test fails.
 
-
 <!-- SECTION:PLAN:BEGIN -->
 Keep the transport hardened: absolute read/write deadlines, bounded connections and SSE buffers, cleanup that survives scheduler failure, and token/reservation release on every failure path. Qualify native dispatch, disconnect cleanup and reload with real QGIS before checking acceptance criteria. Document the endpoint and the MCP boundary in `guides/experimental-plugin-http.md` and `guides/cli-mcp.md`.
 <!-- SECTION:PLAN:END -->
+
+2026-10-29 scope decision (POSIX only): creating the token file relies on POSIX permissions, and Windows credential storage is not implemented. Rather than start a listener whose token another local account could read, PluginHttpServer.start() refuses on a non-POSIX platform with a QgisSdkHttpError that names the limitation and leaves no token or listener. test_start_refuses_a_platform_without_private_token_permissions pins the refusal and proves it does not consume the runtime, so the same server starts once the check passes. The boundary is documented in guides/experimental-plugin-http.md and the 0.8.0 migration notes (doc-12). This is a deliberate scope decision for 0.8.0, not an unfinished fix.
+<!-- SECTION:NOTES:END -->
