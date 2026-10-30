@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 import pytest
 from qgis_sdk.core import (
     AlgorithmContext,
+    Host,
     JobContext,
     PluginContext,
     ResourceScope,
@@ -476,3 +477,50 @@ def test_with_services_adds_a_capability_over_the_same_scope() -> None:
         context.with_services(settings=object())
     with pytest.raises(ValueError, match="no capability named 'iface'"):
         context.with_services(iface=object())
+
+
+# -- the host a context was built for is stated, never inferred (decision-52) ------
+
+
+def test_the_three_hosts_and_which_of_them_has_a_gui() -> None:
+    assert [host.value for host in Host] == ["desktop", "server", "app"]
+    assert str(Host.SERVER) == "server"  # a StrEnum, so metadata and JSON agree
+    assert Host.DESKTOP.gui and Host.APP.gui
+    assert not Host.SERVER.gui
+
+
+def test_a_plugin_context_reports_the_host_that_built_it() -> None:
+    scope = ResourceScope()
+    desktop = PluginContext(notifications=RecordingNotifications(), scope=scope)
+    server = PluginContext(
+        notifications=RecordingNotifications(), scope=scope, host=Host.SERVER
+    )
+
+    assert desktop.host is Host.DESKTOP  # what a host that says nothing means
+    assert server.host is Host.SERVER
+    assert "host=server" in repr(server)
+
+
+def test_a_view_context_inherits_the_host_and_adding_services_keeps_it() -> None:
+    scope = ResourceScope()
+    plugin = PluginContext(
+        notifications=RecordingNotifications(), scope=scope, host=Host.APP
+    )
+    view = UiContext(
+        plugin.notifications,
+        object(),
+        scope.child(),
+        host=plugin.host,  # type: ignore[arg-type]
+    )
+
+    assert view.host is Host.APP
+    assert plugin.with_services(log=object()).host is Host.APP
+
+
+def test_the_host_is_a_stated_attribute_not_a_capability() -> None:
+    context = PluginContext(
+        notifications=RecordingNotifications(), scope=ResourceScope(), host=Host.SERVER
+    )
+
+    with pytest.raises(ValueError, match="has no capability named 'host'"):
+        context.has("host")

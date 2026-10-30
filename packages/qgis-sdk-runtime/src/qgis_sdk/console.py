@@ -41,7 +41,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Final, Self
 
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import Host, PluginContext, ResourceScope
 from qgis_sdk.environment import dev_request
 from qgis_sdk.models import QgisSdkError
 
@@ -146,6 +146,7 @@ def _context(
             else MessageBarNotifications(None, settings_prefix)
         ),
         scope=scope,
+        host=Host.DESKTOP,
     )
 
 

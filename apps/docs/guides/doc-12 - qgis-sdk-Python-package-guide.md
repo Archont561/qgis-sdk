@@ -225,7 +225,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `declarations` | `QgisSdkPlugin` and the shared `describe(target)` dispatcher; plugin, algorithm, job and provider descriptions satisfy `Description` (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorated targets gain `describe()` without wrapping |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
-| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `WorkerContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
+| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `WorkerContext`, `Host`, `ResourceScope`, `PluginRuntime`, and lifecycle errors; a context reports the host that built it as `ctx.host` (`desktop`, `server`, `app`) instead of inferring one from an `iface` (decision-52) |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, `JobSubscription`, `Jobs` and `JobRegistry` - scoped local jobs over the step scheduler, named by the plugin's `jobs` declaration, with typed handles and owner-bound delivery |
@@ -456,6 +456,35 @@ point; `host()` is built on them. Neither imports Qt at module level; the
 adapter never serialises `iface`.
 
 The headless harnesses and the real-Desktop evidence for this adapter are in [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md).
+
+### Which hosts does a plugin declare?
+
+`[tool.qgis-sdk] hosts` says which hosts one plugin class runs on
+([decision-52](../../../backlog/decisions/decision-52%20-%20Run-one-plugin-class-on-three-hosts-QGIS-Desktop-QGIS-Server-and-standalone-PyQGIS-apps.md)):
+`desktop` (a QGIS Desktop plugin loaded through `classFactory`, the default),
+`server` (a QGIS Server plugin loaded through `serverClassFactory`) and `app`
+(a standalone PyQGIS application started by `qgis_sdk.app.run`). The set changes
+nothing about how the class is written - it is what `check` reads when it
+reports `HOST001` (a Desktop-only declaration in a plugin that does not declare
+Desktop) and `HOST003` (the server host declared against a QGIS built without
+QGIS Server, which is a statement about the environment, not the project).
+
+```toml
+[tool.qgis-sdk]
+plugin = "field_tools.plugin:app"
+qgis-minimum-version = "4.0"
+hosts = ["desktop"]                 # desktop | server | app; default ["desktop"]
+```
+
+Host detection is explicit, never inferred from an `iface`, a
+`QgsApplication` or an environment variable: the host that builds a context
+says which one it is, and `ctx.host` reports it - `Host.DESKTOP`,
+`Host.SERVER` or `Host.APP` from `qgis_sdk.core`, compared as strings because it
+is a `StrEnum`. `ctx.host.gui` is `False` on a server, which is the honest
+answer to "may I open a window here?". A view inherits the host of the plugin
+context that opened it. This release implements the Desktop host; the server and
+app hosts arrive with 0.9.0 (TASK-80 and TASK-81), and a capability either of
+them lacks still refuses by name (decision-39).
 
 ## Forms: an action's inputs as a window
 
@@ -2228,6 +2257,8 @@ it is `DEP001`, and it is reported here rather than first at `build`
 | `JOB001` | A `@job` body reaches GUI state: `iface` (imported at module scope or inside the body), a Qt or QGIS GUI class (`QgsMapCanvas`, `QMessageBox`, ... - `qgis_sdk_tools.check.jobs.GUI_CLASSES`), `QgsProject.instance()`, or a module-level name that holds one of those. The whole body runs on a worker thread, so do the GUI work on the driving thread: prepare before submitting, apply in the success callback. |
 | `JOB002` | A `@job` body reads a context attribute other than `progress` and `cancellation`; it is handed a `WorkerContext`, which refuses every driving-thread capability by name, so the job would fail on its first step. Pass plain values in and re-read the service from the callback. |
 | `JOB003` (warning) | A `@job` body imports a module by name (`importlib.import_module`, `__import__`), which `check` cannot follow: the body may reach GUI state through it. Import it at module level or in a helper outside the job. |
+| `HOST001` | A Desktop-only declaration in a plugin whose `[tool.qgis-sdk] hosts` does not declare `desktop`: `@toolbar`, `@menu` or `@shortcut`, a `Dialog`/`Dock` surface, or a web view (`[tool.qgis-sdk.web]`). A server-only plugin loads that module and has nowhere to put a window; add `desktop` to `hosts`, or keep the declaration in a module only the Desktop host loads. |
+| `HOST003` (warning) | `hosts` declares `server`, but the QGIS this interpreter can see was built without QGIS Server, so `qgis.server` is absent. Nothing is wrong with the project - a developer machine without server bindings is normal - but `qgis-sdk test --target server` will skip here and a deployed server needs a build with `WITH_SERVER=ON`. conda-forge builds QGIS without it. |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
 | `VERSION002` | A TypeScript file starting with `// Generated by qgis-sdk. Do not edit.` declares a `PLUGIN_DESCRIPTION_SCHEMA_VERSION` or `HOST_SCHEMA_VERSION` other than the one this release generates; regenerate with `qgis-sdk bridge generate`. `node_modules` is never read. |

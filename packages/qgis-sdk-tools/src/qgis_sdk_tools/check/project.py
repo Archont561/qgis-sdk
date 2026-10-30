@@ -32,6 +32,7 @@ from qgis_sdk_tools.manifest import read_pyproject, table
 
 from .buckets import HOST_ROOTS, BucketReport, bucket_imports, import_findings
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
+from .hosts import check_declared_hosts, check_hosts
 from .imports import check_source
 from .jobs import check_jobs
 from .ui import check_bindings
@@ -97,6 +98,7 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
     packages = list(_check_packages(root))
     diagnostics.extend(packages)
     imports = None
+    declared_hosts: tuple[str, ...] | None = None
     if not any(d.rule == "PROJECT001" for d in packages):
         # The plugin application, the metadata.txt values and the page (decision-43).
         from qgis_sdk_tools.project import load_project
@@ -106,6 +108,10 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         if config is not None:
             imports, bucket_findings = _buckets(root, config)
             diagnostics.extend(bucket_findings)
+            # Which hosts the project declares, and whether this QGIS has them
+            # (decision-52 point 1; TASK-80).
+            declared_hosts = config.hosts
+            diagnostics.extend(check_declared_hosts(config))
     # What the project pins against what this release supports (decision-35),
     # and whether the runtime this interpreter would ship is one it declares.
     diagnostics.extend(check_runtime_pins(root))
@@ -119,6 +125,8 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         source = path.read_text(encoding="utf-8")
         diagnostics.extend(check_source(source, path=relative, native_modules=native))
         diagnostics.extend(check_jobs(source, path=relative))
+        if declared_hosts is not None:
+            diagnostics.extend(check_hosts(source, path=relative, hosts=declared_hosts))
         package = root / relative.parts[0] if len(relative.parts) > 1 else None
         diagnostics.extend(
             check_bindings(

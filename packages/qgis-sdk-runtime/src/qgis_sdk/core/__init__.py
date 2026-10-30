@@ -8,6 +8,7 @@ from .contexts import (
     UiContext,
     WorkerContext,
 )
+from .host import Host
 from .runtime import (
     PluginRuntime,
     PluginRuntimeState,
@@ -27,6 +28,7 @@ __all__ = [
     "GUI_BOUND_CAPABILITIES",
     "AlgorithmContext",
     "Handoff",
+    "Host",
     "Job",
     "JobContext",
     "JobState",

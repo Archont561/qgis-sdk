@@ -355,6 +355,7 @@ class SurfaceHost:
             context.notifications,
             _WidgetControl(close),
             scope,
+            host=context.host,
             network=context.network if context.has("network") else None,
             actions=ViewActions(runtime, view_id=view_id, scope=scope),
             settings=self._settings(),
