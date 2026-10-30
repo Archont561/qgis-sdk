@@ -211,7 +211,7 @@ def test_a_root_without_a_plugin_package_is_project001(tmp_path: Path) -> None:
     report = check_project(root)
 
     assert codes(report) == ["PROJECT001"]
-    assert report.diagnostics[0].path == Path(".")
+    assert report.diagnostics[0].path == Path()
 
 
 def test_a_root_that_is_not_a_directory_is_refused(tmp_path: Path) -> None:

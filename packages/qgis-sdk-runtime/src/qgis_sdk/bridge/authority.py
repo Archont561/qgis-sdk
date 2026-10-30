@@ -351,7 +351,7 @@ class HostAuthority:
                 handle.write(data)
                 handle.flush()
                 os.fsync(handle.fileno())
-            os.replace(partial, path)
+            partial.replace(path)
         except OSError as error:
             partial.unlink(missing_ok=True)
             reason = getattr(error, "strerror", None) or str(error)

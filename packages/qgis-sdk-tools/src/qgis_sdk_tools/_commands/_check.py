@@ -40,7 +40,7 @@ def check(
 ) -> None:
     """Read a plugin project and report problems; import, install and change nothing."""
     runtime: CliRuntime = ctx.obj
-    root = runtime.resolve(path or Path("."))
+    root = runtime.resolve(path or Path())
     try:
         report = check_project(root, native_modules=tuple(native or ()))
     except QgisSdkCheckError as error:

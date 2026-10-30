@@ -23,7 +23,6 @@ contract suite holds both backends to it.
 
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -158,8 +157,9 @@ def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
     ``write`` receives the path it must produce: the destination's own file
     name inside a staging directory next to it, so a writer that creates
     sidecars (a GeoPackage journal, for one) creates them in the staging
-    directory too. Overwrite commits with ``os.replace``; without overwrite,
-    ``os.link`` atomically refuses a destination created during the write.
+    directory too. Overwrite commits with :meth:`pathlib.Path.replace`; without
+    overwrite, :meth:`pathlib.Path.hardlink_to` atomically refuses a destination
+    created during the write.
     The staging directory is removed on every exit path. A writer raising an SDK
     error passes through; other writer and commit errors become
     :class:`QgisSdkExportFailedError`.
@@ -184,11 +184,11 @@ def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
             refuse_source_destination(plan.source, destination)
         try:
             if plan.overwrite:
-                os.replace(partial, destination)
+                partial.replace(destination)
             else:
                 # The staging file is on the same filesystem. Creating the link
                 # atomically refuses even a destination created during writing.
-                os.link(partial, destination)
+                destination.hardlink_to(partial)
         except FileExistsError as error:
             raise QgisSdkExportRefusedError(
                 str(destination),

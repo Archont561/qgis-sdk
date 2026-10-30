@@ -41,7 +41,7 @@ def build(
 ) -> None:
     """Check the project and write an installable plugin ZIP with the runtime inside."""
     runtime: CliRuntime = ctx.obj
-    root = runtime.resolve(path or Path("."))
+    root = runtime.resolve(path or Path())
     try:
         result = build_plugin(
             root,

@@ -76,10 +76,10 @@ def test_publish_without_overwrite_fails_closed_when_hard_links_are_unavailable(
     destination = tmp_path / "out.geojson"
     plan = exports.plan_export(destination, overwrite=False)
 
-    def refuse_link(*args: object) -> None:
+    def refuse_link(self: Path, *args: object, **kwargs: object) -> None:
         raise OSError("hard links unavailable")
 
-    monkeypatch.setattr(exports.os, "link", refuse_link)
+    monkeypatch.setattr(Path, "hardlink_to", refuse_link)
     with pytest.raises(QgisSdkExportFailedError, match="hard links unavailable"):
         exports.run_export(plan, lambda partial: partial.write_text("{}"))
 

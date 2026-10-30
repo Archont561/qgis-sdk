@@ -50,7 +50,7 @@ def test(
 ) -> None:
     """Run the project's tests for one target; other arguments go to pytest."""
     runtime: CliRuntime = ctx.obj
-    root = runtime.resolve(project or Path("."))
+    root = runtime.resolve(project or Path())
     forwarded = (*(pytest_args or ()), *ctx.args)
     workspace: Path | None = None
     try:

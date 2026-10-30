@@ -51,6 +51,7 @@ from qgis_sdk_tools.distributions import (
     QGisSdkDistributionError,
     read_distribution,
 )
+from qgis_sdk_tools.paths import walk_files
 from qgis_sdk_tools.project import ProjectConfig
 from qgis_sdk_tools.scaffold.web import script_command
 
@@ -257,13 +258,7 @@ def _read_vendored(names: Sequence[str]) -> tuple[Distribution, ...]:
 
 def _plugin_sources(package: Path) -> list[Path]:
     """The plugin's own ``.py`` files, excluding what the archive excludes."""
-    files: list[Path] = []
-    for directory, dirnames, filenames in os.walk(package):
-        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDED_DIRECTORIES)
-        for filename in sorted(filenames):
-            if filename.endswith(".py"):
-                files.append(Path(directory) / filename)
-    return files
+    return list(walk_files(package, skip=EXCLUDED_DIRECTORIES, suffix=".py"))
 
 
 def _imports_optional(sources: Sequence[Path], module: str) -> bool:
@@ -340,27 +335,25 @@ def _stage_plugin(
     to the generated lines too. The source tree is never touched.
     """
     extra = dict(append or {})
-    for directory, dirnames, filenames in os.walk(package):
-        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDED_DIRECTORIES)
-        relative = Path(directory).relative_to(package)
-        (staged / relative).mkdir(parents=True, exist_ok=True)
-        for filename in sorted(filenames):
-            source = Path(directory) / filename
-            if source.suffix in EXCLUDED_SUFFIXES or filename in EXCLUDED_FILES:
-                continue
-            target = staged / relative / filename
-            if source.suffix == ".py":
-                text = source.read_text(encoding="utf-8")
-                if relative == Path() and filename in extra:
-                    body = text.rstrip("\n")
-                    text = (body + "\n\n\n" if body else "") + extra.pop(filename)
-                target.write_text(
-                    rewrite_imports(text, prefix=prefix, roots=roots),
-                    encoding="utf-8",
-                    newline="\n",
-                )
-            else:
-                shutil.copyfile(source, target)
+    staged.mkdir(parents=True, exist_ok=True)
+    for source in walk_files(package, skip=EXCLUDED_DIRECTORIES):
+        if source.suffix in EXCLUDED_SUFFIXES or source.name in EXCLUDED_FILES:
+            continue
+        relative = source.parent.relative_to(package)
+        target = staged / relative / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.suffix == ".py":
+            text = source.read_text(encoding="utf-8")
+            if not relative.parts and source.name in extra:
+                body = text.rstrip("\n")
+                text = (body + "\n\n\n" if body else "") + extra.pop(source.name)
+            target.write_text(
+                rewrite_imports(text, prefix=prefix, roots=roots),
+                encoding="utf-8",
+                newline="\n",
+            )
+        else:
+            shutil.copyfile(source, target)
     for filename, text in extra.items():  # a package without the file at all
         (staged / filename).write_text(
             rewrite_imports(text, prefix=prefix, roots=roots),

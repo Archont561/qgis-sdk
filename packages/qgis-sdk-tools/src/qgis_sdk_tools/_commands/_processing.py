@@ -80,7 +80,7 @@ def processing_generate(
     )
 
     runtime: CliRuntime = ctx.obj
-    root = runtime.resolve(project or Path("."))
+    root = runtime.resolve(project or Path())
     try:
         if catalogue is not None:
             from qgis_sdk.models import Catalogue
