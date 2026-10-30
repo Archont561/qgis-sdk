@@ -33,11 +33,14 @@ __all__ = [
 ]
 
 #: Where a prefix keeps the ``qgis`` Python package, in the layouts QGIS ships:
-#: conda, Linux distributions and the macOS bundle, then OSGeo4W.
+#: conda, Linux distributions and the macOS bundle, then OSGeo4W, then the
+#: Debian and Ubuntu ``python3-qgis`` package, which installs into the
+#: distribution's own ``dist-packages`` rather than under ``share/qgis``.
 BINDINGS_LAYOUTS: Final = (
     Path("share/qgis/python"),
     Path("apps/qgis/python"),
     Path("apps/qgis-ltr/python"),
+    Path("lib/python3/dist-packages"),
 )
 EXECUTABLE_LAYOUTS: Final = (
     Path("bin/qgis"),

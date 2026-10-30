@@ -235,3 +235,27 @@ def test_headless_means_no_display_to_show_a_window_on(
     env: dict[str, str], platform: str, expected: bool
 ) -> None:
     assert wants_headless(env, platform=platform) is expected
+
+
+def test_a_debian_prefix_finds_the_distributions_dist_packages(tmp_path: Path) -> None:
+    """`apt install python3-qgis` puts `qgis` in `lib/python3/dist-packages`.
+
+    No `share/qgis/python` exists on such an install, so a discovery that only
+    knew the conda and OSGeo4W layouts refused `/usr` - the prefix the qgis.org
+    and Debian packages install into, and the one the `QGIS 3.44 LTS` row runs.
+    """
+    prefix = tmp_path / "usr"
+    package = prefix / "lib" / "python3" / "dist-packages" / "qgis"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (prefix / "bin").mkdir()
+    (prefix / "bin" / "qgis").write_text("")
+    (prefix / "bin" / "python3").write_text("")
+
+    install = find_qgis_install(
+        {}, prefix=prefix, which=no_which, sys_prefix=tmp_path / "nothing"
+    )
+
+    assert install.bindings == (prefix / "lib" / "python3" / "dist-packages").resolve()
+    assert install.python == (prefix / "bin" / "python3").resolve()
+    assert install.source == "the --qgis-prefix option"
