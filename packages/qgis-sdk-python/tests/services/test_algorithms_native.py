@@ -423,11 +423,11 @@ def test_unavailable_hard_links_fail_without_publishing(
             partial.write_bytes(native_services.dataset.read_bytes())
             return {"OUTPUT": str(partial)}
 
-    def refuse_link(*args: object) -> None:
+    def refuse_link(self: Path, *args: object, **kwargs: object) -> None:
         raise OSError("hard links unavailable")
 
     monkeypatch.setattr(adapter_module, "_processing", lambda: SuccessfulProcessing())
-    monkeypatch.setattr(adapter_module.os, "link", refuse_link)
+    monkeypatch.setattr(Path, "hardlink_to", refuse_link)
     with pytest.raises(QgisSdkAlgorithmFailedError, match="hard-link support"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
