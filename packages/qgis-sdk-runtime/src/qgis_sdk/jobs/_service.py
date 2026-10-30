@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.core.scheduling import QuiesceOutcome, StepScheduler
-from qgis_sdk.jobs._attempt import _TICK_IN_PROGRESS, _Attempt, _run_attempt
+from qgis_sdk.jobs._attempt import (
+    _NOT_THE_DRIVING_THREAD,
+    _TICK_IN_PROGRESS,
+    _Attempt,
+    _run_attempt,
+)
 from qgis_sdk.jobs._authoring import (
     _check_arguments,
     _main_thread,
@@ -41,6 +47,7 @@ class _Runtime:
     project: Project | None
     gui_thread: Callable[[], bool]
     on_fault: Callable[[JobFault], None] | None
+    driving_thread: int = field(default_factory=threading.get_ident)
     attempts: dict[str, _Attempt] = field(default_factory=dict)
     counters: dict[str, int] = field(default_factory=dict)
     faults: list[JobFault] = field(default_factory=list)
@@ -99,9 +106,12 @@ class JobService:
 
     ``gui_thread`` answers "is the calling thread the GUI thread?" for
     :meth:`JobHandle.get`; the default says yes for the interpreter's main
-    thread, which is where QGIS runs its GUI. ``workers``, ``network``,
-    ``algorithms`` and ``project`` become the matching capabilities of every
-    ``JobContext`` this service builds; a host passes the ones it has.
+    thread, which is where QGIS runs its GUI. ``workers`` is required to submit
+    at all: since 0.9.0 a job body runs in its entirety on a worker
+    (decision-65), so a service without one refuses every submission rather
+    than running author code here. The ``WorkerContext`` a body receives is
+    built per attempt with progress and cancellation only; ``network``,
+    ``algorithms`` and ``project`` stay on this side of the seam.
     """
 
     def __init__(
@@ -207,6 +217,21 @@ class JobService:
         if problems:
             raise QgisSdkJobRejectedError(description.id, problems)
         runtime = self._runtime
+        if runtime.workers is None:
+            # Decision-65: a job body never runs on the driving thread. A host
+            # without a worker backend refuses the submission instead of
+            # quietly degrading to the behaviour 0.9.0 removed.
+            raise QgisSdkJobRejectedError(
+                description.id,
+                [
+                    (
+                        "this host provides no worker backend, and a job body "
+                        "never runs on the driving thread; give the host a "
+                        "Workers service (Desktop supplies a QThreadPool) or run "
+                        "the code directly"
+                    )
+                ],
+            )
         number = runtime.counters.get(description.id, 0) + 1
         runtime.counters[description.id] = number
         attempt = _Attempt(
@@ -232,14 +257,15 @@ class JobService:
         Call this from the thread that owns the GUI; it is the only thread on
         which subscribers run. Returns the number of author steps taken.
 
-        A tick entered while another is on the stack - a job or a subscriber
-        opened a modal dialog whose nested event loop fired the host timer -
-        does nothing and returns ``0``; the outer tick finishes when the
-        dialog closes. Re-stepping a job that is mid-step would fail
-        it, and an exception here would escape a Qt slot.
+        A tick entered while another is on the stack - a subscriber opened a
+        modal dialog whose nested event loop fired the host timer - does
+        nothing and returns ``0``; the outer tick finishes when the dialog
+        closes. So does a tick entered from any thread other than the one that
+        built the service: since 0.9.0 a job body runs on a worker, so author
+        code has no tick of its own to enter (decision-65).
         """
         runtime = self._runtime
-        if runtime.ticking:
+        if runtime.ticking or threading.get_ident() != runtime.driving_thread:
             return 0
         runtime.ticking = True
         try:
@@ -258,6 +284,8 @@ class JobService:
         runtime = self._runtime
         if runtime.ticking:
             return QuiesceOutcome(refused=True, blockers=(_TICK_IN_PROGRESS,))
+        if threading.get_ident() != runtime.driving_thread:
+            return QuiesceOutcome(refused=True, blockers=(_NOT_THE_DRIVING_THREAD,))
         runtime.ticking = True
         try:
             outcome = (

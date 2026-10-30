@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from qgis_sdk import QgisSdkPlugin
-from qgis_sdk.core import AlgorithmContext, JobContext, PluginContext
+from qgis_sdk.core import AlgorithmContext, JobContext, PluginContext, WorkerContext
 from qgis_sdk.declarations._plugin import plugin
 from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider
@@ -68,7 +68,7 @@ def test_job_stream_and_surface_share_describe_entry_points() -> None:
     from qgis_sdk.ui import Dialog
 
     @job(id="sum", title="Sum")
-    def sum_job(ctx: JobContext, value: int) -> int:
+    def sum_job(ctx: WorkerContext, value: int) -> int:
         return value
 
     app = QgisSdkPlugin(id="sample", title="Sample")
@@ -167,7 +167,7 @@ def test_existing_describe_attribute_is_not_overwritten() -> None:
     from qgis_sdk import QgisSdkDeclarationError
     from qgis_sdk.jobs import job
 
-    def existing(ctx: JobContext) -> int:
+    def existing(ctx: WorkerContext) -> int:
         return 1
 
     existing.describe = "author value"  # type: ignore[attr-defined]

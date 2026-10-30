@@ -10,7 +10,7 @@ from enum import StrEnum
 from types import UnionType
 from typing import Annotated, Any, Literal, TypeVar, Union, get_args, get_origin
 
-from qgis_sdk.core import JobContext
+from qgis_sdk.core import JobContext, WorkerContext
 from qgis_sdk.core.scheduling import JobState
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
@@ -80,18 +80,21 @@ def job(
 ) -> Any:
     """Attach job metadata to a plain function without wrapping it.
 
-    The function takes the :class:`JobContext` first and its inputs as typed
-    keyword parameters, and declares its result::
+    The function takes the :class:`~qgis_sdk.core.WorkerContext` first and its
+    inputs as typed keyword parameters, and declares its result::
 
         @job(id="demo.sum", title="Sum two numbers")
-        def sum_numbers(ctx: JobContext, a: int, b: int = 0) -> SumResult: ...
+        def sum_numbers(ctx: WorkerContext, a: int, b: int = 0) -> SumResult: ...
 
     ``@job`` alone derives the id and title from the function name, the way
     a declaration does for a named function; ``id=`` and ``title=`` override either one.
-    The decorator adds ``describe()`` but does not wrap the function; the runtime passes the context
-    when it runs the attempt, so a test calls the function directly with a
-    fake. ``async def`` is allowed and suspends on the scheduler at each
-    ``await``.
+    The decorator adds ``describe()`` but does not wrap the function; the runtime
+    hands the restricted context to the worker that runs the body, so a test
+    calls the function directly with a fake.
+
+    Since 0.9.0 the whole body runs on a worker (decision-65): the function is
+    a plain ``def``. ``async def`` is refused with a migration note - a worker
+    runs no event loop, and the driving thread no longer executes job bodies.
     """
     validate_given(id, title)
 
@@ -113,11 +116,11 @@ class JobDescription:
 
     ``parameters`` are the input names in signature order and ``required``
     the ones without a default; ``inputs_schema`` is the object schema built
-    from them, the same way an action's is. ``asynchronous`` says whether the
-    function is a coroutine function. A plain function executes in one
-    scheduler step on the driving thread, so it is for short work or work
-    that hands itself off through ``ctx.workers``; an ``async def`` suspends
-    on the scheduler at every ``await``.
+    from them, the same way an action's is. The body runs in its entirety on a
+    worker (decision-65), so ``asynchronous`` is always ``False`` since 0.9.0:
+    the field stays in the transport description so a 0.8 reader still parses
+    one, and ``describe_job`` refuses a coroutine function before it can be
+    ``True``.
     """
 
     id: str
@@ -160,18 +163,35 @@ def describe_job(function: Callable[..., Any]) -> JobDescription:
         raise QgisSdkDeclarationError(
             f"{path}: a job is a function or coroutine function, not a generator"
         )
+    if inspect.iscoroutinefunction(function):
+        raise QgisSdkDeclarationError(
+            f"{path}: a job body runs on a worker, which runs no event loop, so "
+            "`async def` is refused since 0.9.0. Make it a plain `def`: blocking "
+            "work is already off the driving thread, and anything the GUI must "
+            "do belongs in a success/failure subscriber, which runs there"
+        )
     parameters = list(inspect.signature(function).parameters.values())
     hints = resolve_hints(function, path)
+    first = parameters[0] if parameters else None
+    annotation = hints.get(first.name) if first is not None else None
+    if annotation is JobContext:
+        raise QgisSdkDeclarationError(
+            f"{path}: the runtime injects a WorkerContext, not a JobContext, "
+            "since 0.9.0 - a job body runs on a worker and the project, "
+            "algorithms, iface and view services stay on the driving thread. "
+            "Annotate it `ctx: WorkerContext` and move anything that needs those "
+            "services out of the body"
+        )
     context_first = (
-        bool(parameters)
-        and parameters[0].kind
+        first is not None
+        and first.kind
         in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.POSITIONAL_ONLY)
-        and hints.get(parameters[0].name) is JobContext
+        and annotation is WorkerContext
     )
     if not context_first:
         raise QgisSdkDeclarationError(
-            f"{path}: first parameter must be the JobContext the runtime injects "
-            "(annotate it `ctx: JobContext`)"
+            f"{path}: first parameter must be the WorkerContext the runtime injects "
+            "(annotate it `ctx: WorkerContext`)"
         )
     inputs = parameters[1:]
     properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
@@ -187,7 +207,7 @@ def describe_job(function: Callable[..., Any]) -> JobDescription:
         result_type=result_type,
         inputs_schema=object_schema(properties, required),
         result_schema=schema_for(result_type, f"{path}.result", result=True),
-        asynchronous=inspect.iscoroutinefunction(function),
+        asynchronous=False,
     )
 
 

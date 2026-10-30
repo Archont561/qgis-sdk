@@ -1,10 +1,11 @@
-"""Scoped jobs over a real ``QThreadPool`` and a real Qt event loop (TASK-15).
+"""Scoped jobs over a real ``QThreadPool`` and a real Qt event loop (decisions 13, 65).
 
 The QGIS-free suite pins every job rule with a scripted worker. This file is the
-thread evidence decision-13 asks for: the offloaded callable runs on a pool
-thread, progress it reports from there reaches the subscriber on the GUI thread,
-the typed result is delivered on the GUI thread by a timer-driven ``tick``, and
-a disposed view's callbacks are never run even though the pool keeps working.
+thread evidence those decisions ask for: the whole job body runs on a pool
+thread and never on the GUI thread, progress it reports from there reaches the
+subscriber on the GUI thread, the typed result is delivered there by a
+timer-driven ``tick``, and a disposed view's callbacks are never run even
+though the pool keeps working.
 
 The imports are guarded like ``test_ui_native.py`` so a host without Qt reports
 what it lacks instead of failing collection.
@@ -26,7 +27,7 @@ pytestmark = pytest.mark.qt
 try:
     from PyQt6.QtCore import QThread, QThreadPool, QTimer
     from qgis_sdk.adapters.qgis.workers import ThreadPoolWorkers
-    from qgis_sdk.core import JobContext, ResourceScope
+    from qgis_sdk.core import ResourceScope, WorkerContext
     from qgis_sdk.jobs import JobService, JobStatus, job
     from qgis_sdk.models import QgisSdkJobWaitRefusedError
 except ImportError as error:  # pragma: no cover - depends on the host
@@ -42,18 +43,16 @@ class Result:
 
 
 @job(id="native.count", title="Count on a worker")
-async def count(ctx: JobContext, count: int, delay_seconds: float = 0.0) -> Result:
-    def work() -> Result:
-        total = 0
-        for step in range(1, count + 1):
-            if ctx.cancellation.is_cancelled():
-                break
-            time.sleep(delay_seconds)
-            total += step
-            ctx.progress.report(step / count)
-        return Result(total=total, thread=threading.get_ident())
-
-    return await ctx.workers.offload(work)
+def count(ctx: WorkerContext, count: int, delay_seconds: float = 0.0) -> Result:
+    """The whole body is the worker's: it polls the request and reports as it goes."""
+    total = 0
+    for step in range(1, count + 1):
+        if ctx.cancellation.is_cancelled():
+            break
+        time.sleep(delay_seconds)
+        total += step
+        ctx.progress.report(step / count)
+    return Result(total=total, thread=threading.get_ident())
 
 
 @pytest.fixture(scope="module")
@@ -183,24 +182,17 @@ def test_a_cancelled_job_still_queued_on_the_pool_acknowledges_without_running(
     ran: list[int] = []
 
     @job(id="native.blocker", title="Hold the pool")
-    async def blocker(ctx: JobContext, delay_seconds: float) -> Result:
-        def hold() -> Result:
-            time.sleep(delay_seconds)
-            ran.append(1)
-            return Result(0, threading.get_ident())
-
-        return await ctx.workers.offload(hold)
+    def blocker(ctx: WorkerContext, delay_seconds: float) -> Result:
+        time.sleep(delay_seconds)
+        ran.append(1)
+        return Result(0, threading.get_ident())
 
     pool.setMaxThreadCount(1)
-    holder = jobs.bind(blocker).delay(delay_seconds=0.2)
+    holder = jobs.bind(blocker).delay(delay_seconds=0.3)
     queued = jobs.bind(blocker).delay(delay_seconds=0.0)
-    drive(
-        app,
-        jobs,
-        lambda: (
-            holder.status is JobStatus.RUNNING and queued.status is JobStatus.RUNNING
-        ),
-    )
+    # Both bodies are submitted on the first tick; the pool runs one at a time.
+    jobs.tick()
+    assert (holder.status, queued.status) == (JobStatus.RUNNING, JobStatus.RUNNING)
     assert queued.cancel() is True
 
     drive(app, jobs, lambda: holder.status.settled and queued.status.settled)

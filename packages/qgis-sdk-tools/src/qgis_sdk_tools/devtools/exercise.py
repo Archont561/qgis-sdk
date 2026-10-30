@@ -22,7 +22,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from qgis_sdk.core import JobContext
+from qgis_sdk.core import WorkerContext
 
 from .bootstrap import DevSession, say
 
@@ -222,8 +222,8 @@ def _stuck_job(runtime: Any, gate: threading.Event) -> Any:
     from qgis_sdk.jobs import JobService, job
 
     @job(id="exercise.stuck", title="Stuck on purpose")
-    async def stuck(ctx: JobContext, value: int) -> int:
-        await ctx.workers.offload(gate.wait)
+    def stuck(ctx: WorkerContext, value: int) -> int:
+        gate.wait()  # the whole body is the worker's; nothing interrupts it
         return value
 
     context = runtime.instance.ctx

@@ -192,7 +192,7 @@ def mark_function(
     if inspect.isclass(function):
         raise QgisSdkDeclarationError(
             f"{decorator} declares a function, not a class: write "
-            f"`{decorator} def name(ctx: JobContext, ...) -> Result` "
+            f"`{decorator} def name(ctx: WorkerContext, ...) -> Result` "
             "(the class form was removed; see the 0.6.0 migration notes)"
         )
     if not inspect.isfunction(function):

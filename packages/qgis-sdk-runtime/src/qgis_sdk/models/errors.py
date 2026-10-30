@@ -21,13 +21,23 @@ class QgisSdkScopeClosedError(QgisSdkError):
 
 
 class QgisSdkUnsupportedCapabilityError(QgisSdkError):
-    """The selected runtime does not offer an explicitly requested capability."""
+    """The selected runtime does not offer an explicitly requested capability.
+
+    ``reason`` is set when the capability exists elsewhere in the same runtime
+    but not *here* - a worker thread, for example, which must not touch the
+    project the driving thread owns (decision-65). The message then says why
+    instead of only that the host lacks the service.
+    """
 
     code = "unsupported_capability"
 
-    def __init__(self, capability: str) -> None:
+    def __init__(self, capability: str, reason: str | None = None) -> None:
         self.capability = capability
-        super().__init__(f"Capability {capability!r} is unavailable in this runtime")
+        self.reason = reason
+        message = f"Capability {capability!r} is unavailable in this runtime"
+        if reason is not None:
+            message = f"Capability {capability!r} is unavailable here: {reason}"
+        super().__init__(message)
 
 
 class QgisSdkOptionalDependencyError(QgisSdkError):

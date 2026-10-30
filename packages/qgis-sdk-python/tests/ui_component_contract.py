@@ -15,11 +15,11 @@ from pathlib import Path
 
 import pytest
 from qgis_sdk.core import (
-    JobContext,
     PluginContext,
     PluginRuntime,
     ResourceScope,
     UiContext,
+    WorkerContext,
 )
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobHandle, JobService, job
@@ -55,7 +55,7 @@ GEOJSON = """{"type": "FeatureCollection", "features": [{"type": "Feature",
 
 
 @job(id="slow_sum", title="Slow sum")
-def slow_sum(ctx: JobContext, a: int, b: int, fail: bool = False) -> int:
+def slow_sum(ctx: WorkerContext, a: int, b: int, fail: bool = False) -> int:
     ctx.progress.report(0.5)
     if fail:
         raise ValueError("no sum today")
@@ -107,8 +107,16 @@ class Rendering:
         return instance
 
     def tick(self) -> None:
-        """Advance the plugin's jobs one step, as the host timer would."""
-        self.plugin.jobs.tick()
+        """Drive the plugin's jobs one round trip, as the host and its pool would.
+
+        Since 0.9.0 a job body runs on a worker (decision-65), so one round trip
+        is three moves: the tick hands the body to a worker, the worker runs it,
+        and the tick delivers what changed.
+        """
+        jobs = self.plugin.jobs
+        jobs.tick()
+        self.plugin.workers.run_all()
+        jobs.tick()
 
     def attach(self, component: Component) -> Component:
         component.attach(self.ctx)
@@ -155,7 +163,10 @@ def make_rendering(
     runtime.start()
     instance = runtime.instance
     assert isinstance(instance, CataloguePlugin)
-    instance.jobs = JobService(scope, workers=FakeWorkers(), gui_thread=lambda: False)
+    instance.workers = FakeWorkers()
+    instance.jobs = JobService(
+        scope, workers=instance.workers, gui_thread=lambda: False
+    )
     instance.calls = []
     # The view's scope is a child of the plugin's, as under the host: closing
     # the window detaches its components while the plugin's services live on.

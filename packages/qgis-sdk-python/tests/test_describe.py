@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import pytest
 from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.algorithms import AlgorithmDescription, describe_algorithm
-from qgis_sdk.core import AlgorithmContext, JobContext
+from qgis_sdk.core import AlgorithmContext, WorkerContext
 from qgis_sdk.declarations import (
     Description,
     PluginDescription,
@@ -48,7 +48,7 @@ class Plugin:
 
 
 @job(id="describe.job", title="A job")
-async def echo_job(ctx: JobContext, value: int) -> Result:
+def echo_job(ctx: WorkerContext, value: int) -> Result:
     return Result(value)
 
 

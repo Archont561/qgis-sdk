@@ -9,7 +9,8 @@ interleave them and checks the guarantees that must hold in *every* order:
 * a settled job with a live owner has delivered its terminal event by the end of
   the next tick - delivery is prompt, not eventual;
 * after the plugin closes, every job is settled and nothing is active;
-* a tick re-entered from a subscriber is a no-op and fails nothing (TASK-44);
+* a tick re-entered from a subscriber - or from a worker body, which is now
+  author code on another thread - is a no-op and fails nothing (TASK-44);
 * ``result`` and ``get()`` read the same outcome for every settled job (TASK-46);
 * a settled, delivered job leaves no hook on an explicit subscription owner
   (TASK-47).
@@ -17,13 +18,14 @@ interleave them and checks the guarantees that must hold in *every* order:
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
-from qgis_sdk.core import JobContext, ResourceScope
+from qgis_sdk.core import ResourceScope, WorkerContext
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.models import QgisSdkJobCancelledError, QgisSdkScopeClosedError
 from qgis_sdk.testing import FakeWorkers
@@ -35,20 +37,9 @@ class Result:
 
 
 @job(id="prop.sync", title="Sync")
-def sync_echo(ctx: JobContext, value: int, reenter: bool = False) -> Result:
-    """``reenter`` re-enters the host tick mid-step, as a modal dialog would."""
+def sync_echo(ctx: WorkerContext, value: int, reenter: bool = False) -> Result:
+    """``reenter`` re-enters the host tick from worker code, which must be refused."""
     ctx.progress.report(0.5)
-    if reenter:
-        NESTED.append(HOST_TICK[0]())
-    if value < 0:
-        raise ValueError("negative")
-    return Result(value)
-
-
-@job(id="prop.offloaded", title="Offloaded")
-async def offloaded_echo(ctx: JobContext, value: int, reenter: bool = False) -> Result:
-    ctx.progress.report(0.1)
-    value = await ctx.workers.offload(lambda: value)
     if reenter:
         NESTED.append(HOST_TICK[0]())
     if value < 0:
@@ -124,7 +115,6 @@ class JobLifetimes(RuleBasedStateMachine):
     @precondition(lambda self: not self.plugin_closed)
     @rule(
         view_owned=st.booleans(),
-        offloaded=st.booleans(),
         value=st.integers(min_value=-1, max_value=3),
         reenters=st.booleans(),
         listened=st.booleans(),
@@ -132,7 +122,6 @@ class JobLifetimes(RuleBasedStateMachine):
     def submit(
         self,
         view_owned: bool,
-        offloaded: bool,
         value: int,
         reenters: bool,
         listened: bool,
@@ -141,9 +130,8 @@ class JobLifetimes(RuleBasedStateMachine):
             view_owned = False
         service = self.view_jobs if view_owned else self.jobs
         owner = self.view_scope if view_owned else self.plugin_scope
-        function = offloaded_echo if offloaded else sync_echo
         reenter = self.jobs.tick if reenters else None
-        handle = service.bind(function).delay(value=value, reenter=reenters)
+        handle = service.bind(sync_echo).delay(value=value, reenter=reenters)
         self.tracked.append(_Tracked(handle, owner, value, reenter=reenter))
         if listened and not self.listener_scope.closed:
             handle.on_success(lambda result: None, owner=self.listener_scope)
@@ -167,7 +155,11 @@ class JobLifetimes(RuleBasedStateMachine):
 
     @rule()
     def worker_reports(self) -> None:
-        self.workers.run_one()
+        # On a thread of its own, the way a real backend runs the body: a body
+        # that reaches for the tick must be refused, not given a nested one.
+        thread = threading.Thread(target=self.workers.run_one)
+        thread.start()
+        thread.join()
 
     @precondition(lambda self: not self.listener_scope.closed)
     @rule()

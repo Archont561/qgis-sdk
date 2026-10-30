@@ -225,7 +225,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `declarations` | `QgisSdkPlugin` and the shared `describe(target)` dispatcher; plugin, algorithm, job and provider descriptions satisfy `Description` (`id`, `title`, `schema_version`, `to_dict()`, canonical `to_json()`); decorated targets gain `describe()` without wrapping |
 | `models` | `QgisSdkError`, `QgisSdkScopeClosedError`, `QgisSdkUnsupportedCapabilityError`, `QgisSdkOptionalDependencyError`, `QgisSdkValidationIssue`, and safe `QgisSdkContractValidationError` metadata; the algorithm requests `BufferRequest` and `CentroidRequest` with their refusals `QgisSdkAlgorithmRejectedError` and `QgisSdkAlgorithmCancelledError`; the parameter aliases `LayerInput`, `CrsInput`, `Metres`, `FileInput(filters=)`, `DirectoryInput()`, `FieldInput(of=)`, `Range(min, max)`, `Colour()` over the markers `LayerParameter`, `CrsParameter`, `MetresParameter`, `FileParameter`, `DirectoryParameter`, `FieldParameter`, `RangeParameter`, `ColourParameter`, the registry `parameter_kinds()`/`ParameterKind`, and the branded `FileRef` with its `FILE_REF` schema |
 | `services` | Structural `Notifications`, `ViewControl`, `Progress`, `Cancellation`, `DesktopAccess`, `Layers`, `Project`, `Settings`, `Styles`, `Algorithms`, `Workers` and `Processing` protocols; implementations are supplied by the host or by tests |
-| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
+| `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `WorkerContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
 | `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery |
@@ -287,7 +287,7 @@ context owned by that scope; `host()`'s `default_context` calls it whenever a
 `QgsApplication` is running and falls back to a notifications-only context in a
 bare interpreter, which is what the scaffold's starter tests exercise.
 
-Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext` and `JobContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities, refused by name on access when the host lacks them; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)).
+Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext`, `JobContext` and `WorkerContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities, refused by name on access when the host lacks them; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)). `WorkerContext` is different by design: it is what a `@job` body receives on its worker, so it carries `progress` and `cancellation` and refuses every driving-thread capability by name (decision-65).
 
 The runtime owns the scopes: `scope.on_close(cleanup)` registers synchronous cleanup, `scope.child()` creates an owned scope, and `scope.close()` closes children before local callbacks (last registered first). Closing is idempotent. A child closed on its own stops being owned by its parent. New registrations/children after closure raise `QgisSdkScopeClosedError` (`code="scope_closed"`); reading a capability such as `ctx.desktop` also rejects a disposed scope. If cleanup fails, remaining children and callbacks still run and the failures are raised as an `ExceptionGroup`. Scope closure is **not** proof that an in-flight task stopped; adapters must request cancellation, detach callbacks and wait for safe completion where needed. The scope does not make services thread-safe or automatically revoke references to them.
 
@@ -1168,10 +1168,12 @@ print(described.qualified_id, described.kinds, described.required)
 ### How do I run one from a context?
 
 `invoke(function, ctx, **inputs)` runs one from the context the caller already
-holds - the `PluginContext` of an action, the `JobContext` of a job, or the
-`AlgorithmContext` of another algorithm. It reads `algorithms`, `project` and
-`scope` from that context, builds the invocation's own `AlgorithmContext`, and
-adds the output to `ctx.project` after success:
+holds - the `PluginContext` of an action or the `AlgorithmContext` of another
+algorithm. A `@job` body cannot: it runs on a worker, so its `WorkerContext`
+carries neither `algorithms` nor `project` (decision-65) - invoke the algorithm
+from the subscriber that hears the job succeed. It reads `algorithms`, `project`
+and `scope` from that context, builds the invocation's own `AlgorithmContext`,
+and adds the output to `ctx.project` after success:
 
 ```python
 # inside an @app.action function
@@ -1624,19 +1626,23 @@ through the auth manager.
 [decision-13](../../../backlog/decisions/decision-13%20-%20Use-runtime-bound-Celery-inspired-local-jobs.md)
 shaped,
 [decision-38](../../../backlog/decisions/decision-38%20-%20Declare-jobs-as-plain-functions-with-the-JobContext-injected.md)
-made function-based and
+made function-based,
 [decision-21](../../../backlog/decisions/decision-21%20-%20Bound-job-ownership-and-refuse-unsafe-runtime-replacement.md)
-scoped: a job is a decorated plain function whose first parameter is the
-`JobContext` the runtime injects and whose remaining keyword parameters are
+scoped and
+[decision-65](../../../backlog/decisions/decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md)
+worker-first: a job is a decorated plain function whose first parameter is the
+`WorkerContext` the runtime injects and whose remaining keyword parameters are
 typed the way an action's are, submission is `bind(fn).delay(**inputs)` and
-nothing else, and the handle you get back is typed end to end. `qgis_sdk.jobs`
-is QGIS-free; it runs on the step scheduler and a host drives
-`JobService.tick()` from whatever event loop it already has.
+nothing else, and the handle you get back is typed end to end. Since 0.9.0 the
+whole body runs on a worker: the driving thread submits, validates and
+delivers, and never calls your function. `qgis_sdk.jobs` is QGIS-free; it runs
+on the step scheduler and a host drives `JobService.tick()` from whatever event
+loop it already has.
 
 ```python
 from dataclasses import dataclass
 
-from qgis_sdk.core import JobContext
+from qgis_sdk.core import WorkerContext
 from qgis_sdk.jobs import job
 
 
@@ -1646,13 +1652,11 @@ class SumResult:
 
 
 @job(id="demo.sum", title="Add two numbers")
-async def add(ctx: JobContext, left: int, right: int = 0) -> SumResult:
-    def work() -> int:  # runs on a worker thread, reports from there
-        ctx.progress.report(0.5)
-        return left + right
-
-    total = await ctx.workers.offload(work)
-    return SumResult(total)
+def add(ctx: WorkerContext, left: int, right: int = 0) -> SumResult:
+    # The whole body is on a worker: blocking work is already off the GUI
+    # thread, and there is nothing to await.
+    ctx.progress.report(0.5)
+    return SumResult(left + right)
 
 
 handle = ctx.jobs.bind(add).delay(left=1, right=2)
@@ -1664,21 +1668,26 @@ handle.on_cancelled(lambda: label.setText("cancelled"))
 
 The decorator adds `describe()` but does not wrap `add`, so a unit
 test calls `add(fake_context, left=1, right=2)` directly. A bare `@job`
-derives its id and title from the function name; `async def` is allowed and suspends on the scheduler at every `await`,
-a plain `def` runs in one step on the driving thread, a generator is refused.
-`ctx.jobs.delay(add, left=1, right=2)` is the one-call spelling of `bind` then
-`delay`; there is no ambient `add.delay(...)`, because the owner is always
-explicit (decision-21).
+derives its id and title from the function name. A plain `def` is the only
+accepted form: `async def` and a generator are refused at bind time, because a
+worker runs no event loop. GUI work belongs in a subscriber, which runs on the
+driving thread. `ctx.jobs.delay(add, left=1, right=2)` is the one-call spelling
+of `bind` then `delay`; there is no ambient `add.delay(...)`, because the owner
+is always explicit (decision-21).
 
 ### What is checked before a job runs?
 
 `describe_job(add)` returns the `JobDescription` (`id`, `title`, the parameter
 names, which are required, the result type, and the object schema of the
 inputs plus the result schema from the declarations generator) without calling
-the function; a function without `@job`, without a `JobContext` first
+the function; a function without `@job`, without a `WorkerContext` first
 parameter, with an unannotated parameter or without a declared result is
 refused at bind time with `QgisSdkDeclarationError`, and so is a class
-(the class form was removed in 0.6.0 - see the migration note below).
+(the class form was removed in 0.6.0 - see the migration note below). An
+`async def` body and a `JobContext` annotation are refused the same way, each
+with the migration it needs. `JobDescription.asynchronous` stays in the
+transport description and is always `False` since 0.9.0, so a 0.8 reader still
+parses one.
 Keywords that do not fit the signature - missing, unexpected or of the wrong
 shape - are refused by `delay` with `QgisSdkJobRejectedError` naming every
 problem before anything runs; positional arguments are a `TypeError`; a
@@ -1725,10 +1734,14 @@ handed to `@job` or `bind` is refused with a message that points here.
 
 `handle.cancel()` returns whether the job was still active and sets
 `cancel_requested`; `status` becomes `cancelled` only when the job acknowledges
-it at a suspension point (or before it ever started). A job that finishes
-anyway reports `succeeded`, honestly. Work that never reaches a suspension
-point stays `running`; `quiesce()` names it as a blocker instead of pretending
-it stopped, and nothing kills a thread.
+it (or before the worker ever started it). Nothing interrupts a worker thread:
+the body polls `ctx.cancellation.is_cancelled()`, the request is forwarded to
+the backend, and a callable still queued on a real pool reports without
+running. A request that arrives before the worker reports settles the attempt
+at that report, so a body that runs to the end after being asked to stop ends
+`cancelled` rather than publishing a result nobody is waiting for. Work that
+never reports stays `running`; `quiesce()` names it as a blocker instead of
+pretending it stopped.
 
 #### Callbacks run on the tick, never on a worker
 
@@ -1776,17 +1789,73 @@ jobs = JobService(plugin_scope, workers=ThreadPoolWorkers(plugin_scope), network
 timer.timeout.connect(jobs.tick)  # the GUI thread's event loop drives delivery
 ```
 
-`ThreadPoolWorkers` runs offloaded callables on a `QThreadPool` and reports
-through the scheduler's `Handoff`; a callable still queued when its job is
-cancelled reports without running, a callable already running is left to
-finish. In tests, `qgis_sdk.testing.FakeWorkers` holds offloaded callables
-until the test says `run_one()` / `run_all()`, which is how the suite stages
-races between workers, ticks and disposal. `tests/features/scoped_jobs.feature`
+`workers` is not optional any more: a `JobService` built without one refuses
+every submission with `QgisSdkJobRejectedError` instead of quietly running the
+body on the driving thread (decision-65). `ThreadPoolWorkers` runs each job
+body on a `QThreadPool` and reports through the scheduler's `Handoff`; a
+callable still queued when its job is cancelled reports without running, a
+callable already running is left to finish. In tests,
+`qgis_sdk.testing.FakeWorkers` holds the bodies until the test says
+`run_one()` / `run_all()` - which is how the suite stages races between
+workers, ticks and disposal, and a test passes `run_all` to a thread of its own
+when it wants the body to run off the driving thread -
+and `qgis_sdk.testing.ThreadWorkers` is a real `ThreadPoolExecutor` for the
+cases that want one. A job is driven in three moves: `tick()` submits, the
+worker runs the body, `tick()` delivers. `tests/features/scoped_jobs.feature`
 states the rules as scenarios (bound by `tests/test_jobs_bdd.py`),
 `tests/test_jobs.py` holds the examples, `tests/test_jobs_properties.py` a
 Hypothesis state machine over submit / tick / cancel / worker reports / close
 view / close listener / close plugin, and `tests/test_jobs_native.py` the
 thread evidence over a real pool and a real Qt event loop.
+
+### Migrating a 0.8 job to 0.9
+
+0.8 ran the body on the driving thread and left worker work to the author:
+`async def` plus `await ctx.workers.offload(work)`. 0.9 does the offloading
+itself, so a job becomes a plain `def` and the `await` goes away. Both old
+shapes are refused at bind time with an actionable message; nothing silently
+keeps the old execution.
+
+```python
+# 0.8
+@job(id="demo.count", title="Count")
+async def count(ctx: JobContext, layer_id: str) -> CountResult:
+    def work() -> int:
+        return len(feature_ids(layer_id))
+
+    total = await ctx.workers.offload(work)
+    return CountResult(total)
+
+
+# 0.9
+@job(id="demo.count", title="Count")
+def count(ctx: WorkerContext, layer_id: str) -> CountResult:
+    return CountResult(total=len(feature_ids(layer_id)))
+```
+
+What to move:
+
+- **The context.** `ctx: JobContext` becomes `ctx: WorkerContext`, which
+  carries `progress` and `cancellation` only. `project`, `algorithms`, `layers`,
+  `iface`, `network`, `notifications`, `ui`, `view`, `files`, `scope` and
+  `workers` are gone, and reading one raises
+  `QgisSdkUnsupportedCapabilityError` naming the capability and why a worker
+  cannot have it.
+- **GUI preparation, before submission.** Read the project, resolve a path,
+  collect plain values and let the user confirm - all on the driving thread,
+  before `delay`. Pass plain values (ids, numbers, dataclasses) into the body,
+  not live layers or widgets.
+- **GUI updates, after delivery.** Anything that touches a widget or the
+  message bar belongs in `on_success` / `on_failure` / `on_cancelled`, which
+  run on the driving thread.
+- **Long work, in the body.** A blocking call that used to need an offload is
+  now simply called; the whole body is already off the GUI thread. There is no
+  reason to create a second pool, and `ctx.workers` is absent.
+- **Cancellation, cooperatively.** Poll `ctx.cancellation.is_cancelled()` in a
+  loop and stop; the request is a signal, never a killed thread.
+- **A host without a worker backend** (a script that only wants to call the
+  function, a test double) should call the function directly or run the code
+  without `JobService`; submitting is refused rather than silently degrading.
 
 ## Project scaffold
 

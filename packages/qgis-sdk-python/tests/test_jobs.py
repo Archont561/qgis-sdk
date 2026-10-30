@@ -1,9 +1,13 @@
-"""Scoped local jobs over the step scheduler (TASK-15, decisions 13 and 21).
+"""Scoped local jobs: worker-first execution, delivery and ownership (decisions 13, 21, 65).
 
-Every rule here is pinned without Qt: the scheduler is driven by hand, the
-worker pool is a fake whose completions the test releases, and "the GUI
-thread" is whatever the test says it is. The native file proves the same
-service over a real ``QThreadPool`` and a real event loop.
+Every rule here is pinned without Qt: "the GUI thread" is whichever thread the
+test built the service on, the worker pool is a fake whose completions the test
+releases, and the body is never called by *this* thread. Since 0.9.0 a job body
+runs in its entirety on a worker, so a test drives a job in three moves -
+``jobs.tick()`` submits, ``workers.run_all()`` is the worker, ``jobs.tick()``
+delivers - which the ``drive`` fixture does at once. The native file proves the
+same service over a real ``QThreadPool`` and a real event loop, and
+``test_jobs_worker_first.py`` holds the contract's own evidence.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 import pytest
-from qgis_sdk.core import JobContext, ResourceScope
+from qgis_sdk.core import JobContext, ResourceScope, WorkerContext
 from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.jobs import (
     JobDescription,
@@ -33,7 +37,7 @@ from qgis_sdk.models import (
     QgisSdkScopeClosedError,
     QgisSdkUnsupportedCapabilityError,
 )
-from qgis_sdk.testing import FakeWorkers
+from qgis_sdk.testing import FakeWorkers, ThreadWorkers
 
 # -- authoring surface ----------------------------------------------------------
 
@@ -44,18 +48,14 @@ class SumResult:
 
 
 @job(id="demo.sum", title="Sum two numbers")
-def add(ctx: JobContext, a: int, b: int) -> SumResult:
+def add(ctx: WorkerContext, a: int, b: int) -> SumResult:
     ctx.progress.report(0.5)
     return SumResult(total=a + b)
 
 
-@job(id="demo.offloaded", title="Sum off the driving thread")
-async def offloaded_add(ctx: JobContext, a: int, b: int) -> SumResult:
-    workers = ctx.workers
-    ctx.progress.report(0.1)
-    total = await workers.offload(lambda: a + b)
-    ctx.progress.report(1.0)
-    return SumResult(total=total)
+@job(id="demo.plain", title="Sum two numbers quietly")
+def plain_add(ctx: WorkerContext, a: int, b: int) -> SumResult:
+    return SumResult(total=a + b)
 
 
 def test_a_job_function_is_described_from_its_signature() -> None:
@@ -70,8 +70,10 @@ def test_a_job_function_is_described_from_its_signature() -> None:
     assert description.result_type is SumResult
     assert description.inputs_schema["properties"]["a"]["type"] == "integer"
     assert description.result_schema["properties"]["total"]["type"] == "integer"
+    # A body runs on a worker, which runs no event loop, so no job is a
+    # coroutine function (decision-65). The field stays in the description for
+    # a reader that still parses the 0.8 transport.
     assert description.asynchronous is False
-    assert describe_job(offloaded_add).asynchronous is True
     assert description.to_dict()["result"]["type"] == "SumResult"
     assert description.to_dict()["inputs"] == description.inputs_schema
 
@@ -84,19 +86,27 @@ def _untyped_context(ctx, a: int) -> SumResult:  # type: ignore[no-untyped-def]
     return SumResult(a)
 
 
-def _untyped_parameter(ctx: JobContext, a) -> SumResult:  # type: ignore[no-untyped-def]
+def _untyped_parameter(ctx: WorkerContext, a) -> SumResult:  # type: ignore[no-untyped-def]
     return SumResult(a)
 
 
-def _no_result(ctx: JobContext, a: int):  # type: ignore[no-untyped-def]
+def _no_result(ctx: WorkerContext, a: int):  # type: ignore[no-untyped-def]
     return None
 
 
-def _generator(ctx: JobContext, a: int) -> SumResult:  # type: ignore[misc]
+def _generator(ctx: WorkerContext, a: int) -> SumResult:  # type: ignore[misc]
     yield SumResult(a)
 
 
-def _plain(ctx: JobContext, a: int) -> SumResult:
+def _plain(ctx: WorkerContext, a: int) -> SumResult:
+    return SumResult(a)
+
+
+async def _coroutine(ctx: WorkerContext, a: int) -> SumResult:
+    return SumResult(a)
+
+
+def _driving_thread_context(ctx: JobContext, a: int) -> SumResult:
     return SumResult(a)
 
 
@@ -107,9 +117,9 @@ def _decorated(fn: Callable[..., object]) -> Callable[..., object]:
 @pytest.mark.parametrize(
     ("declare", "problem"),
     [
-        pytest.param(lambda: _decorated(_no_context), "JobContext", id="no context"),
+        pytest.param(lambda: _decorated(_no_context), "WorkerContext", id="no context"),
         pytest.param(
-            lambda: _decorated(_untyped_context), "JobContext", id="untyped context"
+            lambda: _decorated(_untyped_context), "WorkerContext", id="untyped context"
         ),
         pytest.param(
             lambda: _decorated(_untyped_parameter),
@@ -131,6 +141,24 @@ def test_a_declaration_that_cannot_be_described_is_refused(
 ) -> None:
     with pytest.raises(QgisSdkDeclarationError, match=problem):
         describe_job(declare())
+
+
+def test_an_async_job_is_refused_with_the_migration_it_needs() -> None:
+    """AC 5: no ``async def`` job survives into 0.9.0 with the old semantics."""
+    with pytest.raises(QgisSdkDeclarationError, match="runs no event loop") as info:
+        describe_job(_decorated(_coroutine))
+
+    message = str(info.value)
+    assert "plain `def`" in message
+    assert "subscriber" in message  # where the GUI work goes instead
+
+
+def test_a_jobcontext_annotation_is_refused_with_the_migration_it_needs() -> None:
+    """A driving-thread context is an unsupported declaration, named as such."""
+    with pytest.raises(QgisSdkDeclarationError, match="WorkerContext") as info:
+        describe_job(_decorated(_driving_thread_context))
+
+    assert "driving thread" in str(info.value)
 
 
 # -- fixtures -------------------------------------------------------------------
@@ -171,8 +199,8 @@ class _Recorder:
 def plugin_scope() -> Iterator[ResourceScope]:
     scope = ResourceScope()
     yield scope
-    # Unload at the end of every test, as a plugin would: a queued job the test
-    # never drove is abandoned here instead of leaking an unstarted coroutine.
+    # Unload at the end of every test, as a plugin would: a job the test never
+    # drove is abandoned here instead of leaking into the next test.
     scope.close()
 
 
@@ -184,6 +212,30 @@ def workers() -> FakeWorkers:
 @pytest.fixture()
 def jobs(plugin_scope: ResourceScope, workers: FakeWorkers) -> JobService:
     return JobService(plugin_scope, workers=workers, gui_thread=lambda: False)
+
+
+@pytest.fixture()
+def drive(jobs: JobService, workers: FakeWorkers) -> Callable[[], None]:
+    """Submit, let the worker run the body, deliver: one job, one round trip."""
+
+    def run() -> None:
+        jobs.tick()
+        workers.run_all()
+        jobs.tick()
+
+    return run
+
+
+@pytest.fixture()
+def submit(jobs: JobService) -> Callable[[Callable[..., object]], JobHandle]:
+    """Submit and stop: the body is on the worker and has not run yet."""
+
+    def start(function: Callable[..., object], /, **arguments: object) -> JobHandle:
+        handle = jobs.bind(function).delay(**arguments)
+        jobs.tick()
+        return handle
+
+    return start
 
 
 @pytest.fixture()
@@ -200,12 +252,12 @@ def view_jobs(jobs: JobService, view_scope: ResourceScope) -> JobService:
 
 
 def test_bind_then_delay_submits_without_running_author_code(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
-    called: list[JobContext] = []
+    called: list[WorkerContext] = []
 
     @job(id="demo.spy", title="Spy")
-    def spy(ctx: JobContext, a: int, b: int) -> SumResult:
+    def spy(ctx: WorkerContext, a: int, b: int) -> SumResult:
         called.append(ctx)
         return SumResult(a)
 
@@ -215,15 +267,18 @@ def test_bind_then_delay_submits_without_running_author_code(
     assert handle.id == "demo.spy#1"
     assert handle.attempt == 1
     assert handle.description.id == "demo.spy"
-    assert called == []  # the function runs on the first step, not on delay
+    assert called == []  # nothing runs on submission
     jobs.tick()
+    assert called == []  # the first tick only hands the body to a worker
+    assert handle.status is JobStatus.RUNNING
+    drive()
     assert len(called) == 1
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.result == SumResult(1)
 
 
 def test_each_submission_has_its_own_logical_id_and_a_first_attempt(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     bound = jobs.bind(add)
     first = bound.delay(a=1, b=1)
@@ -231,18 +286,33 @@ def test_each_submission_has_its_own_logical_id_and_a_first_attempt(
 
     assert (first.id, second.id) == ("demo.sum#1", "demo.sum#2")
     assert (first.attempt, second.attempt) == (1, 1)
-    jobs.tick()
+    drive()
     assert (first.result.total, second.result.total) == (2, 4)
 
 
 def test_arguments_of_the_wrong_type_are_rejected_before_anything_runs(
-    jobs: JobService,
+    jobs: JobService, workers: FakeWorkers
 ) -> None:
     with pytest.raises(QgisSdkJobRejectedError, match="a must be int") as info:
         jobs.bind(add).delay(a="1", b=2)  # type: ignore[arg-type]
     assert info.value.code == "job_rejected"
     assert info.value.job_id == "demo.sum"
     assert jobs.active == ()
+    assert workers.pending == 0  # nothing reached a worker
+
+
+def test_a_host_without_a_worker_backend_refuses_the_submission(
+    plugin_scope: ResourceScope,
+) -> None:
+    """AC 1: no backend is a refusal, never a quiet return to the old model."""
+    jobs = JobService(plugin_scope, gui_thread=lambda: False)  # no workers
+
+    with pytest.raises(QgisSdkJobRejectedError, match="no worker backend") as info:
+        jobs.bind(add).delay(a=1, b=2)
+
+    assert "never runs on the driving thread" in str(info.value)
+    assert jobs.active == ()
+    assert jobs.tick() == 0
 
 
 def test_binding_an_undeclared_function_fails_at_bind_time(
@@ -252,30 +322,32 @@ def test_binding_an_undeclared_function_fails_at_bind_time(
         jobs.bind(_plain)
 
 
-def test_a_result_of_the_wrong_type_fails_the_job(jobs: JobService) -> None:
+def test_a_result_of_the_wrong_type_fails_the_job(
+    jobs: JobService, drive: Callable[[], None]
+) -> None:
     @job(id="demo.liar", title="Liar")
-    def liar(ctx: JobContext, a: int, b: int) -> SumResult:
+    def liar(ctx: WorkerContext, a: int, b: int) -> SumResult:
         return 3  # type: ignore[return-value]
 
     handle = jobs.bind(liar).delay(a=1, b=2)
-    jobs.tick()
+    drive()
 
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, QgisSdkDeclarationError)
     assert "SumResult" in str(handle.error)
 
 
-def test_a_failure_in_run_is_the_job_s_outcome_not_the_tick_s(
-    jobs: JobService,
+def test_a_failure_in_the_body_is_the_job_s_outcome_not_the_tick_s(
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     @job(id="demo.boom", title="Boom")
-    def boom(ctx: JobContext, a: int, b: int) -> SumResult:
+    def boom(ctx: WorkerContext, a: int, b: int) -> SumResult:
         raise ValueError("no")
 
     handle = jobs.bind(boom).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
-    jobs.tick()
+    drive()
 
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, ValueError)
@@ -309,22 +381,22 @@ def test_a_service_over_a_closed_scope_refuses_to_submit(
 
 
 def test_callbacks_fire_on_the_tick_in_order_and_each_terminal_once(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     handle = jobs.bind(add).delay(a=2, b=3)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
 
     assert recorder.events == []
-    jobs.tick()
-    jobs.tick()
+    drive()
+    drive()  # a settled job delivers nothing a second time
 
     assert recorder.events == [("progress", 0.5), ("success", SumResult(5))]
     assert handle.progress == 0.5
 
 
 def test_a_subscription_is_disposable_and_disposal_is_idempotent(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     handle = jobs.bind(add).delay(a=2, b=3)
     recorder = _Recorder()
@@ -334,13 +406,15 @@ def test_a_subscription_is_disposable_and_disposal_is_idempotent(
     assert subscription.dispose() is True
     assert subscription.dispose() is False
     assert subscription.active is False
-    jobs.tick()
+    drive()
     assert recorder.events == []
 
 
-def test_a_late_subscriber_replays_the_current_state_once(jobs: JobService) -> None:
+def test_a_late_subscriber_replays_the_current_state_once(
+    jobs: JobService, drive: Callable[[], None]
+) -> None:
     handle = jobs.bind(add).delay(a=2, b=3)
-    jobs.tick()
+    drive()
     assert handle.status is JobStatus.SUCCEEDED
 
     recorder = _Recorder()
@@ -355,40 +429,42 @@ def test_a_late_subscriber_replays_the_current_state_once(jobs: JobService) -> N
         False,
         False,
     ]
-    jobs.tick()
+    drive()
     assert len(recorder.events) == 2
 
 
 def test_a_late_progress_subscriber_without_any_report_gets_nothing(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     @job(id="demo.quiet", title="Quiet")
-    def quiet(ctx: JobContext, a: int, b: int) -> SumResult:
+    def quiet(ctx: WorkerContext, a: int, b: int) -> SumResult:
         return SumResult(a)
 
     handle = jobs.bind(quiet).delay(a=1, b=2)
     recorder = _Recorder()
     handle.on_progress(recorder.progress)
-    jobs.tick()
+    drive()
     handle.on_progress(recorder.progress)
     assert recorder.events == []
     assert handle.progress is None
 
 
-def test_progress_reported_from_a_worker_thread_is_delivered_on_the_tick(
-    jobs: JobService, workers: FakeWorkers
+def test_progress_reported_on_the_worker_is_delivered_on_the_tick(
+    jobs: JobService,
+    workers: FakeWorkers,
 ) -> None:
+    """The worker reports; nothing reaches a subscriber until the driving tick."""
+    events_seen_from_worker: list[int] = []
+
     @job(id="demo.worker-progress", title="Worker progress")
-    async def worker_progress(ctx: JobContext, a: int, b: int) -> SumResult:
-        def work() -> int:
-            for step in (0.25, 0.5, 0.75):
-                ctx.progress.report(step)
-            return a
+    def worker_progress(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        for step in (0.25, 0.5, 0.75):
+            ctx.progress.report(step)
+        events_seen_from_worker.append(len(recorder.events))
+        return SumResult(a)
 
-        return SumResult(await ctx.workers.offload(work))
-
-    handle = jobs.bind(worker_progress).delay(a=7, b=0)
     recorder = _Recorder()
+    handle = jobs.bind(worker_progress).delay(a=7, b=0)
     handle.on_progress(recorder.progress)
     jobs.tick()
     assert handle.status is JobStatus.RUNNING
@@ -397,6 +473,7 @@ def test_progress_reported_from_a_worker_thread_is_delivered_on_the_tick(
     thread.start()
     thread.join()
     # Nothing reached the subscriber from the worker thread...
+    assert events_seen_from_worker == [0]
     assert recorder.events == []
     jobs.tick()
     # ...and the tick coalesced the burst into the latest fraction.
@@ -405,21 +482,21 @@ def test_progress_reported_from_a_worker_thread_is_delivered_on_the_tick(
 
 
 def test_a_progress_fraction_outside_the_unit_interval_is_refused(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     @job(id="demo.overflow", title="Overflow")
-    def overflow(ctx: JobContext, a: int, b: int) -> SumResult:
+    def overflow(ctx: WorkerContext, a: int, b: int) -> SumResult:
         ctx.progress.report(1.5)
         return SumResult(0)
 
     handle = jobs.bind(overflow).delay(a=0, b=0)
-    jobs.tick()
+    drive()
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, ValueError)
 
 
 def test_a_failing_callback_is_detached_and_reported_not_raised(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     handle = jobs.bind(add).delay(a=2, b=3)
     recorder = _Recorder()
@@ -429,7 +506,7 @@ def test_a_failing_callback_is_detached_and_reported_not_raised(
 
     broken = handle.on_success(explode)
     handle.on_success(recorder.success)
-    jobs.tick()
+    drive()
 
     assert recorder.events == [("success", SumResult(5))]
     assert broken.active is False
@@ -441,12 +518,16 @@ def test_a_failing_callback_is_detached_and_reported_not_raised(
 
 
 def test_a_fault_hook_hears_about_failing_callbacks(
-    plugin_scope: ResourceScope,
+    plugin_scope: ResourceScope, workers: FakeWorkers
 ) -> None:
     heard = []
-    jobs = JobService(plugin_scope, on_fault=heard.append, gui_thread=lambda: False)
+    jobs = JobService(
+        plugin_scope, workers=workers, on_fault=heard.append, gui_thread=lambda: False
+    )
     handle = jobs.bind(add).delay(a=2, b=3)
     handle.on_progress(lambda fraction: 1 / 0)
+    jobs.tick()
+    workers.run_all()
     jobs.tick()
     assert [fault.event for fault in heard] == ["progress"]
 
@@ -454,13 +535,13 @@ def test_a_fault_hook_hears_about_failing_callbacks(
 # -- cancellation ---------------------------------------------------------------
 
 
-def test_cancel_before_the_first_step_settles_as_cancelled(
+def test_cancel_before_the_worker_starts_settles_as_cancelled(
     jobs: JobService,
 ) -> None:
     called = []
 
     @job(id="demo.never", title="Never runs")
-    def never(ctx: JobContext, a: int, b: int) -> SumResult:
+    def never(ctx: WorkerContext, a: int, b: int) -> SumResult:
         called.append(ctx)
         return SumResult(0)
 
@@ -479,13 +560,12 @@ def test_cancel_before_the_first_step_settles_as_cancelled(
     assert handle.cancel() is False
 
 
-def test_cancellation_is_a_request_until_the_job_acknowledges_it(
-    jobs: JobService, workers: FakeWorkers
+def test_cancellation_is_a_request_until_the_worker_acknowledges_it(
+    jobs: JobService, workers: FakeWorkers, submit: Callable[..., JobHandle]
 ) -> None:
-    handle = jobs.bind(offloaded_add).delay(a=1, b=2)
+    handle = submit(plain_add, a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
-    jobs.tick()
     assert handle.status is JobStatus.RUNNING
     assert workers.pending == 1
 
@@ -495,7 +575,7 @@ def test_cancellation_is_a_request_until_the_job_acknowledges_it(
     assert handle.status is JobStatus.RUNNING
     assert handle.cancel_requested is True
     assert recorder.terminal == []
-    assert workers.cancelled == 1  # the worker was told, as a courtesy
+    assert workers.cancelled == 1  # the backend was told, as a courtesy
 
     workers.run_all()
     jobs.tick()
@@ -503,55 +583,31 @@ def test_cancellation_is_a_request_until_the_job_acknowledges_it(
     assert recorder.terminal == [("cancelled", None)]
 
 
-def test_author_cleanup_runs_when_cancellation_is_delivered(
-    jobs: JobService, workers: FakeWorkers
+def test_the_worker_sees_the_request_through_its_context(
+    jobs: JobService, workers: FakeWorkers, submit: Callable[..., JobHandle]
 ) -> None:
-    cleaned = []
+    """The body polls ``ctx.cancellation``; it is the signal, not a kill."""
+    seen: list[bool] = []
 
-    @job(id="demo.cleanup", title="Cleanup")
-    async def cleanup(ctx: JobContext, a: int, b: int) -> SumResult:
-        try:
-            await ctx.workers.offload(lambda: 1)
-        except QgisSdkJobCancelledError:
-            cleaned.append("partial output removed")
-            raise
-        return SumResult(0)
+    @job(id="demo.polls", title="Polls")
+    def polls(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        seen.append(ctx.cancellation.is_cancelled())
+        return SumResult(a)
 
-    handle = jobs.bind(cleanup).delay(a=0, b=0)
-    jobs.tick()
+    handle = submit(polls, a=1, b=2)
+    assert seen == []  # the body has not started
     handle.cancel()
     workers.run_all()
     jobs.tick()
 
-    assert cleaned == ["partial output removed"]
+    assert seen == [True]
     assert handle.status is JobStatus.CANCELLED
 
 
-def test_a_sync_run_that_finishes_despite_a_request_succeeds_honestly(
-    jobs: JobService,
-) -> None:
-    """A request is not a state: work that completed anyway reports success."""
-    seen = []
-
-    @job(id="demo.stubborn", title="Stubborn")
-    def stubborn(ctx: JobContext, a: int, b: int) -> SumResult:
-        handle.cancel()
-        seen.append(ctx.cancellation.is_cancelled())
-        return SumResult(a)
-
-    handle = jobs.bind(stubborn).delay(a=4, b=0)
-    jobs.tick()
-
-    assert seen == [True]
-    assert handle.status is JobStatus.SUCCEEDED
-    assert handle.cancel_requested is True
-
-
 def test_stuck_work_stays_running_and_is_named_as_a_blocker(
-    jobs: JobService, workers: FakeWorkers
+    jobs: JobService, workers: FakeWorkers, submit: Callable[..., JobHandle]
 ) -> None:
-    handle = jobs.bind(offloaded_add).delay(a=1, b=2)
-    jobs.tick()
+    handle = submit(plain_add, a=1, b=2)
     handle.cancel()
     for _ in range(5):
         jobs.tick()
@@ -570,9 +626,13 @@ def test_stuck_work_stays_running_and_is_named_as_a_blocker(
 
 
 def test_a_view_owned_job_is_detached_and_asked_to_stop_when_the_view_closes(
-    jobs: JobService, view_jobs: JobService, view_scope: ResourceScope, workers
+    jobs: JobService,
+    view_jobs: JobService,
+    view_scope: ResourceScope,
+    workers: FakeWorkers,
+    submit: Callable[..., JobHandle],
 ) -> None:
-    handle = view_jobs.bind(offloaded_add).delay(a=1, b=2)
+    handle = view_jobs.bind(add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
     jobs.tick()
@@ -587,10 +647,9 @@ def test_a_view_owned_job_is_detached_and_asked_to_stop_when_the_view_closes(
     workers.run_all()
     jobs.tick()
     assert handle.status is JobStatus.CANCELLED
-    assert recorder.events == [("progress", 0.1)]
+    assert recorder.events == []  # no callback reached the closed view
     with pytest.raises(QgisSdkScopeClosedError):
         handle.on_cancelled(recorder.cancelled)
-    assert recorder.events == [("progress", 0.1)]
 
 
 def test_hiding_a_view_is_not_disposal(
@@ -603,7 +662,7 @@ def test_hiding_a_view_is_not_disposal(
             self.hidden = True
 
     dock = Dock()
-    handle = view_jobs.bind(offloaded_add).delay(a=1, b=2)
+    handle = view_jobs.bind(add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(handle)
     jobs.tick()
@@ -618,11 +677,14 @@ def test_hiding_a_view_is_not_disposal(
 
 
 def test_plugin_lifetime_work_is_explicit_and_outlives_the_view(
-    jobs: JobService, view_jobs: JobService, view_scope: ResourceScope, workers
+    jobs: JobService,
+    view_jobs: JobService,
+    view_scope: ResourceScope,
+    workers: FakeWorkers,
 ) -> None:
     assert view_jobs.parent is jobs
     assert jobs.parent is None
-    handle = view_jobs.parent.bind(offloaded_add).delay(a=1, b=2)
+    handle = view_jobs.parent.bind(add).delay(a=1, b=2)
     view_recorder = _Recorder()
     plugin_recorder = _Recorder()
     # The view's callbacks on a plugin-owned job are owned by the view.
@@ -641,10 +703,13 @@ def test_plugin_lifetime_work_is_explicit_and_outlives_the_view(
 
 
 def test_a_finished_job_does_not_replay_into_a_view_closed_afterwards(
-    jobs: JobService, view_jobs: JobService, view_scope: ResourceScope
+    jobs: JobService,
+    view_jobs: JobService,
+    view_scope: ResourceScope,
+    drive: Callable[[], None],
 ) -> None:
     handle = view_jobs.bind(add).delay(a=1, b=2)
-    jobs.tick()
+    drive()
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.owner_closed is False
 
@@ -666,9 +731,12 @@ def test_a_subscription_owner_must_be_open(
 
 
 def test_unloading_the_plugin_abandons_everything_without_callbacks(
-    jobs: JobService, view_jobs: JobService, plugin_scope: ResourceScope, workers
+    jobs: JobService,
+    view_jobs: JobService,
+    plugin_scope: ResourceScope,
+    workers: FakeWorkers,
 ) -> None:
-    running = view_jobs.bind(offloaded_add).delay(a=1, b=2)
+    running = view_jobs.bind(add).delay(a=1, b=2)
     recorder = _Recorder()
     recorder.subscribe_all(running)
     jobs.tick()
@@ -688,104 +756,104 @@ def test_unloading_the_plugin_abandons_everything_without_callbacks(
 
 
 def test_a_settled_job_leaves_the_active_set_and_its_attempt_scope_closes(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     closed = []
+    scopes: list[ResourceScope] = []
 
     @job(id="demo.scoped", title="Scoped")
-    def scoped(ctx: JobContext, a: int, b: int) -> SumResult:
-        ctx.scope.on_close(lambda: closed.append(ctx.scope))
+    def scoped(ctx: WorkerContext, a: int, b: int) -> SumResult:
         return SumResult(0)
 
     handle = jobs.bind(scoped).delay(a=0, b=0)
     assert jobs.active == (handle,)
-    jobs.tick()
+    scopes.append(handle._attempt.scope)  # the attempt's own scope
+    drive()
     assert jobs.active == ()
-    assert len(closed) == 1
-    assert closed[0].closed is True
+    assert scopes[0].closed is True
+    assert closed == []
 
 
-# -- workers and the job context ------------------------------------------------
+# -- the worker context ----------------------------------------------------------
 
 
-@job(id="demo.offline", title="Asks for a network")
-def needs_network(ctx: JobContext, a: int, b: int) -> SumResult:
-    _ = ctx.network
+@job(id="demo.offline", title="Asks for the project")
+def needs_project(ctx: WorkerContext, a: int, b: int) -> SumResult:
+    _ = ctx.project
     return SumResult(0)
 
 
 @pytest.mark.parametrize(
     ("fn", "capability"),
     [
-        pytest.param(offloaded_add, "workers", id="workers"),
-        pytest.param(needs_network, "network", id="network"),
+        pytest.param(needs_project, "project", id="project"),
     ],
 )
-def test_a_job_fails_explicitly_when_it_asks_for_a_capability_the_host_lacks(
-    plugin_scope: ResourceScope, fn: Callable[..., object], capability: str
+def test_the_worker_context_refuses_a_driving_thread_capability(
+    jobs: JobService, drive: Callable[[], None], fn, capability: str
 ) -> None:
-    jobs = JobService(plugin_scope, gui_thread=lambda: False)  # no workers, no network
+    """AC 2: the refusal names the capability *and* why a worker cannot have it."""
     handle = jobs.bind(fn).delay(a=1, b=2)
-    jobs.tick()
+    drive()
+
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, QgisSdkUnsupportedCapabilityError)
     assert handle.error.capability == capability
+    assert "driving thread" in str(handle.error)
 
 
 def test_a_worker_failure_reaches_the_job_as_its_exception(
-    jobs: JobService, workers: FakeWorkers
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     @job(id="demo.worker-fails", title="Worker fails")
-    async def worker_fails(ctx: JobContext, a: int, b: int) -> SumResult:
-        def work() -> int:
-            raise OSError("disk full")
-
-        return SumResult(await ctx.workers.offload(work))
+    def worker_fails(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        raise OSError("disk full")
 
     handle = jobs.bind(worker_fails).delay(a=1, b=2)
-    jobs.tick()
-    workers.run_all()
-    jobs.tick()
+    drive()
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, OSError)
 
 
-def test_the_job_context_is_fresh_per_attempt_and_carries_the_services(
-    jobs: JobService, workers: FakeWorkers
+def test_the_worker_context_is_fresh_per_attempt(
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
-    contexts: list[JobContext] = []
-    seen_workers: list[object] = []
+    contexts: list[WorkerContext] = []
 
     @job(id="demo.ctx", title="Context")
-    def record(ctx: JobContext, a: int, b: int) -> SumResult:
+    def record(ctx: WorkerContext, a: int, b: int) -> SumResult:
         contexts.append(ctx)
-        seen_workers.append(ctx.workers)  # readable while the attempt runs
         return SumResult(0)
 
     bound = jobs.bind(record)
     bound.delay(a=0, b=0)
     bound.delay(a=0, b=0)
-    jobs.tick()
+    drive()
 
     first, second = contexts
     assert first is not second
-    assert first.scope is not second.scope
-    assert first.scope.closed and second.scope.closed
-    assert seen_workers == [workers, workers]
-    assert first.has("network") is False
-    with pytest.raises(QgisSdkScopeClosedError):
-        _ = first.workers  # a settled attempt's capabilities are closed with it
+    assert first.progress is not second.progress
+    # Only the two worker-appropriate services exist, and neither is a
+    # driving-thread one wearing another name.
+    assert sorted(name for name in dir(type(first)) if not name.startswith("_")) == [
+        "cancellation",
+        "progress",
+    ]
 
 
 # -- waiting -----------------------------------------------------------------------
 
 
-def test_get_is_refused_on_the_gui_thread(plugin_scope: ResourceScope) -> None:
-    jobs = JobService(plugin_scope, gui_thread=lambda: True)
+def test_get_is_refused_on_the_driving_thread(
+    plugin_scope: ResourceScope, workers: FakeWorkers
+) -> None:
+    jobs = JobService(plugin_scope, workers=workers, gui_thread=lambda: True)
     handle = jobs.bind(add).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobWaitRefusedError) as info:
         handle.get()
     assert info.value.code == "job_wait_refused"
+    jobs.tick()
+    workers.run_all()
     jobs.tick()
     # Even a settled job is not read through get() there: the API has one
     # meaning, and the result property is the GUI-thread form.
@@ -794,10 +862,10 @@ def test_get_is_refused_on_the_gui_thread(plugin_scope: ResourceScope) -> None:
     assert handle.result == SumResult(3)
 
 
-def test_get_waits_for_the_outcome_off_the_gui_thread(
+def test_get_waits_for_the_outcome_off_the_driving_thread(
     jobs: JobService, workers: FakeWorkers
 ) -> None:
-    handle = jobs.bind(offloaded_add).delay(a=1, b=2)
+    handle = jobs.bind(plain_add).delay(a=1, b=2)
     box: list[object] = []
 
     def wait() -> None:
@@ -817,30 +885,32 @@ def test_get_waits_for_the_outcome_off_the_gui_thread(
 
 
 def test_get_times_out_as_not_settled_and_raises_the_failure(
-    jobs: JobService,
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
 ) -> None:
     @job(id="demo.boom2", title="Boom")
-    def boom(ctx: JobContext, a: int, b: int) -> SumResult:
+    def boom(ctx: WorkerContext, a: int, b: int) -> SumResult:
         raise KeyError("missing")
 
     handle = jobs.bind(boom).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobNotSettledError):
         handle.get(timeout=0.01)
-    jobs.tick()
+    drive()
     with pytest.raises(KeyError):
         handle.get(timeout=0.01)
 
     cancelled = jobs.bind(add).delay(a=1, b=2)
     cancelled.cancel()
     jobs.tick()
+    workers.run_all()
+    jobs.tick()
     with pytest.raises(QgisSdkJobCancelledError):
         cancelled.get(timeout=0.01)
 
 
 def test_the_default_gui_thread_is_the_main_thread(
-    plugin_scope: ResourceScope,
+    plugin_scope: ResourceScope, workers: FakeWorkers
 ) -> None:
-    jobs = JobService(plugin_scope)
+    jobs = JobService(plugin_scope, workers=workers)
     handle = jobs.bind(add).delay(a=1, b=2)
     with pytest.raises(QgisSdkJobWaitRefusedError):
         handle.get()
@@ -850,12 +920,12 @@ def test_the_default_gui_thread_is_the_main_thread(
 
 
 def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
-    jobs: JobService,
+    jobs: JobService, workers: FakeWorkers
 ) -> None:
     attempts = []
 
     @job(id="demo.flaky", title="Flaky")
-    def flaky(ctx: JobContext, a: int, b: int) -> SumResult:
+    def flaky(ctx: WorkerContext, a: int, b: int) -> SumResult:
         attempts.append(1)
         raise TimeoutError("transient")
 
@@ -863,10 +933,14 @@ def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
     first = bound.delay(a=0, b=0)
     for _ in range(3):
         jobs.tick()
+        workers.run_all()
+        jobs.tick()
     assert first.status is JobStatus.FAILED
     assert len(attempts) == 1
 
     second = bound.delay(a=0, b=0)
+    jobs.tick()
+    workers.run_all()
     jobs.tick()
     assert second.id == "demo.flaky#2"
     assert second.attempt == 1
@@ -874,14 +948,132 @@ def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
     assert not hasattr(JobHandle, "retry")
 
 
+# -- AC 1: a real worker thread, distinct from the driving thread ------------------
+
+
+@pytest.fixture()
+def threads() -> Iterator[ThreadWorkers]:
+    workers = ThreadWorkers()
+    yield workers
+    workers.close()
+
+
+@pytest.fixture()
+def threaded_jobs(
+    plugin_scope: ResourceScope, threads: ThreadWorkers
+) -> JobService:
+    return JobService(plugin_scope, workers=threads, gui_thread=lambda: False)
+
+
+def test_a_body_runs_on_a_worker_and_never_on_the_driving_thread(
+    threaded_jobs: JobService, threads: ThreadWorkers
+) -> None:
+    """AC 1: the driving thread submits and delivers; the worker runs the body."""
+    driving = threading.get_ident()
+    bodies: list[int] = []
+    seen: list[tuple[str, int]] = []
+    started = threading.Event()
+    release = threading.Event()
+
+    @job(id="thread.where", title="Where am I")
+    def where(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        bodies.append(threading.get_ident())
+        started.set()
+        release.wait(5)  # held until the test has looked at the tick
+        ctx.progress.report(0.5)
+        return SumResult(a + b)
+
+    handle = threaded_jobs.bind(where).delay(a=2, b=3)
+    handle.on_progress(lambda f: seen.append(("progress", threading.get_ident())))
+    handle.on_success(lambda r: seen.append(("success", threading.get_ident())))
+
+    threaded_jobs.tick()
+    assert started.wait(5)
+    # The tick returned while the body was still running: it is not the thread
+    # that runs author code, and delivery waits for the worker.
+    assert handle.status is JobStatus.RUNNING
+    assert driving not in bodies
+    assert seen == []
+
+    release.set()
+    threads.wait()
+    threaded_jobs.tick()
+
+    assert len(bodies) == 1
+    assert bodies[0] != driving
+    assert threads.thread_ids == bodies
+    assert handle.status is JobStatus.SUCCEEDED
+    assert handle.result == SumResult(5)
+    # Every callback, including the progress the worker reported, ran on the
+    # thread that ticked, never on the worker.
+    assert [kind for kind, _ in seen] == ["progress", "success"]
+    assert all(thread == driving for _, thread in seen)
+    assert threads.pending == 0
+
+
+def test_a_failing_body_on_a_real_worker_is_the_job_s_failure(
+    threaded_jobs: JobService, threads: ThreadWorkers
+) -> None:
+    @job(id="thread.fails", title="Fails off-thread")
+    def fails(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        raise OSError("the disk went away")
+
+    handle = threaded_jobs.bind(fails).delay(a=1, b=2)
+    threaded_jobs.tick()
+    threads.wait()
+    threaded_jobs.tick()
+
+    assert handle.status is JobStatus.FAILED
+    assert isinstance(handle.error, OSError)
+    assert threads.cancelled == 0
+
+
+def test_cancelling_a_job_on_a_real_worker_tells_the_backend_once(
+    threaded_jobs: JobService, threads: ThreadWorkers
+) -> None:
+    """The request is forwarded, the thread is not killed, and the report decides."""
+    started = threading.Event()
+    release = threading.Event()
+    observed: list[bool] = []
+
+    @job(id="thread.cooperative", title="Cooperative")
+    def cooperative(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        started.set()
+        observed.append(ctx.cancellation.is_cancelled())
+        release.wait(5)
+        observed.append(ctx.cancellation.is_cancelled())
+        return SumResult(a + b)
+
+    handle = threaded_jobs.bind(cooperative).delay(a=1, b=2)
+    threaded_jobs.tick()
+    assert started.wait(5)  # the body is running on a worker
+
+    assert handle.cancel() is True
+    assert threads.cancelled == 1  # the backend heard about it
+    threaded_jobs.tick()
+    # Nothing was interrupted: the job is still running until the worker reports.
+    assert handle.status is JobStatus.RUNNING
+    assert handle.cancel_requested is True
+
+    release.set()
+    threads.wait()
+    threaded_jobs.tick()
+
+    assert observed == [False, True]
+    assert handle.status is JobStatus.CANCELLED
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = handle.result
+
+
 # -- 2026-10-25 audit follow-ups ----------------------------------------------------
 
 
 class _Reentrant:
-    """Stands in for a job that opens a modal dialog while it runs.
+    """Stands in for author code that reaches for the driving thread.
 
-    The dialog's nested event loop fires the host timer, which calls
-    ``jobs.tick()`` while this job is mid-step (TASK-44).
+    Since 0.9.0 the body runs on a worker, so a tick from there is not a
+    nested tick at all: it is the wrong thread, and it must do nothing rather
+    than advance the scheduler from a worker (TASK-44, decision-65).
     """
 
     service: ClassVar[JobService]
@@ -889,30 +1081,41 @@ class _Reentrant:
 
 
 @job(id="demo.reentrant", title="Re-enters the tick from author code")
-def reentrant_run(ctx: JobContext, a: int, b: int) -> SumResult:
+def reentrant_run(ctx: WorkerContext, a: int, b: int) -> SumResult:
     _Reentrant.nested.append(_Reentrant.service.tick())
     return SumResult(total=a + b)
 
 
-def test_a_tick_entered_from_author_code_is_a_no_op(jobs: JobService) -> None:
+def _run_on_a_worker(workers: FakeWorkers) -> None:
+    """Run the pending bodies on another thread: author code, where it belongs."""
+    thread = threading.Thread(target=workers.run_all)
+    thread.start()
+    thread.join()
+
+
+def test_a_tick_entered_from_author_code_is_a_no_op(
+    jobs: JobService, workers: FakeWorkers
+) -> None:
     _Reentrant.service = jobs
     _Reentrant.nested = []
     first = jobs.bind(reentrant_run).delay(a=1, b=2)
     second = jobs.bind(add).delay(a=3, b=4)
 
-    steps = jobs.tick()
+    jobs.tick()
+    _run_on_a_worker(workers)
+    jobs.tick()
+    _run_on_a_worker(workers)
+    jobs.tick()
 
     assert _Reentrant.nested == [0]
     assert first.status is JobStatus.SUCCEEDED
     assert first.result == SumResult(3)
-    # The queued neighbour was not stepped by the nested tick; the next real
-    # tick runs it.
-    assert steps >= 1
-    jobs.tick()
     assert second.status is JobStatus.SUCCEEDED
 
 
-def test_a_tick_entered_from_a_subscriber_is_a_no_op(jobs: JobService) -> None:
+def test_a_tick_entered_from_a_subscriber_is_a_no_op(
+    jobs: JobService, drive: Callable[[], None]
+) -> None:
     seen: list[object] = []
     handle = jobs.bind(add).delay(a=1, b=2)
     later = jobs.bind(add).delay(a=5, b=6)
@@ -920,7 +1123,7 @@ def test_a_tick_entered_from_a_subscriber_is_a_no_op(jobs: JobService) -> None:
     handle.on_success(lambda result: seen.append(("success", result)))
     later.on_success(lambda result: seen.append(("later", result)))
 
-    jobs.tick()
+    drive()
 
     # Both jobs settled on the outer tick; the nested call did nothing and
     # delivery order is the outer tick's.
@@ -931,31 +1134,39 @@ def test_a_tick_entered_from_a_subscriber_is_a_no_op(jobs: JobService) -> None:
 
 
 def test_a_quiesce_entered_from_author_code_is_refused_without_stopping_anything(
-    jobs: JobService,
+    jobs: JobService, workers: FakeWorkers
 ) -> None:
     outcomes: list[object] = []
 
-    @job(id="demo.reentrant.quiesce", title="Quiesces from inside a step")
-    def quiesce_inside(ctx: JobContext, a: int, b: int) -> SumResult:
+    @job(id="demo.reentrant.quiesce", title="Quiesces from the worker")
+    def quiesce_inside(ctx: WorkerContext, a: int, b: int) -> SumResult:
         outcomes.append(jobs.quiesce(max_ticks=1))
         return SumResult(total=a)
 
     handle = jobs.bind(quiesce_inside).delay(a=9, b=0)
     jobs.tick()
+    _run_on_a_worker(workers)
+    jobs.tick()
 
     assert handle.status is JobStatus.SUCCEEDED
     (outcome,) = outcomes
     assert outcome.refused is True
-    assert outcome.blockers == ("a tick is already in progress on this thread",)
+    blocker = (
+        "the tick and quiesce belong to the thread that built the service; a "
+        "job body runs on a worker and has no tick of its own"
+    )
+    assert outcome.blockers == (blocker,)
 
 
-def test_result_raises_the_failure_of_a_failed_job(jobs: JobService) -> None:
+def test_result_raises_the_failure_of_a_failed_job(
+    jobs: JobService, drive: Callable[[], None]
+) -> None:
     @job(id="demo.boom3", title="Boom")
-    def boom(ctx: JobContext, a: int, b: int) -> SumResult:
+    def boom(ctx: WorkerContext, a: int, b: int) -> SumResult:
         raise KeyError("missing")
 
     handle = jobs.bind(boom).delay(a=1, b=2)
-    jobs.tick()
+    drive()
 
     assert handle.status is JobStatus.FAILED
     with pytest.raises(KeyError) as info:
@@ -963,7 +1174,9 @@ def test_result_raises_the_failure_of_a_failed_job(jobs: JobService) -> None:
     assert info.value is handle.error
 
 
-def test_result_raises_cancelled_for_a_cancelled_job(jobs: JobService) -> None:
+def test_result_raises_cancelled_for_a_cancelled_job(
+    jobs: JobService,
+) -> None:
     handle = jobs.bind(add).delay(a=1, b=2)
     handle.cancel()
     jobs.tick()
@@ -975,14 +1188,17 @@ def test_result_raises_cancelled_for_a_cancelled_job(jobs: JobService) -> None:
 
 
 def test_a_finished_job_leaves_nothing_behind_on_an_explicit_subscription_owner(
-    jobs: JobService, view_jobs: JobService, plugin_scope: ResourceScope
+    jobs: JobService,
+    view_jobs: JobService,
+    plugin_scope: ResourceScope,
+    drive: Callable[[], None],
 ) -> None:
     hooks_before = len(plugin_scope._callbacks)
     for i in range(20):
         handle = view_jobs.bind(add).delay(a=i, b=1)
         handle.on_success(lambda result: None, owner=plugin_scope)
         handle.on_progress(lambda fraction: None, owner=plugin_scope)
-        jobs.tick()
+        drive()
         assert handle.status is JobStatus.SUCCEEDED
 
     # One hook per owner scope at most, never one per subscription; the
@@ -999,7 +1215,7 @@ def test_an_explicit_owner_still_detaches_an_active_subscription(
 ) -> None:
     other_view = plugin_scope.child()
     seen: list[object] = []
-    handle = view_jobs.bind(offloaded_add).delay(a=1, b=2)
+    handle = view_jobs.bind(plain_add).delay(a=1, b=2)
     subscription = handle.on_success(
         lambda result: seen.append(result), owner=other_view
     )

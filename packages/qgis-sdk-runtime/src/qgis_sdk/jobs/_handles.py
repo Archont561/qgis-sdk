@@ -65,7 +65,7 @@ class JobHandle:
     @property
     def cancel_requested(self) -> bool:
         """Whether anyone asked the job to stop, acknowledged or not."""
-        return self._attempt.job.cancellation.is_cancelled()
+        return self._attempt.cancelled
 
     @property
     def owner_closed(self) -> bool:
@@ -96,8 +96,15 @@ class JobHandle:
     # -- control
 
     def cancel(self) -> bool:
-        """Request cancellation; return whether the job was still active."""
-        return self._attempt.job.cancel()
+        """Request cancellation; return whether the job was still active.
+
+        The request reaches the worker at once through the attempt's own
+        signal, so a body polling ``ctx.cancellation`` sees it; the handle only
+        settles when the worker reports.
+        """
+        active = self._attempt.job.cancel()
+        self._attempt.request_cancel()
+        return active
 
     def get(self, timeout: float | None = None) -> Any:
         """Block until the job settles and return its result.

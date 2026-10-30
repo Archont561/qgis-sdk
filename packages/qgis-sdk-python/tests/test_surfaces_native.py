@@ -44,7 +44,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
-from qgis_sdk.core import JobContext, PluginContext, ResourceScope
+from qgis_sdk.core import PluginContext, ResourceScope, WorkerContext
 from qgis_sdk.jobs import JobHandle, JobService, job
 from qgis_sdk.testing import FakeFiles, FakeWorkers, RecordingNotifications
 
@@ -52,6 +52,9 @@ from .ui import BufferDialog, LayerPanel, NoteDialog
 
 SETTINGS: dict[str, str] = {}
 CALLS: list[str] = []
+# The worker backend every host in this file shares, so a test can let a job's
+# body run instead of having the driving thread do it.
+WORKERS = FakeWorkers()
 
 
 class SharedSettings:
@@ -70,7 +73,7 @@ class Total:
 
 
 @job(id="slow_sum", title="Slow sum")
-def slow_sum(ctx: JobContext, a: int, b: int) -> Total:
+def slow_sum(ctx: WorkerContext, a: int, b: int) -> Total:
     ctx.progress.report(0.5)
     return Total(total=a + b)
 
@@ -78,7 +81,7 @@ def slow_sum(ctx: JobContext, a: int, b: int) -> Total:
 def build_context(iface: object) -> PluginContext:
     global JOBS
     scope = ResourceScope()
-    JOBS = JobService(scope, workers=FakeWorkers(), gui_thread=lambda: False)
+    JOBS = JobService(scope, workers=WORKERS, gui_thread=lambda: False)
     return PluginContext(
         notifications=RecordingNotifications(scope),
         scope=scope,
@@ -373,9 +376,12 @@ def test_a_job_submitting_action_reports_on_the_message_bar(
         ]
 
     assert progress_bars() == ["surface_tools.start_sum.progress"]
-    jobs = modules[0].JOBS
+    plugin_module = modules[0]
+    jobs = plugin_module.JOBS
     texts: list[str] = []
     for _ in range(20):
+        jobs.tick()
+        plugin_module.WORKERS.run_all()  # the body runs on the worker, not on the tick
         jobs.tick()
         pump(qgis_app)
         texts = [item.text() for item in iface.bar.items()]

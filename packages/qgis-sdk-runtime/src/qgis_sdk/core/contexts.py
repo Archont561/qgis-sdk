@@ -405,6 +405,80 @@ class AlgorithmContext(_Context):
         )
 
 
+class WorkerContext:
+    """The restricted context a ``@job`` body receives on its worker (decision-65).
+
+    A job body runs in its entirety off the driving thread, so it is handed
+    only what a worker may safely touch: ``progress`` and a cooperative
+    ``cancellation``, both thread-safe by contract. Everything the driving
+    thread owns - the project and its layers, the Processing algorithms, the
+    interface, the surfaces, another worker pool - is absent, and reading it
+    fails by name with the reason instead of returning ``None`` or a live
+    object that would crash QGIS from a worker thread.
+
+    This is a guard, not a sandbox. A body can still reach a module-level
+    ``iface`` it imported itself, pass a live layer in as an argument, or call
+    a helper that does either; ``qgis-sdk check`` names the imports it can see
+    (TASK-117) and the runtime refuses what reaches the context, but neither
+    proves thread safety. Prepare GUI state before submission and apply GUI
+    updates in a callback, which is delivered on the driving thread.
+    """
+
+    __slots__ = ("cancellation", "progress")
+
+    progress: Progress
+    cancellation: Cancellation
+
+    #: Names a driving-thread context carries and a worker does not, with the
+    #: sentence the refusal shows.
+    _REFUSED: ClassVar[dict[str, str]] = {
+        "algorithms": (
+            "Processing runs on the thread that owns the application; return a "
+            "result and invoke it from the subscriber instead"
+        ),
+        "files": "file dialogs are GUI state; resolve a path before submitting",
+        "iface": "the QGIS interface belongs to the driving thread",
+        "layers": "layers are GUI-affine; pass plain values and re-read them on delivery",
+        "network": "the network client suspends on the driving thread, not on a worker",
+        "notifications": "the message bar is GUI state; report through the job outcome",
+        "project": "the project service is owned by the driving thread",
+        "scope": "the job's scope closes on delivery, on the driving thread",
+        "ui": "surfaces are GUI state; open one from the driving thread",
+        "view": "a view outlives no job and is not thread-safe",
+        "workers": "the job body is already on a worker",
+    }
+
+    def __init__(self, progress: Progress, cancellation: Cancellation) -> None:
+        object.__setattr__(self, "progress", progress)
+        object.__setattr__(self, "cancellation", cancellation)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError(f"WorkerContext is assembled once; {name!r} is read-only")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError(f"WorkerContext is assembled once; {name!r} is read-only")
+
+    def __getattr__(self, name: str) -> Any:
+        """Refuse a driving-thread capability by name, never with a bare AttributeError.
+
+        Only reached for names the context does not carry, so ``progress`` and
+        ``cancellation`` keep working. Dunders raise ``AttributeError`` so
+        copying, pickling and ``repr`` still behave like a plain object.
+        """
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        reason = self._REFUSED.get(name)
+        if reason is None:
+            reason = (
+                "a job body runs on a worker and only progress and cancellation "
+                "are available there"
+            )
+        raise QgisSdkUnsupportedCapabilityError(name, reason)
+
+    def __repr__(self) -> str:
+        return "WorkerContext(progress=..., cancellation=...)"
+
+
 class JobContext(_Context):
     """One job attempt, owned by a view unless plugin ownership is explicit.
 

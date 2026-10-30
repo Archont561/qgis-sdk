@@ -9,6 +9,7 @@ from qgis_sdk.core import (
     PluginContext,
     ResourceScope,
     UiContext,
+    WorkerContext,
 )
 from qgis_sdk.models import QgisSdkScopeClosedError, QgisSdkUnsupportedCapabilityError
 
@@ -125,9 +126,80 @@ def test_a_capability_read_on_a_closed_scope_is_refused_as_closed() -> None:
 
 
 def test_the_require_accessors_are_gone() -> None:
-    for context_type in (PluginContext, UiContext, AlgorithmContext, JobContext):
+    for context_type in (
+        PluginContext,
+        UiContext,
+        AlgorithmContext,
+        JobContext,
+        WorkerContext,
+    ):
         leftovers = [name for name in dir(context_type) if name.startswith("require_")]
         assert leftovers == [], (context_type.__name__, leftovers)
+
+
+# -- the worker context refuses the driving thread by name (decision-65) ----------
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "algorithms",
+        "files",
+        "iface",
+        "layers",
+        "network",
+        "notifications",
+        "project",
+        "scope",
+        "ui",
+        "view",
+        "workers",
+    ],
+)
+def test_the_worker_context_refuses_every_driving_thread_capability(
+    capability: str,
+) -> None:
+    context = WorkerContext(
+        progress=RecordingProgress(), cancellation=ControlledCancellation()
+    )
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
+        getattr(context, capability)
+    assert (caught.value.code, caught.value.capability) == (
+        "unsupported_capability",
+        capability,
+    )
+    # The refusal says what is missing and why, never a bare AttributeError.
+    assert WorkerContext._REFUSED[capability] in str(caught.value)
+
+
+def test_the_worker_context_carries_only_progress_and_cancellation() -> None:
+    progress = RecordingProgress()
+    cancellation = ControlledCancellation()
+    context = WorkerContext(progress=progress, cancellation=cancellation)
+
+    assert (context.progress, context.cancellation) == (progress, cancellation)
+    public = {
+        name for name in dir(context) if not name.startswith("_") and name != "has"
+    }
+    assert public == {"progress", "cancellation"}
+    # There is no capability registry here: asking for one is refused like any
+    # other name a worker cannot have, rather than answering a half-truth.
+    with pytest.raises(QgisSdkUnsupportedCapabilityError, match="only progress"):
+        _ = context.capabilities
+
+
+def test_a_worker_context_is_assembled_once() -> None:
+    context = WorkerContext(
+        progress=RecordingProgress(), cancellation=ControlledCancellation()
+    )
+
+    with pytest.raises(AttributeError, match="read-only"):
+        context.progress = RecordingProgress()  # type: ignore[misc]
+    with pytest.raises(AttributeError, match="read-only"):
+        del context.cancellation
+    # Dunders stay ordinary, so repr/copy/pickle keep working.
+    assert isinstance(repr(context), str)
 
 
 def test_a_context_is_immutable_once_assembled() -> None:
