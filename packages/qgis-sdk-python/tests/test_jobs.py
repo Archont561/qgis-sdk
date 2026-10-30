@@ -32,6 +32,7 @@ from qgis_sdk.jobs import (
 from qgis_sdk.models import (
     QgisSdkJobCancelledError,
     QgisSdkJobNotSettledError,
+    QgisSdkJobPrerequisiteError,
     QgisSdkJobRejectedError,
     QgisSdkJobWaitRefusedError,
     QgisSdkScopeClosedError,
@@ -948,6 +949,181 @@ def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
     assert not hasattr(JobHandle, "retry")
 
 
+# -- dependencies: ctx.jobs.after(handle) -------------------------------------------
+
+
+def test_a_dependent_job_is_not_handed_to_a_worker_until_its_prerequisite_settles(
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
+) -> None:
+    order: list[str] = []
+
+    @job(id="dep.first", title="First")
+    def first(ctx: WorkerContext, a: int) -> SumResult:
+        order.append("first")
+        return SumResult(a)
+
+    @job(id="dep.second", title="Second")
+    def second(ctx: WorkerContext, a: int) -> SumResult:
+        order.append("second")
+        return SumResult(a)
+
+    prerequisite = jobs.bind(first).delay(a=1)
+    dependent = jobs.after(prerequisite).bind(second).delay(a=2)
+    assert dependent.status is JobStatus.QUEUED
+    assert workers.pending == 0  # delay submits; the tick is what hands over
+
+    jobs.tick()
+    assert dependent.status is JobStatus.RUNNING  # waiting, not running a body
+    assert workers.pending == 1  # only the prerequisite's body
+    assert workers.items[0].title == "First"
+
+    workers.run_all()  # the prerequisite's body
+    jobs.tick()
+    assert order == ["first"]
+    assert prerequisite.status is JobStatus.SUCCEEDED
+    assert workers.pending == 1  # now the dependent's body is handed over
+    assert workers.items[1].title == "Second"
+
+    workers.run_all()
+    jobs.tick()
+    assert order == ["first", "second"]
+    assert dependent.status is JobStatus.SUCCEEDED
+    assert dependent.result == SumResult(2)
+
+
+def test_the_one_call_and_chained_forms_spell_the_same_dependency(
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
+) -> None:
+    prerequisite = jobs.bind(add).delay(a=1, b=1)
+    chained = jobs.bind(add).after(prerequisite).delay(a=2, b=2)
+    one_call = jobs.after(prerequisite).delay(add, a=3, b=3)
+
+    assert chained._attempt.prerequisites == (prerequisite,)
+    assert one_call._attempt.prerequisites == (prerequisite,)
+    for _ in range(3):
+        jobs.tick()
+        workers.run_all()
+    jobs.tick()
+    assert [chained.status, one_call.status] == [
+        JobStatus.SUCCEEDED,
+        JobStatus.SUCCEEDED,
+    ]
+    assert (chained.result.total, one_call.result.total) == (4, 6)
+
+
+def test_a_long_chain_runs_in_order_one_tick_at_a_time(
+    jobs: JobService, workers: FakeWorkers
+) -> None:
+    order: list[int] = []
+
+    @job(id="dep.step", title="Step")
+    def step(ctx: WorkerContext, index: int) -> SumResult:
+        order.append(index)
+        return SumResult(index)
+
+    handles = [jobs.bind(step).delay(index=0)]
+    for index in (1, 2, 3):
+        handles.append(jobs.after(handles[-1]).bind(step).delay(index=index))
+
+    for _ in range(8):
+        jobs.tick()
+        workers.run_all()
+        jobs.tick()
+
+    assert order == [0, 1, 2, 3]
+    assert all(handle.status is JobStatus.SUCCEEDED for handle in handles)
+
+
+def test_a_failed_prerequisite_fails_the_dependent_job_without_running_it(
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
+) -> None:
+    ran: list[str] = []
+
+    @job(id="dep.boom", title="Boom")
+    def boom(ctx: WorkerContext, a: int) -> SumResult:
+        raise ValueError("no precondition")
+
+    @job(id="dep.never", title="Never")
+    def never(ctx: WorkerContext, a: int) -> SumResult:
+        ran.append("never")
+        return SumResult(a)
+
+    prerequisite = jobs.bind(boom).delay(a=1)
+    dependent = jobs.after(prerequisite).delay(never, a=2)
+    drive()
+    jobs.tick()
+
+    assert dependent.status is JobStatus.FAILED
+    assert isinstance(dependent.error, QgisSdkJobPrerequisiteError)
+    assert dependent.error.code == "job_prerequisite_failed"
+    assert dependent.error.prerequisite_id == prerequisite.id
+    assert dependent.error.prerequisite_status == "failed"
+    assert "never ran" in str(dependent.error)
+    assert ran == []
+
+
+def test_a_cancelled_prerequisite_fails_the_dependent_job_as_well(
+    jobs: JobService, workers: FakeWorkers
+) -> None:
+    prerequisite = jobs.bind(plain_add).delay(a=1, b=1)
+    dependent = jobs.after(prerequisite).delay(plain_add, a=2, b=2)
+
+    prerequisite.cancel()
+    jobs.tick()  # the prerequisite is closed before it ever ran
+    jobs.tick()  # ...and the dependent hears about it
+
+    assert prerequisite.status is JobStatus.CANCELLED
+    assert dependent.status is JobStatus.FAILED
+    assert isinstance(dependent.error, QgisSdkJobPrerequisiteError)
+    assert dependent.error.prerequisite_status == "cancelled"
+
+
+def test_a_dependent_job_can_be_cancelled_while_it_waits(
+    jobs: JobService, workers: FakeWorkers
+) -> None:
+    prerequisite = jobs.bind(add).delay(a=1, b=1)
+    dependent = jobs.after(prerequisite).delay(add, a=2, b=2)
+    recorder = _Recorder()
+    recorder.subscribe_all(dependent)
+
+    jobs.tick()
+    assert dependent.status is JobStatus.RUNNING
+    assert dependent.cancel() is True
+    jobs.tick()
+
+    assert dependent.status is JobStatus.CANCELLED
+    assert recorder.terminal == [("cancelled", None)]
+    assert workers.pending == 1  # only the prerequisite's body was ever handed over
+
+
+def test_after_refuses_something_that_is_not_a_job_handle(jobs: JobService) -> None:
+    with pytest.raises(TypeError, match=r"after\(\) takes job handles"):
+        jobs.after("demo.sum#1")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match=r"after\(\) takes job handles"):
+        jobs.bind(add).after(object())  # type: ignore[arg-type]
+
+
+def test_the_job_reaches_the_backend_with_its_title(
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
+) -> None:
+    """AC 1's other half: a backend that shows work is told what it is showing."""
+    handle = jobs.bind(add).delay(a=1, b=2)
+    jobs.tick()
+
+    (item,) = workers.items
+    assert item.title == "Sum two numbers"
+    assert item.progress is not None
+    assert item.cancel is not None
+
+    # What a task bar's cancel button calls: a request through the same path.
+    item.cancel()
+    assert handle.cancel_requested is True
+
+    workers.run_all()
+    jobs.tick()
+    assert handle.status is JobStatus.CANCELLED
+
+
 # -- AC 1: a real worker thread, distinct from the driving thread ------------------
 
 
@@ -959,9 +1135,7 @@ def threads() -> Iterator[ThreadWorkers]:
 
 
 @pytest.fixture()
-def threaded_jobs(
-    plugin_scope: ResourceScope, threads: ThreadWorkers
-) -> JobService:
+def threaded_jobs(plugin_scope: ResourceScope, threads: ThreadWorkers) -> JobService:
     return JobService(plugin_scope, workers=threads, gui_thread=lambda: False)
 
 

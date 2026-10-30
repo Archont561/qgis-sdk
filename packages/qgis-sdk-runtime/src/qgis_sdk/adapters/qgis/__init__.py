@@ -19,6 +19,7 @@ from .processing import NativeProcessing, NativeProcessingProvider
 from .project import NativeProject
 from .settings import NativeSettings
 from .styles import NativeStyles
+from .tasks import QgsTaskWorkers
 from .workers import ThreadPoolWorkers
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "NativeProject",
     "NativeSettings",
     "NativeStyles",
+    "QgsTaskWorkers",
     "ThreadPoolWorkers",
     "native_plugin_context",
 ]

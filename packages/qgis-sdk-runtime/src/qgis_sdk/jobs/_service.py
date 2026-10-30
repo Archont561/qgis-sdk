@@ -94,6 +94,41 @@ class _Runtime:
             subscription.dispose()
 
 
+class _After:
+    """``job_service.after(handles)``: the same service, with an ordering baked in.
+
+    A thin view rather than a second service: every name a submitted job can be
+    reached by - ``bind``, ``delay`` and the declared-name attributes TASK-116
+    adds - carries the prerequisites, so ordering composes with however the job
+    is submitted.
+    """
+
+    __slots__ = ("_prerequisites", "_service")
+
+    def __init__(self, service: JobService, prerequisites: tuple[JobHandle, ...]):
+        self._service = service
+        self._prerequisites = prerequisites
+
+    def bind(self, function: Callable[..., Any]) -> BoundJob:
+        """Bind a job, ordered behind the prerequisites."""
+        return self._service.bind(function).after(*self._prerequisites)
+
+    def delay(self, function: Callable[..., Any], /, **arguments: Any) -> JobHandle:
+        """``bind(function).delay(**arguments)``, ordered behind the prerequisites."""
+        return self.bind(function).delay(**arguments)
+
+    def __getattr__(self, name: str) -> Any:
+        """Reach a declared job by name (TASK-116), ordered behind the prerequisites."""
+        bound = getattr(self._service, name)
+        if isinstance(bound, BoundJob):
+            return bound.after(*self._prerequisites)
+        return bound
+
+    def __repr__(self) -> str:
+        ids = ", ".join(handle.id for handle in self._prerequisites)
+        return f"<jobs after {ids}>"
+
+
 class JobService:
     """``ctx.jobs``: binds job functions to an owner and delivers their outcomes.
 
@@ -210,6 +245,23 @@ class JobService:
         """``bind(function).delay(**arguments)`` in one call."""
         return self.bind(function).delay(**arguments)
 
+    def after(self, *handles: JobHandle) -> _After:
+        """Submit work that runs only after the jobs in ``handles`` succeeded.
+
+        ``ctx.jobs.after(first).bind(second).delay(a=1)`` - or, with a declared
+        name, ``ctx.jobs.after(first).<name>.delay(a=1)``. The ordering is
+        enforced before the dependent body is handed to a worker, so it holds
+        for every backend; a prerequisite that fails or is cancelled fails the
+        dependent job with ``QgisSdkJobPrerequisiteError``.
+        """
+        for handle in handles:
+            if not isinstance(handle, JobHandle):
+                raise TypeError(
+                    "after() takes job handles, got "
+                    f"{type(handle).__name__}; submit the prerequisite with delay first"
+                )
+        return _After(self, tuple(handles))
+
     def _submit(self, bound: BoundJob, arguments: dict[str, Any]) -> JobHandle:
         self._scope.ensure_open()
         description = bound.description
@@ -239,6 +291,7 @@ class JobService:
             owner=self,
             description=description,
             logical_id=f"{description.id}#{number}",
+            prerequisites=bound.prerequisites,
         )
         coroutine = _run_attempt(attempt, bound.function, dict(arguments))
         try:

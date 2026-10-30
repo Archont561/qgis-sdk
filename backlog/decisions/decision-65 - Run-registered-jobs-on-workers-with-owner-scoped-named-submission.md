@@ -60,6 +60,38 @@ behavior or evidence that any release shipped.
    bridge serialization is ID/status, not a live Python handle. Remote job
    observation or wire changes require separate design and release decisions.
 
+## Implementation note (2026-10-30)
+
+TASK-115 built the worker-first half in `qgis_sdk.jobs` and TASK-82 the native
+backend; the named registry is still TASK-116.
+
+- A job body is a plain `def name(ctx: WorkerContext, ...) -> Result`. The whole
+  body runs on a worker through `Workers.offload`; the driving thread submits,
+  validates inputs and results, and delivers. A host without a worker backend
+  refuses submission with `QgisSdkJobRejectedError` instead of running the body
+  itself. `async def` and `ctx: JobContext` are refused with migration text, so
+  nothing keeps the 0.8 execution semantics.
+- `WorkerContext` carries `progress` and `cancellation` and refuses every other
+  capability by name (`algorithms`, `files`, `iface`, `layers`, `network`,
+  `notifications`, `project`, `scope`, `ui`, `view`, `workers`) with the reason
+  a worker cannot have it. It is a guard, not a sandbox: `qgis-sdk check`
+  (TASK-117) names the imports it can see.
+- Native composition uses `qgis_sdk.adapters.qgis.QgsTaskWorkers`: one job is
+  one `QgsTask` under `QgsApplication.taskManager()` with the job's title, its
+  progress mirrored into the task bar, and a cancel button that files the
+  same cooperative request. `ThreadPoolWorkers` remains for hosts without a
+  task manager and is no longer composed natively.
+- `ctx.jobs.after(handle)` orders a job behind work already submitted; the
+  ordering is enforced before the dependent body reaches a worker, and a
+  prerequisite that fails or is cancelled fails the dependent with
+  `QgisSdkJobPrerequisiteError` without running its body. This is how
+  decision-53's "the task manager enforces" is satisfied without sub-tasks.
+- Cancellation is unchanged in principle and sharper in one detail: a request
+  that arrives before the worker reports settles the attempt at that report, so
+  a body that ignores the request ends `cancelled` rather than publishing a
+  result nobody waits for. A task the manager never started reports a
+  cancellation instead of leaving the job as a replacement blocker.
+
 ## Consequences
 
 - 0.9.0 is a breaking Python minor; `TASK-115` decides how existing async jobs

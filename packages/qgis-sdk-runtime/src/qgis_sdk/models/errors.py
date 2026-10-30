@@ -215,6 +215,29 @@ class QgisSdkJobRejectedError(QgisSdkError):
         super().__init__(f"Job {job_id!r} was refused: {listed}")
 
 
+class QgisSdkJobPrerequisiteError(QgisSdkError):
+    """A job declared with ``ctx.jobs.after(...)`` never started.
+
+    ``ctx.jobs.after(handle)`` orders a job behind work already submitted. The
+    ordering is enforced before the body reaches a worker, so the dependent job
+    fails with this error - naming the prerequisite and how it ended - instead
+    of running against a result that does not exist.
+    """
+
+    code = "job_prerequisite_failed"
+
+    def __init__(
+        self, job_id: str, prerequisite_id: str, prerequisite_status: object
+    ) -> None:
+        self.job_id = job_id
+        self.prerequisite_id = prerequisite_id
+        self.prerequisite_status = str(prerequisite_status)
+        super().__init__(
+            f"Job {job_id!r} waits for {prerequisite_id!r}, which ended "
+            f"{self.prerequisite_status}; its body never ran"
+        )
+
+
 class QgisSdkJobNotSettledError(QgisSdkError):
     """A result was asked for before the job reached a terminal state."""
 

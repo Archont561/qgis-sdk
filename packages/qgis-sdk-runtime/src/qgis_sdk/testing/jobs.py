@@ -9,6 +9,7 @@ from concurrent.futures import wait as wait_futures
 from typing import Any
 
 from qgis_sdk.core.scheduling import Handoff
+from qgis_sdk.services import WorkItem
 
 
 class FakeWorkers:
@@ -23,6 +24,7 @@ class FakeWorkers:
 
     def __init__(self) -> None:
         self._pending: list[tuple[Callable[[], Any], Handoff]] = []
+        self.items: list[WorkItem] = []
         self.cancelled = 0
 
     @property
@@ -30,8 +32,16 @@ class FakeWorkers:
         """How many offloaded callables have not run yet."""
         return len(self._pending)
 
-    def offload(self, fn: Callable[[], Any]) -> Handoff:
-        """Queue ``fn``; the job suspends on the returned handoff."""
+    def offload(
+        self, fn: Callable[[], Any], *, item: WorkItem | None = None
+    ) -> Handoff:
+        """Queue ``fn``; the job suspends on the returned handoff.
+
+        ``item`` is what a real backend would show: this one records it in
+        ``items`` so a test can assert the job reached it with its title.
+        """
+        if item is not None:
+            self.items.append(item)
         handoff = Handoff(on_cancel=self._cancel)
         self._pending.append((fn, handoff))
         return handoff
@@ -74,11 +84,16 @@ class ThreadWorkers:
             max_workers=max_workers, thread_name_prefix="qgis-sdk-worker"
         )
         self._pending: set[Future[Any]] = set()
+        self.items: list[WorkItem] = []
         self.thread_ids: list[int] = []
         self.cancelled = 0
 
-    def offload(self, fn: Callable[[], Any]) -> Handoff:
+    def offload(
+        self, fn: Callable[[], Any], *, item: WorkItem | None = None
+    ) -> Handoff:
         """Queue ``fn`` on a worker thread; the job suspends on the handoff."""
+        if item is not None:
+            self.items.append(item)
         handoff = Handoff(on_cancel=self._cancel)
         future = self._pool.submit(self._run, fn, handoff)
         self._pending.add(future)

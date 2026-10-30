@@ -1782,31 +1782,63 @@ has somewhere to count.
 Hosts compose the service once per plugin:
 
 ```python
-from qgis_sdk.adapters.qgis import ThreadPoolWorkers
+from qgis_sdk.adapters.qgis import QgsTaskWorkers
 from qgis_sdk.jobs import JobService
 
-jobs = JobService(plugin_scope, workers=ThreadPoolWorkers(plugin_scope), network=network)
+jobs = JobService(plugin_scope, workers=QgsTaskWorkers(plugin_scope), network=network)
 timer.timeout.connect(jobs.tick)  # the GUI thread's event loop drives delivery
 ```
 
 `workers` is not optional any more: a `JobService` built without one refuses
 every submission with `QgisSdkJobRejectedError` instead of quietly running the
-body on the driving thread (decision-65). `ThreadPoolWorkers` runs each job
-body on a `QThreadPool` and reports through the scheduler's `Handoff`; a
-callable still queued when its job is cancelled reports without running, a
-callable already running is left to finish. In tests,
-`qgis_sdk.testing.FakeWorkers` holds the bodies until the test says
+body on the driving thread (decision-65). A job is driven in three moves:
+`tick()` submits, the worker runs the body, `tick()` delivers.
+
+`QgsTaskWorkers` is the native backend, and `native_plugin_context` already
+gives you one as `ctx.workers`. It runs each job body as **one `QgsTask` under
+`QgsApplication.taskManager()`**, so the job is a single entry in the QGIS task
+bar: the title is the job's `title`, its bar follows `ctx.progress` (the worker
+reports, the task bar draws), and pressing cancel files the same cooperative
+request `handle.cancel()` does - the body stops when it next polls
+`ctx.cancellation`, and nothing is interrupted. There are no sub-tasks and no
+parent task; a Processing algorithm keeps being the `QgsTask` Processing
+already started. `ThreadPoolWorkers` stays available for a host without a task
+manager (and is what `tests/test_jobs_native.py` drives); both report through
+the scheduler's `Handoff`, so nothing about delivery changes between them.
+
+In tests, `qgis_sdk.testing.FakeWorkers` holds the bodies until the test says
 `run_one()` / `run_all()` - which is how the suite stages races between
 workers, ticks and disposal, and a test passes `run_all` to a thread of its own
-when it wants the body to run off the driving thread -
-and `qgis_sdk.testing.ThreadWorkers` is a real `ThreadPoolExecutor` for the
-cases that want one. A job is driven in three moves: `tick()` submits, the
-worker runs the body, `tick()` delivers. `tests/features/scoped_jobs.feature`
-states the rules as scenarios (bound by `tests/test_jobs_bdd.py`),
-`tests/test_jobs.py` holds the examples, `tests/test_jobs_properties.py` a
-Hypothesis state machine over submit / tick / cancel / worker reports / close
-view / close listener / close plugin, and `tests/test_jobs_native.py` the
-thread evidence over a real pool and a real Qt event loop.
+when it wants the body to run off the driving thread - and
+`qgis_sdk.testing.ThreadWorkers` is a real `ThreadPoolExecutor` for the cases
+that want one. `tests/features/scoped_jobs.feature` states the rules as
+scenarios (bound by `tests/test_jobs_bdd.py`), `tests/test_jobs.py` holds the
+examples, `tests/test_jobs_properties.py` a Hypothesis state machine over
+submit / tick / cancel / worker reports / close view / close listener / close
+plugin, `tests/test_jobs_native.py` the thread evidence over a real pool and a
+real Qt event loop, and `tests/test_jobs_tasks_native.py` the task-manager
+evidence (one task per job, its title, mirrored progress, the cancel button).
+
+### How do I order one job after another?
+
+`ctx.jobs.after(handle)` submits work that runs only after the jobs you name
+succeeded:
+
+```python
+prepare = ctx.jobs.bind(load_layer).delay(layer_id=layer_id)
+
+second = ctx.jobs.after(prepare).bind(run_report).delay(output=path)
+# the same thing, chained: ctx.jobs.bind(run_report).after(prepare).delay(...)
+```
+
+The ordering is enforced before the dependent body is handed to a worker, so it
+holds for every backend and the task bar never shows work it must not start
+yet: the dependent job is `queued`, then `running` while it waits, and its body
+runs after the prerequisite's. A prerequisite that fails or is cancelled fails
+the dependent job with `QgisSdkJobPrerequisiteError` naming the prerequisite
+and its outcome, and the dependent body never runs. A chain works the same way
+- each `after` takes the handles of what it waits for - and a dependent job can
+still be cancelled while it waits.
 
 ### Migrating a 0.8 job to 0.9
 
@@ -1856,6 +1888,13 @@ What to move:
 - **A host without a worker backend** (a script that only wants to call the
   function, a test double) should call the function directly or run the code
   without `JobService`; submitting is refused rather than silently degrading.
+- **Ordering, if you needed it.** `ctx.jobs.after(handle)` replaces any
+  hand-rolled "start the second job from the first one's success callback": the
+  dependency is declared where the job is submitted, and a failed prerequisite
+  fails the dependent job instead of silently skipping it.
+- **The task bar.** On Desktop each job is now one task there. A job whose
+  title reads well in a user interface is worth naming in `@job(title=...)`,
+  and a long job should report `ctx.progress` so its bar moves.
 
 ## Project scaffold
 

@@ -10,7 +10,7 @@ from typing import (
 )
 
 from qgis_sdk.core import ResourceScope, WorkerContext
-from qgis_sdk.core.scheduling import Job
+from qgis_sdk.core.scheduling import Job, Yield
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     type_name,
@@ -27,10 +27,13 @@ from qgis_sdk.jobs._subscriptions import JobFault, JobSubscription
 from qgis_sdk.models import (
     QgisSdkJobCancelledError,
     QgisSdkJobNotSettledError,
+    QgisSdkJobPrerequisiteError,
     QgisSdkScopeClosedError,
 )
+from qgis_sdk.services import WorkItem
 
 if TYPE_CHECKING:
+    from qgis_sdk.jobs._handles import JobHandle
     from qgis_sdk.jobs._service import JobService, _Runtime
 
 
@@ -40,16 +43,20 @@ if TYPE_CHECKING:
 class _Progress:
     """The attempt's ``Progress`` service: reported from the worker, delivered on the tick.
 
-    The worker writes and the driving thread reads, so the two fields sit
-    behind one lock: reporting never blocks and never delivers, and a fraction
-    reported between two ticks is delivered once, at the next one.
+    The worker writes and the driving thread reads, so the fields sit behind one
+    lock: reporting never blocks and never delivers, and a fraction reported
+    between two ticks is delivered once, at the next one. ``observe`` is the
+    backend's side of the same signal (``ObservableProgress``): the QGIS task
+    manager mirrors it into its task bar, and the callback runs on whichever
+    thread reported.
     """
 
-    __slots__ = ("_latest", "_lock", "_pending")
+    __slots__ = ("_latest", "_lock", "_observers", "_pending")
 
     def __init__(self) -> None:
         self._latest: float | None = None
         self._pending = False
+        self._observers: list[Callable[[float], None]] = []
         self._lock = threading.Lock()
 
     def report(self, fraction: float) -> None:
@@ -58,9 +65,18 @@ class _Progress:
             raise ValueError(
                 f"progress must be a fraction from 0.0 to 1.0, not {fraction!r}"
             )
+        value = float(fraction)
         with self._lock:
-            self._latest = float(fraction)
+            self._latest = value
             self._pending = True
+            observers = tuple(self._observers)
+        for observer in observers:
+            observer(value)
+
+    def observe(self, callback: Callable[[float], None]) -> None:
+        """Hear every fraction reported from now on, on the reporting thread."""
+        with self._lock:
+            self._observers.append(callback)
 
     @property
     def latest(self) -> float | None:
@@ -106,11 +122,14 @@ class _Attempt:
         owner: JobService,
         description: JobDescription,
         logical_id: str,
+        prerequisites: tuple[JobHandle, ...] = (),
     ) -> None:
         self.runtime = runtime
         self.owner = owner
         self.description = description
         self.id = logical_id
+        self.prerequisites = prerequisites
+        """Jobs this attempt runs after (``ctx.jobs.after``), submitted earlier."""
         self.attempt = 1
         self.scope = runtime.scope.child()
         self.progress = _Progress()
@@ -295,6 +314,31 @@ _TERMINAL_EVENT: dict[JobStatus, JobEvent] = {
 }
 
 
+async def _wait_for_prerequisites(attempt: _Attempt) -> None:
+    """Hold the body until the jobs it declared it comes after have settled.
+
+    A dependency is enforced here, before the body is handed to a worker, so a
+    backend never sees work it must not start yet - one task, no sub-tasks, and
+    no second scheduler inside the task manager. Waiting costs one ``Yield``
+    per tick and nothing else: the job stays visible, cancellable and named as
+    a blocker like any other. A prerequisite that did not succeed fails this
+    attempt without running its body.
+    """
+    if not attempt.prerequisites:
+        return
+    while True:
+        pending = [
+            handle for handle in attempt.prerequisites if not handle.status.settled
+        ]
+        if not pending:
+            break
+        await Yield()
+    for handle in attempt.prerequisites:
+        status = handle.status
+        if status is not JobStatus.SUCCEEDED:
+            raise QgisSdkJobPrerequisiteError(attempt.id, handle.id, status)
+
+
 async def _run_attempt(
     attempt: _Attempt, function: Callable[..., Any], arguments: dict[str, Any]
 ) -> object:
@@ -308,13 +352,19 @@ async def _run_attempt(
     before any subscriber sees it.
     """
     attempt.scope.ensure_open()
+    await _wait_for_prerequisites(attempt)
     workers = attempt.runtime.workers
     assert workers is not None, "submission is refused without a worker backend"
     context = WorkerContext(
         progress=attempt.progress,
         cancellation=_Cancellation(attempt),
     )
-    handoff = workers.offload(lambda: function(context, **arguments))
+    item = WorkItem(
+        title=attempt.description.title,
+        progress=attempt.progress,
+        cancel=attempt.request_cancel,
+    )
+    handoff = workers.offload(lambda: function(context, **arguments), item=item)
     outcome = await handoff
     description = attempt.description
     if not _accepts(outcome, description.result_type):

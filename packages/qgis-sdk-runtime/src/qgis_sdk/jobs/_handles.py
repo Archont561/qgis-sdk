@@ -186,6 +186,28 @@ class BoundJob:
     description: JobDescription
     function: Callable[..., Any]
     service: JobService = field(repr=False)
+    prerequisites: tuple[JobHandle, ...] = ()
+
+    def after(self, *handles: JobHandle) -> BoundJob:
+        """Order this job behind work already submitted; the body waits for it.
+
+        The prerequisite starts first and this job's body is not handed to a
+        worker until every one of them succeeded - the backend never sees work
+        it must not start yet. A prerequisite that fails or is cancelled fails
+        this job with ``QgisSdkJobPrerequisiteError`` before its body runs.
+        """
+        for handle in handles:
+            if not isinstance(handle, JobHandle):
+                raise TypeError(
+                    "after() takes job handles, got "
+                    f"{type(handle).__name__}; submit the prerequisite with delay first"
+                )
+        return BoundJob(
+            self.description,
+            self.function,
+            self.service,
+            self.prerequisites + tuple(handles),
+        )
 
     def delay(self, **arguments: Any) -> JobHandle:
         """Submit one attempt with the inputs as keywords; no author code runs yet."""
