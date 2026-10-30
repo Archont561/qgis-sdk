@@ -1,19 +1,21 @@
-"""``@job`` declares a function; the runtime injects the ``JobContext`` (decision-38).
+"""``@job`` declares a function; the runtime injects the ``WorkerContext`` (decisions 38, 65).
 
 A job is written the way an action is: keyword parameters with annotations,
 a declared result, and the context first. The decorator attaches metadata and
 nothing else, so the function stays an ordinary callable a test can run with
-a fake context; the class form decision-13 chose is gone.
+a fake context; the class form decision-13 chose is gone. Since 0.9.0 the body
+is a plain ``def`` that runs in its entirety on a worker, so the injected
+context is the worker's: progress and cancellation only.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
 import pytest
-from qgis_sdk.core import JobContext, ResourceScope
+from qgis_sdk.core import ResourceScope, WorkerContext
 from qgis_sdk.declarations import QgisSdkDeclarationError, describe
 from qgis_sdk.jobs import JobService, JobStatus, describe_job, job
 from qgis_sdk.models import QgisSdkJobRejectedError
@@ -26,22 +28,33 @@ class SumResult:
 
 
 @job(id="fn.sum", title="Sum two numbers")
-def sum_numbers(ctx: JobContext, a: int, b: int = 0) -> SumResult:
+def sum_numbers(ctx: WorkerContext, a: int, b: int = 0) -> SumResult:
     ctx.progress.report(0.5)
     return SumResult(total=a + b)
 
 
-@job(id="fn.offloaded", title="Sum off the driving thread")
-async def offloaded_sum(ctx: JobContext, a: int, b: int) -> SumResult:
-    total = await ctx.workers.offload(lambda: a + b)
-    return SumResult(total=total)
+@pytest.fixture
+def workers() -> FakeWorkers:
+    return FakeWorkers()
 
 
 @pytest.fixture
-def jobs() -> Iterator[JobService]:
+def jobs(workers: FakeWorkers) -> Iterator[JobService]:
     scope = ResourceScope()
-    yield JobService(scope, workers=FakeWorkers(), gui_thread=lambda: False)
+    yield JobService(scope, workers=workers, gui_thread=lambda: False)
     scope.close()
+
+
+@pytest.fixture
+def drive(jobs: JobService, workers: FakeWorkers):
+    """Submit, run the body on the worker, deliver: one job, one round trip."""
+    jobs.tick()
+
+    def finish() -> None:
+        workers.run_all()
+        jobs.tick()
+
+    return finish
 
 
 # -- declaring ------------------------------------------------------------------------
@@ -58,7 +71,6 @@ def test_a_job_function_is_described_from_its_signature() -> None:
     assert description.result_type is SumResult
     assert description.result_schema["properties"]["total"]["type"] == "integer"
     assert description.asynchronous is False
-    assert describe_job(offloaded_sum).asynchronous is True
 
 
 def test_the_transport_form_carries_the_inputs_schema_and_the_result() -> None:
@@ -95,7 +107,7 @@ def test_the_decorator_leaves_the_function_callable_as_written() -> None:
 
 def test_a_bare_decorator_derives_the_id_and_title_from_the_function() -> None:
     @job
-    def count_features(ctx: JobContext, layer_id: str) -> int:
+    def count_features(ctx: WorkerContext, layer_id: str) -> int:
         return 0
 
     description = describe_job(count_features)
@@ -118,7 +130,7 @@ def test_a_duplicate_declaration_is_refused() -> None:
 
         @job(id="fn.twice", title="Twice")
         @job(id="fn.once", title="Once")
-        def twice(ctx: JobContext) -> int:
+        def twice(ctx: WorkerContext) -> int:
             return 1
 
 
@@ -126,7 +138,7 @@ def _missing_context(a: int) -> int:
     return a
 
 
-def _context_second(a: int, ctx: JobContext) -> int:
+def _context_second(a: int, ctx: WorkerContext) -> int:
     return a
 
 
@@ -134,32 +146,32 @@ def _untyped_context(ctx, a: int) -> int:  # type: ignore[no-untyped-def]
     return a
 
 
-def _no_result(ctx: JobContext, a: int):  # type: ignore[no-untyped-def]
+def _no_result(ctx: WorkerContext, a: int):  # type: ignore[no-untyped-def]
     return a
 
 
-def _untyped_input(ctx: JobContext, a) -> int:  # type: ignore[no-untyped-def]
+def _untyped_input(ctx: WorkerContext, a) -> int:  # type: ignore[no-untyped-def]
     return a
 
 
-def _variadic(ctx: JobContext, *values: int) -> int:
+def _variadic(ctx: WorkerContext, *values: int) -> int:
     return sum(values)
 
 
-def _generator(ctx: JobContext, a: int):  # type: ignore[no-untyped-def]
+def _generator(ctx: WorkerContext, a: int):  # type: ignore[no-untyped-def]
     yield a
 
 
 @pytest.mark.parametrize(
     ("function", "message"),
     [
-        (_missing_context, "first parameter must be the JobContext"),
-        (_context_second, "first parameter must be the JobContext"),
-        (_untyped_context, "first parameter must be the JobContext"),
+        (_missing_context, "first parameter must be the WorkerContext"),
+        (_context_second, "first parameter must be the WorkerContext"),
+        (_untyped_context, "first parameter must be the WorkerContext"),
         (_no_result, "must declare its result"),
         (_untyped_input, "inputs.a"),
         (_variadic, "variadic and positional-only inputs are unsupported"),
-        (_generator, "function or coroutine function"),
+        (_generator, "not a generator"),
     ],
 )
 def test_a_signature_that_cannot_be_described_is_refused(function, message) -> None:
@@ -168,7 +180,7 @@ def test_a_signature_that_cannot_be_described_is_refused(function, message) -> N
 
 
 def test_describing_an_undeclared_function_is_refused() -> None:
-    def plain(ctx: JobContext) -> int:
+    def plain(ctx: WorkerContext) -> int:
         return 1
 
     with pytest.raises(
@@ -185,30 +197,41 @@ def test_describing_an_undeclared_function_is_refused() -> None:
 
 
 def test_delay_takes_the_parameters_as_keywords_and_injects_the_context(
-    jobs: JobService,
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
 ) -> None:
     handle = jobs.bind(sum_numbers).delay(a=1, b=2)
 
     assert handle.status is JobStatus.QUEUED
     jobs.tick()
 
+    # The tick handed the body to a worker; only the worker runs it.
+    assert handle.status is JobStatus.RUNNING
+    assert workers.pending == 1
+
+    workers.run_all()
+    drive()
+
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.result == SumResult(total=3)
     assert handle.progress == 0.5
 
 
-def test_a_defaulted_parameter_may_be_omitted(jobs: JobService) -> None:
+def test_a_defaulted_parameter_may_be_omitted(
+    jobs: JobService, drive: Callable[[], None]
+) -> None:
     handle = jobs.bind(sum_numbers).delay(a=4)
     jobs.tick()
+    drive()
 
     assert handle.result == SumResult(total=4)
 
 
 def test_the_service_offers_delay_as_a_shorthand_for_bind_then_delay(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     handle = jobs.delay(sum_numbers, a=2, b=2)
     jobs.tick()
+    drive()
 
     assert handle.result == SumResult(total=4)
     assert handle.description.id == "fn.sum"
@@ -249,7 +272,7 @@ class Window:
 
 @job(id="fn.typed", title="Typed inputs")
 def typed(
-    ctx: JobContext,
+    ctx: WorkerContext,
     window: Window,
     mode: Literal["fast", "exact"],
     label: str | None = None,
@@ -260,12 +283,13 @@ def typed(
 
 
 def test_the_argument_check_understands_the_annotations_actions_use(
-    jobs: JobService,
+    jobs: JobService, drive: Callable[[], None]
 ) -> None:
     handle = jobs.bind(typed).delay(
         window=Window(1, 2), mode="fast", weights=[0.5], unit="km"
     )
     jobs.tick()
+    drive()
 
     assert handle.result == "1-2 fast None [0.5] km"
 
@@ -299,20 +323,23 @@ def test_annotated_arguments_of_the_wrong_shape_are_rejected(
 
 
 def test_binding_an_undeclared_function_fails_at_bind_time(jobs: JobService) -> None:
-    def plain(ctx: JobContext) -> int:
+    def plain(ctx: WorkerContext) -> int:
         return 1
 
     with pytest.raises(QgisSdkDeclarationError, match="requires a function with @job"):
         jobs.bind(plain)
 
 
-def test_a_result_of_the_wrong_type_still_fails_the_job(jobs: JobService) -> None:
+def test_a_result_of_the_wrong_type_still_fails_the_job(
+    jobs: JobService, drive: Callable[[], None]
+) -> None:
     @job(id="fn.liar", title="Liar")
-    def liar(ctx: JobContext) -> SumResult:
+    def liar(ctx: WorkerContext) -> SumResult:
         return "three"  # type: ignore[return-value]
 
     handle = jobs.bind(liar).delay()
     jobs.tick()
+    drive()
 
     assert handle.status is JobStatus.FAILED
     assert isinstance(handle.error, QgisSdkDeclarationError)

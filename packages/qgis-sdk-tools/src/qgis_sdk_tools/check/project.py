@@ -9,7 +9,8 @@ Rules owned here: ``PROJECT001`` (no package), ``META001`` (a hand-written
 hand-written ``classFactory``; ``host()`` binds it), ``CONFIG001`` for
 ``[tool.qgis-sdk.check]``. The ``pyproject.toml`` rules live in
 :mod:`qgis_sdk_tools.project`, the version rules in :mod:`.versions`, the
-native UI rules (``UI001``-``UI003``, ``UI005``, ``ICON001``) in :mod:`.ui`.
+native UI rules (``UI001``-``UI003``, ``UI005``, ``ICON001``) in :mod:`.ui`,
+and the worker-safety rules for jobs (``JOB001``-``JOB003``) in :mod:`.jobs`.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ from qgis_sdk_tools.manifest import read_pyproject, table
 from .buckets import HOST_ROOTS, BucketReport, bucket_imports, import_findings
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
 from .imports import check_source
+from .jobs import check_jobs
 from .ui import check_bindings
 from .versions import (
     check_generated_clients,
@@ -116,6 +118,7 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         relative = path.relative_to(root)
         source = path.read_text(encoding="utf-8")
         diagnostics.extend(check_source(source, path=relative, native_modules=native))
+        diagnostics.extend(check_jobs(source, path=relative))
         package = root / relative.parts[0] if len(relative.parts) > 1 else None
         diagnostics.extend(
             check_bindings(

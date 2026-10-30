@@ -7,11 +7,11 @@ from dataclasses import dataclass
 
 import pytest
 from qgis_sdk.core import (
-    JobContext,
     PluginContext,
     PluginRuntime,
     ResourceScope,
     UiContext,
+    WorkerContext,
 )
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin
@@ -33,7 +33,7 @@ class Total:
 
 
 @job(id="slow_sum", title="Slow sum")
-def slow_sum(ctx: JobContext, a: int, b: int) -> Total:
+def slow_sum(ctx: WorkerContext, a: int, b: int) -> Total:
     return Total(total=a + b)
 
 
@@ -87,7 +87,14 @@ def ui(scope: ResourceScope) -> FakeUi:
 
 
 @pytest.fixture
-def runtime(scope: ResourceScope, ui: FakeUi) -> Iterator[PluginRuntime]:
+def workers() -> FakeWorkers:
+    return FakeWorkers()
+
+
+@pytest.fixture
+def runtime(
+    scope: ResourceScope, ui: FakeUi, workers: FakeWorkers
+) -> Iterator[PluginRuntime]:
     context = PluginContext(
         notifications=RecordingNotifications(scope), scope=scope, ui=ui
     )
@@ -95,7 +102,7 @@ def runtime(scope: ResourceScope, ui: FakeUi) -> Iterator[PluginRuntime]:
     runtime.start()
     instance = runtime.instance
     assert isinstance(instance, FieldTools)
-    instance.jobs = JobService(scope, workers=FakeWorkers(), gui_thread=lambda: False)
+    instance.jobs = JobService(scope, workers=workers, gui_thread=lambda: False)
     yield runtime
     runtime.unload()
 
@@ -168,7 +175,7 @@ def test_unknown_actions_and_fields_are_refused_by_name(actions: ViewActions) ->
 
 
 def test_a_job_submitting_action_returns_its_handle_and_is_busy_until_settled(
-    actions: ViewActions, runtime: PluginRuntime
+    actions: ViewActions, runtime: PluginRuntime, workers: FakeWorkers
 ) -> None:
     handle = actions.sum_slowly(a=1, b=2)
 
@@ -180,8 +187,9 @@ def test_a_job_submitting_action_returns_its_handle_and_is_busy_until_settled(
 
     instance = runtime.instance
     assert isinstance(instance, FieldTools)
-    while not handle.status.settled:
-        instance.jobs.tick()
+    instance.jobs.tick()  # the tick hands the body to the worker
+    workers.run_all()  # ...and the worker, not this thread, runs it
+    instance.jobs.tick()  # ...and reports back here
 
     assert handle.result == Total(total=3)
     assert actions.sum_slowly.running is False

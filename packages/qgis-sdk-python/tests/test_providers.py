@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 import pytest
 from qgis_sdk.algorithms import describe_algorithm, parameter_kind
-from qgis_sdk.core import AlgorithmContext, JobContext
+from qgis_sdk.core import AlgorithmContext, WorkerContext
 from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.declarations._plugin import plugin
 from qgis_sdk.models import (
@@ -155,7 +155,9 @@ def test_a_missing_leading_context_parameter_is_refused() -> None:
     with pytest.raises(QgisSdkDeclarationError, match="first parameter must be the"):
 
         @provider.algorithm
-        def wrong_context(ctx: JobContext, layer_id: LayerInput) -> VectorLayerInfo: ...
+        def wrong_context(
+            ctx: WorkerContext, layer_id: LayerInput
+        ) -> VectorLayerInfo: ...
 
     with pytest.raises(QgisSdkDeclarationError, match="first parameter must be the"):
 

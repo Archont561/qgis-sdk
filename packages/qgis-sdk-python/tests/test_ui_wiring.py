@@ -17,11 +17,11 @@ from typing import Any
 
 import pytest
 from qgis_sdk.core import (
-    JobContext,
     PluginContext,
     PluginRuntime,
     ResourceScope,
     UiContext,
+    WorkerContext,
 )
 from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
@@ -62,7 +62,7 @@ class Tick:
 
 
 @job(id="slow_sum", title="Slow sum")
-def slow_sum(ctx: JobContext, a: int, b: int) -> int:
+def slow_sum(ctx: WorkerContext, a: int, b: int) -> int:
     ctx.progress.report(0.5)
     return a + b
 

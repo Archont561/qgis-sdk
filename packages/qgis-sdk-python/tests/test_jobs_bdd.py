@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import pytest
 from pytest_bdd import given, parsers, scenarios, then, when
-from qgis_sdk.core import JobContext, ResourceScope
+from qgis_sdk.core import ResourceScope, WorkerContext
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, JobSubscription, job
 from qgis_sdk.models import QgisSdkJobWaitRefusedError
 from qgis_sdk.testing import FakeWorkers
@@ -30,15 +30,9 @@ AUTHOR_CODE_RAN: list[str] = []
 
 
 @job(id="bdd.sum", title="Sum two numbers")
-def add(ctx: JobContext, a: int, b: int) -> SumResult:
+def add(ctx: WorkerContext, a: int, b: int) -> SumResult:
     AUTHOR_CODE_RAN.append("ran")
     return SumResult(a + b)
-
-
-@job(id="bdd.offloaded", title="Sum on a worker")
-async def offloaded_add(ctx: JobContext, a: int, b: int) -> SumResult:
-    total = await ctx.workers.offload(lambda: a + b)
-    return SumResult(total)
 
 
 @dataclass
@@ -116,24 +110,22 @@ def view_delays_sum(scenario: JobsScenario, a: int, b: int) -> None:
     scenario.submit(scenario.view_jobs, add, a, b)
 
 
-@when("the view delays the offloaded sum job")
-def view_delays_offloaded(scenario: JobsScenario) -> None:
-    scenario.submit(scenario.view_jobs, offloaded_add, 1, 2)
-
-
-@when("the view delays the offloaded sum job through its parent service")
+@when("the view delays the sum job through its parent service")
 def view_delays_through_parent(scenario: JobsScenario) -> None:
     parent = scenario.view_jobs.parent
     assert parent is scenario.jobs
-    scenario.submit(parent, offloaded_add, 1, 2)
+    scenario.submit(parent, add, 1, 2)
 
 
-@when("the view delays a job that is cancelled while it runs and finishes anyway")
+@when("the view delays a job that is cancelled while it runs and ignores it")
 def view_delays_stubborn(scenario: JobsScenario) -> None:
-    @job(id="bdd.stubborn", title="Finishes despite a request")
-    def stubborn(ctx: JobContext, a: int, b: int) -> SumResult:
+    @job(id="bdd.stubborn", title="Ignores a request")
+    def stubborn(ctx: WorkerContext, a: int, b: int) -> SumResult:
         assert scenario.handle is not None
         scenario.handle.cancel()
+        # The body sees the request and does not stop: the job still ends
+        # cancelled, because a request that arrives before the worker reports
+        # settles at the report (decision-65 keeps decision-21's safety rule).
         assert ctx.cancellation.is_cancelled()
         return SumResult(a + b)
 
@@ -143,7 +135,7 @@ def view_delays_stubborn(scenario: JobsScenario) -> None:
 @when("the view delays a job that re-enters the tick while it runs")
 def view_delays_reentering(scenario: JobsScenario) -> None:
     @job(id="bdd.reentrant", title="Opens a modal dialog while running")
-    def reentrant(ctx: JobContext, a: int, b: int) -> SumResult:
+    def reentrant(ctx: WorkerContext, a: int, b: int) -> SumResult:
         scenario.nested_ticks.append(scenario.jobs.tick())
         return SumResult(a + b)
 
@@ -155,8 +147,8 @@ def host_ticks(scenario: JobsScenario) -> None:
     scenario.jobs.tick()
 
 
-@when("the worker reports and the host ticks once")
-def worker_reports_then_tick(scenario: JobsScenario) -> None:
+@when("the worker runs the job and the host ticks once")
+def worker_runs_then_tick(scenario: JobsScenario) -> None:
     scenario.workers.run_all()
     scenario.jobs.tick()
 
@@ -206,11 +198,18 @@ def handle_succeeded(scenario: JobsScenario, total: int) -> None:
     assert scenario.handle.result == SumResult(total)
 
 
-@then("the handle succeeded with cancellation requested")
-def handle_succeeded_despite_request(scenario: JobsScenario) -> None:
+@then("the handle is cancelled with cancellation requested")
+def handle_cancelled_requested(scenario: JobsScenario) -> None:
     assert scenario.handle is not None
-    assert scenario.handle.status is JobStatus.SUCCEEDED
+    assert scenario.handle.status is JobStatus.CANCELLED
     assert scenario.handle.cancel_requested is True
+
+
+@then("the handle is running with no cancellation requested")
+def handle_running_open(scenario: JobsScenario) -> None:
+    assert scenario.handle is not None
+    assert scenario.handle.status is JobStatus.RUNNING
+    assert scenario.handle.cancel_requested is False
 
 
 @then("the handle is still running with cancellation requested")

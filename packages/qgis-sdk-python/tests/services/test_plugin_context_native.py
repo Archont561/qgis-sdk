@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 def test_native_plugin_context_wires_every_curated_service(
     native_services: Services,
 ) -> None:
+    from qgis.core import QgsApplication
     from qgis_sdk.adapters.qgis import (
         NativeAlgorithms,
         NativeLayers,
@@ -32,7 +33,7 @@ def test_native_plugin_context_wires_every_curated_service(
         NativeProject,
         NativeSettings,
         NativeStyles,
-        ThreadPoolWorkers,
+        QgsTaskWorkers,
         native_plugin_context,
     )
     from qgis_sdk.bridge.host import HostServices
@@ -51,7 +52,9 @@ def test_native_plugin_context_wires_every_curated_service(
     assert isinstance(context.settings, NativeSettings)
     assert isinstance(context.styles, NativeStyles)
     assert isinstance(context.algorithms, NativeAlgorithms)
-    assert isinstance(context.workers, ThreadPoolWorkers)
+    # The worker backend is the task manager since 0.9.0 (decision-65).
+    assert isinstance(context.workers, QgsTaskWorkers)
+    assert context.workers.manager is QgsApplication.taskManager()
     assert isinstance(context.network, NetworkClient)
     assert isinstance(context.notifications, NativeNotifications)
     assert isinstance(context.network.transport, NativeNetworkTransport)

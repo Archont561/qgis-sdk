@@ -115,7 +115,8 @@ def fake_ui_context(
     ``desktop`` and ``ui`` are carried when given. Shared service objects
     keep their own scopes; the caller controls their lifetimes.
     ``runtime`` - a started ``PluginRuntime`` - builds ``actions`` and
-    ``streams`` as the host would.
+    ``streams`` as the host would, dispatches action calls on behalf of
+    ``scope``, and adds ``jobs`` when the plugin declares any.
     """
     from qgis_sdk.ui.actions import ViewActions
     from qgis_sdk.ui.streams import ViewStreams
@@ -133,8 +134,14 @@ def fake_ui_context(
             raise QgisSdkUiError(
                 "fake_ui_context: pass runtime or actions/streams, not both"
             )
-        services["actions"] = ViewActions(runtime, view_id=view_id)
+        services["actions"] = ViewActions(runtime, view_id=view_id, scope=scope)
         services["streams"] = ViewStreams(runtime, view_id=view_id)
+        if "jobs" not in services:
+            context = getattr(runtime, "context", None)
+            if context is not None and context.has("jobs"):
+                # The same view-scoped facade a real host builds, so a test
+                # sees the owner rules instead of a plugin-lifetime stand-in.
+                services["jobs"] = context.jobs.scoped(scope)
     return UiContext(notifications, view, scope, **services)
 
 

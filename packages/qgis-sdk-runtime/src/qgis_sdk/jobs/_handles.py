@@ -65,7 +65,7 @@ class JobHandle:
     @property
     def cancel_requested(self) -> bool:
         """Whether anyone asked the job to stop, acknowledged or not."""
-        return self._attempt.job.cancellation.is_cancelled()
+        return self._attempt.cancelled
 
     @property
     def owner_closed(self) -> bool:
@@ -96,8 +96,15 @@ class JobHandle:
     # -- control
 
     def cancel(self) -> bool:
-        """Request cancellation; return whether the job was still active."""
-        return self._attempt.job.cancel()
+        """Request cancellation; return whether the job was still active.
+
+        The request reaches the worker at once through the attempt's own
+        signal, so a body polling ``ctx.cancellation`` sees it; the handle only
+        settles when the worker reports.
+        """
+        active = self._attempt.job.cancel()
+        self._attempt.request_cancel()
+        return active
 
     def get(self, timeout: float | None = None) -> Any:
         """Block until the job settles and return its result.
@@ -153,6 +160,22 @@ class JobHandle:
         return f"JobHandle({self.id!r}, {self.status.value})"
 
 
+def as_handles(handles: tuple[object, ...]) -> tuple[JobHandle, ...]:
+    """Check ``after`` takes job handles; a submitted prerequisite, never a promise.
+
+    Shared by :meth:`BoundJob.after`, :meth:`JobService.after` and
+    ``ctx.jobs.after`` so all three refuse the same way, before anything is
+    scheduled.
+    """
+    for handle in handles:
+        if not isinstance(handle, JobHandle):
+            raise TypeError(
+                f"after() takes job handles, got {type(handle).__name__}; "
+                "submit the prerequisite with delay first"
+            )
+    return tuple(handles)
+
+
 #: How a ``JobHandle`` reads as an action *result* (decision-55: a surface's
 #: ``ctx.actions.<id>()`` and a page both get the id and the status back; the
 #: handle itself never crosses). ``-> JobHandle`` is a describable annotation.
@@ -179,6 +202,22 @@ class BoundJob:
     description: JobDescription
     function: Callable[..., Any]
     service: JobService = field(repr=False)
+    prerequisites: tuple[JobHandle, ...] = ()
+
+    def after(self, *handles: JobHandle) -> BoundJob:
+        """Order this job behind work already submitted; the body waits for it.
+
+        The prerequisite starts first and this job's body is not handed to a
+        worker until every one of them succeeded - the backend never sees work
+        it must not start yet. A prerequisite that fails or is cancelled fails
+        this job with ``QgisSdkJobPrerequisiteError`` before its body runs.
+        """
+        return BoundJob(
+            self.description,
+            self.function,
+            self.service,
+            self.prerequisites + as_handles(handles),
+        )
 
     def delay(self, **arguments: Any) -> JobHandle:
         """Submit one attempt with the inputs as keywords; no author code runs yet."""

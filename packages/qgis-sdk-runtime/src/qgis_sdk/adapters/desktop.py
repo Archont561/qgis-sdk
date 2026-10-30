@@ -80,6 +80,7 @@ class DesktopLifecycleAdapter:
         self._context = context_factory(iface)
         self._runtime = PluginRuntime(app, self._context)
         self._sessions: list[Any] = []
+        self._job_pump: Any = None
 
     @property
     def iface(self) -> object | None:
@@ -88,13 +89,24 @@ class DesktopLifecycleAdapter:
 
     @property
     def context(self) -> PluginContext:
-        """Return the context the runtime binds to the plugin."""
-        return self._context
+        """Return the context the runtime binds to the plugin.
+
+        Read back from the runtime rather than kept here: the runtime adds
+        ``jobs`` to the context it was given when the plugin declares any
+        (TASK-116), and every surface must be built from the context the
+        plugin itself reads.
+        """
+        return self._runtime.context
 
     @property
     def runtime(self) -> PluginRuntime:
         """Return the lifecycle owner for advanced adapters and tests."""
         return self._runtime
+
+    @property
+    def job_pump(self) -> Any | None:
+        """The timer that delivers this plugin's job callbacks, once it runs."""
+        return self._job_pump
 
     def console(self) -> Any:
         """Return a console session bound to this plugin's own context.
@@ -114,9 +126,24 @@ class DesktopLifecycleAdapter:
     def initGui(self) -> None:
         """Construct and bind the author plugin once; QGIS calls this."""
         self._runtime.start()
+        self._start_job_pump()
+
+    def _start_job_pump(self) -> None:
+        """Tick the plugin's jobs on the GUI thread while it runs (TASK-116)."""
+        service = self._runtime.jobs
+        if service is None:
+            return
+        from qgis_sdk.adapters.qgis.jobs import QgsJobPump
+
+        self._job_pump = QgsJobPump(service)
+        self._job_pump.start()
 
     def unload(self) -> None:
         """Dispose owned resources; repeated calls are safe."""
+        if self._job_pump is not None:
+            # Stop delivery before anything the callbacks read is disposed.
+            self._job_pump.stop()
+            self._job_pump = None
         sessions, self._sessions = self._sessions, []
         for session in sessions:
             session.close()

@@ -13,12 +13,12 @@ from dataclasses import dataclass, field
 
 import pytest
 from qgis_sdk.core import (
-    JobContext,
     PluginContext,
     PluginRuntime,
     PluginRuntimeState,
     QuiesceOutcome,
     ResourceScope,
+    WorkerContext,
 )
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobService, job
@@ -92,8 +92,8 @@ class TestScope:
 
 
 @job(id="sum", title="Sum")
-async def double(ctx: JobContext, value: int) -> int:
-    return await ctx.workers.offload(lambda: value * 2)
+def double(ctx: WorkerContext, value: int) -> int:
+    return value * 2
 
 
 class TestJobService:

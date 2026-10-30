@@ -5,10 +5,12 @@ from .contracts import (
     Cancellation,
     DesktopAccess,
     Notifications,
+    ObservableProgress,
     Progress,
     Ui,
     ViewControl,
     Workers,
+    WorkItem,
 )
 from .files import Files
 from .layers import Layers
@@ -48,6 +50,7 @@ __all__ = [
     "NotificationLevel",
     "Notifications",
     "NotificationsBase",
+    "ObservableProgress",
     "Params",
     "Processing",
     "Progress",
@@ -57,5 +60,6 @@ __all__ = [
     "Styles",
     "Ui",
     "ViewControl",
+    "WorkItem",
     "Workers",
 ]

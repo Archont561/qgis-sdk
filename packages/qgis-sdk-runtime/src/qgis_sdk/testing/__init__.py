@@ -19,7 +19,7 @@ from .fakes import (
     RecordingNotifications,
 )
 from .files import FakeFiles
-from .jobs import FakeWorkers
+from .jobs import FakeWorkers, ThreadWorkers
 from .network import (
     FakeNetworkTransport,
     PendingRequest,
@@ -53,6 +53,7 @@ __all__ = [
     "QgisSdkNetworkFakeError",
     "RecordingLog",
     "RecordingNotifications",
+    "ThreadWorkers",
     "build_surface",
     "fake_ui_context",
     "reply",

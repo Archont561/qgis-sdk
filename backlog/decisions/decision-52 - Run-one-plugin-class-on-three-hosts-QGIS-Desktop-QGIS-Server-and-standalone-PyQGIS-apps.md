@@ -61,6 +61,34 @@ the author to say which hosts a plugin targets.
    and multi-process state are the operator's concern; the SDK ships the
    plugin and the local loop. Mobile (QField) is out of scope.
 
+## Implementation note (2026-10-30)
+
+**The server host needs a QGIS built with the server.** `qgis.server` -
+`QgsServer`, `QgsServerInterface`, `QgsServerFilter`, `QgsService` - exists only
+when QGIS is configured with `WITH_SERVER=ON` and Python bindings: `release-4_2`
+`CMakeLists.txt` defaults `WITH_SERVER` to `FALSE` and makes `WITH_SERVER_PLUGINS`
+follow `WITH_BINDINGS`. conda-forge passes `-D WITH_SERVER=FALSE` explicitly in
+`recipe/build.sh` and `recipe/bld.bat`, so no conda build of QGIS has it -
+including the pixi environment this workspace qualifies on, whose installed
+`qgis-4.2.3` has no `libqgis_server`, no `qgis/server`, no `_server.so` and no
+`qgis_mapserv.fcgi` (`from qgis.server import QgsServer` is a
+`ModuleNotFoundError` there). It is available from the Debian/Ubuntu packages
+(`qgis-server` plus `python3-qgis`), the official qgis.org installers, a source
+build with `-DWITH_SERVER=ON -DWITH_BINDINGS=ON`, and the `qgis/qgis-server`
+images.
+
+**What that changes here.** Point 2 splits: the declarations, `ServerContext` and
+the generated `serverClassFactory` are proven against a scripted fake
+`QgsServerInterface` in `qgis_sdk.testing` - which `test --target server` needs in
+any case - and the in-process `QgsServer` claim is its own criterion behind a
+`qgis.server` skip, so any build that has the module runs it and a CI row that
+installs `qgis-server`/`python3-qgis` proves it. `check` gains `HOST003`: a
+project that declares the server host while the QGIS it builds against has no
+`qgis.server`, reported at build time instead of as an `ImportError` in a
+deployed server. The gate records that native row as run or blocked with this
+evidence, never as passed. `ctx.host` and the `[tool.qgis-sdk] hosts` set are
+unchanged, and nothing about the Desktop or app hosts moves.
+
 ## Consequences
 
 - Service contracts gain nothing host-specific; the server adds

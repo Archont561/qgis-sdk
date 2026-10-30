@@ -1,6 +1,13 @@
 """Runtime-independent composition of author-facing contexts and lifetimes."""
 
-from .contexts import AlgorithmContext, JobContext, PluginContext, UiContext
+from .contexts import (
+    GUI_BOUND_CAPABILITIES,
+    AlgorithmContext,
+    JobContext,
+    PluginContext,
+    UiContext,
+    WorkerContext,
+)
 from .runtime import (
     PluginRuntime,
     PluginRuntimeState,
@@ -17,6 +24,7 @@ from .scheduling import (
 from .scope import ResourceScope
 
 __all__ = [
+    "GUI_BOUND_CAPABILITIES",
     "AlgorithmContext",
     "Handoff",
     "Job",
@@ -30,5 +38,6 @@ __all__ = [
     "ResourceScope",
     "StepScheduler",
     "UiContext",
+    "WorkerContext",
     "Yield",
 ]

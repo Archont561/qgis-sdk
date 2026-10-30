@@ -37,10 +37,10 @@ from qgis_sdk.adapters.qgis import native_plugin_context
 from qgis_sdk.adapters.surfaces import SurfaceHost
 from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
 from qgis_sdk.core import (
-    JobContext,
     PluginContext,
     PluginRuntime,
     ResourceScope,
+    WorkerContext,
 )
 from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
@@ -86,7 +86,7 @@ class Tick:
 
 
 @job(id="slow_sum", title="Slow sum")
-def slow_sum(ctx: JobContext, a: int, b: int) -> int:
+def slow_sum(ctx: WorkerContext, a: int, b: int) -> int:
     return a + b
 
 

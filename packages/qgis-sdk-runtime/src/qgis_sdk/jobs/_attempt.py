@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import threading
 from collections.abc import Callable
 from typing import (
@@ -10,8 +9,8 @@ from typing import (
     Any,
 )
 
-from qgis_sdk.core import JobContext, ResourceScope
-from qgis_sdk.core.scheduling import Job
+from qgis_sdk.core import ResourceScope, WorkerContext
+from qgis_sdk.core.scheduling import Job, Yield
 from qgis_sdk.declarations import (
     QgisSdkDeclarationError,
     type_name,
@@ -28,10 +27,13 @@ from qgis_sdk.jobs._subscriptions import JobFault, JobSubscription
 from qgis_sdk.models import (
     QgisSdkJobCancelledError,
     QgisSdkJobNotSettledError,
+    QgisSdkJobPrerequisiteError,
     QgisSdkScopeClosedError,
 )
+from qgis_sdk.services import WorkItem
 
 if TYPE_CHECKING:
+    from qgis_sdk.jobs._handles import JobHandle
     from qgis_sdk.jobs._service import JobService, _Runtime
 
 
@@ -39,13 +41,23 @@ if TYPE_CHECKING:
 
 
 class _Progress:
-    """The attempt's ``Progress`` service: thread-safe to report, delivered on the tick."""
+    """The attempt's ``Progress`` service: reported from the worker, delivered on the tick.
 
-    __slots__ = ("_latest", "_pending")
+    The worker writes and the driving thread reads, so the fields sit behind one
+    lock: reporting never blocks and never delivers, and a fraction reported
+    between two ticks is delivered once, at the next one. ``observe`` is the
+    backend's side of the same signal (``ObservableProgress``): the QGIS task
+    manager mirrors it into its task bar, and the callback runs on whichever
+    thread reported.
+    """
+
+    __slots__ = ("_latest", "_lock", "_observers", "_pending")
 
     def __init__(self) -> None:
         self._latest: float | None = None
         self._pending = False
+        self._observers: list[Callable[[float], None]] = []
+        self._lock = threading.Lock()
 
     def report(self, fraction: float) -> None:
         """Record the latest fraction; the subscriber hears it at the next tick."""
@@ -53,23 +65,43 @@ class _Progress:
             raise ValueError(
                 f"progress must be a fraction from 0.0 to 1.0, not {fraction!r}"
             )
-        self._latest = float(fraction)
-        self._pending = True
+        value = float(fraction)
+        with self._lock:
+            self._latest = value
+            self._pending = True
+            observers = tuple(self._observers)
+        for observer in observers:
+            observer(value)
+
+    def observe(self, callback: Callable[[float], None]) -> None:
+        """Hear every fraction reported from now on, on the reporting thread."""
+        with self._lock:
+            self._observers.append(callback)
 
     @property
     def latest(self) -> float | None:
-        return self._latest
+        with self._lock:
+            return self._latest
 
     def take(self) -> float | None:
         """Return the fraction to deliver now, or ``None`` when nothing is new."""
-        if not self._pending:
-            return None
-        self._pending = False
-        return self._latest
+        with self._lock:
+            if not self._pending:
+                return None
+            self._pending = False
+            return self._latest
 
 
 class _Cancellation:
-    """The attempt's read-only ``Cancellation`` service."""
+    """The attempt's read-only ``Cancellation`` service, polled from the worker.
+
+    Two sources answer it and either is enough. The attempt's own
+    :class:`threading.Event` is set when a handle is cancelled or its owner is
+    disposed, and it is the signal a worker polls; the scheduler's token is
+    read as well because a host quiescing for a reload cancels the job
+    directly. Both are requests, never proof that the body stopped: the
+    attempt only settles when the worker reports.
+    """
 
     __slots__ = ("_attempt",)
 
@@ -77,8 +109,7 @@ class _Cancellation:
         self._attempt = attempt
 
     def is_cancelled(self) -> bool:
-        job = self._attempt._job
-        return job is not None and job.cancellation.is_cancelled()
+        return self._attempt.cancelled
 
 
 class _Attempt:
@@ -91,14 +122,18 @@ class _Attempt:
         owner: JobService,
         description: JobDescription,
         logical_id: str,
+        prerequisites: tuple[JobHandle, ...] = (),
     ) -> None:
         self.runtime = runtime
         self.owner = owner
         self.description = description
         self.id = logical_id
+        self.prerequisites = prerequisites
+        """Jobs this attempt runs after (``ctx.jobs.after``), submitted earlier."""
         self.attempt = 1
         self.scope = runtime.scope.child()
         self.progress = _Progress()
+        self._cancelled = threading.Event()
         self._job: Job | None = None
         self._subscriptions: dict[JobEvent, dict[JobSubscription, None]] = {
             event: {} for event in _EVENTS
@@ -122,6 +157,19 @@ class _Attempt:
         job = self._job
         assert job is not None, "an attempt is submitted before it is handed out"
         return job
+
+    @property
+    def cancelled(self) -> bool:
+        """Whether a cancellation was requested: by the owner or a quiesce.
+
+        Read from a worker through ``ctx.cancellation.is_cancelled()``, so the
+        first half is a :class:`threading.Event`; the scheduler's request
+        covers a host quiescing for a replacement.
+        """
+        job = self._job
+        return self._cancelled.is_set() or (
+            job is not None and job.cancellation.is_cancelled()
+        )
 
     @property
     def status(self) -> JobStatus:
@@ -239,6 +287,11 @@ class _Attempt:
         """The owning view is gone: detach now, ask the job to stop, keep the attempt."""
         self._owner_closed = True
         self.detach()
+        self.request_cancel()
+
+    def request_cancel(self) -> None:
+        """Ask the worker to stop; the attempt keeps the outcome until it reports."""
+        self._cancelled.set()
         self.job.cancel()
 
     def abandoned(self) -> None:
@@ -249,6 +302,10 @@ class _Attempt:
 
 
 _TICK_IN_PROGRESS = "a tick is already in progress on this thread"
+_NOT_THE_DRIVING_THREAD = (
+    "the tick and quiesce belong to the thread that built the service; a job "
+    "body runs on a worker and has no tick of its own"
+)
 
 _TERMINAL_EVENT: dict[JobStatus, JobEvent] = {
     JobStatus.SUCCEEDED: "success",
@@ -257,23 +314,58 @@ _TERMINAL_EVENT: dict[JobStatus, JobEvent] = {
 }
 
 
+async def _wait_for_prerequisites(attempt: _Attempt) -> None:
+    """Hold the body until the jobs it declared it comes after have settled.
+
+    A dependency is enforced here, before the body is handed to a worker, so a
+    backend never sees work it must not start yet - one task, no sub-tasks, and
+    no second scheduler inside the task manager. Waiting costs one ``Yield``
+    per tick and nothing else: the job stays visible, cancellable and named as
+    a blocker like any other. A prerequisite that did not succeed fails this
+    attempt without running its body.
+    """
+    if not attempt.prerequisites:
+        return
+    while True:
+        pending = [
+            handle for handle in attempt.prerequisites if not handle.status.settled
+        ]
+        if not pending:
+            break
+        await Yield()
+    for handle in attempt.prerequisites:
+        status = handle.status
+        if status is not JobStatus.SUCCEEDED:
+            raise QgisSdkJobPrerequisiteError(attempt.id, handle.id, status)
+
+
 async def _run_attempt(
     attempt: _Attempt, function: Callable[..., Any], arguments: dict[str, Any]
 ) -> object:
-    """The coroutine the scheduler drives: inject the context, call, check the result."""
+    """Hand the whole body to a worker, wait for it here, check what came back.
+
+    The coroutine itself only ever runs on the driving thread: it submits a
+    callable and suspends on the worker's handoff, so the body is never
+    executed by whoever called :meth:`JobService.tick`. The context built for
+    that callable carries progress and cancellation and refuses everything
+    else (decision-65); the result is validated here, on the driving thread,
+    before any subscriber sees it.
+    """
     attempt.scope.ensure_open()
-    context = JobContext(
+    await _wait_for_prerequisites(attempt)
+    workers = attempt.runtime.workers
+    assert workers is not None, "submission is refused without a worker backend"
+    context = WorkerContext(
         progress=attempt.progress,
         cancellation=_Cancellation(attempt),
-        scope=attempt.scope,
-        workers=attempt.runtime.workers,
-        network=attempt.runtime.network,
-        algorithms=attempt.runtime.algorithms,
-        project=attempt.runtime.project,
     )
-    outcome = function(context, **arguments)
-    if inspect.isawaitable(outcome):
-        outcome = await outcome
+    item = WorkItem(
+        title=attempt.description.title,
+        progress=attempt.progress,
+        cancel=attempt.request_cancel,
+    )
+    handoff = workers.offload(lambda: function(context, **arguments), item=item)
+    outcome = await handoff
     description = attempt.description
     if not _accepts(outcome, description.result_type):
         raise QgisSdkDeclarationError(

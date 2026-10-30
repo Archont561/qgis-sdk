@@ -24,6 +24,7 @@ from PyQt6.QtCore import QRunnable, QThreadPool
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.core.scheduling import Handoff
 from qgis_sdk.models import QgisSdkJobCancelledError
+from qgis_sdk.services import WorkItem
 
 __all__ = ["ThreadPoolWorkers"]
 
@@ -71,7 +72,9 @@ class ThreadPoolWorkers:
         """How many callables were handed to the pool."""
         return self._offloaded
 
-    def offload(self, fn: Callable[[], Any]) -> Handoff:
+    def offload(
+        self, fn: Callable[[], Any], *, item: WorkItem | None = None
+    ) -> Handoff:
         """Queue ``fn`` on the pool; the job suspends on the returned handoff."""
         self._scope.ensure_open()
         cancelled = threading.Event()

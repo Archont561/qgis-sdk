@@ -21,13 +21,23 @@ class QgisSdkScopeClosedError(QgisSdkError):
 
 
 class QgisSdkUnsupportedCapabilityError(QgisSdkError):
-    """The selected runtime does not offer an explicitly requested capability."""
+    """The selected runtime does not offer an explicitly requested capability.
+
+    ``reason`` is set when the capability exists elsewhere in the same runtime
+    but not *here* - a worker thread, for example, which must not touch the
+    project the driving thread owns (decision-65). The message then says why
+    instead of only that the host lacks the service.
+    """
 
     code = "unsupported_capability"
 
-    def __init__(self, capability: str) -> None:
+    def __init__(self, capability: str, reason: str | None = None) -> None:
         self.capability = capability
-        super().__init__(f"Capability {capability!r} is unavailable in this runtime")
+        self.reason = reason
+        message = f"Capability {capability!r} is unavailable in this runtime"
+        if reason is not None:
+            message = f"Capability {capability!r} is unavailable here: {reason}"
+        super().__init__(message)
 
 
 class QgisSdkOptionalDependencyError(QgisSdkError):
@@ -203,6 +213,29 @@ class QgisSdkJobRejectedError(QgisSdkError):
         self.problems = tuple(problems)
         listed = "; ".join(self.problems)
         super().__init__(f"Job {job_id!r} was refused: {listed}")
+
+
+class QgisSdkJobPrerequisiteError(QgisSdkError):
+    """A job declared with ``ctx.jobs.after(...)`` never started.
+
+    ``ctx.jobs.after(handle)`` orders a job behind work already submitted. The
+    ordering is enforced before the body reaches a worker, so the dependent job
+    fails with this error - naming the prerequisite and how it ended - instead
+    of running against a result that does not exist.
+    """
+
+    code = "job_prerequisite_failed"
+
+    def __init__(
+        self, job_id: str, prerequisite_id: str, prerequisite_status: object
+    ) -> None:
+        self.job_id = job_id
+        self.prerequisite_id = prerequisite_id
+        self.prerequisite_status = str(prerequisite_status)
+        super().__init__(
+            f"Job {job_id!r} waits for {prerequisite_id!r}, which ended "
+            f"{self.prerequisite_status}; its body never ran"
+        )
 
 
 class QgisSdkJobNotSettledError(QgisSdkError):
@@ -511,6 +544,16 @@ class QgisSdkBlockingOnGuiThreadError(QgisSdkNetworkError):
             method=method,
             url=url,
         )
+
+
+class QgisSdkThreadSafetyWarning(UserWarning):
+    """A GUI-bound capability was read from a thread that does not own it.
+
+    A warning rather than an error, because raising would turn a plugin that
+    happens to work into a failing one; a development session (``qgis-sdk
+    dev``) escalates the same finding to
+    :class:`QgisSdkUnsupportedCapabilityError` at the call site (decision-69).
+    """
 
 
 class QgisSdkServiceResponseError(QgisSdkNetworkError):

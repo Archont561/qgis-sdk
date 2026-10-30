@@ -3,11 +3,12 @@
 ``qgis_sdk.adapters.desktop.host()`` is the one place that knows a plugin is
 running inside QGIS Desktop (decision-43). This module is what it calls there -
 or what a plugin's own ``context_factory`` calls - so a plugin gets the whole
-curated surface - layers, project, settings, styles, Processing,
-workers and the network client - on ``self.ctx`` with one line, and the web
-view built from the same context (``HostServices.from_context``) answers from
-the very same instances. Everything is owned by the scope passed in: closing
-it releases the layers, aborts the requests in flight and drains the pool.
+curated surface - layers, project, settings, styles, Processing, the
+task-manager worker backend and the network client - on ``self.ctx`` with one
+line, and the web view built from the same context
+(``HostServices.from_context``) answers from the very same instances.
+Everything is owned by the scope passed in: closing it releases the layers,
+aborts the requests in flight and stops new submissions.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ from .processing import NativeProcessing
 from .project import NativeProject
 from .settings import NativeSettings
 from .styles import NativeStyles
-from .workers import ThreadPoolWorkers
+from .tasks import QgsTaskWorkers
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +86,7 @@ def native_plugin_context(
         settings=NativeSettings(scope, prefix=settings_prefix),
         styles=NativeStyles(layers, scope),
         algorithms=algorithms,
-        workers=ThreadPoolWorkers(scope),
+        workers=QgsTaskWorkers(scope),
         processing=NativeProcessing(
             layers=layers,
             algorithms=algorithms,

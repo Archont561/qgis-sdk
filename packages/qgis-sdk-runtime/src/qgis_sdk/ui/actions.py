@@ -17,7 +17,9 @@ from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from typing import Any, Protocol
 
+from qgis_sdk.core import ResourceScope
 from qgis_sdk.declarations import ActionDescription, PluginDescription
+from qgis_sdk.jobs._ownership import invoking
 from qgis_sdk.models import QgisSdkFormError, QgisSdkUiError
 
 from .form_fields import coerce_values
@@ -46,10 +48,13 @@ class ViewActions:
     ``runtime`` is the started ``PluginRuntime`` (or anything with its
     ``description`` and ``actions``): the description is the allowlist and the
     bound handlers are read on every call, so an unloaded runtime refuses
-    instead of calling a stale instance. ``view_id`` names the calling surface.
+    instead of calling a stale instance. ``view_id`` names the calling surface;
+    ``scope`` is the view's own scope, and the handler runs on its behalf, so a
+    job the handler submits belongs to this window (decision-65 §3) unless it
+    asks for ``ctx.jobs.plugin``.
     """
 
-    __slots__ = ("_markers", "_running", "_runtime", "_view_id")
+    __slots__ = ("_markers", "_running", "_runtime", "_scope", "_view_id")
 
     def __init__(
         self,
@@ -57,9 +62,11 @@ class ViewActions:
         *,
         view_id: str,
         markers: Mapping[str, Mapping[str, str]] | None = None,
+        scope: ResourceScope | None = None,
     ) -> None:
         self._runtime = runtime
         self._view_id = view_id
+        self._scope = scope
         self._markers = dict(markers or {})
         self._running: dict[str, object] = {}
 
@@ -75,6 +82,11 @@ class ViewActions:
     def view_id(self) -> str:
         """The id of the surface these calls are made from."""
         return self._view_id
+
+    @property
+    def scope(self) -> ResourceScope | None:
+        """The view's scope, which its handler calls are dispatched on behalf of."""
+        return self._scope
 
     @property
     def ids(self) -> tuple[str, ...]:
@@ -119,7 +131,14 @@ class ViewActions:
         self._running[action.id] = _RUNNING
         token = CALLING_VIEW.set(self._view_id)
         try:
-            result = handler(**coerced)
+            if self._scope is None:
+                result = handler(**coerced)
+            else:
+                # The handler is the plugin's own method and reads the plugin
+                # context; the view's authority travels with the dispatch so a
+                # job it submits is this window's work (decision-65 §3).
+                with invoking(self._scope):
+                    result = handler(**coerced)
         finally:
             CALLING_VIEW.reset(token)
             del self._running[action.id]

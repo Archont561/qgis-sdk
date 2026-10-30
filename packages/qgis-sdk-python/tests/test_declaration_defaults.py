@@ -16,7 +16,7 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from qgis_sdk import QgisSdkDeclarationError
 from qgis_sdk.algorithms import describe_algorithm
-from qgis_sdk.core import AlgorithmContext, JobContext
+from qgis_sdk.core import AlgorithmContext, WorkerContext
 from qgis_sdk.declarations import derive_id, derive_title
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin, stream
@@ -112,7 +112,7 @@ def test_jobs_derive_their_ids_with_a_suffix_and_provider_algorithms_without() -
         raise AssertionError("never run")
 
     @job(title="Sum")
-    def add_numbers(ctx: JobContext, value: int) -> int:
+    def add_numbers(ctx: WorkerContext, value: int) -> int:
         return value
 
     smooth = describe_algorithm(smooth_geometries)

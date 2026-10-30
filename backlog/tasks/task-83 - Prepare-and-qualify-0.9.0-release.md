@@ -4,7 +4,7 @@ title: Prepare and qualify 0.9.0 release
 status: To Do
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-10-28 14:49'
+updated_date: '2026-10-30 17:12'
 labels: []
 milestone: m-8
 dependencies:
@@ -33,3 +33,9 @@ Explicit release gate for the 0.9.0 hosts and worker-first named jobs release (m
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [ ] #5 The expected zero bridge delta is confirmed rather than assumed: no file under packages/qgis-sdk-typescript changed, no npm version is consumed, and HOST_FINGERPRINT and the plugin-description contract version still agree across both languages. A changed wire requires a separate contract/version decision and revised gate.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Gate must record the server-bindings row (decision-52 implementation note, 2026-10-30): the in-process QgsServer test of TASK-80 #2 needs a QGIS built with WITH_SERVER=ON plus bindings, which no conda build has (conda-forge passes -D WITH_SERVER=FALSE) and which the workspace pixi environment therefore lacks. State whether the row ran (CI job installing qgis-server plus python3-qgis, or a machine where `from qgis.server import QgsServer` imports) or was blocked, with the evidence, and never count it as passed on the strength of the fake-interface tests.
+<!-- SECTION:NOTES:END -->

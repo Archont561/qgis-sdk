@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.core.scheduling import QuiesceOutcome, StepScheduler
-from qgis_sdk.jobs._attempt import _TICK_IN_PROGRESS, _Attempt, _run_attempt
+from qgis_sdk.jobs._attempt import (
+    _NOT_THE_DRIVING_THREAD,
+    _TICK_IN_PROGRESS,
+    _Attempt,
+    _run_attempt,
+)
 from qgis_sdk.jobs._authoring import (
     _check_arguments,
     _main_thread,
     describe_job,
 )
-from qgis_sdk.jobs._handles import BoundJob, JobHandle
+from qgis_sdk.jobs._handles import BoundJob, JobHandle, as_handles
+from qgis_sdk.jobs._ownership import INVOKING_SCOPE
+from qgis_sdk.jobs._registry import JobRegistry
 from qgis_sdk.jobs._subscriptions import JobFault, JobSubscription
 from qgis_sdk.models import (
     QgisSdkJobRejectedError,
@@ -41,12 +49,16 @@ class _Runtime:
     project: Project | None
     gui_thread: Callable[[], bool]
     on_fault: Callable[[JobFault], None] | None
+    registry: JobRegistry = field(default_factory=JobRegistry.empty)
+    driving_thread: int = field(default_factory=threading.get_ident)
     attempts: dict[str, _Attempt] = field(default_factory=dict)
     counters: dict[str, int] = field(default_factory=dict)
     faults: list[JobFault] = field(default_factory=list)
     owner_hooks: dict[ResourceScope, dict[JobSubscription, None]] = field(
         default_factory=dict
     )
+    children: dict[ResourceScope, JobService] = field(default_factory=dict)
+    pinned: JobService | None = None
     ticking: bool = False
 
     def fault(self, fault: JobFault) -> None:
@@ -87,6 +99,41 @@ class _Runtime:
             subscription.dispose()
 
 
+class _After:
+    """``job_service.after(handles)``: the same service, with an ordering baked in.
+
+    A thin view rather than a second service: every name a submitted job can be
+    reached by - ``bind``, ``delay`` and the declared-name attributes TASK-116
+    adds - carries the prerequisites, so ordering composes with however the job
+    is submitted.
+    """
+
+    __slots__ = ("_prerequisites", "_service")
+
+    def __init__(self, service: JobService, prerequisites: tuple[JobHandle, ...]):
+        self._service = service
+        self._prerequisites = prerequisites
+
+    def bind(self, function: Callable[..., Any]) -> BoundJob:
+        """Bind a job, ordered behind the prerequisites."""
+        return self._service.bind(function).after(*self._prerequisites)
+
+    def delay(self, function: Callable[..., Any], /, **arguments: Any) -> JobHandle:
+        """``bind(function).delay(**arguments)``, ordered behind the prerequisites."""
+        return self.bind(function).delay(**arguments)
+
+    def __getattr__(self, name: str) -> Any:
+        """Reach a declared job by name (TASK-116), ordered behind the prerequisites."""
+        bound = getattr(self._service, name)
+        if isinstance(bound, BoundJob):
+            return bound.after(*self._prerequisites)
+        return bound
+
+    def __repr__(self) -> str:
+        ids = ", ".join(handle.id for handle in self._prerequisites)
+        return f"<jobs after {ids}>"
+
+
 class JobService:
     """``ctx.jobs``: binds job functions to an owner and delivers their outcomes.
 
@@ -99,9 +146,12 @@ class JobService:
 
     ``gui_thread`` answers "is the calling thread the GUI thread?" for
     :meth:`JobHandle.get`; the default says yes for the interpreter's main
-    thread, which is where QGIS runs its GUI. ``workers``, ``network``,
-    ``algorithms`` and ``project`` become the matching capabilities of every
-    ``JobContext`` this service builds; a host passes the ones it has.
+    thread, which is where QGIS runs its GUI. ``workers`` is required to submit
+    at all: since 0.9.0 a job body runs in its entirety on a worker
+    (decision-65), so a service without one refuses every submission rather
+    than running author code here. The ``WorkerContext`` a body receives is
+    built per attempt with progress and cancellation only; ``network``,
+    ``algorithms`` and ``project`` stay on this side of the seam.
     """
 
     def __init__(
@@ -115,6 +165,7 @@ class JobService:
         gui_thread: Callable[[], bool] | None = None,
         on_fault: Callable[[JobFault], None] | None = None,
         max_steps_per_job: int | None = None,
+        registry: JobRegistry | None = None,
     ) -> None:
         scope.ensure_open()
         scheduler = (
@@ -131,6 +182,7 @@ class JobService:
             project=project,
             gui_thread=gui_thread if gui_thread is not None else _main_thread,
             on_fault=on_fault,
+            registry=registry if registry is not None else JobRegistry.empty(),
         )
         self._bind(scope, runtime, parent=None)
         # Registered after the scheduler's own disposal hook, so it runs before
@@ -141,12 +193,18 @@ class JobService:
         scope.on_quiesce(self.quiesce, resume=self.resume)
 
     def _bind(
-        self, scope: ResourceScope, runtime: _Runtime, *, parent: JobService | None
+        self,
+        scope: ResourceScope,
+        runtime: _Runtime,
+        *,
+        parent: JobService | None,
+        pinned: bool = False,
     ) -> None:
         """Set every attribute a service has; the one constructor both routes use."""
         self._scope = scope
         self._runtime = runtime
         self._parent = parent
+        self._pinned = pinned
 
     @classmethod
     def _derived(cls, parent: JobService, scope: ResourceScope) -> JobService:
@@ -168,9 +226,45 @@ class JobService:
         """The service this one was derived from, or ``None`` for the plugin's."""
         return self._parent
 
+    @property
+    def registry(self) -> JobRegistry:
+        """The plugin's validated job names (decision-65 §2)."""
+        return self._runtime.registry
+
+    @property
+    def plugin(self) -> JobService:
+        """The plugin-lifetime service, whatever service this is asked of.
+
+        ``ctx.jobs.plugin`` is how view code says "this one outlives the
+        window": the returned service submits as the plugin and never falls
+        back to the invoking view.
+        """
+        runtime = self._runtime
+        if runtime.pinned is None:
+            pinned = type(self).__new__(type(self))
+            pinned._bind(self._root()._scope, runtime, parent=None, pinned=True)
+            runtime.pinned = pinned
+        return runtime.pinned
+
     def scoped(self, scope: ResourceScope) -> JobService:
-        """Derive a service whose jobs are owned by ``scope`` (a view's, usually)."""
-        return JobService._derived(self, scope)
+        """Derive a service whose jobs are owned by ``scope`` (a view's, usually).
+
+        One service per scope, so a scope that opens and closes does not
+        accumulate copies and ``active`` answers the same either way.
+        """
+        cached = self._runtime.children.get(scope)
+        if cached is not None:
+            return cached
+        service = type(self)._derived(self, scope)
+        self._runtime.children[scope] = service
+        return service
+
+    def _root(self) -> JobService:
+        """This service, or the plugin's one at the top of the chain."""
+        service = self
+        while service._parent is not None:
+            service = service._parent
+        return service
 
     @property
     def active(self) -> tuple[JobHandle, ...]:
@@ -192,13 +286,68 @@ class JobService:
     # -- submission
 
     def bind(self, function: Callable[..., Any]) -> BoundJob:
-        """Bind a ``@job`` function to this owner; the declaration is checked now."""
+        """Bind a ``@job`` function to this owner; the declaration is checked now.
+
+        The owner is resolved per call (decision-65 §3): a plugin-level service
+        whose call arrives from a view's dispatch submits that view's work, so
+        an action handler reads its own plugin context and still hands the
+        window the lifetime it answers to. A host driving its own dispatch
+        sets :data:`~qgis_sdk.jobs._ownership.INVOKING_SCOPE` the same way.
+        """
         self._scope.ensure_open()
+        owner = self._owner()
+        if owner is not self:
+            return owner.bind(function)
         return BoundJob(describe_job(function), function, self)
+
+    def __getattr__(self, name: str) -> BoundJob:
+        """Reach a declared job by name: ``service.add`` is what ``ctx.jobs.add`` is.
+
+        Only the names the plugin declared exist here; anything else is an
+        ``AttributeError`` naming what it does have, so a typo never looks
+        like a job that failed to start.
+        """
+        if name.startswith("_"):
+            raise AttributeError(name)
+        runtime = self.__dict__.get("_runtime")
+        if runtime is None:
+            raise AttributeError(name)
+        # A declared name is a dictionary read: the description was validated
+        # when the plugin started, so submission neither imports nor inspects
+        # anything (decision-65 §2).
+        description = runtime.registry.description(name)
+        owner = self._owner()
+        if owner is not self:
+            return owner.__getattr__(name)
+        return BoundJob(description, runtime.registry.function(name), self)
+
+    def _owner(self) -> JobService:
+        """The service a submission belongs to, given who is invoking it."""
+        if self._pinned or self._parent is not None:
+            return self
+        scope = INVOKING_SCOPE.get()
+        if scope is None or scope is self._scope or scope.closed:
+            return self
+        if not _belongs_to(scope, self._scope):
+            # Someone else's dispatch (another plugin, a host request with no
+            # scope of ours): plugin lifetime is the safe reading.
+            return self
+        return self.scoped(scope)
 
     def delay(self, function: Callable[..., Any], /, **arguments: Any) -> JobHandle:
         """``bind(function).delay(**arguments)`` in one call."""
         return self.bind(function).delay(**arguments)
+
+    def after(self, *handles: JobHandle) -> _After:
+        """Submit work that runs only after the jobs in ``handles`` succeeded.
+
+        ``ctx.jobs.after(first).bind(second).delay(a=1)`` - or, with a declared
+        name, ``ctx.jobs.after(first).<name>.delay(a=1)``. The ordering is
+        enforced before the dependent body is handed to a worker, so it holds
+        for every backend; a prerequisite that fails or is cancelled fails the
+        dependent job with ``QgisSdkJobPrerequisiteError``.
+        """
+        return _After(self, as_handles(handles))
 
     def _submit(self, bound: BoundJob, arguments: dict[str, Any]) -> JobHandle:
         self._scope.ensure_open()
@@ -207,6 +356,21 @@ class JobService:
         if problems:
             raise QgisSdkJobRejectedError(description.id, problems)
         runtime = self._runtime
+        if runtime.workers is None:
+            # Decision-65: a job body never runs on the driving thread. A host
+            # without a worker backend refuses the submission instead of
+            # quietly degrading to the behaviour 0.9.0 removed.
+            raise QgisSdkJobRejectedError(
+                description.id,
+                [
+                    (
+                        "this host provides no worker backend, and a job body "
+                        "never runs on the driving thread; give the host a "
+                        "Workers service (Desktop supplies a QThreadPool) or run "
+                        "the code directly"
+                    )
+                ],
+            )
         number = runtime.counters.get(description.id, 0) + 1
         runtime.counters[description.id] = number
         attempt = _Attempt(
@@ -214,6 +378,7 @@ class JobService:
             owner=self,
             description=description,
             logical_id=f"{description.id}#{number}",
+            prerequisites=bound.prerequisites,
         )
         coroutine = _run_attempt(attempt, bound.function, dict(arguments))
         try:
@@ -232,14 +397,15 @@ class JobService:
         Call this from the thread that owns the GUI; it is the only thread on
         which subscribers run. Returns the number of author steps taken.
 
-        A tick entered while another is on the stack - a job or a subscriber
-        opened a modal dialog whose nested event loop fired the host timer -
-        does nothing and returns ``0``; the outer tick finishes when the
-        dialog closes. Re-stepping a job that is mid-step would fail
-        it, and an exception here would escape a Qt slot.
+        A tick entered while another is on the stack - a subscriber opened a
+        modal dialog whose nested event loop fired the host timer - does
+        nothing and returns ``0``; the outer tick finishes when the dialog
+        closes. So does a tick entered from any thread other than the one that
+        built the service: since 0.9.0 a job body runs on a worker, so author
+        code has no tick of its own to enter (decision-65).
         """
         runtime = self._runtime
-        if runtime.ticking:
+        if runtime.ticking or threading.get_ident() != runtime.driving_thread:
             return 0
         runtime.ticking = True
         try:
@@ -258,6 +424,8 @@ class JobService:
         runtime = self._runtime
         if runtime.ticking:
             return QuiesceOutcome(refused=True, blockers=(_TICK_IN_PROGRESS,))
+        if threading.get_ident() != runtime.driving_thread:
+            return QuiesceOutcome(refused=True, blockers=(_NOT_THE_DRIVING_THREAD,))
         runtime.ticking = True
         try:
             outcome = (
@@ -296,6 +464,17 @@ class JobService:
     # -- ownership hooks
 
     def _owner_disposed(self) -> None:
+        self._runtime.children.pop(self._scope, None)
         for attempt in tuple(self._runtime.attempts.values()):
             if attempt.owner is self:
                 attempt.owner_disposed()
+
+
+def _belongs_to(scope: ResourceScope, ancestor: ResourceScope) -> bool:
+    """Whether ``scope`` is ``ancestor`` or one of its descendants."""
+    current: ResourceScope | None = scope
+    while current is not None:
+        if current is ancestor:
+            return True
+        current = current.parent
+    return False

@@ -59,3 +59,30 @@ two-thread shape the scheduler already assumes.
 - decision-13 and decision-21 get status reviews naming this adapter;
   neither is superseded.
 - Scheduled as TASK-82 in m-8 (0.9.0).
+
+## Status review (2026-10-30)
+
+Still accepted in its native-adapter choice and superseded in its execution
+model, which decision-65 replaced before either shipped.
+
+- The adapter is now **one job body per `QgsTask`**, not one task per offloaded
+  step: `qgis_sdk.adapters.qgis.QgsTaskWorkers` creates the task with the
+  job's title (`WorkItem.title`), mirrors `ctx.progress` into the task bar
+  through `ObservableProgress.observe`, and makes the task bar's cancel button
+  call the job's own cooperative request. `native_plugin_context` composes it,
+  so a plugin's `ctx.workers` is the task manager.
+- There are **no sub-tasks and no parent task**: with the whole body on one
+  worker there is nothing to nest. A Processing algorithm keeps being the
+  `QgsTask` Processing already starts; the SDK never wraps one twice (AC 3).
+- **Dependencies are enforced before the task exists.** `ctx.jobs.after(handle)`
+  holds the dependent body until its prerequisite succeeded, so the task
+  manager never receives work it must not start - the ordering holds for every
+  backend, fakes included, instead of only for the native one. This replaces
+  "the task manager enforces" in the text above; the observable rule (a
+  dependent job runs only after its prerequisite finished, and fails without
+  running if the prerequisite did not succeed) is unchanged.
+- `ThreadPoolWorkers` stays available as a plain-pool adapter for hosts without
+  a task manager and for the thread evidence in `tests/test_jobs_native.py`,
+  but it is no longer part of the native composition.
+- decision-13 and decision-21 are unaffected: cancellation is still a request,
+  a running body is never interrupted, and disposal still beats delivery.
