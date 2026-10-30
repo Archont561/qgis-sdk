@@ -37,18 +37,8 @@ SERVER_PROBE = (
     "print(qgis.core.Qgis.version()); "
     "print(qgis.server.QgsServer)"
 )
-SERVER_COMMAND = [
-    sys.executable,
-    "-m",
-    "pytest",
-    "-c",
-    "packages/qgis-sdk-python/pyproject.toml",
-    "packages/qgis-sdk-python/tests",
-    "-m",
-    "server",
-    "-q",
-    "-rs",
-]
+SERVER_TESTS = "packages/qgis-sdk-python/tests"
+SERVER_MODULES = "test_server*_native.py"
 ENVIRONMENT_PROBE = (
     'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); '
     "print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())"
@@ -114,6 +104,31 @@ def native(command: list[str]) -> int:
     annotation("native layers: environment", "\n".join(probe.stdout.splitlines()[-20:]))
     annotation("native layers: pytest", "\n".join(text.splitlines()[-60:]))
     return status
+
+
+def server_command() -> list[str]:
+    """The pytest command for the ``server`` layer: its modules, not the suite.
+
+    ``-m server`` filters *after* collection, and this row installs a QGIS whose
+    bindings are all a Debian package provides - not the WebEngine and test
+    stack the rest of the native modules assume. Collecting the whole suite
+    would fail on a module that imports PyQt6 unconditionally long before the
+    marker is consulted, so the row names the modules it owns and the marker
+    still decides what runs inside them.
+    """
+    modules = sorted((ROOT / SERVER_TESTS).glob(SERVER_MODULES))
+    return [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-c",
+        "packages/qgis-sdk-python/pyproject.toml",
+        *[str(module.relative_to(ROOT)) for module in modules],
+        "-m",
+        "server",
+        "-q",
+        "-rs",
+    ]
 
 
 def server(command: list[str]) -> int:
@@ -283,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "native":
             return native(command or NATIVE_COMMAND)
         if args.action == "server":
-            return server(command or SERVER_COMMAND)
+            return server(command or server_command())
         if not command:
             parser.error("run-log requires a command after --")
         return run_logged(command, args.log)

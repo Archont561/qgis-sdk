@@ -322,9 +322,7 @@ jobs:
           echo "Linux checks: ${{ needs.linux.result }}; Linux coverage: ${{ needs.coverage.result }}; Server host: ${{ needs.server.result }}"
 
       - name: Require every Linux job to succeed
-        if: >-
-          ${{ needs.linux.result != 'success' || needs.coverage.result != 'success'
-          || needs.server.result != 'success' }}
+        if: ${{ needs.linux.result != 'success' || needs.coverage.result != 'success' || needs.server.result != 'success' }}
         run: exit 1
 
   # Portable Python/TypeScript suites on the other supported host platforms.
