@@ -99,6 +99,35 @@ in a request may hold the response open waiting for a worker, and a plugin-owned
 job that outlives requests has to be backed by something the operator started -
 the SDK does not invent a background thread for it.
 
+**The QGIS Server object mapping, decided 2026-10-30 with TASK-80 AC 2.** QGIS
+Server does not call a dispatcher: it calls a `QgsServerFilter` before the
+services, a `QgsService` for the `SERVICE` a request names, and a
+`QgsAccessControlFilter` per layer while a service renders. The adapter therefore
+registers one filter carrying the whole SDK chain (the SDK fixes its own order -
+priority, declaration, include - so QGIS only needs one position for it: the
+lowest priority any filter declares), one `QgsService` per declared service, and
+one access-control object running every access hook. `ServerHost` grew the seams
+that needs (`rewrite`, `denied_layer`, `permits`, `service_for`, `context`) so
+both hosts run the same code rather than two dispatchers.
+
+Three consequences are stated in the code and the guide rather than left to
+inspection. A filter hook sees `request.method == ""`: `QgsServerFilter` gets no
+request object and `QgsRequestHandler` exposes the URL, the headers and the merged
+OGC parameters but not the verb, so the model says it does not know instead of
+claiming `GET`; a hook that must distinguish `GET` from `POST` belongs in a
+service, which does receive the `QgsServerRequest`. A filter that answers writes
+its response over the OGC error `QgsRequestHandler.setServiceException` leaves
+behind, because that flag is the only switch the C++ dispatcher checks before it
+runs its own services, and returning `False` from `onRequestReady` only stops
+other plugins' filters. An access refusal clears all four permissions rather than
+raising, which is what `QgsAccessControl` consults, and the 403 that
+`ServerHost.denied_layer` builds stays the pure host's answer.
+
+Nothing Qt-specific is needed to test any of that: the host lives in
+`qgis_sdk.adapters._server`, imports `qgis.server` only when a host is built, and
+is proven with stand-ins on every run plus a real in-process `QgsServer` on the
+`QGIS 3.44 LTS` row.
+
 ## Consequences
 
 - Service contracts gain nothing host-specific; the server adds

@@ -255,6 +255,31 @@ fixtures now import Qt through `qgis.PyQt` like the adapters, and
 directory that carries `share/qgis` (`/usr` on Debian and Ubuntu), falling back
 to `sys.prefix` where there is no QGIS at all.
 
+The server host has two layers of its own, because a deployed QGIS Server calls
+three objects at three moments of one request and none of them exists on the
+default environment:
+
+* `tests/qgis_server_support.py` holds stand-ins for `QgsServerFilter`,
+  `QgsService`, `QgsAccessControlFilter`, `QgsServerInterface`,
+  `QgsRequestHandler`, `QgsServerRequest` and `QgsServerResponse` - QGIS's own
+  spellings, no behaviour beyond what the adapter reads. `tests/test_server_wire.py`
+  pins the mapping between those objects and the plain
+  `ServerRequest`/`ServerResponse` models, and `tests/test_server_adapter.py`
+  pins the wiring: which hook runs in which slot, what a rewrite leaves in the
+  request QGIS's services read, what an answer leaves in the handler, and that a
+  refused layer clears all four permissions. Both are pure, so a wrong
+  `parameterMap`/`setResponseHeader` costs a second locally rather than a CI
+  round trip.
+* `tests/test_server_native.py` drives the same adapter through a real
+  `QgsServer` on the `QGIS 3.44 LTS` row: a `QgsBufferServerRequest` whose
+  `SERVICE=WMS` a `@server.filter` rewrites to the plugin's own `@server.service`,
+  a body that proves the service read the rewritten parameters, an access hook
+  answering QGIS's per-layer question on real `QgsVectorLayer`s, and the
+  registration landing in `serverInterface().filters()`. No FCGI, no network.
+* `tests/test_server_adapter_native.py` runs in the Pixi environment, where QGIS
+  is real and `qgis.server` is not: the adapter imports there and refuses a host
+  by name, naming `qgis-server`/`WITH_SERVER=ON` and warning off conda-forge.
+
 `tests/test_lts_native.py` is small on purpose: it reports which binding this
 QGIS has and proves the three places Qt 5 and Qt 6 disagree - a dock area, a
 `QAction`, an item flag - through `qgis_sdk.adapters._qt`, then runs one job on

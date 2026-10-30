@@ -225,3 +225,52 @@ def test_the_hooks_become_the_three_objects_qgis_calls(qgis_app) -> None:
     assert registered.count(host.filter) == 1
     assert [item.name() for item in host.services] == ["SDKDEMO"]
     assert host.access_control is not None
+
+
+def test_a_refused_layer_never_reaches_the_capabilities(qgis_app) -> None:
+    """AC 2, second claim driven by a whole request: WMS GetCapabilities.
+
+    The permission question above is one QGIS call. This one is the request an
+    operator actually sees: the layer list of a WMS capabilities document, once
+    with the hook allowing everything and once with it refusing one layer.
+    """
+    from qgis.core import QgsProject, QgsVectorLayer
+    from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse, QgsServer
+    from qgis_sdk.adapters.qgis.server import QgsServerHost
+    from qgis_sdk.server import ServerContext, ServerHooks, access_control
+
+    refused: set[str] = set()
+
+    @access_control(priority=10)
+    def only_public(ctx: ServerContext, request, layer) -> bool:
+        return layer not in refused
+
+    project = QgsProject()
+    for name in ("public_layer", "secret_layer"):
+        layer = QgsVectorLayer("Point?crs=EPSG:4326&field=id:integer", name, "memory")
+        project.addMapLayer(layer)
+
+    server = QgsServer()
+    QgsServerHost(ServerHooks((only_public,)), server.serverInterface()).register()
+
+    def capabilities() -> bytes:
+        request = QgsBufferServerRequest(
+            "http://localhost/qgis/qgis_mapserv.fcgi"
+            "?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0"
+        )
+        response = QgsBufferServerResponse()
+        server.handleRequest(request, response, project)
+        assert response.statusCode() == 200, response.statusCode()
+        return bytes(response.body())
+
+    allowed = capabilities()
+    # The control: unless both layers are listed when nothing is refused, the
+    # absence below would prove nothing.
+    assert b"public_layer" in allowed, allowed[:400]
+    assert b"secret_layer" in allowed, allowed[:400]
+
+    refused.add("secret_layer")
+    denied = capabilities()
+
+    assert b"public_layer" in denied, denied[:400]
+    assert b"secret_layer" not in denied, denied[:400]
