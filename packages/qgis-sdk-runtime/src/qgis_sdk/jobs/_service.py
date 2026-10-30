@@ -259,6 +259,27 @@ class JobService:
         self._runtime.children[scope] = service
         return service
 
+    def request_scoped(self, scope: ResourceScope) -> JobService:
+        """Derive a service whose jobs die with ``scope`` - one request's, on the server.
+
+        This is :meth:`scoped` with the other disposal rule. A view's jobs are
+        cancelled and then report what the worker did; a QGIS Server request has
+        no pump that could ever deliver that report, so closing ``scope``
+        *abandons* its jobs instead (decision-52): every handle reads
+        ``JobStatus.CANCELLED`` at once, a worker still running is asked to
+        stop, and no callback runs. Work that must outlive the request is
+        submitted through ``ctx.jobs.plugin``.
+
+        Nothing is cached - a request scope exists once, so a second call is a
+        second derivation - and the caller closes the scope when the response is
+        sent, which is the abandonment.
+        """
+        scope.ensure_open()
+        service = type(self).__new__(type(self))
+        service._bind(scope, self._runtime, parent=self)
+        scope.on_close(service._owner_abandoned)
+        return service
+
     def _root(self) -> JobService:
         """This service, or the plugin's one at the top of the chain."""
         service = self
@@ -468,6 +489,18 @@ class JobService:
         for attempt in tuple(self._runtime.attempts.values()):
             if attempt.owner is self:
                 attempt.owner_disposed()
+
+    def _owner_abandoned(self) -> None:
+        """The request is over: abandon its jobs instead of waiting for a report.
+
+        The other half of :meth:`_owner_disposed`, chosen by
+        :meth:`request_scoped`: nothing on the server will ever deliver these
+        outcomes, so each attempt names itself cancelled and leaves the books.
+        """
+        self._runtime.children.pop(self._scope, None)
+        for attempt in tuple(self._runtime.attempts.values()):
+            if attempt.owner is self:
+                attempt.cancelled_by_request()
 
 
 def _belongs_to(scope: ResourceScope, ancestor: ResourceScope) -> bool:

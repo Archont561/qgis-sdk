@@ -45,6 +45,7 @@ RESERVED_JOB_NAMES: frozenset[str] = frozenset(
         "plugin",
         "quiesce",
         "registry",
+        "request_scoped",
         "resume",
         "scope",
         "scoped",

@@ -530,11 +530,30 @@ class StepScheduler:
         keeps that outcome whatever its author code does next.
         """
         for job in tuple(self._active.values()):
-            handoff = job.awaiting
-            if handoff is not None:
-                self._discarded.append(handoff)
-            job._abandon()
+            self.abandon(job)
         self._active.clear()
+
+    def abandon(self, job: Job) -> bool:
+        """Drop one job without resuming author code; return whether it was active.
+
+        Dispatching with the same rule a disposed scope uses, for a host that is
+        done with one owner while the rest of the plugin keeps working - a QGIS
+        Server request whose response has been sent (decision-52). A worker
+        report that arrives afterwards is counted as dropped rather than
+        delivered, and a job that already started keeps its state without
+        running a pending ``finally`` against resources that are gone.
+
+        A job that already settled is left alone - there is nothing to drop and
+        its outcome is the one its owner can still read - so this answers
+        ``False`` instead of overwriting it.
+        """
+        if job.id not in self._active:
+            return False
+        handoff = job.awaiting
+        if handoff is not None:
+            self._discarded.append(handoff)
+        job._abandon()
+        return self._active.pop(job.id, None) is not None
 
     def _blockers(self) -> Iterable[str]:
         """Name every job that cannot reach a safe point, in submission order."""

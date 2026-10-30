@@ -139,6 +139,7 @@ class _Attempt:
             event: {} for event in _EVENTS
         }
         self._owner_closed = False
+        self._abandoned = False
         self.delivered = False
         self.settled = threading.Event()
 
@@ -173,6 +174,14 @@ class _Attempt:
 
     @property
     def status(self) -> JobStatus:
+        """The job's state, or ``CANCELLED`` when its host abandoned it.
+
+        An abandoned request-scoped job has no scheduler state worth reading -
+        the request is over and nothing will ever deliver a worker's report - so
+        the attempt answers for it (decision-52).
+        """
+        if self._abandoned:
+            return JobStatus.CANCELLED
         return _STATUS_OF_STATE[self.job.state]
 
     @property
@@ -299,6 +308,27 @@ class _Attempt:
         self._owner_closed = True
         self.detach()
         self.settled.set()
+
+    def cancelled_by_request(self) -> None:
+        """The request is over: report this job cancelled and stop tracking it.
+
+        Called when a request scope closes (decision-52). Unlike
+        :meth:`abandoned` - which leaves the scheduler's own verdict in place
+        when a whole plugin unloads - a request has no pump that could ever
+        deliver a worker's report, so the attempt records the outcome itself:
+        the handle reads ``CANCELLED`` at once, a worker still running is asked
+        to stop, the job leaves the scheduler with any later report counted as
+        dropped, and nothing is delivered to anyone.
+        """
+        self._abandoned = True
+        self._owner_closed = True
+        self.detach()
+        self.request_cancel()
+        self.runtime.scheduler.abandon(self.job)
+        self.settled.set()
+        self.runtime.attempts.pop(self.id, None)
+        if not self.scope.closed:
+            self.scope.close()
 
 
 _TICK_IN_PROGRESS = "a tick is already in progress on this thread"

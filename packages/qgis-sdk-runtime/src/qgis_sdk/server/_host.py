@@ -22,6 +22,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from qgis_sdk.core.scope import ResourceScope
+from qgis_sdk.jobs import Jobs, JobService
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import Layers, Log, Project
 
@@ -75,9 +76,17 @@ class ServerHost:
     context carries the request and the response and refuses ``project``,
     ``layers`` and ``log`` by name, which is what a capabilities-only
     deployment needs.
+
+    ``jobs`` is the plugin's job service, if the host has one. Each request gets
+    a service derived over the *request* scope, so a job a hook submits is
+    request-scoped: it is ticked at request start and abandoned when the
+    response is sent, which here means when the request scope closes
+    (decision-52). Work submitted through ``ctx.jobs.plugin`` keeps the plugin's
+    lifetime. A host without a job service leaves ``ctx.jobs`` out, and the
+    context refuses it by name like any other capability it never had.
     """
 
-    __slots__ = ("_context_factory", "_hooks", "_interface", "_registered")
+    __slots__ = ("_context_factory", "_hooks", "_interface", "_jobs", "_registered")
 
     def __init__(
         self,
@@ -88,16 +97,34 @@ class ServerHost:
             Callable[[ResourceScope, ServerRequest, ServerResponse], ServerContext]
             | None
         ) = None,
+        jobs: JobService | None = None,
     ) -> None:
         self._hooks = hooks
         self._interface = interface
         self._context_factory = context_factory
+        self._jobs = jobs
         self._registered = False
 
     @property
     def hooks(self) -> ServerHooks:
         """The hooks this host serves, in the order it serves them."""
         return self._hooks
+
+    @property
+    def jobs(self) -> JobService | None:
+        """The plugin-lifetime job service this host derives request work from."""
+        return self._jobs
+
+    def tick(self) -> int:
+        """Advance the job service one step; the host does this at request start.
+
+        A server has no event loop and no job pump, so the request is the clock:
+        one tick here lets a job submitted by an earlier request start, and a
+        job submitted now is abandoned rather than kept waiting for a next tick
+        that may never come (decision-52). Without a job service this is a
+        no-op, so a deployment that has none pays nothing.
+        """
+        return 0 if self._jobs is None else self._jobs.tick()
 
     def register(self) -> None:
         """Register every hook with the interface once; a second call is a no-op."""
@@ -139,6 +166,7 @@ class ServerHost:
         if scope is None:
             scope = ResourceScope()
         try:
+            self.tick()
             response = ServerResponse()
             context = self.context(
                 scope, request, response, project=project, layers=layers, log=log
@@ -270,12 +298,27 @@ class ServerHost:
         layers: Layers | None = None,
         log: Log | None = None,
     ) -> ServerContext:
+        """Build the context one request's hooks receive.
+
+        The ``jobs`` capability is derived here rather than taken from the
+        plugin's service, because that derivation *is* the request scope: the
+        hooks see work that dies with this response. A host with its own
+        ``context_factory`` builds the context itself and decides the same
+        question in its own factory.
+        """
         if self._context_factory is not None:
             return self._context_factory(scope, request, response)
+        jobs = None if self._jobs is None else Jobs(self._jobs.request_scoped(scope))
         if project is None and layers is None and log is None:
-            return ServerContext(scope, request, response)
+            return ServerContext(scope, request, response, jobs=jobs)
         return ServerContext(
-            scope, request, response, project=project, layers=layers, log=log
+            scope,
+            request,
+            response,
+            project=project,
+            layers=layers,
+            log=log,
+            jobs=jobs,
         )
 
     def __repr__(self) -> str:

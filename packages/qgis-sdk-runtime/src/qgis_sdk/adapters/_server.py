@@ -21,6 +21,7 @@ from collections.abc import Callable
 from typing import Any
 
 from qgis_sdk.core.scope import ResourceScope
+from qgis_sdk.jobs import JobService
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.server import (
     ServerContext,
@@ -188,13 +189,14 @@ class QgsServerHost:
             Callable[[ResourceScope, ServerRequest, ServerResponse], ServerContext]
             | None
         ) = None,
+        jobs: JobService | None = None,
     ) -> None:
         self._server = qgis_server()
         self._iface = server_interface
         self._filter: Any = None
         self._access: Any = None
         self._services: list[Any] = []
-        self._host = ServerHost(hooks, self, context_factory=context_factory)
+        self._host = ServerHost(hooks, self, context_factory=context_factory, jobs=jobs)
 
     # -- what a plugin loader calls ----------------------------------------------
 
@@ -309,9 +311,13 @@ class QgsServerHost:
         response = ServerResponse()
         scope = ResourceScope()
         try:
+            self._host.tick()
             context = self._host.context(scope, request, response)
             outcome = self._host.rewrite(context, request, response)
         finally:
+            # The response exists once the chain returned, so this is the moment
+            # decision-52 abandons the request's jobs: closing the scope is the
+            # zero-deadline quiesce - nothing here waits for a worker.
             scope.close()
         if isinstance(outcome, ServerResponse):
             # `setServiceException` is what makes the C++ dispatcher skip its own
@@ -334,6 +340,7 @@ class QgsServerHost:
         response = ServerResponse()
         scope = ResourceScope()
         try:
+            self._host.tick()
             context = self._host.context(scope, request, response)
             answer = hook(context, request)
         finally:
