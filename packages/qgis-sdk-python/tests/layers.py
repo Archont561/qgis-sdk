@@ -17,6 +17,9 @@ Layers, as pytest markers:
     needs Qt WebEngine (a real Chromium) on top of ``qt``;
 ``desktop``
     the end-to-end harnesses under ``tests/scripts`` that need a native host;
+``server``
+    needs a QGIS built with server bindings (``qgis.server``), which conda-forge
+    does not provide - the ``Server host`` CI row installs one (TASK-80 AC 2);
     smoke probes are selected explicitly with ``-m smoke``.
 
 ``native`` is added to every test in one of those layers and ``pure`` to every
@@ -124,14 +127,15 @@ def _pack_workspace_package(
     return f"file:{tarballs[0].as_posix()}"
 
 
-NATIVE_LAYERS = frozenset({"qt", "qgis", "webengine", "desktop"})
+NATIVE_LAYERS = frozenset({"qt", "qgis", "webengine", "desktop", "server"})
 LAYER_HELP = {
     "qt": "needs a Qt event loop (a QApplication and the PyQt bindings)",
     "qgis": "needs an initialised QgsApplication and the qgis Python bindings",
     "webengine": "needs Qt WebEngine (a real Chromium) on top of qt",
     "desktop": "needs the QGIS Desktop or a headless native qualification host",
+    "server": "needs a QGIS built with server bindings (qgis.server)",
     "smoke": "explicitly selected real QGIS/Qt smoke test",
-    "native": "any test in the qt, qgis, webengine or desktop layer (added automatically)",
+    "native": "any test in the qt, qgis, webengine, desktop or server layer (added automatically)",
     "pure": "runs without QGIS, Qt or a display (added automatically)",
 }
 

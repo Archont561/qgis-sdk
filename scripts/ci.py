@@ -32,6 +32,13 @@ NATIVE_COMMAND = [
     "-q",
     "-rs",
 ]
+SERVER_PROBE = (
+    "import qgis.core, qgis.server; "
+    "print(qgis.core.Qgis.version()); "
+    "print(qgis.server.QgsServer)"
+)
+SERVER_TESTS = "packages/qgis-sdk-python/tests"
+SERVER_MODULES = "test_server*_native.py"
 ENVIRONMENT_PROBE = (
     'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); '
     "print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())"
@@ -96,6 +103,76 @@ def native(command: list[str]) -> int:
     )
     annotation("native layers: environment", "\n".join(probe.stdout.splitlines()[-20:]))
     annotation("native layers: pytest", "\n".join(text.splitlines()[-60:]))
+    return status
+
+
+def server_command() -> list[str]:
+    """The pytest command for the ``server`` layer: its modules, not the suite.
+
+    ``-m server`` filters *after* collection, and this row installs a QGIS whose
+    bindings are all a Debian package provides - not the WebEngine and test
+    stack the rest of the native modules assume. Collecting the whole suite
+    would fail on a module that imports PyQt6 unconditionally long before the
+    marker is consulted, so the row names the modules it owns and the marker
+    still decides what runs inside them.
+    """
+    modules = sorted((ROOT / SERVER_TESTS).glob(SERVER_MODULES))
+    return [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-c",
+        "packages/qgis-sdk-python/pyproject.toml",
+        *[str(module.relative_to(ROOT)) for module in modules],
+        "-m",
+        "server",
+        "-q",
+        "-rs",
+    ]
+
+
+def server(command: list[str]) -> int:
+    """Prove this QGIS has server bindings, then run the ``server`` test layer.
+
+    Two failures are worth telling apart. A missing ``qgis.server`` means the
+    row installed the wrong QGIS - conda-forge has none, so the workflow needs
+    ``qgis-server`` plus ``python3-qgis`` from a repository that builds
+    ``WITH_SERVER=ON`` - and it is reported before pytest runs, because a suite
+    that skips every test would otherwise read as a pass. Nothing collected is
+    reported as a failure for the same reason (TASK-80 AC 2).
+    """
+    probe = subprocess.run(
+        [sys.executable, "-c", SERVER_PROBE],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    if probe.returncode or "QgsServer" not in probe.stdout:
+        annotation(
+            "server host: no QGIS Server in this build",
+            "\n".join(probe.stdout.splitlines()[-20:]),
+        )
+        print(
+            "::error title=server host::This QGIS was built without "
+            "WITH_SERVER. Install qgis-server and python3-qgis from a "
+            "repository that enables it; conda-forge builds QGIS without it."
+        )
+        return status_code(probe.returncode) or 1
+    print(f"::notice::QGIS Server bindings: {' '.join(probe.stdout.split())}")
+    log = Path("server-host.log")
+    status = run_logged(command, log)
+    text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    if status == 5 or "no tests ran" in text:
+        annotation("server host: nothing ran", "\n".join(text.splitlines()[-20:]))
+        print(
+            "::error title=server host::The server layer collected no tests; "
+            "the row is not proving anything."
+        )
+        return 1
+    if status:
+        annotation("server host: pytest", "\n".join(text.splitlines()[-60:]))
     return status
 
 
@@ -203,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     log.add_argument("command", nargs=argparse.REMAINDER)
     native_parser = commands.add_parser("native")
     native_parser.add_argument("command", nargs=argparse.REMAINDER)
+    server_parser = commands.add_parser("server")
+    server_parser.add_argument("command", nargs=argparse.REMAINDER)
     commands.add_parser("check-generated")
     coverage = commands.add_parser("annotate-coverage")
     coverage.add_argument("log", type=Path)
@@ -212,12 +291,14 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("report-steps")
     commands.add_parser("bun-ui")
     args = parser.parse_args(argv)
-    if args.action in ("run-log", "native"):
+    if args.action in ("run-log", "native", "server"):
         command = args.command
         if command and command[0] == "--":
             command = command[1:]
         if args.action == "native":
             return native(command or NATIVE_COMMAND)
+        if args.action == "server":
+            return server(command or server_command())
         if not command:
             parser.error("run-log requires a command after --")
         return run_logged(command, args.log)
