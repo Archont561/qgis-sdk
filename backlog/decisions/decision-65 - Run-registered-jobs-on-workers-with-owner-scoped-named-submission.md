@@ -92,6 +92,60 @@ backend; the named registry is still TASK-116.
   result nobody waits for. A task the manager never started reports a
   cancellation instead of leaving the job as a replacement blocker.
 
+## Implementation note: the named registry and action handles (2026-10-30)
+
+TASK-116 added the submission half of §2 and §3.
+
+- `jobs` on a plugin is a mapping (`jobs = {"add": add}`) or a sequence of
+  `@job` functions (`jobs = (add, count_features)`). A sequence derives each
+  name from the function's own name with `derive_id`, *not* from the job id: a
+  bare `@job` id carries a module/qualname suffix, so keying off it would make
+  `ctx.jobs.count_features_3f2a91` the only way to reach a job. The mapping form
+  stays because it is how two functions with one Python name are told apart and
+  how a public name is renamed; a sequence that derives one name twice is
+  refused with that instruction. Mixing the two in one value is not a third
+  form - the value is either a mapping or a sequence.
+- `JobRegistry` validates at runtime construction: every entry is a `@job`
+  function, keys are plain identifiers, and names or ids that collide are
+  refused by name. Names that would shadow the surface itself (`active`,
+  `after`, `delay`, `bind`, `describe`, `faults`, `names`, `plugin`,
+  `registry`, `scope`, `scoped`, `watch`, `tick`, `quiesce`, `resume`,
+  `parent`, `jobs`) are reserved, and a test keeps `RESERVED_JOB_NAMES` in step
+  with the public attributes of `Jobs` and `JobService`. Lookup is a
+  dictionary read: descriptions are built once, so submission neither imports
+  nor inspects anything.
+- `ctx.jobs` is a `Jobs` facade over the engine, and deliberately has no
+  `bind`: `ctx.jobs.<name>` is a `BoundJob`, `ctx.jobs.after(handle).<name>`
+  the ordered one, and `ctx.jobs.watch(handle, on_progress=..., on_success=...,
+  on_failure=..., on_cancelled=...)` subscribes the four events to the calling
+  owner's scope. `bind` and the function-passing `delay` remain on
+  `JobService`, where a host and a test use them.
+- Ownership follows the dispatch, not a singleton: `ViewActions` carries the
+  view's scope, sets `INVOKING_SCOPE` around the handler call, and a
+  plugin-level service resolves a submission made under that variable to the
+  invoking view's scoped service (only when the scope is a descendant of the
+  plugin's; anything else stays plugin-owned). Two views calling at once keep
+  their own owner because a context variable is per thread and per task.
+  `ctx.jobs.plugin` is the explicit plugin-lifetime opt-in; the server host
+  (TASK-80) sets the same variable for request scope, and nothing else changes
+  for it.
+- `PluginRuntime` builds the registry and, when it is non-empty, the service
+  over the plugin scope with the host's `workers`, then adds `jobs` to the
+  context it was given - so hosts must read `runtime.context` back rather than
+  keep the context they built, and `DesktopLifecycleAdapter.context` does
+  exactly that. A host that provides `jobs` *and* a plugin that declares them
+  is refused rather than merged: two registries would mean two answers to
+  `ctx.jobs.add`.
+- Delivery needed a driver that did not exist: nothing in the Desktop adapters
+  ticked a job service. `QgsJobPump` (a `QTimer` calling `tick()` on the GUI
+  thread) now starts in `DesktopLifecycleAdapter.initGui` and stops before
+  `unload`, and a host with its own event loop uses the same pump.
+- Not claimed: `PluginDescription` does not list jobs yet, so `describe()`
+  covers actions, streams, surfaces and providers but not the registry;
+  generated per-plugin typing (TASK-124) does not exist, so `ctx.jobs.<name>`
+  has no IDE autocomplete; and the bridge still carries a handle as `{id,
+  status}`, with no live subscription and no wire change.
+
 ## Consequences
 
 - 0.9.0 is a breaking Python minor; `TASK-115` decides how existing async jobs

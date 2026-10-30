@@ -2,9 +2,12 @@
 
 decision-13 fixed the submission shape and decision-38 the authoring one:
 ``@job`` goes on a plain function ``def name(ctx: WorkerContext, ...) -> Result``
-whose keyword parameters are typed the way an action's are, and the work is
-submitted as ``ctx.jobs.bind(name).delay(**inputs)`` with the context injected
-by the runtime at call time. decision-21 fixed what owns the work: a view by
+whose keyword parameters are typed the way an action's are. decision-65 fixed
+how a plugin names the ones it exposes - ``jobs = {"add": add}`` or
+``jobs = (add, count_features)`` - so the work is submitted as
+``ctx.jobs.add.delay(**inputs)``: the name is the declaration, the inputs are
+validated against the signature, and ``bind`` stays the host's tool rather than
+the author's (0.9 migration). decision-21 fixed what owns the work: a view by
 default, a plugin only explicitly, with disposal detaching the view's callbacks
 at once and *requesting* cancellation rather than pretending to have it.
 decision-65 fixed where the body runs: since 0.9.0 the whole function executes
@@ -51,18 +54,28 @@ from qgis_sdk.jobs._authoring import (
     job,
 )
 from qgis_sdk.jobs._handles import BoundJob, JobHandle
+from qgis_sdk.jobs._jobs import Jobs, OrderedJobs
+from qgis_sdk.jobs._ownership import INVOKING_SCOPE, invoking, invoking_scope
+from qgis_sdk.jobs._registry import RESERVED_JOB_NAMES, JobRegistry
 from qgis_sdk.jobs._service import JobService
 from qgis_sdk.jobs._subscriptions import JobFault, JobSubscription
 
 __all__ = [
+    "INVOKING_SCOPE",
+    "RESERVED_JOB_NAMES",
     "BoundJob",
     "JobDescription",
     "JobEvent",
     "JobFault",
     "JobHandle",
+    "JobRegistry",
     "JobService",
     "JobStatus",
     "JobSubscription",
+    "Jobs",
+    "OrderedJobs",
     "describe_job",
+    "invoking",
+    "invoking_scope",
     "job",
 ]

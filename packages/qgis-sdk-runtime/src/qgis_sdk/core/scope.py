@@ -59,6 +59,16 @@ class ResourceScope:
         """Whether the owner has disposed this scope."""
         return self._closed
 
+    @property
+    def parent(self) -> ResourceScope | None:
+        """The scope that owns this one, or ``None`` for a root scope.
+
+        Ownership reads it to answer "is this caller one of ours?" - a view's
+        scope descends from the plugin's - and it lets go when this scope
+        closes, so a retained child never keeps its parent alive.
+        """
+        return self._parent
+
     def ensure_open(self) -> None:
         """Reject work after this owner has been disposed."""
         if self._closed:

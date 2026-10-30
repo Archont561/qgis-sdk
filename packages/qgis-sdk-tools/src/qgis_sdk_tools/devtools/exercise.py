@@ -227,7 +227,12 @@ def _stuck_job(runtime: Any, gate: threading.Event) -> Any:
         return value
 
     context = runtime.instance.ctx
-    jobs = JobService(context.scope, workers=context.workers)
+    # The runtime's own service when the plugin declares jobs, else one over
+    # the same scope and worker backend: either way this is real work under a
+    # real host, not a test double.
+    jobs = runtime.jobs
+    if jobs is None:
+        jobs = JobService(context.scope, workers=context.workers)
     handle = jobs.bind(stuck).delay(value=1)
     jobs.tick()  # now suspended on the handoff
     return handle

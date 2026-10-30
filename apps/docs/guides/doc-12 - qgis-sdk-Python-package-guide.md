@@ -228,7 +228,7 @@ The public `qgis_sdk.models`, `qgis_sdk.services`, and `qgis_sdk.core` modules i
 | `core` | `PluginContext`, `UiContext`, `AlgorithmContext`, `JobContext`, `WorkerContext`, `ResourceScope`, `PluginRuntime`, and lifecycle errors |
 | `algorithms` | `describe_algorithm`, `invoke` and `AlgorithmDescription` for functions declared with `@provider.algorithm`, plus `parameter_kind` - which host parameter an input annotation deserves; input and result schemas come from the same generator the plugin declarations use |
 | `processing` | The generated Processing registry (decision-64): `native`, `qgis`, `gdal`, `p3d`, `pdal` modules of `TypedDict` shapes, request classes and `REGISTRY`; `codegen` (the pure emitters), `snapshot` (`core_catalogue()`), `runs` (request coercion and destination allocation); the models (`AlgorithmInfo`, `AlgorithmRun`, `RunResult`, `validate_parameters`) live in `qgis_sdk.models` |
-| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, and `JobSubscription` - scoped local jobs over the step scheduler, with typed handles and owner-bound delivery |
+| `jobs` | `@job`, `describe_job`, `JobService`, `JobHandle`, `JobStatus`, `JobSubscription`, `Jobs` and `JobRegistry` - scoped local jobs over the step scheduler, named by the plugin's `jobs` declaration, with typed handles and owner-bound delivery |
 | `providers` | `Provider` and `@provider.algorithm`, `ProviderDescription`, and `declared_providers` - providers explicitly added to an application |
 | `ui` | `form_fields` and `coerce_values` - the QGIS-free rules that turn a declared action into renderable fields and submitted values back into Python types |
 
@@ -287,7 +287,7 @@ context owned by that scope; `host()`'s `default_context` calls it whenever a
 `QgsApplication` is running and falls back to a notifications-only context in a
 bare interpreter, which is what the scaffold's starter tests exercise.
 
-Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext`, `JobContext` and `WorkerContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities, refused by name on access when the host lacks them; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)). `WorkerContext` is different by design: it is what a `@job` body receives on its worker, so it carries `progress` and `cancellation` and refuses every driving-thread capability by name (decision-65).
+Create a child scope for each `UiContext`; `view.request_close()` requests closure but does not synchronously dispose the view. Give every `AlgorithmContext`, `JobContext` and `WorkerContext` a fresh child scope plus execution-specific `Progress` and read-only `Cancellation` services. Jobs submitted from a view are view-owned by default; plugin-owned work requires an explicit plugin child scope. `JobContext` also carries the optional `workers` and `network` capabilities, refused by name on access when the host lacks them; the job runtime itself lives in `qgis_sdk.jobs` (see [Scoped jobs](#scoped-jobs)). A plugin that declares jobs gets `ctx.jobs` on its own context (plugin lifetime) and a view-scoped copy on each `UiContext`, both of which refuse by name when the plugin declared none. `WorkerContext` is different by design: it is what a `@job` body receives on its worker, so it carries `progress` and `cancellation` and refuses every driving-thread capability by name (decision-65).
 
 The runtime owns the scopes: `scope.on_close(cleanup)` registers synchronous cleanup, `scope.child()` creates an owned scope, and `scope.close()` closes children before local callbacks (last registered first). Closing is idempotent. A child closed on its own stops being owned by its parent. New registrations/children after closure raise `QgisSdkScopeClosedError` (`code="scope_closed"`); reading a capability such as `ctx.desktop` also rejects a disposed scope. If cleanup fails, remaining children and callbacks still run and the failures are raised as an `ExceptionGroup`. Scope closure is **not** proof that an in-flight task stopped; adapters must request cancellation, detach callbacks and wait for safe completion where needed. The scope does not make services thread-safe or automatically revoke references to them.
 
@@ -1632,8 +1632,9 @@ scoped and
 [decision-65](../../../backlog/decisions/decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md)
 worker-first: a job is a decorated plain function whose first parameter is the
 `WorkerContext` the runtime injects and whose remaining keyword parameters are
-typed the way an action's are, submission is `bind(fn).delay(**inputs)` and
-nothing else, and the handle you get back is typed end to end. Since 0.9.0 the
+typed the way an action's are. The plugin names the jobs it exposes, submission
+is `ctx.jobs.<name>.delay(**inputs)` and nothing else, and the handle you get
+back is typed end to end. Since 0.9.0 the
 whole body runs on a worker: the driving thread submits, validates and
 delivers, and never calls your function. `qgis_sdk.jobs` is QGIS-free; it runs
 on the step scheduler and a host drives `JobService.tick()` from whatever event
@@ -1642,8 +1643,9 @@ loop it already has.
 ```python
 from dataclasses import dataclass
 
-from qgis_sdk.core import WorkerContext
-from qgis_sdk.jobs import job
+from qgis_sdk import QgisSdkPlugin
+from qgis_sdk.core import PluginContext, WorkerContext
+from qgis_sdk.jobs import JobHandle, job
 
 
 @dataclass(frozen=True)
@@ -1659,11 +1661,21 @@ def add(ctx: WorkerContext, left: int, right: int = 0) -> SumResult:
     return SumResult(left + right)
 
 
-handle = ctx.jobs.bind(add).delay(left=1, right=2)
-handle.on_progress(lambda fraction: bar.setValue(int(fraction * 100)))
-handle.on_success(lambda result: label.setText(str(result.total)))
-handle.on_failure(lambda error: label.setText(str(error)))
-handle.on_cancelled(lambda: label.setText("cancelled"))
+app = QgisSdkPlugin(id="demo", title="Demo")
+app.jobs = {"add": add}  # what an action reaches as `ctx.jobs.add`
+
+
+@app.action(id="sum", title="Sum")
+def sum_action(ctx: PluginContext, left: int, right: int) -> JobHandle:
+    handle = ctx.jobs.add.delay(left=left, right=right)  # returns at once
+    ctx.jobs.watch(
+        handle,
+        on_progress=lambda fraction: bar.setValue(int(fraction * 100)),
+        on_success=lambda result: label.setText(str(result.total)),
+        on_failure=lambda error: label.setText(str(error)),
+        on_cancelled=lambda: label.setText("cancelled"),
+    )
+    return handle
 ```
 
 The decorator adds `describe()` but does not wrap `add`, so a unit
@@ -1671,9 +1683,45 @@ test calls `add(fake_context, left=1, right=2)` directly. A bare `@job`
 derives its id and title from the function name. A plain `def` is the only
 accepted form: `async def` and a generator are refused at bind time, because a
 worker runs no event loop. GUI work belongs in a subscriber, which runs on the
-driving thread. `ctx.jobs.delay(add, left=1, right=2)` is the one-call spelling
-of `bind` then `delay`; there is no ambient `add.delay(...)`, because the owner
-is always explicit (decision-21).
+driving thread; `ctx.jobs.watch(handle, ...)` subscribes all four events to the
+calling owner's scope in one call.
+
+### How do I name the jobs my plugin exposes?
+
+A plugin declares the jobs an action may reach, in either of two forms:
+
+```python
+app.jobs = {"add": add, "count": count_features}  # explicit keys
+app.jobs = (add, count_features)                  # names derived from the functions
+```
+
+The second form derives each name from the function's own name - the same
+snake_case rule a bare `@job` uses for its id, without the module suffix - so
+`ctx.jobs.count_features.delay(layer_id=...)` is what a sequence entry of
+`def count_features(...)` buys you. A ``@job(id=...)`` does not change the
+derived name: the name is how you reach the job, the id is how it is described.
+
+Use the mapping form when two jobs share a Python name (two modules, one
+`count_features`) or when you want the public name to differ from the
+function; a sequence that derives the same name twice is refused at startup
+with that instruction. So is an entry that is not a `@job` function, a key that
+is not a plain identifier, a key that shadows what `ctx.jobs` itself reads
+(`active`, `after`, `delay`, `bind`, `describe`, `faults`, `names`, `plugin`,
+`registry`, `scope`, `watch`, ...), and two names for one job id.
+
+Everything is checked when the plugin starts, not when a job is submitted: the
+runtime builds the registry once, and `ctx.jobs.<name>` is a dictionary read
+that neither imports nor inspects anything. An unknown name raises
+`AttributeError` naming what the plugin does declare, so a typo never looks
+like a job that failed to start.
+
+`bind` is deliberately not part of this: it stays on `qgis_sdk.jobs.JobService`
+for hosts and tests, and author code reaches a job by the name the plugin
+declared. Two limitations come with that, both by design: `ctx.jobs.<name>` is
+a runtime lookup, so an editor cannot autocomplete or type-check it (generated
+per-plugin typing is TASK-124), and the web bridge keeps carrying a handle as
+`{id, status}` rather than a live subscription - a page is told the id and the
+state, not the progress stream.
 
 ### What is checked before a job runs?
 
@@ -1682,8 +1730,10 @@ names, which are required, the result type, and the object schema of the
 inputs plus the result schema from the declarations generator) without calling
 the function; a function without `@job`, without a `WorkerContext` first
 parameter, with an unannotated parameter or without a declared result is
-refused at bind time with `QgisSdkDeclarationError`, and so is a class
-(the class form was removed in 0.6.0 - see the migration note below). An
+refused with `QgisSdkDeclarationError` when the plugin starts (the registry
+describes every declared entry once) or when `bind` is handed the function, and
+so is a class (the class form was removed in 0.6.0 - see the migration note
+below). An
 `async def` body and a `JobContext` annotation are refused the same way, each
 with the migration it needs. `JobDescription.asynchronous` stays in the
 transport description and is always `False` since 0.9.0, so a 0.8 reader still
@@ -1766,7 +1816,11 @@ tick is already in progress on this thread`.
 disposes every subscription it owns first, then asks each of its jobs to stop.
 Hiding a dock is not disposal. A finished handle whose view closed afterwards
 refuses new subscriptions rather than replaying into it. Plugin-lifetime work
-is explicit - `ctx.jobs.parent.bind(...)` - and outlives the view. Closing the
+is explicit - `ctx.jobs.plugin.<name>.delay(...)`, or `jobs.plugin` on a view's
+facade - and outlives the view. An action the plugin instance handles submits
+the *calling* view's work by default: the runtime carries the invoking scope
+with the dispatch, so `self.ctx.jobs.add.delay(...)` inside a view-started
+action is that window's job, and a toolbar or page-level call is the plugin's. Closing the
 plugin scope abandons everything through the scheduler's existing rule; nobody
 is called. A subscription may name another owner (`handle.on_success(cb,
 owner=other_scope)`); that owner's closure detaches it, and the service keeps
@@ -1782,12 +1836,22 @@ has somewhere to count.
 Hosts compose the service once per plugin:
 
 ```python
-from qgis_sdk.adapters.qgis import QgsTaskWorkers
+from qgis_sdk.adapters.qgis import QgsJobPump, QgsTaskWorkers
 from qgis_sdk.jobs import JobService
 
 jobs = JobService(plugin_scope, workers=QgsTaskWorkers(plugin_scope), network=network)
-timer.timeout.connect(jobs.tick)  # the GUI thread's event loop drives delivery
+pump = QgsJobPump(jobs)  # a QTimer that calls jobs.tick() on the GUI thread
+pump.start()  # up with the plugin, pump.stop() before it unloads
 ```
+
+A `PluginRuntime` does this itself when the plugin declares jobs: it validates
+the registry, builds the service over the plugin scope with the host's workers,
+and adds `jobs` to the context it was given, so `runtime.context.has("jobs")` is
+true and `runtime.context.jobs.<name>` is the author's call. The runtime is the
+owner of both: `runtime.jobs` is the service (what a host ticks) and
+`runtime.job_registry` the validated names. `host()` in a QGIS Desktop session
+starts a `QgsJobPump` in `initGui` and stops it before `unload`, which is why
+callbacks arrive without the plugin writing a timer.
 
 `workers` is not optional any more: a `JobService` built without one refuses
 every submission with `QgisSdkJobRejectedError` instead of quietly running the
@@ -1825,10 +1889,10 @@ evidence (one task per job, its title, mirrored progress, the cancel button).
 succeeded:
 
 ```python
-prepare = ctx.jobs.bind(load_layer).delay(layer_id=layer_id)
+prepare = ctx.jobs.load_layer.delay(layer_id=layer_id)
 
-second = ctx.jobs.after(prepare).bind(run_report).delay(output=path)
-# the same thing, chained: ctx.jobs.bind(run_report).after(prepare).delay(...)
+second = ctx.jobs.after(prepare).run_report.delay(output=path)
+# the same thing, chained: ctx.jobs.run_report.after(prepare).delay(output=path)
 ```
 
 The ordering is enforced before the dependent body is handed to a worker, so it
@@ -1888,6 +1952,17 @@ What to move:
 - **A host without a worker backend** (a script that only wants to call the
   function, a test double) should call the function directly or run the code
   without `JobService`; submitting is refused rather than silently degrading.
+- **Naming, instead of passing functions.** 0.8 submitted the function itself:
+  `ctx.jobs.bind(add).delay(left=1, right=2)`, or `ctx.jobs.delay(add, ...)` as
+  the one-call spelling. 0.9 has the plugin declare what it exposes
+  (`app.jobs = {"add": add}`) and the action name it:
+  `ctx.jobs.add.delay(left=1, right=2)`. `bind` still exists on
+  `qgis_sdk.jobs.JobService`, but it is the host's and the test's route, not
+  the author's.
+- **The plugin owner, spelled out.** `ctx.jobs.parent` is now
+  `ctx.jobs.plugin`: view code that must outlive the window submits through
+  `ctx.jobs.plugin.<name>.delay(...)` and the job is the plugin's, not the
+  view's. Everything else a view submits closes with the window.
 - **Ordering, if you needed it.** `ctx.jobs.after(handle)` replaces any
   hand-rolled "start the second job from the first one's success callback": the
   dependency is declared where the job is submitted, and a failed prerequisite

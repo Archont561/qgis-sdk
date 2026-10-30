@@ -11,6 +11,7 @@ against one set of tests.
 
 from .algorithms import NativeAlgorithms
 from .context import IfaceDesktopAccess, native_plugin_context
+from .jobs import DEFAULT_INTERVAL_MS, QgsJobPump
 from .layers import NativeLayers
 from .log import NativeLog
 from .network import NativeNetworkTransport
@@ -23,6 +24,7 @@ from .tasks import QgsTaskWorkers
 from .workers import ThreadPoolWorkers
 
 __all__ = [
+    "DEFAULT_INTERVAL_MS",
     "IfaceDesktopAccess",
     "NativeAlgorithms",
     "NativeLayers",
@@ -34,6 +36,7 @@ __all__ = [
     "NativeProject",
     "NativeSettings",
     "NativeStyles",
+    "QgsJobPump",
     "QgsTaskWorkers",
     "ThreadPoolWorkers",
     "native_plugin_context",

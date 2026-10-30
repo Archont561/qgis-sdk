@@ -18,6 +18,7 @@ from .scope import QuiesceOutcome
 
 if TYPE_CHECKING:
     from qgis_sdk.core._application import QgisSdkPlugin
+    from qgis_sdk.jobs import JobRegistry, JobService
     from qgis_sdk.providers import Provider
 
 _PluginFactory = Callable[[PluginContext], object]
@@ -90,8 +91,14 @@ class PluginRuntime:
         self._instance_factory = instance_factory
         self._description = describe_plugin(plugin_class)
         self._providers = _declared_providers(plugin_class)
+        # The registry is validated here, when the runtime is built, so a bad
+        # name or an undeclared function is refused at startup rather than on
+        # the first submission (TASK-116, decision-65 §2).
+        self._registry = _job_registry(plugin_class, self._description.id)
         if context.scope.closed:
             raise QgisSdkScopeClosedError()
+        self._jobs: JobService | None = None
+        self._context = self._attach_jobs(context)
         self._state = PluginRuntimeState.NEW
         self._instance: object | None = None
         self._actions: Mapping[str, Callable[..., object]] = _EMPTY_ACTIONS
@@ -107,6 +114,32 @@ class PluginRuntime:
     def description(self) -> PluginDescription:
         """Return the validated declaration of the wrapped plugin class."""
         return self._description
+
+    @property
+    def context(self) -> PluginContext:
+        """Return the context this runtime binds to the plugin.
+
+        The runtime adds ``jobs`` to the context it was given, when the plugin
+        declares any, so a host reads the context back from here instead of
+        keeping the one it built.
+        """
+        return self._context
+
+    @property
+    def jobs(self) -> JobService | None:
+        """The plugin's job service, or ``None`` when it declares no jobs.
+
+        Hosts drive it: :meth:`JobService.tick` on the GUI thread delivers
+        progress and outcomes, and the plugin scope's quiesce asks it whether
+        a replacement is safe. Authors reach the same jobs by name through
+        ``ctx.jobs``.
+        """
+        return self._jobs
+
+    @property
+    def job_registry(self) -> JobRegistry:
+        """The names the plugin declared, empty when it declares none."""
+        return self._registry
 
     @property
     def instance(self) -> object | None:
@@ -228,6 +261,32 @@ class PluginRuntime:
         finally:
             self._context.scope.close()
 
+    def _attach_jobs(self, context: PluginContext) -> PluginContext:
+        """Give ``context`` its ``jobs`` capability, built from the registry.
+
+        A plugin that declares no jobs keeps whatever its host provided (a
+        host may supply one), and one that declares them gets a service over
+        its own scope with the host's worker backend. A host that provides
+        ``jobs`` *and* a plugin that declares them is refused: two registries
+        for one plugin would mean two answers to ``ctx.jobs.add``.
+        """
+        if len(self._registry) == 0:
+            return context
+        if context.has("jobs"):
+            raise QgisSdkDeclarationError(
+                f"Plugin {self._description.id!r}: the host already provides "
+                "'jobs' and the plugin declares its own registry; keep one"
+            )
+        from qgis_sdk.jobs import Jobs, JobService
+
+        service = JobService(
+            context.scope,
+            workers=context.workers if context.has("workers") else None,
+            registry=self._registry,
+        )
+        self._jobs = service
+        return context.with_services(jobs=Jobs(service))
+
     def _register_providers(self) -> None:
         """Advertise the listed providers through ``ctx.processing``, if any.
 
@@ -339,3 +398,20 @@ def _declared_providers(plugin_class: type) -> tuple[Provider, ...]:
     from qgis_sdk.providers import _declared_providers as validate_providers
 
     return validate_providers(plugin_class)
+
+
+def _job_registry(plugin_class: type, plugin_id: str) -> JobRegistry:
+    """The plugin's ``jobs = ...`` declaration, validated (TASK-116).
+
+    Read from the class the plugin actually runs - an intermediate author base
+    counts too - and never from a module scan: what a plugin exposes is what it
+    wrote down.
+    """
+    from qgis_sdk.jobs import JobRegistry
+
+    for base in plugin_class.__mro__:
+        if "jobs" in vars(base):
+            return JobRegistry.from_declaration(
+                vars(base)["jobs"], path=f"Plugin {plugin_id!r}"
+            )
+    return JobRegistry.empty(f"Plugin {plugin_id!r}")

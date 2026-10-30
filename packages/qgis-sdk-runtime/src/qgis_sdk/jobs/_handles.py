@@ -160,6 +160,22 @@ class JobHandle:
         return f"JobHandle({self.id!r}, {self.status.value})"
 
 
+def as_handles(handles: tuple[object, ...]) -> tuple[JobHandle, ...]:
+    """Check ``after`` takes job handles; a submitted prerequisite, never a promise.
+
+    Shared by :meth:`BoundJob.after`, :meth:`JobService.after` and
+    ``ctx.jobs.after`` so all three refuse the same way, before anything is
+    scheduled.
+    """
+    for handle in handles:
+        if not isinstance(handle, JobHandle):
+            raise TypeError(
+                f"after() takes job handles, got {type(handle).__name__}; "
+                "submit the prerequisite with delay first"
+            )
+    return tuple(handles)
+
+
 #: How a ``JobHandle`` reads as an action *result* (decision-55: a surface's
 #: ``ctx.actions.<id>()`` and a page both get the id and the status back; the
 #: handle itself never crosses). ``-> JobHandle`` is a describable annotation.
@@ -196,17 +212,11 @@ class BoundJob:
         it must not start yet. A prerequisite that fails or is cancelled fails
         this job with ``QgisSdkJobPrerequisiteError`` before its body runs.
         """
-        for handle in handles:
-            if not isinstance(handle, JobHandle):
-                raise TypeError(
-                    "after() takes job handles, got "
-                    f"{type(handle).__name__}; submit the prerequisite with delay first"
-                )
         return BoundJob(
             self.description,
             self.function,
             self.service,
-            self.prerequisites + tuple(handles),
+            self.prerequisites + as_handles(handles),
         )
 
     def delay(self, **arguments: Any) -> JobHandle:

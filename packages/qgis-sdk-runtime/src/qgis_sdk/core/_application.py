@@ -147,6 +147,7 @@ class QgisSdkPlugin(_ActionRegistry):
         self.title = title
         self._surfaces: list[type[Surface]] = []
         self._providers: list[Provider] = []
+        self._jobs: Any = None
         self._included_plugins: set[QgisSdkPlugin] = set()
         self._included_members: set[QgisSdkPlugin] = set()
         self.context_factory: Callable[[object | None], PluginContext] | None = None
@@ -160,6 +161,26 @@ class QgisSdkPlugin(_ActionRegistry):
     def providers(self) -> tuple[Provider, ...]:
         """The Processing providers owned by this application."""
         return tuple(self._providers)
+
+    @property
+    def jobs(self) -> Any:
+        """The named jobs an action reaches as ``ctx.jobs.<name>`` (TASK-116).
+
+        ``None`` until the plugin declares some. Assign a mapping
+        (``app.jobs = {"add": add}``) or a sequence of ``@job`` functions
+        (``app.jobs = (add, count_features)``); the assignment is validated at
+        once, and the runtime builds the registry again from it when the
+        plugin starts.
+        """
+        return self._jobs
+
+    @jobs.setter
+    def jobs(self, declaration: Any) -> None:
+        if declaration is not None:
+            from qgis_sdk.jobs import JobRegistry
+
+            JobRegistry.from_declaration(declaration, path=f"Plugin {self.id!r}")
+        self._jobs = declaration
 
     def surface(self, surface: type[S]) -> type[S]:
         """Register a Dialog or Dock class without replacing it."""
@@ -218,9 +239,11 @@ class QgisSdkPlugin(_ActionRegistry):
                 raise QgisSdkDeclarationError(f"duplicate provider id {provider.id!r}")
             provider_ids.add(provider.id)
 
+        jobs = _merge_jobs(self._jobs, child._jobs)
         self._extend(child._actions)
         self._surfaces = surfaces
         self._providers = providers
+        self._jobs = jobs
         self._included_plugins.add(child)
         self._included_members.update(members)
 
@@ -228,14 +251,20 @@ class QgisSdkPlugin(_ActionRegistry):
         return _describe_lowered_plugin(self._plugin_class())
 
     def _plugin_class(self) -> type:
-        members = {
+        members: dict[str, Any] = {
             "surfaces": tuple(self._surfaces),
             "providers": tuple(self._providers),
         }
+        if self._jobs is not None:
+            members["jobs"] = self._jobs
         for id, title, function, events in self._actions:
-            if function.__name__ in {"surfaces", "providers", "ctx", "describe"} or (
-                function.__name__.startswith("__")
-            ):
+            if function.__name__ in {
+                "surfaces",
+                "providers",
+                "jobs",
+                "ctx",
+                "describe",
+            } or (function.__name__.startswith("__")):
                 raise QgisSdkDeclarationError(
                     "handler name is reserved by the lowered class"
                 )
@@ -314,3 +343,31 @@ register_describer("__qgis_sdk_app_action__", _describe_function)
 register_predicate_describer(
     lambda target: isinstance(target, QgisSdkPlugin), lambda app: app.describe()
 )
+
+
+def _merge_jobs(current: Any, incoming: Any) -> Any:
+    """Combine two plugins' job declarations, refusing a shared name or id.
+
+    Both sides are read through the same validation the runtime uses, so what
+    ``include`` merges is exactly what the included plugin would have exposed -
+    not a second, looser reading of the attribute.
+    """
+    if current is None:
+        return incoming
+    if incoming is None:
+        return current
+    from qgis_sdk.jobs import JobRegistry
+
+    left = JobRegistry.from_declaration(current, path="the including plugin")
+    right = JobRegistry.from_declaration(incoming, path="the included plugin")
+    merged = {name: left.function(name) for name in left.names}
+    ids = {description.id for description in left.descriptions()}
+    for name in right.names:
+        if name in merged:
+            raise QgisSdkDeclarationError(f"duplicate job name {name!r}")
+        description = right.description(name)
+        if description.id in ids:
+            raise QgisSdkDeclarationError(f"duplicate job id {description.id!r}")
+        ids.add(description.id)
+        merged[name] = right.function(name)
+    return merged

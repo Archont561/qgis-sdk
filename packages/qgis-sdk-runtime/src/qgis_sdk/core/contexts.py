@@ -40,6 +40,7 @@ from qgis_sdk.services import (
 from .scope import ResourceScope
 
 if TYPE_CHECKING:
+    from qgis_sdk.jobs import Jobs
     from qgis_sdk.ui.actions import ViewActions
     from qgis_sdk.ui.streams import ViewStreams
 
@@ -141,6 +142,7 @@ class PluginContext(_Context):
         "_algorithms",
         "_desktop",
         "_files",
+        "_jobs",
         "_layers",
         "_log",
         "_network",
@@ -167,6 +169,7 @@ class PluginContext(_Context):
         "ui",
         "files",
         "log",
+        "jobs",
     )
 
     notifications: Notifications
@@ -179,6 +182,10 @@ class PluginContext(_Context):
     styles: Capability[Styles] = Capability()
     algorithms: Capability[Algorithms] = Capability()
     workers: Capability[Workers] = Capability()
+    #: The plugin's declared jobs (``jobs = {...}``), submitted with the
+    #: plugin's lifetime; a view's context carries a view-scoped copy
+    #: (decision-65 §3).
+    jobs: Capability[Jobs] = Capability()
     processing: Capability[Processing] = Capability()
     ui: Capability[Ui] = Capability()
     files: Capability[Files] = Capability()
@@ -202,10 +209,12 @@ class PluginContext(_Context):
         ui: Ui | None = None,
         files: Files | None = None,
         log: Log | None = None,
+        jobs: Jobs | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
             scope=scope,
+            _jobs=jobs,
             _desktop=desktop,
             _network=network,
             _layers=layers,
@@ -259,6 +268,7 @@ class UiContext(_Context):
         "_algorithms",
         "_desktop",
         "_files",
+        "_jobs",
         "_layers",
         "_log",
         "_network",
@@ -285,6 +295,7 @@ class UiContext(_Context):
         "streams",
         "styles",
         "ui",
+        "jobs",
     )
 
     notifications: Notifications
@@ -306,6 +317,10 @@ class UiContext(_Context):
     streams: Capability[ViewStreams] = Capability()
     styles: Capability[Styles] = Capability()
     ui: Capability[Ui] = Capability()
+    #: The plugin's named jobs, owned by *this view*: work submitted here is
+    #: cancelled with the window unless it goes through ``ctx.jobs.plugin``
+    #: (decision-65 §3).
+    jobs: Capability[Jobs] = Capability()
 
     def __init__(
         self,
@@ -324,11 +339,13 @@ class UiContext(_Context):
         ui: Ui | None = None,
         styles: Styles | None = None,
         desktop: DesktopAccess | None = None,
+        jobs: Jobs | None = None,
     ) -> None:
         self._assemble(
             notifications=notifications,
             view=view,
             scope=scope,
+            _jobs=jobs,
             _network=network,
             _actions=actions,
             _algorithms=algorithms,

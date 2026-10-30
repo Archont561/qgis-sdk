@@ -356,7 +356,7 @@ class SurfaceHost:
             _WidgetControl(close),
             scope,
             network=context.network if context.has("network") else None,
-            actions=ViewActions(runtime, view_id=view_id),
+            actions=ViewActions(runtime, view_id=view_id, scope=scope),
             settings=self._settings(),
             layers=context.layers if context.has("layers") else None,
             project=context.project if context.has("project") else None,
@@ -367,6 +367,7 @@ class SurfaceHost:
             styles=context.styles if context.has("styles") else None,
             desktop=context.desktop if context.has("desktop") else None,
             ui=context.ui if context.has("ui") else None,
+            jobs=context.jobs.scoped(scope) if context.has("jobs") else None,
         )
         scope.on_close(streams.dispose)
         return ui, scope
