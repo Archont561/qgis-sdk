@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ast
 import configparser
+import os
 import subprocess
 import sys
 import tomllib
@@ -180,8 +181,21 @@ def test_the_generated_package_reaches_its_factory_without_qgis(tmp_path: Path) 
 
 
 def test_the_starter_tests_pass_in_the_generated_project(tmp_path: Path) -> None:
+    """The project a user gets runs green on its own, with no QGIS and no SDK plugin.
+
+    The environment is the machine's own plus the workspace roots on
+    ``PYTHONPATH`` (``os.pathsep``, because Windows separates paths with ``;``)
+    and the SDK's pytest plugin turned off: the project's ``addopts`` loads the
+    one it declares, and nothing else about this checkout may leak in.
+    """
     root = tmp_path / "demo_server"
     write_scaffold(server_options(), root)
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        [*map(str, layers.SOURCE_ROOTS), environment.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    environment["NO_COLOR"] = "1"
 
     passed = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"],
@@ -189,12 +203,7 @@ def test_the_starter_tests_pass_in_the_generated_project(tmp_path: Path) -> None
         capture_output=True,
         text=True,
         check=False,
-        env={
-            "PATH": "/usr/bin:/bin",
-            "PYTHONPATH": ":".join(map(str, layers.SOURCE_ROOTS)),
-            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-            "NO_COLOR": "1",
-        },
+        env=environment,
     )
 
     assert passed.returncode == 0, passed.stdout + passed.stderr
