@@ -12,7 +12,8 @@ Layers, as pytest markers:
     needs a Qt event loop - a ``QApplication`` and the PyQt bindings;
 ``qgis``
     needs an initialised QGIS - a ``QgsApplication`` with its providers, and
-    the ``qgis`` Python bindings;
+    the ``qgis`` Python bindings (``qgis.PyQt`` names the binding: PyQt6 on
+    QGIS 4.x, PyQt5 on the 3.44 LTS);
 ``webengine``
     needs Qt WebEngine (a real Chromium) on top of ``qt``;
 ``desktop``
@@ -37,6 +38,7 @@ run of the whole suite start the same application.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -147,13 +149,42 @@ _owned = False
 
 
 def qgis_bindings() -> Path | None:
-    """Return the directory holding the QGIS Python bindings, if this prefix has one.
+    """Return the directory holding the QGIS Python bindings, if there is one.
 
     The pixi environment keeps them in ``share/qgis/python`` rather than on
-    ``sys.path``; a pip-only environment has no such directory.
+    ``sys.path``; a distribution package puts them on ``sys.path`` itself, and
+    a pip-only environment has no such directory at all.
     """
-    bindings = Path(sys.prefix) / "share" / "qgis" / "python"
-    return bindings if bindings.is_dir() else None
+    for prefix in (Path(sys.prefix), installed_prefix()):
+        bindings = prefix / "share" / "qgis" / "python"
+        if bindings.is_dir():
+            return bindings
+    return None
+
+
+def installed_prefix() -> Path:
+    """The QGIS installation root this interpreter can reach.
+
+    A Pixi environment keeps QGIS under its own prefix, so ``sys.prefix`` is
+    the answer there. A virtual environment built over a system QGIS
+    (``--system-site-packages``, which is how the LTS row runs) has no QGIS of
+    its own, so the prefix is found by walking up from the bindings until a
+    directory that carries ``share/qgis`` turns up - ``/usr`` on Debian and
+    Ubuntu. Falling back to ``sys.prefix`` keeps the QGIS-free case unchanged.
+    """
+    prefix = Path(sys.prefix)
+    if (prefix / "share" / "qgis").is_dir():
+        return prefix
+    try:
+        spec = importlib.util.find_spec("qgis")
+    except (ImportError, ValueError):  # an import blocker, or a broken install
+        return prefix
+    locations = list(getattr(spec, "submodule_search_locations", None) or ())
+    for location in locations:
+        for candidate in [*Path(location).parents][:6]:
+            if (candidate / "share" / "qgis").is_dir():
+                return candidate
+    return prefix
 
 
 def prepare_environment() -> None:
@@ -164,7 +195,7 @@ def prepare_environment() -> None:
     """
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", CHROMIUM_FLAGS)
-    prefix = Path(sys.prefix)
+    prefix = installed_prefix()
     os.environ.setdefault("QGIS_PREFIX_PATH", str(prefix))
     os.environ.setdefault("PROJ_LIB", str(prefix / "share" / "proj"))
     # QGIS reads this when the application is constructed, so it has to be in
@@ -197,7 +228,12 @@ def start_application() -> Any:
     if _application is not None:
         return _application
     prepare_environment()
-    from PyQt6.QtWidgets import QApplication
+    # `qgis.PyQt` is the binding the running QGIS ships: PyQt6 on QGIS 4.x,
+    # PyQt5 on the 3.44 LTS this suite also runs on (decision-70).
+    try:
+        from qgis.PyQt.QtWidgets import QApplication
+    except ImportError:
+        from PyQt6.QtWidgets import QApplication
 
     existing = QApplication.instance()
     if existing is not None:
