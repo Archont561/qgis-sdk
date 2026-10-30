@@ -36,6 +36,7 @@ LAYER_ORDER = {
     "bridge": 2,
     "files": 2,
     "http": 3,
+    "server": 3,
     "testing": 3,
 }
 LAYER_PATHS = {
@@ -55,6 +56,7 @@ LAYER_PATHS = {
     "providers": SOURCE_ROOT / "providers.py",
     "services": SOURCE_ROOT / "services",
     "resources": SOURCE_ROOT / "resources",
+    "server": SOURCE_ROOT / "server",
     "testing": SOURCE_ROOT / "testing",
     "ui": SOURCE_ROOT / "ui",
 }

@@ -26,6 +26,7 @@ from .network import (
     QgisSdkNetworkFakeError,
     reply,
 )
+from .server import FakeServerInterface, RegisteredFilter
 from .ui import (
     BuiltSurface,
     FakeUi,
@@ -43,6 +44,7 @@ __all__ = [
     "FakeNetworkTransport",
     "FakeProcessing",
     "FakeProject",
+    "FakeServerInterface",
     "FakeSettings",
     "FakeStyles",
     "FakeUi",
@@ -53,6 +55,7 @@ __all__ = [
     "QgisSdkNetworkFakeError",
     "RecordingLog",
     "RecordingNotifications",
+    "RegisteredFilter",
     "ThreadWorkers",
     "build_surface",
     "fake_ui_context",
