@@ -51,6 +51,7 @@ from qgis_sdk_tools.distributions import (
     QGisSdkDistributionError,
     read_distribution,
 )
+from qgis_sdk_tools.project import ProjectConfig
 from qgis_sdk_tools.scaffold.web import script_command
 
 from .validate import check_web_assets
@@ -204,13 +205,7 @@ def build_plugin(
             staged,
             prefix=prefix,
             roots=roots,
-            append={
-                "__init__.py": class_factory_source(
-                    config,
-                    runtime_package=f"{prefix}.{RUNTIME_PACKAGE}",
-                    by="qgis-sdk build",
-                )
-            },
+            append=_entry_points(config, runtime_package=f"{prefix}.{RUNTIME_PACKAGE}"),
         )
         (staged / METADATA_FILE).write_text(
             render_metadata(config, facts), encoding="utf-8", newline="\n"
@@ -309,6 +304,25 @@ def _build_web(web: Path, run: RunProcess) -> None:
         raise QgisSdkBuildError(
             f"web build failed: `{' '.join(argv)}` in {web} exited with {code}"
         )
+
+
+def _entry_points(config: ProjectConfig, *, runtime_package: str) -> dict[str, str]:
+    """What ``build`` appends to ``<plugin>/__init__.py``, per declared host.
+
+    A Desktop plugin keeps an empty ``__init__.py`` in the source tree and gets
+    its ``classFactory`` here (decision-43). A server plugin cannot: QGIS Server
+    imports ``serverClassFactory`` from the package itself, so the source already
+    carries it and ``build`` only writes ``server=True`` into ``metadata.txt``.
+    A project that declares both hosts gets both lines and is loaded by each
+    host through its own entry.
+    """
+    if "desktop" not in config.hosts:
+        return {}
+    return {
+        "__init__.py": class_factory_source(
+            config, runtime_package=runtime_package, by="qgis-sdk build"
+        )
+    }
 
 
 def _stage_plugin(

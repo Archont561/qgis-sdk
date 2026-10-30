@@ -67,6 +67,17 @@ def new(
             help="native: a bound Dialog in pure PyQt plus a toolbar action opening it.",
         ),
     ] = None,
+    host: Annotated[
+        str,
+        typer.Option(
+            "--host",
+            help=(
+                "desktop (default): QGIS loads classFactory. server: QGIS Server "
+                "loads serverClassFactory and the starter declares filters, "
+                "services and access hooks instead of actions."
+            ),
+        ),
+    ] = "desktop",
     web: Annotated[
         str | None,
         typer.Option(help="Add a web UI: vanilla or react (a terminal is asked)."),
@@ -143,6 +154,7 @@ def new(
             ui_dependency=ui_dependency,
             algorithm=algorithm,
             ui=ui,
+            host=host,
         )
         root = runtime.resolve(target)
         _report(runtime, options, root, dry_run=dry_run, force=force)
@@ -216,6 +228,7 @@ def _resolve(
     ui_dependency: str | None = None,
     algorithm: bool = False,
     ui: str | None = None,
+    host: str = "desktop",
 ) -> ScaffoldOptions:
     """Pass only what the caller chose, so the API keeps its own defaults."""
     given: dict[str, object] = {"plugin": plugin or target.name}
@@ -223,6 +236,8 @@ def _resolve(
         given["algorithm"] = True
     if ui is not None:
         given["ui"] = ui
+    if host != "desktop":
+        given["host"] = host
     for key, value in (
         ("title", title),
         ("author", author),

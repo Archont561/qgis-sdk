@@ -553,12 +553,17 @@ Registering them with a real server is one call:
 from qgis_sdk.adapters.qgis.server import QgsServerHost
 from qgis_sdk.server import ServerHooks
 
-from .plugin import app
+from .plugin import add_version, demo, only_public
+
+HOOKS = ServerHooks((add_version, demo, only_public))
 
 
 def serverClassFactory(serverIface):
-    return QgsServerHost(ServerHooks(app.server_hooks()), serverIface).register()
+    return QgsServerHost(HOOKS, serverIface).register()
 ```
+
+`qgis-sdk new --host server` writes exactly that file (below), so a project that
+starts as a server plugin keeps the entry QGIS Server imports.
 
 | SDK declaration | the object QGIS calls | when |
 | --- | --- | --- |
@@ -618,9 +623,9 @@ def schedule(ctx: ServerContext, request: ServerRequest, response: ServerRespons
   naming `jobs` instead of handing out a service that could submit nothing.
 
 The whole dispatcher is testable without QGIS: `qgis_sdk.testing.FakeServerInterface`
-records registrations and serves a request through the same `ServerHost`, which
-is what `qgis-sdk test --target server` uses on a machine whose QGIS has no
-server bindings. Where the build *does* have them, the same plugin runs in-process
+records registrations and serves a request through the same `ServerHost`, so a
+project's own `qgis-sdk test` (the `pure` target) proves the hooks on a machine
+whose QGIS has no server bindings at all. Where the build *does* have them, the same plugin runs in-process
 under a headless `QgsApplication` through `QgsServer.handleRequest` - the
 `QGIS 3.44 LTS` row runs exactly that, and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
 carries the evidence.
@@ -2236,6 +2241,23 @@ options always produce the same bytes: `.gitignore`, `README.md`,
 `--dry-run` prints the plan without touching disk, and an existing file is refused
 unless `--force` is passed.
 
+`--host server` writes a project for the other entry point. The files are the
+same six, and two of them differ: `[tool.qgis-sdk] hosts = ["server"]` says which
+host loads it, and `<plugin>/__init__.py` is no longer empty - it holds
+`serverClassFactory`, because QGIS Server imports the package and calls that
+name, so a generated entry has to exist in the source tree (a Desktop
+`classFactory` is still appended by `build`/`dev`, decision-43). `<plugin>/plugin.py`
+declares a `@filter`, a `@service` and a `@access_control` hook instead of
+actions, and `tests/test_plugin.py` drives them through
+`qgis_sdk.testing.FakeServerInterface`.
+
+The flags that only one host can honour are refused rather than silently
+dropped: `--web`, `--ui` and `--algorithm` need `iface` or a Processing
+registry, and a `ServerContext` has neither, so `qgis-sdk new --host server
+--web vanilla` fails with the reason. A plugin for both hosts is a Desktop
+project that declares `hosts = ["desktop", "server"]` and keeps its surfaces for
+the Desktop one.
+
 There is no `metadata.txt` and no `classFactory` in the project (decision-43):
 `pyproject.toml` carries `[project]` (name, version, description, authors, the
 `qgis-sdk-runtime` requirement) and `[tool.qgis-sdk]` (`plugin`,
@@ -2661,9 +2683,13 @@ argument parsing over `qgis_sdk_tools.bundle.build_plugin`). In order:
    the source tree is untouched - go the two artifacts QGIS needs
    (decision-43): `metadata.txt`, rendered from `pyproject.toml` with every
    key QGIS requires plus `hasProcessingProvider` from the application's
-   providers and the `[tool.qgis-sdk.metadata]` passthrough; and, appended
-   to `<plugin>/__init__.py`, `classFactory = host("<spec>", placement=...,
-   grants=...)` importing `host` from the vendored runtime. The plugin
+   providers, `server=True` when `[tool.qgis-sdk] hosts` declares the server
+   (QGIS Server reads that key to decide whether to load the plugin at all;
+   Desktop ignores it) and the `[tool.qgis-sdk.metadata]` passthrough; and,
+   appended to `<plugin>/__init__.py` for a project that declares `desktop`,
+   `classFactory = host("<spec>", placement=..., grants=...)` importing `host`
+   from the vendored runtime. A server-only project keeps its own
+   `serverClassFactory` there and gets no `classFactory`. The plugin
    application is imported once, in isolation, to read its title and providers
    (an import error is a plain build error). The runtime `qgis_sdk` - every
    module except `qgis_sdk.testing` - is copied to

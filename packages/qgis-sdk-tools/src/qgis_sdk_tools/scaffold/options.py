@@ -40,6 +40,10 @@ RESERVED_PACKAGE_NAMES: Final = frozenset(
 WebFramework = Literal["vanilla", "react"]
 WebPlacement = Literal["dialog", "dock"]
 PackageManager = Literal["npm", "pnpm", "bun"]
+HostKind = Literal["desktop", "server"]
+
+HOSTS: Final[tuple[str, ...]] = get_args(HostKind)
+DEFAULT_HOST: Final = "desktop"
 
 WEB_FRAMEWORKS: Final[tuple[str, ...]] = get_args(WebFramework)
 WEB_PLACEMENTS: Final[tuple[str, ...]] = get_args(WebPlacement)
@@ -96,6 +100,15 @@ class ScaffoldOptions:
     ``buffer`` function (decision-42) - adds it to the application and
     exposes it as an action, with a starter test over the SDK fakes.
     """
+    host: str = DEFAULT_HOST
+    """The host this project is written for: ``"desktop"`` or ``"server"``.
+
+    The choice decides what the starter declares - an application with actions
+    and surfaces, or QGIS Server hooks and a ``serverClassFactory`` - and which
+    flags are refused: a page or a dialog needs `iface`, and Processing exists
+    only inside QGIS Desktop, so ``--web``, ``--ui`` and ``--algorithm`` are
+    Desktop-only (decision-52).
+    """
     ui: str | None = None
     """``"native"`` for a bound Dialog in pure PyQt (decision-55), else ``None``.
 
@@ -122,6 +135,7 @@ class ScaffoldOptions:
         algorithm: bool = False,
         ui: str | None = None,
         ui_dependency: str | None = None,
+        host: str = DEFAULT_HOST,
     ) -> ScaffoldOptions:
         """Check what the caller chose and derive what it left out.
 
@@ -131,6 +145,7 @@ class ScaffoldOptions:
         their own. ``algorithm`` adds the Processing starter.
         """
         return cls(
+            host=_host(host, web=web, ui=ui, algorithm=algorithm),
             plugin=_package_name(plugin),
             title=_title(plugin, title),
             version=_dot_version(version, "version"),
@@ -146,6 +161,26 @@ class ScaffoldOptions:
 
 
 UI_KINDS = ("native",)
+
+
+def _host(host: str, *, web: str | None, ui: str | None, algorithm: bool) -> str:
+    """Check ``--host`` and the flags that only one host makes sense of."""
+    chosen = _choice(host, HOSTS, "host")
+    if chosen == "desktop":
+        return chosen
+    for label, given in (("A web UI (--web)", web), ("--ui native", ui)):
+        if given is not None:
+            raise QgisSdkScaffoldError(
+                f"{label} needs the desktop host: a QGIS Server request has no "
+                "iface to place a dialog or a dock in - declare both hosts and keep "
+                "the surface for the Desktop one"
+            )
+    if algorithm:
+        raise QgisSdkScaffoldError(
+            "--algorithm needs the desktop host: Processing runs inside QGIS "
+            "Desktop, and a server request has no algorithm registry"
+        )
+    return chosen
 
 
 def _ui(ui: str | None) -> str | None:
