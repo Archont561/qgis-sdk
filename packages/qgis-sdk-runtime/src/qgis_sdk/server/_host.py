@@ -140,22 +140,63 @@ class ServerHost:
             scope = ResourceScope()
         try:
             response = ServerResponse()
-            context = self._context(
+            context = self.context(
                 scope, request, response, project=project, layers=layers, log=log
             )
-            return self._serve(context, request, response)
+            return self.serve(context, request, response)
         finally:
             if owned:
                 scope.close()
 
     # -- serving -----------------------------------------------------------------
 
-    def _serve(
+    def serve(
         self,
         context: ServerContext,
         request: ServerRequest,
         response: ServerResponse,
     ) -> ServerResponse:
+        """Serve one request through every declared hook, in the fixed order.
+
+        The pieces below are public because a host that is not this dispatcher
+        - QGIS Server calls a filter, a service and an access-control object at
+        three different moments of one request - has to run the same steps one
+        at a time and in this order, not a second implementation of them.
+        """
+        rewritten = self.rewrite(context, request, response)
+        if isinstance(rewritten, ServerResponse):
+            return rewritten
+        denied = self.denied_layer(context, rewritten)
+        if denied is not None:
+            return denied
+        service = self.service_for(rewritten)
+        if service is not None:
+            answer = service(context, rewritten)
+            if not isinstance(answer, ServerResponse):
+                raise QgisSdkUnsupportedCapabilityError(
+                    f"@server.service `{service.__name__}` returned "
+                    f"{type(answer).__name__}; a service answers with a "
+                    "ServerResponse"
+                )
+            return answer
+        return response.write_text(
+            f"SERVICE {rewritten.param('SERVICE') or '(missing)'!r} is not served "
+            "by this plugin",
+            status=400,
+        )
+
+    def rewrite(
+        self,
+        context: ServerContext,
+        request: ServerRequest,
+        response: ServerResponse,
+    ) -> ServerRequest | ServerResponse:
+        """Run the filters; return the rewritten request or a hook's answer.
+
+        ``None`` from a filter means "pass this request on unchanged", a
+        ``ServerRequest`` means "the hooks after me see this one", and a
+        ``ServerResponse`` means "answer the request, run nothing else".
+        """
         current = request
         for hook in self._hooks.filters:
             outcome = hook(context, current, response)
@@ -169,28 +210,48 @@ class ServerHost:
                     f"{type(outcome).__name__}; return None to pass, a "
                     "ServerRequest to rewrite or a ServerResponse to answer"
                 )
-        # A refusal beats the answer: an access hook that denies a layer stops
-        # the request before any service renders it (decision-52).
-        denied = self._denied_layer(context, current)
-        if denied is not None:
-            return denied
-        service = self._service_for(current)
-        if service is not None:
-            answer = service(context, current)
-            if not isinstance(answer, ServerResponse):
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"@server.service `{service.__name__}` returned "
-                    f"{type(answer).__name__}; a service answers with a "
-                    "ServerResponse"
-                )
-            return answer
-        return context.response.write_text(
-            f"SERVICE {current.param('SERVICE') or '(missing)'!r} is not served "
-            "by this plugin",
-            status=400,
-        )
+        return current
 
-    def _service_for(self, request: ServerRequest) -> Callable[..., Any] | None:
+    def denied_layer(
+        self, context: ServerContext, request: ServerRequest
+    ) -> ServerResponse | None:
+        """Ask every access-control hook about every requested layer.
+
+        A refusal beats the answer: a hook that denies a layer stops the request
+        before any service renders it (decision-52), and the response names the
+        layer instead of passing a silently filtered map.
+        """
+        if not self._hooks.access_control:
+            return None
+        for layer in _requested_layers(request):
+            if self.permits(context, request, layer):
+                continue
+            # A hook that wants its own refusal writes it to ctx.response;
+            # otherwise the host builds the plain 403 that names the layer.
+            if context.response.body or context.response.status != 200:
+                return context.response
+            return ServerResponse.denied(
+                f"layer {layer!r} is not available to this request"
+            )
+        return None
+
+    def permits(
+        self, context: ServerContext, request: ServerRequest, layer: str
+    ) -> bool:
+        """Whether every access-control hook allows ``layer`` for this request.
+
+        QGIS Server asks this one layer at a time, while it renders a map or
+        resolves a filter, so the question is public and the answer is a bool -
+        not the 403 :meth:`denied_layer` builds for a host that dispatches whole
+        requests.
+        """
+        for hook in self._hooks.access_control:
+            if not hook(context, request, layer):
+                return False
+        return True
+
+    def service_for(self, request: ServerRequest) -> Callable[..., Any] | None:
+        """The declared handler of the OGC service this request names, if any."""
         requested = (request.param("SERVICE") or "").replace("_", "").upper()
         if not requested:
             return None
@@ -199,37 +260,15 @@ class ServerHost:
                 return hook
         return None
 
-    def _denied_layer(
-        self, context: ServerContext, request: ServerRequest
-    ) -> ServerResponse | None:
-        """Ask every access-control hook about every requested layer."""
-        if not self._hooks.access_control:
-            return None
-        requested = request.param("LAYERS") or request.param("LAYER") or ""
-        for layer in (name.strip() for name in requested.split(",")):
-            if not layer:
-                continue
-            for hook in self._hooks.access_control:
-                if hook(context, request, layer):
-                    continue
-                # A hook that wants its own refusal writes it to ctx.response;
-                # otherwise the host builds the plain 403 that names the layer.
-                if context.response.body or context.response.status != 200:
-                    return context.response
-                return ServerResponse.denied(
-                    f"layer {layer!r} is not available to this request"
-                )
-        return None
-
-    def _context(
+    def context(
         self,
         scope: ResourceScope,
         request: ServerRequest,
         response: ServerResponse,
         *,
-        project: Project | None,
-        layers: Layers | None,
-        log: Log | None,
+        project: Project | None = None,
+        layers: Layers | None = None,
+        log: Log | None = None,
     ) -> ServerContext:
         if self._context_factory is not None:
             return self._context_factory(scope, request, response)
@@ -242,6 +281,12 @@ class ServerHost:
     def __repr__(self) -> str:
         state = "registered" if self._registered else "unregistered"
         return f"ServerHost({self._hooks!r}, {state})"
+
+
+def _requested_layers(request: ServerRequest) -> tuple[str, ...]:
+    """The layers a request names, in the order it names them."""
+    requested = request.param("LAYERS") or request.param("LAYER") or ""
+    return tuple(name.strip() for name in requested.split(",") if name.strip())
 
 
 def _declaration_of(hook: Callable[..., Any], kind: str) -> HookDeclaration:
