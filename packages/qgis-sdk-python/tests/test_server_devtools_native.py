@@ -23,6 +23,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -46,6 +47,9 @@ if not os.environ.get("QGIS_SDK_SERVER_DEV"):
     )
 
 DEADLINE = 90.0
+
+#: The command, the port it was given, and the lines it has said so far.
+Running = tuple[subprocess.Popen[str], int, list[str]]
 
 PYPROJECT = """[project]
 name = "devtools-demo"
@@ -135,8 +139,33 @@ def get(port: int, query: str) -> str:
         return response.read().decode("utf-8", errors="replace")
 
 
-def wait_for(port: int, expected: str, process: subprocess.Popen[str]) -> str:
+def listening(port: int) -> bool:
+    """Whether anything accepts a connection on ``port``, without sending a request."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(1.0)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def read_alongside(process: subprocess.Popen[str]) -> list[str]:
+    """Keep the command's output while it runs, so a hang can be explained.
+
+    ``qgis-sdk dev`` talks to the terminal the whole time it serves, and a
+    failure that only says "it never answered" wastes the one thing the run
+    produced. Draining the pipe in a thread means the report carries the last
+    lines even when the process never exits.
+    """
+    said: list[str] = []
+    thread = threading.Thread(
+        target=lambda: said.extend(line.rstrip() for line in (process.stdout or ())),
+        daemon=True,
+    )
+    thread.start()
+    return said
+
+
+def wait_for(port: int, expected: str, running: Running) -> str:
     """Poll the server until the body says ``expected``; fail with what it did say."""
+    process, _port, said = running
     deadline = time.monotonic() + DEADLINE
     seen: list[str] = []
     while time.monotonic() < deadline:
@@ -151,12 +180,10 @@ def wait_for(port: int, expected: str, process: subprocess.Popen[str]) -> str:
         if expected in body:
             return body
         time.sleep(0.25)
-    output = ""
-    if process.poll() is not None:
-        output = process.communicate(timeout=30)[0] or ""
     raise AssertionError(
-        f"the server never answered {expected!r}; bodies seen: {seen[-5:]}; "
-        f"qgis-sdk dev said:\n{output[-4000:]}"
+        f"the server never answered {expected!r}: bodies seen: {seen[-5:]}, "
+        f"something listens on 127.0.0.1:{port}: {listening(port)}, "
+        f"exit code: {process.poll()}; qgis-sdk dev said:\n" + "\n".join(said[-60:])
     )
 
 
@@ -168,8 +195,13 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture
-def running(project: Path) -> Iterator[tuple[subprocess.Popen[str], int]]:
-    """``qgis-sdk dev --host server`` as a user runs it, in its own process."""
+def running(project: Path) -> Iterator[Running]:
+    """``qgis-sdk dev --host server`` as a user runs it, in its own process.
+
+    What it says is drained as it says it: the notes name the QGIS the command
+    chose and the command it runs, which is the first thing worth knowing when
+    the loops below time out.
+    """
     port = free_port()
     env = {
         key: value for key, value in os.environ.items() if not key.startswith("PYTEST_")
@@ -192,30 +224,31 @@ def running(project: Path) -> Iterator[tuple[subprocess.Popen[str], int]]:
         stderr=subprocess.STDOUT,
         text=True,
     )
+    said = read_alongside(process)
     try:
-        yield process, port
+        yield process, port, said
     finally:
         if process.poll() is None:
             process.terminate()
-        process.communicate(timeout=60)
+        process.wait(timeout=60)
 
 
 def test_the_server_answers_the_service_the_plugin_declares(
-    project: Path, running: tuple[subprocess.Popen[str], int]
+    project: Path, running: Running
 ) -> None:
-    process, port = running
+    _process, port, _said = running
 
-    body = wait_for(port, "marker=first", process)
+    body = wait_for(port, "marker=first", running)
 
     assert body == "marker=first"
 
 
 def test_a_saved_filter_edit_is_what_the_next_request_runs(
-    project: Path, running: tuple[subprocess.Popen[str], int]
+    project: Path, running: Running
 ) -> None:
     """The AC's claim: the reload, not a restart, is what picks up the edit."""
-    process, port = running
-    wait_for(port, "marker=first", process)
+    process, port, _said = running
+    wait_for(port, "marker=first", running)
 
     plugin = project / "devtools_demo" / "plugin.py"
     plugin.write_text(
@@ -225,7 +258,7 @@ def test_a_saved_filter_edit_is_what_the_next_request_runs(
         encoding="utf-8",
     )
 
-    body = wait_for(port, "marker=second", process)
+    body = wait_for(port, "marker=second", running)
 
     assert body == "marker=second"
     # The command stayed up: a reload that had failed would have ended it, and a
