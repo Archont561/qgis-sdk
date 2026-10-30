@@ -40,12 +40,15 @@ def test(
         str,
         typer.Option(
             help="pure (default, no QGIS), qgis (PyQGIS, headless), "
-            "desktop (inside QGIS Desktop) or web (Vitest)."
+            "desktop (inside QGIS Desktop), server (QGIS Server bindings) "
+            "or web (Vitest)."
         ),
     ] = "pure",
     qgis_prefix: Annotated[
         Path | None,
-        typer.Option(help="QGIS install prefix for the qgis and desktop targets."),
+        typer.Option(
+            help="QGIS install prefix for the qgis, desktop and server targets."
+        ),
     ] = None,
 ) -> None:
     """Run the project's tests for one target; other arguments go to pytest."""

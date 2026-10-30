@@ -508,7 +508,11 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         lts["Test both hosts on the LTS"]["run"]
         == ".venv-lts/bin/python scripts/ci.py lts"
     )
-    assert lts["Test both hosts on the LTS"]["env"] == {"QT_QPA_PLATFORM": "offscreen"}
+    assert lts["Test both hosts on the LTS"]["env"] == {
+        "QT_QPA_PLATFORM": "offscreen",
+        # The dev-loop harness starts a real QgsServer, so the row opts it in.
+        "QGIS_SDK_SERVER_DEV": "1",
+    }
     assert coverage["Check coverage for all packages"]["id"] == "coverage"
     assert (
         coverage["Check coverage for all packages"]["run"]

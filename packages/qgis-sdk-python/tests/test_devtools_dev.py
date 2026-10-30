@@ -12,6 +12,7 @@ from qgis_sdk_tools.devtools.dev import (
     DESKTOP_PROBE,
     DEV_SERVER_ENV,
     REQUEST_ENV,
+    SERVER_PROBE,
     STANDALONE_PROBE,
     QgisSdkDevError,
     inspect_project,
@@ -51,7 +52,9 @@ def install(tmp_path: Path) -> QgisInstall:
     )
 
 
-@pytest.mark.parametrize("probe", [DESKTOP_PROBE, STANDALONE_PROBE, TEST_PROBE])
+@pytest.mark.parametrize(
+    "probe", [DESKTOP_PROBE, STANDALONE_PROBE, SERVER_PROBE, TEST_PROBE]
+)
 def test_every_probe_is_valid_python(probe: str) -> None:
     # A probe with a syntax error hangs headless QGIS in a modal error dialog.
     compile(probe, "probe", "exec")
@@ -183,6 +186,7 @@ class TestDesktopPlan:
             "dev_server": None,
             "exercise": None,
             "watch": True,
+            "port": None,
         }
         assert (workspace / "dev-desktop.py").read_text(
             encoding="utf-8"
@@ -319,8 +323,97 @@ class TestStandalonePlan:
 def test_an_unknown_mode_is_refused(
     project: Path, install: QgisInstall, tmp_path: Path
 ) -> None:
-    with pytest.raises(QgisSdkDevError, match="desktop or standalone"):
+    with pytest.raises(QgisSdkDevError, match="desktop, standalone, server"):
         plan_dev(inspect_project(project), "gui", install, env={}, workspace=tmp_path)
+
+
+class TestServerPlan:
+    """TASK-80 AC 4: a real QgsServer in the process, on loopback, reloadable."""
+
+    def test_runs_the_installs_interpreter_with_a_port_and_no_desktop(
+        self, project: Path, install: QgisInstall, tmp_path: Path
+    ) -> None:
+        plan = plan_dev(
+            inspect_project(project),
+            "server",
+            install,
+            env={},
+            workspace=tmp_path,
+            port=8080,
+        )
+
+        assert plan.argv == (str(install.python), str(tmp_path / "dev-server.py"))
+        assert plan.profile is None
+        assert plan.env["QT_QPA_PLATFORM"] == "offscreen"
+        # The generated package is importable by name; it is NOT a directory
+        # QGIS Server scans, or the plugin would be registered twice.
+        assert "QGIS_PLUGINPATH" not in plan.env
+        sdk_paths = [str(path) for path in sdk_import_paths()]
+        assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
+            str(install.bindings),
+            str(project.resolve() / ".qgis-sdk" / "dev" / "host"),
+            *sdk_paths,
+        ]
+        request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
+        assert request["mode"] == "server"
+        assert request["port"] == 8080
+        assert request["web"] is False
+        assert "http://127.0.0.1:8080" in plan.notes[0]
+        assert "curl" in plan.notes[1]
+        assert "reload" in plan.notes[2]
+        assert (tmp_path / "dev-server.py").read_text(encoding="utf-8") == SERVER_PROBE
+
+    def test_a_web_page_is_not_served_to_a_server_plugin(
+        self, web_project: Path, install: QgisInstall, tmp_path: Path
+    ) -> None:
+        plan = plan_dev(
+            inspect_project(web_project),
+            "server",
+            install,
+            env={},
+            workspace=tmp_path,
+            port=8080,
+        )
+
+        request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
+        assert request["web"] is False
+        assert DEV_SERVER_ENV not in plan.env
+
+    def test_needs_a_port(
+        self, project: Path, install: QgisInstall, tmp_path: Path
+    ) -> None:
+        with pytest.raises(QgisSdkDevError, match="loopback port"):
+            plan_dev(
+                inspect_project(project), "server", install, env={}, workspace=tmp_path
+            )
+
+    def test_needs_an_interpreter(
+        self, project: Path, install: QgisInstall, tmp_path: Path
+    ) -> None:
+        bare = QgisInstall(
+            prefix=install.prefix,
+            bindings=install.bindings,
+            executable=install.executable,
+            python=None,
+            source=install.source,
+            conda=True,
+        )
+
+        with pytest.raises(QgisSdkDevError, match="no Python interpreter"):
+            plan_dev(
+                inspect_project(project),
+                "server",
+                bare,
+                env={},
+                workspace=tmp_path,
+                port=8080,
+            )
+
+    def test_the_probe_is_a_bootstrap_for_the_server_loop(self) -> None:
+        assert "from qgis_sdk_tools.devtools.serverdev import bootstrap_server" in (
+            SERVER_PROBE
+        )
+        assert "bootstrap_server(request)" in SERVER_PROBE
 
 
 class TestWaitForPort:

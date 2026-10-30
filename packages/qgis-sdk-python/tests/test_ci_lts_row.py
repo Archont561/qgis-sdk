@@ -95,6 +95,7 @@ def test_a_green_row_runs_both_modules(
     # so neither can hide behind the other's summary line.
     assert sorted(path.name for path in (tmp_path / "lts").glob("*.log")) == [
         "test_lts_native.py.log",
+        "test_server_devtools_native.py.log",
         "test_server_native.py.log",
     ]
 

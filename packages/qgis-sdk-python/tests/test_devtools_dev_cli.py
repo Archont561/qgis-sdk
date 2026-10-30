@@ -121,6 +121,34 @@ def test_standalone_runs_the_interpreter(project: Path, prefix: Path) -> None:
     assert "no iface, no plugin lifecycle, no reload" in runtime.stderr
 
 
+def test_host_server_runs_the_interpreter_with_a_server_loop(
+    project: Path, prefix: Path
+) -> None:
+    """TASK-80 AC 4 spells it ``dev --host server``; ``--mode`` is the same flag."""
+    runtime = FakeCliRuntime(project)
+
+    result = runner.invoke(
+        app,
+        ["dev", "--host", "server", "--port", "8099", "--qgis-prefix", str(prefix)],
+        obj=runtime,
+    )
+
+    assert result.exit_code == 0, runtime.stderr
+    argv, cwd = runtime.processes[0]
+    assert argv[0] == str(prefix.resolve() / "bin" / "python")
+    assert argv[1].endswith("dev-server.py")
+    assert cwd == project
+    env = runtime.environments[0]
+    assert env is not None
+    assert "QGIS_PLUGINPATH" not in env
+    assert env["QT_QPA_PLATFORM"] == "offscreen"
+    assert "http://127.0.0.1:8099" in runtime.stderr
+    # The workspace holding the request is removed when the command returns; the
+    # plan's own test reads it (TestServerPlan in test_devtools_dev.py).
+    assert env[REQUEST_ENV].endswith("dev-request.json")
+    assert runtime.started == []  # no Vite for a server plugin
+
+
 def test_a_web_ui_starts_vite_on_loopback_and_stops_it_afterwards(
     web_project: Path, prefix: Path, listening_port: int
 ) -> None:

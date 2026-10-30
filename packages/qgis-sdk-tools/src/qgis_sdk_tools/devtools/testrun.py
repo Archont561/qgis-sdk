@@ -19,6 +19,12 @@ Targets:
     marked ``desktop``; ``qgis_iface`` is the real interface, and the
     project's plugin is loadable by name through the same generated host
     package ``qgis-sdk dev`` stages (decision-43);
+``server``
+    the install's interpreter with QGIS Server bindings importable; tests
+    marked ``server``; ``qgis_app`` is a headless ``QgsApplication`` and
+    ``qgis.server`` is what they need. A QGIS built without ``WITH_SERVER``
+    cannot run this target and the run says so instead of skipping
+    (decision-52);
 ``web``
     the project's Vitest through the manager its lockfile names.
 """
@@ -51,17 +57,18 @@ __all__ = [
 ]
 
 PLUGIN: Final = "qgis_sdk_tools.pytest_plugin"
-TARGETS: Final = ("pure", "qgis", "desktop", "web")
-NATIVE_TARGETS: Final = frozenset({"qgis", "desktop"})
+TARGETS: Final = ("pure", "qgis", "desktop", "server", "web")
+NATIVE_TARGETS: Final = frozenset({"qgis", "desktop", "server"})
 PROFILE_NAME: Final = "qgis-sdk-test"
 REQUEST_ENV: Final = "QGIS_SDK_TEST_REQUEST"
 PROBE_NAME: Final = "pytest-probe.py"
 REQUEST_NAME: Final = "pytest-request.json"
 
 SELECTION: Final = {
-    "pure": "not qgis and not desktop",
+    "pure": "not qgis and not desktop and not server",
     "qgis": "qgis",
     "desktop": "desktop",
+    "server": "server",
 }
 
 LOCKFILES: Final = (
@@ -159,6 +166,8 @@ def plan_tests(
     headless = wants_headless(env, platform=platform)
     if target == "qgis":
         return _plan_qgis(root, pytest_args, env, install, headless)
+    if target == "server":
+        return _plan_server(root, pytest_args, env, install)
     if workspace is None:
         raise QgisSdkTestRunError("target desktop needs a workspace directory")
     return _plan_desktop(root, pytest_args, env, install, headless, workspace)
@@ -194,6 +203,50 @@ def _plan_qgis(
             (
                 f"target qgis: QGIS {install.prefix} ({install.source}), "
                 f"python {install.python}, {'offscreen' if headless else 'on screen'}"
+            ),
+        ),
+    )
+
+
+def _plan_server(
+    root: Path,
+    pytest_args: Sequence[str],
+    env: Mapping[str, str],
+    install: QgisInstall,
+) -> TestPlan:
+    """The install's interpreter, headless, with QGIS Server bindings.
+
+    Whether ``qgis.server`` is there is answered by the process that will run
+    the tests - the plugin refuses the session when it is missing, naming the
+    build - because a plan cannot know which interpreter a prefix resolves to
+    without starting it.
+    """
+    if install.python is None:
+        raise QgisSdkTestRunError(
+            f"{install.prefix} has no Python interpreter (bin/python, bin/python3 "
+            "or python.exe); QGIS Server bindings only import into the "
+            "interpreter they were built for, so this install cannot run the "
+            "server target"
+        )
+    process_env = install.environment(
+        env, extra_paths=sdk_import_paths(), headless=True
+    )
+    process_env[TARGET_ENV] = "server"
+    return TestPlan(
+        target="server",
+        argv=(
+            str(install.python),
+            "-m",
+            "pytest",
+            *_pytest_args("server", pytest_args),
+        ),
+        cwd=root,
+        env=process_env,
+        notes=(
+            (
+                f"target server: QGIS {install.prefix} ({install.source}), "
+                f"python {install.python}, offscreen; the tests marked server "
+                "need a QGIS built with WITH_SERVER=ON and its bindings"
             ),
         ),
     )

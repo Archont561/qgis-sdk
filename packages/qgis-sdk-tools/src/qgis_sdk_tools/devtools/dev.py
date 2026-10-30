@@ -20,6 +20,16 @@ Two modes, both explicit (decision-8):
     constructed through the same generated package's ``classFactory(None)``.
     There is no ``iface``, no plugin menu, no QGIS lifecycle and no reload;
     what it offers is a fast loop for the web page and the declared actions.
+``server``
+    the install's interpreter with a real ``QgsServer`` in the process,
+    answering HTTP on loopback through ``QgsServer.handleRequest``: no FCGI,
+    no browser, no profile. The plugin is loaded through the same generated
+    package's ``serverClassFactory``, and a saved change reloads it by handing
+    QGIS's registration the new hook set (``QgsServerHost.rebind``), because
+    QGIS Server cannot withdraw a filter, a service or an access-control
+    object once registered. A priority or a service name that changes needs a
+    new ``qgis-sdk dev``; a failed reload leaves the endpoint answering 503 and
+    says why (``devtools.serverdev``).
 
 With a web UI the command starts the project's Vite dev server on loopback
 and hands its origin to the plugin through ``QGIS_SDK_DEV_SERVER``; the
@@ -70,7 +80,7 @@ __all__ = [
     "wait_for_port",
 ]
 
-MODES: Final = ("desktop", "standalone")
+MODES: Final = ("desktop", "standalone", "server")
 PROFILE_NAME: Final = "dev"
 STATE_DIRECTORY: Final = ".qgis-sdk"
 REQUEST_ENV: Final = DEV_REQUEST_ENV
@@ -78,6 +88,7 @@ REQUEST_ENV: Final = DEV_REQUEST_ENV
 LOOPBACK: Final = "127.0.0.1"
 DESKTOP_PROBE_NAME: Final = "dev-desktop.py"
 STANDALONE_PROBE_NAME: Final = "dev-standalone.py"
+SERVER_PROBE_NAME: Final = "dev-server.py"
 REQUEST_NAME: Final = "dev-request.json"
 SERVER_START_SECONDS: Final = 60.0
 
@@ -191,6 +202,7 @@ def plan_dev(
     dev_server: str | None = None,
     exercise: Path | None = None,
     watch: bool = True,
+    port: int | None = None,
 ) -> DevPlan:
     """The QGIS process for ``mode``; the probe it runs is written to ``workspace``.
 
@@ -204,7 +216,9 @@ def plan_dev(
     imports inside QGIS's interpreter whichever Python runs the CLI.
     """
     if mode not in MODES:
-        raise QgisSdkDevError(f"unknown mode {mode!r}; choose desktop or standalone")
+        raise QgisSdkDevError(
+            f"unknown mode {mode!r}; choose one of {', '.join(MODES)}"
+        )
     workspace = Path(workspace)
     host_root = stage_host(project)
     request = {
@@ -212,14 +226,57 @@ def plan_dev(
         "plugin": project.plugin,
         "host": str(host_root),
         "mode": mode,
-        "web": project.has_web,
+        "web": project.has_web and mode != "server",
         "dev_server": dev_server,
+        "port": port,
         "exercise": None if exercise is None else str(exercise),
         "watch": watch,
     }
     request_path = workspace / REQUEST_NAME
     request_path.write_text(json.dumps(request, indent=2), encoding="utf-8")
     served = "" if dev_server is None else f", page from {dev_server}"
+    if mode == "server":
+        if install.python is None:
+            raise QgisSdkDevError(
+                f"{install.prefix} has no Python interpreter, so it cannot run "
+                "the server mode; QGIS Server bindings only import into the "
+                "interpreter they were built for"
+            )
+        if port is None:
+            raise QgisSdkDevError("server mode needs a loopback port")
+        probe = workspace / SERVER_PROBE_NAME
+        probe.write_text(SERVER_PROBE, encoding="utf-8", newline="\n")
+        process_env = install.environment(
+            env, extra_paths=(host_root, *sdk_import_paths()), headless=True
+        )
+        process_env[REQUEST_ENV] = str(request_path)
+        origin = f"http://{LOOPBACK}:{port}"
+        return DevPlan(
+            mode=mode,
+            argv=(str(install.python), str(probe)),
+            cwd=project.root,
+            env=process_env,
+            notes=(
+                (
+                    f"server: QGIS Server from {install.prefix} "
+                    f"({install.source}) answering on {origin} through "
+                    f"{project.plugin} from {project.root}; nothing is installed "
+                    "and no FCGI process is started"
+                ),
+                (
+                    f"try: curl '{origin}/?MAP=/path/to/project.qgs&SERVICE=WMS"
+                    "&REQUEST=GetCapabilities', or the SERVICE your plugin declares"
+                ),
+                (
+                    "reload: a saved Python change re-imports the plugin and hands "
+                    "QGIS's registration the new hooks; a changed priority or "
+                    "service name needs a new `qgis-sdk dev`; Ctrl+C stops it"
+                    if watch
+                    else "reload: off (--no-watch); Ctrl+C stops it"
+                ),
+            ),
+            profile=None,
+        )
     if mode == "standalone":
         if install.python is None:
             raise QgisSdkDevError(
@@ -378,6 +435,39 @@ else:
         _session = bootstrap(request)  # kept alive: it owns the timers and actions
     except BaseException:  # noqa: BLE001
         report_bootstrap_failure(request.get("exercise"))
+'''
+
+
+#: Runs under the install's interpreter: a real QgsServer on loopback. A thin
+#: probe like the other two - the loop lives in ``devtools.serverdev``, which
+#: imports ``qgis.server`` only once it is inside the QGIS process.
+SERVER_PROBE: Final = '''"""Serve the source plugin from a local QgsServer (qgis-sdk dev)."""
+
+import json
+import os
+import sys
+import traceback
+from pathlib import Path
+
+request = json.loads(Path(os.environ["QGIS_SDK_DEV_REQUEST"]).read_text(encoding="utf-8"))
+log = sys.__stderr__ or sys.stderr
+
+try:
+    from qgis_sdk_tools.devtools.serverdev import bootstrap_server
+except BaseException:  # noqa: BLE001 - the terminal is the only place left to say it
+    log.write(
+        "qgis-sdk dev: cannot import qgis_sdk_tools inside the QGIS interpreter:\\n"
+        + traceback.format_exc()
+    )
+    log.flush()
+    os._exit(1)
+
+try:
+    bootstrap_server(request)  # blocks until Ctrl+C
+except BaseException:  # noqa: BLE001
+    log.write("qgis-sdk dev: server loop failed:\\n" + traceback.format_exc())
+    log.flush()
+    os._exit(1)
 '''
 
 

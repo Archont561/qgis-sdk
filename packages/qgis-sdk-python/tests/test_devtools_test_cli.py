@@ -41,7 +41,7 @@ def test_the_default_target_is_pure_and_pytest_arguments_pass_through(
                 "-p",
                 PLUGIN,
                 "-m",
-                "not qgis and not desktop",
+                "not qgis and not desktop and not server",
                 "-q",
                 "-k",
                 "ping",
@@ -172,4 +172,4 @@ def test_an_unknown_target_is_exit_code_2(project: Path) -> None:
     result = runner.invoke(app, ["test", "--target", "gui"], obj=runtime)
 
     assert result.exit_code == 2
-    assert "pure, qgis, desktop, web" in runtime.stderr
+    assert "pure, qgis, desktop, server, web" in runtime.stderr

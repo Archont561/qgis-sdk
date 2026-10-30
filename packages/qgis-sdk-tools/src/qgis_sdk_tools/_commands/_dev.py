@@ -17,6 +17,7 @@ from qgis_sdk_tools.devtools import (
     wants_headless,
 )
 from qgis_sdk_tools.devtools.dev import (
+    MODES,
     QgisSdkDevError,
     free_port,
     inspect_project,
@@ -36,8 +37,11 @@ def dev(
     mode: Annotated[
         str,
         typer.Option(
-            help="desktop (default: real QGIS Desktop, isolated profile, Reload) "
-            "or standalone (bare QgsApplication: no iface, no lifecycle)."
+            "--mode",
+            "--host",
+            help="desktop (default: real QGIS Desktop, isolated profile, Reload), "
+            "standalone (bare QgsApplication: no iface, no lifecycle) or "
+            "server (a local QgsServer loop on loopback that reloads on save).",
         ),
     ] = "desktop",
     qgis_prefix: Annotated[
@@ -50,7 +54,11 @@ def dev(
         ),
     ] = False,
     port: Annotated[
-        int | None, typer.Option(help="Loopback port for the Vite dev server.")
+        int | None,
+        typer.Option(
+            help="Loopback port: the Vite dev server, or the server loop in "
+            "--mode server (defaults to a free port)."
+        ),
     ] = None,
     no_watch: Annotated[
         bool,
@@ -68,9 +76,20 @@ def dev(
     runtime: CliRuntime = ctx.obj
     root = runtime.resolve(path or Path())
     try:
+        if mode not in MODES:
+            raise QgisSdkDevError(
+                f"unknown mode {mode!r}; choose one of {', '.join(MODES)}"
+            )
         project = inspect_project(root)
         install = find_qgis_install(runtime.env, prefix=qgis_prefix, project=root)
-        server_plan = None if no_web else plan_web_server(project, port or free_port())
+        chosen_port = port or free_port()
+        # A server plugin has no page (HOST001 keeps one out of a server-only
+        # project), so the server mode never starts Vite.
+        server_plan = (
+            None
+            if no_web or mode == "server"
+            else plan_web_server(project, chosen_port)
+        )
     except (QgisSdkDevError, QgisSdkQgisNotFoundError) as error:
         typer.echo(str(error), file=runtime.err)
         raise typer.Exit(code=2) from error
@@ -111,6 +130,7 @@ def dev(
             dev_server=origin,
             exercise=exercise,
             watch=not no_watch,
+            port=chosen_port,
         )
         for note in plan.notes:
             typer.echo(note, file=runtime.err)

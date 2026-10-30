@@ -309,10 +309,14 @@ jobs:
           .venv-lts/bin/python -m pip install --quiet pytest pytest-bdd \
             -e packages/qgis-sdk-runtime -e packages/qgis-sdk-tools
 
+      # QGIS_SDK_SERVER_DEV opts the dev-loop harness in: it starts a real
+      # QgsServer on loopback and proves that a saved filter edit is what the
+      # next request runs (TASK-80 AC 4).
       - name: Test both hosts on the LTS
         id: s04
         env:
           QT_QPA_PLATFORM: offscreen
+          QGIS_SDK_SERVER_DEV: "1"
         run: .venv-lts/bin/python scripts/ci.py lts
 
   # Preserve the existing required `checks` status while ensuring a failed,
