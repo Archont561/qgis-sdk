@@ -247,8 +247,19 @@ def _configured_prefix(project: Path) -> Path | None:
 
 def _resolve(prefix: Path, source: str) -> QgisInstall | None:
     prefix = prefix.expanduser().resolve()
-    bindings = _first_existing(prefix, BINDINGS_LAYOUTS, directory=True)
-    if bindings is None or not (bindings / "qgis" / "__init__.py").is_file():
+    # The first layout that actually holds the `qgis` package, not the first one
+    # that exists: a Debian install has both a `share/qgis` tree for QGIS's own
+    # resources and its bindings under `dist-packages`, so "exists" and "carries
+    # the package" are different questions.
+    bindings = next(
+        (
+            candidate
+            for candidate in (prefix / layout for layout in BINDINGS_LAYOUTS)
+            if (candidate / "qgis" / "__init__.py").is_file()
+        ),
+        None,
+    )
+    if bindings is None:
         return None
     return QgisInstall(
         prefix=prefix,
