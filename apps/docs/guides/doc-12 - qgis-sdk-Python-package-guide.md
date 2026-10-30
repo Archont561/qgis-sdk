@@ -506,9 +506,91 @@ says which one it is, and `ctx.host` reports it - `Host.DESKTOP`,
 `Host.SERVER` or `Host.APP` from `qgis_sdk.core`, compared as strings because it
 is a `StrEnum`. `ctx.host.gui` is `False` on a server, which is the honest
 answer to "may I open a window here?". A view inherits the host of the plugin
-context that opened it. This release implements the Desktop host; the server and
-app hosts arrive with 0.9.0 (TASK-80 and TASK-81), and a capability either of
-them lacks still refuses by name (decision-39).
+context that opened it. The Desktop host is implemented, and so is the server
+host's hook layer (below); the standalone app host arrives with 0.9.0
+(TASK-81), and a capability any of them lacks still refuses by name
+(decision-39).
+
+### The server host: the hooks QGIS Server calls
+
+A server plugin declares hooks instead of surfaces. `qgis_sdk.server` gives it
+three decorators, each of which takes `ctx: ServerContext` first, because that is
+how the host knows what it is calling:
+
+```python
+from qgis_sdk.server import ServerContext, ServerRequest, ServerResponse, access_control, filter, service
+
+
+@filter(priority=10)                     # before the services run
+def add_version(ctx: ServerContext, request: ServerRequest, response: ServerResponse):
+    if request.param("VERSION") is None:
+        return request.with_params(VERSION="1.3.0")
+    return None                          # None passes, a request rewrites,
+                                         # a ServerResponse answers and stops
+
+
+@service(name="SDKDEMO", version="1.0.0")   # answers the SERVICE it names
+def demo(ctx: ServerContext, request: ServerRequest) -> ServerResponse:
+    return ServerResponse.xml("<demo/>")
+
+
+@access_control(priority=20)                # asked once per requested layer
+def only_public(ctx: ServerContext, request: ServerRequest, layer: str) -> bool:
+    return layer != "secret"
+```
+
+`ServerHooks` collects the declarations, fixes their order once - priority
+ascending, then the plugin class's declaration order, then include order - and
+refuses at startup what QGIS would refuse at the first request: an `async def`, a
+hook that does not annotate `ctx` as `ServerContext`, two services claiming one
+name, a non-int priority.
+
+Registering them with a real server is one call:
+
+```python
+# __init__.py of a server-only plugin
+from qgis_sdk.adapters.qgis.server import QgsServerHost
+from qgis_sdk.server import ServerHooks
+
+from .plugin import app
+
+
+def serverClassFactory(serverIface):
+    return QgsServerHost(ServerHooks(app.server_hooks()), serverIface).register()
+```
+
+| SDK declaration | the object QGIS calls | when |
+| --- | --- | --- |
+| every `@filter` | one `QgsServerFilter`, carrying the whole chain | `onRequestReady`, at the lowest priority any filter declares |
+| each `@service` | one `QgsService` | `executeRequest`, when the request names that `SERVICE` and version |
+| every `@access_control` | one `QgsAccessControlFilter` | `layerPermissions`, per layer, while a service renders |
+
+Three things that mapping decides for you, and says so:
+
+- **A filter can rewrite, and can answer.** A rewrite is written into the request
+  handler, so QGIS's own services see the new value. An answer is written over
+  the OGC error `setServiceException` leaves behind - that flag is the only
+  switch that makes the C++ dispatcher skip its own services for a request a
+  plugin has already answered.
+- **`request.method` is empty on the filter path.** `QgsServerFilter` receives no
+  request object, and `QgsRequestHandler` exposes the URL, the headers and the
+  merged OGC parameters but not the verb. A hook that must tell a `GET` from a
+  `POST` belongs in a `@server.service`, where QGIS does hand over the
+  `QgsServerRequest`.
+- **A refused layer is a refusal, not a filtered map.** The access hook answers
+  `False` and the adapter clears all four permissions; it never silently narrows
+  what the client asked for. That decision costs the capabilities cache while the
+  plugin is loaded: the adapter answers `cacheKey()` with a non-empty string,
+  which `QgsAccessControl::fillCacheKey` reads as "do not reuse a document", so a
+  capabilities document shaped by one request is never handed to another.
+
+The whole dispatcher is testable without QGIS: `qgis_sdk.testing.FakeServerInterface`
+records registrations and serves a request through the same `ServerHost`, which
+is what `qgis-sdk test --target server` uses on a machine whose QGIS has no
+server bindings. Where the build *does* have them, the same plugin runs in-process
+under a headless `QgsApplication` through `QgsServer.handleRequest` - the
+`QGIS 3.44 LTS` row runs exactly that, and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
+carries the evidence.
 
 ## Forms: an action's inputs as a window
 

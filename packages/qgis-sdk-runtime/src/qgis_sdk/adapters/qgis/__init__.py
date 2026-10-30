@@ -18,6 +18,7 @@ from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
 from .processing import NativeProcessing, NativeProcessingProvider
 from .project import NativeProject
+from .server import QgsServerHost
 from .settings import NativeSettings
 from .styles import NativeStyles
 from .tasks import QgsTaskWorkers
@@ -37,6 +38,7 @@ __all__ = [
     "NativeSettings",
     "NativeStyles",
     "QgsJobPump",
+    "QgsServerHost",
     "QgsTaskWorkers",
     "ThreadPoolWorkers",
     "native_plugin_context",
