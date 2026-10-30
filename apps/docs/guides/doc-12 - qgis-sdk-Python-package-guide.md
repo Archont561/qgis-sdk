@@ -2556,14 +2556,19 @@ same axis; a server project is `qgis-sdk dev --host server`:
   ```sh
   qgis-sdk dev --host server
   # server: devtools_demo answering on http://127.0.0.1:8099
+  # the plugin's own service, then a real project's WMS
+  curl 'http://127.0.0.1:8099/?SERVICE=SDKDEMO'
   curl 'http://127.0.0.1:8099/?MAP=/path/to/project.qgs&SERVICE=WMS&REQUEST=GetCapabilities'
   ```
 
-  A request with no `MAP` is still a request: QGIS Server answers what it can
-  without a project, and a `@server.service` hook that answers its own `SERVICE`
-  needs nothing else - which is what makes the loop useful before a project
-  exists. The page of a `web/` UI is never served here: a server-only project
-  cannot declare one (`HOST001`), and the command does not start Vite.
+  A request that names no `MAP` is served with an empty project. `QgsServer`
+  dispatches a `SERVICE` only when it has a project - with none it answers
+  `Project file error. For OWS services: please provide a SERVICE and a MAP
+  parameter...` - and a `@server.service` hook that answers its own
+  `SERVICE` has no file to name, which is what makes the loop useful before a
+  project exists. A request that does name `MAP` is QGIS's to load, exactly as
+  under FCGI. The page of a `web/` UI is never served here: a server-only
+  project cannot declare one (`HOST001`), and the command does not start Vite.
 
   Reload is the same policy as Desktop, with one difference QGIS forces: the
   server interface registers a filter, a service and an access-control object

@@ -263,9 +263,11 @@ class FakeServer:
 
     def __init__(self) -> None:
         self.seen: list[BufferRequest] = []
+        self.projects: list[Any] = []
 
     def handleRequest(self, request: Any, response: Any, project: Any = None) -> None:
         self.seen.append(request)
+        self.projects.append(project)
         response.answer(200, f"served {request.method} {request.url}".encode())
 
 
@@ -423,6 +425,60 @@ def test_a_request_that_raises_answers_500_with_the_traceback() -> None:
         said[0] == "server: the request failed; the traceback is in the response body"
     )
     assert said[-1].endswith('"GET /?SERVICE=SDKDEMO HTTP/1.1" 500 -')
+
+
+class Project:
+    """Stand-in for ``QgsProject``: only its identity matters here."""
+
+
+def test_a_request_without_map_is_served_with_an_empty_project() -> None:
+    """QGIS dispatches a SERVICE only when it has a project (qgsserver.cpp).
+
+    A plugin answering its own service has no file to name, so the loop hands
+    the dispatcher an empty project instead of letting the request fail with
+    ``Project file error``.
+    """
+    host, _interface = host_over(plugin_module(chain("first")))
+    host.load("demo")
+    server = FakeServer()
+    built: list[Project] = []
+
+    loop = ServerLoop(
+        bindings=bindings(),
+        server=server,
+        host=host,
+        plugin="demo",
+        port=8080,
+        say=lambda _message: None,
+        project=lambda: built.append(Project()) or built[-1],
+    )
+    loop.answer_request("GET", "/?SERVICE=SDKDEMO")
+    loop.answer_request("GET", "/?SERVICE=SDKDEMO")
+
+    assert len(built) == 1  # one project for the loop, not one per request
+    assert server.projects == [built[0], built[0]]
+
+
+def test_a_request_that_names_map_lets_the_server_load_the_project() -> None:
+    """``MAP`` in the query string is QGIS's to load, so the loop passes ``None``."""
+    host, _interface = host_over(plugin_module(chain("first")))
+    host.load("demo")
+    server = FakeServer()
+    loop = ServerLoop(
+        bindings=bindings(),
+        server=server,
+        host=host,
+        plugin="demo",
+        port=8080,
+        say=lambda _message: None,
+        project=Project,
+    )
+
+    loop.answer_request("GET", "/?SERVICE=WMS&map=/tmp/project.qgs")
+    loop.answer_request("GET", "/?SERVICE=SDKDEMO")
+
+    assert server.projects[0] is None
+    assert isinstance(server.projects[1], Project)
 
 
 def test_a_missing_project_is_not_a_loop_error(tmp_path: Path) -> None:

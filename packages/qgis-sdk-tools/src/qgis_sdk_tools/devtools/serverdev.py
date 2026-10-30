@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any, Final
+from urllib.parse import parse_qsl, urlsplit
 
 from qgis_sdk.core import QuiesceOutcome
 from qgis_sdk.server import ServerHooks
@@ -204,12 +205,19 @@ def query_server(
     url: str,
     headers: Mapping[str, str] | None = None,
     body: bytes = b"",
+    project: Any = None,
 ) -> Answer:
     """One request through ``QgsServer.handleRequest``: buffer in, buffer out.
 
     ``bindings`` is the ``qgis.server`` module and ``server`` a ``QgsServer``
     instance; both are parameters so the translation can be checked with the
     stand-ins ``tests/qgis_server_support.py`` provides.
+
+    ``project`` is QGIS's own split: ``None`` makes the server load the file the
+    request names in ``MAP``, and a project object is served as it stands. The
+    dispatcher refuses every ``SERVICE`` without one, a plugin's own service
+    included, which is why the loop passes an empty project when a request names
+    no ``MAP``.
     """
     verb = (
         bindings.QgsServerRequest.PostMethod
@@ -218,7 +226,7 @@ def query_server(
     )
     request = bindings.QgsBufferServerRequest(url, verb, dict(headers or {}), body)
     response = bindings.QgsBufferServerResponse()
-    server.handleRequest(request, response, None)
+    server.handleRequest(request, response, project)
     return Answer(
         status=int(response.statusCode()),
         headers={str(name): str(value) for name, value in response.headers().items()},
@@ -266,6 +274,7 @@ class ServerLoop:
         clock: Callable[[], float] = time.monotonic,
         poll_seconds: float = WATCH_INTERVAL_MS / 1000,
         process_events: Callable[[], None] | None = None,
+        project: Callable[[], Any] | None = None,
     ) -> None:
         self._bindings = bindings
         self._server = server
@@ -278,6 +287,8 @@ class ServerLoop:
         self._clock = clock
         self._poll_seconds = poll_seconds
         self._process_events = process_events
+        self._project_factory = project
+        self._project: Any = None
         self._httpd: HTTPServer | None = None
         self._stopping = False
 
@@ -313,7 +324,20 @@ class ServerLoop:
             f"{self.origin}{path}",
             headers,
             body,
+            None if _names_a_map(path) else self.empty_project(),
         )
+
+    def empty_project(self) -> Any:
+        """The project a request that names no ``MAP`` is served with.
+
+        ``QgsServer`` dispatches a ``SERVICE`` only when it has a project, and a
+        plugin answering its own service has no file to name, so the loop hands
+        it an empty one - built once, because ``handleRequest`` installs it as
+        the current project on every request.
+        """
+        if self._project is None and self._project_factory is not None:
+            self._project = self._project_factory()
+        return self._project
 
     def respond(self, handler: BaseHTTPRequestHandler, method: str) -> None:
         """Serve one ``http.server`` request from the buffered answer."""
@@ -445,12 +469,15 @@ def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
         # The coordinator's `request()` reloads at once when it has no timer:
         # a server has no editor to debounce, and the watcher already polls.
         watcher = SourceWatcher(root, plugin, on_change=coordinator.request)
+    from qgis.core import QgsProject
+
     loop = ServerLoop(
         bindings=bindings,
         server=server,
         host=host,
         plugin=plugin,
         port=port,
+        project=QgsProject,
         say=lambda message: say(f"server: {message}"),
         watcher=watcher,
         coordinator=coordinator,
@@ -468,3 +495,14 @@ def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
     finally:
         application.exitQgis()
     return loop
+
+
+def _names_a_map(path: str) -> bool:
+    """Whether a request path names the ``MAP`` project QGIS should load.
+
+    The query string of a server request is case-insensitive, so ``map=`` counts.
+    """
+    return any(
+        key.casefold() == "map" and value
+        for key, value in parse_qsl(urlsplit(path).query, keep_blank_values=True)
+    )
