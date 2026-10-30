@@ -28,7 +28,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
-from PyQt6.QtCore import (
+from qgis.core import QgsApplication, QgsNetworkAccessManager
+from qgis.PyQt.QtCore import (
     QByteArray,
     QCoreApplication,
     QEventLoop,
@@ -38,8 +39,11 @@ from PyQt6.QtCore import (
     QUrl,
     pyqtSignal,
 )
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from qgis.core import QgsApplication, QgsNetworkAccessManager
+from qgis.PyQt.QtNetwork import (
+    QNetworkAccessManager,
+    QNetworkReply,
+    QNetworkRequest,
+)
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (

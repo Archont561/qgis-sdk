@@ -32,7 +32,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Any, get_args, get_origin
 
-from PyQt6.QtGui import QColor
 from qgis.core import (
     QgsApplication,
     QgsFeature,
@@ -53,6 +52,7 @@ from qgis.core import (
     QgsProcessingParameterVectorLayer,
     QgsProcessingProvider,
 )
+from qgis.PyQt.QtGui import QColor
 
 from qgis_sdk.algorithms import (
     CRS_PARAMETER,

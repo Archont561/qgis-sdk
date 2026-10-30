@@ -56,8 +56,10 @@ means the workspace demonstrated the kit on that combination and the record
 names how; `unqualified` means the combination is reachable but not
 demonstrated, with the blocker named. Rows match on the series a user reads
 off their installation (QGIS `4.2`, Qt `6.11`, Chromium `140`), not on a
-patch level; `-` means the component is not on the target, and a row without
-QGIS is the QGIS-free kit (`pip install`, scaffold, check, bridge generation).
+patch level; `-` means the component is not on the target - on a row with a
+QGIS, an empty Chromium cell says the WebEngine layer was not exercised there -
+and a row without QGIS is the QGIS-free kit (`pip install`, scaffold, check,
+bridge generation).
 `qgis-sdk targets` prints the same table and where the current host stands in
 it; `qgis-sdk targets --json` is the machine-readable form.
 
@@ -65,12 +67,34 @@ it; `qgis-sdk targets --json` is the machine-readable form.
 | OS | Arch | Python | QGIS | Qt | Chromium | Status | Evidence |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
 | linux | x86-64 | 3.14 | 4.2 | 6.11 | 140 | qualified | the locked Pixi environment (QGIS 4.2.3, Qt 6.11.2, Chromium 140, CPython 3.14): native suite, headless Desktop harnesses, the reference plugin through the toolchain and the release gate (workspace guide) |
+| linux | x86-64 | 3.12 | 3.44 | 5.15 | - | qualified | ci.yml `QGIS 3.44 LTS`: qgis.org apt `qgis` + `qgis-server` + `python3-qgis` (QGIS 3.44, PyQt5, Qt 5.15), the plugin host offscreen and the server layer on the same build; the WebEngine layer is not run on this row |
 | linux | x86-64 | 3.11 | - | - | - | qualified | the QGIS-free suite on CPython 3.11.2, the `requires-python` floor |
 | windows | x86-64 | 3.14 | - | - | - | qualified | ci.yml `cross-platform (windows-latest)`: `pip install` of the kit and the QGIS-free suite |
 | macos | arm64 | 3.14 | - | - | - | qualified | ci.yml `cross-platform (macos-latest)`: `pip install` of the kit and the QGIS-free suite |
 | windows | x86-64 | 3.14 | 4.2 | - | - | unqualified | no Windows QGIS 4 installation in CI or the sandbox |
 | macos | arm64 | 3.14 | 4.2 | - | - | unqualified | no macOS QGIS 4 installation in CI or the sandbox |
 <!-- support-matrix:end -->
+
+### Which QGIS, and which Qt
+
+The kit runs on the QGIS 4.x series in the matrix above and on the **3.44
+LTS** ([decision-70](../../../backlog/decisions/decision-70%20-%20Support-QGIS-3-44-LTS-on-both-hosts-while-4-x-is-not-on-apt.md)).
+They differ underneath: 3.44 is a Qt 5 / PyQt5 build, 4.x is Qt 6 / PyQt6.
+The runtime never names either binding - it imports through `qgis.PyQt`, which
+is whichever one the running QGIS ships - and the two APIs that still differ
+are resolved in one place, `qgis_sdk.adapters._qt`:
+
+| Call | Qt 6 / PyQt6 | Qt 5 / PyQt5 |
+| :-- | :-- | :-- |
+| `qt_enum(Qt, "DockWidgetArea", "RightDockWidgetArea")` | `Qt.DockWidgetArea.RightDockWidgetArea` | `Qt.RightDockWidgetArea` |
+| `action_class()` | `QtGui.QAction` | `QtWidgets.QAction` |
+
+So one installed wheel serves both. A plugin targets whichever QGIS it declares:
+`qgis-minimum-version = "3.44"` for the LTS, `"4.0"` for QGIS 4.x, and the
+`metadata.txt` `build` renders carries that value unchanged. The Desktop host
+and the server host both run on the LTS; the `QGIS 3.44 LTS` CI job is the
+evidence, and it does not run the WebEngine layer, so no page-on-Qt5 claim is
+made (doc-14).
 
 ### The bridge pair
 

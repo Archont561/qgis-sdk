@@ -21,6 +21,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final
 
+from qgis_sdk.adapters._qt import action_class, qt_enum
 from qgis_sdk.adapters.palette import palette_theme
 from qgis_sdk.bindings import (
     BindingsDescription,
@@ -75,12 +76,7 @@ def dock_visible_setting(surface_id: str) -> str:
 def _qt_area(name: str) -> Any:
     from qgis.PyQt.QtCore import Qt
 
-    return {
-        "left": Qt.DockWidgetArea.LeftDockWidgetArea,
-        "right": Qt.DockWidgetArea.RightDockWidgetArea,
-        "top": Qt.DockWidgetArea.TopDockWidgetArea,
-        "bottom": Qt.DockWidgetArea.BottomDockWidgetArea,
-    }[name]
+    return qt_enum(Qt, "DockWidgetArea", f"{name.capitalize()}DockWidgetArea")
 
 
 class _WidgetControl:
@@ -115,7 +111,7 @@ class _StreamPump:
         timer.timeout.connect(self.pump)
         self._timer = timer
         self._current_thread = QThread.currentThread
-        self._queued = Qt.ConnectionType.QueuedConnection
+        self._queued = qt_enum(Qt, "ConnectionType", "QueuedConnection")
         self._invoke = QMetaObject.invokeMethod
         scope.on_close(self._stop)
 
@@ -547,7 +543,8 @@ class DesktopBindings:
         if self._iface is None:
             return
         from qgis.PyQt.QtGui import QIcon, QKeySequence
-        from qgis.PyQt.QtWidgets import QAction
+
+        QAction = action_class()
 
         parent = self._iface.mainWindow()
         for entry in self._bindings.entries:

@@ -46,7 +46,9 @@ def add_toolbar_action(
     """Put one button on the QGIS toolbar; a host without ``iface`` gets none."""
     if iface is None:
         return None
-    from qgis.PyQt.QtWidgets import QAction
+    from qgis_sdk.adapters._qt import action_class
+
+    QAction = action_class()
 
     action = QAction(title, iface.mainWindow())
     action.triggered.connect(lambda _checked=False: on_trigger())
