@@ -27,6 +27,15 @@ with a real ``QgsBufferServerRequest``. No FCGI, no network, no browser.
 from __future__ import annotations
 
 import pytest
+from qgis_sdk.server import (
+    ServerContext,
+    ServerHooks,
+    ServerRequest,
+    ServerResponse,
+    access_control,
+    filter,
+    service,
+)
 
 # One layer per module: `server` already means the QGIS bindings are there,
 # and the application comes from the shared `qgis_app` fixture.
@@ -63,70 +72,116 @@ def test_a_server_can_be_created_in_process(qgis_app) -> None:
     assert hasattr(created, "handleRequest")
 
 
-def test_the_sdk_serves_a_request_inside_a_qgis_process(qgis_app) -> None:
-    from qgis_sdk.server import (
-        ServerContext,
-        ServerHooks,
-        ServerRequest,
-        ServerResponse,
-        filter,
-        service,
+# -- one plugin's hooks, served two ways ------------------------------------------
+#
+# AC 2 asks for *the same plugin class, unchanged* in both places, so the hooks
+# below are declared once and used by a pure `FakeServerInterface` and by a real
+# `QgsServer`. They recognise their own request - the `SDK_DEMO` marker, the layer
+# name - because `QgsServer` holds one static server interface per process and
+# anything registered here stays registered.
+
+REFUSED: set[str] = set()
+
+
+@filter(priority=10)
+def demo_route(ctx: ServerContext, request, response):
+    """Take a marked request to the plugin's own service, and rewrite it there."""
+    if request.param("SDK_DEMO") is None:
+        return None
+    return request.with_params(SERVICE="SDKDEMO", VERSION="1.0.0", ROUTED="yes")
+
+
+@service(name="SDKDEMO", version="1.0.0")
+def demo_answer(ctx: ServerContext, request) -> ServerResponse:
+    return ServerResponse.text(
+        f"marker={request.param('MARKER')} routed={request.param('ROUTED')}"
     )
+
+
+@access_control(priority=10)
+def demo_permission(ctx: ServerContext, request, layer) -> bool:
+    return layer not in REFUSED
+
+
+HOOKS = ServerHooks((demo_route, demo_answer, demo_permission))
+
+
+@pytest.fixture(scope="module")
+def served(qgis_app):
+    """The real server, with this plugin registered on it once."""
+    from qgis.server import QgsServer
+    from qgis_sdk.adapters.qgis.server import QgsServerHost
+
+    protocol_server = QgsServer()
+    host = QgsServerHost(HOOKS, protocol_server.serverInterface()).register()
+    return protocol_server, host
+
+
+def demo_project():
+    """Two memory layers, one of which the access hook will refuse."""
+    from qgis.core import QgsProject, QgsVectorLayer
+
+    project = QgsProject()
+    for name in ("public_layer", "secret_layer"):
+        project.addMapLayer(
+            QgsVectorLayer("Point?crs=EPSG:4326&field=id:integer", name, "memory")
+        )
+    return project
+
+
+def capabilities(protocol_server, project) -> bytes:
+    """One WMS GetCapabilities through the whole C++ request path."""
+    from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse
+
+    request = QgsBufferServerRequest(
+        "http://localhost/qgis/qgis_mapserv.fcgi"
+        "?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0"
+    )
+    response = QgsBufferServerResponse()
+    protocol_server.handleRequest(request, response, project)
+    assert response.statusCode() == 200, response.statusCode()
+    return bytes(response.body())
+
+
+def test_the_same_hooks_answer_without_qgis(qgis_app) -> None:
+    """The pure half: the dispatcher answers with QGIS loaded but unused.
+
+    `FakeServerInterface` records the registrations and serves a request through
+    the same `ServerHost` a deployed server drives, so the three claims are
+    checked here with no Qt object in the path at all.
+    """
     from qgis_sdk.testing import FakeServerInterface
 
-    @filter(priority=10)
-    def default_version(ctx: ServerContext, request, response):
-        if request.param("VERSION") is None:
-            return request.with_params(VERSION="1.3.0")
-        return None
-
-    @service(name="WMS")
-    def capabilities(ctx: ServerContext, request) -> ServerResponse:
-        return ServerResponse.xml(f"<v>{request.param('VERSION')}</v>")
-
-    answer = FakeServerInterface().serve(
-        ServerHooks((default_version, capabilities)),
+    interface = FakeServerInterface()
+    answered = interface.serve(
+        HOOKS,
         ServerRequest(
             method="GET",
             url="http://localhost/qgis/qgis_mapserv.fcgi",
-            params={"SERVICE": "WMS", "REQUEST": "GetCapabilities"},
+            params={"SERVICE": "WMS", "SDK_DEMO": "1", "MARKER": "pure"},
         ),
     )
 
-    # The pure layer answers the same way with QGIS loaded as it does without:
-    # nothing in the dispatcher reaches a Qt object behind the author's back.
-    assert answer.status == 200
-    assert answer.body == b"<v>1.3.0</v>"
+    assert answered.status == 200
+    assert answered.body == b"marker=pure routed=yes"
 
-
-# -- AC 2: the adapter, driven by a real QgsServer ----------------------------------
-
-
-def _demo_hooks():
-    """One filter that rewrites and one service that answers, as a plugin declares them."""
-    from qgis_sdk.server import ServerContext, ServerResponse, filter, service
-
-    @filter(priority=10)
-    def route_to_demo(ctx: ServerContext, request, response):
-        # Only a request that carries the marker becomes ours: `QgsServer` is one
-        # per process, so every hook this module registers stays registered for
-        # the tests after it, and a filter that claimed every request would be
-        # rewriting theirs too (it was, until this test found it).
-        if request.param("SDK_DEMO") is None:
-            return None
-        return request.with_params(SERVICE="SDKDEMO", VERSION="1.0.0", ROUTED="yes")
-
-    @service(name="SDKDEMO")
-    def demo(ctx: ServerContext, request) -> ServerResponse:
-        routed = request.param("ROUTED")
-        return ServerResponse.text(
-            f"marker={request.param('MARKER')} routed={routed}", status=200
+    REFUSED.add("secret_layer")
+    try:
+        refused = FakeServerInterface().serve(
+            HOOKS,
+            ServerRequest(
+                method="GET",
+                url="http://localhost/qgis/qgis_mapserv.fcgi",
+                params={"SERVICE": "WMS", "LAYERS": "secret_layer"},
+            ),
         )
+    finally:
+        REFUSED.discard("secret_layer")
 
-    return route_to_demo, demo
+    assert refused.status == 403
 
 
-def test_a_plugin_answers_a_request_through_a_real_qgis_server(qgis_app) -> None:
+def test_a_plugin_answers_a_request_through_a_real_qgis_server(served) -> None:
     """AC 2, first claim: the filter runs and its rewrite reaches the service.
 
     ``QgsServer.handleRequest`` is the whole C++ request path: filters, service
@@ -135,21 +190,16 @@ def test_a_plugin_answers_a_request_through_a_real_qgis_server(qgis_app) -> None
     parameters - not the ones on the wire.
     """
     from qgis.core import QgsProject
-    from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse, QgsServer
-    from qgis_sdk.adapters.qgis.server import QgsServerHost
-    from qgis_sdk.server import ServerHooks
+    from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse
 
-    route_to_demo, demo = _demo_hooks()
-    server = QgsServer()
-    QgsServerHost(
-        ServerHooks((route_to_demo, demo)), server.serverInterface()
-    ).register()
+    protocol_server, host = served
+    assert host.filter is not None
 
     request = QgsBufferServerRequest(
         "http://localhost/qgis/qgis_mapserv.fcgi?SERVICE=WMS&MARKER=seen&SDK_DEMO=1"
     )
     response = QgsBufferServerResponse()
-    server.handleRequest(request, response, QgsProject())
+    protocol_server.handleRequest(request, response, QgsProject())
 
     assert response.statusCode() == 200
     # `MARKER` came in on the wire; `routed` is what the filter put in the
@@ -157,26 +207,37 @@ def test_a_plugin_answers_a_request_through_a_real_qgis_server(qgis_app) -> None
     assert bytes(response.body()) == b"marker=seen routed=yes"
 
 
-def test_an_access_hook_restricts_a_layer_inside_the_qgis_server(qgis_app) -> None:
-    """AC 2, second claim: the access hook answers QGIS's per-layer question."""
+def test_the_hooks_become_the_three_objects_qgis_calls(served) -> None:
+    """AC 2, second claim: registration, in the shape QGIS Server expects.
+
+    One filter carries the whole SDK filter chain, one ``QgsService`` answers the
+    ``SERVICE`` it declares, and one access-control object runs the access hooks.
+    """
+    protocol_server, host = served
+    interface = protocol_server.serverInterface()
+
+    registered = [item for group in interface.filters().values() for item in group]
+    assert registered.count(host.filter) == 1
+    assert [item.name() for item in host.services] == ["SDKDEMO"]
+    assert host.access_control is not None
+
+
+def test_an_access_hook_restricts_a_layer_inside_the_qgis_server(served) -> None:
+    """AC 2, third claim at the object level: QGIS's per-layer question."""
     from qgis.core import QgsVectorLayer
-    from qgis.server import QgsServer
-    from qgis_sdk.adapters.qgis.server import QgsServerHost
-    from qgis_sdk.server import ServerContext, ServerHooks, access_control
 
-    @access_control(priority=10)
-    def only_public(ctx: ServerContext, request, layer) -> bool:
-        return layer != "secret"
-
-    server = QgsServer()
-    host = QgsServerHost(
-        ServerHooks((only_public,)), server.serverInterface()
-    ).register()
+    _, host = served
     public = QgsVectorLayer("Point?crs=EPSG:4326&field=id:integer", "public", "memory")
-    secret = QgsVectorLayer("Point?crs=EPSG:4326&field=id:integer", "secret", "memory")
+    secret = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=id:integer", "secret_layer", "memory"
+    )
 
     allowed = host.access_control.layerPermissions(public)
-    refused = host.access_control.layerPermissions(secret)
+    REFUSED.add("secret_layer")
+    try:
+        refused = host.access_control.layerPermissions(secret)
+    finally:
+        REFUSED.discard("secret_layer")
 
     # QGIS's own answer is "everything allowed"; a refusal is every permission
     # cleared, which is what QgsAccessControl consults while it renders.
@@ -189,55 +250,8 @@ def test_an_access_hook_restricts_a_layer_inside_the_qgis_server(qgis_app) -> No
     )
 
 
-def test_the_hooks_become_the_three_objects_qgis_calls(qgis_app) -> None:
-    """AC 2, third claim: registration, in the shape QGIS Server expects.
-
-    One filter carries the whole SDK filter chain, one ``QgsService`` answers the
-    ``SERVICE`` it declares, and one access-control object runs the access hooks -
-    three objects, in the interface QGIS reads when a request arrives.
-    """
-    from qgis.server import QgsServer
-    from qgis_sdk.adapters.qgis.server import QgsServerHost
-    from qgis_sdk.server import (
-        ServerContext,
-        ServerHooks,
-        ServerResponse,
-        access_control,
-        filter,
-        service,
-    )
-
-    @filter(priority=10)
-    def first(ctx: ServerContext, request, response):
-        return None
-
-    @filter(priority=20)
-    def second(ctx: ServerContext, request, response):
-        return None
-
-    @service(name="SDKDEMO")
-    def demo(ctx: ServerContext, request) -> ServerResponse:
-        return ServerResponse.text("demo")
-
-    @access_control(priority=30)
-    def only_public(ctx: ServerContext, request, layer) -> bool:
-        return True
-
-    server = QgsServer()
-    iface = server.serverInterface()
-    host = QgsServerHost(
-        ServerHooks((first, second, demo, only_public)), iface
-    ).register()
-
-    registered = [item for group in iface.filters().values() for item in group]
-    assert host.filter is not None
-    assert registered.count(host.filter) == 1
-    assert [item.name() for item in host.services] == ["SDKDEMO"]
-    assert host.access_control is not None
-
-
-def test_a_refused_layer_never_reaches_the_capabilities(qgis_app) -> None:
-    """AC 2, second claim driven by a whole request: WMS GetCapabilities.
+def test_a_refused_layer_never_reaches_the_capabilities(served) -> None:
+    """AC 2, third claim driven by a whole request: WMS GetCapabilities.
 
     The permission question above is one QGIS call. This one is the request an
     operator actually sees: the layer list of a WMS capabilities document, once
@@ -247,43 +261,20 @@ def test_a_refused_layer_never_reaches_the_capabilities(qgis_app) -> None:
     string: without it QGIS serves the *first* document to the second request,
     which is the leak the pure layer pins.
     """
-    from qgis.core import QgsProject, QgsVectorLayer
-    from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse, QgsServer
-    from qgis_sdk.adapters.qgis.server import QgsServerHost
-    from qgis_sdk.server import ServerContext, ServerHooks, access_control
+    protocol_server, _ = served
+    project = demo_project()
 
-    refused: set[str] = set()
-
-    @access_control(priority=10)
-    def only_public(ctx: ServerContext, request, layer) -> bool:
-        return layer not in refused
-
-    project = QgsProject()
-    for name in ("public_layer", "secret_layer"):
-        layer = QgsVectorLayer("Point?crs=EPSG:4326&field=id:integer", name, "memory")
-        project.addMapLayer(layer)
-
-    server = QgsServer()
-    QgsServerHost(ServerHooks((only_public,)), server.serverInterface()).register()
-
-    def capabilities() -> bytes:
-        request = QgsBufferServerRequest(
-            "http://localhost/qgis/qgis_mapserv.fcgi"
-            "?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0"
-        )
-        response = QgsBufferServerResponse()
-        server.handleRequest(request, response, project)
-        assert response.statusCode() == 200, response.statusCode()
-        return bytes(response.body())
-
-    allowed = capabilities()
+    allowed = capabilities(protocol_server, project)
     # The control: unless both layers are listed when nothing is refused, the
     # absence below would prove nothing.
     assert b"public_layer" in allowed, allowed[:400]
     assert b"secret_layer" in allowed, allowed[:400]
 
-    refused.add("secret_layer")
-    denied = capabilities()
+    REFUSED.add("secret_layer")
+    try:
+        denied = capabilities(protocol_server, project)
+    finally:
+        REFUSED.discard("secret_layer")
 
     assert b"public_layer" in denied, denied[:400]
     assert b"secret_layer" not in denied, denied[:400]
