@@ -19,7 +19,11 @@ from typing import Any
 
 import pytest
 import qgis_server_support as support
-from qgis_sdk.adapters._server import QgsServerHost, qgis_server
+from qgis_sdk.adapters._server import (
+    NO_CAPABILITIES_CACHE,
+    QgsServerHost,
+    qgis_server,
+)
 from qgis_sdk.core.host import Host
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.server import (
@@ -287,3 +291,26 @@ def test_every_access_hook_has_to_agree(wired: types.ModuleType) -> None:
     host = QgsServerHost(ServerHooks((allow, deny)), iface).register()
 
     assert host.access_control.layerPermissions(support.Layer("roads")).canRead is False
+
+
+def test_the_access_object_keeps_qgis_from_caching_a_shaped_document(
+    wired: types.ModuleType,
+) -> None:
+    """A layer decision must not be served from another request's cache.
+
+    `QgsAccessControl::fillCacheKey` reads a non-empty `cacheKey()` as "this
+    plugin's answer varies, do not reuse a capabilities document" - so the
+    adapter answers with a key whenever an access hook exists. The cost is one
+    capabilities render per request; the alternative is a document built for one
+    caller answering another, which is a leak rather than a slow response.
+    """
+
+    @access_control(priority=10)
+    def only_public(ctx: ServerContext, request, layer) -> bool:
+        return True
+
+    iface = support.ServerInterface(support.Handler({}))
+    host = QgsServerHost(ServerHooks((only_public,)), iface).register()
+
+    assert host.access_control.cacheKey() == NO_CAPABILITIES_CACHE
+    assert NO_CAPABILITIES_CACHE

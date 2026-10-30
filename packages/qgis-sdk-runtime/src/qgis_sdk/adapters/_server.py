@@ -291,8 +291,8 @@ class QgsServerHost:
         self._access = _object(
             self._server.QgsAccessControlFilter,
             f"{name}AccessControl",
-            ("layerPermissions",),
-            {"layerPermissions": _layer_permissions},
+            ("cacheKey", "layerPermissions"),
+            {"cacheKey": _cache_key, "layerPermissions": _layer_permissions},
             (self._iface,),
             _qgis_sdk_host=self,
         )
@@ -423,6 +423,19 @@ def _execute_request(
 ) -> None:
     """The service's slot: one hook answers the ``SERVICE`` this object names."""
     self._qgis_sdk_host.serve_service(self._qgis_sdk_hook, request, response)
+
+
+#: What the access-control object answers ``cacheKey()`` with. Non-empty on
+#: purpose: `QgsAccessControl::fillCacheKey` reads a non-empty key as "this
+#: plugin's answer varies, do not reuse a capabilities document", and a
+#: per-request layer decision served from a cache built for another request is a
+#: leak, not a performance win.
+NO_CAPABILITIES_CACHE = "qgis-sdk:access-control"
+
+
+def _cache_key(self: Any) -> str:
+    """Keep QGIS from caching a capabilities document an access hook shaped."""
+    return NO_CAPABILITIES_CACHE
 
 
 def _layer_permissions(self: Any, layer: Any) -> Any:

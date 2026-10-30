@@ -233,6 +233,10 @@ def test_a_refused_layer_never_reaches_the_capabilities(qgis_app) -> None:
     The permission question above is one QGIS call. This one is the request an
     operator actually sees: the layer list of a WMS capabilities document, once
     with the hook allowing everything and once with it refusing one layer.
+
+    It only works because the adapter answers ``cacheKey()`` with a non-empty
+    string: without it QGIS serves the *first* document to the second request,
+    which is the leak the pure layer pins.
     """
     from qgis.core import QgsProject, QgsVectorLayer
     from qgis.server import QgsBufferServerRequest, QgsBufferServerResponse, QgsServer

@@ -579,7 +579,10 @@ Three things that mapping decides for you, and says so:
   `QgsServerRequest`.
 - **A refused layer is a refusal, not a filtered map.** The access hook answers
   `False` and the adapter clears all four permissions; it never silently narrows
-  what the client asked for.
+  what the client asked for. That decision costs the capabilities cache while the
+  plugin is loaded: the adapter answers `cacheKey()` with a non-empty string,
+  which `QgsAccessControl::fillCacheKey` reads as "do not reuse a document", so a
+  capabilities document shaped by one request is never handed to another.
 
 The whole dispatcher is testable without QGIS: `qgis_sdk.testing.FakeServerInterface`
 records registrations and serves a request through the same `ServerHost`, which

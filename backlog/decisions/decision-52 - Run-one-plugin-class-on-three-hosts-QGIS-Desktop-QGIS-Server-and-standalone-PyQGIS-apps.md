@@ -121,7 +121,12 @@ behind, because that flag is the only switch the C++ dispatcher checks before it
 runs its own services, and returning `False` from `onRequestReady` only stops
 other plugins' filters. An access refusal clears all four permissions rather than
 raising, which is what `QgsAccessControl` consults, and the 403 that
-`ServerHost.denied_layer` builds stays the pure host's answer.
+`ServerHost.denied_layer` builds stays the pure host's answer. The access object
+also answers `cacheKey()` with a non-empty string: `QgsAccessControl::fillCacheKey`
+reads that as "this answer varies, do not reuse a capabilities document", and the
+alternative - a capabilities document built for one request answering another -
+is a leak rather than a slow response. The cost is one capabilities render per
+request while a plugin with access hooks is loaded, and it is paid deliberately.
 
 Nothing Qt-specific is needed to test any of that: the host lives in
 `qgis_sdk.adapters._server`, imports `qgis.server` only when a host is built, and
