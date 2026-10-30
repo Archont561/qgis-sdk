@@ -15,7 +15,11 @@ from pathlib import Path
 import pytest
 import qgis_sdk_tools.check.hosts as hosts_module
 from qgis_sdk_tools.check import check_project
-from qgis_sdk_tools.check.hosts import check_declared_hosts, check_hosts
+from qgis_sdk_tools.check.hosts import (
+    check_declared_hosts,
+    check_hosts,
+    qgis_server_state,
+)
 from qgis_sdk_tools.project import load_project
 
 PYPROJECT = """[project]
@@ -29,6 +33,18 @@ dependencies = ["qgis-sdk-runtime>=0.1,<99"]
 plugin = "field_tools.plugin:app"
 qgis-minimum-version = "3.40"
 """
+
+
+@pytest.fixture(autouse=True)
+def no_visible_qgis(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer ``HOST003`` from the test, not from the machine running it.
+
+    Whether this interpreter can see a QGIS with server bindings is a property
+    of the environment, so a test that does not stub it would pass on one
+    machine and fail on the next. ``None`` is the honest default - no QGIS
+    visible, so nothing to say - and each HOST003 test says what it means.
+    """
+    monkeypatch.setattr(hosts_module, "qgis_server_state", lambda: None)
 
 
 def project(tmp_path: Path, *, extra: str = "", source: str = "import os\n") -> Path:
@@ -202,10 +218,55 @@ def test_a_server_host_is_silent_when_the_environment_cannot_be_blamed(
     assert list(check_declared_hosts(config)) == []
 
 
-def test_no_qgis_at_all_is_not_a_finding_about_the_plugin() -> None:
-    # The workspace's pure environment has no QGIS on the path, which is a
-    # statement about this interpreter, not about the project.
-    assert hosts_module.qgis_server_state() is None
+def _visible_qgis(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Make ``find_spec("qgis")`` answer with a package under ``tmp_path``."""
+    import importlib.util
+    import types
+
+    package = tmp_path / "qgis"
+    package.mkdir()
+    spec = types.SimpleNamespace(submodule_search_locations=[str(package)])
+
+    def find_spec(name: str, *args: object, **kwargs: object) -> object:
+        return spec if name == "qgis" else None
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    return package
+
+
+def test_the_probe_reads_the_installation_without_importing_qgis(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    package = _visible_qgis(monkeypatch, tmp_path)
+    (package / "server").mkdir()
+    (package / "server" / "__init__.py").write_text("")
+
+    assert qgis_server_state() is True
+
+
+def test_the_probe_finds_a_compiled_server_module_too(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    package = _visible_qgis(monkeypatch, tmp_path)
+    (package / "_server.cpython-314-x86_64-linux-gnu.so").write_bytes(b"")
+
+    assert qgis_server_state() is True
+
+
+def test_a_qgis_without_server_bindings_answers_false(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _visible_qgis(monkeypatch, tmp_path)
+
+    assert qgis_server_state() is False
+
+
+def test_no_qgis_at_all_is_not_a_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib.util
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name, *a, **k: None)
+
+    assert qgis_server_state() is None
 
 
 # -- end to end through check_project ----------------------------------------------

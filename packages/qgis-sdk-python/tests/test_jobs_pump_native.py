@@ -117,7 +117,12 @@ def test_nothing_reaches_the_task_manager_until_something_ticks(
     assert workers.submitted == 0
     pump.tick()
     assert workers.submitted == 1
-    assert handle.status is JobStatus.RUNNING
+    # A tick submits the body; it does not promise the task manager is still
+    # holding it when the tick returns. A body that finishes at once is reported
+    # inside the same tick's remaining step budget, so the handle is running or
+    # already settled - never still queued. What the tick guarantees is the
+    # submission, which is what this test is about.
+    assert handle.status is not JobStatus.QUEUED
     deadline = time.monotonic() + DEADLINE_SECONDS
     while not handle.status.settled:  # manual ticks, no timer
         if time.monotonic() > deadline:
