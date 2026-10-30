@@ -14,9 +14,11 @@ absent. Nothing is wrong with the project; the environment cannot run it
 (decision-52 implementation note, 2026-10-30). It is a warning because a
 developer machine without server bindings is normal while the deployment target
 may well have them.
-``HOST002`` - a server declaration on a plugin without the server host - lands
-with the server declarations themselves (TASK-80), because there is nothing to
-recognise by name before they exist.
+``HOST002`` - a server declaration on a plugin that does not declare the server
+host: ``@server.filter``, ``@server.service`` or ``@server.access_control``. The
+mirror of ``HOST001``, and it arrived with the declarations themselves
+(TASK-80): a Desktop-only plugin that imports a module of server hooks has
+nothing to load them.
 
 Only the source and the environment are read (decision-8): the project is never
 imported. The environment is inspected with :func:`importlib.util.find_spec`,
@@ -39,7 +41,13 @@ from .names import ModuleNames
 if TYPE_CHECKING:  # imported by the caller: this module is imported by it
     from qgis_sdk_tools.project import ProjectConfig
 
-__all__ = ["DESKTOP_BINDINGS", "SURFACE_CLASSES", "check_declared_hosts", "check_hosts"]
+__all__ = [
+    "DESKTOP_BINDINGS",
+    "SERVER_BINDINGS",
+    "SURFACE_CLASSES",
+    "check_declared_hosts",
+    "check_hosts",
+]
 
 #: Decorators that need a window: the Desktop toolbar, its menus and shortcuts.
 DESKTOP_BINDINGS = frozenset({"toolbar", "menu", "shortcut"})
@@ -48,6 +56,12 @@ _BINDING_SOURCES = frozenset({"qgis_sdk", "qgis_sdk.bindings"})
 #: Surface classes that only a GUI host can open.
 SURFACE_CLASSES = frozenset({"Dialog", "Dock"})
 _SURFACE_SOURCES = frozenset({"qgis_sdk.ui", "qgis_sdk.ui.surfaces"})
+#: Decorators only QGIS Server calls: a filter, a service and an access hook.
+SERVER_BINDINGS = frozenset({"filter", "service", "access_control"})
+#: The only module they are imported from. `qgis_sdk` does not re-export them:
+#: `filter` and `service` are common names, and a plugin that wants them says
+#: `qgis_sdk.server` so a reader can see which host it is writing for.
+_SERVER_SOURCES = frozenset({"qgis_sdk.server"})
 
 _PYPROJECT = Path("pyproject.toml")
 
@@ -55,20 +69,32 @@ _PYPROJECT = Path("pyproject.toml")
 def check_hosts(
     source: str, *, path: Path, hosts: Sequence[str]
 ) -> Iterator[Diagnostic]:
-    """Yield the ``HOST001`` findings in ``source`` for the declared ``hosts``.
+    """Yield the ``HOST001``/``HOST002`` findings in ``source`` for ``hosts``.
 
-    ``path`` is the root-relative path the diagnostics report. A project that
-    declares the Desktop host - or declares nothing, so it gets the default
-    Desktop set - has nothing to answer for here, and a file that does not parse
-    is left to ``SYNTAX001``.
+    ``path`` is the root-relative path the diagnostics report. The two rules are
+    independent: a project that declares neither host answers for both kinds of
+    declaration, and one that declares the Desktop host still has to answer for a
+    server hook. A file that does not parse is left to ``SYNTAX001``.
     """
-    if Host.DESKTOP.value in hosts:
+    desktop = Host.DESKTOP.value in hosts
+    server = Host.SERVER.value in hosts
+    if desktop and server:
         return
     try:
         tree = ast.parse(source, filename=str(path))
     except SyntaxError:
         return
     names = ModuleNames(tree)
+    if not desktop:
+        yield from _desktop_declarations(tree, names, path, hosts)
+    if not server:
+        yield from _server_declarations(tree, names, path, hosts)
+
+
+def _desktop_declarations(
+    tree: ast.Module, names: ModuleNames, path: Path, hosts: Sequence[str]
+) -> Iterator[Diagnostic]:
+    """``HOST001``: a binding or surface that only a window can host."""
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for decorator in node.decorator_list:
@@ -99,6 +125,28 @@ def check_hosts(
                         hosts,
                     )
                     break
+
+
+def _server_declarations(
+    tree: ast.Module, names: ModuleNames, path: Path, hosts: Sequence[str]
+) -> Iterator[Diagnostic]:
+    """``HOST002``: a hook only QGIS Server calls, on a plugin without it."""
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            dotted = names.declared_as(decorator)
+            if dotted is None:
+                continue
+            module, _, attribute = dotted.rpartition(".")
+            if module in _SERVER_SOURCES and attribute in SERVER_BINDINGS:
+                yield _server_declaration_finding(
+                    path,
+                    decorator.lineno,
+                    decorator.col_offset + 1,
+                    f"the `@server.{attribute}` hook on `{node.name}`",
+                    hosts,
+                )
 
 
 def check_declared_hosts(config: ProjectConfig) -> Iterator[Diagnostic]:
@@ -157,6 +205,26 @@ def _desktop_finding(
             "Add `desktop` to `[tool.qgis-sdk] hosts`, or keep the Desktop "
             "declaration in a module only the Desktop host loads (decision-52 "
             "point 1)."
+        ),
+    )
+
+
+def _server_declaration_finding(
+    path: Path, line: int, column: int, what: str, hosts: Sequence[str]
+) -> Diagnostic:
+    declared = ", ".join(hosts) or "none"
+    return Diagnostic(
+        rule="HOST002",
+        path=path,
+        line=line,
+        column=column,
+        message=(
+            f"{what} needs the server host, but `[tool.qgis-sdk] hosts` declares "
+            f"{declared}"
+        ),
+        remediation=(
+            "Add `server` to `[tool.qgis-sdk] hosts`, or keep the server hook in "
+            "a module only the server host loads (decision-52 point 1)."
         ),
     )
 

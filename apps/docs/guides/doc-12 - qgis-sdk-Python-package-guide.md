@@ -490,8 +490,9 @@ The headless harnesses and the real-Desktop evidence for this adapter are in [do
 (a standalone PyQGIS application started by `qgis_sdk.app.run`). The set changes
 nothing about how the class is written - it is what `check` reads when it
 reports `HOST001` (a Desktop-only declaration in a plugin that does not declare
-Desktop) and `HOST003` (the server host declared against a QGIS built without
-QGIS Server, which is a statement about the environment, not the project).
+Desktop), `HOST002` (a server hook in a plugin that does not declare the server)
+and `HOST003` (the server host declared against a QGIS built without QGIS
+Server, which is a statement about the environment, not the project).
 
 ```toml
 [tool.qgis-sdk]
@@ -2364,6 +2365,7 @@ it is `DEP001`, and it is reported here rather than first at `build`
 | `JOB002` | A `@job` body reads a context attribute other than `progress` and `cancellation`; it is handed a `WorkerContext`, which refuses every driving-thread capability by name, so the job would fail on its first step. Pass plain values in and re-read the service from the callback. |
 | `JOB003` (warning) | A `@job` body imports a module by name (`importlib.import_module`, `__import__`), which `check` cannot follow: the body may reach GUI state through it. Import it at module level or in a helper outside the job. |
 | `HOST001` | A Desktop-only declaration in a plugin whose `[tool.qgis-sdk] hosts` does not declare `desktop`: `@toolbar`, `@menu` or `@shortcut`, a `Dialog`/`Dock` surface, or a web view (`[tool.qgis-sdk.web]`). A server-only plugin loads that module and has nowhere to put a window; add `desktop` to `hosts`, or keep the declaration in a module only the Desktop host loads. |
+| `HOST002` | A server declaration in a plugin whose `[tool.qgis-sdk] hosts` does not declare `server`: `@server.filter`, `@server.service` or `@server.access_control`. The mirror of `HOST001` - a Desktop plugin that imports a module of server hooks has nothing that will ever call them; add `server` to `hosts`, or keep the hooks in a module only the server host loads. Only `qgis_sdk.server` counts: `filter` and `service` are ordinary words, and a decorator from anywhere else is not a declaration this host recognises. |
 | `HOST003` (warning) | `hosts` declares `server`, but the QGIS this interpreter can see was built without QGIS Server, so `qgis.server` is absent. Nothing is wrong with the project - a developer machine without server bindings is normal - but `qgis-sdk test --target server` will skip here and a deployed server needs a build with `WITH_SERVER=ON`. conda-forge builds QGIS without it. |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
