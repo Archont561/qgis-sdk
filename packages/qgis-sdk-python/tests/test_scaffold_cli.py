@@ -50,6 +50,31 @@ def test_scaffold_writes_every_planned_file_and_reports_the_paths(
         assert path in output
 
 
+def test_the_server_host_reaches_the_generated_entry_point(tmp_path: Path) -> None:
+    """``--host server`` is the one flag that decides what QGIS Server loads."""
+    target = tmp_path / "demo_server"
+
+    exit_code, output = run_cli("new", str(target), "--host", "server")
+
+    assert exit_code == 0, output
+    entry = (target / "demo_server" / "__init__.py").read_text(encoding="utf-8")
+    assert "def serverClassFactory(serverIface):" in entry
+    manifest = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))
+    assert manifest["tool"]["qgis-sdk"]["hosts"] == ["server"]
+
+
+def test_a_flag_only_a_desktop_project_can_use_is_refused_on_a_server(
+    tmp_path: Path,
+) -> None:
+    exit_code, output = run_cli(
+        "new", str(tmp_path / "demo_server"), "--host", "server", "--web", "vanilla"
+    )
+
+    assert exit_code == 1
+    assert "needs the desktop host" in output
+    assert not (tmp_path / "demo_server").exists()
+
+
 def test_the_plugin_name_defaults_to_the_target_directory_name(
     tmp_path: Path,
 ) -> None:

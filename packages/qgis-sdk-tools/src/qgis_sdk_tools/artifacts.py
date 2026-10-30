@@ -124,9 +124,10 @@ def render_metadata(config: ProjectConfig, facts: PluginFacts) -> str:
     """The ``metadata.txt`` for the plugin: every key QGIS requires, then extras.
 
     ``name`` is the application title, ``about`` the passthrough value or the
-    description, ``hasProcessingProvider`` follows ``providers``. Passthrough
-    keys follow in the order written; a multi-line value continues indented,
-    the way QGIS's parser reads it.
+    description, ``hasProcessingProvider`` follows ``providers``, and
+    ``server`` is written when ``[tool.qgis-sdk] hosts`` declares the server.
+    Passthrough keys follow in the order written; a multi-line value continues
+    indented, the way QGIS's parser reads it.
     """
     extra = dict(config.metadata)
     about = extra.pop("about", config.description)
@@ -140,8 +141,13 @@ def render_metadata(config: ProjectConfig, facts: PluginFacts) -> str:
         ("email", config.email),
         ("experimental", "True" if config.experimental else "False"),
         ("hasProcessingProvider", "yes" if facts.has_providers else "no"),
-        *extra.items(),
     ]
+    if "server" in config.hosts:
+        # QGIS Server reads this key to decide whether to load the plugin at
+        # all, and QGIS Desktop ignores it, so a plugin that declares the host
+        # is loaded by both from one ZIP (decision-52).
+        fields.append(("server", "True"))
+    fields.extend(extra.items())
     lines = ["[general]"]
     for key, value in fields:
         lines.append(f"{key}={_continued(value)}")

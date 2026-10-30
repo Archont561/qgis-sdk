@@ -152,6 +152,7 @@ def test_the_manifest_declares_the_plugin_class_and_qgis_facts() -> None:
     assert manifest["dependency-groups"] == {"dev": [tools_line]}
     assert manifest["tool"]["qgis-sdk"] == {
         "plugin": "demo_tools.plugin:app",
+        "hosts": ["desktop"],
         "qgis-minimum-version": "4.0",
         "experimental": True,
     }
