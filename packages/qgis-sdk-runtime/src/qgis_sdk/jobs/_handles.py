@@ -59,7 +59,13 @@ class JobHandle:
 
     @property
     def status(self) -> JobStatus:
-        """The current state; ``cancelled`` only once cancellation is acknowledged."""
+        """The current state.
+
+        ``cancelled`` normally means the job acknowledged a cancellation, which
+        a worker reports through the tick. A job its host abandoned - a request
+        scope that closed with the response (decision-52) - reads ``cancelled``
+        at once instead, because no pump is left to report anything.
+        """
         return self._attempt.status
 
     @property

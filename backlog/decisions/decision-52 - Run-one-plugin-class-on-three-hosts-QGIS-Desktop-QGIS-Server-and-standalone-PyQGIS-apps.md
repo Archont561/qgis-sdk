@@ -99,6 +99,25 @@ in a request may hold the response open waiting for a worker, and a plugin-owned
 job that outlives requests has to be backed by something the operator started -
 the SDK does not invent a background thread for it.
 
+**Request-scoped jobs, landed 2026-10-30 (TASK-80 AC 3).** The mechanism behind
+that note is three small pieces rather than a server-only scheduler. The plugin's
+`JobService` stays the scheduler owner; `JobService.request_scoped(scope)` derives
+a view-like service over the *request* scope with the other disposal rule - it
+registers `on_close` on that scope, so the response's scope close *is* the
+abandonment - and the server host builds one per request and hands it to
+`ServerContext` as the `jobs` capability. Abandoning an attempt there
+(`_Attempt.cancelled_by_request`) marks the handle `cancelled` immediately, asks
+the worker to stop, drops the job out of `StepScheduler` through a new
+`abandon(job)` (the same rule `dispose` uses for a whole scope, with a later
+worker report counted as dropped), and closes the attempt's scope. The *plugin*
+close path is deliberately left alone: there the scheduler's own verdict -
+`QgisSdkScopeClosedError` for a job that never started, `cancelled` for one that
+did - is the more informative answer, so `request_scoped` is a second rule rather
+than a change to the first. `ctx.jobs.plugin` reaches the plugin-lifetime service
+and survives the response. Server ticks are the host's: `ServerHost.tick()` at
+request start, `QgsServerHost` calling it from `serve_filter`/`serve_service` in
+both the fake and the real adapter path.
+
 **The QGIS Server object mapping, decided 2026-10-30 with TASK-80 AC 2.** QGIS
 Server does not call a dispatcher: it calls a `QgsServerFilter` before the
 services, a `QgsService` for the `SERVICE` a request names, and a

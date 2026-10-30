@@ -13,10 +13,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from qgis_sdk.core.scope import ResourceScope
 from qgis_sdk.server import ServerHooks, ServerHost, ServerRequest, ServerResponse
+
+if TYPE_CHECKING:
+    from qgis_sdk.jobs import JobService
 
 __all__ = ["FakeServerInterface", "RegisteredFilter"]
 
@@ -102,10 +105,16 @@ class FakeServerInterface:
         request: ServerRequest,
         *,
         scope: ResourceScope | None = None,
+        jobs: JobService | None = None,
         **services: Any,
     ) -> ServerResponse:
-        """Register ``hooks`` here and serve one request through them."""
-        host = ServerHost(hooks, self)
+        """Register ``hooks`` here and serve one request through them.
+
+        ``jobs`` is the plugin's job service, when the test has one: the host
+        derives a request-scoped service from it exactly as a deployed server
+        does, which is what makes ``ctx.jobs`` reachable from a hook here.
+        """
+        host = ServerHost(hooks, self, jobs=jobs)
         host.register()
         return host.handle(request, scope=scope, **services)
 

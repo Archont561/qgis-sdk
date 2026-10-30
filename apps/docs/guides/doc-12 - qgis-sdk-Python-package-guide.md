@@ -585,6 +585,38 @@ Three things that mapping decides for you, and says so:
   which `QgsAccessControl::fillCacheKey` reads as "do not reuse a document", so a
   capabilities document shaped by one request is never handed to another.
 
+#### Jobs on this host: the request is the clock
+
+A server has no GUI thread and no job pump, so `ctx.jobs` on a `ServerContext`
+is not the plugin's service: it is one derived over *the request's* scope, and
+the request is what drives it.
+
+```python
+@filter()
+def schedule(ctx: ServerContext, request: ServerRequest, response: ServerResponse):
+    handle = ctx.jobs.summarise.delay(layer="parcels")   # this request's job
+    handle.on_cancelled(lambda: ctx.log.info("stopped with the response"))
+    ctx.jobs.plugin.rebuild_index.delay()                # outlives the request
+```
+
+- **Ticked at request start.** A server has no event loop, so the host ticks the
+  plugin's job service when a request begins: a job that request submits starts
+  on the next request, never in the background.
+- **Abandoned when the response is sent.** The request scope closes at that
+  moment and its jobs are abandoned: each handle reads `JobStatus.CANCELLED`
+  immediately, `owner_closed` is `True`, a worker still running is asked to stop,
+  no callback runs, and the plugin's scheduler stops holding the job. That is a
+  zero-deadline quiesce - nothing in a request may wait for a worker - which is
+  why the outcome is the host's word rather than a worker report that will never
+  arrive (decision-52).
+- **Plugin-owned work says so.** `ctx.jobs.plugin` submits with the plugin's
+  lifetime and survives the response, exactly as it does inside a view. It still
+  needs something the operator started to drive it: the SDK does not invent a
+  background thread for a server.
+- **A host with no job service refuses by name.** `ctx.jobs` is a capability, so
+  a deployment given no job service answers `QgisSdkUnsupportedCapabilityError`
+  naming `jobs` instead of handing out a service that could submit nothing.
+
 The whole dispatcher is testable without QGIS: `qgis_sdk.testing.FakeServerInterface`
 records registrations and serves a request through the same `ServerHost`, which
 is what `qgis-sdk test --target server` uses on a machine whose QGIS has no
@@ -1976,6 +2008,19 @@ at that report, so a body that runs to the end after being asked to stop ends
 `cancelled` rather than publishing a result nobody is waiting for. Work that
 never reports stays `running`; `quiesce()` names it as a blocker instead of
 pretending it stopped.
+
+Two hosts go further and *abandon* work instead of waiting for it, and they say
+so differently because they know different things:
+
+- **Unloading the plugin** abandons everything through the scheduler's own rule,
+  so a job that never started reports the reason it never started
+  (`QgisSdkScopeClosedError`) and a job that had started reports `cancelled`.
+- **A QGIS Server request** has no pump at all, so the request scope's jobs are
+  abandoned by name: `status` reads `cancelled` at once, `owner_closed` is
+  `True`, `result` / `get()` raise `QgisSdkJobCancelledError`, and the scheduler
+  stops holding the job. That reading is pinned by `JobService.request_scoped`
+  and the server host's per-request context; the plugin's own work, reached
+  through `ctx.jobs.plugin`, is untouched.
 
 #### Callbacks run on the tick, never on a worker
 
