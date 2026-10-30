@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from qgis_sdk.bindings import BindingsDescription, describe_bindings
-from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+from qgis_sdk.core import Host, PluginContext, PluginRuntime, ResourceScope
 from qgis_sdk.core._application import QgisSdkPlugin
 from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import QgisSdkError
@@ -237,7 +237,7 @@ def default_context(
         return native_plugin_context(
             scope, settings_prefix=plugin_id, iface=iface, notifications=notifications
         )
-    return PluginContext(notifications=notifications, scope=scope)
+    return PluginContext(notifications=notifications, scope=scope, host=Host.DESKTOP)
 
 
 def resolve_plugin_spec(spec: str) -> QgisSdkPlugin:

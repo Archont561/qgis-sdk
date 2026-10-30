@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Final
 
 from qgis_sdk.bridge.host import HOST_OPERATIONS
+from qgis_sdk.core.host import Host
 from qgis_sdk.models import QgisSdkError
 
 from qgis_sdk_tools.check.diagnostics import Diagnostic
@@ -172,6 +173,8 @@ class ProjectConfig:
     metadata: Mapping[str, str] = field(default_factory=dict)
     web: WebConfig | None = None
     build: BuildConfig = field(default_factory=BuildConfig)
+    #: ``[tool.qgis-sdk] hosts``: which hosts this plugin runs on (decision-52).
+    hosts: tuple[str, ...] = ("desktop",)
 
     @property
     def module(self) -> str:
@@ -252,6 +255,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
         )
         experimental = True
     metadata = _passthrough(tool.get("metadata"), findings)
+    hosts = _hosts(tool.get("hosts"), findings)
     web = _web(tool.get("web"), findings)
     build = _build(tool.get("build"), findings)
     config = ProjectConfig(
@@ -266,6 +270,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
         metadata=metadata,
         web=web,
         build=build,
+        hosts=hosts,
     )
     return config, tuple(findings)
 
@@ -356,6 +361,41 @@ def _passthrough(value: object, findings: list[Diagnostic]) -> dict[str, str]:
                 )
             )
     return kept
+
+
+def _hosts(value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
+    """``[tool.qgis-sdk] hosts``: the declared hosts, or the Desktop default.
+
+    One plugin class, a declared host set (decision-52 point 1). A name outside
+    :class:`~qgis_sdk.core.host.Host` is a ``CONFIG001`` rather than a silent
+    default, because a misspelt host is exactly the mistake that would otherwise
+    surface as a plugin that refuses every capability on the host it does run on.
+    """
+    if value is None:
+        return (Host.DESKTOP.value,)
+    if not isinstance(value, (list, tuple)) or not value:
+        findings.append(
+            _config(
+                "[tool.qgis-sdk] hosts must be a list of host names",
+                'hosts = ["desktop", "server"]',
+            )
+        )
+        return (Host.DESKTOP.value,)
+    known = [host.value for host in Host]
+    declared: list[str] = []
+    for name in value:
+        if not isinstance(name, str) or name not in known:
+            findings.append(
+                _config(
+                    f"[tool.qgis-sdk] hosts names {name!r}, which is not one of "
+                    f"{', '.join(known)}",
+                    'hosts = ["desktop", "server"]',
+                )
+            )
+            continue
+        if name not in declared:
+            declared.append(name)
+    return tuple(declared) or (Host.DESKTOP.value,)
 
 
 def _web(value: object, findings: list[Diagnostic]) -> WebConfig | None:

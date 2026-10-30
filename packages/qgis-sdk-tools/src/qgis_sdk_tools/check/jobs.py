@@ -37,6 +37,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from .diagnostics import Diagnostic
+from .names import ModuleNames
 
 __all__ = [
     "GUI_CLASSES",
@@ -122,42 +123,21 @@ class _Module:
 
     def __init__(self, tree: ast.Module) -> None:
         self.tree = tree
-        self.imports: dict[str, str] = {}
-        self.assignments: dict[str, ast.expr] = {}
-        for node in tree.body:
-            self._bind(node)
+        self.names = ModuleNames(tree)
 
-    # -- names -------------------------------------------------------------------
+    @property
+    def imports(self) -> dict[str, str]:
+        """The local name of every module-level import, and what it denotes."""
+        return self.names.imports
 
-    def _bind(self, node: ast.stmt) -> None:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                local = alias.asname or alias.name.split(".")[0]
-                self.imports[local] = alias.name if alias.asname else local
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            for alias in node.names:
-                if alias.name == "*":
-                    continue
-                self.imports[alias.asname or alias.name] = f"{node.module}.{alias.name}"
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    self.assignments[target.id] = node.value
-        elif (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.value is not None
-        ):
-            self.assignments[node.target.id] = node.value
+    @property
+    def assignments(self) -> dict[str, ast.expr]:
+        """The value of every module-level assignment, by name."""
+        return self.names.assignments
 
     def dotted(self, node: ast.expr) -> str | None:
         """The dotted path a name or attribute chain denotes, aliases resolved."""
-        if isinstance(node, ast.Name):
-            return self.imports.get(node.id, node.id)
-        if isinstance(node, ast.Attribute):
-            base = self.dotted(node.value)
-            return f"{base}.{node.attr}" if base is not None else None
-        return None
+        return self.names.dotted(node)
 
     def gui_bindings(self) -> dict[str, str]:
         """Module-level names that hold GUI state, and why they are named so."""
@@ -165,9 +145,7 @@ class _Module:
         for name, value in self.assignments.items():
             target = value.func if isinstance(value, ast.Call) else value
             dotted = self.dotted(target)
-            if dotted is None:
-                continue
-            if _is_gui_path(dotted):
+            if dotted is not None and _is_gui_path(dotted):
                 bindings[name] = dotted
         return bindings
 
@@ -182,8 +160,7 @@ class _Module:
                 yield node
 
     def _is_job_decorator(self, decorator: ast.expr) -> bool:
-        target = decorator.func if isinstance(decorator, ast.Call) else decorator
-        dotted = self.dotted(target)
+        dotted = self.names.declared_as(decorator)
         if dotted is None:
             return False
         if dotted in _JOB_DECORATORS:

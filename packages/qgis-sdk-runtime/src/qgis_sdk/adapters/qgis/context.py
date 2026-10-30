@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from qgis_sdk.bridge.authority import HostAuthority
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import Host, PluginContext, ResourceScope
 from qgis_sdk.files import FilesService
 from qgis_sdk.network import NetworkClient
 from qgis_sdk.services import Notifications
@@ -48,6 +48,7 @@ def native_plugin_context(
     iface: object | None = None,
     notifications: Notifications | None = None,
     working_directory: Path | None = None,
+    host: Host = Host.DESKTOP,
 ) -> PluginContext:
     """Build the plugin context a QGIS Desktop host offers.
 
@@ -60,6 +61,8 @@ def native_plugin_context(
     directory and removes it with the scope. ``processing`` is the registry
     ``PluginRuntime.start()`` advertises the plugin's ``providers`` with.
     ``log`` writes to the QGIS message log under ``settings_prefix`` as its tag.
+    ``host`` is what ``ctx.host`` reports: Desktop by default, and the standalone
+    app host says ``Host.APP`` without touching anything else here.
     """
     scope.ensure_open()
     layers = NativeLayers(scope)
@@ -79,6 +82,7 @@ def native_plugin_context(
             notifications if notifications is not None else NativeNotifications(scope)
         ),
         scope=scope,
+        host=host,
         desktop=None if iface is None else IfaceDesktopAccess(iface),
         network=NetworkClient(transport, scope),
         layers=layers,

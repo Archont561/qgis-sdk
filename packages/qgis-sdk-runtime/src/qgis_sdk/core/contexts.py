@@ -43,6 +43,7 @@ from qgis_sdk.services import (
     Workers,
 )
 
+from .host import Host
 from .scope import ResourceScope
 
 if TYPE_CHECKING:
@@ -175,7 +176,12 @@ class _Context:
 
     def __repr__(self) -> str:
         provided = ", ".join(sorted(self.capabilities)) or "none"
-        return f"{type(self).__name__}(scope={self.scope!r}, capabilities={provided})"  # type: ignore[attr-defined]
+        host = getattr(self, "host", None)
+        prefix = f"host={host}, " if host is not None else ""
+        return (
+            f"{type(self).__name__}({prefix}scope={self.scope!r}, "  # type: ignore[attr-defined]
+            f"capabilities={provided})"
+        )
 
 
 class PluginContext(_Context):
@@ -207,6 +213,7 @@ class PluginContext(_Context):
         "_styles",
         "_ui",
         "_workers",
+        "host",
         "notifications",
         "scope",
     )
@@ -229,6 +236,9 @@ class PluginContext(_Context):
 
     notifications: Notifications
     scope: ResourceScope
+    #: The host that built this context (``desktop``, ``server`` or ``app``),
+    #: stated by the host rather than inferred (decision-52 point 4).
+    host: Host
     desktop: Capability[DesktopAccess] = Capability()
     network: Capability[Network] = Capability()
     layers: Capability[Layers] = Capability()
@@ -265,10 +275,12 @@ class PluginContext(_Context):
         files: Files | None = None,
         log: Log | None = None,
         jobs: Jobs | None = None,
+        host: Host = Host.DESKTOP,
     ) -> None:
         self._assemble(
             notifications=notifications,
             scope=scope,
+            host=host,
             _jobs=jobs,
             _desktop=desktop,
             _network=network,
@@ -299,7 +311,7 @@ class PluginContext(_Context):
                 raise ValueError(f"PluginContext already provides {name!r}")
         current = {name: getattr(self, f"_{name}") for name in self._capability_names}
         current.update(services)
-        return PluginContext(self.notifications, self.scope, **current)
+        return PluginContext(self.notifications, self.scope, host=self.host, **current)
 
 
 class UiContext(_Context):
@@ -332,6 +344,7 @@ class UiContext(_Context):
         "_streams",
         "_styles",
         "_ui",
+        "host",
         "notifications",
         "scope",
         "view",
@@ -356,6 +369,8 @@ class UiContext(_Context):
     notifications: Notifications
     view: ViewControl
     scope: ResourceScope
+    #: The host this view belongs to, handed down from the plugin context.
+    host: Host
     network: Capability[Network] = Capability()
     actions: Capability[ViewActions] = Capability()
     algorithms: Capability[Algorithms] = Capability()
@@ -395,11 +410,13 @@ class UiContext(_Context):
         styles: Styles | None = None,
         desktop: DesktopAccess | None = None,
         jobs: Jobs | None = None,
+        host: Host = Host.DESKTOP,
     ) -> None:
         self._assemble(
             notifications=notifications,
             view=view,
             scope=scope,
+            host=host,
             _jobs=jobs,
             _network=network,
             _actions=actions,

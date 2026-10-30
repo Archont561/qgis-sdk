@@ -7,6 +7,7 @@ hold the text.
 """
 
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError, Severity
+from .hosts import check_declared_hosts, check_hosts, qgis_server_state
 from .imports import NATIVE_ADAPTER_PACKAGE, NATIVE_ROOTS, check_source, module_name
 from .jobs import GUI_CLASSES, GUI_ONLY_PATHS, WORKER_SAFE_ATTRIBUTES, check_jobs
 from .project import EXCLUDED_DIRECTORIES, REQUIRED_METADATA_KEYS, check_project
@@ -25,10 +26,13 @@ __all__ = [
     "QgisSdkCheckError",
     "RuntimeRange",
     "Severity",
+    "check_declared_hosts",
+    "check_hosts",
     "check_jobs",
     "check_project",
     "check_source",
     "module_name",
+    "qgis_server_state",
     "requirement_admits_range",
     "supported_runtime_range",
 ]

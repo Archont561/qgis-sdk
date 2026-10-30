@@ -89,6 +89,16 @@ deployed server. The gate records that native row as run or blocked with this
 evidence, never as passed. `ctx.host` and the `[tool.qgis-sdk] hosts` set are
 unchanged, and nothing about the Desktop or app hosts moves.
 
+**Jobs on the server host, decided 2026-10-30.** There is no GUI thread there
+and no `QgsJobPump` to drive delivery, so point 2's "request-scoped unless
+plugin-owned" becomes concrete: the server host ticks the job service at request
+start, abandons a request-scoped job when its response is sent (`quiesce` with a
+zero deadline, the abandoned job reported as cancelled by name), and refuses
+plugin-lifetime submission unless the host was given a worker backend. Nothing
+in a request may hold the response open waiting for a worker, and a plugin-owned
+job that outlives requests has to be backed by something the operator started -
+the SDK does not invent a background thread for it.
+
 ## Consequences
 
 - Service contracts gain nothing host-specific; the server adds
