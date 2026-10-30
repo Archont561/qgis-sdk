@@ -589,6 +589,12 @@ Three things that mapping decides for you, and says so:
   plugin is loaded: the adapter answers `cacheKey()` with a non-empty string,
   which `QgsAccessControl::fillCacheKey` reads as "do not reuse a document", so a
   capabilities document shaped by one request is never handed to another.
+- **The server adapter imports without Qt.** `qgis_sdk.adapters.qgis` resolves a
+  name the first time it is asked for, so `...adapters.qgis.server` imports on a
+  machine where QGIS is not installed at all. Two things follow: the generated
+  entry can be driven against the `qgis.server` stand-ins in a pure test, and a
+  server-only deployment never drags Qt Widgets or Processing into the process
+  that answers requests.
 
 #### Jobs on this host: the request is the clock
 
