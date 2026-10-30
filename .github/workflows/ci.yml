@@ -257,20 +257,74 @@ jobs:
           STEPS: ${{ toJSON(steps) }}
         run: python scripts/ci.py report-steps
 
+  # The one claim no other job can make: a QGIS that was built with QGIS Server
+  # in it. conda-forge passes -D WITH_SERVER=FALSE on every platform, so
+  # `qgis.server` - QgsServer, QgsServerInterface, QgsServerFilter - does not
+  # exist in the Pixi environment the other jobs use, and the server host is
+  # proven there against the scripted interface instead (decision-52
+  # implementation note). This row installs the Debian packages that do carry
+  # the bindings and runs the `server` test layer, which skips everywhere else
+  # (TASK-80 AC 2). A row that collected nothing is a failure, not a pass:
+  # scripts/ci.py server checks the module itself before pytest starts.
+  server:
+    name: Server host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        id: s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # qgis.org builds WITH_SERVER=ON and WITH_BINDINGS=ON for its Debian
+      # repository; the versions there are the 4.x line this release targets.
+      - name: Install a QGIS with server bindings
+        id: s02
+        run: |
+          set -euo pipefail
+          sudo install -d -m 755 /etc/apt/keyrings
+          sudo wget -qO /etc/apt/keyrings/qgis-archive-keyring.gpg \
+            https://download.qgis.org/downloads/qgis-archive-keyring.gpg
+          keyring=/etc/apt/keyrings/qgis-archive-keyring.gpg
+          echo "deb [signed-by=$keyring] https://qgis.org/debian noble main" \
+            | sudo tee /etc/apt/sources.list.d/qgis.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qgis-server python3-qgis
+          python3 -c "import qgis.core, qgis.server; print(qgis.core.Qgis.version())"
+
+      # The bindings belong to the system interpreter, so the environment is
+      # built over it rather than around it: --system-site-packages is what makes
+      # `import qgis.server` work in the interpreter that runs pytest.
+      - name: Install the SDK over the system bindings
+        id: s03
+        run: |
+          set -euo pipefail
+          python3 -m venv --system-site-packages .venv-server
+          .venv-server/bin/python -m pip install --quiet --upgrade pip
+          .venv-server/bin/python -m pip install --quiet pytest pytest-bdd \
+            -e packages/qgis-sdk-runtime -e packages/qgis-sdk-tools
+
+      - name: Test the server host
+        id: s04
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: .venv-server/bin/python scripts/ci.py server
+
   # Preserve the existing required `checks` status while ensuring a failed,
   # cancelled, or unexpectedly skipped Linux job cannot pass the aggregate.
   checks:
-    needs: [linux, coverage]
+    needs: [linux, coverage, server]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Report Linux job results
         run: >-
-          echo "Linux checks: ${{ needs.linux.result }}; Linux coverage: ${{ needs.coverage.result }}"
+          echo "Linux checks: ${{ needs.linux.result }}; Linux coverage: ${{ needs.coverage.result }}; Server host: ${{ needs.server.result }}"
 
-      - name: Require both Linux jobs to succeed
-        if: ${{ needs.linux.result != 'success' || needs.coverage.result != 'success' }}
+      - name: Require every Linux job to succeed
+        if: >-
+          ${{ needs.linux.result != 'success' || needs.coverage.result != 'success'
+          || needs.server.result != 'success' }}
         run: exit 1
 
   # Portable Python/TypeScript suites on the other supported host platforms.
