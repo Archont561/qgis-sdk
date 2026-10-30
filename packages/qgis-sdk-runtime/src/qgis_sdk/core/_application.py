@@ -148,6 +148,7 @@ class QgisSdkPlugin(_ActionRegistry):
         self._surfaces: list[type[Surface]] = []
         self._providers: list[Provider] = []
         self._jobs: Any = None
+        self._declared_jobs: dict[str, Callable[..., Any]] = {}
         self._included_plugins: set[QgisSdkPlugin] = set()
         self._included_members: set[QgisSdkPlugin] = set()
         self.context_factory: Callable[[object | None], PluginContext] | None = None
@@ -166,21 +167,103 @@ class QgisSdkPlugin(_ActionRegistry):
     def jobs(self) -> Any:
         """The named jobs an action reaches as ``ctx.jobs.<name>`` (TASK-116).
 
-        ``None`` until the plugin declares some. Assign a mapping
-        (``app.jobs = {"add": add}``) or a sequence of ``@job`` functions
-        (``app.jobs = (add, count_features)``); the assignment is validated at
-        once, and the runtime builds the registry again from it when the
-        plugin starts.
+        ``None`` until the plugin declares some. Three spellings, one registry:
+        a mapping (``app.jobs = {"add": add}``), a sequence of ``@job``
+        functions (``app.jobs = (add, count_features)``), or the decorator
+        (``@app.job()`` above the function). Each is validated at once, and the
+        runtime builds the registry again from the result when the plugin
+        starts.
         """
-        return self._jobs
+        if not self._declared_jobs:
+            return self._jobs
+        declared: dict[str, Callable[..., Any]] = {}
+        if self._jobs is not None:
+            from qgis_sdk.jobs import JobRegistry
+
+            registry = JobRegistry.from_declaration(
+                self._jobs, path=f"Plugin {self.id!r}"
+            )
+            declared = {name: registry.function(name) for name in registry.names}
+        declared.update(self._declared_jobs)
+        return declared
 
     @jobs.setter
     def jobs(self, declaration: Any) -> None:
         if declaration is not None:
             from qgis_sdk.jobs import JobRegistry
 
-            JobRegistry.from_declaration(declaration, path=f"Plugin {self.id!r}")
+            registry = JobRegistry.from_declaration(
+                declaration, path=f"Plugin {self.id!r}"
+            )
+            shared = sorted(set(registry.names) & set(self._declared_jobs))
+            if shared:
+                raise QgisSdkDeclarationError(
+                    f"Plugin {self.id!r}: {shared[0]!r} is both assigned in `jobs` "
+                    "and declared with @app.job; keep one declaration per name"
+                )
         self._jobs = declaration
+
+    def job(
+        self,
+        function: Callable[..., Any] | None = None,
+        /,
+        *,
+        key: str | None = None,
+        id: str | None = None,
+        title: str | None = None,
+    ) -> Any:
+        """Declare one ``@job`` function as ``ctx.jobs.<name>``, decorator style.
+
+        The shape an action already has::
+
+            @app.job(id="demo.sum", title="Sum")
+            def add(ctx: WorkerContext, left: int, right: int) -> SumResult: ...
+
+            @app.job()          # id, title and name all derived from the function
+            def count_features(ctx: WorkerContext, layer_id: str) -> int: ...
+
+            @app.job(key="sum") # a name that differs from the function's own
+            def add(ctx: WorkerContext, ...) -> ...: ...
+
+        The name is the function's, snake_cased, exactly as a sequence entry of
+        ``app.jobs`` derives it; ``key=`` renames it the way a mapping key does.
+        The function keeps its ``@job`` metadata - applying it here when the
+        author did not - so ``describe_job(add)`` works either way.
+        """
+        if function is None:
+            return lambda target: self.job(target, key=key, id=id, title=title)
+        if not inspect.isfunction(function):
+            raise QgisSdkDeclarationError("@app.job declares a function")
+        from qgis_sdk.declarations import derive_id
+        from qgis_sdk.jobs import JobRegistry
+        from qgis_sdk.jobs import job as declare_job
+
+        if id is not None or title is not None:
+            declare_job(id=id, title=title)(function)
+        elif "__qgis_sdk_job__" not in vars(function):
+            declare_job(function)
+        name = key if key is not None else derive_id(function.__name__)
+        if name in self._declared_jobs:
+            raise QgisSdkDeclarationError(
+                f"Plugin {self.id!r}: two jobs are named {name!r}; give one of "
+                "them another name with @app.job(key=...)"
+            )
+        # One call validates the name, the decoration, the reserved names and a
+        # second name for an id this plugin already declares.
+        JobRegistry.from_declaration(
+            {**self._declared_jobs, name: function}, path=f"Plugin {self.id!r}"
+        )
+        if self._jobs is not None:
+            assigned = JobRegistry.from_declaration(
+                self._jobs, path=f"Plugin {self.id!r}"
+            )
+            if name in assigned:
+                raise QgisSdkDeclarationError(
+                    f"Plugin {self.id!r}: {name!r} is both assigned in `jobs` and "
+                    "declared with @app.job; keep one declaration per name"
+                )
+        self._declared_jobs = {**self._declared_jobs, name: function}
+        return function
 
     def surface(self, surface: type[S]) -> type[S]:
         """Register a Dialog or Dock class without replacing it."""
@@ -239,11 +322,13 @@ class QgisSdkPlugin(_ActionRegistry):
                 raise QgisSdkDeclarationError(f"duplicate provider id {provider.id!r}")
             provider_ids.add(provider.id)
 
-        jobs = _merge_jobs(self._jobs, child._jobs)
+        jobs = _merge_jobs(self.jobs, child.jobs)
         self._extend(child._actions)
         self._surfaces = surfaces
         self._providers = providers
+        # The merged mapping already holds this plugin's decorator entries.
         self._jobs = jobs
+        self._declared_jobs = {}
         self._included_plugins.add(child)
         self._included_members.update(members)
 
@@ -255,8 +340,9 @@ class QgisSdkPlugin(_ActionRegistry):
             "surfaces": tuple(self._surfaces),
             "providers": tuple(self._providers),
         }
-        if self._jobs is not None:
-            members["jobs"] = self._jobs
+        jobs = self.jobs
+        if jobs is not None:
+            members["jobs"] = jobs
         for id, title, function, events in self._actions:
             if function.__name__ in {
                 "surfaces",

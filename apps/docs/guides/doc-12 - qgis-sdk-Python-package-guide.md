@@ -1693,7 +1693,23 @@ A plugin declares the jobs an action may reach, in either of two forms:
 ```python
 app.jobs = {"add": add, "count": count_features}  # explicit keys
 app.jobs = (add, count_features)                  # names derived from the functions
+
+
+@app.job(id="demo.sum", title="Add two numbers")  # decorator, same registry
+def add(ctx: WorkerContext, left: int, right: int = 0) -> SumResult: ...
+
+
+@app.job()          # name, id and title derived from the function
+def count_features(ctx: WorkerContext, layer_id: str) -> int: ...
 ```
+
+`@app.job(...)` is the spelling to reach for when the job is written next to
+the plugin: it applies `@job` itself (so the function describes on its own),
+derives the name the way a sequence entry does, and takes `key=` to rename it
+the way a mapping key does. `@app.job(id=..., title=...)` gives the explicit
+form, and `@app.job` without parentheses works too. All three spellings share
+one registry, so a name declared twice - by assignment and by decorator, or by
+two decorators - is refused when the plugin is defined.
 
 The second form derives each name from the function's own name - the same
 snake_case rule a bare `@job` uses for its id, without the module suffix - so

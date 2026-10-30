@@ -114,6 +114,12 @@ TASK-116 added the submission half of §2 and §3.
   with the public attributes of `Jobs` and `JobService`. Lookup is a
   dictionary read: descriptions are built once, so submission neither imports
   nor inspects anything.
+- A plugin written with `QgisSdkPlugin` has a third spelling next to the two
+  declaration forms: `@app.job(id=..., title=...)`, `@app.job()` or
+  `@app.job(key=...)` registers the function, applies `@job` when the author
+  did not, and derives the name the way a sequence entry does. The three
+  spellings land in one registry, so a name declared twice - by assignment and
+  by decorator, or by two decorators - is refused where the plugin is defined.
 - `ctx.jobs` is a `Jobs` facade over the engine, and deliberately has no
   `bind`: `ctx.jobs.<name>` is a `BoundJob`, `ctx.jobs.after(handle).<name>`
   the ordered one, and `ctx.jobs.watch(handle, on_progress=..., on_success=...,

@@ -86,6 +86,114 @@ def settle(service: JobService | None, workers: FakeWorkers, rounds: int = 1) ->
     service.tick()
 
 
+# -- declaring with the decorator --------------------------------------------------
+
+
+def test_the_decorator_declares_a_job_the_way_a_sequence_does() -> None:
+    from qgis_sdk.jobs import describe_job
+
+    app = QgisSdkPlugin(id="decorated", title="Decorated")
+
+    @app.job(id="dec.record", title="Record")
+    def record_value(ctx: WorkerContext, value: int) -> int:
+        return value
+
+    @app.job()
+    def count_features(ctx: WorkerContext, layer: str) -> int:
+        return len(layer)
+
+    @app.job(key="sum")
+    def add_numbers(ctx: WorkerContext, left: int, right: int) -> int:
+        return left + right
+
+    assert sorted(app.jobs) == ["count_features", "record_value", "sum"]
+    assert describe_job(record_value).title == "Record"
+    # The decorator applies @job itself, so the function describes on its own.
+    assert describe_job(count_features).id.startswith("count_features_")
+    assert describe_job(add_numbers).title == "Add numbers"
+
+
+def test_the_decorator_can_expose_a_function_that_is_already_a_job() -> None:
+    app = QgisSdkPlugin(id="decorated", title="Decorated")
+
+    assert app.job()(record) is record
+    assert app.jobs == {"record": record}
+
+
+def test_the_decorator_refuses_a_name_it_already_has() -> None:
+    from qgis_sdk.declarations import QgisSdkDeclarationError
+
+    app = QgisSdkPlugin(id="decorated", title="Decorated")
+    app.job()(record)
+
+    with pytest.raises(QgisSdkDeclarationError, match="two jobs are named 'record'"):
+        app.job()(record)
+
+    with pytest.raises(QgisSdkDeclarationError, match="reserved by `ctx.jobs`"):
+        app.job(key="after")(record)
+
+
+def test_the_decorator_and_an_assignments_share_one_registry() -> None:
+    from qgis_sdk.declarations import QgisSdkDeclarationError
+
+    app = QgisSdkPlugin(id="decorated", title="Decorated")
+    app.jobs = {"record": record}
+
+    with pytest.raises(QgisSdkDeclarationError, match="both assigned in `jobs`"):
+        app.job()(record)
+
+    @app.job(key="again")
+    def record_again(ctx: WorkerContext, value: int) -> int:
+        return value
+
+    assert sorted(app.jobs) == ["again", "record"]
+    with pytest.raises(QgisSdkDeclarationError, match="both assigned in `jobs`"):
+        app.jobs = {"again": record}
+
+
+def test_included_plugins_merge_their_decorated_jobs() -> None:
+    from qgis_sdk.declarations import QgisSdkDeclarationError
+
+    child = QgisSdkPlugin(id="child", title="Child")
+    child.job()(record)
+    parent = QgisSdkPlugin(id="parent", title="Parent")
+    parent.include(child)
+
+    assert list(parent.jobs) == ["record"]
+
+    clash = QgisSdkPlugin(id="clash", title="Clash")
+    clash.job()(record)
+    with pytest.raises(QgisSdkDeclarationError, match="duplicate job name 'record'"):
+        parent.include(clash)
+
+
+def test_a_decorated_job_runs_under_the_runtime(workers: FakeWorkers) -> None:
+    app = QgisSdkPlugin(id="decorated", title="Decorated")
+
+    @app.job(key="record")
+    def record_value(ctx: WorkerContext, value: int) -> int:
+        return value * 2
+
+    @app.action(id="run", title="Run")
+    def run(ctx: PluginContext, value: int) -> JobHandle:
+        return ctx.jobs.record.delay(value=value)
+
+    scope = ResourceScope()
+    context = PluginContext(
+        scope=scope,
+        notifications=RecordingNotifications(scope),
+        workers=workers,
+    )
+    runtime = PluginRuntime(app=app, context=context)
+    runtime.start()
+    try:
+        handle = runtime.actions["run"](value=4)
+        settle(runtime.jobs, workers)
+        assert handle.result == 8
+    finally:
+        runtime.unload()
+
+
 # -- the capability ----------------------------------------------------------------
 
 

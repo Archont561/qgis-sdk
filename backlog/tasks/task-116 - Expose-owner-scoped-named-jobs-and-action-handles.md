@@ -47,6 +47,12 @@ Implementation (2026-10-30):
   one name, and two names for one id are all refused by name. Lookup is a dict
   read: descriptions are built once, and a test monkeypatches `describe_job` to
   prove submission never describes anything again.
+- A third spelling, added on review: `@app.job(id=..., title=...)`,
+  `@app.job()` and `@app.job(key=...)` register the function the way
+  `@app.action()` registers an action, apply `@job` when the author did not,
+  derive the name from the function (or take `key=`), and merge with an
+  `app.jobs` assignment into one registry - a name declared twice is refused
+  where the plugin is defined, and `include()` merges both.
 - AC2. `ctx.jobs` is a `Jobs` facade with no `bind`: `ctx.jobs.<name>` is a
   `BoundJob`, `ctx.jobs.watch(handle, ...)` subscribes progress/success/failure/
   cancelled to the calling owner's scope, and `bind`/`delay(fn)` stay on
