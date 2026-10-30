@@ -162,7 +162,7 @@ def _print_captures(runtime: CliRuntime, report: dict[str, Any], fmt: str) -> No
 @ui_app.command("list")
 def list_surfaces(
     ctx: typer.Context,
-    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path("."),
+    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path(),
     qgis_prefix: Annotated[Path | None, typer.Option(help=_PREFIX_HELP)] = None,
     fmt: Annotated[str, typer.Option("--format", help=_FORMAT_HELP)] = "json",
 ) -> None:
@@ -185,7 +185,7 @@ def list_surfaces(
 def open_surface(
     ctx: typer.Context,
     surface: Annotated[str, typer.Argument(help=_SURFACE_HELP)],
-    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path("."),
+    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path(),
     qgis_prefix: Annotated[Path | None, typer.Option(help=_PREFIX_HELP)] = None,
     fmt: Annotated[str, typer.Option("--format", help=_FORMAT_HELP)] = "json",
 ) -> None:
@@ -209,7 +209,7 @@ def open_surface(
 def snapshot_surface(
     ctx: typer.Context,
     surface: Annotated[str, typer.Argument(help=_SURFACE_HELP)],
-    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path("."),
+    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path(),
     out: Annotated[
         Path | None,
         typer.Option(
@@ -243,7 +243,7 @@ def act_on_surface(
     ctx: typer.Context,
     surface: Annotated[str, typer.Argument(help=_SURFACE_HELP)],
     step: Annotated[list[str], typer.Option("--step", help=_STEP_HELP)] = [],  # noqa: B006
-    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path("."),
+    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path(),
     out: Annotated[
         Path | None, typer.Option(help="Where to write the captures.")
     ] = None,

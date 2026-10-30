@@ -33,7 +33,7 @@ def mcp_command(
             file=runtime.err,
         )
         raise typer.Exit(code=2) from error
-    root = runtime.resolve(project or Path("."))
+    root = runtime.resolve(project or Path())
     if not root.is_dir():
         typer.echo(f"MCP working directory does not exist: {root}", file=runtime.err)
         raise typer.Exit(code=2)

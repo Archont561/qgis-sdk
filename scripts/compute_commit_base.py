@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 def main() -> int:
@@ -28,7 +29,7 @@ def main() -> int:
     def emit(name: str, value: str) -> None:
         print(f"{name}={value}")
         if env_path:
-            with open(env_path, "a", encoding="utf-8") as handle:
+            with Path(env_path).open("a", encoding="utf-8") as handle:
                 handle.write(f"{name}={value}\n")
 
     if base_sha and base_sha.lstrip("0") != "":

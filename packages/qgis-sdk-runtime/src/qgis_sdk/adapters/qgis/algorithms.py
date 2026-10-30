@@ -24,7 +24,6 @@ feedback bridge that raises inside QGIS's own loop has not been qualified here.
 
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 import tempfile
@@ -290,7 +289,7 @@ class NativeAlgorithms:
                 algorithm, "the output write grant changed during processing"
             )
         try:
-            os.link(partial, destination)
+            destination.hardlink_to(partial)
         except FileExistsError as error:
             raise QgisSdkAlgorithmFailedError(
                 algorithm, "the destination already exists; choose a new file"

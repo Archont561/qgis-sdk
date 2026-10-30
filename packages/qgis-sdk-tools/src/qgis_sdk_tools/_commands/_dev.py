@@ -66,7 +66,7 @@ def dev(
 ) -> None:
     """Run the source plugin inside QGIS, reloading on save, with HMR for a web UI."""
     runtime: CliRuntime = ctx.obj
-    root = runtime.resolve(path or Path("."))
+    root = runtime.resolve(path or Path())
     try:
         project = inspect_project(root)
         install = find_qgis_install(runtime.env, prefix=qgis_prefix, project=root)

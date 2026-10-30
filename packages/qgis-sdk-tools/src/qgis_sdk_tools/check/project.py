@@ -16,7 +16,6 @@ and the worker-safety rules for jobs (``JOB001``-``JOB003``) in :mod:`.jobs`.
 from __future__ import annotations
 
 import ast
-import os
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -29,6 +28,7 @@ from qgis_sdk_tools.distributions import (
     read_distribution,
 )
 from qgis_sdk_tools.manifest import read_pyproject, table
+from qgis_sdk_tools.paths import walk_files
 
 from .buckets import HOST_ROOTS, BucketReport, bucket_imports, import_findings
 from .diagnostics import CheckReport, Diagnostic, QgisSdkCheckError
@@ -254,11 +254,7 @@ def _declared(rule: str, message: str, name: str, *, vendored: bool) -> Diagnost
 
 
 def _python_files(root: Path) -> Iterator[Path]:
-    for directory, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in EXCLUDED_DIRECTORIES)
-        for filename in sorted(filenames):
-            if filename.endswith(".py"):
-                yield Path(directory) / filename
+    return walk_files(root, skip=EXCLUDED_DIRECTORIES, suffix=".py")
 
 
 def _check_packages(root: Path) -> Iterator[Diagnostic]:
@@ -273,7 +269,7 @@ def _check_packages(root: Path) -> Iterator[Diagnostic]:
     if not packages:
         yield Diagnostic(
             rule="PROJECT001",
-            path=Path("."),
+            path=Path(),
             line=0,
             column=0,
             message=f"no plugin package (a directory with __init__.py) under {root}",

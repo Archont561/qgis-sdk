@@ -23,7 +23,6 @@ an installed runtime outside the declared specifier is an error with the
 from __future__ import annotations
 
 import importlib.metadata
-import os
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -33,6 +32,7 @@ from qgis_sdk.bridge.protocol import HOST_SCHEMA_VERSION
 from qgis_sdk.declarations import PLUGIN_DESCRIPTION_SCHEMA_VERSION
 
 from qgis_sdk_tools.manifest import read_pyproject, table
+from qgis_sdk_tools.paths import walk_files
 
 from .diagnostics import Diagnostic
 
@@ -290,18 +290,14 @@ def check_runtime_pins(root: Path) -> Iterator[Diagnostic]:
 
 
 def _generated_typescript(root: Path) -> Iterator[Path]:
-    for directory, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in _NOT_THE_AUTHORS)
-        for filename in sorted(filenames):
-            if filename.endswith(".ts"):
-                path = Path(directory) / filename
-                try:
-                    with path.open(encoding="utf-8") as handle:
-                        first = handle.readline().rstrip("\n")
-                except OSError:
-                    continue
-                if first == GENERATED_MARKER:
-                    yield path
+    for path in walk_files(root, skip=_NOT_THE_AUTHORS, suffix=".ts"):
+        try:
+            with path.open(encoding="utf-8") as handle:
+                first = handle.readline().rstrip("\n")
+        except OSError:
+            continue
+        if first == GENERATED_MARKER:
+            yield path
 
 
 def check_generated_clients(root: Path) -> Iterator[Diagnostic]:

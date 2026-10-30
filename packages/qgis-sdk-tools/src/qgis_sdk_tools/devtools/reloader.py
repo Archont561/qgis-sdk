@@ -27,7 +27,6 @@ probe calls.
 
 from __future__ import annotations
 
-import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -37,6 +36,7 @@ from typing import Final, Literal, Protocol
 from qgis_sdk.core import QuiesceOutcome
 
 from qgis_sdk_tools.check import check_project
+from qgis_sdk_tools.paths import walk_files
 
 Outcome = Literal["reloaded", "refused", "disabled", "coalesced"]
 NotifyLevel = Literal["info", "warning", "critical"]
@@ -327,16 +327,12 @@ class SourceWatcher:
     def snapshot(self) -> dict[Path, tuple[int, int]]:
         """``{path: (mtime_ns, size)}`` of every watched file right now."""
         seen: dict[Path, tuple[int, int]] = {}
-        for directory, dirnames, filenames in os.walk(self._package):
-            dirnames[:] = [d for d in dirnames if d not in UNWATCHED]
-            for filename in filenames:
-                if filename.endswith(".py"):
-                    path = Path(directory) / filename
-                    try:
-                        stat = path.stat()
-                    except OSError:  # removed between listing and stat
-                        continue
-                    seen[path] = (stat.st_mtime_ns, stat.st_size)
+        for path in walk_files(self._package, skip=UNWATCHED, suffix=".py"):
+            try:
+                stat = path.stat()
+            except OSError:  # removed between listing and stat
+                continue
+            seen[path] = (stat.st_mtime_ns, stat.st_size)
         return seen
 
     def poll(self) -> bool:

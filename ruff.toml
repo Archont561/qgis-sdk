@@ -8,7 +8,10 @@
 # a checkout without one.
 #
 # Rule selection, line length and target version are deliberately left at Ruff's
-# defaults: this file narrows *scope*, it does not re-decide the rule set.
+# defaults: this file narrows *scope*, it does not re-decide the rule set. The one
+# exception is `PTH` (flake8-use-pathlib) below: AGENTS.md requires `pathlib.Path`
+# for every filesystem path, and a rule nobody can forget beats a rule in a
+# document. It adds checks, it never relaxes the defaults.
 extend-exclude = [
   # Restored Pixi environments and their build work dir (tens of thousands of .py files).
   ".pixi",
@@ -35,3 +38,9 @@ extend-exclude = [
   # whole-checkout scope therefore covers Python files only.
   "**/*.md",
 ]
+
+
+[lint]
+# `PTH`: no `os.path`, no bare `open()`, no `os.replace`/`os.mkdir`/`os.remove` -
+# `pathlib` spells every one of them (AGENTS.md, "Development guidance").
+extend-select = ["PTH"]
