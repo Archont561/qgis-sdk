@@ -1,6 +1,7 @@
 """Runtime-independent composition of author-facing contexts and lifetimes."""
 
 from .contexts import (
+    GUI_BOUND_CAPABILITIES,
     AlgorithmContext,
     JobContext,
     PluginContext,
@@ -23,6 +24,7 @@ from .scheduling import (
 from .scope import ResourceScope
 
 __all__ = [
+    "GUI_BOUND_CAPABILITIES",
     "AlgorithmContext",
     "Handoff",
     "Job",

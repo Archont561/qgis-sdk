@@ -546,6 +546,16 @@ class QgisSdkBlockingOnGuiThreadError(QgisSdkNetworkError):
         )
 
 
+class QgisSdkThreadSafetyWarning(UserWarning):
+    """A GUI-bound capability was read from a thread that does not own it.
+
+    A warning rather than an error, because raising would turn a plugin that
+    happens to work into a failing one; a development session (``qgis-sdk
+    dev``) escalates the same finding to
+    :class:`QgisSdkUnsupportedCapabilityError` at the call site (decision-69).
+    """
+
+
 class QgisSdkServiceResponseError(QgisSdkNetworkError):
     """A typed service client received a well-formed reply it cannot interpret."""
 

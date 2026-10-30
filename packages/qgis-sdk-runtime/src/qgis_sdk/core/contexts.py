@@ -14,10 +14,16 @@ to ask instead of use.
 
 from __future__ import annotations
 
+import threading
+import warnings
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Final, Generic, TypeVar, overload
 
-from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
+from qgis_sdk.environment import dev_request
+from qgis_sdk.models import (
+    QgisSdkThreadSafetyWarning,
+    QgisSdkUnsupportedCapabilityError,
+)
 from qgis_sdk.services import (
     Algorithms,
     Cancellation,
@@ -46,6 +52,49 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+#: Capabilities whose service belongs to the thread that assembled the context:
+#: they reach Qt widgets, the interface or the live project, where a call from
+#: another thread crashes QGIS instead of merely being slow (decision-69).
+GUI_BOUND_CAPABILITIES: Final = frozenset(
+    {"actions", "desktop", "files", "layers", "project", "streams", "ui"}
+)
+
+#: ``(context type, capability, thread)`` triples already reported, so one
+#: mistaken read does not fill a log with the same line. The thread object is
+#: the key rather than its identifier, which the interpreter recycles once a
+#: thread has finished.
+_reported_cross_thread: set[tuple[str, str, threading.Thread]] = set()
+
+
+def _report_cross_thread(context: object, name: str) -> None:
+    """Report a GUI-bound capability read off the thread that assembled it.
+
+    This is the half of the worker contract a source check cannot see
+    (TASK-117): a capability captured on the driving thread and used inside a
+    job. The default is one warning per capability and thread, because turning
+    working code into a failing one is not this guard's job; a development
+    session, which ``QGIS_SDK_DEV_REQUEST`` marks, raises at the call site
+    instead. A context with no recorded thread - a pure test double, a
+    hand-built context - is left alone.
+    """
+    owner = getattr(context, "_assembled_on", None)
+    current = threading.current_thread()
+    if owner is None or owner is current:
+        return
+    message = (
+        f"{type(context).__name__}.{name} is GUI-bound and was read from "
+        f"{current.name!r} rather than from the thread that "
+        "assembled the context; prepare GUI state on that thread and hand plain "
+        "values to a job (decision-69)"
+    )
+    if dev_request() is not None:
+        raise QgisSdkUnsupportedCapabilityError(name, message)
+    key = (type(context).__name__, name, current)
+    if key in _reported_cross_thread:
+        return
+    _reported_cross_thread.add(key)
+    warnings.warn(message, QgisSdkThreadSafetyWarning, stacklevel=3)
+
 
 class Capability(Generic[T]):
     """One optional service on a context, refused by name when it is absent.
@@ -72,6 +121,8 @@ class Capability(Generic[T]):
         if instance is None:
             return self
         instance.scope.ensure_open()  # type: ignore[attr-defined]
+        if self.name in GUI_BOUND_CAPABILITIES:
+            _report_cross_thread(instance, self.name)
         service = getattr(instance, self.slot)
         if service is None:
             raise QgisSdkUnsupportedCapabilityError(self.name)
@@ -81,11 +132,15 @@ class Capability(Generic[T]):
 class _Context:
     """What the four contexts share: immutability and the capability probes."""
 
-    __slots__ = ()
+    __slots__ = ("_assembled_on",)
 
     _capability_names: ClassVar[tuple[str, ...]] = ()
 
     def _assemble(self, **values: Any) -> None:
+        # Which thread owns the GUI-bound capabilities of this context, read
+        # back by the capability guard; recorded before anything else so a
+        # context is never briefly thread-less.
+        object.__setattr__(self, "_assembled_on", threading.current_thread())
         for name, value in values.items():
             object.__setattr__(self, name, value)
 

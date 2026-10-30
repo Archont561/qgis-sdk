@@ -1759,6 +1759,38 @@ shape - are refused by `delay` with `QgisSdkJobRejectedError` naming every
 problem before anything runs; positional arguments are a `TypeError`; a
 result of the wrong type fails the job, not the tick.
 
+### What may a job body touch?
+
+The whole body runs on a worker thread (decision-65), so it is handed a
+`WorkerContext`: `progress` and `cancellation`, and nothing else. Reading any
+other attribute - `ctx.layers`, `ctx.project`, `ctx.ui`, `ctx.algorithms` -
+fails with `QgisSdkUnsupportedCapabilityError` naming the capability and the
+reason ("layers are GUI-affine; pass plain values and re-read them on
+delivery"), because a Qt object touched from another thread crashes QGIS
+instead of raising. Prepare GUI state before submitting, pass plain values
+(ids, paths, numbers) in, and apply GUI changes in the success callback, which
+is delivered on the driving thread.
+
+Two guards stand behind that, and neither is a proof of thread safety:
+
+- `qgis-sdk check` reads the source: `JOB001` for GUI state reached from a job
+  body (`iface`, a Qt or QGIS GUI class, `QgsProject.instance()`, a module-level
+  name holding one of those), `JOB002` for a context attribute a
+  `WorkerContext` refuses, and `JOB003` as a warning for a by-name import it
+  cannot follow. A name the body rebinds locally - a parameter called `iface`,
+  an assignment - is not reported. The three rows are in the rule table, which
+  the Project checks section of this guide carries.
+- the runtime remembers which thread assembled a context. Reading a GUI-bound
+  capability (`desktop`, `ui`, `layers`, `project`, `files`, `streams`,
+  `actions`) from another thread warns once per capability and thread, and
+  raises in a development session (`qgis-sdk dev`), which is what catches the
+  captured reference - `service = ctx.desktop` taken on the driving thread and
+  used inside a job - that a source check cannot see (decision-69).
+
+What is left to you: a helper the body calls, a live object passed in as an
+argument, and anything a by-name import reaches. Neither guard turns a data
+race into a reported error, and neither is a sandbox.
+
 ### Migrating from the 0.5 class form
 
 Up to `qgis-sdk-runtime` 0.5 a job was a class with `__init__(self, ctx)` and
@@ -1963,6 +1995,11 @@ What to move:
 - **Long work, in the body.** A blocking call that used to need an offload is
   now simply called; the whole body is already off the GUI thread. There is no
   reason to create a second pool, and `ctx.workers` is absent.
+- **What the check now says.** `qgis-sdk check` reports `JOB001` and `JOB002`
+  for a body that reaches GUI state or a refused attribute, with `JOB003` as a
+  warning for a by-name import; the runtime warns once when a GUI-bound
+  capability is read off the thread that assembled the context, and raises in
+  a development session. Fix the body, not the guard.
 - **Cancellation, cooperatively.** Poll `ctx.cancellation.is_cancelled()` in a
   loop and stop; the request is a signal, never a killed thread.
 - **A host without a worker backend** (a script that only wants to call the
@@ -2188,6 +2225,9 @@ it is `DEP001`, and it is reported here rather than first at `build`
 | `UI004` (warning) | A module of the plugin package that is *declared native* still imports `qgis.PyQt`, `PyQt5/6` or `PySide2/6` when it loads: the exemption lifts `QGIS001`, but Qt at module level defeats the fakes (`build_surface`, `ui_snapshot`) and `check`'s inspection of that module. Keep Qt inside `build()`; the catalogue needs no Qt import. |
 | `UI005` | The declarative form, read statically: `@on(attribute)` in a `Dialog`/`Dock` subclass names a class attribute that is a string, a number or a literal container rather than a component, or a bare name the class never binds; or a `Custom` declared on the class holds a widget built when the class is defined (`Custom(widget=QLabel(...))`), which cannot be copied for each window. Assign a catalogue component to the attribute (or pass the `objectName` as a string), and give `Custom` the widget class or a factory. A call the checker cannot see into and a module-level name are left to the host. |
 | `ICON001` | `@toolbar(icon="...")` names something that is not a file under `<package>/icons/` (a bare file name is required). |
+| `JOB001` | A `@job` body reaches GUI state: `iface` (imported at module scope or inside the body), a Qt or QGIS GUI class (`QgsMapCanvas`, `QMessageBox`, ... - `qgis_sdk_tools.check.jobs.GUI_CLASSES`), `QgsProject.instance()`, or a module-level name that holds one of those. The whole body runs on a worker thread, so do the GUI work on the driving thread: prepare before submitting, apply in the success callback. |
+| `JOB002` | A `@job` body reads a context attribute other than `progress` and `cancellation`; it is handed a `WorkerContext`, which refuses every driving-thread capability by name, so the job would fail on its first step. Pass plain values in and re-read the service from the callback. |
+| `JOB003` (warning) | A `@job` body imports a module by name (`importlib.import_module`, `__import__`), which `check` cannot follow: the body may reach GUI state through it. Import it at module level or in a helper outside the job. |
 | `SYNTAX001` | A file does not parse. |
 | `VERSION001` | `pyproject.toml` pins `qgis-sdk-runtime` (or the `qgis-sdk` kit, which installs the runtime at the same number) in `project.dependencies`, an extra or a dependency group, and no version the pin admits lies in the runtime range this `qgis-sdk-tools` release was tested with (its own `qgis-sdk-runtime>=X,<Y` requirement). Release segments only; `!=` is ignored; a specifier the arithmetic does not know is never reported. Skipped when the range cannot be read. |
 | `VERSION002` | A TypeScript file starting with `// Generated by qgis-sdk. Do not edit.` declares a `PLUGIN_DESCRIPTION_SCHEMA_VERSION` or `HOST_SCHEMA_VERSION` other than the one this release generates; regenerate with `qgis-sdk bridge generate`. `node_modules` is never read. |
