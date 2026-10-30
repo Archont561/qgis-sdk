@@ -30,7 +30,12 @@ Status = Literal["qualified", "unqualified"]
 @dataclass(frozen=True)
 class Target:
     """One row of the matrix. ``qgis`` ``None`` is the QGIS-free kit (``pip``
-    install, scaffold, check, bridge generation) with no QGIS on the host."""
+    install, scaffold, check, bridge generation) with no QGIS on the host.
+
+    ``chromium`` ``None`` on a row with a QGIS means the row did not exercise
+    the WebEngine layer, so nothing is claimed about a page running there - the
+    hosts (Desktop, server) may still be qualified.
+    """
 
     os: str
     arch: str
@@ -81,6 +86,19 @@ SUPPORT_MATRIX: tuple[Target, ...] = (
         "the locked Pixi environment (QGIS 4.2.3, Qt 6.11.2, Chromium 140, "
         "CPython 3.14): native suite, headless Desktop harnesses, the reference "
         "plugin through the toolchain and the release gate (workspace guide)",
+    ),
+    Target(
+        "linux",
+        "x86-64",
+        "3.12",
+        "3.44",
+        "5.15",
+        None,
+        "qualified",
+        "ci.yml `QGIS 3.44 LTS`: qgis.org apt `qgis` + `qgis-server` + "
+        "`python3-qgis` (QGIS 3.44, PyQt5, Qt 5.15), the plugin host offscreen "
+        "and the server layer on the same build; the WebEngine layer is not "
+        "run on this row",
     ),
     Target(
         "linux",

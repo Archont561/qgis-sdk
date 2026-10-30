@@ -56,6 +56,7 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
+from qgis_sdk.adapters._qt import qt_enum
 from qgis_sdk.models import QgisSdkFormError, QgisSdkUiError
 from qgis_sdk.ui.buttons import AcceptCancel, RunButton
 from qgis_sdk.ui.components import (
@@ -537,7 +538,9 @@ def _result_table(
             for row_index, cells in enumerate(rows):
                 for column_index, text in enumerate(cells):
                     item = QTableWidgetItem(text)
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    item.setFlags(
+                        item.flags() & ~qt_enum(Qt, "ItemFlag", "ItemIsEditable")
+                    )
                     table.setItem(row_index, column_index, item)
             table.clearSelection()
             if selected is not None:

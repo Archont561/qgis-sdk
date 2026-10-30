@@ -40,15 +40,39 @@ def test_the_matrix_is_explicit_about_every_cell() -> None:
         assert target.os in {"linux", "windows", "macos"}
         assert target.arch in {"x86-64", "arm64"}
         assert re.fullmatch(r"3\.\d+", target.python)
-        assert target.qgis is None or re.fullmatch(r"4\.\d+", target.qgis)
+        assert target.qgis is None or re.fullmatch(r"[34]\.\d+", target.qgis)
         assert target.status in {"qualified", "unqualified"}
         assert target.evidence.strip(), f"{key} states no evidence"
         if target.qgis is None:
             assert target.qt is None and target.chromium is None
         if target.status == "qualified" and target.qgis is not None:
-            assert target.qt and target.chromium, (
-                f"{key} is qualified without naming its Qt and Chromium"
-            )
+            assert target.qt, f"{key} is qualified without naming its Qt"
+            # A row states its Chromium when it exercised the WebEngine layer.
+            # The LTS row does not, and says so in its evidence, so it leaves
+            # the cell empty instead of inventing a version.
+            if target.chromium is None:
+                assert "WebEngine" in target.evidence, (
+                    f"{key} claims a QGIS without naming its Chromium or why "
+                    "the WebEngine layer is absent"
+                )
+
+
+def test_the_matrix_states_the_lts_row_beside_the_locked_environment() -> None:
+    lts = qualified_target(
+        Host(
+            os="linux",
+            arch="x86-64",
+            python="3.12",
+            qgis="3.44",
+            qt="5.15",
+            chromium=None,
+        )
+    )
+
+    assert lts is not None
+    assert lts.status == "qualified"
+    assert lts.chromium is None
+    assert "QGIS 3.44 LTS" in lts.evidence
 
 
 def test_the_matrix_states_the_demonstrated_linux_host() -> None:

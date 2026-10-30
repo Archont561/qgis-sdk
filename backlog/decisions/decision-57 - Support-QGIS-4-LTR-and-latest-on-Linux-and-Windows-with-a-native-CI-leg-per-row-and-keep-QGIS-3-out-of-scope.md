@@ -38,6 +38,17 @@ becomes a larger lie every milestone.
 5. **Qt6-only idioms are allowed**; the catalogue absorbs Qt version
    differences within Qt 6 (enum scoping, deprecated calls) in one place.
 
+**Narrowed 2026-10-30 by decision-70.** Point 2 said QGIS 3 and Qt5 were out of
+scope because the runtime imported `qgis.PyQt` only. Four adapters named
+`PyQt6` directly and seven enum spellings were Qt6-only, so a Qt5 QGIS failed
+on import - and the 3.44 LTS is precisely the QGIS a Linux user can install
+from a package repository, and the one build that carries `qgis.server`. QGIS
+3.44 LTS is therefore in scope on both hosts (Desktop and server), with Qt
+imported through `qgis.PyQt` and the two binding-specific APIs behind
+`qgis_sdk.adapters._qt`. Other 3.x series remain out of scope, no Qt5 row
+claims WebEngine, and QGIS 4.x stays qualified in the locked environment until
+it reaches apt.
+
 ## Consequences
 
 - TASK-33's Windows row gets its mechanism (the leg) instead of a blocker

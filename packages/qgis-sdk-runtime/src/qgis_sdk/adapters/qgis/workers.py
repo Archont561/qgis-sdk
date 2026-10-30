@@ -19,7 +19,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from PyQt6.QtCore import QRunnable, QThreadPool
+from qgis.PyQt.QtCore import QRunnable, QThreadPool
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.core.scheduling import Handoff

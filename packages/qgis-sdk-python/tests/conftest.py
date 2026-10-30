@@ -113,7 +113,8 @@ def webengine_profile(qt_app: Any) -> Any:
     pages come and go underneath it.
     """
     try:
-        from PyQt6.QtWebEngineCore import QWebEngineProfile
+        # The binding the running QGIS ships, the same way the adapters do.
+        from qgis.PyQt.QtWebEngineCore import QWebEngineProfile
     except ImportError as error:  # pragma: no cover - depends on the host
         pytest.skip(f"the webengine layer needs Qt WebEngine: {error}")
     return QWebEngineProfile(qt_app)

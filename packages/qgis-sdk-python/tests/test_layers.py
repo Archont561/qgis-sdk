@@ -15,6 +15,7 @@ import ast
 import os
 import subprocess
 import sys
+import types
 from functools import cache
 from pathlib import Path
 
@@ -130,6 +131,10 @@ def test_the_bindings_path_is_added_only_when_it_exists(
 ) -> None:
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
     monkeypatch.setattr(sys, "path", list(sys.path))
+    # The pip-only case: nothing importable anywhere. Without this the fallback
+    # that finds a system QGIS would answer with the *real* environment's
+    # bindings whenever the suite runs where QGIS is installed.
+    monkeypatch.setattr(layers.importlib.util, "find_spec", lambda name: None)
 
     assert layers.qgis_bindings() is None
     layers.prepare_environment()
@@ -140,6 +145,41 @@ def test_the_bindings_path_is_added_only_when_it_exists(
     assert layers.qgis_bindings() == bindings
     layers.prepare_environment()
     assert sys.path[0] == str(bindings)
+
+
+def test_a_venv_over_a_system_qgis_uses_the_system_prefix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The LTS row's environment: ``.venv-lts`` has QGIS only on its path.
+
+    ``QGIS_PREFIX_PATH`` and ``PROJ_LIB`` have to point at the installation the
+    bindings came from, or ``QgsApplication`` starts with no providers - which
+    is how the first LTS run skipped every Desktop test.
+    """
+    root = tmp_path / "usr"
+    bindings = root / "lib" / "python3" / "dist-packages" / "qgis"
+    bindings.mkdir(parents=True)
+    (root / "share" / "qgis").mkdir(parents=True)
+    venv = tmp_path / ".venv-lts"
+    venv.mkdir()
+    monkeypatch.setattr(sys, "prefix", str(venv))
+    monkeypatch.setattr(
+        layers.importlib.util,
+        "find_spec",
+        lambda name: types.SimpleNamespace(submodule_search_locations=[str(bindings)]),
+    )
+
+    assert layers.installed_prefix() == root
+    assert layers.installed_prefix() != venv
+
+
+def test_a_prefix_that_cannot_see_qgis_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "prefix", str(tmp_path))
+    monkeypatch.setattr(layers.importlib.util, "find_spec", lambda name: None)
+
+    assert layers.installed_prefix() == tmp_path
 
 
 def test_the_pure_layer_runs_with_qgis_and_qt_unimportable(tmp_path: Path) -> None:

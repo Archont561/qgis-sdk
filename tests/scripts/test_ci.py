@@ -443,12 +443,12 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     coverage = {step.get("name"): step for step in jobs["coverage"]["steps"]}
     assert "needs" not in jobs["linux"] and "needs" not in jobs["coverage"]
     aggregate = jobs["checks"]
-    assert set(aggregate["needs"]) == {"linux", "coverage", "server"}
+    assert set(aggregate["needs"]) == {"linux", "coverage", "lts"}
     assert aggregate["if"] == "${{ always() }}"
     gate = aggregate["steps"][-1]
     assert gate["if"] == (
         "${{ needs.linux.result != 'success' || needs.coverage.result != 'success'"
-        " || needs.server.result != 'success' }}"
+        " || needs.lts.result != 'success' }}"
     )
     assert gate["run"] == "exit 1"
     for name in ("linux", "coverage"):
@@ -493,22 +493,22 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         "QT_QPA_PLATFORM": "offscreen",
         "QGIS_SDK_NATIVE_SERVICES": "1",
     }
-    server = {step.get("name"): step for step in jobs["server"]["steps"]}
-    assert jobs["server"]["runs-on"] == "ubuntu-24.04"
-    assert "needs" not in jobs["server"]
+    lts = {step.get("name"): step for step in jobs["lts"]["steps"]}
+    assert jobs["lts"]["runs-on"] == "ubuntu-24.04"
+    assert "needs" not in jobs["lts"]
     assert (
-        "qgis-server python3-qgis"
-        in server["Install a QGIS with server bindings"]["run"]
+        "qgis qgis-server python3-qgis"
+        in lts["Install the QGIS 3.44 LTS packages"]["run"]
     )
     assert (
         "--system-site-packages"
-        in server["Install the SDK over the system bindings"]["run"]
+        in lts["Install the SDK over the system bindings"]["run"]
     )
     assert (
-        server["Test the server host"]["run"]
-        == ".venv-server/bin/python scripts/ci.py server"
+        lts["Test both hosts on the LTS"]["run"]
+        == ".venv-lts/bin/python scripts/ci.py lts"
     )
-    assert server["Test the server host"]["env"] == {"QT_QPA_PLATFORM": "offscreen"}
+    assert lts["Test both hosts on the LTS"]["env"] == {"QT_QPA_PLATFORM": "offscreen"}
     assert coverage["Check coverage for all packages"]["id"] == "coverage"
     assert (
         coverage["Check coverage for all packages"]["run"]

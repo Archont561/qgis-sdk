@@ -32,13 +32,16 @@ NATIVE_COMMAND = [
     "-q",
     "-rs",
 ]
-SERVER_PROBE = (
+LTS_PROBE = (
     "import qgis.core, qgis.server; "
-    "print(qgis.core.Qgis.version()); "
-    "print(qgis.server.QgsServer)"
+    "print('qgis', qgis.core.Qgis.version()); "
+    "print('qgisserver', qgis.server.QgsServer.__name__); "
+    "import qgis.PyQt.QtCore as qt; "
+    "print('qt', qt.QT_VERSION_STR); "
+    "print('binding', 'PyQt' + qt.QT_VERSION_STR.split('.')[0])"
 )
-SERVER_TESTS = "packages/qgis-sdk-python/tests"
-SERVER_MODULES = "test_server*_native.py"
+LTS_TESTS = "packages/qgis-sdk-python/tests"
+LTS_MODULES = ("test_server_native.py", "test_lts_native.py")
 ENVIRONMENT_PROBE = (
     'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); '
     "print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())"
@@ -106,73 +109,99 @@ def native(command: list[str]) -> int:
     return status
 
 
-def server_command() -> list[str]:
-    """The pytest command for the ``server`` layer: its modules, not the suite.
+def lts_command(module: str) -> list[str]:
+    """The pytest command for one LTS module, run on its own.
 
-    ``-m server`` filters *after* collection, and this row installs a QGIS whose
-    bindings are all a Debian package provides - not the WebEngine and test
-    stack the rest of the native modules assume. Collecting the whole suite
-    would fail on a module that imports PyQt6 unconditionally long before the
-    marker is consulted, so the row names the modules it owns and the marker
-    still decides what runs inside them.
+    One module at a time, because the row has to prove *both* hosts ran:
+    ``-m`` filters after collection and a module whose import fails skips
+    itself with ``importorskip``, so a single run that reports "3 passed" could
+    be hiding a Desktop half that never started. One command per module makes
+    that impossible to miss.
     """
-    modules = sorted((ROOT / SERVER_TESTS).glob(SERVER_MODULES))
+    path = ROOT / LTS_TESTS / module
+    if not path.is_file():
+        raise FileNotFoundError(f"the LTS row names a module that is not there: {path}")
     return [
         sys.executable,
         "-m",
         "pytest",
         "-c",
         "packages/qgis-sdk-python/pyproject.toml",
-        *[str(module.relative_to(ROOT)) for module in modules],
-        "-m",
-        "server",
+        str(path.relative_to(ROOT)),
         "-q",
         "-rs",
     ]
 
 
-def server(command: list[str]) -> int:
-    """Prove this QGIS has server bindings, then run the ``server`` test layer.
+def lts(command: list[str] | None = None) -> int:
+    """Prove this QGIS has both hosts, then run each LTS module on its own.
 
-    Two failures are worth telling apart. A missing ``qgis.server`` means the
-    row installed the wrong QGIS - conda-forge has none, so the workflow needs
-    ``qgis-server`` plus ``python3-qgis`` from a repository that builds
-    ``WITH_SERVER=ON`` - and it is reported before pytest runs, because a suite
-    that skips every test would otherwise read as a pass. Nothing collected is
-    reported as a failure for the same reason (TASK-80 AC 2).
+    QGIS 3.44 LTS is what Debian and Ubuntu install and it is a Qt 5 build: a
+    missing ``qgis.server`` means the row installed a QGIS without server
+    bindings - conda-forge has none - and a failed ``qgis.core`` import means
+    the packages are not there at all. Both are reported before pytest runs,
+    because a suite that skips every test would otherwise read as a pass
+    (TASK-80, decision-70).
+
+    A module that reports skipped tests fails the row: on this build nothing
+    may skip, or the host it was meant to prove was not proven.
     """
     probe = subprocess.run(
-        [sys.executable, "-c", SERVER_PROBE],
+        [sys.executable, "-c", LTS_PROBE],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
         check=False,
     )
-    if probe.returncode or "QgsServer" not in probe.stdout:
+    if probe.returncode or "qgisserver" not in probe.stdout:
         annotation(
-            "server host: no QGIS Server in this build",
+            "LTS host: no QGIS Server in this build",
             "\n".join(probe.stdout.splitlines()[-20:]),
         )
         print(
-            "::error title=server host::This QGIS was built without "
-            "WITH_SERVER. Install qgis-server and python3-qgis from a "
-            "repository that enables it; conda-forge builds QGIS without it."
+            "::error title=LTS host::This QGIS has no qgis.server. Install "
+            "qgis, qgis-server and python3-qgis from a repository that builds "
+            "WITH_SERVER=ON; conda-forge builds QGIS without it."
         )
         return status_code(probe.returncode) or 1
-    print(f"::notice::QGIS Server bindings: {' '.join(probe.stdout.split())}")
-    log = Path("server-host.log")
+    facts = " | ".join(line for line in probe.stdout.splitlines() if line)
+    print(f"::notice::LTS host: {facts}")
+    if command:  # an explicit command replaces the module loop
+        return _lts_run(command, Path("lts-host.log"))
+    status = 0
+    for module in LTS_MODULES:
+        status = _lts_run(lts_command(module), Path("lts") / f"{module}.log") or status
+    return status
+
+
+def _lts_run(command: list[str], log: Path) -> int:
+    """Run one LTS module and refuse a result that proved nothing."""
+    log.parent.mkdir(parents=True, exist_ok=True)
     status = run_logged(command, log)
     text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    summary = [
+        line for line in text.splitlines() if " passed" in line or " failed" in line
+    ]
+    module = next((word for word in command if word.endswith(".py")), "the LTS row")
     if status == 5 or "no tests ran" in text:
-        annotation("server host: nothing ran", "\n".join(text.splitlines()[-20:]))
+        annotation(f"LTS host: {module} collected nothing", text[-2000:])
         print(
-            "::error title=server host::The server layer collected no tests; "
-            "the row is not proving anything."
+            f"::error title=LTS host::{module} collected no tests; the row is "
+            "not proving anything."
         )
         return 1
+    if " skipped" in " ".join(summary):
+        annotation(f"LTS host: {module} skipped", "\n".join(text.splitlines()[-30:]))
+        print(
+            f"::error title=LTS host::{module} skipped tests on a build that has "
+            "both hosts; the Desktop or server half was not proven."
+        )
+        return 1
+    if summary:
+        print(f"::notice::LTS host: {summary[-1].strip()} ({module})")
     if status:
-        annotation("server host: pytest", "\n".join(text.splitlines()[-60:]))
+        annotation("LTS host: pytest", "\n".join(text.splitlines()[-60:]))
     return status
 
 
@@ -280,8 +309,8 @@ def main(argv: list[str] | None = None) -> int:
     log.add_argument("command", nargs=argparse.REMAINDER)
     native_parser = commands.add_parser("native")
     native_parser.add_argument("command", nargs=argparse.REMAINDER)
-    server_parser = commands.add_parser("server")
-    server_parser.add_argument("command", nargs=argparse.REMAINDER)
+    lts_parser = commands.add_parser("lts")
+    lts_parser.add_argument("command", nargs=argparse.REMAINDER)
     commands.add_parser("check-generated")
     coverage = commands.add_parser("annotate-coverage")
     coverage.add_argument("log", type=Path)
@@ -291,14 +320,14 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("report-steps")
     commands.add_parser("bun-ui")
     args = parser.parse_args(argv)
-    if args.action in ("run-log", "native", "server"):
+    if args.action in ("run-log", "native", "lts"):
         command = args.command
         if command and command[0] == "--":
             command = command[1:]
         if args.action == "native":
             return native(command or NATIVE_COMMAND)
-        if args.action == "server":
-            return server(command or server_command())
+        if args.action == "lts":
+            return lts(command)
         if not command:
             parser.error("run-log requires a command after --")
         return run_logged(command, args.log)
