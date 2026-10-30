@@ -28,6 +28,7 @@ try:
     from qgis.PyQt.QtWidgets import (
         QDialog,
         QDockWidget,
+        QMainWindow,
         QTableWidget,
         QTableWidgetItem,
         QToolBar,
@@ -98,13 +99,12 @@ def test_the_reported_binding_matches_the_qt_series() -> None:
 
 
 def test_a_dock_area_resolves_on_either_binding(app) -> None:
-    window = QDialog()
+    right = qt_enum(Qt, "DockWidgetArea", "RightDockWidgetArea")
+    window = QMainWindow()
     try:
         dock = QDockWidget("panel", window)
-        window.addDockWidget(qt_enum(Qt, "DockWidgetArea", "RightDockWidgetArea"), dock)
-        assert window.dockWidgetArea(dock) == qt_enum(
-            Qt, "DockWidgetArea", "RightDockWidgetArea"
-        )
+        window.addDockWidget(right, dock)
+        assert window.dockWidgetArea(dock) == right
     finally:
         window.deleteLater()
 
@@ -123,12 +123,17 @@ def test_an_action_lives_in_whichever_module_this_binding_uses(app) -> None:
 
 
 def test_an_item_flag_resolves_on_either_binding(app) -> None:
+    editable = qt_enum(Qt, "ItemFlag", "ItemIsEditable")
     table = QTableWidget(1, 1)
     try:
         item = QTableWidgetItem("value")
-        item.setFlags(item.flags() & ~qt_enum(Qt, "ItemFlag", "ItemIsEditable"))
+        item.setFlags(item.flags() & ~editable)
         table.setItem(0, 0, item)
-        assert table.item(0, 0).flags() & qt_enum(Qt, "ItemFlag", "ItemIsEditable") == 0
+        stored = table.item(0, 0)
+        assert stored is not None
+        # `flag & flag` is an empty ItemFlag on Qt 6 and `0` on Qt 5; truthiness
+        # is the one comparison both bindings agree on.
+        assert not (stored.flags() & editable)
     finally:
         table.deleteLater()
 

@@ -109,43 +109,42 @@ def native(command: list[str]) -> int:
     return status
 
 
-def lts_command() -> list[str]:
-    """The pytest command for the LTS row: its own modules, not the whole suite.
+def lts_command(module: str) -> list[str]:
+    """The pytest command for one LTS module, run on its own.
 
-    ``-m`` filters *after* collection, and this row installs what a Debian
-    package provides - QGIS 3.44 with PyQt5, no WebEngine test stack - so
-    collecting everything would fail on an unrelated native module before the
-    marker is consulted. The row names the modules it owns; the markers inside
-    them still decide what runs.
+    One module at a time, because the row has to prove *both* hosts ran:
+    ``-m`` filters after collection and a module whose import fails skips
+    itself with ``importorskip``, so a single run that reports "3 passed" could
+    be hiding a Desktop half that never started. One command per module makes
+    that impossible to miss.
     """
-    modules = [ROOT / LTS_TESTS / name for name in LTS_MODULES]
-    missing = [module.name for module in modules if not module.is_file()]
-    if missing:
-        raise FileNotFoundError(
-            f"the LTS row names modules that are not there: {missing}"
-        )
+    path = ROOT / LTS_TESTS / module
+    if not path.is_file():
+        raise FileNotFoundError(f"the LTS row names a module that is not there: {path}")
     return [
         sys.executable,
         "-m",
         "pytest",
         "-c",
         "packages/qgis-sdk-python/pyproject.toml",
-        *[str(module.relative_to(ROOT)) for module in modules],
+        str(path.relative_to(ROOT)),
         "-q",
         "-rs",
     ]
 
 
-def lts(command: list[str]) -> int:
-    """Prove this QGIS has server bindings and a Desktop, then run the LTS row.
+def lts(command: list[str] | None = None) -> int:
+    """Prove this QGIS has both hosts, then run each LTS module on its own.
 
-    QGIS 3.44 LTS is what Debian and Ubuntu install, and it is a Qt 5 build: a
+    QGIS 3.44 LTS is what Debian and Ubuntu install and it is a Qt 5 build: a
     missing ``qgis.server`` means the row installed a QGIS without server
     bindings - conda-forge has none - and a failed ``qgis.core`` import means
     the packages are not there at all. Both are reported before pytest runs,
-    because a suite that skips every test would otherwise read as a pass, and
-    nothing collected is reported as a failure for the same reason (TASK-80,
-    decision-70).
+    because a suite that skips every test would otherwise read as a pass
+    (TASK-80, decision-70).
+
+    A module that reports skipped tests fails the row: on this build nothing
+    may skip, or the host it was meant to prove was not proven.
     """
     probe = subprocess.run(
         [sys.executable, "-c", LTS_PROBE],
@@ -168,16 +167,39 @@ def lts(command: list[str]) -> int:
         return status_code(probe.returncode) or 1
     facts = " | ".join(line for line in probe.stdout.splitlines() if line)
     print(f"::notice::LTS host: {facts}")
-    log = Path("lts-host.log")
+    if command:  # an explicit command replaces the module loop
+        return _lts_run(command, Path("lts-host.log"))
+    status = 0
+    for module in LTS_MODULES:
+        status = _lts_run(lts_command(module), Path("lts") / f"{module}.log") or status
+    return status
+
+
+def _lts_run(command: list[str], log: Path) -> int:
+    """Run one LTS module and refuse a result that proved nothing."""
+    log.parent.mkdir(parents=True, exist_ok=True)
     status = run_logged(command, log)
     text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+    summary = [
+        line for line in text.splitlines() if " passed" in line or " failed" in line
+    ]
+    module = next((word for word in command if word.endswith(".py")), "the LTS row")
     if status == 5 or "no tests ran" in text:
-        annotation("LTS host: nothing ran", "\n".join(text.splitlines()[-20:]))
+        annotation(f"LTS host: {module} collected nothing", text[-2000:])
         print(
-            "::error title=LTS host::The LTS modules collected no tests; the "
-            "row is not proving anything."
+            f"::error title=LTS host::{module} collected no tests; the row is "
+            "not proving anything."
         )
         return 1
+    if " skipped" in " ".join(summary):
+        annotation(f"LTS host: {module} skipped", "\n".join(text.splitlines()[-30:]))
+        print(
+            f"::error title=LTS host::{module} skipped tests on a build that has "
+            "both hosts; the Desktop or server half was not proven."
+        )
+        return 1
+    if summary:
+        print(f"::notice::LTS host: {summary[-1].strip()} ({module})")
     if status:
         annotation("LTS host: pytest", "\n".join(text.splitlines()[-60:]))
     return status
@@ -305,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "native":
             return native(command or NATIVE_COMMAND)
         if args.action == "lts":
-            return lts(command or lts_command())
+            return lts(command)
         if not command:
             parser.error("run-log requires a command after --")
         return run_logged(command, args.log)
