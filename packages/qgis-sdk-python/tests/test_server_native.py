@@ -12,6 +12,11 @@ one of the two modules the ``QGIS 3.44 LTS`` CI row runs. Everywhere else
 ``pytest.importorskip`` skips it, so a build without server bindings costs a
 skip and never a failure.
 
+One thing about this file: ``QgsServer`` holds one static server interface, so
+every hook a test registers is still registered when the next test runs. Each
+test therefore declares hooks that recognise their own request - a marker
+parameter, a layer name - instead of assuming it is the only plugin loaded.
+
 TASK-80 AC 2 lives here: the same plugin class served in-process under a headless
 ``QgsApplication`` through the objects a deployed server calls - a
 ``QgsServerFilter``, a ``QgsService`` and a ``QgsAccessControlFilter`` built by
@@ -103,8 +108,12 @@ def _demo_hooks():
 
     @filter(priority=10)
     def route_to_demo(ctx: ServerContext, request, response):
-        # Every request becomes ours, so the test never needs a WMS project; the
-        # marker it adds is what proves the rewrite reached the service.
+        # Only a request that carries the marker becomes ours: `QgsServer` is one
+        # per process, so every hook this module registers stays registered for
+        # the tests after it, and a filter that claimed every request would be
+        # rewriting theirs too (it was, until this test found it).
+        if request.param("SDK_DEMO") is None:
+            return None
         return request.with_params(SERVICE="SDKDEMO", VERSION="1.0.0", ROUTED="yes")
 
     @service(name="SDKDEMO")
@@ -137,7 +146,7 @@ def test_a_plugin_answers_a_request_through_a_real_qgis_server(qgis_app) -> None
     ).register()
 
     request = QgsBufferServerRequest(
-        "http://localhost/qgis/qgis_mapserv.fcgi?SERVICE=WMS&MARKER=seen"
+        "http://localhost/qgis/qgis_mapserv.fcgi?SERVICE=WMS&MARKER=seen&SDK_DEMO=1"
     )
     response = QgsBufferServerResponse()
     server.handleRequest(request, response, QgsProject())
