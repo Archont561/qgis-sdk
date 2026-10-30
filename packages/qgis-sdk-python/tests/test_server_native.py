@@ -56,6 +56,7 @@ def test_a_server_can_be_created_in_process(qgis_app) -> None:
 
 def test_the_sdk_serves_a_request_inside_a_qgis_process(qgis_app) -> None:
     from qgis_sdk.server import (
+        ServerContext,
         ServerHooks,
         ServerRequest,
         ServerResponse,
@@ -65,13 +66,13 @@ def test_the_sdk_serves_a_request_inside_a_qgis_process(qgis_app) -> None:
     from qgis_sdk.testing import FakeServerInterface
 
     @filter(priority=10)
-    def default_version(ctx, request, response):
+    def default_version(ctx: ServerContext, request, response):
         if request.param("VERSION") is None:
             return request.with_params(VERSION="1.3.0")
         return None
 
     @service(name="WMS")
-    def capabilities(ctx, request) -> ServerResponse:
+    def capabilities(ctx: ServerContext, request) -> ServerResponse:
         return ServerResponse.xml(f"<v>{request.param('VERSION')}</v>")
 
     answer = FakeServerInterface().serve(

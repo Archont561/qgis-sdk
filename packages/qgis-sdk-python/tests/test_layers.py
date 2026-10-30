@@ -131,6 +131,10 @@ def test_the_bindings_path_is_added_only_when_it_exists(
 ) -> None:
     monkeypatch.setattr(sys, "prefix", str(tmp_path))
     monkeypatch.setattr(sys, "path", list(sys.path))
+    # The pip-only case: nothing importable anywhere. Without this the fallback
+    # that finds a system QGIS would answer with the *real* environment's
+    # bindings whenever the suite runs where QGIS is installed.
+    monkeypatch.setattr(layers.importlib.util, "find_spec", lambda name: None)
 
     assert layers.qgis_bindings() is None
     layers.prepare_environment()
