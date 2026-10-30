@@ -3,15 +3,18 @@
 It is small on purpose, and every part of it also works under a direct
 ``pytest`` (decision-7: the command is a thin runner, never the only way):
 
-* the ``qgis`` and ``desktop`` markers, so a ``--strict-markers`` project
-  needs no ``conftest`` to name its native tests;
+* the ``qgis``, ``desktop`` and ``server`` markers, so a ``--strict-markers``
+  project needs no ``conftest`` to name its native tests;
 * the **pure guard**: when the command set ``QGIS_SDK_TEST_TARGET=pure``, an
   import of ``qgis``, PyQt or PySide fails at once with the way out. Markers
   cannot stop a module-level import from running at collection time, so the
   guard is what makes "pure collection avoids native imports" true;
-* the **skip gate**: in the ``qgis`` and ``desktop`` targets a session in
-  which every test skipped exits ``1``. A requested native gate does not
-  pass by skipping;
+* the **skip gate**: in the ``qgis``, ``desktop`` and ``server`` targets a
+  session in which every test skipped exits ``1``. A requested native gate
+  does not pass by skipping;
+* the **bindings gate**: the ``server`` target refuses the session when
+  ``qgis.server`` is not importable, naming the build that has it. A QGIS
+  from conda-forge cannot run that target, and a skip would read as a pass;
 * two fixtures: ``qgis_app`` (a headless ``QgsApplication`` for the ``qgis``
   target, the running one in ``desktop``) and ``qgis_iface`` (Desktop only).
   Outside their target they fail and name the command to run;
@@ -43,8 +46,8 @@ from qgis_sdk.environment import TEST_TARGET_ENV as TARGET_ENV
 
 __all__ = ["NATIVE_TARGETS", "TARGETS", "TARGET_ENV"]
 
-TARGETS: Final = ("pure", "qgis", "desktop", "web")
-NATIVE_TARGETS: Final = frozenset({"qgis", "desktop"})
+TARGETS: Final = ("pure", "qgis", "desktop", "server", "web")
+NATIVE_TARGETS: Final = frozenset({"qgis", "desktop", "server"})
 NATIVE_ROOTS: Final = frozenset({"qgis", "PyQt5", "PyQt6", "PySide2", "PySide6"})
 
 MARKERS: Final = (
@@ -53,6 +56,19 @@ MARKERS: Final = (
         "desktop: needs a running QGIS Desktop (iface); "
         "run with `qgis-sdk test --target desktop`"
     ),
+    (
+        "server: needs QGIS Server bindings (qgis.server); "
+        "run with `qgis-sdk test --target server`"
+    ),
+)
+
+SERVER_BUILD_HELP: Final = (
+    "the QGIS at this prefix was built without server support (`import "
+    "qgis.server` failed: {error}). The server target needs QGIS configured "
+    "with -DWITH_SERVER=ON -DWITH_BINDINGS=ON; conda-forge builds it off, so "
+    "install `qgis-server` and `python3-qgis` from the qgis.org or Debian "
+    "repositories, or point --qgis-prefix at a build that has them "
+    "(decision-52)."
 )
 
 
@@ -115,13 +131,32 @@ def pytest_load_initial_conftests(early_config: pytest.Config) -> None:
         sys.meta_path.insert(0, _HostFirst(roots))
 
 
+def configured_bindings_error(target: str | None) -> str | None:
+    """Why ``target`` cannot run here, or ``None``; the server target's one check.
+
+    Only the server target has a binding of its own: ``qgis`` and ``desktop``
+    need PyQGIS, which the session fixture already reports when it is missing,
+    while a QGIS built without ``WITH_SERVER`` imports ``qgis.core`` happily and
+    has no ``qgis.server`` at all.
+    """
+    if target != "server":
+        return None
+    try:
+        from qgis import server  # noqa: F401
+    except ImportError as error:
+        return SERVER_BUILD_HELP.format(error=error)
+    return None
+
+
 def pytest_configure(config: pytest.Config) -> None:
     for marker in MARKERS:
         config.addinivalue_line("markers", marker)
-    if _target() == "pure" and not any(
-        isinstance(f, _PureGuard) for f in sys.meta_path
-    ):
+    target = _target()
+    if target == "pure" and not any(isinstance(f, _PureGuard) for f in sys.meta_path):
         sys.meta_path.insert(0, _PureGuard())
+    missing = configured_bindings_error(target)
+    if missing is not None:
+        pytest.exit(missing, returncode=1)
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

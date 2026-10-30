@@ -265,6 +265,21 @@ class ServerHooks:
         """The layer permission hooks, lowest priority first."""
         return self._access_control
 
+    def declaration(self, hook: Callable[..., Any]) -> HookDeclaration:
+        """The declaration ``hook`` was registered under.
+
+        The kind, the priority and - for a service - the name and version, which
+        is what a host that has to *re-register* compares before it does: QGIS
+        Server holds one object per identity, so a hook set whose identities
+        moved cannot take the place of the one it registered.
+        """
+        declaration = getattr(hook, _HOOK_ATTRIBUTE, None)
+        if not isinstance(declaration, HookDeclaration):
+            raise QgisSdkDeclarationError(
+                f"{getattr(hook, '__name__', hook)!r} is not a server hook"
+            )
+        return declaration
+
     def __iter__(self) -> Iterator[Callable[..., Any]]:
         """Iterate the filters, then the services, then the access hooks."""
         yield from self._filters

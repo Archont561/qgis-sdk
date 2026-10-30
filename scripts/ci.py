@@ -41,7 +41,11 @@ LTS_PROBE = (
     "print('binding', 'PyQt' + qt.QT_VERSION_STR.split('.')[0])"
 )
 LTS_TESTS = "packages/qgis-sdk-python/tests"
-LTS_MODULES = ("test_server_native.py", "test_lts_native.py")
+LTS_MODULES = (
+    "test_server_native.py",
+    "test_lts_native.py",
+    "test_server_devtools_native.py",
+)
 ENVIRONMENT_PROBE = (
     'import sys, pathlib; sys.path.insert(0, str(pathlib.Path(sys.prefix) / "share" / "qgis" / "python")); '
     "print(sys.version); import PyQt6, qgis.core; print(PyQt6.__file__); print(qgis.core.Qgis.version())"

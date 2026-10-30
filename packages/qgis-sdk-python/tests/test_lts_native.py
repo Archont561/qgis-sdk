@@ -79,10 +79,18 @@ def binding() -> str:
 
 
 def test_the_adapters_import_on_this_binding() -> None:
+    """Names, not the package: `qgis_sdk.adapters.qgis` imports lazily now."""
     import qgis_sdk.adapters.desktop
-    import qgis_sdk.adapters.qgis
     import qgis_sdk.adapters.surfaces
+    from qgis_sdk.adapters.qgis import (
+        NativeProject,
+        QgsServerHost,
+        native_plugin_context,
+    )
 
+    assert NativeProject is not None
+    assert QgsServerHost is not None
+    assert native_plugin_context is not None
     assert binding() in ("PyQt5", "PyQt6")
     assert QT_VERSION_STR.split(".")[0] in ("5", "6")
     assert qgis_sdk.adapters.desktop is not None

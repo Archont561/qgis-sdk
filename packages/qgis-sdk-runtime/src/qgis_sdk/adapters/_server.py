@@ -178,7 +178,16 @@ class QgsServerHost:
     answers QGIS's per-layer questions with the plugin's access hooks.
     """
 
-    __slots__ = ("_access", "_filter", "_host", "_iface", "_server", "_services")
+    __slots__ = (
+        "_access",
+        "_context_factory",
+        "_filter",
+        "_host",
+        "_iface",
+        "_jobs",
+        "_server",
+        "_services",
+    )
 
     def __init__(
         self,
@@ -196,6 +205,8 @@ class QgsServerHost:
         self._filter: Any = None
         self._access: Any = None
         self._services: list[Any] = []
+        self._context_factory = context_factory
+        self._jobs = jobs
         self._host = ServerHost(hooks, self, context_factory=context_factory, jobs=jobs)
 
     # -- what a plugin loader calls ----------------------------------------------
@@ -203,6 +214,33 @@ class QgsServerHost:
     def register(self) -> QgsServerHost:
         """Register every hook with QGIS once; returns this host for chaining."""
         self._host.register()
+        return self
+
+    def rebind(self, hooks: ServerHooks) -> QgsServerHost:
+        """Serve ``hooks`` through the registration QGIS already holds.
+
+        QGIS Server hands out ``registerFilter``, ``registerService`` and
+        ``registerAccessControl`` and no way to withdraw any of them, so a
+        development loop that reloads a plugin cannot register twice: it hands
+        the objects QGIS holds a new hook set instead. What it *cannot* do is
+        change their identity, because that is what the registration froze - the
+        filter's position among the other plugins' filters and the
+        ``SERVICE``/version each ``QgsService`` answers. A hook set that moves
+        either is refused, and the caller starts a new host instead.
+        """
+        before = _shape(self._host.hooks)
+        after = _shape(hooks)
+        if after != before:
+            raise QgisSdkUnsupportedCapabilityError(
+                "server registration",
+                f"the reloaded hooks do not fit what QGIS registered "
+                f"({_shape_difference(before, after)}); a filter priority and a "
+                "service name or version are fixed at registration, so start a "
+                "new host for this revision",
+            )
+        self._host = ServerHost(
+            hooks, self, context_factory=self._context_factory, jobs=self._jobs
+        )
         return self
 
     @property
@@ -300,6 +338,19 @@ class QgsServerHost:
         )
         self._iface.registerAccessControl(self._access, int(priority))
 
+    def current_service(self, name: str, version: str) -> Callable[..., Any]:
+        """The service hook ``name``/``version`` names, as the host holds it now."""
+        for declaration, hook in self._host.hooks.services:
+            if (declaration.name or "").casefold() != str(name).casefold():
+                continue
+            if (declaration.version or "") == str(version):
+                return hook
+        raise QgisSdkUnsupportedCapabilityError(
+            "server registration",
+            f"no @server.service answers SERVICE={name!r} version {version!r}; "
+            "the registration QGIS holds cannot be given a new one",
+        )
+
     # -- what the QGIS objects call ------------------------------------------------
 
     def serve_filter(self, qgs_filter: Any) -> bool:
@@ -377,6 +428,28 @@ class QgsServerHost:
         return f"QgsServerHost({self._host!r})"
 
 
+def _shape(
+    hooks: ServerHooks,
+) -> tuple[tuple[tuple[str, str], ...], int | None, int | None]:
+    """What a registration froze: one service per identity, two chain positions."""
+    services = tuple(
+        (declaration.name or "", declaration.version or "")
+        for declaration, _ in hooks.services
+    )
+    filters = [hooks.declaration(hook).priority for hook in hooks.filters]
+    access = [hooks.declaration(hook).priority for hook in hooks.access_control]
+    return services, min(filters, default=None), min(access, default=None)
+
+
+def _shape_difference(before: tuple[Any, ...], after: tuple[Any, ...]) -> str:
+    """Name the part of the registration that moved, rather than both shapes."""
+    names = ("services", "filter priority", "access-control priority")
+    moved = [
+        name for name, old, new in zip(names, before, after, strict=True) if old != new
+    ]
+    return ", ".join(moved) if moved else "nothing"
+
+
 def _object(
     base: type,
     name: str,
@@ -428,8 +501,18 @@ def _service_version(self: Any) -> str:
 def _execute_request(
     self: Any, request: Any, response: Any, project: Any = None
 ) -> None:
-    """The service's slot: one hook answers the ``SERVICE`` this object names."""
-    self._qgis_sdk_host.serve_service(self._qgis_sdk_hook, request, response)
+    """The service's slot: the hook this object names, as the host holds it now.
+
+    The lookup is by identity rather than by the function captured at
+    registration, because :meth:`QgsServerHost.rebind` swaps the hook set under a
+    registration that QGIS keeps - a service whose body was edited has to answer
+    with the edited body on the next request.
+    """
+    host = self._qgis_sdk_host
+    hook = host.current_service(
+        self._qgis_sdk_service_name, self._qgis_sdk_service_version
+    )
+    host.serve_service(hook, request, response)
 
 
 #: What the access-control object answers ``cacheKey()`` with. Non-empty on

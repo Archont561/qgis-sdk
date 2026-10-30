@@ -314,3 +314,94 @@ def test_the_access_object_keeps_qgis_from_caching_a_shaped_document(
 
     assert host.access_control.cacheKey() == NO_CAPABILITIES_CACHE
     assert NO_CAPABILITIES_CACHE
+
+
+# -- rebinding, which is how `qgis-sdk dev --mode server` reloads --------------------
+
+
+def _chain(marker: str):
+    """One filter, one service and one access hook that answer with ``marker``."""
+
+    @filter(priority=10)
+    def rewrite(ctx: ServerContext, request, response):
+        if request.param("SDK_DEMO") is None:
+            return None
+        return request.with_params(ROUTED=marker)
+
+    @service(name="SDKDEMO", version="1.0.0")
+    def answer(ctx: ServerContext, request) -> ServerResponse:
+        return ServerResponse.text(f"{marker}:{request.param('ROUTED')}")
+
+    @access_control(priority=10)
+    def only_public(ctx: ServerContext, request, layer) -> bool:
+        return layer != marker
+
+    return ServerHooks((rewrite, answer, only_public))
+
+
+def test_a_rebound_host_serves_the_new_hooks_through_the_old_registration(
+    wired: types.ModuleType,
+) -> None:
+    """QGIS has no way to unregister, so a reload swaps what it calls."""
+    iface = support.ServerInterface()
+    host = QgsServerHost(_chain("first"), iface).register()
+    filter_object = host.filter
+    service_object = host.services[0]
+
+    host.rebind(_chain("second"))
+
+    # Nothing was registered twice: the objects QGIS holds are the same ones.
+    assert iface.filters[10] == [filter_object]
+    assert list(iface.services) == [service_object]
+    rewrite = support.Handler({"SERVICE": "SDKDEMO", "SDK_DEMO": "1"})
+    iface.handler = rewrite
+    filter_object.onRequestReady()
+    assert rewrite.params["ROUTED"] == "second"
+    # The service object resolves its hook from the host as it is now.
+    response = support.Response()
+    service_object.executeRequest(support.Request({"SERVICE": "SDKDEMO"}), response)
+    assert response.body == b"second:None"
+    # The access hook is the new one too, and it is the layer name it refuses.
+    assert (
+        host.access_control.layerPermissions(support.Layer("second")).canRead is False
+    )
+    assert host.access_control.layerPermissions(support.Layer("first")).canRead is True
+
+
+def test_a_rebind_that_moves_a_priority_is_refused_by_name(
+    wired: types.ModuleType,
+) -> None:
+    iface = support.ServerInterface()
+    host = QgsServerHost(_chain("first"), iface).register()
+
+    @filter(priority=5)
+    def earlier(ctx: ServerContext, request, response):
+        return None
+
+    @service(name="SDKDEMO", version="1.0.0")
+    def answer(ctx: ServerContext, request) -> ServerResponse:
+        return ServerResponse.text("x")
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as excinfo:
+        host.rebind(ServerHooks((earlier, answer)))
+
+    assert "filter priority" in str(excinfo.value)
+    # The refused set was not installed: the first revision still answers.
+    assert host.hooks.filters[0].__name__ == "rewrite"
+
+
+def test_a_rebind_that_moves_a_service_identity_is_refused_by_name(
+    wired: types.ModuleType,
+) -> None:
+    iface = support.ServerInterface()
+    host = QgsServerHost(_chain("first"), iface).register()
+
+    @service(name="OTHER", version="2.0.0")
+    def answer(ctx: ServerContext, request) -> ServerResponse:
+        return ServerResponse.text("x")
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as excinfo:
+        host.rebind(ServerHooks((answer,)))
+
+    assert "services" in str(excinfo.value)
+    assert [item.name() for item in host.services] == ["SDKDEMO"]

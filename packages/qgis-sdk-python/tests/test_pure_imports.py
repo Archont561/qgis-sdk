@@ -212,6 +212,49 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
     assert result.stdout.strip() == "native-free"
 
 
+def test_the_server_adapter_imports_where_qgis_is_not(tmp_path: Path) -> None:
+    """A server host must be checkable without Qt Widgets or Processing.
+
+    `qgis_sdk.adapters.qgis` imports an adapter when its name is asked for, so
+    `...adapters.qgis.server` - the module a generated `serverClassFactory`
+    imports - does not pull in the rest of the QGIS surface. That is what lets
+    `tests/test_server_factory.py` drive the generated entry against the
+    ``qgis.server`` stand-ins.
+    """
+    script = textwrap.dedent(
+        """
+        import importlib
+        import sys
+
+        sys.path[:0] = sys.argv[1:]
+
+        class RejectNative:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.split('.')[0] in {'qgis', 'PyQt5', 'PyQt6'}:
+                    raise AssertionError(f'eager native import: {fullname}')
+                return None
+
+        sys.meta_path.insert(0, RejectNative())
+        server = importlib.import_module('qgis_sdk.adapters.qgis.server')
+        package = importlib.import_module('qgis_sdk.adapters.qgis')
+        assert package.QgsServerHost is server.QgsServerHost
+        assert 'qgis_sdk.adapters.qgis.algorithms' not in sys.modules
+        assert 'qgis' not in sys.modules
+        print('server-only')
+        """
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "server-only"
+
+
 def test_only_the_testing_package_imports_the_test_doubles() -> None:
     """A fake must never become a runtime fallback for a missing adapter."""
     offenders: list[str] = []

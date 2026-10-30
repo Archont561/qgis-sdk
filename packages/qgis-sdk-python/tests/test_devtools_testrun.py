@@ -47,7 +47,7 @@ class TestPure:
             "-p",
             PLUGIN,
             "-m",
-            "not qgis and not desktop",
+            "not qgis and not desktop and not server",
             "-q",
             "tests/test_x.py",
         )
@@ -256,8 +256,69 @@ class TestWeb:
         assert "pnpm install" in str(excinfo.value)
 
 
+class TestServer:
+    """TASK-80 AC 4: the server target is the install's interpreter, headless."""
+
+    def test_runs_the_installs_interpreter_with_the_server_selection(
+        self, project: Path, install: QgisInstall
+    ) -> None:
+        plan = plan_tests(
+            project, "server", ("-q",), env={}, install=install, platform="linux"
+        )
+
+        assert plan.argv == (
+            str(install.python),
+            "-m",
+            "pytest",
+            "-p",
+            PLUGIN,
+            "-m",
+            "server",
+            "-q",
+        )
+        assert plan.cwd == project
+        assert plan.env[TARGET_ENV] == "server"
+        assert plan.env["QGIS_PREFIX_PATH"] == str(install.prefix)
+        # A server has no display, and a hook is not a widget: offscreen always.
+        assert plan.env["QT_QPA_PLATFORM"] == "offscreen"
+        assert "WITH_SERVER=ON" in plan.notes[0]
+
+    def test_requires_an_install(self, project: Path) -> None:
+        with pytest.raises(QgisSdkTestRunError, match="needs a QGIS install"):
+            plan_tests(project, "server", (), env={})
+
+    def test_an_install_without_an_interpreter_is_refused(
+        self, project: Path, install: QgisInstall
+    ) -> None:
+        bare = QgisInstall(
+            prefix=install.prefix,
+            bindings=install.bindings,
+            executable=install.executable,
+            python=None,
+            source=install.source,
+            conda=False,
+        )
+
+        with pytest.raises(QgisSdkTestRunError) as excinfo:
+            plan_tests(project, "server", (), env={}, install=bare)
+
+        assert "no Python interpreter" in str(excinfo.value)
+        assert str(install.prefix) in str(excinfo.value)
+
+
+def test_the_server_target_is_native_and_gated() -> None:
+    """A server gate must not read as a pass: it is native, and it is selected."""
+    from qgis_sdk_tools.devtools import testrun
+    from qgis_sdk_tools.pytest_plugin import NATIVE_TARGETS, TARGETS
+
+    assert "server" in TARGETS
+    assert "server" in NATIVE_TARGETS
+    assert testrun.SELECTION["server"] == "server"
+    assert set(testrun.TARGETS) == set(TARGETS)
+
+
 def test_an_unknown_target_is_refused(project: Path) -> None:
-    with pytest.raises(QgisSdkTestRunError, match="pure, qgis, desktop, web"):
+    with pytest.raises(QgisSdkTestRunError, match="pure, qgis, desktop, server, web"):
         plan_tests(project, "gui", (), env={})
 
 

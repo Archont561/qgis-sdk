@@ -19,14 +19,25 @@ PLUGIN = "qgis_sdk_tools.pytest_plugin"
 
 
 def run_pytest(
-    project: Path, *args: str, target: str | None = None
+    project: Path, *args: str, target: str | None = None, bindings: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
+    """Run pytest the way the command does; ``bindings`` fakes a QGIS prefix.
+
+    A machine with no QGIS at all would otherwise make every native case reach
+    the bindings gate instead of the behaviour under test; a directory holding
+    an importable ``qgis.server`` is enough for the plugin, which only asks
+    whether the import succeeds.
+    """
     env = {
         key: value
         for key, value in os.environ.items()
         if key not in {TARGET_ENV, "PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST"}
     }
-    env["PYTHONPATH"] = layers.source_path()
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(bindings), layers.source_path()]
+        if bindings is not None
+        else [layers.source_path()]
+    )
     if target is not None:
         env[TARGET_ENV] = target
     return subprocess.run(
@@ -96,6 +107,15 @@ def test_without_a_target_the_guard_is_off(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def fake_server_bindings(root: Path) -> Path:
+    """A directory where ``from qgis import server`` succeeds, and nothing else."""
+    bindings = root / "bindings"
+    (bindings / "qgis").mkdir(parents=True)
+    (bindings / "qgis" / "__init__.py").write_text("", encoding="utf-8")
+    (bindings / "qgis" / "server.py").write_text("", encoding="utf-8")
+    return bindings
+
+
 @pytest.mark.parametrize("target", ["qgis", "desktop"])
 def test_a_native_target_whose_every_test_skipped_does_not_pass(
     tmp_path: Path, target: str
@@ -126,6 +146,58 @@ def test_a_native_target_with_one_real_pass_keeps_pytests_verdict(
     )
 
     result = run_pytest(tmp_path, target="qgis")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_the_server_target_whose_every_test_skipped_does_not_pass(
+    tmp_path: Path,
+) -> None:
+    write_tests(
+        tmp_path,
+        "import pytest\n"
+        "@pytest.mark.server\n"
+        "def test_a():\n"
+        "    pytest.skip('no server project here')\n",
+    )
+
+    result = run_pytest(
+        tmp_path,
+        target="server",
+        bindings=fake_server_bindings(tmp_path / "fake"),
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "every test of the server target was skipped" in result.stdout
+
+
+def test_the_server_target_refuses_a_qgis_built_without_server_bindings(
+    tmp_path: Path,
+) -> None:
+    """A skip would read as a pass, so the target names the build instead."""
+    write_tests(tmp_path, "def test_a(): pass\n")
+    (tmp_path / "conftest.py").write_text(
+        # `from qgis import server` then fails the way a conda build does.
+        "import sys\nsys.modules['qgis'] = None\n",
+        encoding="utf-8",
+    )
+
+    result = run_pytest(tmp_path, target="server")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "built without server support" in result.stdout + result.stderr
+    assert "WITH_SERVER=ON" in result.stdout + result.stderr
+
+
+def test_the_server_target_registers_its_marker(tmp_path: Path) -> None:
+    write_tests(tmp_path, "@pytest.mark.server\ndef test_a(): pass\n")
+    (tmp_path / "test_sample.py").write_text(
+        "import pytest\n\n\n@pytest.mark.server\ndef test_a(): pass\n",
+        encoding="utf-8",
+    )
+    # The marker must be known even where the target cannot run, so a project
+    # using --strict-markers collects before the bindings are asked for.
+    result = run_pytest(tmp_path, "--strict-markers", "--collect-only")
 
     assert result.returncode == 0, result.stdout + result.stderr
 

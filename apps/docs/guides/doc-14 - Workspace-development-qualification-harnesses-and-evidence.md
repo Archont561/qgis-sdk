@@ -230,10 +230,11 @@ both facts (decision-70):
   importable next to pytest), and calls `scripts/ci.py lts`;
 * that helper probes the build first and prints `::notice::LTS host: qgis
   3.44.x | qgisserver QgsServer | qt 5.15.x | binding PyQt5`, then runs
-  `tests/test_server_native.py` (the server layer) and `tests/test_lts_native.py`
-  (the Desktop host on this binding, offscreen), each in its own pytest process
-  with its own log, so the Desktop half cannot hide behind the server half's
-  summary line;
+  `tests/test_server_native.py` (the server layer), `tests/test_lts_native.py`
+  (the Desktop host on this binding, offscreen) and
+  `tests/test_server_devtools_native.py` (the `dev --host server` loop, opted in
+  with `QGIS_SDK_SERVER_DEV=1`), each in its own pytest process with its own
+  log, so no half can hide behind another's summary line;
 * a missing `qgis.server`, a `qgis.core` that does not import, a run that
   collected nothing, or a module that reports `skipped` test count is a failure
   with an annotation, never a pass - a suite that skips everything must not read
@@ -254,6 +255,15 @@ fixtures now import Qt through `qgis.PyQt` like the adapters, and
 `tests/layers.py` finds the installation by walking up from the bindings to the
 directory that carries `share/qgis` (`/usr` on Debian and Ubuntu), falling back
 to `sys.prefix` where there is no QGIS at all.
+
+The development loop for a server plugin is a third layer: `qgis-sdk dev --host
+server` starts a real `QgsServer` in the process and answers HTTP on loopback,
+so the harness drives the command a user types (spawn the CLI, wait for the
+port, request the plugin's own `SERVICE`, save an edit to the `@server.filter`,
+request again). What it proves is the reload, not a restart: QGIS Server cannot
+withdraw a registration, so the reload hands the objects QGIS holds the new hook
+set (`QgsServerHost.rebind`) and the second body is the one the edited filter
+stamped.
 
 The server host has two layers of its own, because a deployed QGIS Server calls
 three objects at three moments of one request and none of them exists on the
