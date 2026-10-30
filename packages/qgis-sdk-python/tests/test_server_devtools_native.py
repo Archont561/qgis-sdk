@@ -133,10 +133,15 @@ def free_port() -> int:
 
 
 def get(port: int, query: str) -> str:
-    with urllib.request.urlopen(
-        f"http://127.0.0.1:{port}/?{query}", timeout=10
-    ) as response:
-        return response.read().decode("utf-8", errors="replace")
+    """The body, whether the server called it a success or a failure."""
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/?{query}", timeout=10
+        ) as response:
+            return response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as failed:
+        with failed:
+            return f"{failed.code}: " + failed.read().decode("utf-8", errors="replace")
 
 
 def listening(port: int) -> bool:
@@ -183,7 +188,12 @@ def wait_for(port: int, expected: str, running: Running) -> str:
     raise AssertionError(
         f"the server never answered {expected!r}: bodies seen: {seen[-5:]}, "
         f"something listens on 127.0.0.1:{port}: {listening(port)}, "
-        f"exit code: {process.poll()}; qgis-sdk dev said:\n" + "\n".join(said[-60:])
+        f"exit code: {process.poll()}; qgis-sdk dev said:\n"
+        + "\n".join(
+            line
+            for line in said
+            if '"GET ' not in line and '"POST ' not in line  # one line per request
+        )[-8000:]
     )
 
 

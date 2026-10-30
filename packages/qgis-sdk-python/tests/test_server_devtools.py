@@ -376,6 +376,55 @@ def test_a_bound_loop_answers_one_real_http_request() -> None:
     assert body == b"served GET http://127.0.0.1:8080/?SERVICE=SDKDEMO"
 
 
+class RaisingServer(FakeServer):
+    """``QgsServer`` whose one call raises, as a plugin bug reaches the loop."""
+
+    def handleRequest(self, request: Any, response: Any, project: Any = None) -> None:
+        raise RuntimeError("the filter raised instead of answering")
+
+
+def test_a_request_that_raises_answers_500_with_the_traceback() -> None:
+    """A plugin bug is reported, not turned into a bare ``500`` by ``http.server``."""
+    import http.client
+    import threading
+
+    host, _interface = host_over(plugin_module(chain("first")))
+    host.load("demo")
+    said: list[str] = []
+    loop = ServerLoop(
+        bindings=bindings(),
+        server=RaisingServer(),
+        host=host,
+        plugin="demo",
+        port=0,
+        say=said.append,
+    )
+    origin = loop.bind()
+    port = int(origin.rsplit(":", 1)[1])
+    serving = threading.Thread(
+        target=loop.serve_forever, kwargs={"max_requests": 1}, daemon=True
+    )
+    serving.start()
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        connection.request("GET", "/?SERVICE=SDKDEMO")
+        response = connection.getresponse()
+        body = response.read()
+        connection.close()
+    finally:
+        serving.join(timeout=10)
+        loop.close()
+
+    assert response.status == 500
+    assert body.startswith(b"qgis-sdk dev: the request failed")
+    assert b"RuntimeError: the filter raised instead of answering" in body
+    # The notice, then `http.server`'s own access line for the 500 it sent.
+    assert (
+        said[0] == "server: the request failed; the traceback is in the response body"
+    )
+    assert said[-1].endswith('"GET /?SERVICE=SDKDEMO HTTP/1.1" 500 -')
+
+
 def test_a_missing_project_is_not_a_loop_error(tmp_path: Path) -> None:
     """The loop never loads a project itself: the request's MAP decides (QGIS's rule)."""
     host, _interface = host_over(plugin_module(chain("first")))

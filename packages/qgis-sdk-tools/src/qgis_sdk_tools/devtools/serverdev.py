@@ -31,6 +31,7 @@ import importlib
 import importlib.util
 import sys
 import time
+import traceback
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -318,7 +319,31 @@ class ServerLoop:
         """Serve one ``http.server`` request from the buffered answer."""
         length = int(handler.headers.get("Content-Length") or 0)
         body = handler.rfile.read(length) if length else b""
-        answer = self.answer_request(method, handler.path, dict(handler.headers), body)
+        try:
+            answer = self.answer_request(
+                method, handler.path, dict(handler.headers), body
+            )
+        except Exception:  # noqa: BLE001 - a plugin bug is reported, never swallowed
+            answer = self.failed(traceback.format_exc())
+        self.write(handler, answer)
+
+    def failed(self, detail: str) -> Answer:
+        """The answer to a request the server could not complete.
+
+        Left to itself, ``http.server`` turns a raised exception into a bare
+        ``500`` and keeps the reason to itself - the one thing a dev loop must
+        not do. The terminal gets the notice and the body gets the traceback, so
+        ``curl`` alone explains the failure.
+        """
+        self.say("the request failed; the traceback is in the response body")
+        return Answer(
+            500,
+            {"Content-Type": "text/plain; charset=utf-8"},
+            f"qgis-sdk dev: the request failed\n\n{detail}".encode(),
+        )
+
+    def write(self, handler: BaseHTTPRequestHandler, answer: Answer) -> None:
+        """Hand one buffered answer to ``http.server``."""
         handler.send_response(answer.status)
         for name, value in answer.headers.items():
             if name.casefold() == "content-length":
@@ -331,9 +356,15 @@ class ServerLoop:
     # -- the loop ------------------------------------------------------------------
 
     def bind(self) -> str:
-        """Start listening; returns the origin it answers on."""
+        """Start listening; returns the origin it answers on.
+
+        The port is read back from the socket, so asking for port 0 - the way a
+        test or a caller that does not care gets a free one - still reports the
+        address the loop really answers on.
+        """
         self._httpd = HTTPServer((LOOPBACK, self._port), _handler_for(self))
         self._httpd.timeout = self._poll_seconds
+        self._port = int(self._httpd.server_address[1])
         return self.origin
 
     def tick(self) -> None:
