@@ -1,9 +1,10 @@
-"""HOST001 / HOST003: a declared host set the project or this QGIS cannot honour.
+"""HOST001 / HOST002 / HOST003: a declared host set that cannot be honoured.
 
 ``[tool.qgis-sdk] hosts`` is the one place a plugin says which hosts it targets
 (decision-52 point 1). A Desktop-only declaration in a project that does not
-declare Desktop is ``HOST001``; a server host declared against a QGIS built
-without QGIS Server is ``HOST003``, a warning because the project is not what is
+declare Desktop is ``HOST001``, a server hook in a project that does not declare
+the server is ``HOST002``, and a server host declared against a QGIS built
+without QGIS Server is ``HOST003`` - a warning, because the project is not what is
 missing (decision-52 implementation note, TASK-80).
 """
 
@@ -305,3 +306,91 @@ def test_a_host003_warning_does_not_fail_the_check(
 
     assert [d.rule for d in report.diagnostics] == ["HOST003"]
     assert report.ok  # a warning: the project is fine, this QGIS is not
+
+
+# -- HOST002: a server hook on a plugin without the server host ----------------------
+
+
+def test_a_server_hook_on_a_desktop_only_plugin_is_a_finding() -> None:
+    source = """
+        from qgis_sdk.server import ServerContext, ServerResponse, filter
+
+        @filter(priority=10)
+        def default_version(ctx: ServerContext, request, response): ...
+        """
+
+    expected = (
+        "HOST002:4:the `@server.filter` hook on `default_version` needs the "
+        + "server host, but `[tool.qgis-sdk] hosts` declares desktop"
+    )
+    assert found(source, hosts=("desktop",)) == [expected]
+
+
+@pytest.mark.parametrize("attribute", ["service", "access_control"])
+def test_every_server_decorator_is_recognised(attribute: str) -> None:
+    source = f"""
+        from qgis_sdk.server import {attribute}
+
+        @{attribute}(priority=1)
+        def hook(ctx, request, response): ...
+        """
+
+    assert [item.split(":", 1)[0] for item in found(source, hosts=("desktop",))] == [
+        "HOST002"
+    ]
+
+
+def test_the_module_alias_spelling_is_recognised_too() -> None:
+    # `import qgis_sdk.server as srv` is the same declaration as the from-import.
+    source = """
+        import qgis_sdk.server as srv
+
+        @srv.service(name="SDKDEMO")
+        def demo(ctx, request): ...
+        """
+
+    assert [item.split(":", 1)[0] for item in found(source, hosts=("desktop",))] == [
+        "HOST002"
+    ]
+
+
+def test_a_project_that_declares_the_server_answers_for_nothing() -> None:
+    source = """
+        from qgis_sdk.server import filter
+
+        @filter(priority=10)
+        def default_version(ctx, request, response): ...
+        """
+
+    assert found(source, hosts=("desktop", "server")) == []
+
+
+def test_a_plugin_declaring_neither_host_answers_for_both_kinds() -> None:
+    source = """
+        from qgis_sdk import toolbar
+        from qgis_sdk.server import access_control
+
+        @toolbar
+        def ping(ctx) -> None: ...
+
+        @access_control(priority=1)
+        def only_public(ctx, request, layer) -> bool: ...
+        """
+
+    assert [item.split(":", 1)[0] for item in found(source, hosts=("app",))] == [
+        "HOST001",
+        "HOST002",
+    ]
+
+
+def test_a_filter_from_somewhere_else_is_not_a_server_hook() -> None:
+    # `filter` and `service` are ordinary words; only the module they come from
+    # makes a declaration a server hook.
+    source = """
+        from itertools import filterfalse
+
+        @filterfalse
+        def odd(value) -> bool: ...
+        """
+
+    assert found(source, hosts=("desktop",)) == []
