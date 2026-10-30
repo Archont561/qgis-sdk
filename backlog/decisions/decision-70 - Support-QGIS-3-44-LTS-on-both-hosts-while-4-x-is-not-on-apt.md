@@ -46,7 +46,10 @@ repository has not moved.
    `qgis`/`qgis-server`/`python3-qgis`, and `scripts/ci.py lts` proves the
    server layer and the Desktop host (offscreen) on the same build. It reports
    the QGIS version, the Qt version and the PyQt binding it found before pytest
-   starts, and fails when either host's module collected nothing.
+   starts; each host's module runs in its own pytest process with its own log;
+   and a module that collected nothing *or* skipped anything fails the row - on
+   a build that has both hosts, a skip means a host this was meant to prove was
+   not proven.
 4. **No WebEngine claim on that row.** The LTS job does not run the WebEngine
    layer, so its matrix row leaves the Chromium cell empty and says why. An
    empty cell means "not exercised here", never "known broken".
@@ -64,7 +67,14 @@ repository has not moved.
   does not impose a floor of its own.
 - The LTS row is the evidence for TASK-80 AC 2's binding half as well: the
   scripted `FakeServerInterface` proves the dispatcher everywhere, and this row
-  proves the same modules inside a QGIS that has `qgis.server`.
+  proves the same modules inside a QGIS that has `qgis.server`. On 2026-10-30
+  (run `41115792940`) it reported `qgis 3.44.7-Solothurn | qgisserver QgsServer
+  | qt 5.15.13 | binding PyQt5` with `7 passed` for the Desktop host and `3
+  passed` for the server layer.
+- The same rule reaches the test harness: the session fixtures that start the
+  application import Qt through `qgis.PyQt` as well, and the environment is
+  prepared against the installation the bindings came from, not `sys.prefix`,
+  because a virtual environment built over a system QGIS owns no QGIS.
 - decision-57 point 2 is narrowed: QGIS 3.44 is in scope on both hosts; other
   3.x series stay out, and no Qt 5 row claims WebEngine.
 - A Qt call that needs two spellings is a defect in the adapter, not a note in

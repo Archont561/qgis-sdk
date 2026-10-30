@@ -231,11 +231,29 @@ both facts (decision-70):
 * that helper probes the build first and prints `::notice::LTS host: qgis
   3.44.x | qgisserver QgsServer | qt 5.15.x | binding PyQt5`, then runs
   `tests/test_server_native.py` (the server layer) and `tests/test_lts_native.py`
-  (the Desktop host on this binding, offscreen);
-* a missing `qgis.server`, a `qgis.core` that does not import, or a run that
-  collected nothing is a failure with an annotation, never a pass - a suite that
-  skips everything must not read as evidence;
+  (the Desktop host on this binding, offscreen), each in its own pytest process
+  with its own log, so the Desktop half cannot hide behind the server half's
+  summary line;
+* a missing `qgis.server`, a `qgis.core` that does not import, a run that
+  collected nothing, or a module that reports `skipped` test count is a failure
+  with an annotation, never a pass - a suite that skips everything must not read
+  as evidence, and `importorskip` is precisely the way a native module says "this
+  host cannot run me", which on this row is the thing being disproved;
 * the job is part of the `checks` aggregate, so it gates.
+
+First green run: 2026-10-30, run `41115792940` job `124269563846`, probe
+`qgis 3.44.7-Solothurn | qgisserver QgsServer | qt 5.15.13 | binding PyQt5`,
+`7 passed` for the Desktop module and `3 passed` for the server module. Getting
+there took two defects the row itself exposed, both of which are the reason it
+is worth a job rather than a note: the adapters imported `PyQt6` by name (so a
+PyQt5 QGIS crashed on the first import), and the session fixture that starts the
+application did too *and* pointed `QGIS_PREFIX_PATH` at `sys.prefix` - a virtual
+environment built with `--system-site-packages` owns no QGIS, and a
+`QgsApplication` with the wrong prefix initialises without providers. The
+fixtures now import Qt through `qgis.PyQt` like the adapters, and
+`tests/layers.py` finds the installation by walking up from the bindings to the
+directory that carries `share/qgis` (`/usr` on Debian and Ubuntu), falling back
+to `sys.prefix` where there is no QGIS at all.
 
 `tests/test_lts_native.py` is small on purpose: it reports which binding this
 QGIS has and proves the three places Qt 5 and Qt 6 disagree - a dock area, a
