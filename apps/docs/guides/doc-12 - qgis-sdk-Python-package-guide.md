@@ -507,10 +507,9 @@ says which one it is, and `ctx.host` reports it - `Host.DESKTOP`,
 `Host.SERVER` or `Host.APP` from `qgis_sdk.core`, compared as strings because it
 is a `StrEnum`. `ctx.host.gui` is `False` on a server, which is the honest
 answer to "may I open a window here?". A view inherits the host of the plugin
-context that opened it. The Desktop host is implemented, and so is the server
-host's hook layer (below); the standalone app host arrives with 0.9.0
-(TASK-81), and a capability any of them lacks still refuses by name
-(decision-39).
+context that opened it. All three hosts are implemented - Desktop below, the
+server's hook layer in the next section, and the standalone app after it - and a
+capability any of them lacks still refuses by name (decision-39).
 
 ### The server host: the hooks QGIS Server calls
 
@@ -635,6 +634,224 @@ whose QGIS has no server bindings at all. Where the build *does* have them, the 
 under a headless `QgsApplication` through `QgsServer.handleRequest` - the
 `QGIS 3.44 LTS` row runs exactly that, and [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md)
 carries the evidence.
+
+### The app host: the same plugin as a standalone PyQGIS application
+
+`qgis_sdk.app.run` owns the `QgsApplication` instead of being called by one. The
+class does not change: the same `QgisSdkPlugin`, the same actions, the same jobs,
+the same bridge. What changes is who starts it and what it may attach to.
+
+```python
+# simple/__main__.py — the entry `python -m simple`, `qgis-sdk run` and a built
+# distribution's console script all call.
+from qgis_sdk.app import main as run_app
+
+from .plugin import app
+
+
+def main(argv=None) -> int:
+    return run_app(app, argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+`run_app(app, argv)` reads the flags (`qgis_sdk.app._options`) and calls
+`run(app, gui=..., argv=..., grace=..., once=...)`; the launcher never parses
+argv itself.
+
+| Flag | What it does |
+| :-- | :-- |
+| *(none)* | a window: a `QMainWindow` with a `QgsMapCanvas`, a toolbar and a status bar |
+| `--headless` | no window and no `ctx.ui`; jobs, the project, the services and the bridge's model layer still work |
+| `--once` | start, deliver what is already queued, stop - the smoke run a CI job makes |
+| `--grace SECONDS` | how long shutdown waits for running jobs (default 15) |
+| `--title TITLE` | the window title, when the application's own is not what a launcher wants |
+| `--` | everything after it goes to the toolkit, not the SDK |
+
+#### What the host offers, and what it refuses
+
+`ctx.host` is `Host.APP` in both modes. Everything a plugin needs *without* a
+window is there: `ctx.project`, `ctx.layers`, `ctx.algorithms`, `ctx.styles`,
+`ctx.files`, `ctx.settings`, `ctx.network`, `ctx.notifications` (the QGIS message
+log and the window's status bar), and `ctx.jobs` driven by the app's own job
+pump. A capability the run does not have refuses by name, as everywhere else:
+
+```python
+run(app)                  # ctx.ui exists; ctx.desktop refuses - there is no iface
+run(app, gui=True)        # a window: @toolbar/@menu bindings become actions on it,
+                          # Dialog and Dock surfaces open inside it
+```
+
+`ctx.desktop` refuses in an app because there is no `QgisInterface` to wrap -
+`qgis_sdk.app` does not fake one. A plugin that needs
+`ctx.desktop.iface` (the QGIS message bar, an existing dialog, the layer tree) is
+a Desktop plugin; one that only needs the services, the job registry and the
+canvas is one class for both hosts.
+
+The window is deliberately small: a `QMainWindow`, one `QgsMapCanvas` with an
+empty project, a toolbar, a status bar, and the same
+`qgis_sdk.adapters.surfaces.SurfaceHost` the Desktop adapter places dialogs
+with. There is no layer tree, no menu from QGIS and no plugin manager - those are
+QGIS Desktop's, not the SDK's. The later canvas service (TASK-85: extent, zoom,
+map themes, capture) attaches to this canvas and to the Desktop one through the
+same interface.
+
+#### Lifecycle, and the difference from a Desktop plugin
+
+| | QGIS Desktop plugin | Standalone app |
+| :-- | :-- | :-- |
+| Who creates `QgsApplication` | QGIS | `qgis_sdk.app.run` (`initQgis` / `exitQgis`) |
+| Who calls the entry | `classFactory(iface)` from the plugin manager | the launcher's `main(argv)` |
+| `ctx.host` | `desktop` | `app` |
+| `ctx.desktop` | the live `iface` | refuses by name |
+| `ctx.ui` | always | only with `gui=True` |
+| Who drives the job pump | QGIS's Qt loop | the app's own `QTimer`, named `job-pump` |
+| Shutdown | the plugin manager unloads it inside a running QGIS | `run` stops the loops, drains jobs, closes the window and exits QGIS once |
+| Reload / enable / disable | QGIS's lifecycle | none: restart the process |
+
+The bounds of that last row are decision-69 points 2 and 4:
+
+1. every background loop the host started is stopped **by name** - the job pump
+   first, then the surface's own timers - and the shutdown report lists them;
+2. running jobs get `grace` seconds (15 by default) to settle; whatever is left
+   is named, asked to stop and reported as cancelled, and none of its callbacks
+   run afterwards;
+3. the UI closes, the runtime unloads, and `exitQgis()` is called exactly once -
+   including when the start failed halfway, and never when `initQgis()` never ran.
+
+```python
+from qgis_sdk.app import AppSession
+from qgis_sdk.adapters.app import QtAppBackend
+
+session = AppSession(app, backend=QtAppBackend(), gui=False, grace=5.0, say=print)
+session.start()
+session.runtime.actions["open_fixture"]()
+report = session.stop()
+print(report.summary())   # stopped 1 loop: job-pump; drained 1 job
+print(report.to_json())   # the same facts, for a log or a test
+```
+
+`qgis_sdk.app.quit()` leaves the event loop from inside a job or an action - the
+one hook a headless app needs when its work is done. Called with no app running
+it refuses by name instead of touching a `QgsApplication` that belongs to QGIS
+Desktop.
+
+#### Running one from a project
+
+Three routes, one entry:
+
+```bash
+# 1. inside the project, with whatever interpreter has PyQGIS
+PYTHONPATH=. python -m simple                 # a window
+PYTHONPATH=. python -m simple --headless --once   # starts and stops; CI's smoke run
+
+# 2. the CLI finds the QGIS install (QGIS_PREFIX_PATH, `qgis` on PATH, this
+#    environment or [tool.qgis-sdk] qgis-prefix) and runs the entry with it
+qgis-sdk run                    # a window
+qgis-sdk run --headless --once  # headless smoke run
+qgis-sdk run --grace 5 --title "Field tools"
+
+# 3. a distribution with a console script
+qgis-sdk build --target app
+pip install dist/simple-0.1.0-app
+simple                          # the same entry, the same flags
+```
+
+`qgis-sdk run` never installs anything and never writes into the project: it
+puts the found install's PyQGIS and the SDK's own packages on that interpreter's
+`PYTHONPATH`, runs the project's `<plugin>/__main__.py` in the project root, and
+passes `--headless`, `--once`, `--grace` and `--title` through. A project
+without an entry (a Desktop plugin) is started through a generated probe in a
+temporary directory that imports `[tool.qgis-sdk] plugin` and calls the same
+`qgis_sdk.app.main`, so trying a plugin as an app costs nothing.
+
+#### `build --target app`: what pip installs
+
+The default `qgis-sdk build` writes the plugin ZIP QGIS's *Install from ZIP*
+reads. An app has no such caller, so `--target app` writes a Python project
+instead:
+
+```
+dist/simple-0.1.0-app/
+  pyproject.toml          # [project.scripts] simple = "simple._launcher:main"
+  simple/
+    __main__.py           # the project's own entry, untouched
+    _launcher.py          # generated: probes externals, then qgis_sdk.app.main
+    ...                   # the plugin's modules, imports rewritten
+    _vendor/
+      qgis_sdk/           # the runtime, same vendoring rules as the ZIP
+      NOTICE              # which runtime, and every vendored distribution
+```
+
+- the runtime is **vendored** (`<plugin>._vendor.qgis_sdk`, imports rewritten by
+  the same AST pass the ZIP build uses), so the distribution declares no runtime
+  dependency and works wherever PyQGIS already is;
+- declared externals (`[tool.qgis-sdk.build] external`) are **probed before the
+  application is imported**: a missing one is one line naming the package and
+  `pip install <requirement>`, exit code 3, instead of a traceback from inside a
+  plugin (decision-50 point 1);
+- pure-Python distributions listed in `[tool.qgis-sdk.build] vendor` are copied
+  beside the runtime under the same rules;
+- the runtime's data files (the Processing catalogue, the reference styles) are
+  listed in `[tool.setuptools.package-data]`, file by file, so a wheel built
+  anywhere carries them.
+
+Nothing is installed by `build`, and nothing in the source tree is edited: the
+directory *is* the input to `pip install`. Install it into the QGIS
+interpretation that already has PyQGIS - a distribution installed into a Python
+with no `qgis.core` refuses by name (`this interpreter cannot import PyQGIS`)
+rather than crashing, because that is the common mistake.
+
+#### Scaffolding one
+
+```bash
+qgis-sdk new field_tools --host app
+qgis-sdk new field_tools --host app --ui native      # a Dialog on the app window
+qgis-sdk new field_tools --host app --algorithm      # a Processing provider
+```
+
+The generated project declares `hosts = ["app"]`, keeps `<plugin>/__init__.py`
+import-only (there is no QGIS to call a factory), and writes
+`<plugin>/__main__.py` as the entry. A web page still needs `--host desktop`:
+the page is placed through the Desktop adapter's `iface`, which the app host does
+not provide - declare both hosts and keep the page for the Desktop one
+(decision-52 point 3 keeps the bridge, not the placement).
+
+#### The bridge is unchanged
+
+`gui=True` gives the app a window; the bridge does not depend on that window. A
+page reaches `runtime.actions` through the same host services, the same grants
+and the same WebChannel transport as in QGIS Desktop, because the app host wraps
+the same `PluginRuntime` in the same `SurfaceHost` - what an app lacks is the
+`iface`, not the contract. The reference example (`examples/simple`) is one class
+on both hosts and one set of actions behind its dock page and its native dialogs;
+its `simple/__main__.py` is the entry above, and the pure test
+`test_reference_example.py::test_the_example_runs_headless_as_an_app_on_the_same_actions`
+runs it headless through `FakeAppBackend` and reads back the same action ids.
+
+#### Proving one without QGIS
+
+`qgis_sdk.testing.FakeAppBackend` drives the real `AppSession` with no Qt at all:
+it records `init`/`build`/`exec`/`process_events`/`quit`/`exit`, builds a
+`PluginContext` whose `ctx.host` is `app`, hands the session a `FakeWorkers` pool
+and a fake UI, and lets a test watch the shutdown report.
+
+```python
+from qgis_sdk.app import run
+from qgis_sdk.testing import FakeAppBackend
+
+backend = FakeAppBackend()
+assert run(app, backend=backend, once=True) == 0
+assert backend.calls == ["init", "build", "process_events", "exit"]
+assert backend.surface.context.host.value == "app"
+```
+
+The window, the canvas and the real bindings need a toolkit: the `qgis` layer's
+`test_app_native.py` starts the host in a child interpreter with
+`QT_QPA_PLATFORM=offscreen` and asserts the `QMainWindow`, its canvas, the
+toolbar action and the dialog the plugin opened.
 
 ## Forms: an action's inputs as a window
 
@@ -2264,6 +2481,29 @@ registry, and a `ServerContext` has neither, so `qgis-sdk new --host server
 project that declares `hosts = ["desktop", "server"]` and keeps its surfaces for
 the Desktop one.
 
+`--host app` writes the third host: `[tool.qgis-sdk] hosts = ["app"]`, the same
+empty `<plugin>/__init__.py` (there is no QGIS to call a factory), the same
+`<plugin>/plugin.py`, plus `<plugin>/__main__.py` - the entry `python -m
+<plugin>`, `qgis-sdk run` and a built distribution's console script all call:
+
+```python
+from qgis_sdk.app import main as run_app
+
+from .plugin import app
+
+
+def main(argv=None) -> int:
+    return run_app(app, argv)
+```
+
+Its starter test drives `qgis_sdk.app.run` over `FakeAppBackend`, so the
+generated suite proves the app host starts, delivers and stops without QGIS or a
+display. `--ui native` and `--algorithm` are allowed on this host - a standalone
+app with `gui=True` has a window and a live application - while `--web` is not:
+the page is placed through the Desktop adapter's `iface`, so a project with a
+page and an app declares both hosts. See
+[The app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application).
+
 There is no `metadata.txt` and no `classFactory` in the project (decision-43):
 `pyproject.toml` carries `[project]` (name, version, description, authors, the
 `qgis-sdk-runtime` requirement) and `[tool.qgis-sdk]` (`plugin`,
@@ -2286,6 +2526,12 @@ The README the scaffold writes teaches both modes; they differ in one thing, whe
 The starter tests are the standalone mode: in the generated project,
 `PYTHONPATH=<this workspace>/packages/qgis-sdk-runtime/src pytest -q` runs load, action and
 unload through the SDK runtime with no QGIS installation at all.
+
+`host(...)(None)` is the *plugin lifecycle* without QGIS, which is what a
+Desktop plugin's own tests need. A project that declares the app host gets the
+other half too: `qgis_sdk.app.run` starts the same declaration with its own
+`QgsApplication`, a window when `gui=True`, and a bounded shutdown -
+[The app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application).
 
 ### Processing starter: `--algorithm`
 
@@ -2705,12 +2951,53 @@ refuses by name with "built by an older qgis-sdk" (decision-39). It is a
 developer's view of one plugin, not an authorization for one plugin to call
 another - validated plugin-to-plugin actions are TASK-125.
 
+## Running an app: `qgis-sdk run`
+
+`qgis-sdk run [PATH] [--headless] [--once] [--grace SECONDS] [--title TITLE]
+[--qgis-prefix PATH]` starts the project as a standalone PyQGIS application
+(decision-52 point 3, decision-69):
+
+- it finds QGIS the way `test` and `dev` do - `--qgis-prefix`, then
+  `[tool.qgis-sdk] qgis-prefix`, then `QGIS_PREFIX_PATH`, then `qgis` on `PATH`,
+  then this environment - and runs the project with *that* interpreter, because
+  PyQGIS only imports into the Python it was built for;
+- it runs the project's own `<plugin>/__main__.py` as `-m <plugin>` in the
+  project root (the same entry `python -m <plugin>` and a built distribution's
+  console script use). A project without one - a Desktop plugin - runs through a
+  generated probe in a temporary directory that imports
+  `[tool.qgis-sdk] plugin` and calls the same `qgis_sdk.app.main`;
+- it never installs anything and never writes into the project: the install's
+  bindings and the SDK's own packages go on the child's `PYTHONPATH`, and the
+  temporary directory is removed when the app exits;
+- the flags are `qgis_sdk.app`'s, passed through unchanged: `--headless` (no
+  window, `ctx.ui` refuses by name), `--once` (start, deliver what is queued,
+  stop - the smoke run a CI job makes), `--grace` (the shutdown bound) and
+  `--title`;
+- the app's exit code is the command's, and a project that is not one or a
+  prefix without bindings is exit 2 with the reason, before anything starts.
+
+```sh
+qgis-sdk run                                   # a window
+qgis-sdk run --headless --once                 # CI: does this project start and stop?
+qgis-sdk run --grace 5 --title "Field tools"   # a shorter shutdown bound
+```
+
+`dev --mode standalone` is a different thing on purpose: it runs the plugin
+inside a bare `QgsApplication` through the generated dev host with *no* app
+window, for a fast page/action loop. `run` is the app host - the one that owns
+the window, the loops and the shutdown bound.
+
 ## Building an installable ZIP: `qgis-sdk build`
 
-`qgis-sdk build [PATH] [--out DIR] [--no-web] [--json]` writes
-`dist/<plugin>-<version>.zip` (version from `[project] version`) for Plugins >
-Manage and Install Plugins > *Install from ZIP* (decision-8: the command is
-argument parsing over `qgis_sdk_tools.bundle.build_plugin`). In order:
+`qgis-sdk build [PATH] [--target plugin|app] [--out DIR] [--no-web] [--json]`
+writes `dist/<plugin>-<version>.zip` (version from `[project] version`) for
+Plugins > Manage and Install Plugins > *Install from ZIP* (decision-8: the
+command is argument parsing over `qgis_sdk_tools.bundle.build_plugin`).
+`--target app` writes a pip-installable distribution instead, with a console
+script that starts the same application as a standalone PyQGIS app -
+`qgis_sdk_tools.bundle.app.build_app` and the section
+[The app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application)
+above. The ZIP, in order:
 
 1. **Validate.** `check_project` runs first - the same rules and output as
    `qgis-sdk check`, so a project without `[tool.qgis-sdk] plugin`
@@ -2761,6 +3048,15 @@ combined `CheckReport`, the vendored runtime version and the requirement it
 was resolved from (`None` under `VERSION003`), the web outcome
 (`none` / `built` / `prebuilt`), the declared externals and the vendored
 distributions; `--json` prints its `to_json()`.
+
+`--target app` answers with `AppBuildResult` instead - the distribution
+directory, the console script name, the same file/`CheckReport`/externals/
+vendoring fields, and `"target": "app"` in its JSON - so a script can tell the
+two targets apart without inspecting the path. The whole app-side contract
+(`build --target app`, its `pyproject.toml`, the generated launcher, the pip
+install and the installed launcher's own refusals) is
+`test_app_build.py`'s build-install harness; the native row that starts the
+installed app on a real QGIS is `test_app_native.py`.
 
 ### Packages the plugin needs: externals and vendoring
 

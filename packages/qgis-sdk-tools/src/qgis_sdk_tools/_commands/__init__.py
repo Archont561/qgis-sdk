@@ -18,6 +18,7 @@ from qgis_sdk_tools._commands import _check  # noqa: F401
 from qgis_sdk_tools._commands import _build  # noqa: F401
 from qgis_sdk_tools._commands import _test  # noqa: F401
 from qgis_sdk_tools._commands import _dev  # noqa: F401
+from qgis_sdk_tools._commands import _run  # noqa: F401
 from qgis_sdk_tools._commands import _targets  # noqa: F401
 from qgis_sdk_tools._commands import _plugin  # noqa: F401
 from qgis_sdk_tools._commands import _ui  # noqa: F401

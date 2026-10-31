@@ -31,6 +31,13 @@ Two modes, both explicit (decision-8):
     new ``qgis-sdk dev``; a failed reload leaves the endpoint answering 503 and
     says why (``devtools.serverdev``).
 
+``qgis-sdk run`` is the same discovery without QGIS Desktop: it starts the
+standalone app host - ``<install python> -m <plugin>``, the project's own
+``__main__.py``, or a generated probe for a project that has none - in the
+project root, with the install's PyQGIS on ``PYTHONPATH``. Nothing is generated
+in the project and nothing is installed; the flags are ``qgis_sdk.app``'s
+(``--headless``, ``--once``, ``--grace``, ``--title``).
+
 With a web UI the command starts the project's Vite dev server on loopback
 and hands its origin to the plugin through ``QGIS_SDK_DEV_SERVER``; the
 runtime's page view loads from there, with HMR, only when that variable is
@@ -43,7 +50,7 @@ import json
 import os
 import socket
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -59,7 +66,7 @@ from qgis_sdk_tools.artifacts import (
 from qgis_sdk_tools.project import ProjectConfig, QgisSdkProjectError, require_project
 from qgis_sdk_tools.scaffold.web import script_command
 
-from .installs import QgisInstall, sdk_import_paths
+from .installs import QgisInstall, sdk_import_paths, wants_headless
 from .testrun import package_manager_for
 
 __all__ = [
@@ -74,6 +81,7 @@ __all__ = [
     "WebServerPlan",
     "free_port",
     "inspect_project",
+    "plan_app",
     "plan_dev",
     "plan_web_server",
     "stage_host",
@@ -89,6 +97,7 @@ LOOPBACK: Final = "127.0.0.1"
 DESKTOP_PROBE_NAME: Final = "dev-desktop.py"
 STANDALONE_PROBE_NAME: Final = "dev-standalone.py"
 SERVER_PROBE_NAME: Final = "dev-server.py"
+APP_PROBE_NAME: Final = "run-app.py"
 REQUEST_NAME: Final = "dev-request.json"
 SERVER_START_SECONDS: Final = 60.0
 
@@ -365,6 +374,136 @@ def plan_dev(
         ),
         profile=profile,
     )
+
+
+def plan_app(
+    project: DevProject,
+    install: QgisInstall,
+    *,
+    env: Mapping[str, str],
+    workspace: Path,
+    gui: bool = True,
+    once: bool = False,
+    grace: float | None = None,
+    title: str | None = None,
+    toolkit_args: Sequence[str] = (),
+) -> DevPlan:
+    """The QGIS process that starts ``project`` as a standalone app.
+
+    The entry is the project's own ``<plugin>/__main__.py`` when it has one,
+    because that is the file ``qgis-sdk build --target app`` installs as a
+    launcher and ``python -m <plugin>`` runs - a project that customises its
+    argv should see the same thing from ``qgis-sdk run``. A project without one
+    gets a generated probe in ``workspace`` that imports ``config.spec`` and
+    calls the same ``qgis_sdk.app.main``, so a Desktop plugin can be tried as
+    an app without editing it.
+
+    ``gui`` opens the app's window; ``once`` starts it, delivers what is queued
+    and stops, which is the smoke run a CI job makes. ``toolkit_args`` go after
+    ``--``, so Qt sees them and the SDK does not.
+    """
+    _require_application(project)
+    if install.python is None:
+        raise QgisSdkDevError(
+            f"{install.prefix} has no Python interpreter, so it cannot run a "
+            "standalone app; the app host imports PyQGIS into the interpreter it "
+            "was built for"
+        )
+    workspace = Path(workspace)
+    root = project.root
+    package = root / project.plugin
+    flags: list[str] = []
+    if not gui:
+        flags.append("--headless")
+    if once:
+        flags.append("--once")
+    if grace is not None:
+        flags.extend(("--grace", f"{grace:g}"))
+    if title is not None:
+        flags.extend(("--title", title))
+    entry = package / "__main__.py"
+    if entry.is_file():
+        argv = (str(install.python), "-m", project.plugin, *flags)
+        where = f"{project.plugin} from {entry}"
+    else:
+        probe = workspace / APP_PROBE_NAME
+        probe.write_text(_app_probe(project), encoding="utf-8", newline="\n")
+        argv = (str(install.python), str(probe), *flags)
+        where = (
+            f"a generated probe for {project.config.spec} "
+            f"(the project has no {project.plugin}/__main__.py)"
+        )
+    if toolkit_args:
+        argv = (*argv, "--", *toolkit_args)
+    process_env = install.environment(
+        env,
+        extra_paths=(root, *sdk_import_paths()),
+        headless=not gui or wants_headless(env),
+    )
+    note = (
+        f"app: {install.python} ({install.source}) running {where}, "
+        f"{'with a window' if gui else 'headless'}"
+    )
+    return DevPlan(
+        mode="app",
+        argv=argv,
+        cwd=root,
+        env=process_env,
+        notes=(
+            note,
+            (
+                "stop: close the window or press Ctrl+C; the app waits for "
+                "running jobs, names every loop it stops, then exits QGIS once"
+                if gui
+                else "stop: Ctrl+C; the app waits for running jobs, names every loop "
+                "it stops, then exits QGIS once"
+            ),
+        ),
+        profile=None,
+    )
+
+
+def _require_application(project: DevProject) -> None:
+    """Refuse a project whose only host is the server: it declares no application.
+
+    A server plugin's declarations are hooks QGIS Server calls; there is no
+    action, no surface and no page for an app host to show, so starting one would
+    present an empty window (decision-52 point 1).
+    """
+    hosts = project.config.hosts
+    if {"desktop", "app"} & set(hosts):
+        return
+    raise QgisSdkDevError(
+        f"{project.plugin} declares hosts = [{', '.join(repr(h) for h in hosts)}], "
+        "so it is not an application: a server plugin's hooks are called by QGIS "
+        "Server, not by an app. Declare `desktop` or `app` in "
+        "`[tool.qgis-sdk] hosts` and keep the hooks in a module the server loads "
+        "(decision-52 point 1)"
+    )
+
+
+def _app_probe(project: DevProject) -> str:
+    """The probe that starts a project without an app entry of its own."""
+    module, _, attribute = project.config.spec.partition(":")
+    return APP_PROBE.format(module=module, attribute=attribute)
+
+
+APP_PROBE: Final = '''"""Starts one project as a standalone app; written by `qgis-sdk run`."""
+
+from __future__ import annotations
+
+import importlib
+
+from qgis_sdk.app import main
+
+
+def _application():
+    return getattr(importlib.import_module({module!r}), {attribute!r})
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(_application()))
+'''
 
 
 def _prepend_path(entry: str, existing: str | None) -> str:

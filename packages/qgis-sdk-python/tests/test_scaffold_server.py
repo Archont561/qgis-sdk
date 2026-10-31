@@ -98,8 +98,8 @@ def test_a_server_project_refuses_what_only_a_desktop_host_provides(
 
 
 def test_an_unknown_host_is_refused_by_name() -> None:
-    with pytest.raises(QgisSdkScaffoldError, match="Invalid host 'app'"):
-        ScaffoldOptions.resolve("demo_server", host="app")
+    with pytest.raises(QgisSdkScaffoldError, match="Invalid host 'mobile'"):
+        ScaffoldOptions.resolve("demo_server", host="mobile")
 
 
 # -- what the plan says ------------------------------------------------------------

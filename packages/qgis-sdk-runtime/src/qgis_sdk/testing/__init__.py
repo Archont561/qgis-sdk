@@ -8,6 +8,7 @@ because they implement its service protocols and must version with them
 ``qgis_sdk_tools.testing``.
 """
 
+from .app import FakeAppBackend, FakeAppSurface, FakeLoop
 from .fakes import (
     FakeAlgorithms,
     FakeLayers,
@@ -39,8 +40,11 @@ from .ui import (
 __all__ = [
     "BuiltSurface",
     "FakeAlgorithms",
+    "FakeAppBackend",
+    "FakeAppSurface",
     "FakeFiles",
     "FakeLayers",
+    "FakeLoop",
     "FakeNetworkTransport",
     "FakeProcessing",
     "FakeProject",

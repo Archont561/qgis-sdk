@@ -125,11 +125,11 @@ class QgisSdkPlugin(_ActionRegistry):
     """Collect functions explicitly and lower them to an SDK plugin class."""
 
     def __init__(self, *, id: str | None = None, title: str | None = None) -> None:
+        try:
+            module = sys._getframe(1).f_globals.get("__name__")
+        except (AttributeError, ValueError):  # pragma: no cover - no frame to read
+            module = None
         if id is None:
-            try:
-                module = sys._getframe(1).f_globals.get("__name__")
-            except (AttributeError, ValueError):
-                module = None
             if not isinstance(module, str) or module == "__main__":
                 raise QgisSdkDeclarationError(
                     "cannot derive plugin id from the declaring module; pass id= explicitly"
@@ -145,6 +145,10 @@ class QgisSdkPlugin(_ActionRegistry):
         super().__init__()
         self.id = id
         self.title = title
+        #: The module that declared this application, kept because a host needs
+        #: it for the paths a declaration names (a toolbar icon lives beside
+        #: the plugin, not beside the runtime) - `qgis_sdk.app.run` fills it.
+        self.module = module if isinstance(module, str) else None
         self._surfaces: list[type[Surface]] = []
         self._providers: list[Provider] = []
         self._jobs: Any = None
@@ -340,6 +344,8 @@ class QgisSdkPlugin(_ActionRegistry):
             "surfaces": tuple(self._surfaces),
             "providers": tuple(self._providers),
         }
+        if self.module is not None:
+            members["__module__"] = self.module
         jobs = self.jobs
         if jobs is not None:
             members["jobs"] = jobs

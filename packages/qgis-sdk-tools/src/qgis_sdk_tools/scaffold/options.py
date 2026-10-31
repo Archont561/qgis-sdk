@@ -40,7 +40,7 @@ RESERVED_PACKAGE_NAMES: Final = frozenset(
 WebFramework = Literal["vanilla", "react"]
 WebPlacement = Literal["dialog", "dock"]
 PackageManager = Literal["npm", "pnpm", "bun"]
-HostKind = Literal["desktop", "server"]
+HostKind = Literal["desktop", "server", "app"]
 
 HOSTS: Final[tuple[str, ...]] = get_args(HostKind)
 DEFAULT_HOST: Final = "desktop"
@@ -101,13 +101,15 @@ class ScaffoldOptions:
     exposes it as an action, with a starter test over the SDK fakes.
     """
     host: str = DEFAULT_HOST
-    """The host this project is written for: ``"desktop"`` or ``"server"``.
+    """The host this project is written for: ``"desktop"``, ``"server"`` or ``"app"``.
 
     The choice decides what the starter declares - an application with actions
-    and surfaces, or QGIS Server hooks and a ``serverClassFactory`` - and which
-    flags are refused: a page or a dialog needs `iface`, and Processing exists
-    only inside QGIS Desktop, so ``--web``, ``--ui`` and ``--algorithm`` are
-    Desktop-only (decision-52).
+    and surfaces, QGIS Server hooks and a ``serverClassFactory``, or an
+    application whose entry is ``main()`` in ``<plugin>/__main__.py`` - and
+    which flags are refused. A dialog, a bound toolbar action and Processing
+    need a window and a live application, which the server host does not have;
+    a page (``--web``) still belongs to the Desktop host, because that is where
+    the bridge's view is placed today (decision-52 point 3).
     """
     ui: str | None = None
     """``"native"`` for a bound Dialog in pure PyQt (decision-55), else ``None``.
@@ -167,6 +169,18 @@ def _host(host: str, *, web: str | None, ui: str | None, algorithm: bool) -> str
     """Check ``--host`` and the flags that only one host makes sense of."""
     chosen = _choice(host, HOSTS, "host")
     if chosen == "desktop":
+        return chosen
+    if chosen == "app":
+        # A standalone app has a window and a live QgsApplication, so a dialog,
+        # a toolbar binding and Processing all work there. A page does not: it
+        # is placed through the Desktop adapter, which the app host does not
+        # use (decision-52 point 3 keeps the bridge, not the placement).
+        if web is not None:
+            raise QgisSdkScaffoldError(
+                "a web UI (--web) needs the desktop host: the page is placed "
+                "through the Desktop adapter's iface, which a standalone app does "
+                "not have - declare both hosts and keep the page for the Desktop one"
+            )
         return chosen
     for label, given in (("A web UI (--web)", web), ("--ui native", ui)):
         if given is not None:

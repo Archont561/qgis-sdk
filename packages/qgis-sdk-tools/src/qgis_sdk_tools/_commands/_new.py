@@ -74,7 +74,9 @@ def new(
             help=(
                 "desktop (default): QGIS loads classFactory. server: QGIS Server "
                 "loads serverClassFactory and the starter declares filters, "
-                "services and access hooks instead of actions."
+                "services and access hooks instead of actions. app: a standalone "
+                "PyQGIS application - `python -m <package>` or `qgis-sdk run` - "
+                "with its own window and no plugin lifecycle."
             ),
         ),
     ] = "desktop",

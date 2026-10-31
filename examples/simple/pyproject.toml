@@ -18,6 +18,11 @@ dev = ["qgis-sdk-tools>=0.8,<0.9"]
 # The application QGIS runs; `build` and `dev` bind classFactory through
 # qgis_sdk.adapters.desktop.host().
 plugin = "simple.plugin:app"
+# Both hosts the example is qualified on (decision-52): QGIS Desktop loads
+# classFactory and places the page in web/ as a dock, and the same declaration
+# runs as a standalone app (`python -m simple`, `qgis-sdk run`) - one class, two
+# hosts. `qgis-sdk build --target app` turns it into an installable launcher.
+hosts = ["desktop", "app"]
 qgis-minimum-version = "4.0"
 experimental = true
 # Where QGIS is, when `qgis-sdk test` and `qgis-sdk dev` should not discover it

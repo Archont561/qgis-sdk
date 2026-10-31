@@ -38,7 +38,7 @@ class QgsJobPump:
 
     #: ``__weakref__`` is not decoration: PyQt6 keeps a weak reference to a
     #: bound slot, and connecting one on a slotted object fails without it.
-    __slots__ = ("__weakref__", "_service", "_timer")
+    __slots__ = ("__weakref__", "_name", "_service", "_timer")
 
     def __init__(
         self,
@@ -46,13 +46,20 @@ class QgsJobPump:
         *,
         interval_ms: int = DEFAULT_INTERVAL_MS,
         parent: Any | None = None,
+        name: str = "job-pump",
     ) -> None:
         if interval_ms <= 0:
             raise ValueError(f"interval_ms must be positive, not {interval_ms!r}")
+        self._name = name
         self._service = service
         self._timer = QTimer(parent)
         self._timer.setInterval(interval_ms)
         self._timer.timeout.connect(self._tick)
+
+    @property
+    def name(self) -> str:
+        """What this loop is called in a host's shutdown report (decision-69 §4)."""
+        return self._name
 
     @property
     def service(self) -> JobService:
@@ -86,4 +93,4 @@ class QgsJobPump:
 
     def __repr__(self) -> str:
         state = "running" if self.running else "stopped"
-        return f"QgsJobPump({state}, {self.interval_ms}ms)"
+        return f"QgsJobPump({self._name!r}, {state}, {self.interval_ms}ms)"
