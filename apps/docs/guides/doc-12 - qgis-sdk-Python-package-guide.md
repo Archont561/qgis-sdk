@@ -1810,6 +1810,19 @@ transaction, `atomic=False` writes row by row and leaves the rows it already
 wrote behind, so a test can assert the outcome says so. No operation in this SDK
 promises atomicity across layers or providers.
 
+The id `add()` returns is a buffer id, and it is not promised to be the stored
+one. QGIS numbers a pending feature with a temporary negative id and asks the
+provider for a real one when the buffer commits, so a row added on the OGR
+provider has one id inside the session and another in the file afterwards; the
+fake keeps the id it handed out, because it has no provider to ask.
+`EditOutcome.feature_ids` therefore names the ids the buffer held - the ones
+`add()` returned - and a caller that needs the stored id reads the row back by
+its attributes, as the contract test does. This is the provider boundary worth
+designing against: it is also why the outcome reports `applied` as a count
+rather than promising a per-row mapping from a pending id to a stored one.
+Where `commit()` leaves a partially written set behind, the way to find it is a
+query, not a rollback.
+
 ### Why there is no `with` statement, and no `iter_features()`
 
 Two conveniences were considered for 0.10.0 and deliberately left out.

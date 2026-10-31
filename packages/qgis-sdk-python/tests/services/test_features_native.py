@@ -28,9 +28,15 @@ def _features(services: Services):
     return services.features
 
 
+def _only(page):
+    """The single feature a page holds, so the row meant is named, not assumed."""
+    assert len(page.items) == 1, [feature.id for feature in page.items]
+    return page.items[0]
+
+
 def test_the_three_encodings_describe_the_same_point(native_services: Services) -> None:
     features = _features(native_services)
-    layer_id = native_services.layers.open_vector(native_services.dataset).id
+    layer_id = native_services.fixture_layer
 
     wkb = features.feature(layer_id, 1, encoding="wkb")
     wkt = features.feature(layer_id, 1, encoding="wkt")
@@ -52,7 +58,7 @@ def test_a_page_of_wkb_round_trips_through_the_provider(
     native_services: Services,
 ) -> None:
     features = _features(native_services)
-    layer_id = native_services.layers.open_vector(native_services.dataset).id
+    layer_id = native_services.fixture_layer
 
     page = features.page(layer_id, FeatureQuery(limit=10, encoding="wkb"))
     again = features.page(layer_id, FeatureQuery(limit=10, encoding="wkb"))
@@ -76,7 +82,19 @@ def test_a_committed_edit_is_in_the_file_a_second_reader_opens(
         session.close()
 
     assert outcome.committed is True
+    assert outcome.applied == 1
+    # QGIS renumbers a pending add from the provider when the buffer commits, so
+    # the id `add` returned is not the stored one; the returned ids are the ones
+    # the buffer held (doc-12).
     assert added in outcome.feature_ids
+    stored = _only(
+        features.page(
+            layer_id,
+            FeatureQuery(
+                limit=10, encoding="wkt", expression="\"value\" = 'committed'"
+            ),
+        )
+    )
 
     # A fresh reader over the same file sees the row: the commit reached the
     # provider rather than only the layer's buffer.
@@ -85,5 +103,5 @@ def test_a_committed_edit_is_in_the_file_a_second_reader_opens(
     path = Path(native_services.work_directory or "") / "editable.geojson"
     reader = QgsVectorLayer(str(path), "reopened", "ogr")
     assert reader.isValid(), path
-    assert reader.featureCount() == 2
-    assert any(feature["value"] == "committed" for feature in reader.getFeatures())
+    assert reader.featureCount() == 4
+    assert reader.getFeature(stored.id).attribute("value") == "committed"

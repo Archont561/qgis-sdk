@@ -59,6 +59,30 @@ def test_native_failure_retains_status_and_annotates_log(tmp_path: Path):
     assert "FAIL 20%25continued" in result.stdout
 
 
+def test_native_failure_names_every_failed_test_before_the_log_tail(tmp_path: Path):
+    """The tail is the last few tracebacks; the summary names all of them."""
+    command = (
+        "import sys; print('running'); "
+        "print('FAILED tests/test_a.py::test_one - AssertionError: 1 != 2'); "
+        "print('FAILED tests/test_b.py::test_two - ValueError'); "
+        "print('24 failed, 321 passed'); sys.exit(1)"
+    )
+    result = run_ci("native", "--", sys.executable, "-c", command, cwd=tmp_path)
+    assert result.returncode == 1
+    lines = result.stdout.splitlines()
+    named = next(
+        line
+        for line in lines
+        if line.startswith("::error title=native layers: 2 failed")
+    )
+    assert "tests/test_a.py::test_one" in named and "tests/test_b.py::test_two" in named
+    # Both are inside one annotation, in the order pytest reported them.
+    assert named.index("test_one") < named.index("test_two")
+    # The annotation carries the summary lines and their reasons, not the run.
+    assert "running" not in named
+    assert named.count("%0A") == 1
+
+
 def test_annotations_limit_coverage_and_report_failed_steps(tmp_path: Path):
     log = tmp_path / "coverage-output.log"
     log.write_text("\n".join(f"ERROR case {n}" for n in range(45)), encoding="utf-8")

@@ -86,6 +86,23 @@ def annotation(title: str, text: str) -> None:
     print(f"::error title={title}::{body}")
 
 
+def failures(text: str, limit: int = 60) -> list[str]:
+    """The ``FAILED`` lines of a pytest run, without the assertion bodies.
+
+    The tail of a native run is the last few tracebacks, so a job with twenty
+    failures costs a rerun per failure: the annotation cap keeps the first ones
+    and the ones that stay readable are the ones nobody needed. The summary block
+    pytest prints at the end names every test that failed, which is the part to
+    surface first.
+    """
+    named = [
+        line.strip()
+        for line in text.splitlines()
+        if line.startswith(("FAILED ", "ERROR "))
+    ]
+    return named[:limit]
+
+
 def native(command: list[str]) -> int:
     log = Path("native-layers.log")
     status = run_logged(command, log)
@@ -108,6 +125,9 @@ def native(command: list[str]) -> int:
         errors="replace",
         check=False,
     )
+    named = failures(text)
+    if named:
+        annotation(f"native layers: {len(named)} failed", "\n".join(named))
     annotation("native layers: environment", "\n".join(probe.stdout.splitlines()[-20:]))
     annotation("native layers: pytest", "\n".join(text.splitlines()[-60:]))
     return status

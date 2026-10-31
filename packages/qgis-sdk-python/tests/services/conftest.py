@@ -93,6 +93,11 @@ class Services:
     #: the fixture so a commit writes to a file the test owns; the fake declares
     #: its own layer, so nothing on disk is touched.
     editable_layer: Callable[[], str] | None = None
+    #: The id of the layer holding the reference points (ids 1-3, values a-c).
+    #: The fakes key layers by name; a native layer's id is the one QGIS gave it
+    #: when it opened the file, so a contract test names the layer the backend
+    #: reports instead of assuming the fake's key is an id.
+    fixture_layer: str = FIXTURE_NAME
 
 
 def _native_available() -> bool:
@@ -274,6 +279,7 @@ def _native_services() -> Services:
     from qgis_sdk.adapters.qgis import NativeFeatures
 
     features = NativeFeatures(layers, scope)
+    fixture_layer = layers.open_vector(FIXTURE_DATASET).id
     editable_copy = work_directory / "editable.geojson"
     shutil.copyfile(FIXTURE_DATASET, editable_copy)
     editable_id = layers.open_vector(editable_copy).id
@@ -281,6 +287,7 @@ def _native_services() -> Services:
         files=files,
         features=features,
         editable_layer=lambda: editable_id,
+        fixture_layer=fixture_layer,
         algorithms=NativeAlgorithms(
             layers, scope, working_directory=work_directory, files=files
         ),

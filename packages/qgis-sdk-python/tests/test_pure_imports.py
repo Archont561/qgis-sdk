@@ -212,6 +212,22 @@ def test_pure_public_imports_succeed_with_native_modules_forbidden(
     assert result.stdout.strip() == "native-free"
 
 
+def test_every_export_of_the_adapters_package_has_a_module_behind_it() -> None:
+    """``__all__`` and the lazy table are one contract, checked without QGIS.
+
+    A name listed for export but missing from ``_EXPORTS`` raises ``KeyError``
+    the first time somebody asks for it - which is a plugin that fails to start,
+    not a typo a linter sees. The two lists are compared here so the next adapter
+    added to the package cannot land half-wired.
+    """
+    from qgis_sdk.adapters import qgis as package
+
+    exports = set(package.__all__)
+    table = set(package._EXPORTS)
+    assert exports - table == set(), "listed for export, no module to import"
+    assert table - exports == set(), "importable, but not listed for export"
+
+
 def test_the_server_adapter_imports_where_qgis_is_not(tmp_path: Path) -> None:
     """A server host must be checkable without Qt Widgets or Processing.
 
