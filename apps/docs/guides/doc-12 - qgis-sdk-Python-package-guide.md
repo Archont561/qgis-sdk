@@ -509,7 +509,10 @@ is a `StrEnum`. `ctx.host.gui` is `False` on a server, which is the honest
 answer to "may I open a window here?". A view inherits the host of the plugin
 context that opened it. All three hosts are implemented - Desktop below, the
 server's hook layer in the next section, and the standalone app after it - and a
-capability any of them lacks still refuses by name (decision-39).
+capability any of them lacks still refuses by name (decision-39). The reference
+example demonstrates both of the hosts 0.9.0 adds: `examples/simple` carries an
+app entry beside its Desktop declaration, and `examples/server` is its server
+variant - the same point fixture, answered by one OGC service.
 
 ### The server host: the hooks QGIS Server calls
 
@@ -3239,6 +3242,256 @@ published for the bridge, and no `ts-v*` tag exists.
   `package.json` carries `0.2.0`. Verify with
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
+
+## 0.9.0 migration notes
+
+`0.9.0` closes the m-8 milestone: the one plugin class
+[decision-52](../../../backlog/decisions/decision-52%20-%20Run-one-plugin-class-on-three-hosts-QGIS-Desktop-QGIS-Server-and-standalone-PyQGIS-apps.md)
+described now runs on three hosts - QGIS Desktop, QGIS Server and a standalone
+PyQGIS app - and a job's whole body now runs on a worker
+([decision-65](../../../backlog/decisions/decision-65%20-%20Run-registered-jobs-on-workers-with-owner-scoped-named-submission.md)).
+It is a **Python-only minor release**: `@archont561/qgis-sdk` is not released
+with it, because none of it changes the bridge a page talks to
+([decision-25](../../../backlog/decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+
+Nothing a 0.8 project does today stops working, with one deliberate exception: a
+job written as `async def` with `await ctx.workers.offload(...)` is refused at
+bind time with the migration it needs. Everything else is additive - `hosts`
+defaults to `["desktop"]`, a plugin without server hooks or an app entry never
+reaches the new code, and a capability a host does not have still refuses by
+name ([decision-39](../../../backlog/decisions/decision-39%20-%20Expose-optional-services-as-capability-attributes-that-refuse-by-name.md)).
+
+### One plugin class, three declared hosts
+
+`[tool.qgis-sdk] hosts` says which hosts a plugin runs on: `desktop` (loaded by
+QGIS through `classFactory`), `server` (loaded by QGIS Server through
+`serverClassFactory`) and `app` (started by `qgis_sdk.app.run`).
+
+```toml
+[tool.qgis-sdk]
+plugin = "field_tools.plugin:app"
+hosts = ["desktop", "app"]          # desktop | server | app; default ["desktop"]
+```
+
+- The set changes nothing about how the class is written. It changes what
+  `check` reports: `HOST001` for a Desktop-only declaration in a project that
+  does not declare `desktop`, `HOST002` for a hook imported from
+  `qgis_sdk.server` in a project that does not declare `server`, and `HOST003`
+  (a warning) when the QGIS this interpreter can see was built without QGIS
+  Server.
+- `ctx.host` is the host that built the context - `Host.DESKTOP`,
+  `Host.SERVER` or `Host.APP`, compared as strings - and is never inferred from
+  an `iface`, a `QgsApplication` or an environment variable. `ctx.host.gui` is
+  `False` on a server, which is the honest answer to "may I open a window here?".
+- A capability a host does not have refuses by name rather than handing over a
+  half-built service: the app host has no `ctx.desktop`, and the server host has
+  no `ui`, `views`, `workers` or algorithm registry.
+- `qgis-sdk new --host desktop|server|app` writes the starter for the chosen
+  host and refuses by name what that host cannot honour (`--web` outside
+  Desktop, `--ui native` and `--algorithm` on the server).
+
+To migrate: a Desktop-only project needs no change. A project that gains a
+second host adds it to `hosts` and adds that host's entry
+(`serverClassFactory` in `<plugin>/__init__.py`, `<plugin>/__main__.py` for the
+app) - the class itself stays as it is.
+
+### A QGIS Server plugin declares hooks, not actions
+
+A request has no window and no event loop, so a server plugin declares three
+kinds of hook over the same plain-function shape a job has, and QGIS Server's
+own entry imports one factory from the package:
+
+```python
+from qgis_sdk.server import ServerContext, ServerRequest, ServerResponse, access_control, filter, service
+
+
+@filter(priority=10)                          # before the services run
+def add_version(ctx: ServerContext, request: ServerRequest, response: ServerResponse):
+    return None if request.param("VERSION") else request.with_params(VERSION="1.3.0")
+
+
+@service(name="SDKDEMO", version="1.0.0")     # answers SERVICE=SDKDEMO
+def demo(ctx: ServerContext, request: ServerRequest) -> ServerResponse:
+    return ServerResponse.json({"service": "SDKDEMO"})
+
+
+@access_control(priority=20)                  # asked once per requested layer
+def only_public(ctx: ServerContext, request: ServerRequest, layer: str) -> bool:
+    return layer != "secret"
+```
+
+```python
+# <plugin>/__init__.py - what QGIS Server imports and calls
+from qgis_sdk.server import ServerHooks
+
+from .plugin import add_version, demo, only_public
+
+HOOKS = ServerHooks((add_version, demo, only_public))
+
+
+def serverClassFactory(serverIface):
+    from qgis_sdk.adapters.qgis.server import QgsServerHost
+
+    return QgsServerHost(HOOKS, serverIface).register()
+```
+
+- **What a hook is handed.** A `ServerContext` carrying `project`, `layers`,
+  `log` and a *request-scoped* `jobs`, plus the plain `ServerRequest` and
+  `ServerResponse` models - never a `QgsServerInterface`, which cannot leave the
+  adapter. Where the deployment loads no project, those capabilities refuse by
+  name.
+- **Order is stated, not sorted.** Filters run priority ascending, then the
+  plugin's declaration order, then the order of each included plugin
+  ([decision-69](../../../backlog/decisions/decision-69%20-%20Order-host-hooks-bound-the-app-host-shutdown-and-guard-gui-bound-capabilities-at-runtime.md));
+  `ServerHooks` refuses at startup what QGIS would refuse at the first request.
+- **A refusal is a 403, not a filtered map.** An access-control hook returns
+  `False` and the host answers `ServerResponse.denied` naming the layer.
+- **Work dies with the response.** `ctx.jobs` on this host is derived over the
+  request's scope: a job a hook submits is abandoned when the response is sent,
+  and work that must outlive the request says so with `ctx.jobs.plugin`.
+- **The build has to have it.** QGIS Server needs a QGIS built with
+  `WITH_SERVER=ON` plus its Python bindings - the Debian/Ubuntu `qgis-server`
+  with `python3-qgis`, the official installers, or a source build. conda-forge
+  passes `-D WITH_SERVER=FALSE`, so a conda QGIS has no `qgis.server`; `check`
+  reports `HOST003` there, and `qgis-sdk test --target server` refuses the target
+  by name. QGIS 3.44 LTS is supported on this host alongside 4.x
+  ([decision-70](../../../backlog/decisions/decision-70%20-%20Support-QGIS-3-44-LTS-on-both-hosts-while-4-x-is-not-on-apt.md)).
+- **What you run.** `qgis-sdk test` proves the hooks against
+  `qgis_sdk.testing.FakeServerInterface` with no QGIS at all, `test --target
+  server` runs the same plugin in-process under a real `QgsServer`, `dev --host
+  server` reloads on save, and `build` writes `metadata.txt` with `server=True`
+  and keeps the `serverClassFactory` the source already carries
+  ([decision-43](../../../backlog/decisions/decision-43%20-%20Generate-the-QGIS-host-artifacts-in-build-and-dev-instead-of-scaffolding-them.md)).
+
+See [the server host](#the-server-host-the-hooks-qgis-server-calls) above for the
+full mapping and `examples/server` for the reference example's server variant:
+the same fixture `examples/simple` opens through QGIS, answered as JSON over one
+OGC service.
+
+### A standalone app owns the `QgsApplication`
+
+`qgis_sdk.app.run(app, gui=..., argv=..., grace=...)` is the host that constructs
+`QgsApplication` instead of being called by one, and `qgis_sdk.app.main(app,
+argv)` is the launcher that reads the flags. The class does not change: the same
+`QgisSdkPlugin`, the same actions, the same jobs, the same bridge.
+
+```python
+# <plugin>/__main__.py - `python -m <plugin>`, `qgis-sdk run` and a built
+# distribution's console script all call this.
+from qgis_sdk.app import main as run_app
+
+from .plugin import app
+
+
+def main(argv=None) -> int:
+    return run_app(app, argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+- `run(app)` has no window and no `ctx.ui`; `run(app, gui=True)` gives a
+  `QMainWindow` with one `QgsMapCanvas`, a toolbar and a status bar, and
+  `@toolbar`/`@menu` bindings and `Dialog`/`Dock` surfaces attach to it. The GUI
+  flag also decides Qt's `GUIenabled`, which is fixed when `QgsApplication` is
+  constructed - hence an argument to `run`, not a property of the plugin.
+- `ctx.host` is `Host.APP` in both modes and `ctx.desktop` refuses by name:
+  there is no `QgisInterface`, and the host does not fake one.
+- Shutdown is bounded and named. `AppSession.stop()` stops every loop the host
+  started (naming the ones that were running), waits up to `grace` for running
+  jobs, names and cancels the stragglers, unloads the runtime and calls
+  `exitQgis` exactly once; `ShutdownReport` carries `stopped`, `loops`,
+  `drained`, `abandoned`, `grace_seconds`, `elapsed` and `exited`
+  ([decision-69](../../../backlog/decisions/decision-69%20-%20Order-host-hooks-bound-the-app-host-shutdown-and-guard-gui-bound-capabilities-at-runtime.md)).
+- `qgis-sdk run` discovers QGIS the way `dev` does and starts the project's own
+  `<plugin>/__main__.py` with the install's bindings on the child's path;
+  `build --target app` produces an installable distribution whose
+  `[project.scripts]` launcher probes the declared externals and then calls
+  `qgis_sdk.app.main`. A wrong interpreter says "this interpreter cannot import
+  PyQGIS" and exits 2 instead of raising from three frames down.
+
+See [the app host](#the-app-host-the-same-plugin-as-a-standalone-pyqgis-application)
+above for the flag table, the lifecycle and the build layout;
+`examples/simple/simple/__main__.py` is the reference example's app entry.
+
+### Jobs run whole bodies on workers
+
+A job is a plain `def` whose first parameter is the `WorkerContext` the runtime
+injects. Since 0.9.0 the driving thread only validates, submits and delivers: the
+whole body runs on a worker, so a blocking call is simply called and there is
+nothing to `await`. `async def` and a `JobContext` annotation are refused at bind
+time, each naming the migration.
+
+- **The worker context is small on purpose.** `progress` and `cancellation`; no
+  `project`, `layers`, `ui`, `algorithms`, `network`, `files` or `workers`.
+  Reading one raises `QgisSdkUnsupportedCapabilityError` with the reason (a Qt
+  object touched from another thread crashes QGIS instead of raising). Prepare
+  GUI state before `delay`, pass plain values in, and apply GUI changes in
+  `on_success`/`on_failure`/`on_cancelled`, which arrive on the driving thread.
+- **Names, not function objects.** A plugin declares what it exposes -
+  `app.jobs = {"add": add}`, a sequence whose names derive from the functions,
+  or `@app.job(...)` - and an action submits with
+  `ctx.jobs.add.delay(left=1, right=2)`. Unknown keywords are refused by `delay`
+  before anything runs; an unknown name is an `AttributeError` naming what the
+  plugin does declare. `ctx.jobs.parent` is now `ctx.jobs.plugin`.
+- **Handles come back, and actions may return one.** An action that only starts
+  work returns the `JobHandle` it submitted; `ctx.jobs.watch(handle, ...)`
+  subscribes all four events to the caller's scope in one call, and
+  `ctx.jobs.after(handle)` declares ordering.
+- **Two guards, neither a proof of thread safety.** `check` reads the source:
+  `JOB001` for GUI state reached from a body, `JOB002` for a context attribute a
+  `WorkerContext` refuses, `JOB003` (warning) for a by-name import it cannot
+  follow. At runtime the context remembers which thread assembled it: reading a
+  GUI-bound capability from another thread warns once per capability and thread
+  and raises in a development session.
+
+[The 0.8-to-0.9 job migration](#migrating-a-08-job-to-09) above is the
+step-by-step list, with the before-and-after of an `await
+ctx.workers.offload(...)` body.
+
+### Each job is one `QgsTask` on Desktop
+
+On a QGIS Desktop host the worker backend is `QgsTaskWorkers`: each job body is
+one `QgsTask` under `QgsApplication.taskManager()`, so the job is a single entry
+in the QGIS task bar whose title is the job's `title` and whose bar follows
+`ctx.progress`. Pressing cancel files the same cooperative request
+`handle.cancel()` does - the body stops when it next polls `ctx.cancellation`,
+and nothing is interrupted. There are no sub-tasks and no parent task, and a
+Processing algorithm keeps being the `QgsTask` Processing already started. A
+host without a task manager keeps `ThreadPoolWorkers`; delivery does not change
+between them.
+
+### The bridge does not move
+
+Hosts and scheduling are host-side: a web view in a standalone app uses the same
+`@archont561/qgis-sdk` release, the same generated catalogue and the same host
+manifest as one in QGIS Desktop, and a job handle still reaches a page as
+`{id, status}` - an ID and a state, not a live subscription. No file under
+`packages/qgis-sdk-typescript` changes in this release and no npm version is
+consumed with it - `qgis-sdk bridge generate` renders the same catalogue a
+0.8.0 project already ships.
+
+### Checklist for a 0.8 project
+
+1. **Nothing, if it is a Desktop plugin with 0.8-style jobs.** Add `hosts` only
+   when the plugin gains a second host.
+2. **Rewrite a job that offloads.** `async def` + `await ctx.workers.offload(work)`
+   becomes a plain `def` with the work inline and `ctx: WorkerContext`. Both old
+   shapes are refused when the plugin starts, with the message naming this
+   section.
+3. **Name the jobs the plugin exposes** (`app.jobs`, `@app.job`) and submit with
+   `ctx.jobs.<name>.delay(...)`; move `ctx.jobs.bind(fn)` call sites and
+   whatever needs to survive a window to `ctx.jobs.plugin.<name>`.
+4. **Run `qgis-sdk check`.** `JOB001`/`JOB002` are errors, `JOB003` a warning;
+   `HOST001`/`HOST002` appear only if `hosts` disagrees with a declaration the
+   project keeps.
+5. **Adopting a host:** `new --host server|app` for a new project, or add the
+   entry (`serverClassFactory`, `__main__.py`) and the host to `hosts` for an
+   existing one; `build` writes `server=True` and `--target app` writes the
+   launcher, so no hand-written `metadata.txt` or `classFactory` appears in
+   either case.
+
 
 ## 0.8.0 migration notes
 
