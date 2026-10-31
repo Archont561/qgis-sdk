@@ -34,6 +34,19 @@ Explicit release gate for the 0.9.0 hosts and worker-first named jobs release (m
 - [x] #5 The expected zero bridge delta is confirmed rather than assumed: no file under packages/qgis-sdk-typescript changed, no npm version is consumed, and HOST_FINGERPRINT and the plugin-description contract version still agree across both languages. A changed wire requires a separate contract/version decision and revised gate.
 <!-- AC:END -->
 
+## Merge and the `autorelease` gate (2026-10-31)
+
+PR #158 merged as `63b6d108` with all six CI rows green (the `QGIS 3.44
+LTS` row had twice failed on a qgis.org TLS handshake, not on the code;
+it now retries, and doc-14 records that). The `autorelease` run on the
+merge commit, `41222400860`, is the last outstanding piece of evidence:
+its *Run quality gate* step - the one failing with exit 139 since
+`bc3fb1f` - succeeded, as did the dry-run packaging check. With that the
+TASK-82 lifetime defect is closed end to end.
+
+AC 2 (the 0.9.0 stamp) and AC 4 (publishing approval) remain open: both
+wait on explicit authorization, and no manifest has been touched.
+
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->

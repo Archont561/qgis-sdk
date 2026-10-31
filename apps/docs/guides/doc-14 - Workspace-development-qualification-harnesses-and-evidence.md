@@ -1905,6 +1905,12 @@ publishing wait for an explicit authorization.
   The row now retries with `Acquire::Retries=5` and one step-level
   retry, then fails as before; it went green on the retry with all six
   rows passing.
+- **The `autorelease` quality gate is green again (the defect's last
+  evidence).** PR #158 merged as `63b6d108`, and the `autorelease` run on
+  that push (`41222400860`) passed every step including *Run quality
+  gate* - the step that had been failing with exit 139 on `f466d86`,
+  `7319794` and `bc3fb1f` - plus the dry-run packaging check. The
+  whole-suite crash does not reproduce on `main`.
 - **Not run here, and where it is run.** The native layers:
   `tests/test_jobs_tasks_native.py` and the rest of `-m native` in
   `Linux checks`, the pure-layer coverage job in `Linux coverage`, and
