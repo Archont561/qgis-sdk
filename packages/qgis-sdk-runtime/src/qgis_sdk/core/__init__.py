@@ -9,6 +9,7 @@ from .contexts import (
     WorkerContext,
 )
 from .host import Host
+from .loops import LoopRegistry, LoopState, NamedLoop
 from .runtime import (
     PluginRuntime,
     PluginRuntimeState,
@@ -32,6 +33,9 @@ __all__ = [
     "Job",
     "JobContext",
     "JobState",
+    "LoopRegistry",
+    "LoopState",
+    "NamedLoop",
     "PluginContext",
     "PluginRuntime",
     "PluginRuntimeState",

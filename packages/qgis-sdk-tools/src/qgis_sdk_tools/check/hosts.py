@@ -4,10 +4,13 @@ Decision-52 point 1 makes ``[tool.qgis-sdk] hosts`` the one place a plugin says
 which hosts it targets, and makes a declaration that only one host can satisfy a
 finding rather than a surprise at load time.
 
-``HOST001`` - a Desktop-only declaration in a plugin that does not declare the
-Desktop host: ``@toolbar``/``@menu``/``@shortcut``, a ``Dialog``/``Dock``
+``HOST001`` - a window-only declaration in a plugin that declares neither host
+that has a window: ``@toolbar``/``@menu``/``@shortcut``, a ``Dialog``/``Dock``
 surface, or a web view (``[tool.qgis-sdk.web]``). A server-only plugin loads
-that module and has nowhere to put a window.
+that module and has nowhere to put a window. ``desktop`` and ``app`` both
+satisfy a binding or a surface - a standalone app with ``gui=True`` has a
+window of its own (decision-52 point 3) - while a web view still needs
+``desktop``, because the page is placed through the Desktop adapter.
 ``HOST003`` (warning) - the plugin declares the server host, and the QGIS this
 interpreter can see was built without QGIS Server, so ``qgis.server`` is
 absent. Nothing is wrong with the project; the environment cannot run it
@@ -76,16 +79,16 @@ def check_hosts(
     declaration, and one that declares the Desktop host still has to answer for a
     server hook. A file that does not parse is left to ``SYNTAX001``.
     """
-    desktop = Host.DESKTOP.value in hosts
+    windowed = Host.DESKTOP.value in hosts or Host.APP.value in hosts
     server = Host.SERVER.value in hosts
-    if desktop and server:
+    if windowed and server:
         return
     try:
         tree = ast.parse(source, filename=str(path))
     except SyntaxError:
         return
     names = ModuleNames(tree)
-    if not desktop:
+    if not windowed:
         yield from _desktop_declarations(tree, names, path, hosts)
     if not server:
         yield from _server_declarations(tree, names, path, hosts)
@@ -198,12 +201,12 @@ def _desktop_finding(
         line=line,
         column=column,
         message=(
-            f"{what} needs the Desktop host, but `[tool.qgis-sdk] hosts` declares "
-            f"{declared}"
+            f"{what} needs a window - the Desktop host or the app host - but "
+            f"`[tool.qgis-sdk] hosts` declares {declared}"
         ),
         remediation=(
-            "Add `desktop` to `[tool.qgis-sdk] hosts`, or keep the Desktop "
-            "declaration in a module only the Desktop host loads (decision-52 "
+            "Add `desktop` (or `app`) to `[tool.qgis-sdk] hosts`, or keep the "
+            "declaration in a module only a windowed host loads (decision-52 "
             "point 1)."
         ),
     )

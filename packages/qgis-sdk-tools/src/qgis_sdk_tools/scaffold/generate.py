@@ -274,6 +274,63 @@ def test_the_buffer_algorithm_asks_processing_for_exactly_the_request(tmp_path) 
     scope.close()
 '''
 
+APP_MAIN_MODULE = '''"""`python -m {plugin}`: the entry of the standalone app.
+
+There is no QGIS to load a ``classFactory`` into, so this module *is* the entry
+(decision-52 point 3): ``qgis-sdk run`` starts it, and a distribution built with
+``qgis-sdk build --target app`` installs it as a console script. The flags are
+``qgis_sdk.app``'s - ``--headless``, ``--once``, ``--grace``, ``--title`` and
+``--`` before anything meant for Qt - so nothing here parses argv itself.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from qgis_sdk.app import main as run_app
+
+from .plugin import app
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run {title}; close the window or press Ctrl+C to leave."""
+    return run_app(app, argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+
+APP_STARTER_TEST = '''"""Smoke tests for {title}: the app host, without QGIS and without a display.
+
+``qgis_sdk.app.run`` is driven by ``FakeAppBackend``: the real session starts the
+application, starts the plugin, delivers what is queued and stops - so these
+tests fail when the declarations stop agreeing with the host, not only when QGIS
+is missing.
+"""
+
+from qgis_sdk import describe
+from qgis_sdk.app import run
+from qgis_sdk.core import Host
+from qgis_sdk.testing import FakeAppBackend
+
+from {plugin}.plugin import app
+
+
+def test_the_app_starts_headless_and_stops_in_order() -> None:
+    backend = FakeAppBackend()
+
+    assert run(app, backend=backend, once=True) == 0
+    assert backend.calls == ["init", "build", "process_events", "exit"]
+    assert backend.surface.context.host is Host.APP
+
+
+def test_declared_actions_are_the_plugins_public_surface() -> None:
+    description = describe(app)
+
+    assert [action.id for action in description.actions] == [{action_ids}]
+'''
+
 SERVER_ENTRY_POINT = '''"""``serverClassFactory``: the entry QGIS Server calls for {title}.
 
 QGIS Server does not load ``classFactory``. It imports this module and calls
@@ -532,6 +589,16 @@ def plan_scaffold(options: ScaffoldOptions) -> tuple[GeneratedFile, ...]:
         GeneratedFile("pyproject.toml", _pyproject(options)),
         GeneratedFile(f"{options.plugin}/__init__.py", _entry_point(options)),
         GeneratedFile(f"{options.plugin}/plugin.py", _plugin_module(options)),
+        *(
+            (
+                GeneratedFile(
+                    f"{options.plugin}/__main__.py",
+                    APP_MAIN_MODULE.format(title=options.title, plugin=options.plugin),
+                ),
+            )
+            if options.host == "app"
+            else ()
+        ),
         GeneratedFile("tests/test_plugin.py", _starter_test(options)),
         *(GeneratedFile(path, content) for path, content in plan_web(options)),
     ]
@@ -605,12 +672,14 @@ def sdk_requirements() -> tuple[str, str]:
 
 
 def _entry_point(options: ScaffoldOptions) -> str:
-    """``<plugin>/__init__.py``: empty for Desktop, the factory for a server.
+    """``<plugin>/__init__.py``: empty except for a server plugin's factory.
 
     A Desktop plugin's ``classFactory`` is bound by ``build``/``dev``
     (decision-43), so the file stays empty. A server plugin's entry cannot be:
     QGIS Server imports ``serverClassFactory`` from the package itself, and the
-    plugin is deployed as the package QGIS already has on its path.
+    plugin is deployed as the package QGIS already has on its path. An app
+    plugin's entry is ``main()`` in ``<plugin>/__main__.py`` - there is no QGIS
+    to call a factory, so the package stays import-only.
     """
     if options.host == "server":
         return SERVER_ENTRY_POINT.format(title=options.title)
@@ -653,17 +722,23 @@ def _algorithms_module(options: ScaffoldOptions) -> str:
 
 
 def _starter_test(options: ScaffoldOptions) -> str:
+    action_ids = sorted(
+        ["ping", "project_layers"]
+        + (["buffer"] if options.algorithm else [])
+        + (["open_ping"] if options.ui else [])
+    )
+    if options.host == "app":
+        return APP_STARTER_TEST.format(
+            title=options.title,
+            plugin=options.plugin,
+            action_ids=", ".join(f'"{identifier}"' for identifier in action_ids),
+        )
     if options.host == "server":
         return SERVER_STARTER_TEST.format(
             title=options.title,
             plugin=options.plugin,
             service_name=_service_name(options.plugin),
         )
-    action_ids = sorted(
-        ["ping", "project_layers"]
-        + (["buffer"] if options.algorithm else [])
-        + (["open_ping"] if options.ui else [])
-    )
     return STARTER_TEST.format(
         title=options.title,
         plugin=options.plugin,

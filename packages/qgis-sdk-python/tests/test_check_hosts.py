@@ -118,8 +118,8 @@ def test_a_toolbar_binding_on_a_server_only_plugin_is_a_finding() -> None:
         """
 
     expected = (
-        "HOST001:6:the `@toolbar` binding on `ping` needs the Desktop host, "
-        + "but `[tool.qgis-sdk] hosts` declares server"
+        "HOST001:6:the `@toolbar` binding on `ping` needs a window - the Desktop "
+        + "host or the app host - but `[tool.qgis-sdk] hosts` declares server"
     )
     assert found(source) == [expected]
 
@@ -377,9 +377,38 @@ def test_a_plugin_declaring_neither_host_answers_for_both_kinds() -> None:
         def only_public(ctx, request, layer) -> bool: ...
         """
 
-    assert [item.split(":", 1)[0] for item in found(source, hosts=("app",))] == [
+    assert [item.split(":", 1)[0] for item in found(source, hosts=())] == [
         "HOST001",
         "HOST002",
+    ]
+
+
+def test_the_app_host_satisfies_a_window_binding() -> None:
+    """A standalone app with ``gui=True`` has a window: decision-52 point 3."""
+    source = """
+        from qgis_sdk import toolbar
+        from qgis_sdk.ui import Dialog
+
+        @toolbar
+        def ping(ctx) -> None: ...
+
+        class PingDialog(Dialog):
+            def build(self): ...
+        """
+
+    assert found(source, hosts=("app",)) == []
+
+
+def test_the_app_host_still_answers_for_a_server_hook() -> None:
+    source = """
+        from qgis_sdk.server import filter
+
+        @filter(priority=10)
+        def default_version(ctx, request, response): ...
+        """
+
+    assert [item.split(":", 1)[0] for item in found(source, hosts=("app",))] == [
+        "HOST002"
     ]
 
 

@@ -14,6 +14,9 @@ writing. The end-to-end half of this contract lives in
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import tomllib
 
 import layers
@@ -85,3 +88,70 @@ def test_the_example_page_is_a_member_of_the_bun_workspace() -> None:
 
     assert "examples/*/web" in root["workspaces"]
     assert not (EXAMPLE / "web" / "bun.lock").exists()  # the root lockfile owns it
+
+
+# -- the app host: the same declaration, a second host ------------------------------
+
+
+APP_PROBE = """
+import json
+
+from qgis_sdk.app import AppSession
+from qgis_sdk.testing import FakeAppBackend
+
+from simple.plugin import app
+
+backend = FakeAppBackend()
+session = AppSession(app, backend=backend, gui=False, grace=0.5)
+session.start()
+actions = sorted(session.runtime.actions)
+report = session.stop()
+print(json.dumps({
+    "calls": backend.calls,
+    "host": backend.surface.context.host.value,
+    "actions": actions,
+    "exits": backend.exits,
+    "report": report.to_json(),
+}))
+"""
+
+
+def test_the_example_declares_both_hosts() -> None:
+    example = tomllib.loads((EXAMPLE / "pyproject.toml").read_text())
+
+    assert example["tool"]["qgis-sdk"]["hosts"] == ["desktop", "app"]
+
+
+def test_the_example_entry_is_the_runtime_main_with_the_same_declaration() -> None:
+    entry = (EXAMPLE / "simple" / "__main__.py").read_text()
+    example = tomllib.loads((EXAMPLE / "pyproject.toml").read_text())
+
+    assert "from qgis_sdk.app import main as run_app" in entry
+    assert "from .plugin import app" in entry
+    assert "return run_app(app, argv)" in entry
+    assert 'if __name__ == "__main__":' in entry
+    # One declaration, two hosts: the entry starts what `plugin` names.
+    assert example["tool"]["qgis-sdk"]["plugin"] == "simple.plugin:app"
+
+
+def test_the_example_runs_headless_as_an_app_on_the_same_actions() -> None:
+    """The bridge and the actions do not change with the host - only the host."""
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = layers.source_path(EXAMPLE)
+
+    finished = subprocess.run(
+        [sys.executable, "-c", APP_PROBE],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=EXAMPLE,
+        env=environment,
+    )
+
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    found = json.loads(finished.stdout.strip().splitlines()[-1])
+    assert found["host"] == "app"
+    assert found["calls"] == ["init", "build", "exit"]
+    assert found["exits"] == 1
+    assert found["report"]["exited"] is True
+    assert {"open_fixture", "selected_features", "buffer"} <= set(found["actions"])

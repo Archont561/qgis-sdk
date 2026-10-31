@@ -364,6 +364,19 @@ class QgisSdkUiError(QgisSdkError):
     code = "ui_refused"
 
 
+class QgisSdkAppError(QgisSdkError):
+    """The application host cannot start, run or stop the plugin as asked.
+
+    Raised by the QGIS-free session (``qgis_sdk.app.run``): a second application
+    in the same process, a quit with nothing running, a negative grace period, a
+    backend that reports a host other than ``app`` - and by the Qt backend when
+    ``QgsApplication`` already exists. The message always names the condition, so
+    a launcher can show it without a stack trace.
+    """
+
+    code = "app_refused"
+
+
 class QgisSdkBridgeError(QgisSdkError):
     """A bridge call was refused, or its value cannot cross the transport.
 

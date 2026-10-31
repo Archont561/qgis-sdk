@@ -14,6 +14,16 @@
 # pip; Linux runners have no QGIS), so leaving them in this report would only
 # dilute the number this job exists to defend. Excluding them is stated here once
 # instead of being inferred from a coverage drop.
+#
+# The `coverage` package script selects the pure layer (`-m "pure and not smoke"`)
+# for the same reason, and because the traced process is the wrong place for the
+# native ones: the Linux coverage row runs inside an environment that *does* have
+# QGIS, so the native layers were being traced alongside the pure suite while the
+# Bun and Storybook suites ran in parallel. A `QgsTask` worker thread under a
+# coverage tracer on that row twice ended the pytest process in a segmentation
+# fault inside `test_lts_native.py`, which says nothing about the SDK. What those
+# layers prove is proven by `Linux checks` (`-m "native and not smoke"`), the
+# `QGIS 3.44 LTS` row and the native smoke probes - not by this percentage.
 [run]
 omit =
     packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/*
