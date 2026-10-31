@@ -81,6 +81,17 @@ def test_a_headless_app_reports_the_app_host_and_runs_the_plugin() -> None:
     session.stop()
 
 
+def test_the_session_offers_the_surface_the_backend_built() -> None:
+    """A caller that needs the window reads it off the session, not the platform."""
+    backend = FakeAppBackend()
+
+    session = start(backend, gui=True)
+
+    assert session.surface is not None
+    assert session.surface is backend.surfaces[0]
+    session.stop()
+
+
 def test_a_headless_app_refuses_the_desktop_and_the_ui_by_name() -> None:
     session = start(FakeAppBackend())
 

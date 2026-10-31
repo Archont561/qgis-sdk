@@ -64,7 +64,7 @@ from qgis.PyQt.QtWidgets import (
 
 from qgis_sdk.adapters.app import QtAppBackend
 from qgis_sdk.app import AppSession
-from qgis_sdk.core import Host, PluginContext
+from qgis_sdk.core import Host, PluginContext, WorkerContext
 from qgis_sdk.jobs import job
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.ui import Dialog, Dock
@@ -96,7 +96,7 @@ class Inspector(Dock):
 
 
 @job(id="demo.echo", title="Echo")
-def echo(ctx, value: int) -> int:
+def echo(ctx: WorkerContext, value: int) -> int:
     return value
 
 
@@ -154,7 +154,7 @@ def main() -> int:
         found["layers"] = list(context.project.layer_ids())
         found["loops"] = [state.name for state in session.loops.inventory()]
         if GUI:
-            window = backend.application.activeWindow()
+            window = session.surface.window
             found["window"] = type(window).__name__
             found["is_main_window"] = isinstance(window, QMainWindow)
             found["canvas"] = len(window.findChildren(QgsMapCanvas))

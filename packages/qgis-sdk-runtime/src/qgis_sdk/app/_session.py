@@ -173,6 +173,11 @@ class AppSession:
         return None if self._runtime is None else self._runtime.context
 
     @property
+    def surface(self) -> AppSurface | None:
+        """What the backend built for this run: the context, and the window if any."""
+        return self._surface
+
+    @property
     def loops(self) -> LoopRegistry:
         """The loops the surface started, by name."""
         return self._loops
