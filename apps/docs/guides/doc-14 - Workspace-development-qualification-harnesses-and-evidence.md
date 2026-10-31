@@ -1814,3 +1814,92 @@ test passed) when Chromium tears the profiles down. Since 2026-10-25
 whenever `test_scaffold_web_native.py` is collected in the same process
 (`QGIS_SDK_SCAFFOLD_WEB=1`), so a combined invocation reports skips instead
 of dying; the evidence run stays one file per process.
+
+## 0.9.0 release gate (2026-10-31)
+
+What was run on this checkout at the branch head built on `main`
+`f466d86` (the PR #157 merge) on Linux x86-64, CPython 3.11.2 in a
+throwaway `venv` with the runtime and the tools installed from their
+`src` trees, Ruff 0.17.3, Alint 0.20.1. **No QGIS and no Qt are present
+in this sandbox**, so every native layer - the offscreen Desktop
+harness, the in-process `QgsServer`, the `QgsTaskManager` job tests - is
+recorded here as *not run*, and the `Linux checks`, `Linux coverage`,
+`QGIS 3.44 LTS`, `macOS` and `Windows` CI jobs are the rows that carry
+them. The tree is **unstamped**: the manifests still say 0.8.0 / 0.6.0,
+so the artifact names below carry 0.8.0. Stamping, tagging and
+publishing wait for an explicit authorization.
+
+- **Required work (AC 1).** TASK-115, 82, 116, 117, 80 and 81 are Done,
+  and the milestone's last two surfaces - the reference example's server
+  variant (`examples/server`, PR #157) and doc-12's 0.9.0 notes - landed
+  before this gate. TASK-83 is the gate itself.
+- **Pure Python suite.** `pytest -c packages/qgis-sdk-python/pyproject.toml
+  packages/qgis-sdk-python/tests` **2411 passed, 93 skipped, 7
+  deselected** in 2:00. The 93 skips are the native layers, each naming
+  what it lacks. `-m "pure and not smoke"` is the coverage lane:
+  **2411 passed, 32 skipped, 68 deselected**.
+- **Developer scripts and policy.** `pytest -c tests/scripts/pyproject.toml
+  tests/scripts` **289 passed** (the two example-manifest tests added
+  with the server variant included), `alint check .` **9/9 rules**,
+  `ruff check .` clean, `ruff format --check .` **470 files**.
+- **The example projects.** `qgis-sdk test --project examples/simple`
+  **20 passed, 7 deselected** (the `qgis` target needs a QGIS, absent
+  here), `qgis-sdk test --project examples/server` **8 passed**,
+  `qgis-sdk check examples/simple` *checked 11 files: no problems*,
+  `qgis-sdk check examples/server` *checked 3 files: no problems*.
+  `qgis-sdk build` on `examples/server` writes `metadata.txt` with
+  `server=True`, keeps the source's `serverClassFactory` and adds no
+  `classFactory`.
+- **Clean installation (AC 3).** `pip wheel --no-deps` builds the three
+  distributions (`qgis_sdk-0.8.0`, `qgis_sdk_runtime-0.8.0`,
+  `qgis_sdk_tools-0.8.0`); a fresh `venv` installs `qgis-sdk` from those
+  wheels with `--no-index`, getting the kit, the runtime and the tools
+  plus `typer==0.27.3`, and its `qgis-sdk new --host server` writes the
+  server starter (`__init__.py` with `serverClassFactory`, `plugin.py`,
+  `tests/test_plugin.py`).
+- **A project from the previous minor (AC 3).** A 0.8-shaped project -
+  `async def` job, `ctx: JobContext`, `await ctx.workers.offload(...)`,
+  and `ctx.jobs.bind(count).delay(...)` in an action - is read by
+  `qgis-sdk check` as **`legacy08/plugin.py:17:18: JOB002 job `count`
+  reads `ctx.workers` in its body, which a WorkerContext refuses`**,
+  *checked 2 files: 1 problem*, exit 1: a finding with its remediation,
+  not a crash. The shapes themselves are refused when the plugin binds,
+  which is the message doc-12's [0.9.0 notes](doc-12%20-%20qgis-sdk-Python-package-guide.md#090-migration-notes)
+  carry.
+- **Version policy, rehearsed (AC 2).** `release.py plan --scope python
+  --trigger dispatch --bump minor --dry-run true` reads `python-v0.8.0`
+  and plans **`python-v0.9.0`**; `classify --tag python-v0.9.0` gives
+  `0.9.0` (not a prerelease) and `--tag python-v0.9.0-rc.1` gives
+  `0.9.0rc1` (prerelease). A 0.9.0 stamp rehearsed on a scratch copy of
+  the manifests (`stamp --scope python`) moves the kit, the runtime and
+  the tools to `0.9.0`, the tools' runtime range to `>=0.9.0,<0.10`, the
+  recipe's `runtime_version` / `tools_version` /
+  `tools_runtime_requirement`, and **both** reference examples' windows
+  to `>=0.9,<0.10`; `verify-versions --scope python --version 0.9.0`
+  then agrees on all eight entries, and `--scope typescript --version
+  0.6.0` still agrees on its four. The real manifests are untouched.
+- **Zero bridge delta (AC 5).** `git diff origin/main --stat --
+  packages/qgis-sdk-typescript` is empty: no file under the bridge
+  changed on this branch, no npm version is consumed, and
+  `verify-versions` reports *plugin description contract version 1
+  agrees across the Python declarations and the TypeScript bridge*.
+  `HOST_FINGERPRINT`, `HOST_SCHEMA_VERSION` and `BRIDGE_PROTOCOL_VERSION`
+  are unchanged from 0.8.0, so doc-13 needs no entry for this release.
+- **A lifetime defect the gate had to fix (AC 1).** The `autorelease`
+  quality gate went red on `main` after PR #157 with `exit code 139`:
+  `QgsTaskWorkers` released its last Python reference *inside*
+  `_JobTask.finished()`, while `QgsTaskManager` - which owns the task -
+  still had `processSubTasksForCompletion` and the completion progress
+  queued for it, so the process died in
+  `QgsTaskManager::progressChanged`. It reproduced in whole-suite runs
+  only (3 of 4 runs in one job, 1 of 2 in another; never in isolation),
+  which is why CI's split lanes had stayed green. The fix lets Qt delete
+  the task (`deleteLater()`), retires the wrapper and releases it from
+  the adapter's own stack after `destroyed`; a native regression test
+  pins it. After the fix **twelve consecutive whole-suite runs** (6 + 6,
+  ~2609 passed each) were green. TASK-82's notes carry the defect.
+- **Not run here, and where it is run.** The native layers:
+  `tests/test_jobs_tasks_native.py` and the rest of `-m native` in
+  `Linux checks`, the pure-layer coverage job in `Linux coverage`, and
+  the server host plus the Desktop harnesses in `QGIS 3.44 LTS`.
+  The windows/QGIS and macOS/QGIS rows stay *unqualified* per TASK-33.
