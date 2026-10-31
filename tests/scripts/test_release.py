@@ -100,7 +100,7 @@ def _the_real_manifests_stay_untouched():
         release._ALIAS_PACKAGE,
         release._UI_PACKAGE,
         release._UI_ALIAS_PACKAGE,
-        release._EXAMPLE_PYPROJECT,
+        *release._EXAMPLE_PYPROJECTS,
     )
     before = {
         path: path.read_text(encoding="utf-8") for path in paths if path.is_file()
@@ -167,7 +167,7 @@ def _python_manifests(
     monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "no-alias.json")
     monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "no-web.py")
-    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECT", tmp_path / "no-example.toml")
+    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (tmp_path / "no-example.toml",))
     monkeypatch.setattr(release, "_UI_PACKAGE", tmp_path / "no-ui.json")
     monkeypatch.setattr(release, "_UI_ALIAS_PACKAGE", tmp_path / "no-ui-alias.json")
     return {
@@ -2628,7 +2628,7 @@ def _example_manifests(tmp_path, monkeypatch, text=None, **kwargs):
     example.write_text(text or EXAMPLE_PYPROJECT, encoding="utf-8")
     import release
 
-    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECT", example)
+    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (example,))
     files["example"] = example
     return files
 
@@ -2663,6 +2663,44 @@ def test_stamp_scope_runtime_and_tools_move_their_own_example_line(
     assert '"qgis-sdk-tools>=0.2,<0.3"' in example
 
 
+def test_every_reference_example_follows_the_kit_stamp(tmp_path, monkeypatch):
+    """Both example projects are projects the released tools qualify against."""
+    files = _example_manifests(tmp_path, monkeypatch)
+    second = tmp_path / "server-example-pyproject.toml"
+    second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (files["example"], second))
+
+    assert main(["stamp", "--version", "0.6.0", "--scope", "python"]) == 0
+
+    for path in (files["example"], second):
+        stamped = path.read_text(encoding="utf-8")
+        assert '"qgis-sdk-runtime>=0.6,<0.7"' in stamped
+        assert '"qgis-sdk-tools>=0.6,<0.7"' in stamped
+    assert main(["verify-versions", "--scope", "python", "--version", "0.6.0"]) == 0
+
+
+def test_verify_versions_refuses_a_second_example_left_on_the_old_window(
+    tmp_path, monkeypatch, capsys
+):
+    """One example missing the stamp is enough to refuse the release."""
+    files = _example_manifests(tmp_path, monkeypatch)
+    second = tmp_path / "server-example-pyproject.toml"
+    second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")
+    import release
+
+    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (files["example"], second))
+    assert main(["stamp", "--version", "0.6.0", "--scope", "python"]) == 0
+    second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")  # it missed the stamp
+
+    assert main(["verify-versions", "--scope", "python", "--version", "0.6.0"]) == 1
+
+    out = capsys.readouterr().out
+    assert "server-example-pyproject.toml" in out
+    assert "qgis-sdk-runtime>=0.1.0,<0.2" in out
+
+
 def test_verify_versions_names_an_example_window_that_excludes_the_release(
     tmp_path, monkeypatch, capsys
 ):
@@ -2672,7 +2710,7 @@ def test_verify_versions_names_an_example_window_that_excludes_the_release(
     assert main(["verify-versions", "--scope", "python", "--version", "0.6.0"]) == 1
 
     out = capsys.readouterr().out
-    assert "examples/simple" in out
+    assert "example-pyproject.toml" in out
     assert "qgis-sdk-runtime>=0.1.0,<0.2" in out
     assert "stamp --scope python --version 0.6.0" in out
 

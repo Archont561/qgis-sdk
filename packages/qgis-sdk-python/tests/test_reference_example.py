@@ -13,6 +13,7 @@ writing. The end-to-end half of this contract lives in
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import subprocess
@@ -20,11 +21,14 @@ import sys
 import tomllib
 
 import layers
+from qgis_sdk.server import ServerRequest
+from qgis_sdk.testing import FakeServerInterface
 from qgis_sdk_tools.scaffold import ScaffoldOptions, plan_scaffold
 from qgis_sdk_tools.scaffold.generate import sdk_requirements
 from qgis_sdk_tools.scaffold.web import SDK_NPM_PACKAGE, UI_NPM_PACKAGE
 
 EXAMPLE = layers.REPOSITORY_ROOT / "examples" / "simple"
+SERVER_VARIANT = layers.REPOSITORY_ROOT / "examples" / "server"
 WORKSPACE = "workspace:*"
 HOST_ARTIFACTS = ("metadata.txt", "webview.py")
 
@@ -155,3 +159,104 @@ def test_the_example_runs_headless_as_an_app_on_the_same_actions() -> None:
     assert found["exits"] == 1
     assert found["report"]["exited"] is True
     assert {"open_fixture", "selected_features", "buffer"} <= set(found["actions"])
+
+
+# -- the server host: the reference example's third host ---------------------------
+
+
+def _server_variant():
+    """Import ``examples/server``'s package from its own directory, once."""
+    source = str(SERVER_VARIANT)
+    if source not in sys.path:
+        sys.path.insert(0, source)
+    return importlib.import_module("simple_server")
+
+
+def test_the_server_variant_is_the_scaffold_shape_for_that_host() -> None:
+    """``--host server`` writes the same tables; the plugin fills them in."""
+    scaffolded = tomllib.loads(
+        next(
+            file.content
+            for file in plan_scaffold(
+                ScaffoldOptions.resolve(
+                    "simple_server",
+                    title="Simple server",
+                    host="server",
+                )
+            )
+            if file.path == "pyproject.toml"
+        )
+    )
+    variant = tomllib.loads((SERVER_VARIANT / "pyproject.toml").read_text())
+
+    assert set(variant) == set(scaffolded)
+    assert set(variant["tool"]) == set(scaffolded["tool"])
+    assert variant["tool"]["qgis-sdk"]["plugin"] == "simple_server.plugin:app"
+    assert variant["tool"]["qgis-sdk"]["hosts"] == ["server"]
+    assert "web" not in variant["tool"]["qgis-sdk"]
+
+
+def test_the_server_variant_entry_is_the_factory_qgis_server_imports() -> None:
+    """A server plugin keeps ``serverClassFactory`` in the source (decision-43)."""
+    entry = (SERVER_VARIANT / "simple_server" / "__init__.py").read_text()
+
+    assert "def serverClassFactory(serverIface):" in entry
+    assert "classFactory = " not in entry
+    # The adapter is imported inside the call, so the package imports without Qt.
+    assert entry.count("from qgis_sdk.adapters.qgis.server import") == 1
+    assert entry.index("from qgis_sdk.adapters.qgis.server import") > entry.index(
+        "def serverClassFactory"
+    )
+
+
+def test_the_server_variant_answers_its_service_through_the_dispatcher() -> None:
+    package = _server_variant()
+    fixture = json.loads(
+        (SERVER_VARIANT / "simple_server" / "data" / "points.geojson").read_text()
+    )
+    coordinates = [
+        feature["geometry"]["coordinates"] for feature in fixture["features"]
+    ]
+
+    answered = FakeServerInterface().serve(
+        package.HOOKS,
+        ServerRequest(
+            method="GET",
+            url="http://localhost/qgis/qgis_mapserv.fcgi",
+            params={"SERVICE": "SIMPLESERVER", "REQUEST": "extent"},
+        ),
+    )
+
+    assert answered.status == 200
+    assert json.loads(answered.body) == {
+        "service": "SIMPLE_SERVER",
+        # The filter filled the missing VERSION in before the service ran.
+        "version": "1.0.0",
+        "features": len(coordinates),
+        "bbox": [
+            min(point[0] for point in coordinates),
+            min(point[1] for point in coordinates),
+            max(point[0] for point in coordinates),
+            max(point[1] for point in coordinates),
+        ],
+    }
+
+
+def test_the_server_variant_refuses_a_private_layer() -> None:
+    package = _server_variant()
+
+    refused = FakeServerInterface().serve(
+        package.HOOKS,
+        ServerRequest(
+            method="GET",
+            url="http://localhost/qgis/qgis_mapserv.fcgi",
+            params={
+                "SERVICE": "SIMPLE_SERVER",
+                "REQUEST": "extent",
+                "LAYERS": "parcels,private_parcels",
+            },
+        ),
+    )
+
+    assert refused.status == 403
+    assert "private_parcels" in refused.body.decode()
