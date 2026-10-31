@@ -373,7 +373,8 @@ def test_a_graphical_run_tells_qt_it_has_a_window_system(pyqgis) -> None:
     backend.init(["--headless"], gui=True)
 
     application = backend.application
-    assert application.argv == ["qgis-sdk-app", "--headless"]
+    # PyQt6's QgsApplication takes `list[bytes]`; a list of str raises there.
+    assert application.argv == [b"qgis-sdk-app", b"--headless"]
     assert application.gui is True
     assert application.calls == ["initQgis"]
 

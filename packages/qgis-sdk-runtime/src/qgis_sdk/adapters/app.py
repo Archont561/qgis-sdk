@@ -413,7 +413,12 @@ class QtAppBackend:
         prefix = os.environ.get("QGIS_PREFIX_PATH")
         if prefix:
             QgsApplication.setPrefixPath(prefix, True)
-        self._application = QgsApplication(["qgis-sdk-app", *argv], gui)
+        # PyQt6's ``QgsApplication`` takes ``list[bytes]`` and raises
+        # "expected bytes, str found" for a list of str; bytes works on both
+        # bindings, and every other place the SDK constructs one already does
+        # this (the dev probe, the catalogue, the pytest plugin).
+        arguments = [b"qgis-sdk-app", *(item.encode("utf-8") for item in argv)]
+        self._application = QgsApplication(arguments, gui)
         self._application.initQgis()
 
     def build(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> AppSurface:
