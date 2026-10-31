@@ -35,6 +35,7 @@ from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, CentroidRequest
 from qgis_sdk.services import (
     Algorithms,
+    Features,
     Layers,
     Notifications,
     Project,
@@ -85,6 +86,23 @@ class Services:
     work_directory: Path | None = None
     # The files service the algorithms backend mints its file outputs through.
     files: FilesService | None = None
+    #: Layer data, expressions and editing (TASK-86). ``None`` while a backend
+    #: has not joined the contract, so one slice failing is one test failing.
+    features: Features | None = None
+    #: A layer that may be edited, freshly prepared for one test. Native copies
+    #: the fixture so a commit writes to a file the test owns; the fake declares
+    #: its own layer, so nothing on disk is touched.
+    editable_layer: Callable[[], str] | None = None
+    #: The id of the layer holding the reference points (ids 1-3, values a-c).
+    #: The fakes key layers by name; a native layer's id is the one QGIS gave it
+    #: when it opened the file, so a contract test names the layer the backend
+    #: reports instead of assuming the fake's key is an id. It opens on first
+    #: use, because a backend that has opened nothing must stay empty for the
+    #: tests that assert exactly that.
+    fixture_layer: Callable[[], str] | None = None
+    #: The file behind :attr:`editable_layer` when a backend writes one to disk.
+    #: ``None`` for a backend whose editable layer exists only in memory.
+    editable_dataset: Path | None = None
 
 
 def _native_available() -> bool:
@@ -104,6 +122,7 @@ _SESSION_TOKEN = f"{os.getpid()}-{int(__import__('time').time())}"
 # never observe another test's files.
 _WORK_ROOT = Path(tempfile.mkdtemp(prefix="qgis-sdk-algorithms-"))
 _WORK_DIRECTORIES = 0
+_FEATURE_DIRECTORIES = 0
 
 
 def _algorithm_work_directory() -> Path:
@@ -113,6 +132,30 @@ def _algorithm_work_directory() -> Path:
     directory = _WORK_ROOT / f"services-{_WORK_DIRECTORIES}"
     directory.mkdir(parents=True)
     return directory
+
+
+def _feature_work_directory() -> Path:
+    """Return a fresh directory for one native features backend.
+
+    The editable copy cannot share the algorithms directory, even in a
+    subdirectory: those tests walk their directory and assert that the run's
+    output is the only file in it, so a fixture row file would be a second file
+    they did not write.
+    """
+    global _FEATURE_DIRECTORIES
+    _FEATURE_DIRECTORIES += 1
+    directory = _WORK_ROOT / f"features-{_FEATURE_DIRECTORIES}"
+    directory.mkdir(parents=True)
+    return directory
+
+
+def _point_wkt(x: float, y: float):
+    """A WKT point the fake declares; the fake never converts encodings."""
+    from qgis_sdk.models import Geometry
+
+    return Geometry(
+        encoding="wkt", value=f"POINT ({x} {y})", geometry_type="point", crs=FIXTURE_CRS
+    )
 
 
 def _fake_services() -> Services:
@@ -181,10 +224,31 @@ def _fake_services() -> Services:
         "native:basicstatisticsforfields",
         {"COUNT": 3, "OUTPUT_HTML_FILE": MINIMAL_DATASET},
     )
+    from qgis_sdk.testing import FakeFeatures
+
+    features = FakeFeatures(scope)
+    features.declare(
+        FIXTURE_NAME,
+        fields=FIXTURE_FIELDS,
+        rows=[
+            (1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0)),
+            (2, {"id": 2, "value": "b"}, _point_wkt(21.1, 52.1)),
+            (3, {"id": 3, "value": "c"}, _point_wkt(21.2, 52.2)),
+        ],
+    )
+    editable = features.declare(
+        "editable",
+        fields=FIXTURE_FIELDS,
+        rows=[(1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0))],
+    )
+    del editable
     styles = FakeStyles(layers, scope)
     return Services(
         files=files,
         algorithms=algorithms,
+        features=features,
+        editable_layer=lambda: "editable",
+        fixture_layer=lambda: FIXTURE_NAME,
         layers=layers,
         project=FakeProject(layers, scope),
         settings=FakeSettings(scope),
@@ -234,8 +298,34 @@ def _native_services() -> Services:
     from qgis_sdk.bridge.authority import HostAuthority
 
     files = FilesService(HostAuthority(), scope, owner="plugin:contract")
+    from qgis_sdk.adapters.qgis import NativeFeatures
+
+    features = NativeFeatures(layers, scope)
+
+    # A layer the features tests ask for is opened when they ask: this backend
+    # starts with nothing open, which is a fact the algorithms contract asserts.
+    opened: dict[str, str] = {}
+
+    def _open(source: Path) -> str:
+        if str(source) not in opened:
+            opened[str(source)] = layers.open_vector(source).id
+        return opened[str(source)]
+
+    def fixture_layer() -> str:
+        return _open(FIXTURE_DATASET)
+
+    editable_copy = _feature_work_directory() / "editable.geojson"
+    shutil.copyfile(FIXTURE_DATASET, editable_copy)
+
+    def editable_layer() -> str:
+        return _open(editable_copy)
+
     return Services(
         files=files,
+        features=features,
+        editable_layer=editable_layer,
+        editable_dataset=editable_copy,
+        fixture_layer=fixture_layer,
         algorithms=NativeAlgorithms(
             layers, scope, working_directory=work_directory, files=files
         ),

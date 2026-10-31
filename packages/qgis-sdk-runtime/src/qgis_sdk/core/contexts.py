@@ -28,6 +28,7 @@ from qgis_sdk.services import (
     Algorithms,
     Cancellation,
     DesktopAccess,
+    Features,
     Files,
     Layers,
     Log,
@@ -202,6 +203,7 @@ class PluginContext(_Context):
     __slots__ = (
         "_algorithms",
         "_desktop",
+        "_features",
         "_files",
         "_jobs",
         "_layers",
@@ -222,6 +224,7 @@ class PluginContext(_Context):
         "desktop",
         "network",
         "layers",
+        "features",
         "project",
         "settings",
         "styles",
@@ -242,6 +245,10 @@ class PluginContext(_Context):
     desktop: Capability[DesktopAccess] = Capability()
     network: Capability[Network] = Capability()
     layers: Capability[Layers] = Capability()
+    #: Layer data and the expressions that select it (decision-54 point 3): a
+    #: layer is a description, a feature is data, and editing is an explicitly
+    #: opened session rather than another method here.
+    features: Capability[Features] = Capability()
     project: Capability[Project] = Capability()
     settings: Capability[Settings] = Capability()
     styles: Capability[Styles] = Capability()
@@ -265,6 +272,7 @@ class PluginContext(_Context):
         desktop: DesktopAccess | None = None,
         network: Network | None = None,
         layers: Layers | None = None,
+        features: Features | None = None,
         project: Project | None = None,
         settings: Settings | None = None,
         styles: Styles | None = None,
@@ -285,6 +293,7 @@ class PluginContext(_Context):
             _desktop=desktop,
             _network=network,
             _layers=layers,
+            _features=features,
             _project=project,
             _settings=settings,
             _styles=styles,
@@ -334,6 +343,7 @@ class UiContext(_Context):
         "_actions",
         "_algorithms",
         "_desktop",
+        "_features",
         "_files",
         "_jobs",
         "_layers",
@@ -357,6 +367,7 @@ class UiContext(_Context):
         "desktop",
         "settings",
         "layers",
+        "features",
         "project",
         "files",
         "log",
@@ -379,6 +390,9 @@ class UiContext(_Context):
     #: What the catalogue's pickers list and the ``FileInput`` mints through
     #: the plugin's own services, handed to its surfaces.
     layers: Capability[Layers] = Capability()
+    #: The plugin's feature and expression service, shared like ``layers`` so a
+    #: surface handler reads the same data a page does.
+    features: Capability[Features] = Capability()
     project: Capability[Project] = Capability()
     files: Capability[Files] = Capability()
     log: Capability[Log] = Capability()
@@ -401,6 +415,7 @@ class UiContext(_Context):
         actions: ViewActions | None = None,
         settings: Settings | None = None,
         layers: Layers | None = None,
+        features: Features | None = None,
         project: Project | None = None,
         files: Files | None = None,
         log: Log | None = None,
@@ -424,6 +439,7 @@ class UiContext(_Context):
             _desktop=desktop,
             _settings=settings,
             _layers=layers,
+            _features=features,
             _project=project,
             _files=files,
             _log=log,

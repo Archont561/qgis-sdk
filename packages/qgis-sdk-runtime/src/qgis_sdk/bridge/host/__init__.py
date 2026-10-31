@@ -46,11 +46,14 @@ from qgis_sdk.bridge.host._operations import (
 )
 from qgis_sdk.bridge.host._schemas import DEFAULT_PAGE, MAX_PAGE
 from qgis_sdk.bridge.host._services import HostServices
+from qgis_sdk.models.features import DEFAULT_FEATURE_PAGE, MAX_FEATURE_PAGE
 
 __all__ = [
+    "DEFAULT_FEATURE_PAGE",
     "DEFAULT_PAGE",
     "DEFERRED_HOST_METHODS",
     "HOST_OPERATIONS",
+    "MAX_FEATURE_PAGE",
     "MAX_PAGE",
     "HostOperation",
     "HostServices",

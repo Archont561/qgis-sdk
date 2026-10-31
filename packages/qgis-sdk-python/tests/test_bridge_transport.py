@@ -11,7 +11,7 @@ import json
 from collections.abc import Iterator
 from typing import Any
 
-from qgis_sdk.bridge import BridgeOperation, Dispatcher
+from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, BridgeOperation, Dispatcher
 from qgis_sdk.bridge.resources import HandleKind
 from qgis_sdk.bridge.streams import MAX_QUEUED_EVENTS
 from qgis_sdk.bridge.transport import ChannelTransport, envelope_protocol
@@ -67,7 +67,7 @@ def test_a_call_crosses_as_text_and_comes_back_as_text() -> None:
     assert reply == {
         "call_id": "c1",
         "ok": True,
-        "protocol": 1,
+        "protocol": BRIDGE_PROTOCOL_VERSION,
         "value": {"echo": {"name": "A"}},
     }
 
@@ -89,7 +89,7 @@ def test_a_refusal_survives_the_round_trip() -> None:
     transport.receive(
         json.dumps(
             {
-                "protocol": 1,
+                "protocol": BRIDGE_PROTOCOL_VERSION,
                 "call_id": "c1",
                 "operation": ECHO.id,
                 "payload": {},
@@ -108,7 +108,7 @@ def test_a_subscription_is_acknowledged_and_its_frames_flushed_in_order() -> Non
     transport.receive(
         json.dumps(
             {
-                "protocol": 1,
+                "protocol": BRIDGE_PROTOCOL_VERSION,
                 "kind": "subscribe",
                 "call_id": "s1",
                 "operation": TICKS.id,
@@ -143,7 +143,7 @@ def test_a_pushed_stream_reaches_the_channel_through_flush() -> None:
     transport.receive(
         json.dumps(
             {
-                "protocol": 1,
+                "protocol": BRIDGE_PROTOCOL_VERSION,
                 "kind": "subscribe",
                 "call_id": "s1",
                 "operation": PUSHED.id,
@@ -157,9 +157,23 @@ def test_a_pushed_stream_reaches_the_channel_through_flush() -> None:
     for index in range(MAX_QUEUED_EVENTS + 1):
         dispatcher.emit(subscription_id, {"index": index})
 
-    transport.flush(limit=MAX_QUEUED_EVENTS + 1)
+    # A protocol-2 reader acks what it delivered; without an ack the host stops
+    # after MAX_IN_FLIGHT_FRAMES by design, so this loop is the client's side of
+    # the contract, not a workaround.
+    frames = []
+    for _ in range(MAX_QUEUED_EVENTS):
+        sent.clear()
+        transport.flush(limit=MAX_QUEUED_EVENTS + 1)
+        batch = _frames(sent)
+        frames.extend(batch)
+        if not batch:
+            break
+        for frame in batch:
+            if "terminal" not in frame:
+                transport.acknowledge(frame["subscription_id"], frame["seq"])
+        if any("terminal" in frame for frame in batch):
+            break
 
-    frames = _frames(sent)
     assert frames[-1]["terminal"]["kind"] == "gap"
     assert frames[-1]["terminal"]["dropped"] == 1
 
@@ -171,7 +185,7 @@ def test_release_crosses_the_channel_like_any_other_call() -> None:
     transport.receive(
         json.dumps(
             {
-                "protocol": 1,
+                "protocol": BRIDGE_PROTOCOL_VERSION,
                 "kind": "release",
                 "call_id": "r1",
                 "payload": {"handles": [{"kind": "borrowed", "id": "sites"}]},
@@ -190,7 +204,7 @@ def test_disposal_stops_the_frames_for_that_view() -> None:
     transport.receive(
         json.dumps(
             {
-                "protocol": 1,
+                "protocol": BRIDGE_PROTOCOL_VERSION,
                 "kind": "subscribe",
                 "call_id": "s1",
                 "operation": TICKS.id,

@@ -12,6 +12,7 @@ from .contracts import (
     Workers,
     WorkItem,
 )
+from .features import EditingSession, Features
 from .files import Files
 from .layers import Layers
 from .log import LOG_LEVELS, Log, LogBase, LogLevel, LogListener, LogRecord
@@ -36,6 +37,8 @@ __all__ = [
     "Cancellation",
     "Deliver",
     "DesktopAccess",
+    "EditingSession",
+    "Features",
     "Files",
     "Layers",
     "Log",

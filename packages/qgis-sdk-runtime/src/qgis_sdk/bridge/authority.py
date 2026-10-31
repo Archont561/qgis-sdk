@@ -15,17 +15,27 @@ never existed, said the same way; ``stale_handle``: was yours, is not any more;
 
 Network authority follows the same shape: the host grants a view a
 :class:`~qgis_sdk.network.NetworkGrant` and the bridge's network operation goes
-through it. Nothing here imports Qt.
+through it.
+
+Blob authority is the third: a payload above the inline cap (decision-59) is
+kept here as bytes the host produced, and the view gets a
+:class:`~qgis_sdk.models.BlobRef` it exchanges for bounded chunks. No path is
+involved - a blob is never a file - and the bytes are dropped when the view is
+released, so a page cannot keep a copy of the host's memory alive by holding an
+id. Nothing here imports Qt.
 """
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 import secrets
 import tempfile
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -37,6 +47,7 @@ from qgis_sdk.models import (
     QgisSdkStaleHandleError,
     QgisSdkUnknownHandleError,
 )
+from qgis_sdk.models.blobs import BLOB_REF_KIND, BlobRef
 from qgis_sdk.models.files import FILE_REF, FILE_REF_KINDS, FileRef
 from qgis_sdk.network.grants import NetworkGrant
 
@@ -45,6 +56,20 @@ MAX_FILE_REFS_PER_VIEW = 64
 
 DEFAULT_EXPORT_BYTES = 4 * 1024 * 1024
 """Default ceiling for one export: the content crosses the channel as a string."""
+
+#: How many blobs one view may hold at once. A page that keeps minting them is
+#: a page that is not releasing them, and the host's memory is not its to fill.
+MAX_BLOBS_PER_VIEW = 16
+
+#: Ceiling for one blob. Above this a producer keeps the bytes where they are
+#: and returns a file (decision-59 point 4): a raster or a point cloud never
+#: moves whole.
+MAX_BLOB_BYTES = 32 * 1024 * 1024
+
+#: How long a blob lives unless the producer asks for something else. Long
+#: enough for a client to assemble a payload in chunks, short enough that an
+#: abandoned page does not pin megabytes until the view is disposed.
+BLOB_TTL_SECONDS = 300.0
 
 FILE_SOURCES = frozenset({"picker", "plugin"})
 
@@ -78,6 +103,17 @@ class _NetworkGrant:
     generation: int
 
 
+@dataclass(slots=True)
+class _BlobGrant:
+    """The host's side of one blob: the bytes, and who may ask for them."""
+
+    ref: BlobRef
+    view_id: str
+    generation: int
+    data: bytes
+    expires_at: float | None
+
+
 def _refuse_unknown(ref_id: str) -> QgisSdkUnknownHandleError:
     return QgisSdkUnknownHandleError(f"file ref {ref_id!r} is not one this view holds")
 
@@ -104,6 +140,7 @@ class HostAuthority:
     _files: dict[str, _FileGrant] = field(default_factory=dict, repr=False)
     _revoked: dict[str, str] = field(default_factory=dict, repr=False)
     _networks: dict[str, _NetworkGrant] = field(default_factory=dict, repr=False)
+    _blobs: dict[str, _BlobGrant] = field(default_factory=dict, repr=False)
 
     # -- files: minting -----------------------------------------------------
 
@@ -394,6 +431,12 @@ class HostAuthority:
         for ref_id in [k for k, v in self._revoked.items() if v == binding.view_id]:
             del self._revoked[ref_id]
         self._networks.pop(binding.view_id, None)
+        for ref_id in [
+            ref_id
+            for ref_id, grant in self._blobs.items()
+            if grant.view_id == binding.view_id
+        ]:
+            del self._blobs[ref_id]
         return len(dropped)
 
     def prune(self, generation: int) -> int:
@@ -411,6 +454,175 @@ class HostAuthority:
             if granted.generation < generation
         ]:
             del self._networks[view_id]
+        for ref_id in [
+            ref_id
+            for ref_id, grant in self._blobs.items()
+            if grant.generation < generation
+        ]:
+            del self._blobs[ref_id]
+        return len(stale)
+
+    # -- blobs: minting ------------------------------------------------------
+
+    def mint_blob(
+        self,
+        binding: ViewBinding,
+        data: bytes | bytearray | memoryview,
+        *,
+        media_type: str = "application/octet-stream",
+        ttl_seconds: float | None = BLOB_TTL_SECONDS,
+    ) -> BlobRef:
+        """Keep ``data`` for ``binding``'s view and return the ref that names it.
+
+        The checksum is computed here, over the whole payload, so a client that
+        assembles chunks verifies one digest rather than trusting a length. A
+        payload above :data:`MAX_BLOB_BYTES` is refused: that is a file, not a
+        blob, and a view asks for it through a file ref or a job.
+        """
+        payload = bytes(data)
+        if len(payload) > MAX_BLOB_BYTES:
+            raise QgisSdkBridgeError(
+                f"a blob carries at most {MAX_BLOB_BYTES} bytes; {len(payload)} "
+                "is a file, and a view reaches one through a file ref"
+            )
+        if self._count_blobs(binding.view_id) >= MAX_BLOBS_PER_VIEW:
+            self._release_expired_blobs()
+            if self._count_blobs(binding.view_id) >= MAX_BLOBS_PER_VIEW:
+                raise QgisSdkBridgeError(
+                    f"view {binding.view_id!r} already holds {MAX_BLOBS_PER_VIEW} "
+                    "blobs; they are released with the view"
+                )
+        expires_at = None if ttl_seconds is None else self.clock() + ttl_seconds
+        ref = BlobRef(
+            id=self.token(),
+            size=len(payload),
+            media_type=media_type or "application/octet-stream",
+            checksum=hashlib.sha256(payload).hexdigest(),
+            # The wire carries a wall-clock moment a client can show; the
+            # refusal above uses the monotonic clock, which cannot be reordered
+            # by a system clock change.
+            expires_at=(
+                None
+                if ttl_seconds is None
+                else datetime.fromtimestamp(
+                    time.time() + ttl_seconds, tz=UTC
+                ).isoformat()
+            ),
+        )
+        self._blobs[ref.id] = _BlobGrant(
+            ref=ref,
+            view_id=binding.view_id,
+            generation=binding.generation,
+            data=payload,
+            expires_at=expires_at,
+        )
+        return ref
+
+    def inline_or_blob(
+        self,
+        binding: ViewBinding,
+        data: bytes | bytearray | memoryview,
+        *,
+        media_type: str = "application/octet-stream",
+        cap: int = 256 * 1024,
+    ) -> dict[str, Any]:
+        """Return a payload inline when it fits ``cap``, and as a blob when it does not.
+
+        This is the shape decision-59 point 1 asks every large-result operation
+        to use: the caller gets either ``{"inline_base64": ..., "size": ...}``
+        or ``{"blob": BlobRef, "size": ...}`` and never has to measure the
+        message itself. The cap defaults to the protocol's inline ceiling; a
+        caller may lower it, never raise it, because the dispatcher refuses a
+        reply above the ceiling anyway.
+        """
+        payload = bytes(data)
+        if len(payload) <= min(cap, MAX_BLOB_BYTES):
+            return {
+                "inline_base64": base64.b64encode(payload).decode("ascii"),
+                "size": len(payload),
+                "media_type": media_type,
+            }
+        return {
+            "blob": self.mint_blob(binding, payload, media_type=media_type).to_wire(),
+            "size": len(payload),
+            "media_type": media_type,
+        }
+
+    # -- blobs: reading ------------------------------------------------------
+
+    def read_blob(
+        self,
+        binding: ViewBinding,
+        raw: Any,
+        *,
+        offset: int = 0,
+        length: int | None = None,
+    ) -> bytes:
+        """Return ``length`` bytes of ``raw`` from ``offset``, or refuse.
+
+        Only ``raw["id"]`` is read, exactly as with a file ref. The checks run
+        in the order that tells a foreign caller the least: shape, ownership,
+        generation, expiry, then the bounds - a chunk past the end is a caller
+        mistake, not something to clamp silently.
+        """
+        grant = self._lookup_blob(binding, raw)
+        size = len(grant.data)
+        if offset < 0 or offset > size:
+            raise QgisSdkBridgeError(
+                f"offset {offset} is outside a blob of {size} bytes"
+            )
+        end = size if length is None else min(size, offset + max(0, length))
+        return grant.data[offset:end]
+
+    def blob_size(self, binding: ViewBinding, raw: Any) -> int:
+        """Return the size of ``raw`` without reading it."""
+        return len(self._lookup_blob(binding, raw).data)
+
+    def blob_info(self, binding: ViewBinding, raw: Any) -> BlobRef:
+        """Return the stored ref (size, media type, checksum) without the bytes."""
+        return self._lookup_blob(binding, raw).ref
+
+    def _lookup_blob(self, binding: ViewBinding, raw: Any) -> _BlobGrant:
+        ref_id = raw.get("id") if isinstance(raw, Mapping) else None
+        if not isinstance(raw, Mapping) or raw.get("kind") != BLOB_REF_KIND:
+            raise QgisSdkUnknownHandleError(
+                f"blob ref {ref_id!r} is not one this view holds"
+            )
+        if not isinstance(ref_id, str) or not ref_id:
+            raise QgisSdkUnknownHandleError(
+                f"blob ref {ref_id!r} is not one this view holds"
+            )
+        grant = self._blobs.get(ref_id)
+        if grant is None:
+            raise QgisSdkUnknownHandleError(
+                f"blob ref {ref_id!r} is not one this view holds"
+            )
+        if grant.view_id != binding.view_id:
+            raise QgisSdkUnknownHandleError(
+                f"blob ref {ref_id!r} is not one this view holds"
+            )
+        if grant.generation != binding.generation:
+            raise QgisSdkStaleHandleError(
+                f"blob ref {ref_id!r} belongs to a runtime generation that was replaced"
+            )
+        if grant.expires_at is not None and self.clock() >= grant.expires_at:
+            del self._blobs[ref_id]
+            raise QgisSdkStaleHandleError(f"blob ref {ref_id!r} expired")
+        return grant
+
+    def _count_blobs(self, view_id: str) -> int:
+        return sum(1 for grant in self._blobs.values() if grant.view_id == view_id)
+
+    def _release_expired_blobs(self) -> int:
+        """Drop every blob past its expiry, whoever holds it."""
+        now = self.clock()
+        stale = [
+            ref_id
+            for ref_id, grant in self._blobs.items()
+            if grant.expires_at is not None and now >= grant.expires_at
+        ]
+        for ref_id in stale:
+            del self._blobs[ref_id]
         return len(stale)
 
     # -- network ------------------------------------------------------------

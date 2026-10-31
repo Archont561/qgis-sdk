@@ -46,6 +46,7 @@ from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.bridge.host import HostServices, register_host_operations
 from qgis_sdk.bridge.resources import HandleKind
 from qgis_sdk.bridge.streams import (
+    MAX_FRAMES_PER_PUMP,
     MAX_QUEUED_EVENTS,
     StreamEventType,
 )
@@ -316,6 +317,45 @@ def build_cases() -> dict[str, Any]:
     }
 
 
+def _drain(
+    host: Any,
+    binding: Any,
+    subscription_id: str,
+    *,
+    limit: int = MAX_FRAMES_PER_PUMP,
+    rounds: int = MAX_QUEUED_EVENTS + 2,
+) -> list[dict[str, Any]]:
+    """Collect a whole stream the way a protocol-2 client does: pump, then ack.
+
+    The host hands out at most ``MAX_IN_FLIGHT_FRAMES`` unacknowledged frames, so
+    a reader that only pumps would stop after eight and never see the terminal.
+    Acknowledging each delivered frame through the dispatcher is also what keeps
+    this fixture honest: the frames in the file are the ones a real client gets.
+    """
+    frames: list[dict[str, Any]] = []
+    for _ in range(rounds):
+        batch = host.pump(binding, limit=limit)
+        if not batch:
+            break
+        frames.extend(batch)
+        for frame in batch:
+            if "terminal" in frame:
+                continue
+            host.dispatch(
+                binding,
+                {
+                    "protocol": BRIDGE_PROTOCOL_VERSION,
+                    "call_id": f"ack-{frame['seq']}",
+                    "kind": "ack",
+                    "subscription_id": subscription_id,
+                    "seq": frame["seq"],
+                },
+            )
+        if any("terminal" in frame for frame in batch):
+            break
+    return frames
+
+
 def _stream_cases() -> list[dict[str, Any]]:
     """Return the stream frames the TypeScript client has to reach too.
 
@@ -346,7 +386,7 @@ def _stream_cases() -> list[dict[str, Any]]:
     streams.append(
         {
             "name": "gap-overflow",
-            "frames": overflow.pump(binding, limit=MAX_QUEUED_EVENTS + 1),
+            "frames": _drain(overflow, binding, subscription_id),
         }
     )
 

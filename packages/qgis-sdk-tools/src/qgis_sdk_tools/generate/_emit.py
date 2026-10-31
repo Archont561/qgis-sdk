@@ -15,6 +15,7 @@ from qgis_sdk_tools.generate._contract import (
     _KNOWN_KEYWORDS,
     _SIMPLE_TYPES,
     KIND_KEYWORD,
+    _is_open_map,
     _Surface,
 )
 from qgis_sdk_tools.generate._names import _Action, _Stream
@@ -246,7 +247,7 @@ def _field_type(schema: Mapping[str, Any], generator: _Generator) -> str:
         return name
     if schema.get("type") == "array":
         return f"readonly {_element(_field_type(schema['items'], generator))}[]"
-    return _inline_type(schema)
+    return _inline_type(schema, generator)
 
 
 def _element(rendered: str) -> str:
@@ -264,30 +265,49 @@ def _member_validator(
     if schema.get("type") == "array":
         inner = _member_validator("item", schema["items"], generator)
         return f"(Array.isArray({expression}) && {expression}.every((item) => {inner}))"
-    return _inline_validator(schema, expression)
+    return _inline_validator(schema, expression, generator)
 
 
-def _inline_type(schema: Mapping[str, Any]) -> str:
+def _inline_type(schema: Mapping[str, Any], generator: _Generator | None = None) -> str:
     if "anyOf" in schema:
-        return " | ".join(_inline_type(branch) for branch in schema["anyOf"])
+        return " | ".join(_inline_type(branch, generator) for branch in schema["anyOf"])
     if "enum" in schema:
         return " | ".join(_literal(value) for value in schema["enum"])
     declared = schema.get("type")
+    if isinstance(declared, list):
+        # ``"type": ["string", "number"]`` is a union the writer already spelled
+        # out; rendering each alternative is the same thing spelled the long way.
+        return " | ".join(
+            _inline_type({"type": alternative}, generator) for alternative in declared
+        )
     if declared == "array":
-        return f"readonly {_element(_inline_type(schema['items']))}[]"
+        items = schema.get("items")
+        if items is None:
+            # An array of unspecified values: a free-form JSON payload, which a
+            # caller checks itself rather than this module guessing an element.
+            return "readonly unknown[]"
+        return f"readonly {_element(_inline_type(items, generator))}[]"
     if declared in _SIMPLE_TYPES:
         return _SIMPLE_TYPES[declared]
     if declared == "object":
-        return "Record<string, unknown>"
+        # A titled object inside a union is a declaration of its own, so it is
+        # rendered under its name; an untitled one is an open map.
+        if _is_open_map(schema):
+            return "Record<string, unknown>"
+        named = None if generator is None else generator.name_for(schema)
+        return named if named is not None else "Record<string, unknown>"
     raise QgisSdkBridgeError(f"cannot render a type for {declared!r}")
 
 
-def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
+def _inline_validator(
+    schema: Mapping[str, Any], expression: str, generator: _Generator | None = None
+) -> str:
     if "anyOf" in schema:
         return (
             "("
             + " || ".join(
-                _inline_validator(branch, expression) for branch in schema["anyOf"]
+                _inline_validator(branch, expression, generator)
+                for branch in schema["anyOf"]
             )
             + ")"
         )
@@ -301,9 +321,12 @@ def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
         )
     declared = schema.get("type")
     if declared == "array":
+        items = schema.get("items")
+        if items is None:
+            return f"Array.isArray({expression})"
         return (
             f"(Array.isArray({expression}) && {expression}.every((item) => "
-            f"{_inline_validator(schema['items'], 'item')}))"
+            f"{_inline_validator(items, 'item', generator)}))"
         )
     if declared == "string":
         test = f'typeof {expression} === "string"'
@@ -330,7 +353,21 @@ def _inline_validator(schema: Mapping[str, Any], expression: str) -> str:
         return "(" + " && ".join(checks) + ")"
     if declared == "null":
         return f"{expression} === null"
+    if isinstance(declared, list):
+        return (
+            "("
+            + " || ".join(
+                _inline_validator({"type": alternative}, expression, generator)
+                for alternative in declared
+            )
+            + ")"
+        )
     if declared == "object":
+        if _is_open_map(schema):
+            return f"isRecord({expression})"
+        named = None if generator is None else generator.name_for(schema)
+        if named is not None:
+            return f"{named}({expression}, strict)"
         return f"isRecord({expression})"
     raise QgisSdkBridgeError(f"cannot validate {declared!r}")
 

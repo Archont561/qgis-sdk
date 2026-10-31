@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from qgis_sdk.bridge import BridgeOperation, Dispatcher
+from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, BridgeOperation, Dispatcher
 from qgis_sdk.bridge.resources import Handle, HandleKind, ReleaseLedger, ReleaseOutcome
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
@@ -50,7 +50,7 @@ def _release(dispatcher: Dispatcher, binding, handles: list[dict[str, str]]):
     return dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "release",
             "call_id": "release-1",
             "payload": {"handles": handles},
@@ -151,7 +151,7 @@ def test_the_dispatcher_tracks_the_subscriptions_a_view_opens() -> None:
     reply = dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "subscribe",
             "call_id": "sub-1",
             "operation": TICKS.id,
@@ -213,7 +213,7 @@ def test_a_malformed_handle_list_is_refused_before_anything_is_released() -> Non
     not_a_list = dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "release",
             "call_id": "release-2",
             "payload": {"handles": "tmp-1"},

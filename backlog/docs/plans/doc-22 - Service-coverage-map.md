@@ -34,14 +34,18 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Styles | `styles.apply_style` (packaged QML) | ✓ | — | ✓ | ✓ | `styles.apply` | ✓ | complete, narrow |
 | Processing (plugin-local) | `algorithms.execute` | ✓ | `AlgorithmRequest` | ✓ | ✓ | — (actions wrap it) | n/a | complete |
 | Processing (any provider, 0.7.0) | `algorithms.providers/list/describe/run`, generated `qgis_sdk.processing.*` | ✓ | `AlgorithmInfo`, `AlgorithmRun`, `RunResult` | ✓ (snapshot + `script_run`) | ✓ | `algorithms.providers/list/describe/run` | `algorithms.read`, `algorithms.run` | complete ([TASK-109](../../tasks/task-109%20-%20Generate-the-Processing-catalogue-typed-registry-in-Python-and-TypeScript-list-describe-and-run-for-any-provider.md), decision-64); models and batch in TASK-94 |
+| Features (0.10.0) | `features.page`, `features.feature`, paging/filters, geometry encodings | ✓ | `Feature`, `FeaturePage`, `FeatureQuery`, `Geometry` | ✓ (`FakeFeatures`, declared encodings, no conversion) | ✓ (`QgsFeatureRequest`, `$id > cursor`) | `features.page` stream, `features.get` | `features.read` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); 100 features a page by default, 1000 at most, an over-size ask refused by name |
+| Expressions (0.10.0) | `expressions.evaluate`, `expressions.validate` | ✓ | `ExpressionOutcome`, `ExpressionCheck` | ✓ (documented subset; functions refused by name) | ✓ (`QgsExpression` in a prepared context) | `expressions.evaluate`, `expressions.validate` | `expressions.evaluate` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); "valid, value null" and "invalid, message" are different answers |
+| Editing (0.10.0) | `Features.begin_edit`, `EditingSession.add/update/delete/commit/rollback` | ✓ | `EditOutcome` | ✓ (declares `atomic=True/False`) | ✓ (the layer's edit buffer) | `editing.begin/add/update/delete/commit/rollback` | `features.edit` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); session lifetime is the view, no cross-provider atomicity promised |
 | Network | get/post/request, blocking + async, limits | ✓ | ✓ | ✓ | ✓ | `network.fetch` stream | ✓ | complete |
+| Blobs (decision-59) | `HostAuthority.mint_blob`/`inline_or_blob`/`read_blob` | ✓ | `BlobRef`, `BlobChunk` | ✓ (authority over fakes) | ✓ (same code: the authority holds no Qt) | `blob.get` | `blob.read` | complete; the 256 KiB inline cap and the chunk size are measured in a real `QWebEngineView` by the native suite |
 | Notifications | `info` | ✓ | — | ✓ | ✓ | `notifications.info` | ✓ | levels in 0.7.0 (TASK-68) |
 | Workers / jobs | `offload`, `@job` | ✓ | — | ✓ | `QThreadPool` → `QgsTaskManager` (TASK-82) | n/a | n/a | existing step model; worker-first named jobs and lint planned for 0.9.0 (TASK-115–117; decision-65) |
 | Desktop | `desktop.iface` (opaque) | ✓ | — | ✓ | ✓ | never | n/a | escape hatch by design |
 
 ## Host operations
 
-Every operation the host answers, as of 0.9.0 ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
+Every operation the host answers, as of 0.10.0 ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
 point 5). The id is `<service>.<operation>`; the grant is the name that selects it
 in `[tool.qgis-sdk.web] grants` and `[tool.qgis-sdk.console] grants`, and `wraps`
 is the Protocol method the operation answers, so a reader can follow a name to
@@ -62,6 +66,17 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `settings.get` | `settings.read` | Settings | `Settings.get` |
 | `styles.apply` | `styles.apply` | Styles | `Styles.apply_style` |
 | `files.export` | `files.export` | Files (authority) | `HostAuthority.export_file` |
+| `blob.get` | `blob.read` | Payloads above the inline ceiling | `HostAuthority.read_blob` |
+| `features.page` | `features.read` | Features (a bounded page stream) | `Features.page` |
+| `features.get` | `features.read` | Features | `Features.feature` |
+| `expressions.evaluate` | `expressions.evaluate` | Expressions | `Features.evaluate` |
+| `expressions.validate` | `expressions.evaluate` | Expressions | `Features.check` |
+| `editing.begin` | `features.edit` | Editing | `Features.begin_edit` |
+| `editing.add` | `features.edit` | Editing | `EditingSession.add` |
+| `editing.update` | `features.edit` | Editing | `EditingSession.update` |
+| `editing.delete` | `features.edit` | Editing | `EditingSession.delete` |
+| `editing.commit` | `features.edit` | Editing | `EditingSession.commit` |
+| `editing.rollback` | `features.edit` | Editing | `EditingSession.rollback` |
 | `algorithms.providers` | `algorithms.read` | Processing | `Algorithms.providers` |
 | `algorithms.list` | `algorithms.read` | Processing | `Algorithms.list` |
 | `algorithms.describe` | `algorithms.read` | Processing | `Algorithms.describe` |
@@ -82,8 +97,6 @@ second list somewhere else.
 | Area | Service / operations | Task | Milestone | Status |
 | --- | --- | --- | --- | --- |
 | Canvas | `canvas.extent/scale/crs/center/zoom_to/refresh`, `themes.*`, `on_extent_changed`, `@tool` capture | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | planned |
-| Features | `features.iterate/get`, geometry models, editing sessions | [TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md) | 0.10.0 | planned |
-| Expressions | `expressions.evaluate/validate` | [TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md) | 0.10.0 | planned |
 | Rasters | `rasters.open/info/statistics/sample/export`, `LayerInfo.kind` | [TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md) | 0.10.0 | planned |
 | Project (full) | CRS, read/write/save, variables, properties, bookmarks, layer tree, `on_changed` | [TASK-88](../../tasks/task-88%20-%20Extend-the-project-service-CRS-read-write-and-save-variables-custom-properties-bookmarks-and-the-layer-tree.md) | 0.10.0 | planned |
 | Layouts / atlas | `layouts.list/load_template/export`, `atlas.run` as jobs | [TASK-89](../../tasks/task-89%20-%20Add-layouts-and-atlas-list-template-load-export-to-PDF-PNG-and-SVG-as-jobs-atlas-iteration-with-progress.md) | 0.10.0 | planned |

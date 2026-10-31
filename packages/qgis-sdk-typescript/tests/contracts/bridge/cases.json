@@ -13,7 +13,7 @@
 			"reply": {
 				"call_id": "case-success",
 				"ok": true,
-				"protocol": 1,
+				"protocol": 2,
 				"value": {
 					"echo": {
 						"name": "A"
@@ -26,7 +26,7 @@
 				"payload": {
 					"name": "A"
 				},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -42,13 +42,13 @@
 					"message": "No operation 'demo.missing' is exposed by this plugin"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-unknown",
 				"operation": "demo.missing",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -64,13 +64,13 @@
 					"message": "This view is not authorized for that operation"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-denied",
 				"operation": "demo.echo",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -86,13 +86,13 @@
 					"message": "This view belongs to a runtime generation that no longer exists"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-stale",
 				"operation": "demo.echo",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -105,10 +105,10 @@
 				"call_id": "case-protocol",
 				"error": {
 					"code": "invalid_bridge_message",
-					"message": "Unsupported bridge protocol: 99; this host speaks 1"
+					"message": "Unsupported bridge protocol: 99; this host speaks 2"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-protocol",
@@ -130,7 +130,7 @@
 					"message": "value is nested deeper than 32"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-payload",
@@ -218,7 +218,7 @@
 						]
 					]
 				},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -234,13 +234,13 @@
 					"message": "object is not wire-serializable"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-native",
 				"operation": "demo.native",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -256,13 +256,13 @@
 					"message": "No layer 'sites' is available in this runtime"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-failed",
 				"operation": "demo.fails",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -278,13 +278,13 @@
 					"message": "result.total: expected an integer, got string"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-invalid-result",
 				"operation": "demo.malformed",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -300,13 +300,13 @@
 					"message": "The operation was cancelled"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-cancelled",
 				"operation": "demo.echo",
 				"payload": {},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -321,7 +321,7 @@
 			"reply": {
 				"call_id": "case-forged",
 				"ok": true,
-				"protocol": 1,
+				"protocol": 2,
 				"value": {
 					"generation": 0,
 					"view_id": "view-1"
@@ -334,7 +334,7 @@
 				"payload": {
 					"view_id": "view-2"
 				},
-				"protocol": 1,
+				"protocol": 2,
 				"view_id": "view-2"
 			}
 		},
@@ -351,7 +351,7 @@
 					"message": "file ref '0123456789abcdef0123456789abcdef' expired"
 				},
 				"ok": false,
-				"protocol": 1
+				"protocol": 2
 			},
 			"request": {
 				"call_id": "case-expired",
@@ -364,7 +364,7 @@
 						"operations": ["read"]
 					}
 				},
-				"protocol": 1
+				"protocol": 2
 			}
 		},
 		{
@@ -389,7 +389,7 @@
 			"reply": {
 				"call_id": "case-release",
 				"ok": true,
-				"protocol": 1,
+				"protocol": 2,
 				"value": {
 					"released": [
 						{
@@ -420,11 +420,11 @@
 						}
 					]
 				},
-				"protocol": 1
+				"protocol": 2
 			}
 		}
 	],
-	"protocol": 1,
+	"protocol": 2,
 	"streams": [
 		{
 			"frames": [
@@ -435,7 +435,7 @@
 							"index": 0
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 0,
 					"subscription_id": "s1"
 				},
@@ -446,12 +446,12 @@
 							"index": 1
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 1,
 					"subscription_id": "s1"
 				},
 				{
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 2,
 					"subscription_id": "s1",
 					"terminal": {
@@ -470,7 +470,7 @@
 							"percent": 20
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 0,
 					"subscription_id": "s1"
 				},
@@ -481,7 +481,7 @@
 							"row": 1
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 1,
 					"subscription_id": "s1"
 				}
@@ -497,7 +497,7 @@
 							"index": 0
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 0,
 					"subscription_id": "s1"
 				},
@@ -508,7 +508,7 @@
 							"index": 1
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 1,
 					"subscription_id": "s1"
 				},
@@ -519,7 +519,7 @@
 							"index": 2
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 2,
 					"subscription_id": "s1"
 				},
@@ -530,7 +530,7 @@
 							"index": 3
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 3,
 					"subscription_id": "s1"
 				},
@@ -541,7 +541,7 @@
 							"index": 4
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 4,
 					"subscription_id": "s1"
 				},
@@ -552,7 +552,7 @@
 							"index": 5
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 5,
 					"subscription_id": "s1"
 				},
@@ -563,7 +563,7 @@
 							"index": 6
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 6,
 					"subscription_id": "s1"
 				},
@@ -574,7 +574,7 @@
 							"index": 7
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 7,
 					"subscription_id": "s1"
 				},
@@ -585,7 +585,7 @@
 							"index": 8
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 8,
 					"subscription_id": "s1"
 				},
@@ -596,7 +596,7 @@
 							"index": 9
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 9,
 					"subscription_id": "s1"
 				},
@@ -607,7 +607,7 @@
 							"index": 10
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 10,
 					"subscription_id": "s1"
 				},
@@ -618,7 +618,7 @@
 							"index": 11
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 11,
 					"subscription_id": "s1"
 				},
@@ -629,7 +629,7 @@
 							"index": 12
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 12,
 					"subscription_id": "s1"
 				},
@@ -640,7 +640,7 @@
 							"index": 13
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 13,
 					"subscription_id": "s1"
 				},
@@ -651,7 +651,7 @@
 							"index": 14
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 14,
 					"subscription_id": "s1"
 				},
@@ -662,7 +662,7 @@
 							"index": 15
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 15,
 					"subscription_id": "s1"
 				},
@@ -673,7 +673,7 @@
 							"index": 16
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 16,
 					"subscription_id": "s1"
 				},
@@ -684,7 +684,7 @@
 							"index": 17
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 17,
 					"subscription_id": "s1"
 				},
@@ -695,7 +695,7 @@
 							"index": 18
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 18,
 					"subscription_id": "s1"
 				},
@@ -706,7 +706,7 @@
 							"index": 19
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 19,
 					"subscription_id": "s1"
 				},
@@ -717,7 +717,7 @@
 							"index": 20
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 20,
 					"subscription_id": "s1"
 				},
@@ -728,7 +728,7 @@
 							"index": 21
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 21,
 					"subscription_id": "s1"
 				},
@@ -739,7 +739,7 @@
 							"index": 22
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 22,
 					"subscription_id": "s1"
 				},
@@ -750,7 +750,7 @@
 							"index": 23
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 23,
 					"subscription_id": "s1"
 				},
@@ -761,7 +761,7 @@
 							"index": 24
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 24,
 					"subscription_id": "s1"
 				},
@@ -772,7 +772,7 @@
 							"index": 25
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 25,
 					"subscription_id": "s1"
 				},
@@ -783,7 +783,7 @@
 							"index": 26
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 26,
 					"subscription_id": "s1"
 				},
@@ -794,7 +794,7 @@
 							"index": 27
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 27,
 					"subscription_id": "s1"
 				},
@@ -805,7 +805,7 @@
 							"index": 28
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 28,
 					"subscription_id": "s1"
 				},
@@ -816,7 +816,7 @@
 							"index": 29
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 29,
 					"subscription_id": "s1"
 				},
@@ -827,7 +827,7 @@
 							"index": 30
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 30,
 					"subscription_id": "s1"
 				},
@@ -838,7 +838,7 @@
 							"index": 31
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 31,
 					"subscription_id": "s1"
 				},
@@ -849,7 +849,7 @@
 							"index": 32
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 32,
 					"subscription_id": "s1"
 				},
@@ -860,7 +860,7 @@
 							"index": 33
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 33,
 					"subscription_id": "s1"
 				},
@@ -871,7 +871,7 @@
 							"index": 34
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 34,
 					"subscription_id": "s1"
 				},
@@ -882,7 +882,7 @@
 							"index": 35
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 35,
 					"subscription_id": "s1"
 				},
@@ -893,7 +893,7 @@
 							"index": 36
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 36,
 					"subscription_id": "s1"
 				},
@@ -904,7 +904,7 @@
 							"index": 37
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 37,
 					"subscription_id": "s1"
 				},
@@ -915,7 +915,7 @@
 							"index": 38
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 38,
 					"subscription_id": "s1"
 				},
@@ -926,7 +926,7 @@
 							"index": 39
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 39,
 					"subscription_id": "s1"
 				},
@@ -937,7 +937,7 @@
 							"index": 40
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 40,
 					"subscription_id": "s1"
 				},
@@ -948,7 +948,7 @@
 							"index": 41
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 41,
 					"subscription_id": "s1"
 				},
@@ -959,7 +959,7 @@
 							"index": 42
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 42,
 					"subscription_id": "s1"
 				},
@@ -970,7 +970,7 @@
 							"index": 43
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 43,
 					"subscription_id": "s1"
 				},
@@ -981,7 +981,7 @@
 							"index": 44
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 44,
 					"subscription_id": "s1"
 				},
@@ -992,7 +992,7 @@
 							"index": 45
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 45,
 					"subscription_id": "s1"
 				},
@@ -1003,7 +1003,7 @@
 							"index": 46
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 46,
 					"subscription_id": "s1"
 				},
@@ -1014,7 +1014,7 @@
 							"index": 47
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 47,
 					"subscription_id": "s1"
 				},
@@ -1025,7 +1025,7 @@
 							"index": 48
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 48,
 					"subscription_id": "s1"
 				},
@@ -1036,7 +1036,7 @@
 							"index": 49
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 49,
 					"subscription_id": "s1"
 				},
@@ -1047,7 +1047,7 @@
 							"index": 50
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 50,
 					"subscription_id": "s1"
 				},
@@ -1058,7 +1058,7 @@
 							"index": 51
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 51,
 					"subscription_id": "s1"
 				},
@@ -1069,7 +1069,7 @@
 							"index": 52
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 52,
 					"subscription_id": "s1"
 				},
@@ -1080,7 +1080,7 @@
 							"index": 53
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 53,
 					"subscription_id": "s1"
 				},
@@ -1091,7 +1091,7 @@
 							"index": 54
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 54,
 					"subscription_id": "s1"
 				},
@@ -1102,7 +1102,7 @@
 							"index": 55
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 55,
 					"subscription_id": "s1"
 				},
@@ -1113,7 +1113,7 @@
 							"index": 56
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 56,
 					"subscription_id": "s1"
 				},
@@ -1124,7 +1124,7 @@
 							"index": 57
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 57,
 					"subscription_id": "s1"
 				},
@@ -1135,7 +1135,7 @@
 							"index": 58
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 58,
 					"subscription_id": "s1"
 				},
@@ -1146,7 +1146,7 @@
 							"index": 59
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 59,
 					"subscription_id": "s1"
 				},
@@ -1157,7 +1157,7 @@
 							"index": 60
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 60,
 					"subscription_id": "s1"
 				},
@@ -1168,7 +1168,7 @@
 							"index": 61
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 61,
 					"subscription_id": "s1"
 				},
@@ -1179,7 +1179,7 @@
 							"index": 62
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 62,
 					"subscription_id": "s1"
 				},
@@ -1190,12 +1190,12 @@
 							"index": 63
 						}
 					},
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 63,
 					"subscription_id": "s1"
 				},
 				{
-					"protocol": 1,
+					"protocol": 2,
 					"seq": 64,
 					"subscription_id": "s1",
 					"terminal": {

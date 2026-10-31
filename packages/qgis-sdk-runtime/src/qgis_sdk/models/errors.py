@@ -407,6 +407,17 @@ class QgisSdkBridgeRefusalError(QgisSdkBridgeError):
     code = "grant_refused"
 
 
+class QgisSdkInvalidRequestError(QgisSdkBridgeRefusalError):
+    """A call asked for something the surface does not accept.
+
+    A page asking for a page size above the ceiling, or a bbox that is not four
+    numbers, hears ``invalid_payload`` and the bound it crossed, rather than a
+    generic failure it cannot act on.
+    """
+
+    code = "invalid_payload"
+
+
 class QgisSdkGrantRefusedError(QgisSdkBridgeRefusalError):
     """The view holds no grant that allows what it asked for."""
 
@@ -432,6 +443,15 @@ class QgisSdkStaleHandleError(QgisSdkBridgeRefusalError):
     """
 
     code = "stale_handle"
+
+
+class QgisSdkFeatureEditError(QgisSdkError):
+    """A provider refused a write, and the buffer says what it said.
+
+    ``commit`` reports this rather than claiming the write was rolled back: a
+    provider that wrote some rows and then failed has left them written, and
+    reversing them is a provider capability the SDK cannot assume.
+    """
 
 
 class QgisSdkNetworkError(QgisSdkError):

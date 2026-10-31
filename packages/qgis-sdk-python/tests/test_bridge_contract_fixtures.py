@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 
 from bridge_steps import ContractHost
+from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = PROJECT_ROOT / "scripts" / "generate_bridge_cases.py"
@@ -149,7 +150,7 @@ def test_releasing_a_borrowed_handle_retains_it_and_reports_each_outcome() -> No
 def test_every_reply_carries_the_protocol_and_survives_json() -> None:
     payload = _checked_in()
 
-    assert payload["protocol"] == 1
+    assert payload["protocol"] == BRIDGE_PROTOCOL_VERSION
     for case in payload["cases"]:
         assert case["reply"]["protocol"] == payload["protocol"]
         assert json.loads(json.dumps(case["reply"])) == case["reply"]

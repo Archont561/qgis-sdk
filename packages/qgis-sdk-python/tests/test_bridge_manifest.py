@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import pytest
-from qgis_sdk.bridge import BridgeOperation, Dispatcher
+from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, BridgeOperation, Dispatcher
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.models import FileInput, FileRef
@@ -72,7 +72,7 @@ def _call(
     operation: str, payload: dict[str, Any], call_id: str = "call-1"
 ) -> dict[str, Any]:
     return {
-        "protocol": 1,
+        "protocol": BRIDGE_PROTOCOL_VERSION,
         "call_id": call_id,
         "operation": operation,
         "payload": payload,
@@ -456,7 +456,7 @@ def test_a_subscription_payload_is_validated_the_same_way() -> None:
     refused = dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "subscribe",
             "call_id": "s1",
             "operation": "demo.ticks",
@@ -466,7 +466,7 @@ def test_a_subscription_payload_is_validated_the_same_way() -> None:
     accepted = dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "subscribe",
             "call_id": "s2",
             "operation": "demo.ticks",
@@ -572,7 +572,7 @@ def _subscribe(dispatcher: Dispatcher, binding: Any, payload: dict[str, Any]) ->
     return dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "subscribe",
             "call_id": "s1",
             "operation": "sites.watch",
@@ -683,7 +683,7 @@ def test_a_pushed_event_is_held_to_the_declaration_too() -> None:
     reply = dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "subscribe",
             "call_id": "s1",
             "operation": "demo.push",

@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:16790dc8c4d77ef5b5f22636702e913f3d6fb63275d0ae3e5a4ca6e8001a9abd";
+export const HOST_FINGERPRINT = "sha256:8c6bd797c3ab7fcae39a8be68d9eac4f6e10c5db77445eef988667a1fc3bd3b1";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -14,6 +14,17 @@ export const HOST_OPERATIONS = [
 	"algorithms.list",
 	"algorithms.providers",
 	"algorithms.run",
+	"blob.get",
+	"editing.add",
+	"editing.begin",
+	"editing.commit",
+	"editing.delete",
+	"editing.rollback",
+	"editing.update",
+	"expressions.evaluate",
+	"expressions.validate",
+	"features.get",
+	"features.page",
 	"files.export",
 	"layers.get",
 	"layers.list",
@@ -131,6 +142,78 @@ export interface AlgorithmSummary {
 	readonly provider: string;
 }
 
+export interface BlobChunk {
+	readonly checksum: string;
+	readonly data_base64: string;
+	readonly length: number;
+	readonly media_type: string;
+	readonly next_offset: number | null;
+	readonly offset: number;
+	readonly size: number;
+}
+
+export interface BlobRef {
+	readonly checksum: string;
+	readonly expires_at?: string | null;
+	readonly id: string;
+	readonly kind: "blob";
+	readonly media_type: string;
+	readonly size: number;
+}
+
+export interface BlobRequest {
+	readonly blob: BlobRef;
+	readonly length?: number;
+	readonly offset?: number;
+}
+
+export interface EditAddRequest {
+	readonly attributes: Record<string, unknown>;
+	readonly geometry?: Geometry | null;
+	readonly session_id: string;
+}
+
+export interface EditAddResult {
+	readonly feature_id: number;
+	readonly pending: number;
+}
+
+export interface EditBeginRequest {
+	readonly layer_id: string;
+}
+
+export interface EditDeleteRequest {
+	readonly feature_id: number;
+	readonly session_id: string;
+}
+
+export interface EditOutcome {
+	readonly applied: number;
+	readonly committed: boolean;
+	readonly feature_ids: readonly number[];
+}
+
+export interface EditPendingResult {
+	readonly pending: number;
+	readonly session_id: string;
+}
+
+export interface EditSessionInfo {
+	readonly layer_id: string;
+	readonly session_id: string;
+}
+
+export interface EditSessionRequest {
+	readonly session_id: string;
+}
+
+export interface EditUpdateRequest {
+	readonly attributes?: Record<string, unknown> | null;
+	readonly feature_id: number;
+	readonly geometry?: Geometry | null;
+	readonly session_id: string;
+}
+
 export interface ExportRequest {
 	readonly content: string;
 	readonly file: FileRef;
@@ -139,6 +222,54 @@ export interface ExportRequest {
 export interface ExportResult {
 	readonly bytes_written: number;
 	readonly name: string;
+}
+
+export interface ExpressionCheck {
+	readonly message: string | null;
+	readonly referenced_columns: readonly string[];
+	readonly valid: boolean;
+}
+
+export interface ExpressionOutcome {
+	readonly message: string | null;
+	readonly valid: boolean;
+	readonly value?: string | number | boolean | null | readonly unknown[] | Record<string, unknown>;
+}
+
+export interface ExpressionRequest {
+	readonly feature_id?: number | null;
+	readonly layer_id?: string | null;
+	readonly text: string;
+}
+
+export interface Feature {
+	readonly attributes: Record<string, unknown>;
+	readonly geometry?: Geometry | null;
+	readonly id: number;
+}
+
+export interface FeaturePage {
+	readonly items: readonly Feature[];
+	readonly next_cursor?: string;
+	readonly total?: number;
+	readonly truncated: boolean;
+}
+
+export interface FeaturePageRequest {
+	readonly bbox?: readonly number[] | null;
+	readonly cursor?: string;
+	readonly encoding?: "wkb" | "wkt" | "geojson";
+	readonly expression?: string | null;
+	readonly ids?: readonly number[] | null;
+	readonly layer_id: string;
+	readonly limit?: number;
+	readonly with_geometry?: boolean;
+}
+
+export interface FeatureRequest {
+	readonly encoding?: "wkb" | "wkt" | "geojson";
+	readonly feature_id: number;
+	readonly layer_id: string;
 }
 
 export interface FetchRequest {
@@ -155,6 +286,16 @@ export interface FileRef {
 	readonly kind: "file" | "directory";
 	readonly name?: string;
 	readonly operations?: readonly ("read" | "write")[];
+}
+
+export interface Geometry {
+	readonly crs?: string | null;
+	readonly encoding: "wkb" | "wkt" | "geojson";
+	readonly geometry_type: "point" | "line" | "polygon" | "multipoint" | "multiline" | "multipolygon" | "geometrycollection" | "none";
+	readonly is_empty?: boolean;
+	readonly part_count?: number;
+	readonly value: string;
+	readonly vertex_count?: number;
 }
 
 export interface HttpHeader {
@@ -391,6 +532,216 @@ export function AlgorithmSummary(value: unknown, strict = false): value is Algor
 	return true;
 }
 
+export function BlobChunk(value: unknown, strict = false): value is BlobChunk {
+	if (!isRecord(value)) return false;
+	if (!("offset" in value)) return false;
+	if (!("length" in value)) return false;
+	if (!("size" in value)) return false;
+	if (!("media_type" in value)) return false;
+	if (!("checksum" in value)) return false;
+	if (!("data_base64" in value)) return false;
+	if (!("next_offset" in value)) return false;
+	if (value["checksum"] !== undefined && !(typeof value["checksum"] === "string")) {
+		return false;
+	}
+	if (value["data_base64"] !== undefined && !(typeof value["data_base64"] === "string")) {
+		return false;
+	}
+	if (value["length"] !== undefined && !((isSafeInteger(value["length"]) && value["length"] >= 0))) {
+		return false;
+	}
+	if (value["media_type"] !== undefined && !(typeof value["media_type"] === "string")) {
+		return false;
+	}
+	if (value["next_offset"] !== undefined && !((isSafeInteger(value["next_offset"]) || value["next_offset"] === null))) {
+		return false;
+	}
+	if (value["offset"] !== undefined && !((isSafeInteger(value["offset"]) && value["offset"] >= 0))) {
+		return false;
+	}
+	if (value["size"] !== undefined && !((isSafeInteger(value["size"]) && value["size"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["checksum", "data_base64", "length", "media_type", "next_offset", "offset", "size"])) return false;
+	return true;
+}
+
+export function BlobRef(value: unknown, strict = false): value is BlobRef {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("size" in value)) return false;
+	if (!("media_type" in value)) return false;
+	if (!("checksum" in value)) return false;
+	if (value["checksum"] !== undefined && !(typeof value["checksum"] === "string" && new RegExp("^(?:[a-f0-9]{64})$").test(value["checksum"]))) {
+		return false;
+	}
+	if (value["expires_at"] !== undefined && !((typeof value["expires_at"] === "string" || value["expires_at"] === null))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string" && new RegExp("^(?:[a-f0-9]{16,64})$").test(value["id"]))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "blob"))) {
+		return false;
+	}
+	if (value["media_type"] !== undefined && !(typeof value["media_type"] === "string")) {
+		return false;
+	}
+	if (value["size"] !== undefined && !((isSafeInteger(value["size"]) && value["size"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["checksum", "expires_at", "id", "kind", "media_type", "size"])) return false;
+	return true;
+}
+
+export function BlobRequest(value: unknown, strict = false): value is BlobRequest {
+	if (!isRecord(value)) return false;
+	if (!("blob" in value)) return false;
+	if (value["blob"] !== undefined && !(BlobRef(value["blob"], strict))) {
+		return false;
+	}
+	if (value["length"] !== undefined && !((isSafeInteger(value["length"]) && value["length"] >= 1 && value["length"] <= 65536))) {
+		return false;
+	}
+	if (value["offset"] !== undefined && !((isSafeInteger(value["offset"]) && value["offset"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["blob", "length", "offset"])) return false;
+	return true;
+}
+
+export function EditAddRequest(value: unknown, strict = false): value is EditAddRequest {
+	if (!isRecord(value)) return false;
+	if (!("session_id" in value)) return false;
+	if (!("attributes" in value)) return false;
+	if (value["attributes"] !== undefined && !(isRecord(value["attributes"]))) {
+		return false;
+	}
+	if (value["geometry"] !== undefined && !((Geometry(value["geometry"], strict) || value["geometry"] === null))) {
+		return false;
+	}
+	if (value["session_id"] !== undefined && !(typeof value["session_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["attributes", "geometry", "session_id"])) return false;
+	return true;
+}
+
+export function EditAddResult(value: unknown, strict = false): value is EditAddResult {
+	if (!isRecord(value)) return false;
+	if (!("feature_id" in value)) return false;
+	if (!("pending" in value)) return false;
+	if (value["feature_id"] !== undefined && !(isSafeInteger(value["feature_id"]))) {
+		return false;
+	}
+	if (value["pending"] !== undefined && !(isSafeInteger(value["pending"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["feature_id", "pending"])) return false;
+	return true;
+}
+
+export function EditBeginRequest(value: unknown, strict = false): value is EditBeginRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id"])) return false;
+	return true;
+}
+
+export function EditDeleteRequest(value: unknown, strict = false): value is EditDeleteRequest {
+	if (!isRecord(value)) return false;
+	if (!("session_id" in value)) return false;
+	if (!("feature_id" in value)) return false;
+	if (value["feature_id"] !== undefined && !(isSafeInteger(value["feature_id"]))) {
+		return false;
+	}
+	if (value["session_id"] !== undefined && !(typeof value["session_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["feature_id", "session_id"])) return false;
+	return true;
+}
+
+export function EditOutcome(value: unknown, strict = false): value is EditOutcome {
+	if (!isRecord(value)) return false;
+	if (!("applied" in value)) return false;
+	if (!("feature_ids" in value)) return false;
+	if (!("committed" in value)) return false;
+	if (value["applied"] !== undefined && !((isSafeInteger(value["applied"]) && value["applied"] >= 0))) {
+		return false;
+	}
+	if (value["committed"] !== undefined && !(typeof value["committed"] === "boolean")) {
+		return false;
+	}
+	if (value["feature_ids"] !== undefined && !((Array.isArray(value["feature_ids"]) && value["feature_ids"].every((item) => isSafeInteger(item))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["applied", "committed", "feature_ids"])) return false;
+	return true;
+}
+
+export function EditPendingResult(value: unknown, strict = false): value is EditPendingResult {
+	if (!isRecord(value)) return false;
+	if (!("session_id" in value)) return false;
+	if (!("pending" in value)) return false;
+	if (value["pending"] !== undefined && !(isSafeInteger(value["pending"]))) {
+		return false;
+	}
+	if (value["session_id"] !== undefined && !(typeof value["session_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["pending", "session_id"])) return false;
+	return true;
+}
+
+export function EditSessionInfo(value: unknown, strict = false): value is EditSessionInfo {
+	if (!isRecord(value)) return false;
+	if (!("session_id" in value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (value["session_id"] !== undefined && !(typeof value["session_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id", "session_id"])) return false;
+	return true;
+}
+
+export function EditSessionRequest(value: unknown, strict = false): value is EditSessionRequest {
+	if (!isRecord(value)) return false;
+	if (!("session_id" in value)) return false;
+	if (value["session_id"] !== undefined && !(typeof value["session_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["session_id"])) return false;
+	return true;
+}
+
+export function EditUpdateRequest(value: unknown, strict = false): value is EditUpdateRequest {
+	if (!isRecord(value)) return false;
+	if (!("session_id" in value)) return false;
+	if (!("feature_id" in value)) return false;
+	if (value["attributes"] !== undefined && !((isRecord(value["attributes"]) || value["attributes"] === null))) {
+		return false;
+	}
+	if (value["feature_id"] !== undefined && !(isSafeInteger(value["feature_id"]))) {
+		return false;
+	}
+	if (value["geometry"] !== undefined && !((Geometry(value["geometry"], strict) || value["geometry"] === null))) {
+		return false;
+	}
+	if (value["session_id"] !== undefined && !(typeof value["session_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["attributes", "feature_id", "geometry", "session_id"])) return false;
+	return true;
+}
+
 export function ExportRequest(value: unknown, strict = false): value is ExportRequest {
 	if (!isRecord(value)) return false;
 	if (!("file" in value)) return false;
@@ -416,6 +767,142 @@ export function ExportResult(value: unknown, strict = false): value is ExportRes
 		return false;
 	}
 	if (strict && !hasOnly(value, ["bytes_written", "name"])) return false;
+	return true;
+}
+
+export function ExpressionCheck(value: unknown, strict = false): value is ExpressionCheck {
+	if (!isRecord(value)) return false;
+	if (!("valid" in value)) return false;
+	if (!("message" in value)) return false;
+	if (!("referenced_columns" in value)) return false;
+	if (value["message"] !== undefined && !((typeof value["message"] === "string" || value["message"] === null))) {
+		return false;
+	}
+	if (value["referenced_columns"] !== undefined && !((Array.isArray(value["referenced_columns"]) && value["referenced_columns"].every((item) => typeof item === "string")))) {
+		return false;
+	}
+	if (value["valid"] !== undefined && !(typeof value["valid"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["message", "referenced_columns", "valid"])) return false;
+	return true;
+}
+
+export function ExpressionOutcome(value: unknown, strict = false): value is ExpressionOutcome {
+	if (!isRecord(value)) return false;
+	if (!("valid" in value)) return false;
+	if (!("message" in value)) return false;
+	if (value["message"] !== undefined && !((typeof value["message"] === "string" || value["message"] === null))) {
+		return false;
+	}
+	if (value["valid"] !== undefined && !(typeof value["valid"] === "boolean")) {
+		return false;
+	}
+	if (value["value"] !== undefined && !((typeof value["value"] === "string" || typeof value["value"] === "number" && Number.isFinite(value["value"]) || typeof value["value"] === "boolean" || value["value"] === null || Array.isArray(value["value"]) || isRecord(value["value"])))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["message", "valid", "value"])) return false;
+	return true;
+}
+
+export function ExpressionRequest(value: unknown, strict = false): value is ExpressionRequest {
+	if (!isRecord(value)) return false;
+	if (!("text" in value)) return false;
+	if (value["feature_id"] !== undefined && !((isSafeInteger(value["feature_id"]) || value["feature_id"] === null))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !((typeof value["layer_id"] === "string" || value["layer_id"] === null))) {
+		return false;
+	}
+	if (value["text"] !== undefined && !(typeof value["text"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["feature_id", "layer_id", "text"])) return false;
+	return true;
+}
+
+export function Feature(value: unknown, strict = false): value is Feature {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("attributes" in value)) return false;
+	if (value["attributes"] !== undefined && !(isRecord(value["attributes"]))) {
+		return false;
+	}
+	if (value["geometry"] !== undefined && !((Geometry(value["geometry"], strict) || value["geometry"] === null))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(isSafeInteger(value["id"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["attributes", "geometry", "id"])) return false;
+	return true;
+}
+
+export function FeaturePage(value: unknown, strict = false): value is FeaturePage {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => Feature(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["total"] !== undefined && !((isSafeInteger(value["total"]) && value["total"] >= 0))) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "total", "truncated"])) return false;
+	return true;
+}
+
+export function FeaturePageRequest(value: unknown, strict = false): value is FeaturePageRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["bbox"] !== undefined && !(((Array.isArray(value["bbox"]) && value["bbox"].every((item) => typeof item === "number" && Number.isFinite(item))) || value["bbox"] === null))) {
+		return false;
+	}
+	if (value["cursor"] !== undefined && !(typeof value["cursor"] === "string" && new RegExp("^(?:[0-9]+)$").test(value["cursor"]))) {
+		return false;
+	}
+	if (value["encoding"] !== undefined && !((value["encoding"] === "wkb" || value["encoding"] === "wkt" || value["encoding"] === "geojson"))) {
+		return false;
+	}
+	if (value["expression"] !== undefined && !((typeof value["expression"] === "string" || value["expression"] === null))) {
+		return false;
+	}
+	if (value["ids"] !== undefined && !(((Array.isArray(value["ids"]) && value["ids"].every((item) => isSafeInteger(item))) || value["ids"] === null))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (value["limit"] !== undefined && !((isSafeInteger(value["limit"]) && value["limit"] >= 1 && value["limit"] <= 1000))) {
+		return false;
+	}
+	if (value["with_geometry"] !== undefined && !(typeof value["with_geometry"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["bbox", "cursor", "encoding", "expression", "ids", "layer_id", "limit", "with_geometry"])) return false;
+	return true;
+}
+
+export function FeatureRequest(value: unknown, strict = false): value is FeatureRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("feature_id" in value)) return false;
+	if (value["encoding"] !== undefined && !((value["encoding"] === "wkb" || value["encoding"] === "wkt" || value["encoding"] === "geojson"))) {
+		return false;
+	}
+	if (value["feature_id"] !== undefined && !(isSafeInteger(value["feature_id"]))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["encoding", "feature_id", "layer_id"])) return false;
 	return true;
 }
 
@@ -461,6 +948,36 @@ export function FileRef(value: unknown, strict = false): value is FileRef {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["id", "kind", "name", "operations"])) return false;
+	return true;
+}
+
+export function Geometry(value: unknown, strict = false): value is Geometry {
+	if (!isRecord(value)) return false;
+	if (!("encoding" in value)) return false;
+	if (!("value" in value)) return false;
+	if (!("geometry_type" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["encoding"] !== undefined && !((value["encoding"] === "wkb" || value["encoding"] === "wkt" || value["encoding"] === "geojson"))) {
+		return false;
+	}
+	if (value["geometry_type"] !== undefined && !((value["geometry_type"] === "point" || value["geometry_type"] === "line" || value["geometry_type"] === "polygon" || value["geometry_type"] === "multipoint" || value["geometry_type"] === "multiline" || value["geometry_type"] === "multipolygon" || value["geometry_type"] === "geometrycollection" || value["geometry_type"] === "none"))) {
+		return false;
+	}
+	if (value["is_empty"] !== undefined && !(typeof value["is_empty"] === "boolean")) {
+		return false;
+	}
+	if (value["part_count"] !== undefined && !((isSafeInteger(value["part_count"]) && value["part_count"] >= 0))) {
+		return false;
+	}
+	if (value["value"] !== undefined && !(typeof value["value"] === "string")) {
+		return false;
+	}
+	if (value["vertex_count"] !== undefined && !((isSafeInteger(value["vertex_count"]) && value["vertex_count"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "encoding", "geometry_type", "is_empty", "part_count", "value", "vertex_count"])) return false;
 	return true;
 }
 
@@ -811,6 +1328,16 @@ export function VectorLayerInfo(value: unknown, strict = false): value is Vector
 	return true;
 }
 
+/** One event of `features.page`, narrowed by its kind. */
+export type FeaturesPageEvent =
+	| { readonly kind: "data"; readonly payload: FeaturePage };
+
+export function FeaturesPageEvent(value: unknown, strict = false): value is FeaturesPageEvent {
+	if (!isRecord(value)) return false;
+	if (value.kind === "data") return FeaturePage(value.payload, strict);
+	return false;
+}
+
 /** One event of `network.fetch`, narrowed by its kind. */
 export type NetworkFetchEvent =
 	| { readonly kind: "data"; readonly payload: NetworkFetchData };
@@ -828,6 +1355,25 @@ export interface HostOperations {
 		readonly list: (input?: AlgorithmListRequest, options?: HostInvokeOptions) => Promise<AlgorithmPage>;
 		readonly providers: (input?: PageRequest, options?: HostInvokeOptions) => Promise<ProviderPage>;
 		readonly run: (input: RunAlgorithmRequest, options?: HostInvokeOptions) => Promise<RunResult>;
+	};
+	readonly blob: {
+		readonly get: (input: BlobRequest, options?: HostInvokeOptions) => Promise<BlobChunk>;
+	};
+	readonly editing: {
+		readonly add: (input: EditAddRequest, options?: HostInvokeOptions) => Promise<EditAddResult>;
+		readonly begin: (input: EditBeginRequest, options?: HostInvokeOptions) => Promise<EditSessionInfo>;
+		readonly commit: (input: EditSessionRequest, options?: HostInvokeOptions) => Promise<EditOutcome>;
+		readonly delete: (input: EditDeleteRequest, options?: HostInvokeOptions) => Promise<EditPendingResult>;
+		readonly rollback: (input: EditSessionRequest, options?: HostInvokeOptions) => Promise<EditPendingResult>;
+		readonly update: (input: EditUpdateRequest, options?: HostInvokeOptions) => Promise<EditPendingResult>;
+	};
+	readonly expressions: {
+		readonly evaluate: (input: ExpressionRequest, options?: HostInvokeOptions) => Promise<ExpressionOutcome>;
+		readonly validate: (input: ExpressionRequest, options?: HostInvokeOptions) => Promise<ExpressionCheck>;
+	};
+	readonly features: {
+		readonly get: (input: FeatureRequest, options?: HostInvokeOptions) => Promise<Feature>;
+		readonly page: (input: FeaturePageRequest, handlers: HostStreamHandlers<FeaturesPageEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
 	};
 	readonly files: {
 		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
@@ -880,6 +1426,80 @@ export function createHost(client: HostClientLike): HostOperations {
 					client, "algorithms.run", input, options,
 					RunAlgorithmRequest,
 					RunResult,
+				),
+		},
+		blob: {
+			get: (input: BlobRequest, options?: HostInvokeOptions) =>
+				call<BlobChunk>(
+					client, "blob.get", input, options,
+					BlobRequest,
+					BlobChunk,
+				),
+		},
+		editing: {
+			add: (input: EditAddRequest, options?: HostInvokeOptions) =>
+				call<EditAddResult>(
+					client, "editing.add", input, options,
+					EditAddRequest,
+					EditAddResult,
+				),
+			begin: (input: EditBeginRequest, options?: HostInvokeOptions) =>
+				call<EditSessionInfo>(
+					client, "editing.begin", input, options,
+					EditBeginRequest,
+					EditSessionInfo,
+				),
+			commit: (input: EditSessionRequest, options?: HostInvokeOptions) =>
+				call<EditOutcome>(
+					client, "editing.commit", input, options,
+					EditSessionRequest,
+					EditOutcome,
+				),
+			delete: (input: EditDeleteRequest, options?: HostInvokeOptions) =>
+				call<EditPendingResult>(
+					client, "editing.delete", input, options,
+					EditDeleteRequest,
+					EditPendingResult,
+				),
+			rollback: (input: EditSessionRequest, options?: HostInvokeOptions) =>
+				call<EditPendingResult>(
+					client, "editing.rollback", input, options,
+					EditSessionRequest,
+					EditPendingResult,
+				),
+			update: (input: EditUpdateRequest, options?: HostInvokeOptions) =>
+				call<EditPendingResult>(
+					client, "editing.update", input, options,
+					EditUpdateRequest,
+					EditPendingResult,
+				),
+		},
+		expressions: {
+			evaluate: (input: ExpressionRequest, options?: HostInvokeOptions) =>
+				call<ExpressionOutcome>(
+					client, "expressions.evaluate", input, options,
+					ExpressionRequest,
+					ExpressionOutcome,
+				),
+			validate: (input: ExpressionRequest, options?: HostInvokeOptions) =>
+				call<ExpressionCheck>(
+					client, "expressions.validate", input, options,
+					ExpressionRequest,
+					ExpressionCheck,
+				),
+		},
+		features: {
+			get: (input: FeatureRequest, options?: HostInvokeOptions) =>
+				call<Feature>(
+					client, "features.get", input, options,
+					FeatureRequest,
+					Feature,
+				),
+			page: (input: FeaturePageRequest, handlers: HostStreamHandlers<FeaturesPageEvent>, options?: HostInvokeOptions) =>
+				open<FeaturesPageEvent>(
+					client, "features.page", input, handlers, options,
+					FeaturePageRequest,
+					FeaturesPageEvent,
 				),
 		},
 		files: {

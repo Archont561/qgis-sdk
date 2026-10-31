@@ -12,9 +12,15 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
-from qgis_sdk.bridge import BridgeOperation, Dispatcher, ViewBinding
+from qgis_sdk.bridge import (
+    BRIDGE_PROTOCOL_VERSION,
+    BridgeOperation,
+    Dispatcher,
+    ViewBinding,
+)
 from qgis_sdk.bridge.streams import (
     MAX_FRAMES_PER_PUMP,
+    MAX_IN_FLIGHT_FRAMES,
     MAX_QUEUED_EVENTS,
     MAX_SUBSCRIPTIONS_PER_VIEW,
     StreamEventType,
@@ -67,7 +73,7 @@ def _subscribe(
     return dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "subscribe",
             "call_id": "sub-1",
             "operation": operation,
@@ -82,12 +88,56 @@ def _unsubscribe(
     return dispatcher.dispatch(
         binding,
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "kind": "unsubscribe",
             "call_id": "unsub-1",
             "subscription_id": subscription_id,
         },
     )
+
+
+def _ack(
+    dispatcher: Dispatcher, binding: ViewBinding, subscription_id: str, seq: int
+) -> dict[str, Any]:
+    return dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "ack",
+            "call_id": f"ack-{seq}",
+            "subscription_id": subscription_id,
+            "seq": seq,
+        },
+    )
+
+
+def _drain(
+    dispatcher: Dispatcher,
+    binding: ViewBinding,
+    subscription_id: str,
+    *,
+    limit: int = MAX_FRAMES_PER_PUMP,
+    rounds: int = 32,
+) -> list[dict[str, Any]]:
+    """Collect a whole stream the way a protocol-2 client does: pump, then ack.
+
+    The host hands out :data:`MAX_IN_FLIGHT_FRAMES` unacknowledged frames, so a
+    reader that never acks stops there by design rather than by accident. This is
+    the loop a client runs, written once for the tests that want the whole
+    stream.
+    """
+    frames: list[dict[str, Any]] = []
+    for _ in range(rounds):
+        batch = dispatcher.pump(binding, limit=limit)
+        if not batch:
+            break
+        frames.extend(batch)
+        for frame in batch:
+            if "terminal" not in frame:
+                _ack(dispatcher, binding, subscription_id, frame["seq"])
+        if any("terminal" in frame for frame in batch):
+            break
+    return frames
 
 
 def test_a_subscription_is_a_call_and_a_forbidden_view_cannot_open_one() -> None:
@@ -145,7 +195,7 @@ def test_frames_are_ordered_per_subscription_and_carry_the_protocol() -> None:
     frames = dispatcher.pump(binding)
 
     assert [frame["seq"] for frame in frames] == [0, 1, 2, 3]
-    assert all(frame["protocol"] == 1 for frame in frames)
+    assert all(frame["protocol"] == BRIDGE_PROTOCOL_VERSION for frame in frames)
     assert all(frame["subscription_id"] == subscription_id for frame in frames)
     assert [frame["event"]["payload"] for frame in frames[:-1]] == [
         {"index": 0},
@@ -194,7 +244,7 @@ def test_a_pushed_stream_that_overruns_its_queue_ends_with_a_gap() -> None:
         assert dispatcher.emit(subscription_id, {"index": index}) is True
 
     assert dispatcher.emit(subscription_id, {"index": "overflow"}) is False
-    frames = dispatcher.pump(binding, limit=MAX_QUEUED_EVENTS + 1)
+    frames = _drain(dispatcher, binding, subscription_id, limit=MAX_QUEUED_EVENTS + 1)
 
     assert frames[-1]["terminal"] == {
         "kind": "gap",
@@ -380,8 +430,24 @@ def test_pump_respects_its_budget_across_many_subscriptions() -> None:
 
     first = dispatcher.pump(binding, limit=MAX_FRAMES_PER_PUMP)
 
-    assert len(first) == 2 * MAX_FRAMES_PER_PUMP
-    assert len(dispatcher.pump(binding, limit=MAX_FRAMES_PER_PUMP)) > 0
+    # The smaller of the pump budget and the in-flight bound wins: a client that
+    # has not acked anything is owed at most MAX_IN_FLIGHT_FRAMES per stream.
+    assert len(first) == 2 * MAX_IN_FLIGHT_FRAMES
+    assert dispatcher.pump(binding, limit=MAX_FRAMES_PER_PUMP) == []
+
+    for subscription_id in {frame["subscription_id"] for frame in first}:
+        for frame in first:
+            if frame["subscription_id"] == subscription_id:
+                _ack(dispatcher, binding, subscription_id, frame["seq"])
+
+    later = dispatcher.pump(binding, limit=MAX_FRAMES_PER_PUMP)
+
+    # Acking released exactly one window, so the next pump is bounded the same
+    # way and the frames continue where the first batch stopped.
+    assert len(later) == 2 * MAX_IN_FLIGHT_FRAMES
+    assert [frame["seq"] for frame in later[:MAX_IN_FLIGHT_FRAMES]] == list(
+        range(MAX_IN_FLIGHT_FRAMES, 2 * MAX_IN_FLIGHT_FRAMES)
+    )
 
 
 def test_the_stream_event_vocabulary_has_one_owner() -> None:

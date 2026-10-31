@@ -30,6 +30,7 @@ not by whatever the transport happens to do with a callback.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any
@@ -37,6 +38,7 @@ from typing import Any
 from qgis_sdk.bridge.protocol import (
     BRIDGE_PROTOCOL_VERSION,
     HOST_SCHEMA_VERSION,
+    MAX_INLINE_BYTES,
     BridgeErrorCode,
     BridgeOperation,
     InvokeEnvelope,
@@ -50,6 +52,7 @@ from qgis_sdk.bridge.schema import validate
 from qgis_sdk.bridge.streams import (
     MAX_FRAMES_PER_PUMP,
     MAX_SUBSCRIPTIONS_PER_VIEW,
+    AckRequest,
     DisposalRequest,
     PushSource,
     StreamEventType,
@@ -123,6 +126,11 @@ class Dispatcher:
         self._subscriptions: dict[str, Subscription] = {}
         self._counter = 0
         self._generation = 0
+        #: Closes one editing session (``True`` when it was open) and, with the
+        #: view id, every session that view owns. Set by the host that owns the
+        #: sessions; a dispatcher with none simply has nothing to close.
+        self._close_editing: Callable[[str], bool] | None = None
+        self._close_view_editing: Callable[[str], None] | None = None
 
     @classmethod
     def from_description(
@@ -358,9 +366,9 @@ class Dispatcher:
         """Answer one call with a reply, never with an exception.
 
         ``kind`` selects the call: an invocation by default, a subscription,
-        its disposal, a release or a handshake otherwise. They share the same
-        refusals, so a subscription can never be opened through a path an
-        invocation cannot take.
+        its acknowledgement, its disposal, a release or a handshake otherwise.
+        They share the same refusals, so a subscription can never be opened
+        through a path an invocation cannot take.
         """
         call_id = peek_call_id(raw) or ""
         kind = raw.get("kind", "invoke") if isinstance(raw, Mapping) else "invoke"
@@ -368,6 +376,8 @@ class Dispatcher:
             return self._subscribe(binding, raw, cancelled=cancelled)
         if kind == "unsubscribe":
             return self._unsubscribe(binding, raw)
+        if kind == "ack":
+            return self._acknowledge(binding, raw)
         if kind == "release":
             return self._release(binding, raw)
         if kind == "handshake":
@@ -426,6 +436,15 @@ class Dispatcher:
         refusal = _output_refusal(operation, wire_value)
         if refusal is not None:
             return failure(call_id, BridgeErrorCode.INVALID_RESULT, refusal)
+        size = _wire_size(wire_value)
+        if size > MAX_INLINE_BYTES:
+            return failure(
+                call_id,
+                BridgeErrorCode.INVALID_RESULT,
+                f"The result is {size} bytes, above the {MAX_INLINE_BYTES}-byte "
+                "inline ceiling; return a BlobRef and let the page fetch chunks "
+                "(decision-59)",
+            )
         return success(call_id, wire_value)
 
     def pump(
@@ -468,8 +487,28 @@ class Dispatcher:
             return False
         return subscription.emit(payload, kind=kind)
 
+    def register_editing(
+        self,
+        *,
+        close: Callable[[str], bool],
+        close_view: Callable[[str], None],
+    ) -> None:
+        """Let the host close its editing sessions when the view is released.
+
+        Editing sessions live on the host's service, not in the dispatcher, but
+        their lifetime is the view's: a page that disappears mid-edit must not
+        leave a buffer open behind it. The host hands the two calls it needs -
+        one session by id, and every session of a view - so disposal stays a
+        decision of the code that owns the buffers.
+        """
+        self._close_editing = close
+        self._close_view_editing = close_view
+        self._ledger.dispose_editing = close
+
     def dispose(self, binding: ViewBinding) -> int:
-        """Close every subscription belonging to ``binding``'s view."""
+        """Close every subscription and editing session of ``binding``'s view."""
+        if self._close_view_editing is not None:
+            self._close_view_editing(binding.view_id)
         disposal = [
             subscription
             for subscription in self._subscriptions.values()
@@ -628,6 +667,68 @@ class Dispatcher:
             Handle(kind=HandleKind.SUBSCRIPTION, id=subscription.id),
         )
         return success(call_id, {"subscription_id": subscription.id, "disposed": True})
+
+    def _acknowledge(
+        self, binding: ViewBinding, raw: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Record that a view delivered one stream frame (protocol 2).
+
+        An acknowledgement is delivery feedback, not a call that does work: it
+        names a subscription this view opened and a seq the host handed out, and
+        the answer says how much is still in flight. A repeat or a late ack is
+        accepted as a no-op, because frames race the consumer that acknowledges
+        them; an ack for a seq the host never sent is refused, because that
+        client is no longer reading the stream it thinks it reads.
+        """
+        call_id = peek_call_id(raw) or ""
+        try:
+            request = AckRequest.parse(raw)
+        except QgisSdkBridgeProtocolError as error:
+            return failure(call_id, BridgeErrorCode.INVALID_MESSAGE, str(error))
+        call_id = request.call_id
+        if binding.generation != self._generation:
+            return failure(
+                call_id,
+                BridgeErrorCode.STALE_GENERATION,
+                "This view belongs to a runtime generation that no longer exists",
+            )
+        subscription = self._subscriptions.get(request.subscription_id)
+        if subscription is None:
+            return success(
+                call_id,
+                {
+                    "subscription_id": request.subscription_id,
+                    "acknowledged": None,
+                    "in_flight": 0,
+                },
+            )
+        if subscription.view_id != binding.view_id:
+            return failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This subscription belongs to a different view",
+            )
+        if not self._is_authorized(binding, subscription.operation):
+            return failure(
+                call_id,
+                BridgeErrorCode.NOT_AUTHORIZED,
+                "This view is not authorized for that operation",
+            )
+        if not subscription.acknowledge(request.seq):
+            return failure(
+                call_id,
+                BridgeErrorCode.INVALID_MESSAGE,
+                f"Frame {request.seq} of {request.subscription_id!r} was never "
+                "handed to this view",
+            )
+        return success(
+            call_id,
+            {
+                "subscription_id": subscription.id,
+                "acknowledged": subscription.acknowledged,
+                "in_flight": subscription.in_flight,
+            },
+        )
 
     def _handshake_reply(self, binding: ViewBinding, call_id: str) -> dict[str, Any]:
         """Answer ``kind: "handshake"`` for a view the host already bound.
@@ -933,6 +1034,20 @@ def _input_refusal(operation: BridgeOperation, payload: Any) -> str | None:
     except QgisSdkBridgeError as error:
         return str(error)
     return None
+
+
+def _wire_size(value: Any) -> int:
+    """Measure a reply the way the transport will, in bytes of JSON text.
+
+    The ceiling is about what crosses QWebChannel, so it is measured after the
+    value is already known to be JSON-safe: no encoder fallback, no surprises.
+    """
+    try:
+        return len(
+            json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+        )
+    except (TypeError, ValueError):
+        return 0
 
 
 def _output_refusal(operation: BridgeOperation, value: Any) -> str | None:

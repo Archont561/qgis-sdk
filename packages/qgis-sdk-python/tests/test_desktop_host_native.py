@@ -33,6 +33,7 @@ try:
     QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
     import PyQt6.QtWebEngineWidgets  # noqa: F401  (must precede the application)
     from qgis_sdk.adapters.desktop import host
+    from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"the hosted page needs Qt WebEngine: {error}", allow_module_level=True)
 
@@ -112,7 +113,7 @@ class _Page:
 
     def call(self, call_id: str, operation: str, payload: Any) -> dict[str, Any]:
         message = {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "call_id": call_id,
             "operation": operation,
             "payload": payload,

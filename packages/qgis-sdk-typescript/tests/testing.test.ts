@@ -8,6 +8,7 @@
 
 import { expect, test } from "@archont561/bun-test-utils";
 import {
+	BRIDGE_PROTOCOL_VERSION,
 	BridgeClient,
 	QgisSdkBridgeRemoteError,
 	QgisSdkBridgeTimeoutError,
@@ -266,7 +267,12 @@ test("a raw message can be pushed to script what no expectation covers", async (
 	const harness = createBridgeHarness<Op>();
 	const client = new BridgeClient(harness);
 
-	harness.deliver({ protocol: 1, call_id: "ghost", ok: true, value: null });
+	harness.deliver({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		call_id: "ghost",
+		ok: true,
+		value: null,
+	});
 	harness.deliver("not even an object");
 	await harness.settled();
 
@@ -297,11 +303,15 @@ test("two harnesses are two hosts: nothing crosses between their clients", async
 test("the harness refuses an envelope that is not the protocol it fakes", () => {
 	const harness = createBridgeHarness<Op>();
 
-	expect(() => harness.send({ protocol: 2, call_id: "c1" })).toThrow(
+	expect(() => harness.send({ protocol: 99, call_id: "c1" })).toThrow(
 		QgisSdkBridgeHarnessError,
 	);
 	expect(() =>
-		harness.send({ protocol: 1, call_id: "c1", kind: "dance" }),
+		harness.send({
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			call_id: "c1",
+			kind: "dance",
+		}),
 	).toThrow(QgisSdkBridgeHarnessError);
 });
 

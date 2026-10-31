@@ -15,6 +15,14 @@ a client chooses to make, and the host only sends frames for a subscription that
 client opened, so a client which never subscribes still sees nothing but replies
 to its own calls. The ordering, buffering and termination rules that go with
 those frames live in :mod:`qgis_sdk.bridge.streams`.
+
+Version 2 added ``kind: "ack"`` (decision-59 point 3): a client acknowledges
+each stream frame it delivered, and the host keeps at most
+:data:`~qgis_sdk.bridge.streams.MAX_IN_FLIGHT_FRAMES` frames ahead of the
+acknowledgement before it stops advancing the source. A version-1 client never
+sends one, so the host could not tell a slow consumer from a dead one and had no
+answer but a bounded queue and a ``gap``; that is a wire change, not a package
+release, and it moved this number and nothing else.
 """
 
 from __future__ import annotations
@@ -29,7 +37,14 @@ from typing import Any
 from qgis_sdk.declarations import STREAM_EVENT_KINDS
 from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkBridgeProtocolError
 
-BRIDGE_PROTOCOL_VERSION = 1
+BRIDGE_PROTOCOL_VERSION = 2
+
+#: Ceiling for one message, in bytes of JSON (decision-59 point 1). A payload
+#: above it is not truncated and not sent: the producer hands over a
+#: ``BlobRef`` instead (``HostAuthority.inline_or_blob``), and the dispatcher
+#: refuses a reply that still exceeds the ceiling rather than shipping a
+#: message a page was never designed to parse.
+MAX_INLINE_BYTES = 256 * 1024
 
 #: Version of the curated host surface (:mod:`qgis_sdk.bridge.host`). It is
 #: advertised in the handshake and carried by the generated TypeScript module, so

@@ -36,6 +36,7 @@ from qgis_sdk.models.layers import VectorLayerInfo
 from qgis_sdk.network import NetworkGrant
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.contracts import Notifications
+from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.layers import Layers
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
@@ -54,6 +55,8 @@ PROTOCOLS: dict[str, type] = {
     "Styles": Styles,
     "Notifications": Notifications,
     "Algorithms": Algorithms,
+    "Features": Features,
+    "EditingSession": EditingSession,
 }
 
 
@@ -291,9 +294,13 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "notifications.info",
         "styles.apply",
         "files.export",
+        "blob.read",
         "network.fetch",
         "algorithms.read",
         "algorithms.run",
+        "features.read",
+        "features.edit",
+        "expressions.evaluate",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.

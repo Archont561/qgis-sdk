@@ -90,6 +90,26 @@ def _check(value: Any, schema: Any, *, path: str, allow_unknown: bool) -> None:
     declared = schema.get("type")
     if declared is None:
         raise QgisSdkBridgeError(f"{path}: a schema needs a type, anyOf or enum")
+    if isinstance(declared, list):
+        # ``"type": ["string", "number"]`` says what ``anyOf`` says the long way;
+        # an expression's value is the case that needs it.
+        failures = []
+        for alternative in declared:
+            try:
+                _check(
+                    value,
+                    {key: item for key, item in schema.items() if key != "type"}
+                    | {"type": alternative},
+                    path=path,
+                    allow_unknown=allow_unknown,
+                )
+            except QgisSdkBridgeError as error:
+                failures.append(str(error))
+            else:
+                return
+        raise QgisSdkBridgeError(
+            f"{path}: matches none of the allowed types ({'; '.join(failures)})"
+        )
     if declared not in _PRIMITIVES:
         raise QgisSdkBridgeError(f"{path}: unsupported type {declared!r}")
     checker = _CHECKERS[declared]

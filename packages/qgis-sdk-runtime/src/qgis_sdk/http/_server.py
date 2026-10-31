@@ -18,7 +18,7 @@ from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any, Self
 
-from qgis_sdk.bridge import Dispatcher
+from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, Dispatcher
 from qgis_sdk.bridge.resources import ReleaseLedger
 from qgis_sdk.bridge.transport import ChannelTransport
 from qgis_sdk.models.errors import QgisSdkError
@@ -469,7 +469,7 @@ class PluginHttpServer:
                         try:
                             text = json.dumps(
                                 {
-                                    "protocol": 1,
+                                    "protocol": BRIDGE_PROTOCOL_VERSION,
                                     "call_id": secrets.token_hex(8),
                                     "operation": action,
                                     "payload": payload,
@@ -541,7 +541,7 @@ class PluginHttpServer:
                                 owner._sessions[session_id] = session
                             text = json.dumps(
                                 {
-                                    "protocol": 1,
+                                    "protocol": BRIDGE_PROTOCOL_VERSION,
                                     "kind": "subscribe",
                                     "call_id": secrets.token_hex(8),
                                     "operation": stream_id,
@@ -592,15 +592,40 @@ class PluginHttpServer:
                                     break
                             try:
                                 frame = session.frames.get(timeout=0.5)
+                                decoded = json.loads(frame)
                                 outgoing = b"data: " + frame.encode("utf-8") + b"\n\n"
-                                terminal = "terminal" in json.loads(frame)
+                                terminal = "terminal" in decoded
                             except Empty:
+                                decoded = None
                                 outgoing = b": keepalive\n\n"
                                 terminal = False
                             self.wfile.write(outgoing)
                             self.wfile.flush()
                             if terminal:
                                 break
+                            if decoded is not None:
+                                # Written and flushed, so the frame is
+                                # delivered: tell the host, or the in-flight
+                                # bound would stall this stream after eight
+                                # frames (decision-59).
+                                subscription = decoded.get("subscription_id")
+                                seq = decoded.get("seq")
+                                if isinstance(subscription, str) and isinstance(
+                                    seq, int
+                                ):
+                                    try:
+                                        owner._queue.call(
+                                            lambda subscription=subscription, seq=seq: (
+                                                session.channel.acknowledge(
+                                                    subscription, seq
+                                                )
+                                            )
+                                        )
+                                    except (
+                                        QgisSdkHostBusyError,
+                                        QgisSdkHostReloadedError,
+                                    ):
+                                        break
                     except (ConnectionError, OSError):
                         pass
                     finally:

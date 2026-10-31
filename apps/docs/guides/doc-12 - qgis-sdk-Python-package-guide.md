@@ -1736,6 +1736,165 @@ import QGIS); the output is `<plugin package>/processing/` in Python
 each skippable (`--no-python`, `--no-web`). Pass `--catalogue <json>` to
 render from a catalogue a reader already wrote.
 
+## Features, expressions and editing
+
+`ctx.features` is the vector-data service: bounded pages of features, one
+feature by id, and an expression evaluator. Geometry crosses encoded - WKB as
+base64 in `value`, or WKT, or GeoJSON text - with the encoding named on the
+value, so a page that wants to draw and a page that wants to store read the same
+feature without a native object anywhere in the picture.
+
+```python
+from qgis_sdk.models import FeatureQuery
+
+page = self.ctx.features.page("parcels", FeatureQuery(limit=100, encoding="geojson"))
+while page.truncated:
+    page = self.ctx.features.page(
+        "parcels", FeatureQuery(limit=100, encoding="geojson", cursor=page.next_cursor)
+    )
+```
+
+### A page is bounded, ordered and filtered by the provider
+
+`FeatureQuery(limit, cursor, expression, bbox, ids, encoding, with_geometry)` is
+what a caller may ask, and its `__post_init__` refuses a `limit` above
+`MAX_FEATURE_PAGE` (1000), a cursor that is not a digit string, an unknown
+encoding, a bbox that is not four numbers and ids that are not integers - by
+name, before a provider is touched. `DEFAULT_FEATURE_PAGE` is 100.
+
+Ordering is ascending provider feature id, and `next_cursor` is the last id of
+the page rather than an offset: a provider that reorders between two calls
+cannot make a client skip a row, and the same query over the same data returns
+the same pages. `truncated` says more rows remain, so the end of a page is never
+mistaken for the end of the layer.
+
+`expression`, `bbox` and `ids` run in the provider. The page never holds the
+layer to filter it, which is the difference between a page and a slice of a list.
+
+### An expression is a value or a message, never both
+
+`ctx.features.evaluate(text, layer_id=..., feature_id=...)` returns an
+`ExpressionOutcome`: `valid` says whether the text parsed, `value` is the result,
+and a parsed expression that evaluated to null is `valid` with `value` null -
+which is a different answer from a syntax error. `check(text, layer_id=...)`
+returns `ExpressionCheck` without running anything, including the columns the
+expression names. A comparison is answered by QGIS with `1`, because its
+expression engine has no boolean type; the fake answers `True`, because it is
+Python. Compare the value, not its type: `bool(value)` is true on both, and the
+wire carries whichever the backend produced. The native adapter hands both to `QgsExpression` in a prepared
+project context; the fake documents a small subset (comparisons, `IS [NOT]
+NULL`, `and`/`or`, quoted field names) and refuses functions, arithmetic and
+parentheses by name, because a test that passed for a syntax QGIS rejects would
+be worse than one that says "this needs QGIS".
+
+### Editing is an explicit session, and the view owns it
+
+```python
+session = self.ctx.features.begin_edit("parcels")
+added = session.add({"name": "F", "area": 60})
+session.update(1, {"area": 11})
+session.delete(2)
+outcome = session.commit()      # EditOutcome(applied=..., feature_ids=..., committed=True)
+```
+
+There is no implicit edit mode: a session is a buffer over one layer, begun,
+written and ended explicitly, and `rollback()` discards it. On the bridge the
+session belongs to the view that began it - a session id from another view is
+refused exactly like an unknown one, and disposing the view closes every session
+it held, so a page that disappears mid-edit cannot leave a buffer open.
+
+`commit()` reports what the provider wrote and never claims more. QGIS wraps a
+commit in a transaction only for the data providers that implement one; for the
+rest a commit is a sequence of writes. A failed commit raises with the
+provider's message instead of pretending to roll back, because rolling back a
+partial write is itself a provider capability. `qgis_sdk.testing.FakeFeatures`
+can model both ends: `declared(..., atomic=True)` behaves like a provider with a
+transaction, `atomic=False` writes row by row and leaves the rows it already
+wrote behind, so a test can assert the outcome says so. No operation in this SDK
+promises atomicity across layers or providers.
+
+The id `add()` returns is a buffer id, and it is not promised to be the stored
+one. QGIS numbers a pending feature with a temporary negative id and asks the
+provider for a real one when the buffer commits, so a row added on the OGR
+provider has one id inside the session and another in the file afterwards; the
+fake keeps the id it handed out, because it has no provider to ask.
+`EditOutcome.feature_ids` therefore names the ids the buffer held - the ones
+`add()` returned - and a caller that needs the stored id reads the row back by
+its attributes, as the contract test does. This is the provider boundary worth
+designing against: it is also why the outcome reports `applied` as a count
+rather than promising a per-row mapping from a pending id to a stored one.
+Where `commit()` leaves a partially written set behind, the way to find it is a
+query, not a rollback.
+
+### Why there is no `with` statement, and no `iter_features()`
+
+Two conveniences were considered for 0.10.0 and deliberately left out.
+
+*No context manager alongside the explicit session.* `with ctx.features.edit(
+"parcels") as session:` would have to answer, in order: what happens when the
+layer is already being edited by this plugin (a second buffer, or a refusal?),
+what a nested `with` over the same layer means, what a commit that raises does to
+the block's exit, what cancellation mid-block does to the buffer, and what a
+scope closing while the block runs does. Each has a defensible answer and the
+answers disagree; a context manager that guesses is worse than five explicit
+calls, because the guess is invisible at the call site. The explicit session is
+the API, and a convenience wrapper can be added later without changing the
+protocol.
+
+*No Python-level `iter_features()` generator.* It is the obvious Python shape,
+and it cannot cross the bridge: a generator holds the whole layer open, cannot be
+resumed by a different message, and gives the host no place to apply a page
+ceiling. Paging over an explicit cursor is the iterator here, and the loop above
+is what it looks like. For comparison, native QGIS iterates a
+`QgsFeatureRequest` with `QgsVectorLayer.getFeatures(...)` /
+`QgsFeatureIterator` - cheap to start, unbounded in memory, and valid only on
+the thread that owns the layer; QGIS 4.3 keeps both that iterator and
+`QgsGeometry.parts()` / `QgsGeometry.vertices()` as Java-style read-only
+iterators. A page is the same idea with the ceiling and the cursor made part of
+the contract, so it can be resumed by a later call or a different process.
+
+*No part or vertex iterator either.* A `Geometry` carries `part_count`,
+`vertex_count`, `is_empty`, `geometry_type` and `crs` next to its encoded
+payload, which answers the questions a page actually asks - is this empty, is
+this multipart, how big is it - without a second model per part and a wire shape
+with its own paging. A geometry that is present but empty has `is_empty` true,
+zero counts, its declared type and an empty payload; a multipart one has
+`part_count > 1` and a
+`multipoint`/`multiline`/`multipolygon` type; a geometry asked for in an encoding
+the source did not declare raises `QgisSdkUnsupportedCapabilityError`. There is
+no part index or vertex index to get wrong, because the API takes neither; a
+consumer that needs coordinates decodes the payload it already holds. Adding
+accessors later is additive on the model and a bridge minor, and decision-72
+records why it is not in 0.10.0.
+
+A row with no shape of its own is the third case, and it is not the second:
+`Feature.geometry` is `None` when the query said `with_geometry=False`, so a
+page that asked for geometry and got `None` would be reading an answer to a
+question it did not ask. Such a row reports `geometry_type` `none`, an empty
+`value`, zero counts and `is_empty` false, on the fake and on PyQGIS alike. The
+native side is the one that has to spell it out: `QgsGeometry` expresses "no
+abstract geometry" as `constGet()` returning `None`, and neither `isNull()` nor
+`isEmpty()` says so - a default-constructed `QgsGeometry` is neither, per those
+two predicates, and still holds nothing.
+
+### Unsupported things are refused or reported, never faked
+
+A raster layer asked for features, a layer whose provider cannot edit, an
+encoding the source did not declare, and a bbox the fake cannot evaluate all
+raise `QgisSdkUnsupportedCapabilityError` naming the layer or the construct.
+That is a contract property: a page that cannot tell "no rows" from "not
+answered" draws an empty map and tells the user nothing.
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeFeatures` takes a `ResourceScope` and layers declared with
+`declare(layer_id, fields=..., rows=..., editable=..., atomic=...)`; a row's
+third item is one `Geometry` or a mapping of encodings to geometries. The fake
+never converts between encodings - that is a geometry engine's job, and a fake
+that approximated it would let a round-trip test pass for a conversion QGIS
+rejects - so a test declares what it reads back. `qgis_sdk.testing.literal_token`
+and `literal_value` expose the same literal parser the fake's expressions use.
+
 ## Providers: algorithms in the QGIS Processing toolbox
 
 A provider is both an algorithm namespace and the registration that makes its
@@ -1892,22 +2051,92 @@ register_host_operations(
 )
 ```
 
-- **Six operations, each with a canonical grant.** `layers.list`, `layers.get`,
-  `project.layer_ids`, `settings.get`, `notifications.info`, `styles.apply`.
-  Grants are per operation (`layers.read`, `project.read`, ...), never per
-  namespace, so a method added later is not automatically allowed.
+- **Every operation carries a canonical grant.** `HOST_OPERATIONS` is the
+  inventory: layer reads, `project.layer_ids`, `settings.get`,
+  `notifications.info`, `styles.apply`, `files.export`, `blob.get`, the four
+  `algorithms.*`, the fetch stream, and - since 0.10.0 - `features.page`,
+  `features.get`, `expressions.evaluate`, `expressions.validate` and the six
+  `editing.*` operations. Grants are per operation (`layers.read`,
+  `features.edit`, `expressions.evaluate`, ...), never per namespace, so a
+  method added later is not automatically allowed.
 - **Everything is declared.** Each entry names the Protocol method it wraps, its
   `gui` affinity and its request/result schema. Every other method of the curated
-  Protocols - `open_vector`, `selection`, `add_layer`, `set`, `execute` - is
-  listed in `DEFERRED_HOST_METHODS` with the task that owns it, and a test
+  Protocols - `selection`, `add_layer`, `set`, `execute`, `EditingSession.close` -
+  is listed in `DEFERRED_HOST_METHODS` with the reason it is absent, and a test
   reflects the Protocols so a new method cannot appear unaccounted for.
 - **Nothing unbounded, nothing by path.** Every list is paged
   (`{limit?, cursor?}` in, `{items, truncated, next_cursor?}` out; 50 by default,
-  200 at most), a cursor the host never issued is refused rather than silently
-  read as the first page, and no operation takes a filesystem path.
+  200 at most), a feature page is paged the same way but larger (100 by default,
+  1000 at most, and an ask above the ceiling is refused by name rather than
+  clamped), a cursor the host never issued is refused rather than silently read
+  as the first page, and no operation takes a filesystem path.
+- **Nothing large goes inline.** A reply above the inline cap becomes a
+  `BlobRef` the page fetches in bounded chunks and verifies against the checksum,
+  and a pushed stream waits for the page's acknowledgement so a slow consumer
+  slows the producer instead of growing a queue.
 - **Versioned with the client.** The handshake advertises `host_schema_version`
   and the registered ids, and the TypeScript side ships generated inside the npm
-  package as `@archont561/qgis-sdk/host`.
+  package as `@archont561/qgis-sdk/host`. Adding operations moves
+  `HOST_FINGERPRINT` and regenerates `generated/host.ts`; the wire protocol does
+  not move (decision-54 point 6).
+
+### Payloads above the inline ceiling: `BlobRef`
+
+A result larger than `MAX_INLINE_BYTES` is not sent. The host keeps the bytes,
+returns a `BlobRef` in the operation's place and serves the payload in bounded
+chunks through `blob.get` (decision-59):
+
+```python
+ref = authority.inline_or_blob(binding, payload)   # {"kind": "blob", "id", "size",
+                                                   #  "media_type", "checksum", "expires_at"}
+```
+
+- **The ref is a handle, not a path.** `id` is minted for the view that asked,
+  `size` and `media_type` describe the bytes, `checksum` is SHA-256 of the whole
+  payload and `expires_at` is the end of its life. A ref from another view is
+  refused exactly like an unknown one.
+- **Chunks are bounded and resumable.** `blob.get` takes `{blob, offset?,
+  length?}`, defaults to `BLOB_CHUNK_BYTES` (64 KiB), never reads past
+  `MAX_BLOB_BYTES` (32 MiB) and answers `{offset, length, size, media_type,
+  checksum, data_base64, next_offset}`; `next_offset` is null on the last chunk,
+  so the client loops until it sees null. A page verifies the checksum over the
+  chunks it assembled, not over the ref.
+- **A view holds a bounded number of them.** `MAX_BLOBS_PER_VIEW` (16) is
+  refused by name rather than replacing an earlier ref, and `BLOB_TTL_SECONDS`
+  (300) bounds a ref's life; releasing the view releases every blob it held.
+- **Which operations use it.** `algorithms.run` results and `network.fetch`
+  replies are the two today; a result above the ceiling from any other operation
+  is refused with `invalid_result` naming the ceiling rather than truncated.
+
+### Backpressure: `ack` and in-flight frames
+
+A pushed stream does not run ahead of the view that consumes it. Every frame
+carries a `seq` scoped to its subscription, the client acknowledges the frames
+it delivered with a `{kind: "ack", subscription_id, seq}` message, and the host
+hands out at most `MAX_IN_FLIGHT_FRAMES` (8) unacknowledged frames per
+subscription. A producer that is faster than the consumer coalesces progress
+frames and blocks on data frames instead of filling `MAX_QUEUED_EVENTS` - and
+`MAX_IN_FLIGHT_FRAMES` is what makes "slow consumer slows the producer" a bound
+rather than a hope.
+
+Three rules keep the sequence honest:
+
+- **Seqs are contiguous per subscription** and never reused. An `ack` for a
+  frame the host never handed out is refused (`invalid_payload`), so a client
+  cannot acknowledge the future.
+- **A gap ends the subscription.** The client compares each arriving `seq` with
+  the next it expects; a jump ends the stream with a `gap` terminal, and
+  re-opening is a new subscription with its own id rather than a resume.
+- **Terminal is final.** A terminal frame is not acknowledged; the host stops
+  counting in-flight frames when it writes one, and disposing the view closes the
+  source once.
+
+`bridge.streams` holds the accounting (`Subscription.acknowledge`,
+`MAX_IN_FLIGHT_FRAMES`, `MAX_QUEUED_EVENTS`) and `tests/test_bridge_streams.py`
+plus the Hypothesis model in `tests/test_bridge_streams_properties.py` check the
+ordering, the overflow and the disposal races.
+
+
 
 ## Networking
 

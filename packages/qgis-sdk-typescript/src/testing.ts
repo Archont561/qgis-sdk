@@ -21,6 +21,7 @@ import type {
 	StreamEventKind,
 	WireTransport,
 } from "./bridge";
+import { BRIDGE_PROTOCOL_VERSION } from "./bridge/protocol";
 import { QgisSdkError } from "./errors";
 import {
 	HOST_OPERATIONS,
@@ -30,7 +31,7 @@ import {
 import type { QgisSdkHostTheme } from "./qgis-sdk";
 import type { BridgeSchema, OperationShape, StreamShape } from "./schema";
 
-const PROTOCOL = 1;
+const PROTOCOL = BRIDGE_PROTOCOL_VERSION;
 const SUBSCRIPTION_CAPACITY = 64;
 
 /** A scripted host failure, returned from an expectation's handler. */
@@ -78,7 +79,7 @@ export type ScriptedReply<Res> =
 /** A message the client sent, as the harness recorded it. */
 export interface RecordedCall {
 	readonly callId: string;
-	readonly kind: "invoke" | "subscribe" | "unsubscribe" | "handshake";
+	readonly kind: "invoke" | "subscribe" | "unsubscribe" | "ack" | "handshake";
 	/** Empty for a handshake, which names no operation. */
 	readonly operation: string;
 	readonly payload?: Readonly<Record<string, unknown>>;
@@ -165,6 +166,11 @@ export interface BridgeHarness<Op extends string = string>
 	readonly unexpected: readonly RecordedCall[];
 	/** Subscriptions neither ended by a script nor closed by the page. */
 	readonly openSubscriptions: readonly string[];
+	/**
+	 * The seqs the page acknowledged, oldest first (protocol 2). A frame the page
+	 * never acknowledged is absent, and a terminal is never in the list.
+	 */
+	readonly acknowledgements: readonly number[];
 	/** Clients currently attached. */
 	readonly listeners: number;
 	/** Answer the next `operation` call with what `handler` returns. */
@@ -235,6 +241,8 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 	private readonly recorded: RecordedCall[] = [];
 	private readonly unexpectedCalls: RecordedCall[] = [];
 	private readonly streams = new Map<string, OpenStream>();
+	/** Every seq the page acknowledged, in arrival order. */
+	private readonly acked: number[] = [];
 	private readonly problems: string[] = [];
 	private readonly outbox: unknown[] = [];
 	private draining: Promise<void> | null = null;
@@ -252,6 +260,11 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 
 	public get unexpected(): readonly RecordedCall[] {
 		return [...this.unexpectedCalls];
+	}
+
+	/** The seqs the page has acknowledged, oldest first (protocol 2). */
+	public get acknowledgements(): readonly number[] {
+		return [...this.acked];
 	}
 
 	public get openSubscriptions(): readonly string[] {
@@ -283,6 +296,10 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 		const envelope = this.parseEnvelope(message);
 		if (envelope.kind === "unsubscribe") {
 			this.closeFromPage(envelope);
+			return;
+		}
+		if (envelope.kind === "ack") {
+			this.answerAck(envelope);
 			return;
 		}
 		if (envelope.kind === "handshake") {
@@ -389,6 +406,29 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 					title: id,
 				})),
 				...(this.theme === undefined ? {} : { theme: this.theme }),
+			},
+		});
+	}
+
+	/**
+	 * Answer one acknowledgement, the way the host does: with the watermark the
+	 * page reached, not with an error. An ack for a stream that already ended is
+	 * a no-op, because a page cannot know that the last frame it delivered was
+	 * the last frame the host sent.
+	 */
+	private answerAck(call: RecordedCall): void {
+		const open =
+			call.subscriptionId === undefined
+				? undefined
+				: this.streams.get(call.subscriptionId);
+		this.deliver({
+			protocol: PROTOCOL,
+			call_id: call.callId,
+			ok: true,
+			value: {
+				subscription_id: call.subscriptionId ?? "",
+				acknowledged: open === undefined ? null : this.acked.length,
+				in_flight: 0,
 			},
 		});
 	}
@@ -627,6 +667,24 @@ class Harness<Op extends string> implements BridgeHarness<Op> {
 				operation: this.streams.get(subscriptionId)?.operation ?? "",
 				subscriptionId,
 			};
+			this.recorded.push(call);
+			return call;
+		}
+		if (raw.kind === "ack") {
+			const subscriptionId = raw.subscription_id;
+			const seq = raw.seq;
+			if (typeof subscriptionId !== "string" || typeof seq !== "number") {
+				throw new QgisSdkBridgeHarnessError(
+					`${callId}: ack names no subscription_id and seq`,
+				);
+			}
+			const call: RecordedCall = {
+				callId,
+				kind: "ack",
+				operation: this.streams.get(subscriptionId)?.operation ?? "",
+				subscriptionId,
+			};
+			this.acked.push(seq);
 			this.recorded.push(call);
 			return call;
 		}

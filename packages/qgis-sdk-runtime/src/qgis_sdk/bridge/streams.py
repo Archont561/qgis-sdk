@@ -20,6 +20,16 @@ model simply stops pulling. A pushed stream - progress from a Qt task, say - can
 overrun it, and then the subscription is terminated with ``gap`` and a count of
 what was dropped. Growth without bound is the one outcome that is not allowed.
 
+*Acknowledgements bound what is in flight (protocol 2, decision-59).* Every event
+frame a client delivered is acknowledged with ``kind: "ack"``; the host hands
+out at most :data:`MAX_IN_FLIGHT_FRAMES` unacknowledged frames and then stops
+advancing the source, so a slow consumer slows the producer instead of filling a
+queue. A terminal frame is never held back: the stream is over, and making the
+end wait for an acknowledgement would let a stalled client keep a subscription -
+and whatever it wrote into - alive. An acknowledgement for a frame the host
+never handed out is refused rather than clamped, because a client that acks
+numbers it did not receive has lost track of the stream.
+
 *Progress may be coalesced; data may not.* Only a ``progress`` event may replace
 the previous queued ``progress`` frame, and only while that frame is still
 waiting for the transport. A data event is never merged, replaced or dropped
@@ -60,6 +70,12 @@ from qgis_sdk.models.errors import (
 MAX_QUEUED_EVENTS = 64
 MAX_FRAMES_PER_PUMP = 16
 MAX_SUBSCRIPTIONS_PER_VIEW = 8
+
+#: Unacknowledged event frames one subscription may have in flight. Eight is a
+#: comfortable burst for a channel that acks on delivery, and small enough that
+#: a consumer which stopped acking stalls the producer long before the queue
+#: (four times larger) would have to terminate the stream with ``gap``.
+MAX_IN_FLIGHT_FRAMES = 8
 
 
 class StreamTerminal(str, Enum):
@@ -162,6 +178,40 @@ class SubscriptionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class AckRequest:
+    """A parsed ``ack`` call: which frame the client has delivered."""
+
+    call_id: str
+    subscription_id: str
+    seq: int
+
+    @classmethod
+    def parse(cls, raw: Any) -> AckRequest:
+        """Validate ``raw`` as an acknowledgement, refusing anything else."""
+        if not isinstance(raw, Mapping):
+            raise QgisSdkBridgeProtocolError("An acknowledgement must be an object")
+        if raw.get("protocol") != BRIDGE_PROTOCOL_VERSION:
+            raise QgisSdkBridgeProtocolError(
+                f"Unsupported bridge protocol: {raw.get('protocol')!r}; "
+                f"this host speaks {BRIDGE_PROTOCOL_VERSION}"
+            )
+        call_id = peek_call_id(raw)
+        if call_id is None:
+            raise QgisSdkBridgeProtocolError(
+                "call_id must be a nonempty string of at most 128 characters"
+            )
+        subscription_id = raw.get("subscription_id")
+        if not isinstance(subscription_id, str) or not subscription_id:
+            raise QgisSdkBridgeProtocolError(
+                "subscription_id must be a nonempty string"
+            )
+        seq = raw.get("seq")
+        if not isinstance(seq, int) or isinstance(seq, bool) or seq < 0:
+            raise QgisSdkBridgeProtocolError("seq must be a non-negative integer")
+        return cls(call_id=call_id, subscription_id=subscription_id, seq=seq)
+
+
+@dataclass(frozen=True, slots=True)
 class DisposalRequest:
     """A parsed ``unsubscribe`` call: a call id and the subscription it names."""
 
@@ -221,6 +271,11 @@ class Subscription:
     capacity: int = MAX_QUEUED_EVENTS
     events: Mapping[str, Mapping[str, Any]] | None = None
     seq: int = 0
+    #: How many frames have been handed to the transport; also the seq the next
+    #: acknowledgement may not exceed.
+    handed: int = 0
+    #: Every frame below this seq is acknowledged by the client.
+    acked: int = 0
     dropped: int = 0
     state: StreamState = StreamState.OPEN
     _queue: deque[dict[str, Any]] = field(default_factory=deque)
@@ -235,6 +290,31 @@ class Subscription:
     def queued(self) -> int:
         """How many frames are waiting for the transport."""
         return len(self._queue)
+
+    @property
+    def in_flight(self) -> int:
+        """Event frames handed out but not yet acknowledged."""
+        return max(0, self.handed - self.acked)
+
+    @property
+    def acknowledged(self) -> int:
+        """The seq the client has confirmed it delivered."""
+        return self.acked
+
+    def acknowledge(self, seq: int) -> bool:
+        """Record that the client delivered frame ``seq``.
+
+        ``True`` when the seq is one this subscription handed out - a repeat or
+        an out-of-order ack is accepted, because frames race the consumer that
+        acknowledges them - and ``False`` when it names a frame that was never
+        handed out. A client that acks numbers it did not receive has lost track
+        of the stream, and clamping would hide exactly the gap this exists to
+        surface.
+        """
+        if seq < 0 or seq >= self.handed:
+            return False
+        self.acked = max(self.acked, seq + 1)
+        return True
 
     def attach(self, source: Iterator[Mapping[str, Any]] | PushSource | None) -> None:
         """Attach the generator a pull subscription is fed from, or a push source.
@@ -342,10 +422,21 @@ class Subscription:
             close()
 
     def drain(self, limit: int) -> list[dict[str, Any]]:
-        """Hand up to ``limit`` frames to the transport, oldest first."""
+        """Hand up to ``limit`` frames to the transport, oldest first.
+
+        At most :data:`MAX_IN_FLIGHT_FRAMES` unacknowledged event frames leave in
+        one go; a terminal frame is never held back, because ending the stream is
+        not work the client has to acknowledge first.
+        """
         frames: list[dict[str, Any]] = []
         while self._queue and len(frames) < limit:
-            frames.append(self._queue.popleft())
+            frame = self._queue[0]
+            if "terminal" not in frame and self.in_flight >= MAX_IN_FLIGHT_FRAMES:
+                break
+            self._queue.popleft()
+            if "terminal" not in frame:
+                self.handed += 1
+            frames.append(frame)
         if not self._queue and self.state is StreamState.TERMINATED:
             self.state = StreamState.DRAINED
         return frames
@@ -464,8 +555,10 @@ def split_event(item: Any) -> tuple[StreamEventType, Any]:
 
 __all__ = [
     "MAX_FRAMES_PER_PUMP",
+    "MAX_IN_FLIGHT_FRAMES",
     "MAX_QUEUED_EVENTS",
     "MAX_SUBSCRIPTIONS_PER_VIEW",
+    "AckRequest",
     "DisposalRequest",
     "PushSource",
     "StreamEventType",

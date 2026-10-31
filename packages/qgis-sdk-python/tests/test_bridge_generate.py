@@ -218,7 +218,7 @@ def test_the_kind_annotation_is_accepted_and_documented() -> None:
     assert "@qgis-sdk-kind range" in rendered
 
 
-def test_an_object_inside_a_union_is_refused() -> None:
+def test_an_untitled_object_inside_a_union_is_refused() -> None:
     described = _single(
         "sites.mixed",
         request={
@@ -227,7 +227,11 @@ def test_an_object_inside_a_union_is_refused() -> None:
                 "which": {
                     "anyOf": [
                         {"type": "string"},
-                        {"type": "object", "properties": {}},
+                        {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": False,
+                        },
                     ]
                 }
             },
@@ -237,6 +241,61 @@ def test_an_object_inside_a_union_is_refused() -> None:
     )
     with pytest.raises(QgisSdkBridgeError, match="inside a union"):
         generate_typescript(described)
+
+
+def test_a_titled_object_inside_a_union_is_named_and_nullable() -> None:
+    """A nullable object field is one declared type plus null, never a shape."""
+    described = _single(
+        "sites.mixed",
+        request={
+            "type": "object",
+            "properties": {
+                "which": {
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "title": "FeatureGeometry",
+                            "properties": {"value": {"type": "string"}},
+                            "required": ["value"],
+                            "additionalProperties": False,
+                        },
+                        {"type": "null"},
+                    ]
+                }
+            },
+            "additionalProperties": False,
+        },
+        result={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+
+    rendered = generate_typescript(described)
+
+    assert "readonly which?: FeatureGeometry | null;" in rendered
+    assert "export interface FeatureGeometry {" in rendered
+    assert "export function FeatureGeometry(value: unknown, strict = false)" in rendered
+
+
+def test_an_open_map_inside_a_union_renders_as_a_record() -> None:
+    described = _single(
+        "sites.mixed",
+        request={
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "anyOf": [
+                        {"type": "object", "additionalProperties": True},
+                        {"type": "null"},
+                    ]
+                }
+            },
+            "additionalProperties": False,
+        },
+        result={"type": "object", "properties": {}, "additionalProperties": False},
+    )
+
+    rendered = generate_typescript(described)
+
+    assert "readonly attributes?: Record<string, unknown> | null;" in rendered
 
 
 def test_duplicate_operation_ids_are_refused() -> None:

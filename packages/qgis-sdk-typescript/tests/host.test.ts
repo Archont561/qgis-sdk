@@ -95,6 +95,17 @@ test("the host module names its surface and advertises its version", () => {
 		"algorithms.list",
 		"algorithms.providers",
 		"algorithms.run",
+		"blob.get",
+		"editing.add",
+		"editing.begin",
+		"editing.commit",
+		"editing.delete",
+		"editing.rollback",
+		"editing.update",
+		"expressions.evaluate",
+		"expressions.validate",
+		"features.get",
+		"features.page",
 		"files.export",
 		"layers.get",
 		"layers.list",
@@ -542,4 +553,262 @@ test("a run sends the id and the params and reads back tagged outputs", async ()
 		} as never),
 	).rejects.toThrow(QgisSdkHostContractError);
 	expect(nothing.length).toBe(0);
+});
+
+// -- features, expressions and editing (TASK-86) -----------------------------
+
+const geometry = {
+	encoding: "wkt",
+	value: "POINT (21 52)",
+	geometry_type: "point",
+	crs: "EPSG:4326",
+	part_count: 1,
+	vertex_count: 1,
+	is_empty: false,
+} as const;
+
+test("a feature crosses with its encoded geometry and its attributes", async () => {
+	const feature = {
+		id: 3,
+		attributes: { name: "C", area: 30 },
+		geometry,
+	};
+	const { client, sent } = scripted(feature);
+	const result = await createHost(client).features.get({
+		layer_id: "parcels",
+		feature_id: 3,
+		encoding: "wkt",
+	});
+
+	expect(sent[0]?.operation).toBe("features.get");
+	expect(sent[0]?.payload).toEqual({
+		layer_id: "parcels",
+		feature_id: 3,
+		encoding: "wkt",
+	});
+	expect(result.geometry?.geometry_type).toBe("point");
+	expect(result.attributes).toEqual({ name: "C", area: 30 });
+
+	// ``geometry`` is optional - a page may ask for attributes alone - but an id
+	// that is not an integer is not a feature.
+	const { client: without } = scripted({ id: "3", attributes: {} });
+	await expect(
+		createHost(without).features.get({ layer_id: "parcels", feature_id: 3 }),
+	).rejects.toThrow(QgisSdkHostContractError);
+});
+
+test("a page of features is a stream under the same paging rules", async () => {
+	const { client, sent, emit, end, closed } = scripted(null);
+	const pages: unknown[] = [];
+
+	const handle = await createHost(client).features.page(
+		{ layer_id: "parcels", limit: 100, encoding: "geojson" },
+		{
+			onEvent: (event) => pages.push(event.payload),
+			onTerminal: () => undefined,
+		},
+	);
+
+	expect(sent[0]?.operation).toBe("features.page");
+	expect(sent[0]?.payload).toEqual({
+		layer_id: "parcels",
+		limit: 100,
+		encoding: "geojson",
+	});
+	emit({
+		kind: "data",
+		payload: {
+			items: [{ id: 1, attributes: {}, geometry: null }],
+			truncated: true,
+			next_cursor: "1",
+		},
+	});
+	end({ kind: "complete" });
+	expect(pages).toHaveLength(1);
+
+	handle.close();
+	expect(closed()).toBe(1);
+
+	// The bound the schema declares is checked before anything is sent.
+	const { client: unsent, sent: nothing } = scripted(null);
+	await expect(
+		createHost(unsent).features.page(
+			{ layer_id: "parcels", limit: 5000 } as never,
+			{},
+		),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+});
+
+test("an expression is a value or a message, and the validator says which", async () => {
+	const { client } = scripted({ valid: true, value: 42, message: null });
+	const value = await createHost(client).expressions.evaluate({ text: "42" });
+	expect(value.valid).toBe(true);
+	expect(value.value).toBe(42);
+
+	const { client: broken } = scripted({
+		valid: false,
+		value: null,
+		message: "1 + is not an expression",
+	});
+	const outcome = await createHost(broken).expressions.evaluate({
+		text: "1 +",
+	});
+	expect(outcome.valid).toBe(false);
+	expect(outcome.message).toContain("1 +");
+
+	const { client: checked } = scripted({
+		valid: true,
+		message: null,
+		referenced_columns: ["area"],
+	});
+	const check = await createHost(checked).expressions.validate({
+		text: '"area" > 25',
+		layer_id: "parcels",
+	});
+	expect(check.referenced_columns).toEqual(["area"]);
+});
+
+test("an editing session is begun, written and committed as declared", async () => {
+	const { client, sent } = scripted({
+		session_id: "edit-1",
+		layer_id: "parcels",
+	});
+	const host = createHost(client);
+	const opened = await host.editing.begin({ layer_id: "parcels" });
+	expect(opened.session_id).toBe("edit-1");
+
+	const { client: addedClient, sent: additions } = scripted({
+		feature_id: 9,
+		pending: 1,
+	});
+	const added = await createHost(addedClient).editing.add({
+		session_id: "edit-1",
+		attributes: { name: "F" },
+		geometry,
+	});
+	expect(added.feature_id).toBe(9);
+	expect(additions[0]?.operation).toBe("editing.add");
+
+	const { client: committedClient, sent: commits } = scripted({
+		applied: 1,
+		feature_ids: [9],
+		committed: true,
+	});
+	const outcome = await createHost(committedClient).editing.commit({
+		session_id: "edit-1",
+	});
+	expect(outcome.committed).toBe(true);
+	expect(outcome.feature_ids).toEqual([9]);
+	expect(commits[0]?.operation).toBe("editing.commit");
+	expect(sent[0]?.operation).toBe("editing.begin");
+
+	const { client: refused } = scripted({
+		applied: 0,
+		feature_ids: [],
+		committed: "yes",
+	});
+	await expect(
+		createHost(refused).editing.commit({ session_id: "edit-1" }),
+	).rejects.toThrow(QgisSdkHostContractError);
+
+	const { client: unsent, sent: nothing } = scripted(null);
+	await expect(
+		createHost(unsent).editing.begin({ layer_id: 7 } as never),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+});
+
+const blobRef = {
+	kind: "blob",
+	id: "0123456789abcdef",
+	size: 4,
+	media_type: "text/plain",
+	checksum: "a".repeat(64),
+	expires_at: null,
+} as const;
+
+test("a blob is fetched by reference and arrives as a checked chunk", async () => {
+	const chunk = {
+		offset: 0,
+		length: 4,
+		size: 4,
+		media_type: "text/plain",
+		checksum: "a".repeat(64),
+		data_base64: "AAAA",
+		next_offset: 4,
+	};
+	const { client, sent } = scripted(chunk);
+	const got = await createHost(client).blob.get({
+		blob: blobRef,
+		offset: 0,
+		length: 4,
+	});
+
+	expect(sent[0]?.operation).toBe("blob.get");
+	expect(sent[0]?.payload).toEqual({ blob: blobRef, offset: 0, length: 4 });
+	expect(got.next_offset).toBe(4);
+
+	// A reference whose checksum is not a digest, and a chunk with no bytes in
+	// it, are refused: the page never reads past the reference it was given.
+	const { client: unsent, sent: nothing } = scripted(null);
+	await expect(
+		createHost(unsent).blob.get({ blob: { ...blobRef, checksum: "abc" } }),
+	).rejects.toThrow(QgisSdkHostContractError);
+	await expect(
+		createHost(scripted({ ...chunk, data_base64: 7 }).client).blob.get({
+			blob: blobRef,
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+});
+
+test("updating and deleting a feature are pending writes, not committed ones", async () => {
+	const { client, sent } = scripted({ session_id: "edit-1", pending: 2 });
+	const host = createHost(client);
+
+	const updated = await host.editing.update({
+		session_id: "edit-1",
+		feature_id: 9,
+		attributes: { name: "F" },
+	});
+	expect(updated.pending).toBe(2);
+	expect(sent[0]?.operation).toBe("editing.update");
+
+	const deleted = await host.editing.delete({
+		session_id: "edit-1",
+		feature_id: 9,
+	});
+	expect(deleted.pending).toBe(2);
+	expect(sent[1]?.operation).toBe("editing.delete");
+
+	const rolledBack = await host.editing.rollback({ session_id: "edit-1" });
+	expect(rolledBack.pending).toBe(2);
+	expect(sent[2]?.operation).toBe("editing.rollback");
+
+	// Nothing is sent when the write names a feature by something other than a
+	// feature id.
+	const { client: unsent, sent: nothing } = scripted(null);
+	await expect(
+		createHost(unsent).editing.delete({
+			session_id: "edit-1",
+			feature_id: "9",
+		} as never),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+});
+
+test("a style is applied to a layer and the call answers with nothing", async () => {
+	const { client, sent } = scripted(null);
+	const answered = await createHost(client).styles.apply({
+		layer_id: "parcels",
+		style: "<qgis></qgis>",
+	});
+
+	expect(answered).toBe(null);
+	expect(sent[0]?.operation).toBe("styles.apply");
+	expect(sent[0]?.payload).toEqual({
+		layer_id: "parcels",
+		style: "<qgis></qgis>",
+	});
 });

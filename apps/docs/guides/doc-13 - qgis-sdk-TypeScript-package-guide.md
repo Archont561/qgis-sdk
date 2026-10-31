@@ -177,8 +177,49 @@ const subscription = await client.subscribe("project.changes", {}, {
 subscription.close();
 ```
 
-Protocol version 1 is unchanged by subscriptions: a client that never subscribes
-still sees nothing but the replies to its own calls.
+Protocol 2 adds the acknowledgement. Every frame the client delivers is answered
+with a `{kind: "ack", subscription_id, seq}` message, sent after `onEvent`
+returns and never for a terminal frame; without it the host holds a bounded
+number of frames in flight (`MAX_IN_FLIGHT_FRAMES`, 8) and stops. Passing
+`{acknowledge: false}` turns it off for a consumer that really does want the
+raw pump, and then the queue is the host's to bound
+([decision-59](../../../backlog/decisions/decision-59%20-%20Carry-large-and-binary-payloads-across-the-bridge-and-agent-boundaries-by-reference-with-bounded-pages-and-backpressure.md)).
+
+A `seq` that does not continue the sequence ends the subscription with a `gap`
+terminal, and recovery is a fresh `subscribe` with its own id, not a resume: the
+host has already dropped the old subscription's position.
+
+### Results too large to send: `BlobRef`
+
+A reply above the inline ceiling does not arrive as a value. The host keeps the
+bytes and answers with a `BlobRef` - `{kind: "blob", id, size, media_type,
+checksum, expires_at}` - and the page fetches it in bounded chunks:
+
+```ts
+import { readBlob } from "@archont561/qgis-sdk/bridge";
+import type { BlobRef } from "@archont561/qgis-sdk/host";
+
+const value = (await client.invoke("algorithms.run", payload)) as
+	| BlobRef
+	| RunResult;
+if (typeof value === "object" && value !== null && "kind" in value) {
+	// `readBlob` follows `next_offset`, checks the size and verifies the sha256
+	// before handing anything back.
+	const bytes = await readBlob((input) => client.invoke("blob.get", input), value);
+}
+```
+
+- **The ref is not a handle for another view.** A `blob` minted for one view is
+  refused for another exactly like an unknown one, and disposal of the view
+  releases the bytes.
+- **Chunks are resumable.** Each `blob.get` answers `{offset, length, size,
+  checksum, data_base64, next_offset}`; `next_offset` null ends the payload, so
+  the loop is `offset = next_offset` until null. `MAX_BLOB_BYTES` (32 MiB) and
+  `BLOB_TTL_SECONDS` (300) bound the payload and its life, and
+  `MAX_BLOBS_PER_VIEW` (16) bounds how many a view can hold.
+- **A result above the ceiling that is not a blob is a failure, not a
+  truncation.** The host refuses with `invalid_result` naming the ceiling, and
+  the client surfaces it as `QgisSdkBridgeRemoteError`.
 
 ## Host namespaces
 
@@ -197,17 +238,20 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
 
 - **The declared inventory:** `layers.list`, `layers.get`,
   `layers.open_vector`, `project.layer_ids`, `settings.get`,
-  `notifications.info`, `styles.apply`, `files.export`, the `network.fetch`
-  stream and, since 0.7.0, `algorithms.providers`, `algorithms.list`,
-  `algorithms.describe` and `algorithms.run` (below). Anything else of the
-  QGIS API is not reachable from a page; the operations it would need wait
-  for their owning task, and the Python manifest records which.
+  `notifications.info`, `styles.apply`, `files.export`, `blob.get`, the
+  `network.fetch` stream, `algorithms.providers`, `algorithms.list`,
+  `algorithms.describe`, `algorithms.run` (below) and, since 0.10.0,
+  `features.page`, `features.get`, `expressions.evaluate`,
+  `expressions.validate` and `editing.begin/add/update/delete/commit/rollback`.
+  Anything else of the QGIS API is not reachable from a page; the operations it
+  would need wait for their owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
-  `{items, truncated, next_cursor?}`. `limit` is capped at 200, and the generated
-  validator refuses a larger one before the call leaves the page. A cursor is
-  only ever the value the host handed back in `next_cursor`: anything else is
-  refused as `invalid_payload` instead of being read as "start over", and the
-  generated validator refuses it before the call leaves the page.
+  `{items, truncated, next_cursor?}`. `limit` is capped at 200 (1000 for a
+  feature page, 100 by default), and the generated validator refuses a larger one
+  before the call leaves the page. A cursor is only ever the value the host
+  handed back in `next_cursor`: anything else is refused as `invalid_payload`
+  instead of being read as "start over", and the generated validator refuses it
+  before the call leaves the page.
 - **Typed results.** `host.layers.get` returns `VectorLayerInfo`, not a record:
   `geometry_type` is one of the declared literals and `crs` is `string | null`.
 - **The same asymmetry as plugin operations.** Arguments are closed (an unknown
@@ -232,6 +276,58 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   (`PluginHttpServer(actions=...)`) is the third authority-bearing client and it
   names **action and stream ids**, not host operations; there is no agent
   namespace to configure (decision-49 was withdrawn in 0.8.0).
+
+### Features, expressions and editing from a page
+
+`features.page` is a stream, not a call: the host asks the provider for one
+bounded page, hands it over and waits, so a page that stops early has cost one
+page rather than the dataset.
+
+```ts
+const subscription = await client.subscribe(
+	"features.page",
+	{ layer_id: "parcels", limit: 100, encoding: "geojson" },
+	{
+		onEvent: (event) => {
+			const page = event.payload as FeaturePage;
+			page.items.forEach(draw);
+		},
+		onTerminal: (terminal) => console.info("pages done:", terminal.kind),
+	},
+);
+```
+
+- **Each event is one `FeaturePage`**: `{items, truncated, next_cursor?}` where
+  `next_cursor` is the last feature id of the page and `truncated` says more rows
+  remain. The stream pages on by itself, so a consumer does not loop; `cursor` is
+  optional and pins where it starts. A consumer that wants exactly one page opens
+  the subscription and closes it after the first event, which costs the host one
+  page rather than the layer.
+- **Geometry is encoded, never an object graph.** `GeoJSON` text can be handed
+  straight to a renderer, `wkb` is base64 of the provider's bytes for a consumer
+  that stores them, `wkt` is text; `encoding` names which, and
+  `geometry_type`/`crs`/`part_count`/`vertex_count`/`is_empty` describe it
+  without a parser. A page asking for an encoding the source did not declare is
+  refused by name.
+- **`features.get`** returns one `Feature` in the same shapes, for a page that
+  already has an id.
+- **`expressions.evaluate` returns `ExpressionOutcome`**: `{valid, value?,
+  message?}`. `valid: true` with `value: null` is a parsed expression whose value
+  is null; `valid: false` with a message is a syntax or evaluation error. Neither
+  is a failed call, so a console and a page see the same answer.
+  `expressions.validate` returns `ExpressionCheck` with `referenced_columns`, for
+  validating a form before anything runs.
+- **Editing is a view-owned session.** `editing.begin({layer_id})` returns
+  `{session_id, layer_id}`; `add`/`update`/`delete` return the pending count;
+  `commit` returns `EditOutcome(applied, feature_ids, committed)` and `rollback`
+  discards. The session belongs to the view that began it: an id from another
+  view is refused as `unknown_handle`, and disposing the view closes every
+  session it held.
+- **No atomicity is promised.** `commit` reports `committed: false` or raises
+  with the provider's message; the host never claims a transaction the provider
+  does not have, and nothing here spans two layers. The tested boundaries per
+  provider are in [doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md)'s
+  editing section and in doc-22.
 
 ### Processing from a page: `algorithms.*` and `runAlgorithm`
 
