@@ -1898,6 +1898,13 @@ publishing wait for an explicit authorization.
   the adapter's own stack after `destroyed`; a native regression test
   pins it. After the fix **twelve consecutive whole-suite runs** (6 + 6,
   ~2609 passed each) were green. TASK-82's notes carry the defect.
+- **The LTS row itself was flaky, not failing.** `QGIS 3.44 LTS` came back
+  red twice on the gate PR with apt's exit 100 and no test output:
+  qgis.org terminated TLS mid-download for two of the ~30 packages
+  (`Could not handshake: The TLS connection was non-properly terminated`).
+  The row now retries with `Acquire::Retries=5` and one step-level
+  retry, then fails as before; it went green on the retry with all six
+  rows passing.
 - **Not run here, and where it is run.** The native layers:
   `tests/test_jobs_tasks_native.py` and the rest of `-m native` in
   `Linux checks`, the pure-layer coverage job in `Linux coverage`, and
