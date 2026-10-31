@@ -109,12 +109,15 @@ class FakeAppBackend:
 
     calls: list[str] = field(default_factory=list)
     argv: tuple[str, ...] = ()
+    gui: bool = False
+    """Whether the application was asked for a window before it was created."""
     surfaces: list[FakeAppSurface] = field(default_factory=list)
     exits: int = 0
 
-    def init(self, argv: Sequence[str]) -> None:
+    def init(self, argv: Sequence[str], *, gui: bool = False) -> None:
         self.calls.append("init")
         self.argv = tuple(argv)
+        self.gui = gui
         if self.init_error is not None:
             raise self.init_error
 

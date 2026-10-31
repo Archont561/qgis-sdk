@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from qgis_sdk.core import NamedLoop, PluginContext, PluginRuntime
+from qgis_sdk.core._application import QgisSdkPlugin
 
 __all__ = ["AppBackend", "AppSurface"]
 
@@ -47,10 +48,17 @@ class AppSurface(Protocol):
 class AppBackend(Protocol):
     """The toolkit behind one ``qgis_sdk.app.run`` call."""
 
-    def init(self, argv: Sequence[str]) -> None:
-        """Create the application and initialise it (``QgsApplication.initQgis``)."""
+    def init(self, argv: Sequence[str], *, gui: bool) -> None:
+        """Create the application and initialise it (``QgsApplication.initQgis``).
 
-    def build(self, *, plugin_id: str, title: str, gui: bool) -> AppSurface:
+        ``gui`` is passed before any widget exists because it is a property of
+        the application itself: Qt decides at construction whether a window
+        system is used (``QgsApplication(argv, GUIenabled)``), and a window
+        created under a non-GUI application is undefined behaviour rather than
+        an error.
+        """
+
+    def build(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> AppSurface:
         """Build the surface for this run: a window when ``gui``, else headless."""
 
     def exec(self) -> int:

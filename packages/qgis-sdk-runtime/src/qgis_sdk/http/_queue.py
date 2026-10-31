@@ -57,6 +57,9 @@ class GuiQueue:
         self._retry_timer: threading.Timer | None = None
         self._scheduled = False
         self._closed = False
+        # Per thread: whether this thread is inside `_drain`, and whether the
+        # post it made at the end of an item ran the callback straight away.
+        self._local = threading.local()
 
     @property
     def pending(self) -> int:
@@ -132,18 +135,37 @@ class GuiQueue:
                 self._scheduled = True
         if schedule:
             self._schedule()
-        if not work.picked.wait(self._deadline):
-            with self._lock:
-                if not work.picked.is_set():
-                    work.cancelled = True
-                    self._items.remove(work)
-                    raise QgisSdkHostBusyError(
-                        "The QGIS host did not pick up the request in time"
-                    )
+        if not work.picked.wait(self._deadline) and not self._adopt_late(work):
+            raise QgisSdkHostBusyError(
+                "The QGIS host did not pick up the request in time"
+            )
         work.done.wait()
         if work.error is not None:
             raise work.error
         return work.value
+
+    def _adopt_late(self, work: _Work) -> bool:
+        """Settle a request whose pickup deadline has just expired.
+
+        ``True`` means the request has begun - the owner picked it up, or took
+        it out of the queue as the deadline expired - so its outcome is owed to
+        the caller, because a deadline only covers pickup. ``False`` means it was
+        taken back out before it started, and the caller is told the pickup
+        failed.
+        """
+        with self._lock:
+            if work.picked.is_set():
+                return True
+            work.cancelled = True
+            try:
+                self._items.remove(work)
+            except ValueError:
+                # Popped between the deadline expiring and this sweep, so the
+                # owner is starting it: leave it uncancelled and wait for the
+                # pickup to be announced rather than losing the outcome.
+                work.cancelled = False
+                return work.picked.wait(self._deadline)
+            return False
 
     def _schedule(self) -> None:
         try:
@@ -177,6 +199,32 @@ class GuiQueue:
             self._schedule()
 
     def _drain(self) -> None:
+        """Deliver queued work, without growing the stack per item.
+
+        The tail of every item posts the next turn. A ``post`` that runs the
+        callback immediately - a test's ``lambda callback: callback()``, or a
+        host that dispatches inline - would then re-enter this method once per
+        queued request, and a hundred waiting requests would be a hundred nested
+        frames, close enough to Python's limit to fail as a ``RecursionError``
+        raised somewhere unrelated. The re-entry is noticed here and answered by
+        the loop of the item that is finishing, so the stack stays flat.
+        """
+        local = self._local
+        if getattr(local, "draining", False):
+            local.again = True
+            return
+        local.draining = True
+        local.again = False
+        try:
+            while True:
+                local.again = False
+                self._drain_one()
+                if not local.again:
+                    return
+        finally:
+            local.draining = False
+
+    def _drain_one(self) -> None:
         with self._lock:
             self._scheduled = False
             if self._active:

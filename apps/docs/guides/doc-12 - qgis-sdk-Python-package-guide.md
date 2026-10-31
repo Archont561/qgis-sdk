@@ -694,9 +694,16 @@ The window is deliberately small: a `QMainWindow`, one `QgsMapCanvas` with an
 empty project, a toolbar, a status bar, and the same
 `qgis_sdk.adapters.surfaces.SurfaceHost` the Desktop adapter places dialogs
 with. There is no layer tree, no menu from QGIS and no plugin manager - those are
-QGIS Desktop's, not the SDK's. The later canvas service (TASK-85: extent, zoom,
-map themes, capture) attaches to this canvas and to the Desktop one through the
-same interface.
+QGIS Desktop's, not the SDK's. A `@menu("Plugins/Field tools")` binding lands in
+a submenu of that name, exactly as it does in QGIS: `AppWindowInterface` answers
+`addPluginToMenu(name, action)` the way `iface` does, opening the `Plugins`,
+`Vector`, `Raster`, `Database`, `Web` and `Mesh` menus on first use and taking an
+entry back out - submenu first, then the family menu once it is empty - when the
+plugin stops. `gui` is settled first because Qt fixes it at construction: a
+window may only exist under a `QgsApplication` created with `GUIenabled`, so
+`run(app)` creates the application without it and `run(app, gui=True)` with it.
+The later canvas service (TASK-85: extent, zoom, map themes, capture) attaches
+to this canvas and to the Desktop one through the same interface.
 
 #### Lifecycle, and the difference from a Desktop plugin
 

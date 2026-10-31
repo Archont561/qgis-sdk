@@ -196,7 +196,7 @@ class AppSession:
                 f"{self._title}: this app session already started; call `stop` "
                 "and build a new one"
             )
-        self._backend.init(self._argv)
+        self._backend.init(self._argv, gui=self._gui)
         try:
             surface = self._backend.build(self._app, gui=self._gui, title=self._title)
             self._surface = surface

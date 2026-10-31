@@ -8,6 +8,7 @@ import os
 import queue
 import threading
 import time
+from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -282,6 +283,98 @@ def test_the_owner_thread_is_refused_promptly_instead_of_waiting(
     )
     # The queue is usable again once the work returns.
     assert queue.call(lambda: "later") == "later"
+
+
+def test_a_backlog_is_drained_flat_instead_of_one_frame_per_request():
+    """A ``post`` that runs the callback inline must not nest the queue.
+
+    Each finished item posts the next turn. When the host dispatches that post
+    immediately - which a plugin's own ``post`` may do - the next drain lands on
+    top of the one that made it, so a hundred waiting requests became a hundred
+    nested frames: close enough to Python's recursion limit that a full test run
+    failed as a ``RecursionError`` raised inside unrelated code. The stack must
+    stay the same depth no matter how long the backlog is.
+    """
+    import sys
+
+    from qgis_sdk.http._queue import GuiQueue, _Work
+
+    depths: list[int] = []
+
+    def depth() -> int:
+        frames = 0
+        frame = sys._getframe()
+        while frame is not None:
+            frames += 1
+            frame = frame.f_back
+        return frames
+
+    def measure() -> int:
+        depths.append(depth())
+        return 1
+
+    queue = GuiQueue(post=lambda callback: callback(), deadline=10)
+    for _ in range(200):
+        queue._items.append(_Work(measure))
+
+    queue._drain()
+
+    assert len(depths) == 200, "every queued request must be delivered"
+    assert len(set(depths)) == 1, f"the drain nested: depths {set(depths)}"
+
+
+def test_a_request_taken_as_the_deadline_expires_is_answered_not_dropped():
+    """A deadline covers pickup; once the owner has it, the answer is owed.
+
+    The owner pops an item and announces the pickup under one lock, so the two
+    are not normally seen apart. This test forces the interleaving that can look
+    that way from the waiting side - the item is already out of the queue when
+    the deadline expires - and checks that the caller receives the value instead
+    of a "never picked up" error or a crash from sweeping the queue.
+    """
+    from qgis_sdk.http._queue import GuiQueue
+
+    handed_over: list[bool] = []
+
+    class Claimed(deque):
+        """A queue whose item the owner has taken but not yet announced."""
+
+        def remove(self, work):
+            def hand_over() -> None:
+                work.picked.set()
+                work.value = "late"
+                work.done.set()
+
+            threading.Timer(0.01, hand_over).start()
+            handed_over.append(True)
+            raise ValueError(f"{work!r} is not in deque")
+
+    # `post` that does nothing: this queue has no owner thread of its own, so
+    # the only thing that can settle the request is the hand-over above.
+    queue = GuiQueue(post=lambda callback: None, deadline=0.2)
+    queue._items = Claimed()  # type: ignore[assignment]
+    started = time.monotonic()
+
+    assert queue.call(lambda: "already running") == "late"
+
+    assert handed_over == [True]
+    assert time.monotonic() - started < 1, (
+        "the caller must not wait out a second deadline"
+    )
+
+
+def test_a_request_nobody_picks_up_is_still_reported():
+    from qgis_sdk.http._queue import GuiQueue, QgisSdkHostBusyError
+
+    queue = GuiQueue(post=lambda callback: None, deadline=0.05)
+    started = time.monotonic()
+
+    with pytest.raises(QgisSdkHostBusyError) as caught:
+        queue.call(lambda: "never")
+
+    assert caught.value.code == "host_busy"
+    assert time.monotonic() - started < 1
+    assert len(queue._items) == 0, "a withdrawn request leaves the queue"
 
 
 def test_connection_limit_rejects_overload_and_recovers(tmp_path: Path):

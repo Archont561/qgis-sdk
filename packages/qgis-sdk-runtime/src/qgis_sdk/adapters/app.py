@@ -118,7 +118,7 @@ class AppWindowInterface:
 
     @property
     def menus(self) -> tuple[str, ...]:
-        """The menu names opened so far, in creation order."""
+        """The menu paths opened so far (``"Plugins/Native app"``), in creation order."""
         return tuple(self._menus)
 
     def mainWindow(self) -> Any:
@@ -131,57 +131,80 @@ class AppWindowInterface:
     def removeToolBarIcon(self, action: Any) -> None:
         self._toolbar.removeAction(action)
 
-    def _menu(self, name: str) -> Any:
-        menu = self._menus.get(name)
-        if menu is None:
-            menu = self._window.menuBar().addMenu(name)
-            menu.setObjectName(f"qgis-sdk-app.{name.casefold()}")
-            self._menus[name] = menu
+    def _menu(self, path: str) -> Any:
+        """The menu at ``"Plugins/Native app"``, created level by level on first use."""
+        parent: Any = self._window.menuBar()
+        pieces = path.split("/")
+        menu: Any = None
+        for index, part in enumerate(pieces):
+            key = "/".join(pieces[: index + 1])
+            menu = self._menus.get(key)
+            if menu is None:
+                menu = parent.addMenu(part)
+                menu.setObjectName(f"qgis-sdk-app.{key.casefold().replace('/', '-')}")
+                self._menus[key] = menu
+            parent = menu
         return menu
 
-    def _add_to_menu(self, family: str, action: Any) -> None:
-        self._menu(_MENU_PAIRS[family]).addAction(action)
+    def _add_to_menu(self, family: str, name: str, action: Any) -> None:
+        """``iface.addPluginToMenu(name, action)``: the submenu ``name``, under ``family``."""
+        self._menu(f"{_MENU_PAIRS[family]}/{name}").addAction(action)
 
-    def _remove_from_menu(self, family: str, action: Any) -> None:
-        menu = self._menus.get(_MENU_PAIRS[family])
-        if menu is not None:
-            menu.removeAction(action)
+    def _remove_from_menu(self, family: str, name: str, action: Any) -> None:
+        """Take one action back out; the menus this empties go with it.
+
+        QGIS withdraws a plugin's submenu when its last entry goes, and an app
+        window has nowhere to leave an empty one either, so the prune walks up
+        from the submenu to the family menu.
+        """
+        pieces = f"{_MENU_PAIRS[family]}/{name}".split("/")
+        for depth in range(len(pieces), 0, -1):
+            key = "/".join(pieces[:depth])
+            menu = self._menus.get(key)
+            if menu is None:
+                continue
+            if depth == len(pieces):
+                menu.removeAction(action)
+            if not menu.isEmpty():
+                break
+            menu.parentWidget().removeAction(menu.menuAction())
+            del self._menus[key]
 
     def addPluginToMenu(self, name: str, action: Any) -> None:
-        self._add_to_menu("addPluginToMenu", action)
+        self._add_to_menu("addPluginToMenu", name, action)
 
     def removePluginMenu(self, name: str, action: Any) -> None:
-        self._remove_from_menu("addPluginToMenu", action)
+        self._remove_from_menu("addPluginToMenu", name, action)
 
     def addPluginToVectorMenu(self, name: str, action: Any) -> None:
-        self._add_to_menu("addPluginToVectorMenu", action)
+        self._add_to_menu("addPluginToVectorMenu", name, action)
 
     def removePluginVectorMenu(self, name: str, action: Any) -> None:
-        self._remove_from_menu("addPluginToVectorMenu", action)
+        self._remove_from_menu("addPluginToVectorMenu", name, action)
 
     def addPluginToRasterMenu(self, name: str, action: Any) -> None:
-        self._add_to_menu("addPluginToRasterMenu", action)
+        self._add_to_menu("addPluginToRasterMenu", name, action)
 
     def removePluginRasterMenu(self, name: str, action: Any) -> None:
-        self._remove_from_menu("addPluginToRasterMenu", action)
+        self._remove_from_menu("addPluginToRasterMenu", name, action)
 
     def addPluginToDatabaseMenu(self, name: str, action: Any) -> None:
-        self._add_to_menu("addPluginToDatabaseMenu", action)
+        self._add_to_menu("addPluginToDatabaseMenu", name, action)
 
     def removePluginDatabaseMenu(self, name: str, action: Any) -> None:
-        self._remove_from_menu("addPluginToDatabaseMenu", action)
+        self._remove_from_menu("addPluginToDatabaseMenu", name, action)
 
     def addPluginToWebMenu(self, name: str, action: Any) -> None:
-        self._add_to_menu("addPluginToWebMenu", action)
+        self._add_to_menu("addPluginToWebMenu", name, action)
 
     def removePluginWebMenu(self, name: str, action: Any) -> None:
-        self._remove_from_menu("addPluginToWebMenu", action)
+        self._remove_from_menu("addPluginToWebMenu", name, action)
 
     def addPluginToMeshMenu(self, name: str, action: Any) -> None:
-        self._add_to_menu("addPluginToMeshMenu", action)
+        self._add_to_menu("addPluginToMeshMenu", name, action)
 
     def removePluginMeshMenu(self, name: str, action: Any) -> None:
-        self._remove_from_menu("addPluginToMeshMenu", action)
+        self._remove_from_menu("addPluginToMeshMenu", name, action)
 
     def registerMainWindowAction(self, action: Any, shortcut: str) -> None:
         self._window.addAction(action)
@@ -363,8 +386,13 @@ class QtAppBackend:
         """The ``QgsApplication`` this backend created, once :meth:`init` ran."""
         return self._application
 
-    def init(self, argv: Sequence[str]) -> None:
-        """Create and initialise the application; refuse to nest one in QGIS."""
+    def init(self, argv: Sequence[str], *, gui: bool = False) -> None:
+        """Create and initialise the application; refuse to nest one in QGIS.
+
+        ``gui`` decides Qt's ``GUIenabled`` flag: a window may only be created
+        under an application that was told it has a window system, and a headless
+        run has no business asking for one.
+        """
         try:
             from qgis.core import QgsApplication
         except ImportError as error:
@@ -385,7 +413,7 @@ class QtAppBackend:
         prefix = os.environ.get("QGIS_PREFIX_PATH")
         if prefix:
             QgsApplication.setPrefixPath(prefix, True)
-        self._application = QgsApplication(["qgis-sdk-app", *argv], False)
+        self._application = QgsApplication(["qgis-sdk-app", *argv], gui)
         self._application.initQgis()
 
     def build(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> AppSurface:

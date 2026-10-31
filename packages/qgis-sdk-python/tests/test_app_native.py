@@ -128,6 +128,17 @@ def note(message):
     NOTES.append(message)
 
 
+def _menu_titles(menu):
+    """Every menu title under ``menu`` (the bar itself has no title)."""
+    titles = []
+    for action in menu.actions():
+        child = action.menu()
+        if child is not None:
+            titles.append(action.text())
+            titles.extend(_menu_titles(child))
+    return titles
+
+
 def main() -> int:
     from qgis.core import QgsProject
     from qgis.gui import QgsMapCanvas
@@ -152,7 +163,9 @@ def main() -> int:
                 for bar in window.findChildren(QToolBar)
                 for action in bar.actions()
             ]
-            found["menus"] = [action.text() for action in window.menuBar().actions()]
+            # `@menu("Plugins/Native app")` is a submenu, as it is in QGIS, so
+            # the titles are read at every depth rather than off the menu bar.
+            found["menus"] = _menu_titles(window.menuBar())
             session.runtime.actions["greet"]()
             # A dialog is a top-level window of its own whether or not the host
             # parented it to the app window; a dock has to be inside it.
@@ -235,7 +248,9 @@ def test_the_window_carries_the_canvas_and_the_declared_bindings(
     assert found["window"] == "QMainWindow"
     assert found["is_main_window"] is True
     assert found["canvas"] >= 1
-    assert "Ping" in found["toolbar_actions"]
+    assert "Ping" in found["toolbars"]
+    # The Plugins family menu, and the plugin's own submenu inside it.
+    assert "Plugins" in found["menus"]
     assert "Native app" in found["menus"]
     assert found["dialogs"] == ["Greeting"]
     assert found["docks"] == ["Inspector"]
