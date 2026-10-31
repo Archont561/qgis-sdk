@@ -7,7 +7,7 @@ capabilities through scoped services. Pure layers import without QGIS or Qt;
 `qgis-sdk build` vendors a private runtime into the plugin ZIP. The runtime
 has no third-party Python dependencies; QGIS and Qt are supplied by the host.
 
-> Status: `0.8.0`, experimental `0.x`. Each `0.Y.0` carries migration
+> Status: `0.9.0`, experimental `0.x`. Each `0.Y.0` carries migration
 > notes; nothing is promised stable before `1.0.0`.
 
 ## Installation

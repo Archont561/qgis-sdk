@@ -8,7 +8,7 @@ an installable ZIP. This developer kit brings together the
 [`qgis-sdk-runtime`](https://pypi.org/project/qgis-sdk-runtime/) and
 [`qgis-sdk-tools`](https://pypi.org/project/qgis-sdk-tools/) at matching versions.
 
-> Status: `0.8.0`, experimental `0.x`. Each `0.Y.0` carries migration
+> Status: `0.9.0`, experimental `0.x`. Each `0.Y.0` carries migration
 > notes; nothing is promised stable before `1.0.0`.
 
 ## Installation

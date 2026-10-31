@@ -4,7 +4,7 @@ title: Prepare and qualify 0.9.0 release
 status: In Progress
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-10-31 13:40'
+updated_date: '2026-10-31 19:20'
 labels: []
 milestone: m-8
 dependencies:
@@ -28,11 +28,42 @@ Explicit release gate for the 0.9.0 hosts and worker-first named jobs release (m
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Required work has verified outcomes and test/artifact evidence across the Python suite, tests/scripts, the opt-in harnesses the milestone touched and the example projects; doc-12/doc-13 migration notes cover every added or renamed name, including worker-first jobs, restricted context, named registration, action handles and legacy async/offload migration.
-- [ ] #2 Use valid SemVer and prereleases such as -rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves with it) and keep protocol versions independent.
+- [x] #2 Use valid SemVer and prereleases such as -rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves with it) and keep protocol versions independent.
 - [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a project from the previous minor reports what changed rather than crashing.
 - [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [x] #5 The expected zero bridge delta is confirmed rather than assumed: no file under packages/qgis-sdk-typescript changed, no npm version is consumed, and HOST_FINGERPRINT and the plugin-description contract version still agree across both languages. A changed wire requires a separate contract/version decision and revised gate.
 <!-- AC:END -->
+
+## The 0.9.0 stamp (2026-10-31)
+
+`release.py stamp --version 0.9.0 --scope python` on this branch, after the
+gate recorded above. It moved the kit, runtime and tools manifests, the
+kit's two exact pins (runtime and tools, plus `tools[mcp]`), the tools'
+runtime range (`>=0.9.0,<0.10`), the recipe's three versions and the
+`tools_runtime_requirement`, and both examples' windows (`>=0.9,<0.10`).
+Nothing under `packages/qgis-sdk-typescript` moved and no npm version is
+consumed, so the bridge stays at 0.6.0 - `verify-versions` reports python
+0.9.0, typescript 0.6.0, ui 0.1.0 and contract version 1.
+
+By hand, as the rehearsal predicted: the status lines of the root README
+and the three Python package READMEs. doc-12's `0.9.0 migration notes`
+heading was already final, so the site publishes
+`python-migration/v0-9` without a Draft badge and doc-13 needs no entry.
+
+**On the stamped tree.** Pure suite 2418 passed / 89 skipped / 7
+deselected (`test_app_build.py` needs `wheel` and `setuptools` in the
+venv, as in every earlier gate), `tests/scripts` 289, Ruff clean, Alint
+9/9, both examples green through `qgis-sdk test` (20 and 8) and clean
+through `check` (11 and 3 files). `build-python --scope python` builds
+and twine-checks the three `0.9.0` wheels; the kit's metadata reads
+`qgis-sdk-runtime==0.9.0`, `qgis-sdk-tools==0.9.0` and
+`qgis-sdk-tools[mcp]==0.9.0`, the tools' `qgis-sdk-runtime<0.10,>=0.9.0`.
+Installed from those wheels into a fresh `venv`,
+`qgis-sdk new --host server` and `--host app` scaffold
+`>=0.9,<0.10` windows with `check` clean on three and four files.
+
+AC 2 is checked by this PR. AC 4 stays open: no tag is pushed and
+nothing is published without explicit approval.
 
 ## Merge and the `autorelease` gate (2026-10-31)
 
