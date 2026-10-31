@@ -39,7 +39,6 @@ from qgis.core import (
     QgsExpressionContext,
     QgsExpressionContextUtils,
     QgsFeature,
-    QgsFeatureIds,
     QgsFeatureRequest,
     QgsGeometry,
     QgsRectangle,
@@ -67,6 +66,9 @@ __all__ = ["NativeFeatureEditing", "NativeFeatures"]
 #: cases stay apart on the wire: a page that draws a multipoint wants to know.
 #: Z and M variants are reported as their flat type, which is what a page
 #: reasons about.
+#: The legacy "25D" bit some providers still set on ``wkbType()``.
+_WKB_25D = 0x80000000
+
 _GEOMETRY_NAMES = {
     1: "point",
     2: "line",
@@ -79,15 +81,23 @@ _GEOMETRY_NAMES = {
 
 
 def _geometry_type_code(geometry: QgsGeometry) -> int:
-    """The flat WKB type code of a geometry, without Z/M/25D decorations."""
-    return int(geometry.wkbType()) % 1000
+    """The flat WKB type code of a geometry, without Z/M/25D decorations.
+
+    ``WkbType`` is a single enum whose Z, M and ZM variants are the flat code with
+    a thousands digit, and whose legacy 25D variants set the high bit; a page
+    reasons about "point" and "multipoint", so both decorations are dropped here.
+    """
+    return (int(geometry.wkbType()) & ~_WKB_25D) % 1000
 
 
 def _vertex_count(geometry: QgsGeometry) -> int:
-    count = 0
-    for part in geometry.parts():
-        count += part.vertexCount() if hasattr(part, "vertexCount") else 0
-    return count
+    """Every vertex of the geometry, parts included."""
+    return int(geometry.constGet().vertexCount())
+
+
+def _part_count(geometry: QgsGeometry) -> int:
+    """Parts of the geometry: one for a single part, N for a collection."""
+    return int(geometry.constGet().partCount())
 
 
 def _encode(geometry: QgsGeometry, encoding: str, crs: str | None) -> Geometry:
@@ -101,7 +111,7 @@ def _encode(geometry: QgsGeometry, encoding: str, crs: str | None) -> Geometry:
             value=value,
             geometry_type="none" if geometry.isNull() else _name(geometry),
             crs=crs,
-            part_count=len(geometry.parts()),
+            part_count=_part_count(geometry),
             is_empty=not geometry.isNull(),
         )
     if encoding == "wkb":
@@ -119,7 +129,7 @@ def _encode(geometry: QgsGeometry, encoding: str, crs: str | None) -> Geometry:
         value=value,
         geometry_type=_name(geometry),
         crs=crs,
-        part_count=len(geometry.parts()),
+        part_count=_part_count(geometry),
         vertex_count=_vertex_count(geometry),
     )
 
@@ -174,7 +184,9 @@ class NativeFeatures:
         if conditions:
             request.setFilterExpression(" AND ".join(conditions))
         elif query.ids is not None:
-            request.setFilterFids(QgsFeatureIds(list(query.ids)))
+            # A plain list of ints is what SIP accepts for ``QgsFeatureIds``,
+            # which is a typedef the bindings do not export as a name.
+            request.setFilterFids(list(query.ids))
         if query.bbox is not None:
             request.setFilterRect(
                 QgsRectangle(query.bbox[0], query.bbox[1], query.bbox[2], query.bbox[3])

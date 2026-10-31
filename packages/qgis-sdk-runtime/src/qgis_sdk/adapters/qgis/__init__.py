@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
     from .algorithms import NativeAlgorithms
     from .context import IfaceDesktopAccess, native_plugin_context
+    from .features import NativeFeatureEditing, NativeFeatures
     from .jobs import DEFAULT_INTERVAL_MS, QgsJobPump
     from .layers import NativeLayers
     from .log import NativeLog
@@ -38,6 +39,8 @@ __all__ = [
     "DEFAULT_INTERVAL_MS",
     "IfaceDesktopAccess",
     "NativeAlgorithms",
+    "NativeFeatureEditing",
+    "NativeFeatures",
     "NativeLayers",
     "NativeLog",
     "NativeNetworkTransport",
@@ -59,6 +62,8 @@ _EXPORTS: dict[str, str] = {
     "DEFAULT_INTERVAL_MS": ".jobs",
     "IfaceDesktopAccess": ".context",
     "NativeAlgorithms": ".algorithms",
+    "NativeFeatureEditing": ".features",
+    "NativeFeatures": ".features",
     "NativeLayers": ".layers",
     "NativeLog": ".log",
     "NativeNetworkTransport": ".network",
