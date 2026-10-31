@@ -218,6 +218,20 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
 - **Versioned.** `HOST_SCHEMA_VERSION` and `HOST_OPERATIONS` are exported, and the
   handshake advertises the same version, so a page can tell what it is talking to
   before its first call.
+- **Reached through a grant, never wholesale.** Every operation belongs to one
+  grant (`layers.read`, `layers.open`, `project.read`, `files.export`,
+  `algorithms.read`, `algorithms.run`, `network.fetch`, ...), and the page is
+  registered with `register_host_operations(only=...)`: what
+  `[tool.qgis-sdk.web] grants` does not name is *absent* on this side too, so
+  `host.settings` is `undefined` rather than a call that fails. The same names
+  narrow the plugin's console (`[tool.qgis-sdk.console] grants`, every operation
+  by default), and `qgis-sdk check --grants` prints the page/console matrix for
+  one project. The complete list is
+  [doc-22's host operations table](../../../backlog/docs/plans/doc-22%20-%20Service-coverage-map.md#host-operations).
+- **A different vocabulary for the plugin's own actions.** The plugin HTTP API
+  (`PluginHttpServer(actions=...)`) is the third authority-bearing client and it
+  names **action and stream ids**, not host operations; there is no agent
+  namespace to configure (decision-49 was withdrawn in 0.8.0).
 
 ### Processing from a page: `algorithms.*` and `runAlgorithm`
 

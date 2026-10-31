@@ -2629,6 +2629,62 @@ prints the retry (`cd <target>/web && npm install`) with exit code 1; nothing
 is rolled back and nothing else is ever downloaded. A package named `web` or
 `tests` is refused because the project owns those directories.
 
+## Grants, the console and the HTTP allowlist
+
+An operation has one name - `<service>.<operation>` - and one grant selects it:
+`layers.read` selects every operation that needs it (`layers.list`, `layers.get`),
+`layers.open` selects `layers.open_vector`, and an operation id selects exactly
+itself. The catalogue is `qgis_sdk.bridge.host.HOST_OPERATIONS`, and
+[doc-22](../../../backlog/docs/plans/doc-22%20-%20Service-coverage-map.md#host-operations)
+lists every operation with its grant.
+
+Three clients carry authority, and they do **not** speak the same vocabulary:
+
+- **the page.** `[tool.qgis-sdk.web] grants` names host grants or operation ids,
+  and nothing else is registered on that view
+  (`register_host_operations(only=)`), so an operation a page was not granted is
+  absent rather than refused.
+- **the console.** `[tool.qgis-sdk.console] grants` uses the same names.
+  Unset means *every* operation, because the console is the plugin's own
+  developer looking at a running plugin (decision-48); narrowing it is opt-in:
+
+  ```toml
+  [tool.qgis-sdk.console]
+  grants = ["layers.read", "project.layer_ids"]
+  ```
+
+- **the plugin HTTP API.** `PluginHttpServer(actions=...)` is an allowlist of
+  **plugin action and stream ids**, not host operations. The agent dialect this
+  vocabulary once spanned was withdrawn with decision-49, so a project has no
+  `[tool.qgis-sdk.agent]` and no consent list; an unknown action is refused by
+  name when the server is constructed.
+
+Both `grants` lists are read the same way, and a name that is neither a grant nor
+an operation is the same `GRANT001` in whichever section it appears, with one
+remediation listing the whole vocabulary. `qgis-sdk check --grants` prints who
+reaches what:
+
+```text
+grants: one vocabulary, one name per operation
+
+client   declares                        names
+page     [tool.qgis-sdk.web] grants      host grants or operation ids
+console  [tool.qgis-sdk.console] grants  host grants or operation ids (unset: every operation)
+http     PluginHttpServer(actions=...)   plugin action and stream ids, not host operations
+
+operation             grant               page     console
+layers.list           layers.read         granted  granted
+layers.get            layers.read         granted  granted
+project.layer_ids     project.read        -        granted
+...
+network.fetch         network.fetch       -        granted
+```
+
+The matrix is the same table as doc-22, for one project: the coverage map says
+what the host answers, and `--grants` says which client reaches it here. A
+`tests/scripts` check keeps the map complete in both directions, so a service
+that ships without a row fails the build rather than the review.
+
 ## Project checks
 
 `qgis-sdk check [PATH]` reads a plugin project and reports what would stop it
@@ -2643,6 +2699,7 @@ qgis-sdk check                       # the working directory
 qgis-sdk check my_tools --json       # the same report as data
 qgis-sdk check my_tools --native "my_tools.native.*"
 qgis-sdk check my_tools --imports     # every import root, with its bucket
+qgis-sdk check my_tools --grants      # the client x host operation matrix
 ```
 
 Every finding is a `Diagnostic` with a stable `rule`, a root-relative `path`,
@@ -2651,8 +2708,8 @@ Every finding is a `Diagnostic` with a stable `rule`, a root-relative `path`,
 remediation indented beneath, and ends with `checked N files: ...`. The exit
 code is `1` when any error was found and `2` when the path is not a directory.
 
-`--imports` prints the bucket of every import root, and every finding below
-still prints with it:
+`--imports` prints the bucket of every import root, and `--grants` the matrix
+above; every finding below still prints with either:
 
 ```text
 json                     stdlib    field_tools/plugin.py:5
@@ -2677,11 +2734,11 @@ it is `DEP001`, and it is reported here rather than first at `build`
 | `ARCH001` | `qgis_sdk.adapters.qgis` (the PyQGIS-backed adapters) is imported when a pure module loads; let `host()` build the context, or reach the adapter inside the function that runs in QGIS. |
 | `PROJECT001` | No directory with an `__init__.py` under the root (other than `tests/`). |
 | `PROJECT002` | No `pyproject.toml`, or no `[tool.qgis-sdk] plugin = "<package>.plugin:app"` in it; `build` and `dev` derive `metadata.txt` and `classFactory` from that line (decision-43). |
-| `CONFIG001` | `[tool.qgis-sdk]`, `[tool.qgis-sdk.check]`, `[tool.qgis-sdk.web]` or `[tool.qgis-sdk.metadata]` in `pyproject.toml` is malformed (`plugin` not `pkg.module:app`, `placement` not `dock`/`dialog`, `grants` not a list of strings, a passthrough value that is not a scalar). |
+| `CONFIG001` | `[tool.qgis-sdk]`, `[tool.qgis-sdk.check]`, `[tool.qgis-sdk.web]`, `[tool.qgis-sdk.console]` or `[tool.qgis-sdk.metadata]` in `pyproject.toml` is malformed (`plugin` not `pkg.module:app`, `placement` not `dock`/`dialog`, `grants` not a list of strings, an unknown key under `[tool.qgis-sdk.console]`, a passthrough value that is not a scalar). |
 | `META001` | The plugin package has a hand-written `metadata.txt`; `build` renders it, so delete the file (or move extra keys under `[tool.qgis-sdk.metadata]`). |
 | `META002` | `pyproject.toml` lacks a key `metadata.txt` needs: `[project] name`, `version`, `description`, `authors[0].name`/`.email`, or `[tool.qgis-sdk] qgis-minimum-version`. |
 | `ENTRY002` | A module of the plugin package defines or imports `classFactory`; `build` and `dev` bind it through `host()`. |
-| `GRANT001` | `[tool.qgis-sdk.web] grants` names something that is neither a host grant (`layers.read`, selecting every operation that needs it) nor a host operation id (`project.layer_ids`); see `qgis_sdk.bridge.host.granted_operations`. |
+| `GRANT001` | A `grants` list (`[tool.qgis-sdk.web]` or `[tool.qgis-sdk.console]`) names something that is neither a host grant (`layers.read`, selecting every operation that needs it) nor a host operation id (`project.layer_ids`); the message names the section, and the remediation lists the one vocabulary (`qgis_sdk.bridge.host.host_grant_names`). |
 | `VERSION003` (warning) | `pyproject.toml` declares no `qgis-sdk-runtime` (or `qgis-sdk`) requirement; `build` ships the installed runtime and says so in the NOTICE. |
 | `VERSION004` | The installed `qgis-sdk-runtime` does not satisfy the project's requirement. The finding names both and the `pip install` line; the tools never install. |
 | `UI001` | A method of a `Dialog`/`Dock` subclass constructs an interactive Qt or QGIS widget (`QPushButton`, `QLineEdit`, `QSpinBox`, `QgsMapLayerComboBox`, ... - `qgis_sdk_tools.check.ui.INTERACTIVE_WIDGETS`) and never calls `setObjectName` on the name holding it; a constructor passed straight to `addWidget` is flagged too. Name it, or use a `qgis_sdk.ui` component, which names its widget (`form/<field>`, `buttons/<name>`). |

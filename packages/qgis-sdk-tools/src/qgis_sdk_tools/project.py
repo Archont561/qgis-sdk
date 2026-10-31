@@ -60,7 +60,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
-from qgis_sdk.bridge.host import HOST_OPERATIONS
+from qgis_sdk.bridge.host import host_grant_names, host_operation_ids
 from qgis_sdk.core.host import Host
 from qgis_sdk.models import QgisSdkError
 
@@ -127,6 +127,26 @@ class WebConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsoleConfig:
+    """``[tool.qgis-sdk.console]``: what the developer's console may reach.
+
+    Unset means every operation. The console is the plugin's own developer
+    looking at a running plugin (decision-48), so "call anything" has to stay
+    the default; a ``grants`` list narrows it with the same names a page uses
+    (decision-54, amended: the agent dialect this used to name was withdrawn
+    with decision-49, and the plugin HTTP allowlist names actions, not
+    operations).
+    """
+
+    grants: tuple[str, ...] = ()
+
+    @property
+    def unrestricted(self) -> bool:
+        """True when the console reaches every declared operation."""
+        return not self.grants
+
+
+@dataclass(frozen=True, slots=True)
 class ExternalPackage:
     """One ``[tool.qgis-sdk.build] external`` entry (decision-50 point 1).
 
@@ -172,6 +192,7 @@ class ProjectConfig:
     experimental: bool = True
     metadata: Mapping[str, str] = field(default_factory=dict)
     web: WebConfig | None = None
+    console: ConsoleConfig = field(default_factory=ConsoleConfig)
     build: BuildConfig = field(default_factory=BuildConfig)
     #: ``[tool.qgis-sdk] hosts``: which hosts this plugin runs on (decision-52).
     hosts: tuple[str, ...] = ("desktop",)
@@ -257,6 +278,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
     metadata = _passthrough(tool.get("metadata"), findings)
     hosts = _hosts(tool.get("hosts"), findings)
     web = _web(tool.get("web"), findings)
+    console = _console(tool.get("console"), findings)
     build = _build(tool.get("build"), findings)
     config = ProjectConfig(
         root=root,
@@ -269,6 +291,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
         experimental=experimental,
         metadata=metadata,
         web=web,
+        console=console,
         build=build,
         hosts=hosts,
     )
@@ -419,18 +442,60 @@ def _web(value: object, findings: list[Diagnostic]) -> WebConfig | None:
             )
         )
         placement = DEFAULT_PLACEMENT
-    grants = value.get("grants", [])
-    if not isinstance(grants, list) or not all(isinstance(g, str) for g in grants):
+    return WebConfig(
+        placement=placement,
+        grants=_grants("[tool.qgis-sdk.web]", value.get("grants"), findings),
+    )
+
+
+def _console(value: object, findings: list[Diagnostic]) -> ConsoleConfig:
+    """``[tool.qgis-sdk.console]``: the developer's console, unrestricted by default."""
+    if value is None:
+        return ConsoleConfig()
+    if not isinstance(value, dict):
         findings.append(
             _config(
-                "[tool.qgis-sdk.web] grants must be a list of host grants or operation ids",
+                "[tool.qgis-sdk.console] must be a table",
+                '[tool.qgis-sdk.console]\ngrants = ["layers.read"]',
+            )
+        )
+        return ConsoleConfig()
+    for key in sorted(set(value) - {"grants"}):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.console] has no key `{key}` (only grants)",
+                '[tool.qgis-sdk.console]\ngrants = ["layers.read"]',
+            )
+        )
+    return ConsoleConfig(
+        grants=_grants("[tool.qgis-sdk.console]", value.get("grants"), findings)
+    )
+
+
+def _grants(section: str, value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
+    """Read one ``grants`` list: the same names and the same finding everywhere.
+
+    ``value`` is the raw entry under ``grants``, so ``None`` and a wrong type are
+    told apart: a missing list is an empty one, while a string where a list
+    belongs is a malformed table and gets ``CONFIG001``. An unknown name is
+    ``GRANT001`` in whichever section it appears, with the one remediation
+    listing the vocabulary (decision-54 point 2).
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(
+        isinstance(entry, str) for entry in value
+    ):
+        findings.append(
+            _config(
+                f"{section} grants must be a list of host grants or operation ids",
                 'grants = ["layers.read", "project.layer_ids"]',
             )
         )
-        grants = []
-    known_grants = sorted({operation.grant for operation in HOST_OPERATIONS})
-    known_ids = [operation.id for operation in HOST_OPERATIONS]
-    for grant in sorted(set(grants) - set(known_grants) - set(known_ids)):
+        return ()
+    known_grants = host_grant_names()
+    known_ids = host_operation_ids()
+    for grant in sorted(set(value) - set(known_grants) - set(known_ids)):
         findings.append(
             Diagnostic(
                 rule="GRANT001",
@@ -438,8 +503,8 @@ def _web(value: object, findings: list[Diagnostic]) -> WebConfig | None:
                 line=0,
                 column=0,
                 message=(
-                    f"[tool.qgis-sdk.web] grants names `{grant}`, neither a host "
-                    "grant nor a host operation"
+                    f"{section} grants names `{grant}`, neither a host grant "
+                    "nor a host operation"
                 ),
                 remediation=(
                     "The grants are "
@@ -450,7 +515,7 @@ def _web(value: object, findings: list[Diagnostic]) -> WebConfig | None:
                 ),
             )
         )
-    return WebConfig(placement=placement, grants=tuple(dict.fromkeys(grants)))
+    return tuple(dict.fromkeys(value))
 
 
 _BUILD_KEYS: Final = frozenset({"external", "vendor"})
