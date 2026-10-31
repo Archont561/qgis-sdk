@@ -455,13 +455,11 @@ def test_the_package_directory_is_read_from_the_declaring_module(
     assert _package_directory(FakeApp()) == tmp_path / "demo_plugin"
 
 
-def test_a_module_that_cannot_be_found_resolves_against_the_working_directory(
-    monkeypatch,
-) -> None:
+def test_a_module_that_is_not_loaded_falls_back_to_the_working_directory() -> None:
+    """No guess from a spec string: an unimported module means the cwd."""
     from qgis_sdk.adapters.app import _package_directory
 
     class FakeApp:
         module = "not_imported_anywhere"
 
-    monkeypatch.chdir(Path("/tmp"))
     assert _package_directory(FakeApp()) == Path()

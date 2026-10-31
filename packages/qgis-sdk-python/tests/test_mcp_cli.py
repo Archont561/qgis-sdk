@@ -88,6 +88,7 @@ def test_stdio_server_exposes_and_runs_cli_commands(tmp_path: Path):
                 "qgis_sdk_build",
                 "qgis_sdk_test",
                 "qgis_sdk_dev",
+                "qgis_sdk_run",
                 "qgis_sdk_targets",
                 "qgis_sdk_ui_list",
                 "qgis_sdk_ui_open",

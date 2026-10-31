@@ -62,6 +62,13 @@ _COMMANDS = {
         "Build a plugin archive; may write files and run project build tools.",
     ),
     "test": ("test", "Run project tests; executes arbitrary project code."),
+    "run": (
+        "run",
+        (
+            "Start the project as a standalone app; starts QGIS and blocks until "
+            "it quits. Pass --once for a smoke run that stops by itself."
+        ),
+    ),
     "targets": ("targets", "Report the SDK support matrix and host QGIS."),
     "ui_list": ("ui list", "List the surfaces a plugin declares; starts QGIS."),
     "ui_open": (

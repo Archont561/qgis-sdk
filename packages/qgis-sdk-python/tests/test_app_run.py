@@ -95,7 +95,9 @@ def test_the_environment_carries_the_bindings_and_the_project(
     entries = plan.env["PYTHONPATH"].split(os.pathsep)
     assert entries[0] == str(prefix.resolve() / "share" / "qgis" / "python")
     assert str(project) in entries
-    assert any(entry.endswith("qgis-sdk-runtime/src") for entry in entries)
+    assert any(
+        Path(entry).parts[-2:] == ("qgis-sdk-runtime", "src") for entry in entries
+    ), "the SDK's own source trees must stay importable in the child"
     assert "QT_QPA_PLATFORM" not in plan.env
 
 

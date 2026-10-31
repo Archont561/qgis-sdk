@@ -37,7 +37,8 @@ not require it.
 
 The server exposes `qgis_sdk_new`, `qgis_sdk_scaffold` (deprecated alias),
 `qgis_sdk_bridge_generate`, `qgis_sdk_processing_generate`, `qgis_sdk_check`,
-`qgis_sdk_build`, `qgis_sdk_test`, `qgis_sdk_dev`, `qgis_sdk_targets`, and the
+`qgis_sdk_build`, `qgis_sdk_test`, `qgis_sdk_run`, `qgis_sdk_dev`,
+`qgis_sdk_targets`, and the
 surface tools `qgis_sdk_ui_list`, `qgis_sdk_ui_open`, `qgis_sdk_ui_snapshot`,
 `qgis_sdk_ui_act` and `qgis_sdk_ui_diff`. The surface tools start QGIS: they
 open the plugin's own surfaces from a generated host and capture what the host
@@ -47,7 +48,9 @@ Pass `args` as an array of individual CLI argument strings, e.g.
 `{"args": ["--json"]}` to `qgis_sdk_targets` or
 `{"args": ["my-plugin", "--no-input"]}` to `qgis_sdk_new`. Pass
 `["--help"]` to discover each command's complete options (for `dev`, read the
-output with `qgis_sdk_dev_status`). There is no shell expansion or interactive input. QGIS is required only for commands or targets
+output with `qgis_sdk_dev_status`). There is no shell expansion or interactive
+input, and `qgis_sdk_run` blocks until the app quits: pass `--once` when a call
+has to return. QGIS is required only for commands or targets
 that already require it.
 
 Most calls return `exit_code`, `stdout`, `stderr`, `timed_out`, and `truncated`.

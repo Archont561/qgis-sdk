@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from layers import source_path
+from layers import qgis_bindings, source_path
 
 pytestmark = pytest.mark.qgis
 
@@ -208,7 +208,15 @@ def run_probe(tmp_path: Path, *, gui: bool) -> dict[str, object]:
         newline="\n",
     )
     environment = dict(os.environ)
-    environment["PYTHONPATH"] = source_path(tmp_path)
+    # The pixi and Debian builds keep PyQGIS in ``share/qgis/python``, off
+    # ``sys.path``: this interpreter reaches it because ``layers`` put it there,
+    # and the child has to be told the same. Without this the probe dies on
+    # ``from qgis.PyQt.QtWidgets import`` on every row whose QGIS is not an
+    # installed wheel.
+    bindings = qgis_bindings()
+    environment["PYTHONPATH"] = source_path(
+        tmp_path, *((bindings,) if bindings is not None else ())
+    )
     environment["QT_QPA_PLATFORM"] = "offscreen"
     environment.setdefault("QT_LOGGING_RULES", "*.debug=false")
     finished = subprocess.run(
