@@ -19,7 +19,11 @@ import {
 	readBlob,
 	sha256Hex,
 } from "../src/bridge";
-import { createBridgeHarness, type ScriptedStream } from "../src/testing";
+import {
+	createBridgeHarness,
+	fault,
+	type ScriptedStream,
+} from "../src/testing";
 
 function digest(bytes: Uint8Array): string {
 	return createHash("sha256").update(bytes).digest("hex");
@@ -277,5 +281,148 @@ test("following stops after the configured number of reopens", async () => {
 	expect(followed.attempts).toBe(2);
 	expect(followed.closed).toBe(true);
 	expect(terminals).toEqual(["gap", "gap"]);
+	client.close();
+});
+
+test("a follow whose first subscription is refused rejects ready and says so", async () => {
+	const harness = createBridgeHarness<"demo.ticks">();
+	// A script that returns a fault refuses the subscription instead of opening it.
+	harness.expectSubscribe("demo.ticks", () =>
+		fault("not_authorized", "no grant for demo.ticks"),
+	);
+	const client = new BridgeClient(harness);
+	const terminals: string[] = [];
+
+	const followed = followSubscription(
+		client,
+		"demo.ticks",
+		{},
+		{ onTerminal: (terminal) => terminals.push(terminal.kind) },
+	);
+
+	await expect(followed.ready).rejects.toThrow(/not_authorized|no grant/);
+	await harness.settled();
+	expect(followed.closed).toBe(true);
+	expect(followed.subscriptionId).toBe(null);
+	expect(terminals).toEqual(["error"]);
+	client.close();
+});
+
+test("a terminal that is not worth retrying is reported once and ends the follow", async () => {
+	const harness = createBridgeHarness<"demo.ticks">();
+	let stream: ScriptedStream | undefined;
+	harness.expectSubscribe("demo.ticks", (_payload, opened) => {
+		stream = opened;
+	});
+	const client = new BridgeClient(harness);
+	const terminals: string[] = [];
+
+	const followed = followSubscription(
+		client,
+		"demo.ticks",
+		{},
+		{ onTerminal: (terminal) => terminals.push(terminal.kind) },
+		{ retryOn: (terminal) => terminal.kind === "cancelled" },
+	);
+	await followed.ready;
+	stream?.end({ kind: "complete" });
+	await harness.settled();
+
+	// `complete` is an answer: the caller asked to retry cancellations only.
+	expect(terminals).toEqual(["complete"]);
+	expect(followed.attempts).toBe(1);
+	expect(followed.closed).toBe(true);
+	client.close();
+});
+
+test("closing a follow before the host answered closes the late subscription", async () => {
+	const harness = createBridgeHarness<"demo.ticks">();
+	let stream: ScriptedStream | undefined;
+	harness.expectSubscribe("demo.ticks", (_payload, opened) => {
+		stream = opened;
+	});
+	const client = new BridgeClient(harness);
+	const events: unknown[] = [];
+
+	const followed = followSubscription(
+		client,
+		"demo.ticks",
+		{},
+		{ onEvent: (event) => events.push(event.payload) },
+		{},
+	);
+	followed.close();
+	await harness.settled();
+
+	stream?.emit("data", 1);
+	await harness.settled();
+
+	// A closed follow delivers nothing, and the subscription it opened late is
+	// closed rather than leaked.
+	expect(events).toEqual([]);
+	expect(followed.subscriptionId).toBe(null);
+	expect(harness.openSubscriptions).toEqual([]);
+	client.close();
+});
+
+test("a live follow delivers its events, and closing it stops them", async () => {
+	const harness = createBridgeHarness<"demo.ticks">();
+	let stream: ScriptedStream | undefined;
+	harness.expectSubscribe("demo.ticks", (_payload, opened) => {
+		stream = opened;
+	});
+	const client = new BridgeClient(harness);
+	const events: unknown[] = [];
+
+	const followed = followSubscription(
+		client,
+		"demo.ticks",
+		{},
+		{ onEvent: (event) => events.push(event.payload) },
+	);
+	await followed.ready;
+	stream?.emit("data", 1);
+	stream?.emit("data", 2);
+	await harness.settled();
+	expect(events).toEqual([1, 2]);
+
+	followed.close();
+	followed.close();
+	await harness.settled();
+	expect(followed.closed).toBe(true);
+	expect(followed.subscriptionId).toBe(null);
+	expect(events).toEqual([1, 2]);
+	client.close();
+});
+
+test("a follow closed from its own terminal handler does not reopen", async () => {
+	const harness = createBridgeHarness<"demo.ticks">();
+	let stream: ScriptedStream | undefined;
+	harness.expectSubscribe("demo.ticks", (_payload, opened) => {
+		stream = opened;
+	});
+	const client = new BridgeClient(harness);
+	const terminals: string[] = [];
+
+	const followed = followSubscription(
+		client,
+		"demo.ticks",
+		{},
+		{
+			onTerminal: (terminal) => {
+				terminals.push(terminal.kind);
+				followed.close();
+			},
+		},
+		{ retryOn: () => true },
+	);
+	await followed.ready;
+	stream?.end({ kind: "gap", dropped: 1 });
+	await harness.settled();
+
+	// A page that closed the follow while handling the gap asked for no reopen.
+	expect(terminals).toEqual(["gap"]);
+	expect(followed.attempts).toBe(1);
+	expect(followed.closed).toBe(true);
 	client.close();
 });

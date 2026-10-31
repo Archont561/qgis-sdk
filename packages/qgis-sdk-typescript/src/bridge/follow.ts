@@ -79,8 +79,9 @@ export function followSubscription(
 	let closed = false;
 	let attempts = 0;
 	let resubscribes = 0;
-	let settleReady: () => void = () => undefined;
-	let refuseReady: (error: unknown) => void = () => undefined;
+	// Assigned by the executor below, which runs before this call returns.
+	let settleReady: (() => void) | undefined;
+	let refuseReady: ((error: unknown) => void) | undefined;
 	const ready = new Promise<void>((resolve, reject) => {
 		settleReady = resolve;
 		refuseReady = reject;
@@ -111,10 +112,10 @@ export function followSubscription(
 		},
 	};
 
+	// Every caller has already checked `closed` - the first open happens while it
+	// is false and a reopen only follows a terminal that did not close us - so
+	// opening again here would be a second guard on the same fact.
 	const open = (): void => {
-		if (closed) {
-			return;
-		}
 		attempts += 1;
 		client
 			.subscribe(operation, payload, {
@@ -152,14 +153,14 @@ export function followSubscription(
 					return;
 				}
 				subscription = opened;
-				settleReady();
+				settleReady?.();
 			})
 			.catch((error: unknown) => {
 				if (closed) {
 					return;
 				}
 				closed = true;
-				refuseReady(error);
+				refuseReady?.(error);
 				handlers.onTerminal?.({
 					kind: "error",
 					message: error instanceof Error ? error.message : "the host refused",

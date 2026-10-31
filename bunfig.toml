@@ -1,4 +1,6 @@
 [test]
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage/qgis-sdk-typescript"
+# Bun applies this per file, not to the printed "All files" row: one file under
+# 90% of its lines or of its functions fails the run however high the rest are.
 coverageThreshold = { lines = 0.9, functions = 0.9 }
