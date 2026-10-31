@@ -277,8 +277,6 @@ def annotate_coverage(log: Path) -> None:
     matches = [
         f"{index}:{line}" for index, line in enumerate(lines, 1) if pattern.search(line)
     ]
-    for line in matches[-40:]:
-        print(f"::error::{line[:900]}")
     fatal = next(
         (
             index
@@ -288,10 +286,15 @@ def annotate_coverage(log: Path) -> None:
         None,
     )
     if fatal is not None:
-        # Annotations are capped per step, so this goes last and stays short:
-        # the frames under the marker name the test and the C call that died.
-        for offset, line in enumerate(lines[fatal : fatal + 8], fatal + 1):
+        # An annotations cap exists per step and it keeps the first ones, so a
+        # crash is reported alone and from the marker down: the frames under it
+        # name the test and the C call that died, and the lines the pattern
+        # above matched are an aftermath of the same death.
+        for offset, line in enumerate(lines[fatal : fatal + 10], fatal + 1):
             print(f"::error title=interpreter died::{f'{offset}:{line}'[:900]}")
+        return
+    for line in matches[-40:]:
+        print(f"::error::{line[:900]}")
 
 
 def report_bun(log: Path, title: str) -> None:

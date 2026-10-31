@@ -91,9 +91,16 @@ def test_a_crashed_coverage_run_annotates_the_stack_under_the_marker(
     report = run_ci("annotate-coverage", str(log), cwd=tmp_path)
 
     lines = report.stdout.splitlines()
-    assert lines[0].startswith("::error::1:packages/qgis-sdk-python/tests/test_lts")
-    assert lines[-3].startswith("::error title=interpreter died::3:Current thread")
-    assert lines[-1].startswith("::error title=interpreter died::5:Segmentation fault")
+    # The crash is the report: the matched aftermath would only crowd out the
+    # frames, which a step's annotation cap would drop.
+    assert lines[0].startswith(
+        "::error title=interpreter died::1:packages/qgis-sdk-python/tests/test_lts"
+    )
+    assert lines[2].startswith("::error title=interpreter died::3:Current thread")
+    assert lines[3].endswith("line 61 in _tick")
+    assert lines[-1].startswith(
+        "::error title=interpreter died::5:Segmentation fault (core dumped)"
+    )
 
 
 def test_bun_summary_first_match_or_missing_log(tmp_path: Path):
