@@ -42,6 +42,20 @@ pytestmark = pytest.mark.skipif(
     reason="building the distribution needs setuptools in this interpreter",
 )
 
+needs_pip = pytest.mark.skipif(
+    importlib.util.find_spec("pip") is None,
+    reason="installing a built distribution into a prefix needs pip in this "
+    "interpreter; the cross-platform rows have it, a Pixi environment does not",
+)
+"""The build half needs no pip; the install half is a real ``pip install``.
+
+The Linux coverage row runs the suite inside Pixi's interpreter, which carries
+no pip at all - ``python -m pip`` there fails before the distribution is looked
+at. The macOS and Windows rows run under ``setup-python``, whose interpreter has
+pip, so the install harness is exercised there; here the two tests say why they
+did not run rather than reporting a broken launcher.
+"""
+
 
 def succeed(argv, cwd) -> int:
     return 0
@@ -320,6 +334,7 @@ def _run(
     )
 
 
+@needs_pip
 def test_the_installed_launcher_runs_as_a_console_script(
     built: Path, tmp_path: Path
 ) -> None:
@@ -333,6 +348,7 @@ def test_the_installed_launcher_runs_as_a_console_script(
     assert "--grace wants seconds" in refused.stderr
 
 
+@needs_pip
 def test_the_installed_launcher_refuses_without_pyqgis_rather_than_crashing(
     built: Path, tmp_path: Path
 ) -> None:
