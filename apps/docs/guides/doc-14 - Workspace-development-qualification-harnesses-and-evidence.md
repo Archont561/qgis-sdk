@@ -1939,3 +1939,37 @@ publishing wait for an explicit authorization.
   `Linux checks`, the pure-layer coverage job in `Linux coverage`, and
   the server host plus the Desktop harnesses in `QGIS 3.44 LTS`.
   The windows/QGIS and macOS/QGIS rows stay *unqualified* per TASK-33.
+
+### Released afterwards (2026-10-31)
+
+The owner's "publish" cut two annotated tags on `181f8cc6`, the stamp pull
+request's merge commit; the 0.8.0 pair's lesson held, so the rehearsal came
+first and consumed nothing.
+
+| Tag | `release.yml` run | Outcome |
+| --- | --- | --- |
+| `python-v0.9.0-rc.1` | [41227547204](https://github.com/Archont561/qgis-sdk/actions/runs/41227547204) | every job green: `build` stamped `0.9.0-rc.1` for scope `python`, "Verify the stamped manifests and the shared contract" passed, the support matrix was recorded, three wheels built and twine-checked, three Conda outputs built; `pypi` ran "Verify the wheel without uploading" with all three publish steps skipped; `conda` ran its prerelease skip with the three prefix.dev uploads skipped; `github-release` published the prerelease with the three wheels, the three `.conda` files and `SHA256SUMS`. PyPI still ended at 0.8.0 and npm's `latest` was still 0.6.0 afterwards |
+| `python-v0.9.0` | [41228399266](https://github.com/Archont561/qgis-sdk/actions/runs/41228399266) | `build`, `pypi`, `conda` and `github-release` succeeded; `npm`, `ui`, `github-packages` and `github-packages-ui` skipped, as a Python-only scope must. Every publish step ran for real - "Publish qgis-sdk-runtime / qgis-sdk-tools / qgis-sdk to PyPI" and the three prefix.dev uploads - with the prerelease skip step *itself* skipped |
+
+**PyPI** serves `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` 0.9.0 as
+`latest`, one wheel each (`qgis_sdk-0.9.0` `1ade63c4…`, `qgis_sdk_runtime-0.9.0`
+`66738aab…`, `qgis_sdk_tools-0.9.0` `ee057933…`), `requires-python >=3.11`, with
+the kit pinning `qgis-sdk-runtime==0.9.0` and `qgis-sdk-tools==0.9.0`, its
+`mcp` extra pinning `qgis-sdk-tools[mcp]==0.9.0`, and the tools declaring
+`qgis-sdk-runtime<0.10,>=0.9.0`. Installing the published
+`qgis-sdk[mcp]==0.9.0` into a fresh CPython 3.11.2 `venv` resolves
+`mcp 2.3.0`, `pip check` is clean, and `qgis-sdk mcp --help` renders. That
+venv's `qgis-sdk new --host server` writes `qgis-sdk-runtime>=0.9,<0.10` and
+`qgis-sdk-tools>=0.9,<0.10` and `check` is clean on it; `targets` still prints
+the six-row matrix with the Windows and macOS QGIS rows *unqualified*.
+
+**npm** stays at `@archont561/qgis-sdk` 0.6.0 as `latest`, which is the point
+of this train: the 0.9.0 minor changed nothing on the wire, so no npm version
+was consumed and the bridge's 0.6.0 release stands unchanged.
+
+The release assets are the three wheels, the three `.conda` files
+(`qgis-sdk-0.9.0-pyhc1a64d8_0`, `qgis-sdk-runtime-0.9.0-pyh4616a5c_0`,
+`qgis-sdk-tools-0.9.0-pyh4616a5c_0`) and `SHA256SUMS`; neither GitHub Release is
+a prerelease. The prefix.dev uploads and the release-asset CDN are attested by
+the run logs; Conda is still not reproducible in this sandbox, and the native
+QGIS rows remain CI evidence rather than local runs.
