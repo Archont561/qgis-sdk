@@ -7,8 +7,9 @@ created_date: '2026-10-26 10:20'
 # Service coverage map
 
 **Status:** Source of truth for "what is mapped" ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md) point 5). Updated
-in the same change as any service work; a `tests/scripts` check that every
-host operation appears here lands with [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md). An area not listed is out of
+in the same change as any service work; the `tests/scripts` check that every
+host operation appears here landed with [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md)
+(`test_service_coverage.py`), and the exhaustive list is [Host operations](#host-operations). An area not listed is out of
 scope by decision, not by omission; explicitly marked proposals below still
 require a decision before being added to the committed service scope.
 
@@ -38,6 +39,44 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Workers / jobs | `offload`, `@job` | ✓ | — | ✓ | `QThreadPool` → `QgsTaskManager` (TASK-82) | n/a | n/a | existing step model; worker-first named jobs and lint planned for 0.9.0 (TASK-115–117; decision-65) |
 | Desktop | `desktop.iface` (opaque) | ✓ | — | ✓ | ✓ | never | n/a | escape hatch by design |
 
+## Host operations
+
+Every operation the host answers, as of 0.9.0 ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
+point 5). The id is `<service>.<operation>`; the grant is the name that selects it
+in `[tool.qgis-sdk.web] grants` and `[tool.qgis-sdk.console] grants`, and `wraps`
+is the Protocol method the operation answers, so a reader can follow a name to
+the code.
+
+The page and the console reach these through the same vocabulary and differ only
+in their default: a page reaches what its `grants` name, while the console
+reaches every operation unless `[tool.qgis-sdk.console] grants` narrows it. The
+plugin HTTP allowlist (`PluginHttpServer(actions=...)`) is authority too, and it
+names **plugin actions and streams**, not host operations, so it has no row here.
+
+| Operation | Grant | Area | Wraps |
+| --- | --- | --- | --- |
+| `layers.list` | `layers.read` | Vector layers | `Layers.list_layers` |
+| `layers.get` | `layers.read` | Vector layers | `Layers.layer` |
+| `layers.open_vector` | `layers.open` | Vector layers | `Layers.open_vector` |
+| `project.layer_ids` | `project.read` | Project (flat) | `Project.layer_ids` |
+| `settings.get` | `settings.read` | Settings | `Settings.get` |
+| `styles.apply` | `styles.apply` | Styles | `Styles.apply_style` |
+| `files.export` | `files.export` | Files (authority) | `HostAuthority.export_file` |
+| `algorithms.providers` | `algorithms.read` | Processing | `Algorithms.providers` |
+| `algorithms.list` | `algorithms.read` | Processing | `Algorithms.list` |
+| `algorithms.describe` | `algorithms.read` | Processing | `Algorithms.describe` |
+| `algorithms.run` | `algorithms.run` | Processing | `Algorithms.run` |
+| `notifications.info` | `notifications.info` | Notifications | `Notifications.info` |
+| `network.fetch` | `network.fetch` | Network | `NetworkTransport.send` |
+
+Two checks keep the table honest: `tests/scripts/test_service_coverage.py` fails
+when an operation declared in `qgis_sdk.bridge.host.HOST_OPERATIONS` has no row
+here, or when a row names an operation that no longer exists; and
+`qgis-sdk check --grants` prints the same table for one project, with what the
+page and the console actually reach. A service lands with its rows in the same
+change (decision-54 point 1), so a later sprint adds rows here rather than a
+second list somewhere else.
+
 ## Planned
 
 | Area | Service / operations | Task | Milestone | Status |
@@ -55,7 +94,7 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Large payloads | `BlobRef`, `qgis.host.blob`, bounded pages, stream `ack` (decision-59) | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) | 0.10.0 | planned |
 | Log | `ctx.log` debug/info/warning/error, correlation ids, agent log stream (decision-63) | [TASK-106](../../tasks/task-106%20-%20Add-ctx.log-crash-capture-into-it-the-Report-a-problem-surface-and-qgis-sdk-diagnose-with-no-telemetry.md) (minimum in [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md)) | 1.0.0 | planned |
 | i18n | `qgis.host.i18n` locale and strings (decision-60) | [TASK-103](../../tasks/task-103%20-%20Add-i18n-through-Qt-catalogues-shared-with-the-page-and-the-accessibility-rule-UI005.md) | 1.0.0 | planned |
-| Grant vocabulary | `<service>.<operation>` across web, agent, console; `check --grants` | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) | 0.10.0 | planned |
+| Grant vocabulary | `<service>.<operation>` across page, console and the HTTP allowlist; `check --grants` | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) | 0.10.0 | in progress (vocabulary, console grants, matrix and this map landed; agent consent and audit deferred) |
 
 ## Proposals awaiting a decision
 
