@@ -40,7 +40,9 @@ from qgis_sdk.bridge.host._operations import (
     HostOperation,
     granted_operations,
     host_description,
+    host_grant_names,
     host_grants,
+    host_operation_ids,
 )
 from qgis_sdk.bridge.host._schemas import DEFAULT_PAGE, MAX_PAGE
 from qgis_sdk.bridge.host._services import HostServices
@@ -54,7 +56,9 @@ __all__ = [
     "HostServices",
     "granted_operations",
     "host_description",
+    "host_grant_names",
     "host_grants",
+    "host_operation_ids",
     "register_host_operations",
 ]
 

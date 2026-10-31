@@ -263,6 +263,23 @@ def host_grants() -> dict[str, str]:
     return {operation.id: operation.grant for operation in HOST_OPERATIONS}
 
 
+def host_grant_names() -> tuple[str, ...]:
+    """Return the canonical grant names, sorted: the one vocabulary (decision-54).
+
+    Every client that names authority reads this list - the page's
+    ``[tool.qgis-sdk.web] grants``, the console's
+    ``[tool.qgis-sdk.console] grants``, the manifest, the coverage map and the
+    ``GRANT001`` finding - so a name cannot be a grant for one client and a typo
+    for another.
+    """
+    return tuple(sorted({operation.grant for operation in HOST_OPERATIONS}))
+
+
+def host_operation_ids() -> tuple[str, ...]:
+    """Return every declared operation id, in catalogue order."""
+    return tuple(operation.id for operation in HOST_OPERATIONS)
+
+
 def granted_operations(grants: Sequence[str]) -> tuple[str, ...]:
     """Return the operation ids a project's ``grants`` list selects (decision-43).
 
@@ -273,15 +290,14 @@ def granted_operations(grants: Sequence[str]) -> tuple[str, ...]:
     typo that would otherwise narrow the surface in silence, so it raises.
     """
     wanted = set(grants)
-    known = {operation.id for operation in HOST_OPERATIONS} | {
-        operation.grant for operation in HOST_OPERATIONS
-    }
+    operation_ids = host_operation_ids()
+    known = set(operation_ids) | set(host_grant_names())
     for entry in grants:
         if entry not in known:
             raise QgisSdkBridgeError(
                 f"unknown host grant {entry!r}; grants are "
-                f"{', '.join(sorted({o.grant for o in HOST_OPERATIONS}))} and "
-                f"operation ids are {', '.join(o.id for o in HOST_OPERATIONS)}"
+                f"{', '.join(host_grant_names())} and "
+                f"operation ids are {', '.join(operation_ids)}"
             )
     return tuple(
         operation.id

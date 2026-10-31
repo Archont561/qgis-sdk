@@ -11,6 +11,8 @@ import typer
 from qgis_sdk_tools._commands._app import app
 from qgis_sdk_tools.check import QgisSdkCheckError, check_project
 from qgis_sdk_tools.cli import CliRuntime
+from qgis_sdk_tools.grants import grants_matrix
+from qgis_sdk_tools.project import load_project
 
 
 @app.command("check")
@@ -37,6 +39,13 @@ def check(
             help="Print every import root with the bucket it sorts into.",
         ),
     ] = False,
+    grants: Annotated[
+        bool,
+        typer.Option(
+            "--grants",
+            help="Print the client x host operation matrix of the grant vocabulary.",
+        ),
+    ] = False,
 ) -> None:
     """Read a plugin project and report problems; import, install and change nothing."""
     runtime: CliRuntime = ctx.obj
@@ -55,6 +64,10 @@ def check(
             listing = report.imports.render()
             if listing:
                 typer.echo(listing, file=runtime.out)
+        if grants:
+            config, _ = load_project(root)
+            if config is not None:
+                typer.echo(grants_matrix(config).render(), file=runtime.out)
         count = len(report.diagnostics)
         problems = (
             "no problems"
