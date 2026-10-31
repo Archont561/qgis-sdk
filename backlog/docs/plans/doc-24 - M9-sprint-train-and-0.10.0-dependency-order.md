@@ -34,7 +34,11 @@ table for 0.10.0 is `ctx.desktop.iface` today. Authority is three dialects.
 
 - **Sprint 1: TASK-84.** One vocabulary, console grants, `check --grants`,
   doc-22 as the enforced source of truth. Small; first because every later
-  sprint fills the map.
+  sprint fills the map. Landed on `d751a18`: decision-71 re-grounded the
+  "agent" table onto the plugin HTTP allowlist (decision-49 withdrawn) and
+  deferred the destructive annotation to TASK-105; the vocabulary, console
+  grants, matrix and the enforced map are in, AC 3's documentation half with
+  them.
 - **Sprint 2: TASK-102, then TASK-86 in the same pull request.** `BlobRef`,
   `qgis.host.blob`, bounded pages and stream `ack` (decision-59, measured
   in a real view), then features, geometry models, paging, editing
