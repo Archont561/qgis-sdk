@@ -14,6 +14,19 @@ while its task is still queued makes the run without calling the body, and a
 body already running is left to finish - it can poll ``ctx.cancellation``
 itself. Nothing is interrupted and no thread is killed. Closing the owning
 scope stops new submissions; it does not wait for the manager.
+
+A task outlives its own ``finished()`` callback, and the adapter never releases
+one from inside it. ``QgsTaskManager.addTask`` takes ownership: the manager
+keeps working with the task after ``finished()`` returns (it posts
+``processSubTasksForCompletion``, emits the completion progress the task bar
+draws, then deletes the task). Dropping the last Python reference in
+``finished()`` deletes the sip object right there, under the manager's feet,
+which crashed inside ``QgsTaskManager::progressChanged`` - intermittently, in
+whole-suite runs of the 0.9.0 gate. So ``finished()`` asks Qt to delete the task
+with ``deleteLater()`` and hands it to the adapter's retired list; the wrapper
+is released only later, from the adapter's own stack (on the next submission or
+read), never from a Qt callback, and only after ``destroyed`` says the C++
+object is gone.
 """
 
 from __future__ import annotations
@@ -53,6 +66,7 @@ class _JobTask(QgsTask):
         self._item = item
         self._on_finished = on_finished
         self._observed = False
+        self._retired = False
 
     # -- Qt's side
 
@@ -79,7 +93,18 @@ class _JobTask(QgsTask):
         The task itself does nothing here beyond letting the adapter forget it -
         not even a message bar, because every callback belongs to the job's
         subscribers and they run on the host's tick.
+
+        Two things must not happen here: deleting the object, because the
+        manager keeps working with this task after this method returns (see the
+        module docstring), and holding the body's closure any longer than
+        needed. So the closure is dropped, progress is no longer mirrored, and
+        the task is handed to Qt with ``deleteLater()``; the adapter keeps the
+        Python wrapper alive until ``destroyed`` says the object is really gone.
         """
+        self._retired = True
+        self._fn = None
+        self._item = None
+        self.deleteLater()
         self._on_finished()
 
     def cancel(self) -> None:
@@ -104,7 +129,13 @@ class _JobTask(QgsTask):
         self._observed = True
         # setProgress takes 0..100 and is safe to call from run(); Qt queues the
         # signal that reaches the task bar on the main thread.
-        observe(lambda fraction: self.setProgress(fraction * 100))
+        observe(self._report_progress)
+
+    def _report_progress(self, fraction: float) -> None:
+        """Mirror one fraction while the task exists; a retired task ignores it."""
+        if self._retired:
+            return
+        self.setProgress(fraction * 100)
 
 
 class QgsTaskWorkers:
@@ -135,6 +166,14 @@ class QgsTaskWorkers:
         # The manager owns the C++ object; this keeps the Python subclass alive
         # while Qt still calls into it, and is emptied as each task finishes.
         self._live: list[_JobTask] = []
+        # Finished tasks Qt has been asked to delete but has not deleted yet.
+        # Their wrappers must stay alive until ``destroyed`` fires: dropping the
+        # last reference deletes the C++ object, and the manager still has work
+        # queued for it (see the module docstring).
+        self._retired: list[_JobTask] = []
+        # Retired wrappers Qt has already destroyed. They are released from
+        # this adapter's own stack, never from the ``destroyed`` callback.
+        self._gone: list[_JobTask] = []
         self._submitted = 0
 
     @property
@@ -150,13 +189,26 @@ class QgsTaskWorkers:
     @property
     def tasks(self) -> tuple[QgsTask, ...]:
         """The tasks still running, oldest first - what a host's task bar shows."""
+        self._release_gone()
         return tuple(self._live)
+
+    @property
+    def retired(self) -> int:
+        """How many finished tasks are still waiting for Qt to delete them.
+
+        Zero once Qt has run the ``deleteLater()`` and the adapter has released
+        them: this is the count a test asserts to prove finished tasks do not
+        pile up, and a host can log it.
+        """
+        self._release_gone()
+        return len(self._retired)
 
     def offload(
         self, fn: Callable[[], Any], *, item: WorkItem | None = None
     ) -> Handoff:
         """Queue ``fn`` as one task; the job suspends on the returned handoff."""
         self._scope.ensure_open()
+        self._release_gone()
         cancelled = threading.Event()
         handoff = Handoff(on_cancel=cancelled.set)
         task = _JobTask(fn, handoff, cancelled, item, lambda: self._forget(task))
@@ -166,6 +218,34 @@ class QgsTaskWorkers:
         return handoff
 
     def _forget(self, task: _JobTask) -> None:
-        """Drop the reference Qt no longer needs once a task has finished."""
+        """Stop showing a finished task, keeping it alive until Qt deletes it.
+
+        Called from ``finished()``, so it only moves references: releasing the
+        wrapper here is exactly the use-after-free this class documents.
+        """
         if task in self._live:
             self._live.remove(task)
+        self._release_gone()
+        if task in self._retired:
+            return
+        self._retired.append(task)
+        # ``deleteLater`` was requested in ``finished``; ``destroyed`` fires
+        # when the C++ object is gone. It only records that fact - the wrapper
+        # is released by ``_release_gone``, outside Qt's callback.
+        task.destroyed.connect(lambda *_: self._destroyed(task))
+
+    def _destroyed(self, task: _JobTask) -> None:
+        """Record that Qt deleted a task; nothing is released in this callback."""
+        if task in self._retired:
+            self._retired.remove(task)
+        if task not in self._gone:
+            self._gone.append(task)
+
+    def _release_gone(self) -> None:
+        """Drop finished wrappers Qt has already destroyed.
+
+        ``_gone`` never holds anything whose C++ object still exists, so
+        clearing it cannot delete a task the manager is using.
+        """
+        if self._gone:
+            self._gone.clear()

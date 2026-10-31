@@ -142,20 +142,25 @@ def test_progress_reported_by_the_body_reaches_the_task(
         release.wait(5)
         return Total(total=1, thread=threading.get_ident())
 
-    # Connected before the task exists: a progress signal for a task the
-    # manager has already dropped is a QGIS-level assertion, not a test's.
-    workers.manager.progressChanged.connect(
-        lambda task_id, fraction: fractions.append(fraction)
-    )
+    # Connected before the task exists, and disconnected again below: the
+    # manager is the application's singleton, so a connection left behind
+    # outlives this test and every task after it.
+    def record(task_id: int, fraction: float) -> None:
+        fractions.append(fraction)
 
-    handle = jobs.bind(progress_job).delay()
-    jobs.tick()
-    drive(app, jobs, lambda: len(workers.tasks) == 1)
-    (task,) = workers.tasks
-    assert task.description() == "Report progress"
+    workers.manager.progressChanged.connect(record)
 
-    release.set()
-    drive(app, jobs, lambda: handle.status.settled)
+    try:
+        handle = jobs.bind(progress_job).delay()
+        jobs.tick()
+        drive(app, jobs, lambda: len(workers.tasks) == 1)
+        (task,) = workers.tasks
+        assert task.description() == "Report progress"
+
+        release.set()
+        drive(app, jobs, lambda: handle.status.settled)
+    finally:
+        workers.manager.progressChanged.disconnect(record)
 
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.progress == 0.5
@@ -163,6 +168,42 @@ def test_progress_reported_by_the_body_reaches_the_task(
     # and completion is the last one it emits.
     assert [fraction for fraction in fractions if fraction < 100.0] == [25.0, 50.0]
     assert fractions[-1] == pytest.approx(100.0)
+
+
+def test_a_finished_task_outlives_its_own_completion_callback(
+    app, jobs: JobService, workers: QgsTaskWorkers
+) -> None:
+    """A task is deleted by Qt, not from inside its ``finished()`` callback.
+
+    ``QgsTaskManager`` owns a task and keeps using it after ``finished()``
+    returns: it posts ``processSubTasksForCompletion`` and emits the completion
+    progress the task bar draws. Releasing the Python subclass inside that
+    callback freed the object under the manager and segfaulted inside
+    ``QgsTaskManager::progressChanged`` (whole-suite runs of the 0.9.0 gate).
+    The adapter therefore retires a finished task and only releases it once Qt
+    reports the C++ object gone - visible here as ``retired`` returning to zero
+    without a job ever being freed for the manager.
+    """
+
+    @job(id="task.lifetime", title="Lifetime")
+    def lifetime(ctx: WorkerContext) -> Total:
+        return Total(total=1, thread=threading.get_ident())
+
+    handle = jobs.bind(lifetime).delay()
+    drive(app, jobs, lambda: handle.status.settled)
+
+    assert handle.status is JobStatus.SUCCEEDED
+    assert workers.tasks == ()  # nothing running, so nothing in the task bar
+    # Deferred deletion: the task is still referenced when ``finished()``
+    # returns, and Qt's deleteLater is what ends it.
+    deadline = time.monotonic() + DEADLINE_SECONDS
+    while workers.retired and time.monotonic() < deadline:
+        app.processEvents()
+        # ``0`` also flushes the DeferredDelete events ``deleteLater`` posts;
+        # the enum name for that differs between PyQt5 and PyQt6.
+        app.sendPostedEvents(None, 0)
+        time.sleep(0.001)
+    assert workers.retired == 0
 
 
 def test_cancelling_the_task_asks_the_job_to_stop_without_killing_it(
