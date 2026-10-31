@@ -6,12 +6,28 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from qgis_sdk.bridge.authority import FILE_REF
+from qgis_sdk.models.blobs import BLOB_REF
+from qgis_sdk.models.features import (
+    FEATURE_PAGE,
+    GEOMETRY,
+    GEOMETRY_ENCODINGS,
+    MAX_FEATURE_PAGE,
+)
 
 #: Rows a page gets when it does not ask for a size.
 DEFAULT_PAGE = 50
 
 #: Ceiling for one page: a page that asks for a million rows gets fifty.
 MAX_PAGE = 200
+
+#: A page of features may be larger than a page of names (decision-59 point 2):
+#: a feature is small and the caller is walking a dataset. The ceiling itself
+#: lives with the query, in ``qgis_sdk.models.features``, so the fake, the native
+#: adapter and the wire refuse the same ask by name.
+
+#: Ceiling for one blob chunk. A client asks for the next chunk until
+#: ``next_offset`` is null, so one message stays far below the inline cap.
+BLOB_CHUNK_BYTES = 64 * 1024
 
 GUI = "gui"
 WORKER = "worker"
@@ -270,3 +286,152 @@ def _page_result(items: Mapping[str, Any]) -> dict:
         },
         required=("items", "truncated"),
     )
+
+
+#: The request ``qgis.host.blob.get`` takes: a ref the view holds, and where in
+#: it to start. ``length`` is optional; the host never returns more than
+#: :data:`BLOB_CHUNK_BYTES`, and a longer request is refused by the schema
+#: rather than clamped, so a client that asks for a megabyte learns the rule.
+BLOB_REQUEST = _object(
+    {
+        "blob": BLOB_REF,
+        "offset": {"type": "integer", "minimum": 0},
+        "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": BLOB_CHUNK_BYTES,
+        },
+    },
+    required=("blob",),
+)
+
+#: One chunk of a blob. ``next_offset`` is null on the last one, so a client
+#: loops until it sees null instead of counting bytes.
+BLOB_CHUNK = _object(
+    {
+        "offset": {"type": "integer", "minimum": 0},
+        "length": {"type": "integer", "minimum": 0},
+        "size": {"type": "integer", "minimum": 0},
+        "media_type": {"type": "string"},
+        "checksum": {"type": "string"},
+        "data_base64": {"type": "string"},
+        "next_offset": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+    },
+    required=(
+        "offset",
+        "length",
+        "size",
+        "media_type",
+        "checksum",
+        "data_base64",
+        "next_offset",
+    ),
+)
+BLOB_CHUNK["title"] = "BlobChunk"
+
+
+# -- features, expressions and editing (decision-54 point 3) -----------------
+
+#: Rows a feature page gets when the caller does not ask for a size.
+FEATURE_QUERY = _object(
+    {
+        "layer_id": {"type": "string"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": MAX_FEATURE_PAGE},
+        "cursor": {"type": "string", "pattern": "[0-9]+"},
+        "expression": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "bbox": {
+            "anyOf": [
+                {
+                    "type": "array",
+                    "items": {"type": "number"},
+                },
+                {"type": "null"},
+            ]
+        },
+        "ids": {
+            "anyOf": [
+                {"type": "array", "items": {"type": "integer"}},
+                {"type": "null"},
+            ]
+        },
+        "encoding": {"enum": list(GEOMETRY_ENCODINGS)},
+        "with_geometry": {"type": "boolean"},
+    },
+    required=("layer_id",),
+)
+FEATURE_QUERY["title"] = "FeaturePageRequest"
+
+FEATURE_PAGE_RESULT = FEATURE_PAGE
+
+FEATURE_REQUEST = _object(
+    {
+        "layer_id": {"type": "string"},
+        "feature_id": {"type": "integer"},
+        "encoding": {"enum": list(GEOMETRY_ENCODINGS)},
+    },
+    required=("layer_id", "feature_id"),
+)
+FEATURE_REQUEST["title"] = "FeatureRequest"
+
+EXPRESSION_REQUEST = _object(
+    {
+        "text": {"type": "string"},
+        "layer_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "feature_id": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+    },
+    required=("text",),
+)
+EXPRESSION_REQUEST["title"] = "ExpressionRequest"
+
+EDIT_BEGIN_REQUEST = _object({"layer_id": {"type": "string"}}, required=("layer_id",))
+EDIT_BEGIN_REQUEST["title"] = "EditBeginRequest"
+
+EDIT_SESSION_RESULT = _object(
+    {"session_id": {"type": "string"}, "layer_id": {"type": "string"}},
+    required=("session_id", "layer_id"),
+)
+EDIT_SESSION_RESULT["title"] = "EditSessionInfo"
+
+EDIT_ADD_REQUEST = _object(
+    {
+        "session_id": {"type": "string"},
+        "attributes": {"type": "object", "additionalProperties": True},
+        "geometry": {"anyOf": [GEOMETRY, {"type": "null"}]},
+    },
+    required=("session_id", "attributes"),
+)
+EDIT_ADD_REQUEST["title"] = "EditAddRequest"
+
+EDIT_ADD_RESULT = _object(
+    {"feature_id": {"type": "integer"}, "pending": {"type": "integer"}},
+    required=("feature_id", "pending"),
+)
+EDIT_ADD_RESULT["title"] = "EditAddResult"
+
+EDIT_UPDATE_REQUEST = _object(
+    {
+        "session_id": {"type": "string"},
+        "feature_id": {"type": "integer"},
+        "attributes": {"anyOf": [{"type": "object"}, {"type": "null"}]},
+        "geometry": {"anyOf": [GEOMETRY, {"type": "null"}]},
+    },
+    required=("session_id", "feature_id"),
+)
+EDIT_UPDATE_REQUEST["title"] = "EditUpdateRequest"
+
+EDIT_DELETE_REQUEST = _object(
+    {"session_id": {"type": "string"}, "feature_id": {"type": "integer"}},
+    required=("session_id", "feature_id"),
+)
+EDIT_DELETE_REQUEST["title"] = "EditDeleteRequest"
+
+EDIT_SESSION_REQUEST = _object(
+    {"session_id": {"type": "string"}}, required=("session_id",)
+)
+EDIT_SESSION_REQUEST["title"] = "EditSessionRequest"
+
+EDIT_PENDING_RESULT = _object(
+    {"session_id": {"type": "string"}, "pending": {"type": "integer"}},
+    required=("session_id", "pending"),
+)
+EDIT_PENDING_RESULT["title"] = "EditPendingResult"

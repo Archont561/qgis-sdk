@@ -207,12 +207,22 @@ class _Generator:
             self._register(item, f"{name}{_pascal(str(key))}")
         if isinstance(schema.get("items"), Mapping):
             self._register(schema["items"], f"{name}Item")
-        for branch in schema.get("anyOf", []) or []:
-            if branch.get("type") == "object":
-                raise QgisSdkBridgeError(
-                    f"{name}: an object inside a union has no generated type yet; "
-                    "declare it as its own dataclass instead"
-                )
+        for position, branch in enumerate(schema.get("anyOf", []) or []):
+            if branch.get("type") != "object":
+                continue
+            if _is_open_map(branch):
+                # An open map is rendered inline; there is no shape to name.
+                continue
+            if "title" in branch:
+                # A titled object in a union is a declaration of its own - the
+                # nullable geometry of a feature, say - so it is registered
+                # under its title and the union renders as ``Geometry | null``.
+                self._register(branch, f"{name}{position}")
+                continue
+            raise QgisSdkBridgeError(
+                f"{name}: an untitled object inside a union has no generated type; "
+                "give it a title or declare it as its own dataclass"
+            )
 
     def name_for(self, schema: Mapping[str, Any]) -> str | None:
         """Return the registered name of an object schema, if it has one."""

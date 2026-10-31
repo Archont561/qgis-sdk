@@ -2,7 +2,18 @@
 
 import type { StreamEventKind } from "../declarations";
 
-export const BRIDGE_PROTOCOL_VERSION: 1 = 1;
+/**
+ * The wire protocol this client speaks.
+ *
+ * Version 2 added `kind: "ack"`: a client acknowledges every stream frame it
+ * delivered, and the host keeps a bounded number of them in flight so a slow
+ * consumer slows the producer instead of filling a queue (decision-59).
+ */
+export const BRIDGE_PROTOCOL_VERSION: 2 = 2;
+
+/** The protocol version as a type, so one constant moves every shape below. */
+export type ProtocolVersion = typeof BRIDGE_PROTOCOL_VERSION;
+
 export const MAX_CALL_ID_LENGTH: number = 128;
 
 /** A failure reply, as the host serialized it. */
@@ -14,13 +25,13 @@ export interface BridgeFailure {
 /** A reply to one invocation: exactly one of `value` or `error` is present. */
 export type InvokeReply =
 	| {
-			readonly protocol: 1;
+			readonly protocol: ProtocolVersion;
 			readonly call_id: string;
 			readonly ok: true;
 			readonly value: unknown;
 	  }
 	| {
-			readonly protocol: 1;
+			readonly protocol: ProtocolVersion;
 			readonly call_id: string;
 			readonly ok: false;
 			readonly error: BridgeFailure;
@@ -49,7 +60,7 @@ export interface BridgeStreamTerminal {
 
 /** A frame carrying one event. */
 export interface BridgeEventFrame {
-	readonly protocol: 1;
+	readonly protocol: ProtocolVersion;
 	readonly subscription_id: string;
 	readonly seq: number;
 	readonly event: BridgeStreamEvent;
@@ -57,7 +68,7 @@ export interface BridgeEventFrame {
 
 /** The frame that ends a subscription. */
 export interface BridgeTerminalFrame {
-	readonly protocol: 1;
+	readonly protocol: ProtocolVersion;
 	readonly subscription_id: string;
 	readonly seq: number;
 	readonly terminal: BridgeStreamTerminal;
@@ -75,6 +86,23 @@ export interface WireTransport {
 /** Options for {@link BridgeClient}. */
 export interface BridgeClientOptions {
 	readonly timeoutMs?: number;
+	/**
+	 * Acknowledge every stream frame on delivery. On by default: without an
+	 * acknowledgement the host cannot tell a slow consumer from a dead one, and
+	 * stops at a bounded queue instead of applying backpressure.
+	 */
+	readonly acknowledge?: boolean;
+}
+
+/** One blob chunk, as `blob.get` returns it. */
+export interface BlobChunk {
+	readonly offset: number;
+	readonly length: number;
+	readonly size: number;
+	readonly media_type: string;
+	readonly checksum: string;
+	readonly data_base64: string;
+	readonly next_offset: number | null;
 }
 
 /** Options for one invocation. */

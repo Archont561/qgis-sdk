@@ -19,7 +19,12 @@ from typing import Any
 
 import pytest
 from pytest_bdd import given, parsers, then, when
-from qgis_sdk.bridge import BridgeOperation, Dispatcher, ViewBinding
+from qgis_sdk.bridge import (
+    BRIDGE_PROTOCOL_VERSION,
+    BridgeOperation,
+    Dispatcher,
+    ViewBinding,
+)
 from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.bridge.host import HostServices, register_host_operations
 from qgis_sdk.bridge.resources import HandleKind
@@ -279,7 +284,7 @@ def view_no_longer_holds(host: ContractHost, layer_id: str) -> None:
         item["id"]: item["outcome"]
         for item in host.send(
             {
-                "protocol": 1,
+                "protocol": BRIDGE_PROTOCOL_VERSION,
                 "kind": "release",
                 "call_id": "again",
                 "payload": {"handles": [{"kind": "borrowed", "id": layer_id}]},

@@ -9,7 +9,11 @@
  */
 
 import { expect, test } from "@archont561/bun-test-utils";
-import { BridgeClient, QgisSdkBridgeRemoteError } from "../src/bridge";
+import {
+	BRIDGE_PROTOCOL_VERSION,
+	BridgeClient,
+	QgisSdkBridgeRemoteError,
+} from "../src/bridge";
 import { QgisSdkDeclarationError } from "../src/declarations";
 import { HOST_OPERATIONS } from "../src/generated/host";
 import {
@@ -372,6 +376,10 @@ test("`host` is the curated surface on the same client, with every grant by defa
 	expect(qgis.host.granted).toEqual([...HOST_OPERATIONS]);
 	expect(Object.keys(qgis.host).sort()).toEqual([
 		"algorithms",
+		"blob",
+		"editing",
+		"expressions",
+		"features",
 		"files",
 		"granted",
 		"layers",
@@ -427,7 +435,7 @@ test("`ready` rejects when the host refuses the handshake", async () => {
 			const raw = message as { kind?: string; call_id: string };
 			if (raw.kind === "handshake") {
 				harness.deliver({
-					protocol: 1,
+					protocol: BRIDGE_PROTOCOL_VERSION,
 					call_id: raw.call_id,
 					ok: false,
 					error: { code: "stale_generation", message: "gone" },
@@ -528,7 +536,12 @@ function handshakeAnswering(value: Record<string, unknown>): BridgeHarness {
 		send: (message) => {
 			const raw = message as { kind?: string; call_id: string };
 			if (raw.kind === "handshake") {
-				harness.deliver({ protocol: 1, call_id: raw.call_id, ok: true, value });
+				harness.deliver({
+					protocol: BRIDGE_PROTOCOL_VERSION,
+					call_id: raw.call_id,
+					ok: true,
+					value,
+				});
 				return;
 			}
 			harness.send(message);

@@ -8,7 +8,7 @@
  */
 
 import { test as base, expect } from "@archont561/bun-test-utils";
-import { BridgeClient } from "../src/bridge";
+import { BRIDGE_PROTOCOL_VERSION, BridgeClient } from "../src/bridge";
 import { QgisSdk } from "../src/qgis-sdk";
 import {
 	createWebChannelTransport,
@@ -101,8 +101,17 @@ test("messages sent before the channel is ready are delivered in order once it i
 	const channel = installQt({ bridge });
 	expect(insideQgis()).toBe(true);
 	const transport = createWebChannelTransport();
-	transport.send({ protocol: 1, call_id: "c1", kind: "handshake" });
-	transport.send({ protocol: 1, call_id: "c2", operation: "x", payload: {} });
+	transport.send({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		call_id: "c1",
+		kind: "handshake",
+	});
+	transport.send({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		call_id: "c2",
+		operation: "x",
+		payload: {},
+	});
 	expect(bridge.received).toEqual([]);
 	channel.ready();
 	await transport.ready;
@@ -110,7 +119,7 @@ test("messages sent before the channel is ready are delivered in order once it i
 		"c1",
 		"c2",
 	]);
-	transport.send({ protocol: 1, call_id: "c3" });
+	transport.send({ protocol: BRIDGE_PROTOCOL_VERSION, call_id: "c3" });
 	expect(bridge.received).toHaveLength(3);
 	transport.close();
 });
@@ -128,15 +137,27 @@ test("replies from the channel object reach every subscriber, parsed", async ({
 	expect(bridge.listeners.size).toBe(1);
 	for (const listener of bridge.listeners) {
 		listener(
-			JSON.stringify({ protocol: 1, call_id: "c1", ok: true, value: 1 }),
+			JSON.stringify({
+				protocol: BRIDGE_PROTOCOL_VERSION,
+				call_id: "c1",
+				ok: true,
+				value: 1,
+			}),
 		);
 		listener("{not json");
 	}
-	expect(seen).toEqual([{ protocol: 1, call_id: "c1", ok: true, value: 1 }]);
+	expect(seen).toEqual([
+		{ protocol: BRIDGE_PROTOCOL_VERSION, call_id: "c1", ok: true, value: 1 },
+	]);
 	detach();
 	for (const listener of bridge.listeners) {
 		listener(
-			JSON.stringify({ protocol: 1, call_id: "c2", ok: true, value: 2 }),
+			JSON.stringify({
+				protocol: BRIDGE_PROTOCOL_VERSION,
+				call_id: "c2",
+				ok: true,
+				value: 2,
+			}),
 		);
 	}
 	expect(seen).toHaveLength(1);
@@ -150,7 +171,11 @@ test("a missing channel object rejects `ready`, drops the queue and fails later 
 }) => {
 	const channel = installQt({});
 	const transport = createWebChannelTransport("bridge");
-	transport.send({ protocol: 1, call_id: "c1", kind: "handshake" });
+	transport.send({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		call_id: "c1",
+		kind: "handshake",
+	});
 	channel.ready();
 	const failure = await transport.ready.then(
 		() => null,
@@ -179,11 +204,11 @@ test("the object name is configurable and the SDK uses it for its default transp
 	for (const listener of panel.listeners) {
 		listener(
 			JSON.stringify({
-				protocol: 1,
+				protocol: BRIDGE_PROTOCOL_VERSION,
 				call_id: callId,
 				ok: true,
 				value: {
-					protocol: 1,
+					protocol: BRIDGE_PROTOCOL_VERSION,
 					generation: 0,
 					plugin: null,
 					host_schema_version: 1,

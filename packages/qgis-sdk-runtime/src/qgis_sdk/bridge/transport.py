@@ -46,6 +46,26 @@ class ChannelTransport:
         # dispatcher wakes this transport so the frames go out right away.
         self.dispatcher.watch(self.binding, self._wake)
 
+    def acknowledge(self, subscription_id: str, seq: int) -> bool:
+        """Record delivery of one stream frame (protocol 2).
+
+        An acknowledgement is not a call the sender waits for, so the reply is
+        not handed to :attr:`send`: a transport that acks every frame it wrote
+        would otherwise fill the caller's reply queue with answers it discards.
+        ``True`` means the dispatcher accepted the seq.
+        """
+        reply = self.dispatcher.dispatch(
+            self.binding,
+            {
+                "protocol": BRIDGE_PROTOCOL_VERSION,
+                "call_id": f"ack-{subscription_id}-{seq}",
+                "kind": "ack",
+                "subscription_id": subscription_id,
+                "seq": seq,
+            },
+        )
+        return reply.get("ok") is True
+
     def receive(self, text: str) -> bool:
         """Handle one message from the channel; ``False`` if it was unusable.
 

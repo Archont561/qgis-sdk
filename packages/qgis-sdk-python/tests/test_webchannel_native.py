@@ -29,7 +29,12 @@ try:
     from PyQt6.QtWebChannel import QWebChannel
     from qgis_sdk.adapters.webchannel import create_channel_object
     from qgis_sdk.adapters.webengine import BrowserPolicy, create_restricted_page
-    from qgis_sdk.bridge import BridgeOperation, Dispatcher, ViewBinding
+    from qgis_sdk.bridge import (
+        BRIDGE_PROTOCOL_VERSION,
+        BridgeOperation,
+        Dispatcher,
+        ViewBinding,
+    )
     from qgis_sdk.bridge.streams import StreamSink
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(
@@ -153,7 +158,7 @@ def test_the_host_minted_binding_answers_not_the_identity_the_page_claims(
 ) -> None:
     view.send(
         {
-            "protocol": 1,
+            "protocol": BRIDGE_PROTOCOL_VERSION,
             "call_id": "c1",
             "operation": "demo.whoami",
             "view_id": "view-2",
@@ -177,7 +182,13 @@ def test_a_message_that_is_not_an_envelope_is_counted_and_answered_nothing(
     settle(view.app, 0.2)
 
     assert view.received() == []
-    view.send({"protocol": 1, "call_id": "c2", "operation": "demo.whoami"})
+    view.send(
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "call_id": "c2",
+            "operation": "demo.whoami",
+        }
+    )
     (reply,) = view.wait_received(1)
     assert reply["ok"] is True
 
@@ -186,7 +197,12 @@ def test_host_pushed_frames_reach_the_page_in_order_and_disposal_ends_them(
     view: _View,
 ) -> None:
     view.send(
-        {"protocol": 1, "kind": "subscribe", "call_id": "s1", "operation": "demo.push"}
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "s1",
+            "operation": "demo.push",
+        }
     )
     (ack,) = view.wait_received(1)
     assert ack["ok"] is True

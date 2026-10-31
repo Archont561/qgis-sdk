@@ -39,6 +39,7 @@ test("all exported exception classes start with the QgisSdk prefix", () => {
 
 	expect(errorExports.sort()).toEqual([
 		"QgisSdkBridgeAbortedError",
+		"QgisSdkBridgeBlobError",
 		"QgisSdkBridgeClosedError",
 		"QgisSdkBridgeProtocolError",
 		"QgisSdkBridgeRemoteError",

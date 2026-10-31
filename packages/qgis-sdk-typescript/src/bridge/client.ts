@@ -56,9 +56,11 @@ interface PendingCall {
 export class BridgeClient {
 	private readonly transport: WireTransport;
 	private readonly timeoutMs: number;
+	private readonly acknowledge: boolean;
 	private readonly pending: Map<string, PendingCall> = new Map();
 	private readonly subscriptions: Map<string, OpenSubscription> = new Map();
-	private readonly disposals: Set<string> = new Set();
+	/** Call ids whose reply the client asked for and then ignored. */
+	private readonly silent: Set<string> = new Set();
 	private readonly unsubscribe: () => void;
 	private counter: number = 0;
 	private closed: boolean = false;
@@ -72,6 +74,7 @@ export class BridgeClient {
 	) {
 		this.transport = transport;
 		this.timeoutMs = options.timeoutMs ?? 30_000;
+		this.acknowledge = options.acknowledge ?? true;
 		this.unsubscribe = transport.subscribe((message) => {
 			this.handle(message);
 		});
@@ -184,8 +187,7 @@ export class BridgeClient {
 		if (this.closed) {
 			return Promise.reject(new QgisSdkBridgeClosedError());
 		}
-		this.counter += 1;
-		const callId = `c${this.counter}`;
+		const callId = this.nextCallId();
 
 		const promise = new Promise<unknown>((resolve, reject) => {
 			if (options.signal?.aborted === true) {
@@ -287,7 +289,7 @@ export class BridgeClient {
 			}
 			return;
 		}
-		if (this.disposals.delete(reply.call_id)) {
+		if (this.silent.delete(reply.call_id)) {
 			return;
 		}
 		const pending = this.settle(reply.call_id);
@@ -340,6 +342,9 @@ export class BridgeClient {
 			return;
 		}
 		open.handlers.onEvent?.(frame.event);
+		if (this.acknowledge) {
+			this.acknowledgeFrame(frame.subscription_id, frame.seq);
+		}
 	}
 
 	private endSubscription(
@@ -363,15 +368,41 @@ export class BridgeClient {
 		if (this.closed) {
 			return;
 		}
-		this.counter += 1;
-		const callId = `c${this.counter}`;
-		this.disposals.add(callId);
+		const callId = this.nextCallId();
+		this.silent.add(callId);
 		this.transport.send({
 			protocol: BRIDGE_PROTOCOL_VERSION,
 			call_id: callId,
 			kind: "unsubscribe",
 			subscription_id: id,
 		});
+	}
+
+	/**
+	 * Tell the host one frame was delivered.
+	 *
+	 * The reply is ignored - an acknowledgement is bookkeeping, and a stream
+	 * that ends between delivery and the reply is not an error - but the call id
+	 * is remembered so the reply is not counted as unmatched.
+	 */
+	private acknowledgeFrame(id: string, seq: number): void {
+		if (this.closed) {
+			return;
+		}
+		const callId = this.nextCallId();
+		this.silent.add(callId);
+		this.transport.send({
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			call_id: callId,
+			kind: "ack",
+			subscription_id: id,
+			seq,
+		});
+	}
+
+	private nextCallId(): string {
+		this.counter += 1;
+		return `c${this.counter}`;
 	}
 
 	/** The last malformed message this client refused, if any. */

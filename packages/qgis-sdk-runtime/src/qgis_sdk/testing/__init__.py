@@ -19,6 +19,7 @@ from .fakes import (
     RecordingLog,
     RecordingNotifications,
 )
+from .features import FakeEditingSession, FakeFeatures, FakeLayer
 from .files import FakeFiles
 from .jobs import FakeWorkers, ThreadWorkers
 from .network import (
@@ -42,7 +43,10 @@ __all__ = [
     "FakeAlgorithms",
     "FakeAppBackend",
     "FakeAppSurface",
+    "FakeEditingSession",
+    "FakeFeatures",
     "FakeFiles",
+    "FakeLayer",
     "FakeLayers",
     "FakeLoop",
     "FakeNetworkTransport",

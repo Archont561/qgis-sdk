@@ -23,6 +23,7 @@ from qgis_sdk.network import NetworkClient
 from qgis_sdk.services import Notifications
 
 from .algorithms import NativeAlgorithms
+from .features import NativeFeatures
 from .layers import NativeLayers
 from .log import NativeLog
 from .network import NativeNetworkTransport
@@ -68,6 +69,7 @@ def native_plugin_context(
     layers = NativeLayers(scope)
     transport = NativeNetworkTransport(scope)
     project = NativeProject(layers, scope)
+    features = NativeFeatures(layers, scope)
     # One authority per runtime (decision-20): the refs Processing mints for
     # a toolbox run, the ones a page receives through ``HostServices``, the
     # ones the form components hand a handler and the file outputs of
@@ -86,6 +88,7 @@ def native_plugin_context(
         desktop=None if iface is None else IfaceDesktopAccess(iface),
         network=NetworkClient(transport, scope),
         layers=layers,
+        features=features,
         project=project,
         settings=NativeSettings(scope, prefix=settings_prefix),
         styles=NativeStyles(layers, scope),

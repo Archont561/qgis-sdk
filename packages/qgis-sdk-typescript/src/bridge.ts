@@ -17,6 +17,17 @@
 
 import type { StreamEventKind } from "./declarations";
 
+export type {
+	BlobDescriptor,
+	BlobFetcher,
+	ReadBlobOptions,
+} from "./bridge/blob";
+export {
+	decodeBase64,
+	QgisSdkBridgeBlobError,
+	readBlob,
+	sha256Hex,
+} from "./bridge/blob";
 export type { BridgeSubscription, SubscriptionHandlers } from "./bridge/client";
 export { BridgeClient } from "./bridge/client";
 export {
@@ -26,8 +37,11 @@ export {
 	QgisSdkBridgeRemoteError,
 	QgisSdkBridgeTimeoutError,
 } from "./bridge/errors";
+export type { FollowedStream, FollowOptions } from "./bridge/follow";
+export { followSubscription } from "./bridge/follow";
 export { parseInvokeReply, parseStreamFrame } from "./bridge/frames";
 export type {
+	BlobChunk,
 	BridgeClientOptions,
 	BridgeEventFrame,
 	BridgeFailure,

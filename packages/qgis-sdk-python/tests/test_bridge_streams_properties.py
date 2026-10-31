@@ -32,7 +32,12 @@ from typing import Any
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, invariant, precondition, rule
-from qgis_sdk.bridge import BridgeOperation, Dispatcher, ViewBinding
+from qgis_sdk.bridge import (
+    BRIDGE_PROTOCOL_VERSION,
+    BridgeOperation,
+    Dispatcher,
+    ViewBinding,
+)
 from qgis_sdk.bridge.streams import (
     MAX_SUBSCRIPTIONS_PER_VIEW,
     StreamEventType,
@@ -113,7 +118,12 @@ class StreamDelivery(RuleBasedStateMachine):
     def _call(self, binding: ViewBinding, message: dict[str, Any]) -> dict[str, Any]:
         self.calls += 1
         return self.dispatcher.dispatch(
-            binding, {"protocol": 1, "call_id": f"c{self.calls}", **message}
+            binding,
+            {
+                "protocol": BRIDGE_PROTOCOL_VERSION,
+                "call_id": f"c{self.calls}",
+                **message,
+            },
         )
 
     def _live(self, view: str) -> list[str]:

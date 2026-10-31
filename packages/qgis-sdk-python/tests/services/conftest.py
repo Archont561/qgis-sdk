@@ -35,6 +35,7 @@ from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, CentroidRequest
 from qgis_sdk.services import (
     Algorithms,
+    Features,
     Layers,
     Notifications,
     Project,
@@ -85,6 +86,13 @@ class Services:
     work_directory: Path | None = None
     # The files service the algorithms backend mints its file outputs through.
     files: FilesService | None = None
+    #: Layer data, expressions and editing (TASK-86). ``None`` while a backend
+    #: has not joined the contract, so one slice failing is one test failing.
+    features: Features | None = None
+    #: A layer that may be edited, freshly prepared for one test. Native copies
+    #: the fixture so a commit writes to a file the test owns; the fake declares
+    #: its own layer, so nothing on disk is touched.
+    editable_layer: Callable[[], str] | None = None
 
 
 def _native_available() -> bool:
@@ -113,6 +121,15 @@ def _algorithm_work_directory() -> Path:
     directory = _WORK_ROOT / f"services-{_WORK_DIRECTORIES}"
     directory.mkdir(parents=True)
     return directory
+
+
+def _point_wkt(x: float, y: float):
+    """A WKT point the fake declares; the fake never converts encodings."""
+    from qgis_sdk.models import Geometry
+
+    return Geometry(
+        encoding="wkt", value=f"POINT ({x} {y})", geometry_type="point", crs=FIXTURE_CRS
+    )
 
 
 def _fake_services() -> Services:
@@ -181,10 +198,30 @@ def _fake_services() -> Services:
         "native:basicstatisticsforfields",
         {"COUNT": 3, "OUTPUT_HTML_FILE": MINIMAL_DATASET},
     )
+    from qgis_sdk.testing import FakeFeatures
+
+    features = FakeFeatures(scope)
+    features.declare(
+        FIXTURE_NAME,
+        fields=FIXTURE_FIELDS,
+        rows=[
+            (1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0)),
+            (2, {"id": 2, "value": "b"}, _point_wkt(21.1, 52.1)),
+            (3, {"id": 3, "value": "c"}, _point_wkt(21.2, 52.2)),
+        ],
+    )
+    editable = features.declare(
+        "editable",
+        fields=FIXTURE_FIELDS,
+        rows=[(1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0))],
+    )
+    del editable
     styles = FakeStyles(layers, scope)
     return Services(
         files=files,
         algorithms=algorithms,
+        features=features,
+        editable_layer=lambda: "editable",
         layers=layers,
         project=FakeProject(layers, scope),
         settings=FakeSettings(scope),
@@ -234,8 +271,16 @@ def _native_services() -> Services:
     from qgis_sdk.bridge.authority import HostAuthority
 
     files = FilesService(HostAuthority(), scope, owner="plugin:contract")
+    from qgis_sdk.adapters.qgis import NativeFeatures
+
+    features = NativeFeatures(layers, scope)
+    editable_copy = work_directory / "editable.geojson"
+    shutil.copyfile(FIXTURE_DATASET, editable_copy)
+    editable_id = layers.open_vector(editable_copy).id
     return Services(
         files=files,
+        features=features,
+        editable_layer=lambda: editable_id,
         algorithms=NativeAlgorithms(
             layers, scope, working_directory=work_directory, files=files
         ),

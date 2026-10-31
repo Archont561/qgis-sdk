@@ -10,6 +10,9 @@ path (AC #7):
 * a **subscription** is a stream. Releasing it disposes the subscription, and a
   subscription that already ended is not an error - a closing UI races with the
   terminal frame all the time.
+* an **editing session** is an open buffer over a layer. Releasing it closes the
+  session, which discards whatever it still held: a view that goes away must not
+  leave half an edit waiting for a page that no longer exists.
 
 Two properties are the point of the ledger: releasing twice is not releasing
 twice, and releasing a borrowed handle cannot reach the layer.
@@ -30,11 +33,12 @@ from qgis_sdk.models.errors import QgisSdkBridgeError
 
 
 class HandleKind(str, Enum):
-    """The three things a view can hold a reference to."""
+    """The kinds of thing a view can hold a reference to."""
 
     BORROWED = "borrowed"
     OWNED = "owned"
     SUBSCRIPTION = "subscription"
+    EDITING = "editing"
 
 
 class ReleaseOutcome(str, Enum):
@@ -43,6 +47,7 @@ class ReleaseOutcome(str, Enum):
     BORROWED_RETAINED = "borrowed_retained"
     DELETED = "deleted"
     SUBSCRIPTION_DISPOSED = "subscription_disposed"
+    EDITING_CLOSED = "editing_closed"
     ALREADY_RELEASED = "already_released"
 
 
@@ -94,12 +99,18 @@ def _no_subscription(subscription_id: str) -> bool:
     return False
 
 
+def _no_editing(session_id: str) -> bool:
+    """The default: a host with no editing registry closes nothing."""
+    return False
+
+
 @dataclass(slots=True)
 class ReleaseLedger:
     """Track one view's handles and release them according to their kind."""
 
     delete_owned: Callable[[str], None] = _no_owned
     dispose_subscription: Callable[[str], bool] = _no_subscription
+    dispose_editing: Callable[[str], bool] = _no_editing
     _held: dict[str, set[Handle]] = field(default_factory=dict, repr=False)
 
     def track(self, view_id: str, handle: Handle) -> None:
@@ -142,6 +153,13 @@ class ReleaseLedger:
         if handle.kind is HandleKind.OWNED:
             self.delete_owned(handle.id)
             return ReleaseOutcome.DELETED
+        if handle.kind is HandleKind.EDITING:
+            closed = self.dispose_editing(handle.id)
+            return (
+                ReleaseOutcome.EDITING_CLOSED
+                if closed
+                else ReleaseOutcome.ALREADY_RELEASED
+            )
         disposed = self.dispose_subscription(handle.id)
         return (
             ReleaseOutcome.SUBSCRIPTION_DISPOSED

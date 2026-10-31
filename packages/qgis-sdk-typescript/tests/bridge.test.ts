@@ -105,7 +105,7 @@ test("parseInvokeReply refuses replies a host could not have produced", () => {
 		null,
 		[],
 		{ call_id: "c1", ok: true, value: 1 },
-		{ protocol: 2, call_id: "c1", ok: true, value: 1 },
+		{ protocol: 99, call_id: "c1", ok: true, value: 1 },
 		{ protocol: BRIDGE_PROTOCOL_VERSION, call_id: "", ok: true, value: 1 },
 		{ protocol: BRIDGE_PROTOCOL_VERSION, call_id: "c1", ok: "yes", value: 1 },
 		{ protocol: BRIDGE_PROTOCOL_VERSION, call_id: "c1", ok: true },
@@ -300,21 +300,40 @@ test("parseStreamFrame refuses frames a host could not have produced", () => {
 	const refused: unknown[] = [
 		null,
 		[],
-		{ protocol: 1, seq: 0, event: { kind: "data", payload: 1 } },
-		{ protocol: 2, subscription_id: "s1", seq: 0, event: { kind: "data" } },
-		{ protocol: 1, subscription_id: "s1", seq: -1, event: { kind: "data" } },
-		{ protocol: 1, subscription_id: "s1", seq: 0 },
 		{
-			protocol: 1,
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			seq: 0,
+			event: { kind: "data", payload: 1 },
+		},
+		{ protocol: 99, subscription_id: "s1", seq: 0, event: { kind: "data" } },
+		{
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			subscription_id: "s1",
+			seq: -1,
+			event: { kind: "data" },
+		},
+		{ protocol: BRIDGE_PROTOCOL_VERSION, subscription_id: "s1", seq: 0 },
+		{
+			protocol: BRIDGE_PROTOCOL_VERSION,
 			subscription_id: "s1",
 			seq: 0,
 			event: { kind: "data", payload: 1 },
 			terminal: { kind: "complete" },
 		},
-		{ protocol: 1, subscription_id: "s1", seq: 0, event: { kind: "nope" } },
-		{ protocol: 1, subscription_id: "s1", seq: 0, terminal: { kind: "nope" } },
 		{
-			protocol: 1,
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			subscription_id: "s1",
+			seq: 0,
+			event: { kind: "nope" },
+		},
+		{
+			protocol: BRIDGE_PROTOCOL_VERSION,
+			subscription_id: "s1",
+			seq: 0,
+			terminal: { kind: "nope" },
+		},
+		{
+			protocol: BRIDGE_PROTOCOL_VERSION,
 			subscription_id: "s1",
 			seq: 0,
 			terminal: { kind: "gap", dropped: -1 },
@@ -436,7 +455,11 @@ test("frames for a subscription the client does not hold are counted, not routed
 	const client = new BridgeClient(scripted.transport);
 
 	scripted.deliver(frame("s9", 0, { index: 0 }));
-	scripted.deliver({ protocol: 1, subscription_id: "s9", seq: 0 });
+	scripted.deliver({
+		protocol: BRIDGE_PROTOCOL_VERSION,
+		subscription_id: "s9",
+		seq: 0,
+	});
 
 	expect(client.activeSubscriptions).toEqual([]);
 	expect(client.unmatchedReplies).toBe(2);

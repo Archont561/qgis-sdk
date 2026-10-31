@@ -4,28 +4,41 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import asdict, is_dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from qgis_sdk.bridge.authority import FileOperation, HostAuthority
 from qgis_sdk.bridge.host._operations import HOST_OPERATIONS, HostOperation
-from qgis_sdk.bridge.host._schemas import DEFAULT_PAGE, _page
+from qgis_sdk.bridge.host._schemas import (
+    BLOB_CHUNK_BYTES,
+    DEFAULT_PAGE,
+    MAX_FEATURE_PAGE,
+    _page,
+)
 from qgis_sdk.bridge.host._services import HostServices
 from qgis_sdk.bridge.protocol import BridgeOperation
 from qgis_sdk.bridge.streams import StreamSink
 from qgis_sdk.models import (
+    DEFAULT_FEATURE_PAGE,
     AlgorithmInfo,
+    FeatureQuery,
     FileRef,
+    Geometry,
     NetworkRequest,
     QgisSdkDecodeError,
     QgisSdkResponseTooLargeError,
     Response,
     RunResult,
 )
-from qgis_sdk.models.errors import QgisSdkBridgeError
+from qgis_sdk.models.errors import (
+    QgisSdkBridgeError,
+    QgisSdkInvalidRequestError,
+    QgisSdkUnknownHandleError,
+)
 from qgis_sdk.network.client import NetworkDefaults, build_request
 from qgis_sdk.services.algorithms import Algorithms
+from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.network import NetworkTransport
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
@@ -60,12 +73,16 @@ def _page_of(items: Sequence[Any], payload: Mapping[str, Any]) -> dict:
 BoundHostHandler = Callable[["ViewBinding", Mapping[str, Any]], Any]
 
 
-def _handlers(services: HostServices) -> dict[str, BoundHostHandler]:
+def _handlers(
+    services: HostServices, editing: EditingSessions
+) -> dict[str, BoundHostHandler]:
     """Bind each operation id to the Protocol call and the shape it returns.
 
     Every handler receives the caller's binding; the ones that take a file ref
     hand it to the authority, which resolves the ref against that binding and
-    never against anything in the payload.
+    never against anything in the payload. ``editing`` is the registry the
+    lifecycle operations share, so a session one call began is the session the
+    next call names - and the one disposal closes.
     """
     authority = services.authority
 
@@ -82,6 +99,24 @@ def _handlers(services: HostServices) -> dict[str, BoundHostHandler]:
     def files_export(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
         written = authority.export_file(binding, payload["file"], payload["content"])
         return {"bytes_written": written, "name": str(payload["file"].get("name", ""))}
+
+    def blob_get(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        offset = int(payload.get("offset", 0))
+        length = int(payload.get("length", BLOB_CHUNK_BYTES))
+        ref = authority.blob_info(binding, payload["blob"])
+        chunk = authority.read_blob(
+            binding, payload["blob"], offset=offset, length=length
+        )
+        end = offset + len(chunk)
+        return {
+            "offset": offset,
+            "length": len(chunk),
+            "size": ref.size,
+            "media_type": ref.media_type,
+            "checksum": ref.checksum,
+            "data_base64": base64.b64encode(chunk).decode("ascii"),
+            "next_offset": None if end >= ref.size else end,
+        }
 
     def project_layer_ids(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
         return _page_of(services.project.layer_ids(), payload)
@@ -119,6 +154,90 @@ def _handlers(services: HostServices) -> dict[str, BoundHostHandler]:
             raise QgisSdkBridgeError("this host has no network transport configured")
         return _Fetch(services.network, grant.constrain(_fetch_request(payload)))
 
+    def features_page(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> Iterator[dict[str, Any]]:
+        """Stream pages until the layer runs out, one bounded page per event.
+
+        The pull shape is the point: the host asks the provider for one page,
+        hands it to the view, and stops until the view pumps again. A page that
+        stops early has cost the host one page, not the dataset.
+        """
+        service = _features(services)
+        layer_id = payload["layer_id"]
+        query = _feature_query(payload)
+
+        def pages() -> Iterator[dict[str, Any]]:
+            cursor = query.cursor
+            while True:
+                page = service.page(layer_id, replace(query, cursor=cursor))
+                yield page.to_wire()
+                if not page.truncated or page.next_cursor is None:
+                    return
+                cursor = page.next_cursor
+
+        return pages()
+
+    def features_get(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        service = _features(services)
+        feature = service.feature(
+            payload["layer_id"],
+            int(payload["feature_id"]),
+            encoding=payload.get("encoding", "wkb"),
+        )
+        return feature.to_wire()
+
+    def expressions_evaluate(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        service = _features(services)
+        outcome = service.evaluate(
+            payload["text"],
+            layer_id=payload.get("layer_id"),
+            feature_id=_optional_int(payload.get("feature_id")),
+        )
+        return outcome.to_wire()
+
+    def expressions_validate(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        service = _features(services)
+        return service.check(
+            payload["text"], layer_id=payload.get("layer_id")
+        ).to_wire()
+
+    def editing_begin(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        service = _features(services)
+        session = editing.begin(binding, service, payload["layer_id"])
+        return {"session_id": session.id, "layer_id": session.layer_id}
+
+    def editing_add(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        session = editing.require(binding, payload["session_id"])
+        feature_id = session.add(
+            dict(payload["attributes"]),
+            _geometry(payload.get("geometry")),
+        )
+        return {"feature_id": feature_id, "pending": session.pending}
+
+    def editing_update(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        session = editing.require(binding, payload["session_id"])
+        session.update(
+            int(payload["feature_id"]),
+            dict(payload["attributes"]) if payload.get("attributes") else None,
+            _geometry(payload.get("geometry")),
+        )
+        return {"session_id": session.id, "pending": session.pending}
+
+    def editing_delete(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        session = editing.require(binding, payload["session_id"])
+        session.delete(int(payload["feature_id"]))
+        return {"session_id": session.id, "pending": session.pending}
+
+    def editing_commit(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        session = editing.require(binding, payload["session_id"])
+        return session.commit().to_wire()
+
+    def editing_rollback(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        session = editing.require(binding, payload["session_id"])
+        session.rollback()
+        return {"session_id": session.id, "pending": session.pending}
+
     return {
         "layers.list": layers_list,
         "layers.get": layers_get,
@@ -128,6 +247,17 @@ def _handlers(services: HostServices) -> dict[str, BoundHostHandler]:
         "settings.get": settings_get,
         "notifications.info": notifications_info,
         "styles.apply": styles_apply,
+        "blob.get": blob_get,
+        "features.page": features_page,
+        "features.get": features_get,
+        "expressions.evaluate": expressions_evaluate,
+        "expressions.validate": expressions_validate,
+        "editing.begin": editing_begin,
+        "editing.add": editing_add,
+        "editing.update": editing_update,
+        "editing.delete": editing_delete,
+        "editing.commit": editing_commit,
+        "editing.rollback": editing_rollback,
         "algorithms.providers": algorithms_providers,
         "algorithms.list": algorithms_list,
         "algorithms.describe": algorithms_describe,
@@ -272,6 +402,97 @@ def _response_event(response: Response) -> dict[str, Any]:
     }
 
 
+def _features(services: HostServices) -> Features:
+    if services.features is None:
+        raise QgisSdkBridgeError("this host has no features service configured")
+    return services.features
+
+
+def _feature_query(payload: Mapping[str, Any]) -> FeatureQuery:
+    """Turn a wire request into the bounded query the service takes.
+
+    The bounds are checked here, by name, rather than left to the layer: a page
+    asking for more than ``MAX_FEATURE_PAGE`` features or a bbox that is not
+    four numbers is a mistake in the request, and the caller hears which.
+    """
+    raw_bbox = payload.get("bbox")
+    raw_ids = payload.get("ids")
+    limit = int(payload.get("limit", DEFAULT_FEATURE_PAGE))
+    if limit > MAX_FEATURE_PAGE:
+        raise QgisSdkInvalidRequestError(
+            f"limit is at most {MAX_FEATURE_PAGE} features, not {limit}"
+        )
+    bbox = None
+    if raw_bbox is not None:
+        if len(raw_bbox) != 4:
+            raise QgisSdkInvalidRequestError(
+                f"bbox is (min_x, min_y, max_x, max_y), not {len(raw_bbox)} numbers"
+            )
+        bbox = tuple(float(item) for item in raw_bbox)
+    return FeatureQuery(
+        limit=limit,
+        cursor=payload.get("cursor"),
+        expression=payload.get("expression"),
+        bbox=bbox,
+        ids=None if raw_ids is None else tuple(int(item) for item in raw_ids),
+        encoding=payload.get("encoding", "wkb"),
+        with_geometry=bool(payload.get("with_geometry", True)),
+    )
+
+
+def _optional_int(value: Any) -> int | None:
+    return None if value is None else int(value)
+
+
+def _geometry(value: Any) -> Geometry | None:
+    """Read a geometry a page sent back, or ``None`` when it sent none."""
+    return None if value is None else Geometry.from_wire(value)
+
+
+class EditingSessions:
+    """The host's editing sessions, scoped to the view that opened them.
+
+    A session is a buffer over a layer, so it is neither the service's nor the
+    page's: it belongs to the view. Every session records its view, a call names
+    its session id, and the dispatcher disposes what a closing view held, so a
+    page that disappears mid-edit cannot leave a buffer open. Two views editing
+    one layer are two sessions over one provider buffer, which the service is
+    free to refuse - the host does not pretend otherwise.
+    """
+
+    def __init__(self) -> None:
+        self._sessions: dict[str, tuple[str, EditingSession]] = {}
+
+    def begin(
+        self, binding: ViewBinding, service: Features, layer_id: str
+    ) -> EditingSession:
+        session = service.begin_edit(layer_id)
+        self._sessions[session.id] = (binding.view_id, session)
+        return session
+
+    def require(self, binding: ViewBinding, session_id: str) -> EditingSession:
+        entry = self._sessions.get(session_id)
+        if entry is None or entry[0] != binding.view_id:
+            # A session begun by another view is reported exactly like one that
+            # never existed: the reply must not become an oracle for other views.
+            raise QgisSdkUnknownHandleError(
+                f"editing session {session_id!r} is not open for this view"
+            )
+        return entry[1]
+
+    def close(self, session_id: str) -> bool:
+        entry = self._sessions.pop(session_id, None)
+        if entry is None:
+            return False
+        entry[1].close()
+        return True
+
+    def close_view(self, view_id: str) -> None:
+        for session_id, (owner, _session) in list(self._sessions.items()):
+            if owner == view_id:
+                self.close(session_id)
+
+
 class _Fetch:
     """The push source behind ``network.fetch``: one request, one event, done.
 
@@ -335,7 +556,8 @@ def register_host_operations(
     operations registered before it in place, on a call whose caller was told it
     failed.
     """
-    handlers = _handlers(services)
+    editing = EditingSessions()
+    handlers = _handlers(services, editing)
     wanted = _selected(only)
     operations = [
         BridgeOperation(
@@ -353,6 +575,7 @@ def register_host_operations(
         raise QgisSdkBridgeError(
             f"duplicate operation id {conflicts[0]!r}; nothing was registered"
         )
+    dispatcher.register_editing(close=editing.close, close_view=editing.close_view)
     streams = {operation.id for operation in wanted if operation.events is not None}
     for operation in operations:
         if operation.id in streams:

@@ -9,6 +9,7 @@ from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import PluginContext
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.contracts import Notifications
+from qgis_sdk.services.features import Features
 from qgis_sdk.services.layers import Layers
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
@@ -39,6 +40,10 @@ class HostServices:
     settings: Settings
     styles: Styles
     notifications: Notifications
+    #: Layer data, expressions and editing (decision-54 point 3). Without one
+    #: the ``features.*``, ``expressions.*`` and ``editing.*`` operations are
+    #: declared and fail by name, never silently answered with nothing.
+    features: Features | None = None
     authority: HostAuthority = field(default_factory=HostAuthority)
     network: NetworkTransport | None = None
     algorithms: Algorithms | None = None
@@ -77,6 +82,7 @@ class HostServices:
             settings=context.settings,
             styles=context.styles,
             notifications=context.notifications,
+            features=context.features if context.has("features") else None,
             authority=authority if authority is not None else HostAuthority(),
             network=network,
             algorithms=context.algorithms if context.has("algorithms") else None,
