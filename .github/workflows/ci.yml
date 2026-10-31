@@ -293,8 +293,23 @@ jobs:
           keyring=/etc/apt/keyrings/qgis-archive-keyring.gpg
           echo "deb [signed-by=$keyring] https://qgis.org/debian noble main" \
             | sudo tee /etc/apt/sources.list.d/qgis.list >/dev/null
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qgis qgis-server python3-qgis
+          # qgis.org has dropped TLS handshakes mid-download in this row, which
+          # fails the whole job with apt's exit 100 on a mirror hiccup rather
+          # than on anything the change under test did. apt's own retry knob
+          # plus one step-level retry keeps that transient failure out of the
+          # gate (see doc-14, "0.9.0 release gate").
+          sudo apt-get -o Acquire::Retries=5 update
+          installed=0
+          for attempt in 1 2 3; do
+            if sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+              qgis qgis-server python3-qgis; then
+              installed=1
+              break
+            fi
+            echo "::warning::QGIS 3.44 install attempt $attempt failed; retrying"
+            sleep 15
+          done
+          test "$installed" = 1
           python3 -c "import qgis.core, qgis.server; print(qgis.core.Qgis.version())"
 
       # The bindings belong to the system interpreter, so the environment is
