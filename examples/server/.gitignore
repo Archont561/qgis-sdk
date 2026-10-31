@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+# `qgis-sdk dev` keeps its isolated QGIS profile and the generated host package here.
+.qgis-sdk/
+# `qgis-sdk build` writes the installable ZIP here.
+dist/

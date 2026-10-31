@@ -40,11 +40,13 @@ PYTHONPATH = "$PIXI_PROJECT_ROOT/packages/qgis-sdk-runtime/src:$PIXI_PROJECT_ROO
 # lives in Alint rather than a duplicate pytest implementation.
 cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q && alint check --only bridge-readme-mirror --only ui-readme-mirror --only bridge-readme-alias-name --only ui-readme-alias-name ."
 
-# The reference plugin (examples/simple) through its own
-# `qgis-sdk test`: the pure target on the SDK fakes, then the `qgis` target
-# against the headless QGIS this environment carries.
+# The reference projects through their own `qgis-sdk test`: `examples/simple`
+# on the pure target and against the headless QGIS this environment carries, and
+# `examples/server` - the server variant - on the pure target, because a QGIS
+# built without WITH_SERVER has no `qgis.server` for `--target server` (the
+# `QGIS 3.44 LTS` row runs that half).
 [feature.python.tasks.test-reference-example]
-cmd = "python -m qgis_sdk_tools test --project examples/simple -q && python -m qgis_sdk_tools test --project examples/simple --target qgis -q"
+cmd = "python -m qgis_sdk_tools test --project examples/simple -q && python -m qgis_sdk_tools test --project examples/simple --target qgis -q && python -m qgis_sdk_tools test --project examples/server -q"
 env = { QT_QPA_PLATFORM = "offscreen" }
 
 [feature.python.tasks.release-plan]
