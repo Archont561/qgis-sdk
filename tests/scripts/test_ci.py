@@ -73,6 +73,29 @@ def test_annotations_limit_coverage_and_report_failed_steps(tmp_path: Path):
     assert report.stdout == "::error title=failed step::s11\n"
 
 
+def test_a_crashed_coverage_run_annotates_the_stack_under_the_marker(
+    tmp_path: Path,
+):
+    """A segfault leaves no FAILED line; the stack under it is the report."""
+    log = tmp_path / "coverage-output.log"
+    log.write_text(
+        "packages/qgis-sdk-python/tests/test_lts_native.py .....Fatal Python error: "
+        "Segmentation fault\n"
+        "\n"
+        "Current thread 0x00007f (most recent call first):\n"
+        '  File "/repo/src/qgis_sdk/adapters/qgis/jobs.py", line 61 in _tick\n'
+        "Segmentation fault (core dumped)\n",
+        encoding="utf-8",
+    )
+
+    report = run_ci("annotate-coverage", str(log), cwd=tmp_path)
+
+    lines = report.stdout.splitlines()
+    assert lines[0].startswith("::error::1:packages/qgis-sdk-python/tests/test_lts")
+    assert lines[-3].startswith("::error title=interpreter died::3:Current thread")
+    assert lines[-1].startswith("::error title=interpreter died::5:Segmentation fault")
+
+
 def test_bun_summary_first_match_or_missing_log(tmp_path: Path):
     log = tmp_path / "bun.log"
     log.write_text("12 pass\n42 pass\n", encoding="utf-8")

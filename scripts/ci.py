@@ -258,19 +258,40 @@ def check_generated() -> int:
     )
 
 
+FATAL_MARKERS = ("Fatal Python error", "Segmentation fault")
+"""What an aborted pytest prints before it dies.
+
+Such a run has no summary line and no ``FAILED`` line: the interpreter stops
+mid-test, and the only thing that says where is the C-level stack pytest's
+``faulthandler`` prints after the marker. A red coverage job that reports
+nothing but ``exit code 137`` costs a rerun to diagnose, so the lines under the
+marker are annotated too.
+"""
+
+
 def annotate_coverage(log: Path) -> None:
     if not log.exists():
         return
+    lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
     pattern = re.compile(r"FAILED|ERROR|Error|error:|Coverage|TOTAL|no tests ran")
     matches = [
-        f"{index}:{line}"
-        for index, line in enumerate(
-            log.read_text(encoding="utf-8", errors="replace").splitlines(), 1
-        )
-        if pattern.search(line)
+        f"{index}:{line}" for index, line in enumerate(lines, 1) if pattern.search(line)
     ]
     for line in matches[-40:]:
         print(f"::error::{line[:900]}")
+    fatal = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if any(marker in line for marker in FATAL_MARKERS)
+        ),
+        None,
+    )
+    if fatal is not None:
+        # Annotations are capped per step, so this goes last and stays short:
+        # the frames under the marker name the test and the C call that died.
+        for offset, line in enumerate(lines[fatal : fatal + 8], fatal + 1):
+            print(f"::error title=interpreter died::{f'{offset}:{line}'[:900]}")
 
 
 def report_bun(log: Path, title: str) -> None:
