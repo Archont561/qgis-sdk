@@ -1854,14 +1854,25 @@ the contract, so it can be resumed by a later call or a different process.
 `vertex_count`, `is_empty`, `geometry_type` and `crs` next to its encoded
 payload, which answers the questions a page actually asks - is this empty, is
 this multipart, how big is it - without a second model per part and a wire shape
-with its own paging. An empty geometry is `is_empty` with zero counts and a
-`geometry_type` of `none`; a multipart one has `part_count > 1` and a
+with its own paging. A geometry that is present but empty has `is_empty` true,
+zero counts, its declared type and an empty payload; a multipart one has
+`part_count > 1` and a
 `multipoint`/`multiline`/`multipolygon` type; a geometry asked for in an encoding
 the source did not declare raises `QgisSdkUnsupportedCapabilityError`. There is
 no part index or vertex index to get wrong, because the API takes neither; a
 consumer that needs coordinates decodes the payload it already holds. Adding
 accessors later is additive on the model and a bridge minor, and decision-72
 records why it is not in 0.10.0.
+
+A row with no shape of its own is the third case, and it is not the second:
+`Feature.geometry` is `None` when the query said `with_geometry=False`, so a
+page that asked for geometry and got `None` would be reading an answer to a
+question it did not ask. Such a row reports `geometry_type` `none`, an empty
+`value`, zero counts and `is_empty` false, on the fake and on PyQGIS alike. The
+native side is the one that has to spell it out: `QgsGeometry` expresses "no
+abstract geometry" as `constGet()` returning `None`, and neither `isNull()` nor
+`isEmpty()` says so - a default-constructed `QgsGeometry` is neither, per those
+two predicates, and still holds nothing.
 
 ### Unsupported things are refused or reported, never faked
 

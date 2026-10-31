@@ -30,7 +30,11 @@ NATIVE_COMMAND = [
     "-m",
     "native and not smoke",
     "-q",
-    "-rs",
+    # `-q` on its own prints no short summary, and `-rs` asks for skips alone:
+    # a job with twenty failures then names none of them. `-rfE` puts the failed
+    # and errored test ids in the log, which is what `native()` annotates and
+    # what a rerun otherwise has to rediscover.
+    "-rfEs",
 ]
 LTS_PROBE = (
     "import qgis.core, qgis.server; "

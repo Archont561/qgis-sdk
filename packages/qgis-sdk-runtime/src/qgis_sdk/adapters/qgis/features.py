@@ -92,27 +92,38 @@ def _geometry_type_code(geometry: QgsGeometry) -> int:
 
 def _vertex_count(geometry: QgsGeometry) -> int:
     """Every vertex of the geometry, parts included."""
-    return int(geometry.constGet().vertexCount())
+    abstract = geometry.constGet()
+    return 0 if abstract is None else int(abstract.vertexCount())
 
 
 def _part_count(geometry: QgsGeometry) -> int:
     """Parts of the geometry: one for a single part, N for a collection."""
-    return int(geometry.constGet().partCount())
+    abstract = geometry.constGet()
+    return 0 if abstract is None else int(abstract.partCount())
 
 
 def _encode(geometry: QgsGeometry, encoding: str, crs: str | None) -> Geometry:
-    """Encode one QGIS geometry in the encoding the caller asked for."""
-    if geometry.isNull() or geometry.isEmpty():
+    """Encode one QGIS geometry in the encoding the caller asked for.
+
+    A feature with no geometry is a fact about a row, not an error: a row added
+    from the console, or one a provider stores with no shape, still has
+    attributes worth a page. ``QgsGeometry`` spells that case ``constGet()``
+    returning None, and neither ``isNull()`` nor ``isEmpty()`` says it - a
+    default-constructed ``QgsGeometry`` is neither null nor empty by those two
+    predicates and still holds no abstract geometry at all.
+    """
+    abstract = geometry.constGet()
+    if abstract is None or geometry.isNull() or geometry.isEmpty():
         value = ""
-        if encoding == "wkb" and not geometry.isNull():
+        if encoding == "wkb" and abstract is not None:
             value = base64.b64encode(bytes(geometry.asWkb())).decode("ascii")
         return Geometry(
             encoding=encoding,
             value=value,
-            geometry_type="none" if geometry.isNull() else _name(geometry),
+            geometry_type="none" if abstract is None else _name(geometry),
             crs=crs,
             part_count=_part_count(geometry),
-            is_empty=not geometry.isNull(),
+            is_empty=abstract is not None,
         )
     if encoding == "wkb":
         value = base64.b64encode(bytes(geometry.asWkb())).decode("ascii")

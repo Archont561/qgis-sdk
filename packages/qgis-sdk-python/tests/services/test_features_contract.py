@@ -89,7 +89,10 @@ def test_ids_narrow_a_page_without_an_expression(services: Services) -> None:
         services.fixture_layer, FeatureQuery(limit=10, encoding="wkt", ids=(3, 1))
     )
 
-    assert _point_ids(page) == [1, 3]
+    # Which ids come back is the contract; the order an explicit id set comes
+    # back in is the provider's, and asking for it here would pin a detail the
+    # paging tests already cover for a cursor walk.
+    assert sorted(_point_ids(page)) == [1, 3]
 
 
 def test_a_bbox_filter_runs_in_the_provider(services: Services) -> None:
@@ -131,6 +134,55 @@ def test_one_feature_carries_its_attributes_and_geometry(services: Services) -> 
     assert feature.geometry.geometry_type == "point"
     assert feature.geometry.is_empty is False
     assert feature.geometry.value
+
+
+def test_a_row_with_no_shape_reports_a_geometry_that_says_so(
+    services: Services,
+) -> None:
+    """Missing and empty are different facts, and neither is "not asked for".
+
+    A row added without a geometry - a record a page created from a form, say -
+    has no shape of its own. ``Feature.geometry`` is ``None`` when the query did
+    not ask for one, so a page that asked and got ``None`` would be reading an
+    answer to a different question.
+    """
+    assert services.editable_layer is not None
+    layer_id = services.editable_layer()
+    features = _features(services)
+
+    session = features.begin_edit(layer_id)
+    try:
+        session.add({"id": 77, "value": "shapeless"})
+        session.commit()
+    finally:
+        session.close()
+
+    page = features.page(
+        layer_id,
+        FeatureQuery(limit=10, encoding="wkt", expression="\"value\" = 'shapeless'"),
+    )
+    shapeless = _only(page)
+
+    assert shapeless.geometry is not None
+    assert shapeless.geometry.geometry_type == "none"
+    assert shapeless.geometry.value == ""
+    assert shapeless.geometry.part_count == 0
+    assert shapeless.geometry.vertex_count == 0
+    assert shapeless.geometry.is_empty is False
+
+    # Asking for no geometry is the case `None` answers.
+    bare = _only(
+        features.page(
+            layer_id,
+            FeatureQuery(
+                limit=10,
+                encoding="wkt",
+                expression="\"value\" = 'shapeless'",
+                with_geometry=False,
+            ),
+        )
+    )
+    assert bare.geometry is None
 
 
 def test_a_feature_asked_for_without_geometry_has_none(services: Services) -> None:

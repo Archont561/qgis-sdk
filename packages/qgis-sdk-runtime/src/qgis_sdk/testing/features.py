@@ -301,7 +301,14 @@ class FakeFeatures:
                     f"{feature_id}; it declared "
                     f"{sorted(layer.geometries[feature_id])}"
                 )
-            geometry = stored
+            # A row with no shape of its own still reports one: `None` on a
+            # `Feature` means the page did not ask for a geometry, and reading a
+            # row without one as "not requested" would answer a question nobody
+            # asked. ``geometry_type`` "none" is the missing case, which is a
+            # different fact from an empty geometry (doc-12).
+            geometry = stored or Geometry(
+                encoding=encoding, value="", geometry_type="none"
+            )
         return Feature(
             id=feature_id,
             attributes=dict(layer.rows[feature_id]),
