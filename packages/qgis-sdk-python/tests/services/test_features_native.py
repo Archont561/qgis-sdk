@@ -10,7 +10,6 @@ file a second reader opens.
 from __future__ import annotations
 
 import base64
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import conftest
@@ -36,7 +35,8 @@ def _only(page):
 
 def test_the_three_encodings_describe_the_same_point(native_services: Services) -> None:
     features = _features(native_services)
-    layer_id = native_services.fixture_layer
+    assert native_services.fixture_layer is not None
+    layer_id = native_services.fixture_layer()
 
     wkb = features.feature(layer_id, 1, encoding="wkb")
     wkt = features.feature(layer_id, 1, encoding="wkt")
@@ -58,7 +58,8 @@ def test_a_page_of_wkb_round_trips_through_the_provider(
     native_services: Services,
 ) -> None:
     features = _features(native_services)
-    layer_id = native_services.fixture_layer
+    assert native_services.fixture_layer is not None
+    layer_id = native_services.fixture_layer()
 
     page = features.page(layer_id, FeatureQuery(limit=10, encoding="wkb"))
     again = features.page(layer_id, FeatureQuery(limit=10, encoding="wkb"))
@@ -100,7 +101,8 @@ def test_a_committed_edit_is_in_the_file_a_second_reader_opens(
     # provider rather than only the layer's buffer.
     from qgis.core import QgsVectorLayer
 
-    path = Path(native_services.work_directory or "") / "editable.geojson"
+    path = native_services.editable_dataset
+    assert path is not None
     reader = QgsVectorLayer(str(path), "reopened", "ogr")
     assert reader.isValid(), path
     assert reader.featureCount() == 4

@@ -25,6 +25,12 @@ def _features(services: Services):
     return services.features
 
 
+def _layer(services: Services) -> str:
+    """The reference-points layer, opened if the backend opens it on demand."""
+    assert services.fixture_layer is not None
+    return services.fixture_layer()
+
+
 def _point_ids(page) -> list[int]:
     return [feature.id for feature in page.items]
 
@@ -36,7 +42,7 @@ def test_a_page_is_ordered_by_feature_id_and_says_what_is_left(
     services: Services,
 ) -> None:
     page = _features(services).page(
-        services.fixture_layer, FeatureQuery(limit=2, encoding="wkt")
+        _layer(services), FeatureQuery(limit=2, encoding="wkt")
     )
 
     assert _point_ids(page) == [1, 2]
@@ -44,7 +50,7 @@ def test_a_page_is_ordered_by_feature_id_and_says_what_is_left(
     assert page.next_cursor == "2"
 
     rest = _features(services).page(
-        services.fixture_layer,
+        _layer(services),
         FeatureQuery(limit=2, encoding="wkt", cursor=page.next_cursor),
     )
     assert _point_ids(rest) == [3]
@@ -57,10 +63,10 @@ def test_the_same_query_over_the_same_data_returns_the_same_page(
 ) -> None:
     """Deterministic means byte-for-byte, not "the same ids in some order"."""
     first = _features(services).page(
-        services.fixture_layer, FeatureQuery(limit=3, encoding="wkt")
+        _layer(services), FeatureQuery(limit=3, encoding="wkt")
     )
     second = _features(services).page(
-        services.fixture_layer, FeatureQuery(limit=3, encoding="wkt")
+        _layer(services), FeatureQuery(limit=3, encoding="wkt")
     )
 
     assert first.to_wire() == second.to_wire()
@@ -68,7 +74,7 @@ def test_the_same_query_over_the_same_data_returns_the_same_page(
 
 def test_a_page_smaller_than_the_layer_is_all_of_it(services: Services) -> None:
     page = _features(services).page(
-        services.fixture_layer, FeatureQuery(limit=10, encoding="wkt")
+        _layer(services), FeatureQuery(limit=10, encoding="wkt")
     )
 
     assert _point_ids(page) == [1, 2, 3]
@@ -86,7 +92,7 @@ def test_a_page_over_the_ceiling_is_refused_before_the_provider_sees_it(
 
 def test_ids_narrow_a_page_without_an_expression(services: Services) -> None:
     page = _features(services).page(
-        services.fixture_layer, FeatureQuery(limit=10, encoding="wkt", ids=(3, 1))
+        _layer(services), FeatureQuery(limit=10, encoding="wkt", ids=(3, 1))
     )
 
     # Which ids come back is the contract; the order an explicit id set comes
@@ -98,7 +104,7 @@ def test_ids_narrow_a_page_without_an_expression(services: Services) -> None:
 def test_a_bbox_filter_runs_in_the_provider(services: Services) -> None:
     """Only the first two points fall inside this box."""
     page = _features(services).page(
-        services.fixture_layer,
+        _layer(services),
         FeatureQuery(limit=10, encoding="wkt", bbox=(20.9, 51.9, 21.15, 52.15)),
     )
 
@@ -107,7 +113,7 @@ def test_a_bbox_filter_runs_in_the_provider(services: Services) -> None:
 
 def test_an_expression_filter_runs_in_the_provider(services: Services) -> None:
     page = _features(services).page(
-        services.fixture_layer,
+        _layer(services),
         FeatureQuery(limit=10, encoding="wkt", expression='"id" > 1'),
     )
 
@@ -125,7 +131,7 @@ def test_an_unknown_layer_is_reported_by_its_identifier(services: Services) -> N
 
 
 def test_one_feature_carries_its_attributes_and_geometry(services: Services) -> None:
-    feature = _features(services).feature(services.fixture_layer, 2, encoding="wkt")
+    feature = _features(services).feature(_layer(services), 2, encoding="wkt")
 
     assert feature.id == 2
     assert feature.attributes["value"] == "b"
@@ -187,7 +193,7 @@ def test_a_row_with_no_shape_reports_a_geometry_that_says_so(
 
 def test_a_feature_asked_for_without_geometry_has_none(services: Services) -> None:
     page = _features(services).page(
-        services.fixture_layer,
+        _layer(services),
         FeatureQuery(limit=1, encoding="wkt", with_geometry=False),
     )
 
@@ -198,7 +204,7 @@ def test_an_unknown_feature_is_reported_by_its_identifier(
     services: Services,
 ) -> None:
     with pytest.raises(QgisSdkLayerNotFoundError) as error:
-        _features(services).feature(services.fixture_layer, 999)
+        _features(services).feature(_layer(services), 999)
 
     assert "999" in error.value.identifier
 
@@ -208,19 +214,22 @@ def test_an_unknown_feature_is_reported_by_its_identifier(
 
 def test_an_expression_is_a_value_or_a_message(services: Services) -> None:
     value = _features(services).evaluate(
-        '"id" > 1', layer_id=services.fixture_layer, feature_id=3
+        '"id" > 1', layer_id=_layer(services), feature_id=3
     )
-    broken = _features(services).evaluate("1 +", layer_id=services.fixture_layer)
+    broken = _features(services).evaluate("1 +", layer_id=_layer(services))
 
     assert value.valid is True
-    assert value.value is True
+    # Truthiness, not identity: QGIS's expression engine has no boolean type and
+    # answers a comparison with 1, while the fake answers what a Python caller
+    # expects. A page tests the value, not its spelling.
+    assert bool(value.value) is True
     assert value.message is None
     assert broken.valid is False
     assert broken.message
 
 
 def test_validate_names_the_columns_an_expression_reads(services: Services) -> None:
-    check = _features(services).check('"id" > 1', layer_id=services.fixture_layer)
+    check = _features(services).check('"id" > 1', layer_id=_layer(services))
 
     assert check.valid is True
     assert check.referenced_columns == ("id",)

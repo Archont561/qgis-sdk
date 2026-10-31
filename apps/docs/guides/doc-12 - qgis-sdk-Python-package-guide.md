@@ -1778,7 +1778,10 @@ layer to filter it, which is the difference between a page and a slice of a list
 and a parsed expression that evaluated to null is `valid` with `value` null -
 which is a different answer from a syntax error. `check(text, layer_id=...)`
 returns `ExpressionCheck` without running anything, including the columns the
-expression names. The native adapter hands both to `QgsExpression` in a prepared
+expression names. A comparison is answered by QGIS with `1`, because its
+expression engine has no boolean type; the fake answers `True`, because it is
+Python. Compare the value, not its type: `bool(value)` is true on both, and the
+wire carries whichever the backend produced. The native adapter hands both to `QgsExpression` in a prepared
 project context; the fake documents a small subset (comparisons, `IS [NOT]
 NULL`, `and`/`or`, quoted field names) and refuses functions, arithmetic and
 parentheses by name, because a test that passed for a syntax QGIS rejects would
