@@ -1911,6 +1911,29 @@ publishing wait for an explicit authorization.
   gate* - the step that had been failing with exit 139 on `f466d86`,
   `7319794` and `bc3fb1f` - plus the dry-run packaging check. The
   whole-suite crash does not reproduce on `main`.
+- **The 0.9.0 stamp (2026-10-31, the stamp pull request).** On the gate
+  record's merge `6917e54`: `release.py stamp --version 0.9.0 --scope
+  python` moved the kit, runtime and tools manifests, the kit's two exact
+  pins (runtime, tools and `tools[mcp]`, all `==0.9.0`), the tools'
+  runtime range (`>=0.9.0,<0.10`), the recipe's three versions plus
+  `tools_runtime_requirement`, and both examples' windows
+  (`>=0.9,<0.10`). The TypeScript scope was not stamped and no npm
+  version is consumed, so the bridge stays at `0.6.0`: `verify-versions`
+  reports python 0.9.0, typescript 0.6.0, ui 0.1.0, contract version 1.
+  By hand: the status lines of the root README and the three Python
+  package READMEs. doc-12's `0.9.0 migration notes` heading was already
+  final, so the site publishes `python-migration/v0-9` without the Draft
+  badge and doc-13 needs no entry.
+- **On the stamped tree.** Pure suite 2418 passed / 89 skipped / 7
+  deselected, `tests/scripts` 289, Ruff clean (470 files), Alint 9/9,
+  both examples green through `qgis-sdk test` (20 and 8) and clean
+  through `check` (11 and 3 files). `build-python --scope python` builds
+  and twine-checks the three `0.9.0` wheels, whose metadata carries
+  `qgis-sdk-runtime==0.9.0`, `qgis-sdk-tools==0.9.0`,
+  `qgis-sdk-tools[mcp]==0.9.0` and the tools' `qgis-sdk-runtime<0.10,
+  >=0.9.0`; from those wheels a fresh `venv` scaffolds server and app
+  projects with `>=0.9,<0.10` windows and a clean `check`. Tagging and
+  publishing wait for an explicit request.
 - **Not run here, and where it is run.** The native layers:
   `tests/test_jobs_tasks_native.py` and the rest of `-m native` in
   `Linux checks`, the pure-layer coverage job in `Linux coverage`, and
