@@ -1,10 +1,10 @@
 ---
 id: TASK-83
 title: Prepare and qualify 0.9.0 release
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-10-31 19:20'
+updated_date: '2026-10-31 20:10'
 labels: []
 milestone: m-8
 dependencies:
@@ -30,9 +30,40 @@ Explicit release gate for the 0.9.0 hosts and worker-first named jobs release (m
 - [x] #1 Required work has verified outcomes and test/artifact evidence across the Python suite, tests/scripts, the opt-in harnesses the milestone touched and the example projects; doc-12/doc-13 migration notes cover every added or renamed name, including worker-first jobs, restricted context, named registration, action handles and legacy async/offload migration.
 - [x] #2 Use valid SemVer and prereleases such as -rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves with it) and keep protocol versions independent.
 - [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a project from the previous minor reports what changed rather than crashing.
-- [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks.
+- [x] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks. (Approved with "publish" after the green `python-v0.9.0-rc.1` rehearsal; released as `python-v0.9.0` on `181f8cc6`, run 41228399266, recorded in doc-14 under "Released afterwards".); no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [x] #5 The expected zero bridge delta is confirmed rather than assumed: no file under packages/qgis-sdk-typescript changed, no npm version is consumed, and HOST_FINGERPRINT and the plugin-description contract version still agree across both languages. A changed wire requires a separate contract/version decision and revised gate.
 <!-- AC:END -->
+
+## Released (2026-10-31)
+
+Owner said "publish", after the stamp merged as `181f8cc6`. Two annotated
+tags on that commit, rehearsal first because a stable tag spends version
+space and an rc spends none:
+
+- `python-v0.9.0-rc.1` (run 41227547204) - green end to end: stamped
+  `0.9.0-rc.1`, verified the stamped manifests and the shared contract,
+  built and twine-checked three wheels plus three Conda outputs, ran the
+  PyPI verify step with every publish step skipped, skipped the
+  prefix.dev uploads, and published a GitHub prerelease. PyPI still ended
+  at 0.8.0 and npm's `latest` was still 0.6.0 afterwards.
+- `python-v0.9.0` (run 41228399266) - `build`, `pypi`, `conda` and
+  `github-release` succeeded; `npm`, `ui`, `github-packages` and
+  `github-packages-ui` skipped, as a Python-only scope must. The three
+  PyPI uploads and the three prefix.dev uploads were real, and the
+  prerelease skip step was itself skipped.
+
+PyPI serves 0.9.0 as `latest` for `qgis-sdk`, `qgis-sdk-runtime` and
+`qgis-sdk-tools` (digests 1ade63c4, 66738aab, ee057933). A fresh CPython
+3.11.2 venv installing the published `qgis-sdk[mcp]==0.9.0` resolves
+`mcp 2.3.0` with a clean `pip check`, renders `qgis-sdk mcp --help`,
+scaffolds `--host server` with `>=0.9,<0.10` windows that `check` passes,
+and `targets` still marks the Windows and macOS QGIS rows unqualified.
+npm was not touched: `@archont561/qgis-sdk` stays 0.6.0, which is the
+train's whole point.
+
+AC 4 was the last open criterion; all five are checked and the task is
+Done. prefix.dev and the release-asset CDN are attested by the run logs
+only; Conda and the native QGIS rows remain outside this sandbox.
 
 ## The 0.9.0 stamp (2026-10-31)
 
