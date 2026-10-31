@@ -263,3 +263,88 @@ def test_the_window_carries_the_canvas_and_the_declared_bindings(
     assert found["dialogs"] == ["Greeting"]
     assert found["docks"] == ["Inspector"]
     assert found["report"]["exited"] is True
+
+
+# -- the command line, end to end ----------------------------------------------------
+
+#: Appended to a scaffolded project so the child the command starts can report
+#: itself: which entry ran, and under which QGIS.
+_RUN_REPORT = """
+import os as _os
+
+if _entry := _os.environ.get("QGIS_SDK_RUN_ENTRY"):
+    import pathlib as _pathlib
+
+    _pathlib.Path(_entry).write_text("entry", encoding="utf-8")
+
+if _marker := _os.environ.get("QGIS_SDK_RUN_MARKER"):
+    import json as _json
+    import pathlib as _pathlib
+    import sys as _sys
+
+    from qgis.core import Qgis as _Qgis
+
+    _pathlib.Path(_marker).write_text(
+        _json.dumps(
+            {
+                "version": _Qgis.version(),
+                "platform": _os.environ.get("QT_QPA_PLATFORM"),
+                "interpreter": _sys.executable,
+            }
+        ),
+        encoding="utf-8",
+    )
+"""
+
+
+def test_qgis_sdk_run_starts_the_project_through_the_found_qgis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC 2, the Linux half: the command, the discovery and the app, end to end.
+
+    ``test_app_run.py`` proves the *plan* - the argv, the environment, and that
+    the generated probe still exists when the process starts. This proves the
+    command on a row whose interpreter has PyQGIS: a project scaffolded for the
+    app host is started by ``qgis-sdk run --headless --once`` exactly as a shell
+    starts it, the install is discovered from this environment, the project's own
+    ``__main__.py`` is the entry, and the child imports the project's module
+    under that QGIS and stops by itself.
+    """
+    from qgis.core import Qgis
+    from qgis_sdk_tools.__main__ import app as cli
+    from qgis_sdk_tools.devtools import find_qgis_install
+    from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
+    from typer.testing import CliRunner
+
+    root = tmp_path / "field_tools"
+    options = ScaffoldOptions.resolve("field_tools", host="app")
+    write_scaffold(options, root)
+    for name in ("plugin.py", "__main__.py"):
+        module = root / options.plugin / name
+        text = module.read_text(encoding="utf-8")
+        guard = 'if __name__ == "__main__":'
+        # `__main__.py` ends with the guard, which would exit before appended
+        # lines ran: the report goes above it.
+        module.write_text(
+            text.replace(guard, _RUN_REPORT + "\n" + guard, 1)
+            if guard in text
+            else text + _RUN_REPORT,
+            encoding="utf-8",
+        )
+    entry = tmp_path / "entry.txt"
+    marker = tmp_path / "started.json"
+    monkeypatch.setenv("QGIS_SDK_RUN_ENTRY", str(entry))
+    monkeypatch.setenv("QGIS_SDK_RUN_MARKER", str(marker))
+
+    result = CliRunner().invoke(cli, ["run", str(root), "--headless", "--once"])
+
+    assert result.exit_code == 0, f"{result.output}{result.exception!r}"
+    assert entry.is_file(), "the project's own __main__.py was not the entry"
+    assert marker.is_file(), "the child never imported the project's plugin"
+    reported = json.loads(marker.read_text(encoding="utf-8"))
+    assert reported["version"] == Qgis.version(), "not the QGIS this row has"
+    assert reported["platform"] == "offscreen", "--headless must reach the toolkit"
+    # The interpreter the command discovered, not one the test named: a symlinked
+    # `bin/python` is the same interpreter, so compare where it resolves to.
+    install = find_qgis_install(os.environ)
+    assert Path(reported["interpreter"]).resolve() == Path(install.python).resolve()
