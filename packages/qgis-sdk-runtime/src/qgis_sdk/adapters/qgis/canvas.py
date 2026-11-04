@@ -31,11 +31,11 @@ from typing import TYPE_CHECKING, Any
 from qgis.core import (
     QgsGeometry,
     QgsMapLayer,
-    QgsMapTool,
     QgsPointXY,
     QgsProject,
     QgsRectangle,
 )
+from qgis.gui import QgsMapTool
 from qgis.PyQt.QtCore import Qt, pyqtSignal
 
 from qgis_sdk.core import Host, ResourceScope
