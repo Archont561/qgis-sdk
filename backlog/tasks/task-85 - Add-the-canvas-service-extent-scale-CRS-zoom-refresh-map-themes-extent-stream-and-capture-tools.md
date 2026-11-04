@@ -53,6 +53,14 @@ subclass for a capture (replacing the active tool and restoring it afterwards),
 follows `extentChanged` for the stream, and refuses every method by name on a
 server host, where there is map settings rather than a canvas.
 
+**Where the canvas comes from.** A Desktop host resolves it from
+`iface.mapCanvas()`; an app window hands its own widget to the context, so a
+graphical app zooms the canvas the user is looking at rather than a second one
+the runtime made; a server keeps the capability only to refuse by name. A bare
+`QgsApplication` that opened no window has no canvas capability at all, which is
+what `ctx.has("canvas")` answers - the alternative was a service that refuses
+every call.
+
 **Host surface.** Ten operations behind two grants: `canvas.read` for `extent`,
 `scale`, `crs`, `center`, `themes` and the `canvas.extent_changed` stream, and
 `canvas.control` for `zoom_to`, `refresh`, `apply_theme` and the
