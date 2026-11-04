@@ -65,9 +65,11 @@ class Canvas(Protocol):
     def zoom_to(self, target: ZoomTarget) -> CanvasExtent:
         """Move the canvas onto ``target`` and report the extent it landed on.
 
-        A target the canvas cannot honour - a layer with no extent, a layer with
-        nothing selected - raises ``QgisSdkUnsupportedCapabilityError`` instead
-        of leaving the map where it was and reporting success.
+        A target the canvas cannot honour refuses instead of leaving the map
+        where it was and reporting success: a layer the plugin never opened is
+        ``QgisSdkLayerNotFoundError`` - the layer service's own answer - and a
+        layer with nothing selected or no extent is
+        ``QgisSdkUnsupportedCapabilityError`` naming which.
         """
         ...
 
