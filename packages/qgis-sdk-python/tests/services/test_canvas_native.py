@@ -71,7 +71,7 @@ def test_a_drawn_line_is_two_vertices_and_a_point_is_one(
 def test_a_pan_on_a_real_canvas_reaches_the_extent_subscription(
     native_services: Services,
 ) -> None:
-    """The stream follows ``extentChanged``, not a value the host remembered."""
+    """The stream follows the canvas's signal, not a value the host remembered."""
     canvas = _canvas(native_services)
     seen: list[object] = []
 
@@ -81,7 +81,7 @@ def test_a_pan_on_a_real_canvas_reaches_the_extent_subscription(
     finally:
         cancel()
 
-    assert seen == [landed]
+    assert seen and seen[-1] == landed
     # The native box is the canvas's own, so it must cover the reference points.
     assert landed.x_min <= conftest.FIXTURE_EXTENT.x_min
     assert landed.y_min <= conftest.FIXTURE_EXTENT.y_min

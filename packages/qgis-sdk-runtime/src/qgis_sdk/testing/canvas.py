@@ -39,6 +39,7 @@ from qgis_sdk.models.canvas import (
     ZoomTarget,
 )
 from qgis_sdk.models.errors import (
+    QgisSdkLayerNotFoundError,
     QgisSdkThemeNotFoundError,
     QgisSdkUnsupportedCapabilityError,
 )
@@ -286,9 +287,7 @@ class FakeCanvas:
             return _margin(selection, target.margin)
         layer_extent = self._layer_extents.get(layer_id)
         if layer_extent is None:
-            raise QgisSdkUnsupportedCapabilityError(
-                f"layer {layer_id!r} has no extent this canvas knows of"
-            )
+            raise QgisSdkLayerNotFoundError(layer_id)
         return _margin(layer_extent, target.margin)
 
     def _notify(self, extent: CanvasExtent) -> None:

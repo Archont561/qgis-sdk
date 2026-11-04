@@ -110,6 +110,10 @@ class NativeCanvas:
         #: when the capture ends however it ends.
         self._previous_tool: object | None = None
         self._active_capture: _CaptureTool | None = None
+        #: The theme this adapter applied last. ``mapTheme`` is the truth where
+        #: the host exposes it; this is what a canvas that cannot report one is
+        #: drawn with.
+        self._applied_theme: str | None = None
 
     # -- reading ------------------------------------------------------------
 
@@ -159,6 +163,7 @@ class NativeCanvas:
             raise QgisSdkThemeNotFoundError(name)
         canvas.setTheme(name)
         canvas.refresh()
+        self._applied_theme = name
         return MapThemes(names=names, active=self._active_theme(names))
 
     # -- capture and the extent stream --------------------------------------
@@ -195,7 +200,7 @@ class NativeCanvas:
     def watch_extent(
         self, on_extent: Callable[[CanvasExtent], None]
     ) -> Callable[[], None]:
-        """Follow ``extentChanged`` until the returned canceller runs."""
+        """Follow the canvas's ``extentsChanged`` until the canceller runs."""
         canvas = self._require()
         state = {"live": True}
 
@@ -203,7 +208,7 @@ class NativeCanvas:
             if state["live"]:
                 on_extent(self.extent())
 
-        canvas.extentChanged.connect(changed)
+        canvas.extentsChanged.connect(changed)
 
         def cancel() -> None:
             # Idempotent, and safe after the canvas went away: a second call, or
@@ -212,7 +217,7 @@ class NativeCanvas:
                 return
             state["live"] = False
             try:
-                canvas.extentChanged.disconnect(changed)
+                canvas.extentsChanged.disconnect(changed)
             except (TypeError, RuntimeError):  # pragma: no cover - Qt lifetime race
                 pass
 
@@ -250,14 +255,19 @@ class NativeCanvas:
         Read through ``getattr`` because an empty project answers with an empty
         string and a canvas built without a theme answers with nothing at all;
         both are "no theme", and a name the project does not carry is treated
-        the same way rather than handed to a page that would look it up.
+        the same way rather than handed to a page that would look it up. A
+        canvas that does not report its theme at all falls back to the one this
+        adapter applied.
         """
         canvas = self._canvas
         getter = getattr(canvas, "mapTheme", None) if canvas is not None else None
         reported = getter() if callable(getter) else None
-        if not reported or reported not in names:
-            return None
-        return str(reported)
+        if reported and reported in names:
+            return str(reported)
+        applied = self._applied_theme
+        if applied and applied in names:
+            return applied
+        return None
 
     def _target_rectangle(self, target: ZoomTarget) -> QgsRectangle:
         if target.kind == "extent":
