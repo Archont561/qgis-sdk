@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import PluginContext
 from qgis_sdk.services.algorithms import Algorithms
+from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.features import Features
 from qgis_sdk.services.layers import Layers
@@ -44,6 +45,9 @@ class HostServices:
     #: the ``features.*``, ``expressions.*`` and ``editing.*`` operations are
     #: declared and fail by name, never silently answered with nothing.
     features: Features | None = None
+    #: The map the user is looking at (TASK-85). A server host has no canvas, so
+    #: the ``canvas.*`` operations are declared there and fail by name.
+    canvas: Canvas | None = None
     authority: HostAuthority = field(default_factory=HostAuthority)
     network: NetworkTransport | None = None
     algorithms: Algorithms | None = None
@@ -83,6 +87,7 @@ class HostServices:
             styles=context.styles,
             notifications=context.notifications,
             features=context.features if context.has("features") else None,
+            canvas=context.canvas if context.has("canvas") else None,
             authority=authority if authority is not None else HostAuthority(),
             network=network,
             algorithms=context.algorithms if context.has("algorithms") else None,

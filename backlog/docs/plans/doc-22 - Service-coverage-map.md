@@ -83,6 +83,16 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `algorithms.run` | `algorithms.run` | Processing | `Algorithms.run` |
 | `notifications.info` | `notifications.info` | Notifications | `Notifications.info` |
 | `network.fetch` | `network.fetch` | Network | `NetworkTransport.send` |
+| `canvas.extent` | `canvas.read` | Canvas (the view) | `Canvas.extent` |
+| `canvas.scale` | `canvas.read` | Canvas | `Canvas.scale` |
+| `canvas.crs` | `canvas.read` | Canvas | `Canvas.crs` |
+| `canvas.center` | `canvas.read` | Canvas | `Canvas.center` |
+| `canvas.themes` | `canvas.read` | Canvas (map themes) | `Canvas.themes` |
+| `canvas.extent_changed` | `canvas.read` | Canvas (a push stream) | `Canvas.watch_extent` |
+| `canvas.zoom_to` | `canvas.control` | Canvas | `Canvas.zoom_to` |
+| `canvas.refresh` | `canvas.control` | Canvas | `Canvas.refresh` |
+| `canvas.apply_theme` | `canvas.control` | Canvas (map themes) | `Canvas.apply_theme` |
+| `canvas.capture` | `canvas.control` | Canvas (a capture stream) | `Canvas.capture` |
 
 Two checks keep the table honest: `tests/scripts/test_service_coverage.py` fails
 when an operation declared in `qgis_sdk.bridge.host.HOST_OPERATIONS` has no row
@@ -96,7 +106,7 @@ second list somewhere else.
 
 | Area | Service / operations | Task | Milestone | Status |
 | --- | --- | --- | --- | --- |
-| Canvas | `canvas.extent/scale/crs/center/zoom_to/refresh`, `themes.*`, `on_extent_changed`, `@tool` capture | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | planned |
+| Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | landed (doc-12, doc-13 and the example use `zoom_to`) |
 | Rasters | `rasters.open/info/statistics/sample/export`, `LayerInfo.kind` | [TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md) | 0.10.0 | planned |
 | Project (full) | CRS, read/write/save, variables, properties, bookmarks, layer tree, `on_changed` | [TASK-88](../../tasks/task-88%20-%20Extend-the-project-service-CRS-read-write-and-save-variables-custom-properties-bookmarks-and-the-layer-tree.md) | 0.10.0 | planned |
 | Layouts / atlas | `layouts.list/load_template/export`, `atlas.run` as jobs | [TASK-89](../../tasks/task-89%20-%20Add-layouts-and-atlas-list-template-load-export-to-PDF-PNG-and-SVG-as-jobs-atlas-iteration-with-progress.md) | 0.10.0 | planned |

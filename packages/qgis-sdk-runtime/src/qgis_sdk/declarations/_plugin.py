@@ -65,20 +65,23 @@ def bindings_of(target: object) -> tuple[Any, ...]:
     return tuple(vars(target).get(BINDINGS_ATTRIBUTE, ()))
 
 
-def refuse_bindings(target: Any, decorator: str) -> None:
-    """``@job``/``@stream`` applied over a binding: refuse with the way forward."""
+def refuse_bindings(
+    target: Any, decorator: str, *, instead: str = "bind an @action instead"
+) -> None:
+    """``@job``/``@stream``/``@tool`` applied over a binding: refuse, with a way forward."""
     if bindings_of(target):
         raise QgisSdkDeclarationError(
             f"{decorator} cannot carry a toolbar, menu or shortcut binding "
-            f"({target.__name__}); bind an @action instead"
+            f"({target.__name__}); {instead}"
         )
 
 
 def validate_plugin_bindings(cls: type) -> None:
-    """Refuse a plain method that carries a binding, when the class is created.
+    """Refuse a method that carries a binding but no ``@action``.
 
-    Bindings stack on ``@action`` in any order, so a binding applied below
-    ``@action`` cannot tell yet; the plugin class is where both are known.
+    ``@tool`` refuses a binding itself, in either order; a plain method is
+    refused here, when the class is created, because that is where the
+    declaration would have had to be.
     """
     for name, member in vars(cls).items():
         function = member.__func__ if isinstance(member, staticmethod) else member
@@ -87,7 +90,7 @@ def validate_plugin_bindings(cls: type) -> None:
         if not hasattr(function, "__qgis_sdk_action__"):
             raise QgisSdkDeclarationError(
                 f"{cls.__name__}.{name} carries a binding but is not an @action; "
-                "add @action (bindings stack on it in any order)"
+                "add one (a @tool is started by an @action that calls start())"
             )
 
 

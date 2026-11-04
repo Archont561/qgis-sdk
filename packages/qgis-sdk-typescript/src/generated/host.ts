@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:8c6bd797c3ab7fcae39a8be68d9eac4f6e10c5db77445eef988667a1fc3bd3b1";
+export const HOST_FINGERPRINT = "sha256:e5c282455912d4873b2115c68681bae48ea43804c0d25ba4ba82d3f4654d2523";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -15,6 +15,16 @@ export const HOST_OPERATIONS = [
 	"algorithms.providers",
 	"algorithms.run",
 	"blob.get",
+	"canvas.apply_theme",
+	"canvas.capture",
+	"canvas.center",
+	"canvas.crs",
+	"canvas.extent",
+	"canvas.extent_changed",
+	"canvas.refresh",
+	"canvas.scale",
+	"canvas.themes",
+	"canvas.zoom_to",
 	"editing.add",
 	"editing.begin",
 	"editing.commit",
@@ -165,6 +175,52 @@ export interface BlobRequest {
 	readonly blob: BlobRef;
 	readonly length?: number;
 	readonly offset?: number;
+}
+
+export interface CanvasCenterRequest {
+	readonly [key: string]: never;
+}
+
+export interface CanvasCrsRequest {
+	readonly [key: string]: never;
+}
+
+export interface CanvasExtent {
+	readonly crs?: string | null;
+	readonly x_max: number;
+	readonly x_min: number;
+	readonly y_max: number;
+	readonly y_min: number;
+}
+
+export interface CanvasExtentRequest {
+	readonly [key: string]: never;
+}
+
+export interface CanvasExtent_changedRequest {
+	readonly [key: string]: never;
+}
+
+export interface CanvasPoint {
+	readonly crs?: string | null;
+	readonly x: number;
+	readonly y: number;
+}
+
+export interface CanvasRefreshRequest {
+	readonly [key: string]: never;
+}
+
+export interface CanvasScaleRequest {
+	readonly [key: string]: never;
+}
+
+export interface CanvasThemesRequest {
+	readonly [key: string]: never;
+}
+
+export interface CaptureRequest {
+	readonly shape: "point" | "line" | "polygon";
 }
 
 export interface EditAddRequest {
@@ -319,6 +375,11 @@ export interface LayerRequest {
 	readonly layer_id: string;
 }
 
+export interface MapThemes {
+	readonly active?: string | null;
+	readonly names: readonly string[];
+}
+
 export interface NetworkFetchData {
 	readonly base64: string | null;
 	readonly headers: readonly HttpHeader[];
@@ -406,12 +467,23 @@ export interface StylesApplyRequest {
 	readonly style: string;
 }
 
+export interface ThemeRequest {
+	readonly name: string;
+}
+
 export interface VectorLayerInfo {
 	readonly crs: string | null;
 	readonly field_names: readonly string[];
 	readonly geometry_type: "point" | "line" | "polygon" | "none";
 	readonly id: string;
 	readonly name: string;
+}
+
+export interface ZoomRequest {
+	readonly extent?: CanvasExtent | null;
+	readonly kind: "layer" | "selection" | "extent";
+	readonly layer_id?: string | null;
+	readonly margin?: number;
 }
 
 export function AlgorithmInfo(value: unknown, strict = false): value is AlgorithmInfo {
@@ -608,6 +680,100 @@ export function BlobRequest(value: unknown, strict = false): value is BlobReques
 		return false;
 	}
 	if (strict && !hasOnly(value, ["blob", "length", "offset"])) return false;
+	return true;
+}
+
+export function CanvasCenterRequest(value: unknown, strict = false): value is CanvasCenterRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CanvasCrsRequest(value: unknown, strict = false): value is CanvasCrsRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CanvasExtent(value: unknown, strict = false): value is CanvasExtent {
+	if (!isRecord(value)) return false;
+	if (!("x_min" in value)) return false;
+	if (!("y_min" in value)) return false;
+	if (!("x_max" in value)) return false;
+	if (!("y_max" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["x_max"] !== undefined && !(typeof value["x_max"] === "number" && Number.isFinite(value["x_max"]))) {
+		return false;
+	}
+	if (value["x_min"] !== undefined && !(typeof value["x_min"] === "number" && Number.isFinite(value["x_min"]))) {
+		return false;
+	}
+	if (value["y_max"] !== undefined && !(typeof value["y_max"] === "number" && Number.isFinite(value["y_max"]))) {
+		return false;
+	}
+	if (value["y_min"] !== undefined && !(typeof value["y_min"] === "number" && Number.isFinite(value["y_min"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "x_max", "x_min", "y_max", "y_min"])) return false;
+	return true;
+}
+
+export function CanvasExtentRequest(value: unknown, strict = false): value is CanvasExtentRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CanvasExtent_changedRequest(value: unknown, strict = false): value is CanvasExtent_changedRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CanvasPoint(value: unknown, strict = false): value is CanvasPoint {
+	if (!isRecord(value)) return false;
+	if (!("x" in value)) return false;
+	if (!("y" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["x"] !== undefined && !(typeof value["x"] === "number" && Number.isFinite(value["x"]))) {
+		return false;
+	}
+	if (value["y"] !== undefined && !(typeof value["y"] === "number" && Number.isFinite(value["y"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "x", "y"])) return false;
+	return true;
+}
+
+export function CanvasRefreshRequest(value: unknown, strict = false): value is CanvasRefreshRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CanvasScaleRequest(value: unknown, strict = false): value is CanvasScaleRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CanvasThemesRequest(value: unknown, strict = false): value is CanvasThemesRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function CaptureRequest(value: unknown, strict = false): value is CaptureRequest {
+	if (!isRecord(value)) return false;
+	if (!("shape" in value)) return false;
+	if (value["shape"] !== undefined && !((value["shape"] === "point" || value["shape"] === "line" || value["shape"] === "polygon"))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["shape"])) return false;
 	return true;
 }
 
@@ -1039,6 +1205,19 @@ export function LayerRequest(value: unknown, strict = false): value is LayerRequ
 	return true;
 }
 
+export function MapThemes(value: unknown, strict = false): value is MapThemes {
+	if (!isRecord(value)) return false;
+	if (!("names" in value)) return false;
+	if (value["active"] !== undefined && !((typeof value["active"] === "string" || value["active"] === null))) {
+		return false;
+	}
+	if (value["names"] !== undefined && !((Array.isArray(value["names"]) && value["names"].every((item) => typeof item === "string")))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["active", "names"])) return false;
+	return true;
+}
+
 export function NetworkFetchData(value: unknown, strict = false): value is NetworkFetchData {
 	if (!isRecord(value)) return false;
 	if (!("url" in value)) return false;
@@ -1302,6 +1481,16 @@ export function StylesApplyRequest(value: unknown, strict = false): value is Sty
 	return true;
 }
 
+export function ThemeRequest(value: unknown, strict = false): value is ThemeRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name"])) return false;
+	return true;
+}
+
 export function VectorLayerInfo(value: unknown, strict = false): value is VectorLayerInfo {
 	if (!isRecord(value)) return false;
 	if (!("id" in value)) return false;
@@ -1326,6 +1515,45 @@ export function VectorLayerInfo(value: unknown, strict = false): value is Vector
 	}
 	if (strict && !hasOnly(value, ["crs", "field_names", "geometry_type", "id", "name"])) return false;
 	return true;
+}
+
+export function ZoomRequest(value: unknown, strict = false): value is ZoomRequest {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (value["extent"] !== undefined && !((CanvasExtent(value["extent"], strict) || value["extent"] === null))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "layer" || value["kind"] === "selection" || value["kind"] === "extent"))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !((typeof value["layer_id"] === "string" || value["layer_id"] === null))) {
+		return false;
+	}
+	if (value["margin"] !== undefined && !(typeof value["margin"] === "number" && Number.isFinite(value["margin"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["extent", "kind", "layer_id", "margin"])) return false;
+	return true;
+}
+
+/** One event of `canvas.capture`, narrowed by its kind. */
+export type CanvasCaptureEvent =
+	| { readonly kind: "data"; readonly payload: Geometry };
+
+export function CanvasCaptureEvent(value: unknown, strict = false): value is CanvasCaptureEvent {
+	if (!isRecord(value)) return false;
+	if (value.kind === "data") return Geometry(value.payload, strict);
+	return false;
+}
+
+/** One event of `canvas.extent_changed`, narrowed by its kind. */
+export type CanvasExtent_changedEvent =
+	| { readonly kind: "data"; readonly payload: CanvasExtent };
+
+export function CanvasExtent_changedEvent(value: unknown, strict = false): value is CanvasExtent_changedEvent {
+	if (!isRecord(value)) return false;
+	if (value.kind === "data") return CanvasExtent(value.payload, strict);
+	return false;
 }
 
 /** One event of `features.page`, narrowed by its kind. */
@@ -1358,6 +1586,18 @@ export interface HostOperations {
 	};
 	readonly blob: {
 		readonly get: (input: BlobRequest, options?: HostInvokeOptions) => Promise<BlobChunk>;
+	};
+	readonly canvas: {
+		readonly apply_theme: (input: ThemeRequest, options?: HostInvokeOptions) => Promise<MapThemes>;
+		readonly capture: (input: CaptureRequest, handlers: HostStreamHandlers<CanvasCaptureEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
+		readonly center: (input?: CanvasCenterRequest, options?: HostInvokeOptions) => Promise<CanvasPoint>;
+		readonly crs: (input?: CanvasCrsRequest, options?: HostInvokeOptions) => Promise<string | null>;
+		readonly extent: (input?: CanvasExtentRequest, options?: HostInvokeOptions) => Promise<CanvasExtent>;
+		readonly extent_changed: (input: CanvasExtent_changedRequest, handlers: HostStreamHandlers<CanvasExtent_changedEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
+		readonly refresh: (input?: CanvasRefreshRequest, options?: HostInvokeOptions) => Promise<null>;
+		readonly scale: (input?: CanvasScaleRequest, options?: HostInvokeOptions) => Promise<number>;
+		readonly themes: (input?: CanvasThemesRequest, options?: HostInvokeOptions) => Promise<MapThemes>;
+		readonly zoom_to: (input: ZoomRequest, options?: HostInvokeOptions) => Promise<CanvasExtent>;
 	};
 	readonly editing: {
 		readonly add: (input: EditAddRequest, options?: HostInvokeOptions) => Promise<EditAddResult>;
@@ -1434,6 +1674,68 @@ export function createHost(client: HostClientLike): HostOperations {
 					client, "blob.get", input, options,
 					BlobRequest,
 					BlobChunk,
+				),
+		},
+		canvas: {
+			apply_theme: (input: ThemeRequest, options?: HostInvokeOptions) =>
+				call<MapThemes>(
+					client, "canvas.apply_theme", input, options,
+					ThemeRequest,
+					MapThemes,
+				),
+			capture: (input: CaptureRequest, handlers: HostStreamHandlers<CanvasCaptureEvent>, options?: HostInvokeOptions) =>
+				open<CanvasCaptureEvent>(
+					client, "canvas.capture", input, handlers, options,
+					CaptureRequest,
+					CanvasCaptureEvent,
+				),
+			center: (input?: CanvasCenterRequest, options?: HostInvokeOptions) =>
+				call<CanvasPoint>(
+					client, "canvas.center", input, options,
+					CanvasCenterRequest,
+					CanvasPoint,
+				),
+			crs: (input?: CanvasCrsRequest, options?: HostInvokeOptions) =>
+				call<string | null>(
+					client, "canvas.crs", input, options,
+					CanvasCrsRequest,
+					(candidate: unknown) => (typeof candidate === "string" || candidate === null),
+				),
+			extent: (input?: CanvasExtentRequest, options?: HostInvokeOptions) =>
+				call<CanvasExtent>(
+					client, "canvas.extent", input, options,
+					CanvasExtentRequest,
+					CanvasExtent,
+				),
+			extent_changed: (input: CanvasExtent_changedRequest, handlers: HostStreamHandlers<CanvasExtent_changedEvent>, options?: HostInvokeOptions) =>
+				open<CanvasExtent_changedEvent>(
+					client, "canvas.extent_changed", input, handlers, options,
+					CanvasExtent_changedRequest,
+					CanvasExtent_changedEvent,
+				),
+			refresh: (input?: CanvasRefreshRequest, options?: HostInvokeOptions) =>
+				call<null>(
+					client, "canvas.refresh", input, options,
+					CanvasRefreshRequest,
+					(candidate: unknown) => candidate === null,
+				),
+			scale: (input?: CanvasScaleRequest, options?: HostInvokeOptions) =>
+				call<number>(
+					client, "canvas.scale", input, options,
+					CanvasScaleRequest,
+					(candidate: unknown) => typeof candidate === "number" && Number.isFinite(candidate),
+				),
+			themes: (input?: CanvasThemesRequest, options?: HostInvokeOptions) =>
+				call<MapThemes>(
+					client, "canvas.themes", input, options,
+					CanvasThemesRequest,
+					MapThemes,
+				),
+			zoom_to: (input: ZoomRequest, options?: HostInvokeOptions) =>
+				call<CanvasExtent>(
+					client, "canvas.zoom_to", input, options,
+					ZoomRequest,
+					CanvasExtent,
 				),
 		},
 		editing: {

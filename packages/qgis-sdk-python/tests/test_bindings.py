@@ -165,6 +165,28 @@ def test_a_plain_method_is_refused_when_the_plugin_class_is_created() -> None:
                 return None
 
 
+def test_a_tool_is_refused_either_way_with_the_way_forward() -> None:
+    """A tool is started by an action, so the button belongs on that action."""
+    from qgis_sdk.declarations import tool
+    from qgis_sdk.models import Geometry
+
+    with pytest.raises(QgisSdkDeclarationError, match="calls start\\(\\) on it"):
+
+        class _Above:
+            @toolbar
+            @tool(captures="point")
+            def pick(self, geometry: Geometry) -> None:
+                return None
+
+    with pytest.raises(QgisSdkDeclarationError, match="@tool cannot carry a toolbar"):
+
+        class _Below:
+            @tool(captures="point")
+            @toolbar
+            def pick(self, geometry: Geometry) -> None:
+                return None
+
+
 def test_a_class_that_is_not_a_surface_is_refused() -> None:
     with pytest.raises(QgisSdkDeclarationError, match="Dialog/Dock subclass"):
 

@@ -1,6 +1,7 @@
 """Pure capability contracts; implementations are injected by runtime adapters."""
 
 from .algorithms import Algorithms
+from .canvas import Canvas, CaptureCanceller, ExtentListener
 from .contracts import (
     Cancellation,
     DesktopAccess,
@@ -35,9 +36,12 @@ __all__ = [
     "Algorithms",
     "BlockingNetwork",
     "Cancellation",
+    "Canvas",
+    "CaptureCanceller",
     "Deliver",
     "DesktopAccess",
     "EditingSession",
+    "ExtentListener",
     "Features",
     "Files",
     "Layers",

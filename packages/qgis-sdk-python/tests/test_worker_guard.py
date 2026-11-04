@@ -147,6 +147,9 @@ def test_a_development_session_raises_at_the_call_site(monkeypatch: Any) -> None
 def test_the_guard_covers_exactly_the_capabilities_that_reach_gui_state() -> None:
     assert GUI_BOUND_CAPABILITIES == {
         "actions",
+        # The canvas is a Qt widget: moving it off the GUI thread crashes QGIS
+        # rather than merely being slow (TASK-85).
+        "canvas",
         "desktop",
         "files",
         "layers",

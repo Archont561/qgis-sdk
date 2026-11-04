@@ -1895,6 +1895,104 @@ that approximated it would let a round-trip test pass for a conversion QGIS
 rejects - so a test declares what it reads back. `qgis_sdk.testing.literal_token`
 and `literal_value` expose the same literal parser the fake's expressions use.
 
+## The map canvas
+
+`ctx.canvas` is the view the user is looking at: its extent, its scale, its CRS,
+its centre, the project's map themes, and a way to move it. It is a capability,
+not a promise - a QGIS Server request has map settings, not a canvas a user
+pans, and a standalone application that never opened a window has none - so a
+host that cannot answer refuses every method by name.
+
+```python
+from qgis_sdk.models import ZoomTarget
+
+extent = self.ctx.canvas.extent()          # CanvasExtent(x_min, y_min, x_max, y_max, crs)
+self.ctx.canvas.zoom_to(ZoomTarget.layer("parcels", margin=0.1))
+themes = self.ctx.canvas.themes()          # MapThemes(names=..., active=...)
+self.ctx.canvas.apply_theme("print")
+```
+
+### Reads and changes are different authority
+
+Looking at an extent is not the same permission as moving the map under
+somebody's cursor. The host grants `canvas.read` for `extent`, `scale`, `crs`,
+`center`, `themes` and the extent stream, and `canvas.control` for `zoom_to`,
+`refresh`, `apply_theme` and `capture`. A page that may draw a scale bar has no
+business panning the map, and the two grants are what say so.
+
+### Zooming reports where it landed
+
+`zoom_to` answers with the extent the canvas ended up on rather than `None`. A
+real `QgsMapCanvas` grows the box it was handed to the window's aspect ratio, so
+the answer is at least what was asked for; a page that draws after a zoom uses
+the answer instead of asking a second time and disagreeing with the first. A
+target the canvas cannot honour - a layer it never opened, a layer with nothing
+selected - raises `QgisSdkUnsupportedCapabilityError` naming it, and the canvas
+stays where it was.
+
+### Themes are names, and the active one is part of the answer
+
+`themes()` returns `MapThemes(names, active)`, and `active` is never a name the
+list does not carry. `apply_theme(name)` refuses an unknown theme with
+`QgisSdkThemeNotFoundError` and leaves the map drawn as it was. A theme is
+project configuration: the canvas picks one, it never creates one.
+
+### The extent stream
+
+`watch_extent(listener)` calls the listener every time the map moves, in the
+order the canvas produced the changes, and returns a canceller. Over the bridge
+that subscription is `canvas.extent_changed`, one `data` frame per move with a
+`seq` that starts at zero and increases by one, so a client that misses a number
+knows the stream broke rather than stitching a plausible path out of what
+arrived. A refresh is not a move and produces no frame.
+
+### Capture: `@tool`
+
+A drawing takes as long as a person takes, so capture is a declaration rather
+than a call. `@tool` marks a method that receives the geometry the user drew:
+
+```python
+from qgis_sdk import toolbar
+from qgis_sdk.declarations import start, tool
+from qgis_sdk.models import Geometry
+
+@tool(captures="polygon", id="area", title="Draw an area")
+def area(self, geometry: Geometry) -> None:
+    self.ctx.notifications.info(f"drew a {geometry.geometry_type}")
+
+@action(id="start_area", title="Draw an area")
+@toolbar(text="Area")
+def start_area(self) -> None:
+    start(self.area, self.ctx)      # returns the canceller
+```
+
+The button is on the action, not on the tool: a tool is a declaration, so a
+binding refuses it (`bind an @action that calls start() on it`) the same way it
+refuses a `@job` or a `@stream`. The action runs on the GUI thread and returns
+the canceller, which is what a second click or a closing window calls.
+
+`captures` is `point`, `line` or `polygon` - the three shapes a user can draw -
+and anything else is refused where it is written. The method runs when the
+geometry arrives, on the GUI thread; a body with real work in it hands that work
+to `ctx.jobs` instead of doing it in the drawing's callback. Starting the tool
+twice replaces the first drawing, and cancelling - a closing window, a second
+click - never calls the body. `describe(tool)` works the same way it does for an
+action, so a console can list what a plugin can draw without constructing it.
+Over the bridge the same capture is `canvas.capture`: subscribe with a `shape`,
+receive one `data` frame carrying the geometry the user drew - the same
+`Geometry` model a feature carries - and the subscription completes;
+unsubscribe and the tool is removed.
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeCanvas` takes a `ResourceScope` and answers from a box the
+test controls. `layer_extents` declares what a zoom to a layer lands on,
+`select(layer_id, extent)` and `clear_selection(layer_id)` declare a selection,
+`declare_theme(name)` adds a theme, `draw(geometry)` finishes the oldest open
+capture of that shape, and `refreshes`, `drawn()`, `open_captures()` and
+`subscriptions()` observe what happened. A layer, theme or selection the test
+never declared refuses by name, exactly as QGIS does.
+
 ## Providers: algorithms in the QGIS Processing toolbox
 
 A provider is both an algorithm namespace and the registration that makes its

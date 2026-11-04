@@ -22,6 +22,7 @@ from qgis_sdk.bridge.streams import StreamSink
 from qgis_sdk.models import (
     DEFAULT_FEATURE_PAGE,
     AlgorithmInfo,
+    CanvasExtent,
     FeatureQuery,
     FileRef,
     Geometry,
@@ -30,6 +31,7 @@ from qgis_sdk.models import (
     QgisSdkResponseTooLargeError,
     Response,
     RunResult,
+    ZoomTarget,
 )
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
@@ -38,6 +40,7 @@ from qgis_sdk.models.errors import (
 )
 from qgis_sdk.network.client import NetworkDefaults, build_request
 from qgis_sdk.services.algorithms import Algorithms
+from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.network import NetworkTransport
 
@@ -238,7 +241,50 @@ def _handlers(
         session.rollback()
         return {"session_id": session.id, "pending": session.pending}
 
+    def canvas_extent(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _canvas(services).extent().to_wire()
+
+    def canvas_scale(binding: ViewBinding, payload: Mapping[str, Any]) -> float:
+        return _canvas(services).scale()
+
+    def canvas_crs(binding: ViewBinding, payload: Mapping[str, Any]) -> str | None:
+        return _canvas(services).crs()
+
+    def canvas_center(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _canvas(services).center().to_wire()
+
+    def canvas_zoom_to(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        target = ZoomTarget.from_wire(payload)
+        return _canvas(services).zoom_to(target).to_wire()
+
+    def canvas_refresh(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
+        _canvas(services).refresh()
+
+    def canvas_themes(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _canvas(services).themes().to_wire()
+
+    def canvas_apply_theme(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _canvas(services).apply_theme(payload["name"]).to_wire()
+
+    def canvas_extent_changed(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> _WatchExtent:
+        return _WatchExtent(_canvas(services))
+
+    def canvas_capture(binding: ViewBinding, payload: Mapping[str, Any]) -> _Capture:
+        return _Capture(_canvas(services), payload["shape"])
+
     return {
+        "canvas.capture": canvas_capture,
+        "canvas.center": canvas_center,
+        "canvas.crs": canvas_crs,
+        "canvas.extent": canvas_extent,
+        "canvas.extent_changed": canvas_extent_changed,
+        "canvas.refresh": canvas_refresh,
+        "canvas.scale": canvas_scale,
+        "canvas.themes": canvas_themes,
+        "canvas.apply_theme": canvas_apply_theme,
+        "canvas.zoom_to": canvas_zoom_to,
         "layers.list": layers_list,
         "layers.get": layers_get,
         "layers.open_vector": layers_open_vector,
@@ -400,6 +446,71 @@ def _response_event(response: Response) -> dict[str, Any]:
         "text": text,
         "base64": encoded,
     }
+
+
+def _canvas(services: HostServices) -> Canvas:
+    if services.canvas is None:
+        raise QgisSdkBridgeError("this host has no map canvas configured")
+    return services.canvas
+
+
+class _WatchExtent:
+    """The push source behind ``canvas.extent_changed``.
+
+    The canvas calls back whenever the user moves it, and the sink turns each
+    extent into one ``data`` frame; the frames are the canvas's order, which is
+    the order a page draws them in. Disposal before the first pan cancels the
+    subscription on the canvas, so a closed page leaves no listener behind.
+    """
+
+    def __init__(self, canvas: Canvas) -> None:
+        self._canvas = canvas
+        self._cancel: Callable[[], None] | None = None
+        self._done = False
+
+    def start(self, sink: StreamSink) -> None:
+        def deliver(extent: CanvasExtent) -> None:
+            sink.emit(extent.to_wire())
+
+        # The stream does not complete: a page follows the map until it
+        # unsubscribes, so only disposal or an error ends it.
+        self._cancel = self._canvas.watch_extent(deliver)
+
+    def close(self) -> None:
+        if self._done or self._cancel is None:
+            return
+        self._done = True
+        self._cancel()
+
+
+class _Capture:
+    """The push source behind ``canvas.capture``: one drawing, one geometry.
+
+    The tool takes as long as the user takes, so the frame arrives on a later
+    event loop turn and the subscription completes as soon as it does. A
+    cancelled drawing - Escape, or a view that went away - ends the subscription
+    as cancelled; either way the map tool is removed by the canceller.
+    """
+
+    def __init__(self, canvas: Canvas, shape: str) -> None:
+        self._canvas = canvas
+        self._shape = shape
+        self._cancel: Callable[[], None] | None = None
+        self._done = False
+
+    def start(self, sink: StreamSink) -> None:
+        def deliver(geometry: Geometry) -> None:
+            self._done = True
+            if sink.emit(geometry.to_wire()):
+                sink.complete()
+
+        self._cancel = self._canvas.capture(self._shape, deliver)
+
+    def close(self) -> None:
+        if self._done or self._cancel is None:
+            return
+        self._done = True
+        self._cancel()
 
 
 def _features(services: HostServices) -> Features:

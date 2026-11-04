@@ -57,6 +57,13 @@ from qgis_sdk.declarations._schemas import (
     resolve_kind,
     schema_for,
 )
+from qgis_sdk.declarations._tools import (
+    TOOL_ATTRIBUTE,
+    ToolDescription,
+    declared_tools,
+    start,
+    tool,
+)
 
 __all__ = [
     "BINDINGS_ATTRIBUTE",
@@ -64,6 +71,7 @@ __all__ = [
     "PLUGIN_ATTRIBUTE",
     "PLUGIN_DESCRIPTION_SCHEMA_VERSION",
     "STREAM_EVENT_KINDS",
+    "TOOL_ATTRIBUTE",
     "WIRES_ATTRIBUTE",
     "WIRE_KIND_KEYWORD",
     "WIRE_SCHEMA_ATTRIBUTE",
@@ -75,6 +83,7 @@ __all__ = [
     "QgisSdkDeclarationError",
     "StreamDescription",
     "T",
+    "ToolDescription",
     "attach_describe",
     "bindings_of",
     "canonical_json",
@@ -84,6 +93,7 @@ __all__ = [
     "declare_class",
     "declared_function_metadata",
     "declared_metadata",
+    "declared_tools",
     "derive_id",
     "derive_title",
     "describe",
@@ -101,6 +111,8 @@ __all__ = [
     "resolve_hints",
     "resolve_kind",
     "schema_for",
+    "start",
+    "tool",
     "type_name",
     "validate_given",
     "validate_plugin_bindings",

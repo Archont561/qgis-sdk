@@ -23,6 +23,7 @@ from qgis_sdk.network import NetworkClient
 from qgis_sdk.services import Notifications
 
 from .algorithms import NativeAlgorithms
+from .canvas import NativeCanvas
 from .features import NativeFeatures
 from .layers import NativeLayers
 from .log import NativeLog
@@ -70,6 +71,10 @@ def native_plugin_context(
     transport = NativeNetworkTransport(scope)
     project = NativeProject(layers, scope)
     features = NativeFeatures(layers, scope)
+    # The canvas is the view, so it is resolved from the interface when the
+    # document is - a host with no interface (a bare QgsApplication, a server)
+    # keeps the capability and refuses each call by name.
+    canvas = NativeCanvas(scope, layers=layers, iface=iface, host=host)
     # One authority per runtime (decision-20): the refs Processing mints for
     # a toolbox run, the ones a page receives through ``HostServices``, the
     # ones the form components hand a handler and the file outputs of
@@ -89,6 +94,7 @@ def native_plugin_context(
         network=NetworkClient(transport, scope),
         layers=layers,
         features=features,
+        canvas=canvas,
         project=project,
         settings=NativeSettings(scope, prefix=settings_prefix),
         styles=NativeStyles(layers, scope),

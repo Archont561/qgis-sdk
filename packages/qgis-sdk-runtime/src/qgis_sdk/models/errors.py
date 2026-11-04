@@ -101,6 +101,21 @@ class QgisSdkStyleNotFoundError(QgisSdkError):
         super().__init__(f"No packaged style {style!r} is available")
 
 
+class QgisSdkThemeNotFoundError(QgisSdkError):
+    """No map theme with this name exists in the project.
+
+    The canvas keeps whatever theme it was drawn with; a page that applied a
+    theme by a stale name hears which name failed rather than seeing an
+    unchanged map and assuming the call went through.
+    """
+
+    code = "theme_not_found"
+
+    def __init__(self, theme: str) -> None:
+        self.theme = theme
+        super().__init__(f"No map theme {theme!r} is available in this project")
+
+
 class QgisSdkExportRefusedError(QgisSdkError):
     """An export cannot start as requested: the destination fails a precondition.
 

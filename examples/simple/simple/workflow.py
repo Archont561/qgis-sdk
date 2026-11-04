@@ -27,7 +27,7 @@ from pathlib import Path
 
 from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
-from qgis_sdk.models import VectorExport, VectorLayerInfo
+from qgis_sdk.models import VectorExport, VectorLayerInfo, ZoomTarget
 from qgis_sdk.services import Cancellation, Progress
 
 from .algorithms import buffer_layer
@@ -80,6 +80,12 @@ class LocalGisWorkflow:
         )
         self.ctx.styles.apply_style(output.id, self.OUTPUT_STYLE)
         self.ctx.project.add_layer(output.id)
+        # Present it where the user is looking. The canvas is a capability a host
+        # may not have - a QGIS Server request has map settings, not a view - so
+        # the workflow asks whether this runtime has one instead of assuming a
+        # window it cannot see.
+        if self.ctx.has("canvas"):
+            self.ctx.canvas.zoom_to(ZoomTarget.layer(output.id))
         return output
 
     def export(

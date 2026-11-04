@@ -27,6 +27,7 @@ from qgis_sdk.models import (
 from qgis_sdk.services import (
     Algorithms,
     Cancellation,
+    Canvas,
     DesktopAccess,
     Features,
     Files,
@@ -58,7 +59,7 @@ T = TypeVar("T")
 #: they reach Qt widgets, the interface or the live project, where a call from
 #: another thread crashes QGIS instead of merely being slow (decision-69).
 GUI_BOUND_CAPABILITIES: Final = frozenset(
-    {"actions", "desktop", "files", "layers", "project", "streams", "ui"}
+    {"actions", "canvas", "desktop", "files", "layers", "project", "streams", "ui"}
 )
 
 #: ``(context type, capability, thread)`` triples already reported, so one
@@ -202,6 +203,7 @@ class PluginContext(_Context):
 
     __slots__ = (
         "_algorithms",
+        "_canvas",
         "_desktop",
         "_features",
         "_files",
@@ -225,6 +227,7 @@ class PluginContext(_Context):
         "network",
         "layers",
         "features",
+        "canvas",
         "project",
         "settings",
         "styles",
@@ -253,6 +256,10 @@ class PluginContext(_Context):
     settings: Capability[Settings] = Capability()
     styles: Capability[Styles] = Capability()
     algorithms: Capability[Algorithms] = Capability()
+    #: The map the user is looking at (decision-54 point 3): read it, move it,
+    #: theme it, capture from it. A host with no canvas - a QGIS Server, a bare
+    #: ``QgsApplication`` - refuses this capability by name.
+    canvas: Capability[Canvas] = Capability()
     workers: Capability[Workers] = Capability()
     #: The plugin's declared jobs (``jobs = {...}``), submitted with the
     #: plugin's lifetime; a view's context carries a view-scoped copy
@@ -273,6 +280,7 @@ class PluginContext(_Context):
         network: Network | None = None,
         layers: Layers | None = None,
         features: Features | None = None,
+        canvas: Canvas | None = None,
         project: Project | None = None,
         settings: Settings | None = None,
         styles: Styles | None = None,
@@ -294,6 +302,7 @@ class PluginContext(_Context):
             _network=network,
             _layers=layers,
             _features=features,
+            _canvas=canvas,
             _project=project,
             _settings=settings,
             _styles=styles,
@@ -342,6 +351,7 @@ class UiContext(_Context):
     __slots__ = (
         "_actions",
         "_algorithms",
+        "_canvas",
         "_desktop",
         "_features",
         "_files",
@@ -368,6 +378,7 @@ class UiContext(_Context):
         "settings",
         "layers",
         "features",
+        "canvas",
         "project",
         "files",
         "log",
@@ -394,6 +405,9 @@ class UiContext(_Context):
     #: surface handler reads the same data a page does.
     features: Capability[Features] = Capability()
     project: Capability[Project] = Capability()
+    #: The same canvas the plugin context carries: a surface handler that moves
+    #: the map moves the map the page is looking at.
+    canvas: Capability[Canvas] = Capability()
     files: Capability[Files] = Capability()
     log: Capability[Log] = Capability()
     #: The plugin's ``@stream`` methods, subscribed from this view
@@ -416,6 +430,7 @@ class UiContext(_Context):
         settings: Settings | None = None,
         layers: Layers | None = None,
         features: Features | None = None,
+        canvas: Canvas | None = None,
         project: Project | None = None,
         files: Files | None = None,
         log: Log | None = None,
@@ -440,6 +455,7 @@ class UiContext(_Context):
             _settings=settings,
             _layers=layers,
             _features=features,
+            _canvas=canvas,
             _project=project,
             _files=files,
             _log=log,
