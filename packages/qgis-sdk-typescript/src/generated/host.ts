@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:e5c282455912d4873b2115c68681bae48ea43804c0d25ba4ba82d3f4654d2523";
+export const HOST_FINGERPRINT = "sha256:73e9a9af19011512deb933358c8cfa673871210417c0fdd69895807ee4e11b7e";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -1529,7 +1529,7 @@ export function ZoomRequest(value: unknown, strict = false): value is ZoomReques
 	if (value["layer_id"] !== undefined && !((typeof value["layer_id"] === "string" || value["layer_id"] === null))) {
 		return false;
 	}
-	if (value["margin"] !== undefined && !(typeof value["margin"] === "number" && Number.isFinite(value["margin"]))) {
+	if (value["margin"] !== undefined && !((typeof value["margin"] === "number" && Number.isFinite(value["margin"]) && value["margin"] >= 0 && value["margin"] <= 10.0))) {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["extent", "kind", "layer_id", "margin"])) return false;

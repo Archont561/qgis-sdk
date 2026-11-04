@@ -350,7 +350,13 @@ ZOOM_REQUEST: dict[str, Any] = {
         "kind": {"enum": list(ZOOM_KINDS)},
         "layer_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
         "extent": {"anyOf": [CANVAS_EXTENT, {"type": "null"}]},
-        "margin": {"type": "number"},
+        # The bound is in the schema as well as the model, so a page is refused
+        # before the host and both read the same limit.
+        "margin": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": MAX_ZOOM_MARGIN,
+        },
     },
     "required": ["kind"],
     "additionalProperties": False,

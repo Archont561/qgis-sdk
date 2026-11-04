@@ -57,7 +57,7 @@ server host, where there is map settings rather than a canvas.
 `scale`, `crs`, `center`, `themes` and the `canvas.extent_changed` stream, and
 `canvas.control` for `zoom_to`, `refresh`, `apply_theme` and the
 `canvas.capture` stream. `HOST_FINGERPRINT` moved to
-`sha256:e5c28245...` and `generated/host.ts` was regenerated, never hand-edited.
+`sha256:73e9a9af...` and `generated/host.ts` was regenerated, never hand-edited.
 
 **`@tool`.** `qgis_sdk.declarations.tool` declares an instance method that
 receives the drawn geometry; `start(tool, ctx)` asks `ctx.canvas` for the
