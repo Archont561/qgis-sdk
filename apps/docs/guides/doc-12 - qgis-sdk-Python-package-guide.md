@@ -1899,9 +1899,10 @@ and `literal_value` expose the same literal parser the fake's expressions use.
 
 `ctx.canvas` is the view the user is looking at: its extent, its scale, its CRS,
 its centre, the project's map themes, and a way to move it. It is a capability,
-not a promise - a QGIS Server request has map settings, not a canvas a user
-pans, and a standalone application that never opened a window has none - so a
-host that cannot answer refuses every method by name.
+not a promise: `ctx.has("canvas")` is false for a bare `QgsApplication` that
+never opened a window, and a QGIS Server context keeps the capability only to
+refuse every method by name, because a request has map settings rather than a
+canvas somebody pans.
 
 ```python
 from qgis_sdk.models import ZoomTarget
@@ -1927,8 +1928,9 @@ real `QgsMapCanvas` grows the box it was handed to the window's aspect ratio, so
 the answer is at least what was asked for; a page that draws after a zoom uses
 the answer instead of asking a second time and disagreeing with the first. A
 target the canvas cannot honour - a layer it never opened, a layer with nothing
-selected - raises `QgisSdkUnsupportedCapabilityError` naming it, and the canvas
-stays where it was.
+selected - raises naming it (`QgisSdkLayerNotFoundError` for the layer, since
+that is the layer service's answer, `QgisSdkUnsupportedCapabilityError` for an
+empty selection), and the canvas stays where it was.
 
 ### Themes are names, and the active one is part of the answer
 

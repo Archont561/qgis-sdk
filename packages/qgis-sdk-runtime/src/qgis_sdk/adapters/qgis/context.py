@@ -51,6 +51,7 @@ def native_plugin_context(
     notifications: Notifications | None = None,
     working_directory: Path | None = None,
     host: Host = Host.DESKTOP,
+    canvas: object | None = None,
 ) -> PluginContext:
     """Build the plugin context a QGIS Desktop host offers.
 
@@ -64,17 +65,25 @@ def native_plugin_context(
     ``PluginRuntime.start()`` advertises the plugin's ``providers`` with.
     ``log`` writes to the QGIS message log under ``settings_prefix`` as its tag.
     ``host`` is what ``ctx.host`` reports: Desktop by default, and the standalone
-    app host says ``Host.APP`` without touching anything else here.
+    app host says ``Host.APP`` without touching anything else here. ``canvas`` is
+    the ``QgsMapCanvas`` an app window owns; a Desktop host resolves its own from
+    ``iface.mapCanvas()`` at the first call.
     """
     scope.ensure_open()
     layers = NativeLayers(scope)
     transport = NativeNetworkTransport(scope)
     project = NativeProject(layers, scope)
     features = NativeFeatures(layers, scope)
-    # The canvas is the view, so it is resolved from the interface when the
-    # document is - a host with no interface (a bare QgsApplication, a server)
-    # keeps the capability and refuses each call by name.
-    canvas = NativeCanvas(scope, layers=layers, iface=iface, host=host)
+    # A canvas is a view, so the capability exists when there is one behind it:
+    # the Desktop interface, an app window's own widget, or a server, which keeps
+    # the capability to refuse by name rather than pretend a request has a map
+    # somebody pans. A bare QgsApplication has no view, and `ctx.has("canvas")`
+    # says so instead of handing back a service that refuses every call.
+    canvas_service: NativeCanvas | None = None
+    if host is Host.SERVER:
+        canvas_service = NativeCanvas(scope, layers=layers, host=host)
+    elif iface is not None or canvas is not None:
+        canvas_service = NativeCanvas(scope, layers=layers, iface=iface, canvas=canvas)
     # One authority per runtime (decision-20): the refs Processing mints for
     # a toolbox run, the ones a page receives through ``HostServices``, the
     # ones the form components hand a handler and the file outputs of
@@ -94,7 +103,7 @@ def native_plugin_context(
         network=NetworkClient(transport, scope),
         layers=layers,
         features=features,
-        canvas=canvas,
+        canvas=canvas_service,
         project=project,
         settings=NativeSettings(scope, prefix=settings_prefix),
         styles=NativeStyles(layers, scope),
