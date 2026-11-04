@@ -1990,9 +1990,11 @@ unsubscribe and the tool is removed.
 `qgis_sdk.testing.FakeCanvas` takes a `ResourceScope` and answers from a box the
 test controls. `layer_extents` declares what a zoom to a layer lands on,
 `select(layer_id, extent)` and `clear_selection(layer_id)` declare a selection,
-`declare_theme(name)` adds a theme, `draw(geometry)` finishes the oldest open
-capture of that shape, and `refreshes`, `drawn()`, `open_captures()` and
-`subscriptions()` observe what happened. A layer, theme or selection the test
+`declare_theme(name)` adds a theme, `set_extent(extent)` moves the canvas the way
+a pan does - notifying the extent stream without being a zoom - and
+`draw(geometry)` finishes the oldest open capture of that shape.
+`refreshes`, `drawn()`, `open_captures()` and `subscriptions()` observe what
+happened. A layer, theme or selection the test
 never declared refuses by name, exactly as QGIS does.
 
 ## Providers: algorithms in the QGIS Processing toolbox
