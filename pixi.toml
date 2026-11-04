@@ -113,6 +113,14 @@ cmd = "ruff check ."
 [feature.utils.tasks.format-python-check]
 cmd = "ruff format --check ."
 
+# Gherkin linting (gherlint) pins pydantic 1, which cannot share the default
+# environment with the runtime's mcp/pydantic 2. The task therefore builds a
+# throwaway venv beside the pixi environments - gitignored, reused across runs -
+# and lints from there. scripts/ci.py owns the scope: it fails on a *.feature
+# file outside FEATURE_DIRECTORIES as well as on a finding.
+[feature.utils.tasks.lint-features]
+cmd = "python -m venv .pixi/gherkin && .pixi/gherkin/bin/python -m pip install --quiet --disable-pip-version-check 'gherlint==0.5.0' && python scripts/ci.py check-gherkin --gherlint .pixi/gherkin/bin/gherlint"
+
 [feature.utils.tasks.lint-github-actions]
 cmd = "actionlint .github/workflows/*.yml"
 

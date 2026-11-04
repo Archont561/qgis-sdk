@@ -1,0 +1,16 @@
+# gherlint policy for the workspace's Gherkin feature files.
+#
+# `python scripts/ci.py check-gherkin` runs the linter over every `*.feature`
+# in the checkout, fails on any finding and fails again if a scenario lands
+# outside the directories it looks at. This file is what the linter reads from
+# the checkout root, so it applies to the local run exactly as it does to CI.
+#
+# One message is disabled, and deliberately only one.
+
+[reporting]
+# A scenario whose only `Given` sits in a `Background` is the shape Gherkin
+# recommends, and this checker reads a scenario's own steps only - so it
+# reports `missing-given-step` for precisely the files that follow the advice.
+# `consider-using-background` (the mirror image, which asks for the Background)
+# stays enabled: that is the hint the shared setup is meant to satisfy.
+disable = ["missing-given-step"]
