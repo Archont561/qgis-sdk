@@ -882,7 +882,11 @@ test("a zoom sends its target and answers where the canvas landed", async () => 
 
 	const { client: unsent, sent: nothing } = scripted(landed);
 	await expect(
-		createHost(unsent).canvas.zoom_to({ kind: "layer", layer_id: "parcels", margin: 99 }),
+		createHost(unsent).canvas.zoom_to({
+			kind: "layer",
+			layer_id: "parcels",
+			margin: 99,
+		}),
 	).rejects.toThrow(QgisSdkHostContractError);
 	expect(nothing.length).toBe(0);
 });
@@ -905,11 +909,12 @@ test("themes are names with an active one, and applying one answers the new list
 		names: ["print", "draft"],
 		active: "draft",
 	});
-	const applied = await createHost(applying).canvas.apply_theme({ name: "draft" });
+	const applied = await createHost(applying).canvas.apply_theme({
+		name: "draft",
+	});
 	expect(applied.active).toBe("draft");
 	expect(applications[0]?.operation).toBe("canvas.apply_theme");
 	expect(applications[0]?.payload).toEqual({ name: "draft" });
-
 
 	// `active` being one of `names` is the host's guarantee - a JSON schema
 	// cannot say "one of another array's items" - so the page reads the list
