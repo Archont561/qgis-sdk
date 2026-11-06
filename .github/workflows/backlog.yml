@@ -1,0 +1,73 @@
+name: backlog
+
+# The backlog guards, for the one change CI never sees.
+#
+# `ci.yml` ignores `backlog/**` on purpose: a task edit does not need the Python,
+# Qt and TypeScript matrices. But `tests/scripts/test_backlog.py` - the guard
+# that keeps the board honest - is a step inside that job, so a backlog-only pull
+# request ran no link check, no `milestone:` against `doc-4` comparison and no id
+# uniqueness check at all. Those passed only when somebody ran them by hand. This
+# workflow runs that one file on the paths the matrix skips.
+#
+# Deliberately narrow, and not a second home for tests: a check that needs the
+# SDK installed, QGIS, or a browser stays in `ci.yml`. This job installs pytest
+# and nothing else, and finishes in seconds.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backlog/**"
+      - "tests/scripts/test_backlog.py"
+      - "tests/scripts/pyproject.toml"
+      - ".github/workflows/backlog.yml"
+  pull_request:
+    # Spelled out per trigger rather than shared through an anchor, as in
+    # `ci.yml`: the trigger filters take no expressions, and one readable list
+    # per event is easier to diff than an alias.
+    paths:
+      - "backlog/**"
+      - "tests/scripts/test_backlog.py"
+      - "tests/scripts/pyproject.toml"
+      - ".github/workflows/backlog.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The result nobody is waiting for: a superseded commit on the same branch is
+# cancelled rather than queued behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: backlog drift
+    runs-on: ubuntu-latest
+    # The Actions default is 360 minutes. Nothing here can legitimately take ten.
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Plain pip rather than pixi: this job needs pytest and no lockfile, and
+      # solving the pixi environment would cost more than the test it runs
+      # (TASK-34).
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # Pinned to the pytest the locked environment carries, so this job and the
+      # `test-release-tool` step it stands in for cannot disagree about what a
+      # passing test is.
+      - name: Install pytest
+        run: python -m pip install --disable-pip-version-check "pytest==9.1.1"
+
+      # The file reads the repository as data. It imports no package code, so
+      # nothing needs installing and no PYTHONPATH is set.
+      - name: Run the backlog guards
+        run: >-
+          python -m pytest -c tests/scripts/pyproject.toml
+          tests/scripts/test_backlog.py -q
