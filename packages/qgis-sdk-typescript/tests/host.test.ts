@@ -376,6 +376,77 @@ test("an open takes a host-minted file ref and never a path", async () => {
 	expect(pathSent.length).toBe(0);
 });
 
+test("every kind opens through its own operation and answers its own interface", async () => {
+	// Five opens, one grant (TASK-91): each sends the ref (or the name) and
+	// answers the interface for its kind, and each refuses the other kind's
+	// request shape before the transport sees it.
+	const mesh = {
+		kind: "mesh",
+		id: "lagoon",
+		name: "Lagoon",
+		vertex_count: 3,
+		face_count: 1,
+		group_count: 0,
+		crs: null,
+	} as const;
+	const opened = await createHost(scripted(mesh).client).layers.open_mesh({
+		file: picked,
+	});
+	expect(opened.vertex_count).toBe(3);
+	expect(opened.kind).toBe("mesh");
+
+	const cloud = await createHost(scripted({
+		kind: "point_cloud",
+		id: "survey",
+		name: "Survey",
+		point_count: 12,
+		attribute_names: ["X", "Y", "Z"],
+		crs: "EPSG:4326",
+	}).client).layers.open_point_cloud({ file: picked });
+	expect(cloud.attribute_names).toEqual(["X", "Y", "Z"]);
+
+	const tiles = await createHost(scripted({
+		kind: "vector_tile",
+		id: "basemap",
+		name: "Basemap",
+		source_type: "xyz",
+		min_zoom: 0,
+		max_zoom: 14,
+		crs: null,
+	}).client).layers.open_vector_tile({ file: picked });
+	expect(tiles.max_zoom).toBe(14);
+
+	const notes = await createHost(scripted({
+		kind: "annotation",
+		id: "notes",
+		name: "Field notes",
+		item_count: 0,
+		crs: null,
+	}).client).layers.open_annotation({ name: "Field notes" });
+	expect(notes.item_count).toBe(0);
+
+	const scene = await createHost(scripted({
+		kind: "tiled_scene",
+		id: "city",
+		name: "City",
+		extent: { x_min: 21, y_min: 52, x_max: 21.3, y_max: 52.2 },
+		crs: null,
+	}).client).layers.open_tiled_scene({ file: picked });
+	expect(scene.extent.x_max).toBe(21.3);
+
+	// A blank name is what the wire refuses, so the page never asks the host
+	// for an annotation layer nobody can name again.
+	const { client, sent } = scripted(null);
+	await expect(
+		createHost(client).layers.open_annotation({ name: "   " }),
+	).rejects.toThrow(QgisSdkHostContractError);
+	// A name is a name: a ref where a name belongs is refused too.
+	await expect(
+		createHost(client).layers.open_annotation({ name: picked } as never),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(sent.length).toBe(0);
+});
+
 test("an export sends the ref and the text and reads back the size", async () => {
 	const { client, sent } = scripted({ bytes_written: 4, name: "out.csv" });
 	const result = await createHost(client).files.export({
