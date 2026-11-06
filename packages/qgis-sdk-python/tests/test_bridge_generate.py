@@ -720,8 +720,13 @@ def test_both_contract_errors_carry_the_shared_wire_code() -> None:
 def test_the_host_module_names_the_public_types_the_manifest_declared() -> None:
     generated = generate_host_typescript()
     assert "export interface VectorLayerInfo {" in generated
+    assert "export interface RasterLayerInfo {" in generated
     assert "export interface LayerPage {" in generated
-    assert "readonly items: readonly VectorLayerInfo[];" in generated
+    # One page lists both kinds (TASK-87): the discriminator is the ``kind``
+    # field, so the element type is a union rather than two page types.
+    assert (
+        "readonly items: readonly (VectorLayerInfo | RasterLayerInfo)[];" in generated
+    )
     assert "VectorLayerInfo(item, strict)" in generated
     # A tighter bound than the safe-integer range is enforced client-side too.
     assert 'value["limit"] >= 1 && value["limit"] <= 200' in generated

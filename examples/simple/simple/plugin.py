@@ -24,10 +24,14 @@ from pathlib import Path
 from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.core import PluginContext
 from qgis_sdk.models import (
+    CanvasPoint,
     CrsInput,
     LayerInput,
     Metres,
     QgisSdkExportRefusedError,
+    RasterInput,
+    RasterLayerInfo,
+    RasterSample,
     VectorExport,
     VectorLayerInfo,
 )
@@ -41,6 +45,9 @@ TITLE = "Simple"
 #: The local fixture dataset shipped inside the plugin package (decision-19: no
 #: external service gates the reference workflow).
 FIXTURE = Path(__file__).resolve().parent / "data" / "points.geojson"
+#: The bundled raster: the same three-by-two grid the SDK's own contract tests
+#: read, so what this example shows is what the tests prove.
+ELEVATION = Path(__file__).resolve().parent / "data" / "elevation.asc"
 
 #: The settings key holding the directory exports are written to. A page never
 #: names a path (decision-20): it names a file *inside* this directory, and the
@@ -58,6 +65,20 @@ for surface in surfaces.surfaces:
 def open_fixture(ctx: PluginContext) -> VectorLayerInfo:
     """Load the bundled points and add them to the project."""
     return LocalGisWorkflow(ctx).open_dataset(FIXTURE)
+
+
+@app.action(id="open_elevation", title="Open the bundled elevation raster")
+def open_elevation(ctx: PluginContext) -> RasterLayerInfo:
+    """Load the bundled raster and add it to the project beside the vectors."""
+    return LocalGisWorkflow(ctx).open_raster(ELEVATION)
+
+
+@app.action(id="sample_elevation", title="Sample the elevation raster")
+def sample_elevation(
+    ctx: PluginContext, layer_id: RasterInput, x: float, y: float
+) -> RasterSample:
+    """Read one point, in the project's CRS, out of a raster layer."""
+    return LocalGisWorkflow(ctx).sample(layer_id, CanvasPoint(x=x, y=y))
 
 
 @app.action(id="selected_features", title="Selected features")

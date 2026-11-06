@@ -28,11 +28,14 @@ from qgis_sdk.bridge.host._schemas import (
     FETCH_REQUEST,
     FETCH_RESPONSE,
     GUI,
+    LAYER_INFO,
     PAGE_REQUEST,
     PROVIDER_INFO,
+    RASTER_LAYER_INFO,
     RUN_REQUEST,
     RUN_RESULT,
     VECTOR_LAYER_INFO,
+    _array,
     _object,
     _page_result,
 )
@@ -52,6 +55,21 @@ from qgis_sdk.models.features import (
     FEATURE,
     GEOMETRY,
 )
+from qgis_sdk.models.layers import RASTER_SAMPLE, RASTER_STATISTICS
+from qgis_sdk.models.project import (
+    BOOKMARK,
+    LAYER_TREE,
+    PROJECT_CHANGE,
+    PROJECT_ENTRY,
+    PROJECT_FILE,
+)
+
+#: Project variables and custom properties: one small, project-owned list,
+#: answered whole rather than paged, because a project file bounds it.
+_PROJECT_ENTRIES = _array(PROJECT_ENTRY)
+
+#: The project's bookmarks, bounded the same way.
+_BOOKMARKS = _array(BOOKMARK)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +79,13 @@ class HostOperation:
     ``source`` names the Protocol method it wraps so a test can prove the two
     lists stay in step, and ``grant`` is the canonical permission an application
     checks - a namespace-wide flag would grant every future method at once.
+
+    ``destructive`` is the one annotation the agent surface reads (decision-27
+    point 2, decision-49 point 4): an operation that replaces or discards
+    project state - a write, a save, a read over the open project, a removal -
+    says so here, so the consent list can ask each time and the audit log can
+    mark the call. A read never carries it, and nothing infers it from the
+    operation's name.
     """
 
     id: str
@@ -73,6 +98,7 @@ class HostOperation:
     events: Mapping[str, Mapping[str, Any]] | None = None
     request_name: str | None = None
     result_name: str | None = None
+    destructive: bool = False
 
     def to_description(self) -> dict[str, Any]:
         """Return the action- or stream-shaped record the generator understands."""
@@ -90,6 +116,7 @@ class HostOperation:
             described["request_name"] = self.request_name
         if self.result_name is not None:
             described["result_name"] = self.result_name
+        described["destructive"] = self.destructive
         return described
 
 
@@ -101,7 +128,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="layers.read",
         affinity=GUI,
         request=PAGE_REQUEST,
-        result=_page_result(VECTOR_LAYER_INFO),
+        result=_page_result(LAYER_INFO),
         request_name="PageRequest",
         result_name="LayerPage",
     ),
@@ -112,9 +139,9 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="layers.read",
         affinity=GUI,
         request=_object({"layer_id": {"type": "string"}}, required=("layer_id",)),
-        result=VECTOR_LAYER_INFO,
+        result=LAYER_INFO,
         request_name="LayerRequest",
-        result_name="VectorLayerInfo",
+        result_name="LayerInfo",
     ),
     HostOperation(
         id="project.layer_ids",
@@ -172,6 +199,60 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         result=VECTOR_LAYER_INFO,
         request_name="OpenVectorRequest",
         result_name="VectorLayerInfo",
+    ),
+    HostOperation(
+        id="rasters.open",
+        title="Open the raster dataset a file ref names",
+        source="Rasters.open_raster",
+        grant="rasters.open",
+        affinity=GUI,
+        request=_object({"file": FILE_REF}, required=("file",)),
+        result=RASTER_LAYER_INFO,
+        request_name="OpenRasterRequest",
+        result_name="RasterLayerInfo",
+    ),
+    HostOperation(
+        id="rasters.get",
+        title="Describe one opened raster by its bands",
+        source="Rasters.raster",
+        grant="rasters.read",
+        affinity=GUI,
+        request=_object({"layer_id": {"type": "string"}}, required=("layer_id",)),
+        result=RASTER_LAYER_INFO,
+        request_name="RasterRequest",
+        result_name="RasterLayerInfo",
+    ),
+    HostOperation(
+        id="rasters.statistics",
+        title="Measure one band of an opened raster",
+        source="Rasters.statistics",
+        grant="rasters.read",
+        affinity=GUI,
+        request=_object(
+            {"layer_id": {"type": "string"}, "band": {"type": "integer", "minimum": 1}},
+            required=("layer_id", "band"),
+        ),
+        result=RASTER_STATISTICS,
+        request_name="BandRequest",
+        result_name="RasterStatistics",
+    ),
+    HostOperation(
+        id="rasters.sample",
+        title="Read the value of every band at one point",
+        source="Rasters.sample",
+        grant="rasters.read",
+        affinity=GUI,
+        request=_object(
+            {
+                "layer_id": {"type": "string"},
+                "point": CANVAS_POINT,
+                "band": {"type": "integer", "minimum": 1},
+            },
+            required=("layer_id", "point"),
+        ),
+        result=RASTER_SAMPLE,
+        request_name="SampleRequest",
+        result_name="RasterSample",
     ),
     HostOperation(
         id="files.export",
@@ -457,6 +538,246 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         request_name="CaptureRequest",
     ),
     HostOperation(
+        id="project.tree",
+        title="Read the project's layer tree",
+        source="Project.layer_tree",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({}),
+        result=LAYER_TREE,
+        result_name="LayerTree",
+    ),
+    HostOperation(
+        id="project.add_layer",
+        title="Add an owned layer to the project, into a group if named",
+        source="Project.add_layer",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {"layer_id": {"type": "string"}, "group": {"type": "string"}},
+            required=("layer_id",),
+        ),
+        result_name="LayerTree",
+        result=LAYER_TREE,
+    ),
+    HostOperation(
+        id="project.remove_layer",
+        title="Remove one layer from the project",
+        source="Project.remove_layer",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({"layer_id": {"type": "string"}}, required=("layer_id",)),
+        result=LAYER_TREE,
+        result_name="LayerTree",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.move_layer",
+        title="Move one layer within the project tree",
+        source="Project.move_layer",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {
+                "layer_id": {"type": "string"},
+                "group": {"type": "string"},
+                "index": {"type": "integer", "minimum": 0},
+            },
+            required=("layer_id",),
+        ),
+        result=LAYER_TREE,
+        result_name="LayerTree",
+    ),
+    HostOperation(
+        id="project.set_visible",
+        title="Show or hide one node of the project tree",
+        source="Project.set_visible",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {"node_id": {"type": "string"}, "visible": {"type": "boolean"}},
+            required=("node_id", "visible"),
+        ),
+        result=LAYER_TREE,
+        result_name="LayerTree",
+    ),
+    HostOperation(
+        id="project.crs",
+        title="Read the project's CRS",
+        source="Project.crs",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({}),
+        result={"anyOf": [{"type": "string"}, {"type": "null"}]},
+    ),
+    HostOperation(
+        id="project.set_crs",
+        title="Set the project's CRS",
+        source="Project.set_crs",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({"auth_id": {"type": "string"}}, required=("auth_id",)),
+        result={"type": "string"},
+    ),
+    HostOperation(
+        id="project.variables",
+        title="Read the project's expression variables",
+        source="Project.variables",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({}),
+        result=_PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+    ),
+    HostOperation(
+        id="project.set_variable",
+        title="Set one project expression variable",
+        source="Project.set_variable",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {"name": {"type": "string"}, "value": {"type": "string"}},
+            required=("name", "value"),
+        ),
+        result=_PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+    ),
+    HostOperation(
+        id="project.unset_variable",
+        title="Remove one project expression variable",
+        source="Project.unset_variable",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({"name": {"type": "string"}}, required=("name",)),
+        result=_PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.properties",
+        title="Read the project's custom properties",
+        source="Project.custom_properties",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({}),
+        result=_PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+    ),
+    HostOperation(
+        id="project.set_property",
+        title="Set one project custom property",
+        source="Project.set_custom_property",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {"name": {"type": "string"}, "value": {"type": "string"}},
+            required=("name", "value"),
+        ),
+        result=_PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+    ),
+    HostOperation(
+        id="project.unset_property",
+        title="Remove one project custom property",
+        source="Project.unset_custom_property",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({"name": {"type": "string"}}, required=("name",)),
+        result=_PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.bookmarks",
+        title="Read the project's bookmarks",
+        source="Project.bookmarks",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({}),
+        result=_BOOKMARKS,
+        result_name="Bookmarks",
+    ),
+    HostOperation(
+        id="project.bookmark",
+        title="Read one bookmark by name",
+        source="Project.bookmark",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({"name": {"type": "string"}}, required=("name",)),
+        result=BOOKMARK,
+        result_name="Bookmark",
+    ),
+    HostOperation(
+        id="project.add_bookmark",
+        title="Bookmark an extent",
+        source="Project.add_bookmark",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {"name": {"type": "string"}, "extent": CANVAS_EXTENT},
+            required=("name", "extent"),
+        ),
+        result=_BOOKMARKS,
+        result_name="Bookmarks",
+    ),
+    HostOperation(
+        id="project.remove_bookmark",
+        title="Remove one bookmark by name",
+        source="Project.remove_bookmark",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({"name": {"type": "string"}}, required=("name",)),
+        result=_BOOKMARKS,
+        result_name="Bookmarks",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.read",
+        title="Open the project file a read ref names",
+        source="Project.read",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({"file": FILE_REF}, required=("file",)),
+        result=LAYER_TREE,
+        request_name="ReadProjectRequest",
+        result_name="LayerTree",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.write",
+        title="Write the project to the file a write ref names",
+        source="Project.write",
+        grant="project.write",
+        affinity=GUI,
+        request=_object(
+            {"file": FILE_REF, "overwrite": {"type": "boolean"}}, required=("file",)
+        ),
+        result=PROJECT_FILE,
+        request_name="WriteProjectRequest",
+        result_name="ProjectFile",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.save",
+        title="Save the project to the file it was opened from",
+        source="Project.save",
+        grant="project.write",
+        affinity=GUI,
+        request=_object({}),
+        result=PROJECT_FILE,
+        result_name="ProjectFile",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.changed",
+        title="Follow the project as it changes",
+        source="Project.watch_changes",
+        grant="project.read",
+        affinity=GUI,
+        request=_object({}),
+        events={"data": PROJECT_CHANGE},
+    ),
+    HostOperation(
         id="network.fetch",
         title="Perform one HTTP request through the view's network grant",
         source="NetworkTransport.send",
@@ -481,7 +802,11 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
         "returns every selected feature id; unbounded, and needs the paging the "
         "protocol does not have for it yet"
     ),
-    "Project.add_layer": "mutates the open project; arrives with the mutation slice",
+    "Rasters.export_raster": (
+        "writes a whole raster, which is minutes of work on a real dataset; a "
+        "page asks its plugin action, which runs it as a @job on a worker and "
+        "hands the file back as a ref (the layouts precedent, decision-54 point 3)"
+    ),
     "Layers.export_vector": (
         "takes a filesystem destination, which a page never supplies (decision-20); "
         "a page exports through `files.export` and a host-minted write ref, and a "

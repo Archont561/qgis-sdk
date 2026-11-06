@@ -19,18 +19,19 @@ from qgis_sdk.adapters.desktop import (
     host,
 )
 from qgis_sdk.core import PluginContext, ResourceScope
-from qgis_sdk.models import BufferRequest
+from qgis_sdk.models import BufferRequest, RasterStatistics
 from qgis_sdk.models.canvas import CanvasExtent
 from qgis_sdk.testing import (
     FakeAlgorithms,
     FakeCanvas,
     FakeLayers,
     FakeProject,
+    FakeRasters,
     FakeSettings,
     FakeStyles,
     RecordingNotifications,
 )
-from simple.plugin import FIXTURE, app
+from simple.plugin import ELEVATION, FIXTURE, app
 
 WORKING_CRS = "EPSG:3857"
 classFactory = host("simple.plugin:app", placement="dock")
@@ -49,12 +50,37 @@ class FakeHost:
     settings: FakeSettings
     notifications: RecordingNotifications
     canvas: FakeCanvas
+    rasters: FakeRasters
 
 
 @pytest.fixture
 def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     scope = ResourceScope()
-    layers = FakeLayers(scope)
+    # The rasters first: a raster is a layer too, so the layer fake holds it and
+    # `list_layers` answers both kinds (TASK-87).
+    rasters = FakeRasters(scope)
+    rasters.register(
+        ELEVATION,
+        name="elevation",
+        extent=CanvasExtent(x_min=21.0, y_min=52.0, x_max=21.3, y_max=52.2),
+        crs="EPSG:4326",
+        values=(1.0,),
+        holes=((21.15, 52.05),),
+        # The three-by-two grid's own numbers: 1, 2, 3 in the top row and
+        # 4, no-data, 6 in the bottom one.
+        statistics={
+            1: RasterStatistics(
+                band=1,
+                minimum=1.0,
+                maximum=6.0,
+                mean=3.2,
+                std_dev=1.7204650534085253,
+                valid_count=5,
+                no_data_count=1,
+            )
+        },
+    )
+    layers = FakeLayers(scope, rasters=rasters)
     layers.register(
         FIXTURE, name="points", geometry_type="point", field_names=("id", "value")
     )
@@ -98,6 +124,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         styles=styles,
         algorithms=algorithms,
         canvas=canvas,
+        rasters=rasters,
     )
     factory = create_class_factory(app, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)
@@ -113,6 +140,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
             settings=settings,
             notifications=notifications,
             canvas=canvas,
+            rasters=rasters,
         )
     finally:
         adapter.unload()

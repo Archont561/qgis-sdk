@@ -285,7 +285,12 @@ def input_for(spec: FieldSpec, *, of: LayerPicker | None = None) -> Input:
             name, alpha=details.get("alpha", True), label=label, required=required
         )
     if widget == "layer":
-        return LayerPicker(name, label=label, required=required)
+        return LayerPicker(
+            name,
+            kind=details.get("layer_kind", "vector"),
+            label=label,
+            required=required,
+        )
     if widget == "crs":
         return CrsPicker(name, label=label, required=required)
     if widget == "file":

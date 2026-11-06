@@ -59,7 +59,15 @@ _STRING_WIDGETS = frozenset({"text", "layer", "crs", "field"})
 _REF_WIDGETS = frozenset({"file", "directory"})
 #: Schema keywords copied into ``FieldSpec.details`` for the families that
 #: need more than a name to render: bounds, a parent input, picker filters.
-_DETAIL_KEYS = ("minimum", "maximum", "step", "of", "filters", "alpha")
+_DETAIL_KEYS = (
+    "minimum",
+    "maximum",
+    "step",
+    "of",
+    "filters",
+    "alpha",
+    "layer_kind",
+)
 
 
 @dataclass(frozen=True, slots=True)

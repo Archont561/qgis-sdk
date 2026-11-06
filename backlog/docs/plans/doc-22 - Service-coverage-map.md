@@ -37,6 +37,8 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Features (0.10.0) | `features.page`, `features.feature`, paging/filters, geometry encodings | ✓ | `Feature`, `FeaturePage`, `FeatureQuery`, `Geometry` | ✓ (`FakeFeatures`, declared encodings, no conversion) | ✓ (`QgsFeatureRequest`, `$id > cursor`) | `features.page` stream, `features.get` | `features.read` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); 100 features a page by default, 1000 at most, an over-size ask refused by name |
 | Expressions (0.10.0) | `expressions.evaluate`, `expressions.validate` | ✓ | `ExpressionOutcome`, `ExpressionCheck` | ✓ (documented subset; functions refused by name) | ✓ (`QgsExpression` in a prepared context) | `expressions.evaluate`, `expressions.validate` | `expressions.evaluate` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); "valid, value null" and "invalid, message" are different answers |
 | Editing (0.10.0) | `Features.begin_edit`, `EditingSession.add/update/delete/commit/rollback` | ✓ | `EditOutcome` | ✓ (declares `atomic=True/False`) | ✓ (the layer's edit buffer) | `editing.begin/add/update/delete/commit/rollback` | `features.edit` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); session lifetime is the view, no cross-provider atomicity promised |
+| Rasters (0.10.0) | `rasters.open/info/statistics/sample`, `LayerInfo.kind` | ✓ | `RasterLayerInfo`, `RasterStatistics`, `RasterSample` | ✓ (`FakeRasters`, declared values and holes) | ✓ (GDAL through `QgsRasterLayer`) | `rasters.open/get/statistics/sample` | `rasters.open`, `rasters.read` | complete ([TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md)); a raster export is `files.export` over a raster-owned destination — no raster writer of its own |
+| Project, full (0.10.0) | `project.crs/set_crs`, `read/write/save`, variables, custom properties, bookmarks, `layer_tree`/`add_layer`/`remove_layer`/`move_layer`/`set_visible`, `watch_changes` | ✓ | `LayerTreeNode`, `Bookmark`, `ProjectEntry`, `WriteOutcome` | ✓ (private JSON format) | ✓ (`.qgs` through `QgsProject`) | `project.*` — see the table below | `project.read`, `project.write` | complete ([TASK-88](../../tasks/task-88%20-%20Extend-the-project-service-CRS-read-write-and-save-variables-custom-properties-bookmarks-and-the-layer-tree.md)); the layer tree is a model, never a `QgsLayerTreeGroup` handle |
 | Network | get/post/request, blocking + async, limits | ✓ | ✓ | ✓ | ✓ | `network.fetch` stream | ✓ | complete |
 | Blobs (decision-59) | `HostAuthority.mint_blob`/`inline_or_blob`/`read_blob` | ✓ | `BlobRef`, `BlobChunk` | ✓ (authority over fakes) | ✓ (same code: the authority holds no Qt) | `blob.get` | `blob.read` | complete; the 256 KiB inline cap and the chunk size are measured in a real `QWebEngineView` by the native suite |
 | Notifications | `info` | ✓ | — | ✓ | ✓ | `notifications.info` | ✓ | levels in 0.7.0 (TASK-68) |
@@ -59,10 +61,35 @@ names **plugin actions and streams**, not host operations, so it has no row here
 
 | Operation | Grant | Area | Wraps |
 | --- | --- | --- | --- |
-| `layers.list` | `layers.read` | Vector layers | `Layers.list_layers` |
-| `layers.get` | `layers.read` | Vector layers | `Layers.layer` |
-| `layers.open_vector` | `layers.open` | Vector layers | `Layers.open_vector` |
-| `project.layer_ids` | `project.read` | Project (flat) | `Project.layer_ids` |
+| `layers.list` | `layers.read` | Layers (vector and raster) | `Layers.list_layers` |
+| `layers.get` | `layers.read` | Layers | `Layers.layer` |
+| `layers.open_vector` | `layers.open` | Layers (vector) | `Layers.open_vector` |
+| `rasters.open` | `rasters.open` | Rasters | `Rasters.open_raster` |
+| `rasters.get` | `rasters.read` | Rasters | `Rasters.raster` |
+| `rasters.statistics` | `rasters.read` | Rasters | `Rasters.statistics` |
+| `rasters.sample` | `rasters.read` | Rasters | `Rasters.sample` |
+| `project.layer_ids` | `project.read` | Project (flat ids) | `Project.layer_ids` |
+| `project.tree` | `project.read` | Project (the layer tree) | `Project.layer_tree` |
+| `project.add_layer` | `project.write` | Project (the layer tree) | `Project.add_layer` |
+| `project.remove_layer` | `project.write` | Project (the layer tree) | `Project.remove_layer` |
+| `project.move_layer` | `project.write` | Project (the layer tree) | `Project.move_layer` |
+| `project.set_visible` | `project.write` | Project (the layer tree) | `Project.set_visible` |
+| `project.crs` | `project.read` | Project (CRS) | `Project.crs` |
+| `project.set_crs` | `project.write` | Project (CRS) | `Project.set_crs` |
+| `project.variables` | `project.read` | Project (variables) | `Project.variables` |
+| `project.set_variable` | `project.write` | Project (variables) | `Project.set_variable` |
+| `project.unset_variable` | `project.write` | Project (variables) | `Project.unset_variable` |
+| `project.properties` | `project.read` | Project (custom properties) | `Project.custom_properties` |
+| `project.set_property` | `project.write` | Project (custom properties) | `Project.set_custom_property` |
+| `project.unset_property` | `project.write` | Project (custom properties) | `Project.unset_custom_property` |
+| `project.bookmarks` | `project.read` | Project (bookmarks) | `Project.bookmarks` |
+| `project.bookmark` | `project.read` | Project (bookmarks) | `Project.bookmark` |
+| `project.add_bookmark` | `project.write` | Project (bookmarks) | `Project.add_bookmark` |
+| `project.remove_bookmark` | `project.write` | Project (bookmarks) | `Project.remove_bookmark` |
+| `project.read` | `project.write` | Project (the file) | `Project.read` |
+| `project.write` | `project.write` | Project (the file) | `Project.write` |
+| `project.save` | `project.write` | Project (the file) | `Project.save` |
+| `project.changed` | `project.read` | Project (a push stream) | `Project.watch_changes` |
 | `settings.get` | `settings.read` | Settings | `Settings.get` |
 | `styles.apply` | `styles.apply` | Styles | `Styles.apply_style` |
 | `files.export` | `files.export` | Files (authority) | `HostAuthority.export_file` |
@@ -94,6 +121,17 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `canvas.apply_theme` | `canvas.control` | Canvas (map themes) | `Canvas.apply_theme` |
 | `canvas.capture` | `canvas.control` | Canvas (a capture stream) | `Canvas.capture` |
 
+Seven operations carry the `destructive` annotation, and nothing infers it from
+a name: `project.read` (it replaces the open project), `project.write`,
+`project.save`, `project.remove_layer`, `project.remove_bookmark`,
+`project.unset_variable` and `project.unset_property`. The annotation is
+declared beside the operation (`HostOperation.destructive`), crosses in the
+manifest, and is the flag the agent consent list reads so a destructive tool can
+be set to "ask each time" ([decision-49](../../decisions/decision-49%20-%20Expose-the-runtime-to-agents-over-a-loopback-transport-with-the-MCP-server-in-the-tools-for-developers-and-users-alike.md)
+point 4, [decision-27](../../decisions/decision-27%20-%20Expose-curated-host-services-to-web-views-as-generated-namespaces.md)
+point 2). `tests/test_bridge_host_project.py` pins the list, so adding one
+without the annotation fails.
+
 Two checks keep the table honest: `tests/scripts/test_service_coverage.py` fails
 when an operation declared in `qgis_sdk.bridge.host.HOST_OPERATIONS` has no row
 here, or when a row names an operation that no longer exists; and
@@ -107,8 +145,6 @@ second list somewhere else.
 | Area | Service / operations | Task | Milestone | Status |
 | --- | --- | --- | --- | --- |
 | Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | landed (doc-12, doc-13 and the example use `zoom_to`) |
-| Rasters | `rasters.open/info/statistics/sample/export`, `LayerInfo.kind` | [TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md) | 0.10.0 | planned |
-| Project (full) | CRS, read/write/save, variables, properties, bookmarks, layer tree, `on_changed` | [TASK-88](../../tasks/task-88%20-%20Extend-the-project-service-CRS-read-write-and-save-variables-custom-properties-bookmarks-and-the-layer-tree.md) | 0.10.0 | planned |
 | Layouts / atlas | `layouts.list/load_template/export`, `atlas.run` as jobs | [TASK-89](../../tasks/task-89%20-%20Add-layouts-and-atlas-list-template-load-export-to-PDF-PNG-and-SVG-as-jobs-atlas-iteration-with-progress.md) | 0.10.0 | planned |
 | Layer kinds | mesh, point cloud, vector tile, annotation, tiled scene | [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) | 0.11.0 | planned |
 | Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only) | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | planned |

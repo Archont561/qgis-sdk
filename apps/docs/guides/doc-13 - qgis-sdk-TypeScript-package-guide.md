@@ -243,8 +243,10 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   `algorithms.describe`, `algorithms.run` (below) and, since 0.10.0,
   `features.page`, `features.get`, `expressions.evaluate`,
   `expressions.validate`, `editing.begin/add/update/delete/commit/rollback`,
-  and the `canvas` namespace with its `canvas.extent_changed` and
-  `canvas.capture` streams.
+  the `canvas` namespace with its `canvas.extent_changed` and `canvas.capture`
+  streams, the `rasters` namespace, and the `project` namespace down to the
+  layer tree, the CRS, the entries, the bookmarks, the file and the
+  `project.changed` stream.
   Anything else of the QGIS API is not reachable from a page; the operations it
   would need wait for their owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
@@ -420,6 +422,80 @@ const stop = await qgis.host.canvas.extent_changed({}, {
   produces no frame. A server host has no canvas: every operation is declared and
   fails by name there.
 
+### Rasters from a page
+
+`rasters` reads raster bands. It is its own namespace because a raster is not a
+vector layer with different fields, and `layers.*` only reports *that* one
+exists - `layers.list` and `layers.get` answer both kinds, each with its `kind`.
+
+```ts
+const info = await qgis.host.rasters.open({ file: ref }); // RasterLayerInfo
+info.band_count;   // 1
+info.data_types;   // readonly ("Float32")[]
+info.no_data;      // readonly (number | null)[]
+info.resolution;   // readonly number[] - (x, y) map units per pixel
+
+const stats = await qgis.host.rasters.statistics({ layer_id: info.id, band: 1 });
+const sample = await qgis.host.rasters.sample({
+	layer_id: info.id,
+	point: { x: 21.05, y: 52.15, crs: "EPSG:4326" },
+});
+sample.values; // readonly (number | null)[] - None per band, never 0
+```
+
+- **Two grants.** `rasters.open` for opening a file the view holds a read ref
+  for; `rasters.read` for `get`, `statistics` and `sample`.
+- **`LayerInfo` is a union.** `layers.get` answers `VectorLayerInfo |
+  RasterLayerInfo`, and the discriminator is `kind` (`"vector"` / `"raster"`), so
+  a page narrows with one comparison rather than guessing from the fields.
+- **A band number is 1-based** and outside `1..band_count` fails by name
+  (`operation_failed`, with the band in the message); a no-data pixel or a point
+  outside the raster answers `null` for that band.
+- **The point carries its CRS.** `point.crs` says what the numbers mean; the host
+  transforms and answers `sample.point` where it landed. Omit `crs` and the point
+  is read in the raster's own.
+- **No export operation.** A page never names a filesystem destination
+  (decision-20): the export is a plugin action that runs it as a job and returns
+  a `FileRef`.
+
+### The project from a page
+
+`project` is the open project: the layer tree, the CRS, variables, custom
+properties, bookmarks, the file, and the change stream.
+
+```ts
+const tree = await qgis.host.project.tree();        // LayerTree
+await qgis.host.project.add_layer({ layer_id: layer.id, group: "Elevation" });
+await qgis.host.project.move_layer({ layer_id: layer.id, group: "Elevation", index: 0 });
+await qgis.host.project.set_visible({ node_id: groupId, visible: false });
+
+await qgis.host.project.set_variable({ name: "author", value: "Ada" }); // ProjectEntry[]
+const bookmarks = await qgis.host.project.add_bookmark({ name: "home", extent });
+
+const stop = await qgis.host.project.changed({}, {
+	onEvent: (event) => console.info(event.payload.kind, event.payload.layer_ids),
+});
+```
+
+- **The tree is a model.** `LayerTree { nodes }` is a flat, ordered list
+  (`LayerNode { id, name, kind, visible, parent }`) so a page can rebuild the
+  hierarchy; `parent` is a group id, never a name. Every mutation answers the tree
+  it produced, so a page that just moved a node does not ask again.
+- **Two grants.** `project.read` for `layer_ids`, `tree`, `crs`, `variables`,
+  `properties`, `bookmarks`, `bookmark` and the `changed` stream;
+  `project.write` for everything that changes the project, including `read`
+  (which replaces the open project), `write` and `save`.
+- **`destructive` is declared, not inferred.** The generated module carries the
+  annotation per action, so a consent list can set a destructive tool to "ask each
+  time": `read`, `write`, `save`, `remove_layer`, `remove_bookmark`,
+  `unset_variable`, `unset_property`.
+- **Files are refs.** `project.read({file})` and `project.write({file})` take a
+  `FileRef` the view holds; `project.save()` rewrites the file the project
+  already has, and fails by name on a project never saved.
+- **One frame per change, in order.** `project.changed` emits `{kind, layer_ids}`
+  for `layers`, `crs`, `variables`, `properties` and `bookmarks`; the stream does
+  not complete, so a page follows the project until it unsubscribes.
+
 ## The schema module and `QgisSdk`
 
 `client.invoke<T>(...)` is a transport, not a type guarantee: `T` is asserted by
@@ -522,8 +598,8 @@ with an `error` terminal instead of reaching the handler. The frame envelope -
 #### `qgis.host`
 
 `qgis.host` is the typed host surface of [Host namespaces](#host-namespaces) on
-the same client - `layers`, `project`, `settings`, `notifications`, `styles`,
-`files` and the `network.fetch` stream - plus `granted`, the host operation ids
+the same client - `layers`, `rasters`, `project`, `settings`, `notifications`,
+`styles`, `files` and the `network.fetch` stream - plus `granted`, the host operation ids
 the handshake advertised for this view. A call outside the grants is refused by
 the host with its own failure code; the SDK does not pre-empt it.
 

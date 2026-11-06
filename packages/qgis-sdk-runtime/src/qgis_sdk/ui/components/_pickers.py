@@ -44,9 +44,11 @@ class LayerPicker(_Picker):
 
     ``kind`` filters what is listed: ``"vector"`` (the default), ``"raster"``
     or ``"any"``. Natively this is ``QgsMapLayerComboBox``, which follows the
-    project on its own; under the fake the list comes from ``ctx.project``
-    and ``ctx.layers`` (vector layers, until the all-layer-types service
-    lands) and :meth:`refresh` re-reads it.
+    project on its own; under the fake the list comes from ``ctx.layers`` -
+    the all-kinds service TASK-87 lands - and :meth:`refresh` re-reads it. The
+    project is consulted first so the picker matches the tree's order, and a
+    layer the project holds but the layer service no longer knows is skipped
+    rather than listed as a dead id.
     """
 
     kind = "layer"
@@ -69,19 +71,33 @@ class LayerPicker(_Picker):
 
     def _list(self) -> tuple[Option, ...]:
         ctx = self._ctx
-        if ctx is None or not ctx.has("layers") or self.layer_kind == "raster":
+        if ctx is None or not ctx.has("layers"):
             return ()
+        wanted = (
+            ("vector", "raster") if self.layer_kind == "any" else (self.layer_kind,)
+        )
+        known = {
+            info.id: info for info in ctx.layers.list_layers() if info.kind in wanted
+        }
         ids: Iterable[str]
         if ctx.has("project"):
             ids = ctx.project.layer_ids()
         else:
-            ids = (info.id for info in ctx.layers.list_layers())
+            ids = known
         listed: list[Option] = []
+        seen: set[str] = set()
         for layer_id in ids:
-            try:
-                info = ctx.layers.layer(layer_id)
-            except QgisSdkLayerNotFoundError:
+            if layer_id in seen:
                 continue
+            seen.add(layer_id)
+            info = known.get(layer_id)
+            if info is None:
+                try:
+                    info = ctx.layers.layer(layer_id)
+                except QgisSdkLayerNotFoundError:
+                    continue
+                if info.kind not in wanted:
+                    continue
             listed.append(Option(id=info.id, label=info.name))
         return tuple(listed)
 

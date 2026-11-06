@@ -30,6 +30,7 @@ if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
     from .notifications import NativeNotifications
     from .processing import NativeProcessing, NativeProcessingProvider
     from .project import NativeProject
+    from .rasters import NativeRasters
     from .server import QgsServerHost
     from .settings import NativeSettings
     from .styles import NativeStyles
@@ -50,6 +51,7 @@ __all__ = [
     "NativeProcessing",
     "NativeProcessingProvider",
     "NativeProject",
+    "NativeRasters",
     "NativeSettings",
     "NativeStyles",
     "QgsJobPump",
@@ -74,6 +76,7 @@ _EXPORTS: dict[str, str] = {
     "NativeProcessing": ".processing",
     "NativeProcessingProvider": ".processing",
     "NativeProject": ".project",
+    "NativeRasters": ".rasters",
     "NativeSettings": ".settings",
     "NativeStyles": ".styles",
     "QgsJobPump": ".jobs",

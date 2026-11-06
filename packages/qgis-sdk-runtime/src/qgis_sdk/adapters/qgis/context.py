@@ -31,6 +31,7 @@ from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
 from .processing import NativeProcessing
 from .project import NativeProject
+from .rasters import NativeRasters
 from .settings import NativeSettings
 from .styles import NativeStyles
 from .tasks import QgsTaskWorkers
@@ -70,9 +71,14 @@ def native_plugin_context(
     ``iface.mapCanvas()`` at the first call.
     """
     scope.ensure_open()
-    layers = NativeLayers(scope)
+    # The raster adapter is built first and the vector one holds it: a raster is
+    # a layer too, so ``ctx.layers.list_layers`` answers both kinds and a raster
+    # id reaching a vector-only method is refused by name rather than reported
+    # missing (TASK-87).
+    rasters = NativeRasters(scope)
+    layers = NativeLayers(scope, rasters=rasters)
     transport = NativeNetworkTransport(scope)
-    project = NativeProject(layers, scope)
+    project = NativeProject(layers, scope, rasters=rasters)
     features = NativeFeatures(layers, scope)
     # A canvas is a view, so the capability exists when there is one behind it:
     # the Desktop interface, an app window's own widget, or a server, which keeps
@@ -102,6 +108,7 @@ def native_plugin_context(
         desktop=None if iface is None else IfaceDesktopAccess(iface),
         network=NetworkClient(transport, scope),
         layers=layers,
+        rasters=rasters,
         features=features,
         canvas=canvas_service,
         project=project,
@@ -115,6 +122,7 @@ def native_plugin_context(
             project=project,
             scope=scope,
             authority=authority,
+            rasters=rasters,
         ),
         files=files,
         log=NativeLog(scope, settings_prefix),

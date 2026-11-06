@@ -2,13 +2,16 @@
 
 Native module: importing it needs a QGIS installation, so nothing on the pure
 side may import it (``tests/test_pure_imports.py`` guards that). The adapter
-returns ``VectorLayerInfo`` values only; ``QgsVectorLayer`` handles never cross
-this boundary.
+returns :class:`~qgis_sdk.models.layers.LayerInfo` values - a
+:class:`~qgis_sdk.models.layers.VectorLayerInfo` or, when a sibling
+``NativeRasters`` opened it, a
+:class:`~qgis_sdk.models.layers.RasterLayerInfo` - and never a PyQGIS handle.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from qgis.core import (
     Qgis,
@@ -22,11 +25,16 @@ import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
     GeometryType,
+    LayerInfo,
     QgisSdkExportFailedError,
     QgisSdkLayerNotFoundError,
+    QgisSdkUnsupportedCapabilityError,
     VectorExport,
     VectorLayerInfo,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, no import cycle at runtime
+    from .rasters import NativeRasters
 
 GEOMETRY_TYPES: dict[int, GeometryType] = {
     Qgis.GeometryType.Point: "point",
@@ -49,10 +57,16 @@ class NativeLayers:
     stale reference (decision-20).
     """
 
-    def __init__(self, scope: ResourceScope) -> None:
+    def __init__(
+        self, scope: ResourceScope, *, rasters: NativeRasters | None = None
+    ) -> None:
         self._scope = scope
         self._layers: dict[str, QgsVectorLayer] = {}
         self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
+        #: The sibling raster adapter, when the host built one: ``list_layers``
+        #: answers both kinds and a raster id reaching a vector-only method is
+        #: refused by name rather than reported as missing.
+        self._rasters = rasters
         scope.on_close(self._release)
 
     def open_vector(self, source: Path) -> VectorLayerInfo:
@@ -65,14 +79,24 @@ class NativeLayers:
         self._export_sources[layer.id()] = _capture_source(layer)
         return _describe(layer)
 
-    def list_layers(self) -> tuple[VectorLayerInfo, ...]:
-        """Return opened layers in the order they were opened."""
-        self._scope.ensure_open()
-        return tuple(_describe(layer) for layer in self._layers.values())
+    def list_layers(self) -> tuple[LayerInfo, ...]:
+        """Return every opened layer, of both kinds, in the order opened.
 
-    def layer(self, layer_id: str) -> VectorLayerInfo:
-        """Return the description of one opened layer."""
+        Vector layers come first because they are the ones this adapter owns;
+        the rasters follow in the order their own adapter opened them. A caller
+        that needs one order reads the project's tree instead.
+        """
         self._scope.ensure_open()
+        opened: list[LayerInfo] = [_describe(layer) for layer in self._layers.values()]
+        if self._rasters is not None:
+            opened.extend(self._rasters.list_layers())
+        return tuple(opened)
+
+    def layer(self, layer_id: str) -> LayerInfo:
+        """Return the description of one opened layer, of either kind."""
+        self._scope.ensure_open()
+        if layer_id not in self._layers and self._rasters is not None:
+            return self._rasters.raster(layer_id)
         return _describe(self._require(layer_id))
 
     def selection(self, layer_id: str) -> tuple[int, ...]:
@@ -123,7 +147,14 @@ class NativeLayers:
         try:
             return self._layers[layer_id]
         except KeyError:
-            raise QgisSdkLayerNotFoundError(layer_id) from None
+            pass
+        if self._rasters is not None and self._rasters.knows(layer_id):
+            raise QgisSdkUnsupportedCapabilityError(
+                layer_id,
+                "this layer is a raster; fields, features, styles and a vector "
+                "export are vector work - read it through ctx.rasters",
+            )
+        raise QgisSdkLayerNotFoundError(layer_id)
 
     def _release(self) -> None:
         """Drop this runtime's references; the scope closes exactly once."""

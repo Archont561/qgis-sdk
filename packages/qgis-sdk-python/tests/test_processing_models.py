@@ -258,6 +258,7 @@ def test_run_result_discriminates_outputs_on_the_wire() -> None:
         "name": "OUTPUT",
         "kind": "vector",
         "layer": {
+            "kind": "vector",
             "id": "out-1",
             "name": "buffer",
             "geometry_type": "polygon",

@@ -239,3 +239,25 @@ def test_the_plugins_provider_is_in_the_toolbox_only_while_it_runs(
     finally:
         plugin.unload()
     assert advertised() == []
+
+
+def test_the_bundled_raster_opens_and_answers_a_sample(desktop: Any) -> None:
+    """The example's raster action, against the GDAL behind a real QGIS.
+
+    The bundled grid is the one the SDK's own contract tests read, so the value
+    here and the value there are the same number from the same file.
+    """
+    info = desktop.runtime.actions["open_elevation"]()
+
+    assert (info.kind, info.band_count, info.crs) == ("raster", 1, "EPSG:4326")
+    assert info.resolution == (0.1, 0.1)
+
+    sample = desktop.runtime.actions["sample_elevation"](
+        layer_id=info.id, x=21.05, y=52.15
+    )
+    at_hole = desktop.runtime.actions["sample_elevation"](
+        layer_id=info.id, x=21.15, y=52.05
+    )
+
+    assert sample.values == pytest.approx((1.0,))
+    assert at_hole.values == (None,)
