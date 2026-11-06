@@ -2373,7 +2373,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<string | null>(
 					client, "canvas.crs", input, options,
 					CanvasCrsRequest,
-					(candidate: unknown) => (typeof candidate === "string" || candidate === null),
+					(candidate: unknown, strict = false) => (typeof candidate === "string" || candidate === null),
 				),
 			extent: (input?: CanvasExtentRequest, options?: HostInvokeOptions) =>
 				call<CanvasExtent>(
@@ -2391,13 +2391,13 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "canvas.refresh", input, options,
 					CanvasRefreshRequest,
-					(candidate: unknown) => candidate === null,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 			scale: (input?: CanvasScaleRequest, options?: HostInvokeOptions) =>
 				call<number>(
 					client, "canvas.scale", input, options,
 					CanvasScaleRequest,
-					(candidate: unknown) => typeof candidate === "number" && Number.isFinite(candidate),
+					(candidate: unknown, strict = false) => typeof candidate === "number" && Number.isFinite(candidate),
 				),
 			themes: (input?: CanvasThemesRequest, options?: HostInvokeOptions) =>
 				call<MapThemes>(
@@ -2491,7 +2491,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<VectorLayerInfo | RasterLayerInfo>(
 					client, "layers.get", input, options,
 					LayerRequest,
-					(candidate: unknown) => (isRecord(candidate) || isRecord(candidate)),
+					(candidate: unknown, strict = false) => (VectorLayerInfo(candidate, strict) || RasterLayerInfo(candidate, strict)),
 				),
 			list: (input?: PageRequest, options?: HostInvokeOptions) =>
 				call<LayerPage>(
@@ -2519,7 +2519,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "notifications.info", input, options,
 					NotificationsInfoRequest,
-					(candidate: unknown) => candidate === null,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 		},
 		project: {
@@ -2527,7 +2527,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<readonly Bookmark[]>(
 					client, "project.add_bookmark", input, options,
 					ProjectAdd_bookmarkRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => Bookmark(item, strict))),
 				),
 			add_layer: (input: ProjectAdd_layerRequest, options?: HostInvokeOptions) =>
 				call<LayerTree>(
@@ -2545,7 +2545,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<readonly Bookmark[]>(
 					client, "project.bookmarks", input, options,
 					ProjectBookmarksRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => Bookmark(item, strict))),
 				),
 			changed: (input: ProjectChangedRequest, handlers: HostStreamHandlers<ProjectChangedEvent>, options?: HostInvokeOptions) =>
 				open<ProjectChangedEvent>(
@@ -2557,7 +2557,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<string | null>(
 					client, "project.crs", input, options,
 					ProjectCrsRequest,
-					(candidate: unknown) => (typeof candidate === "string" || candidate === null),
+					(candidate: unknown, strict = false) => (typeof candidate === "string" || candidate === null),
 				),
 			layer_ids: (input?: PageRequest, options?: HostInvokeOptions) =>
 				call<IdPage>(
@@ -2575,7 +2575,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<readonly ProjectEntry[]>(
 					client, "project.properties", input, options,
 					ProjectPropertiesRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
 				),
 			read: (input: ReadProjectRequest, options?: HostInvokeOptions) =>
 				call<LayerTree>(
@@ -2587,7 +2587,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<readonly Bookmark[]>(
 					client, "project.remove_bookmark", input, options,
 					ProjectRemove_bookmarkRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => Bookmark(item, strict))),
 				),
 			remove_layer: (input: ProjectRemove_layerRequest, options?: HostInvokeOptions) =>
 				call<LayerTree>(
@@ -2605,19 +2605,19 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<string>(
 					client, "project.set_crs", input, options,
 					ProjectSet_crsRequest,
-					(candidate: unknown) => typeof candidate === "string",
+					(candidate: unknown, strict = false) => typeof candidate === "string",
 				),
 			set_property: (input: ProjectSet_propertyRequest, options?: HostInvokeOptions) =>
 				call<readonly ProjectEntry[]>(
 					client, "project.set_property", input, options,
 					ProjectSet_propertyRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
 				),
 			set_variable: (input: ProjectSet_variableRequest, options?: HostInvokeOptions) =>
 				call<readonly ProjectEntry[]>(
 					client, "project.set_variable", input, options,
 					ProjectSet_variableRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
 				),
 			set_visible: (input: ProjectSet_visibleRequest, options?: HostInvokeOptions) =>
 				call<LayerTree>(
@@ -2635,19 +2635,19 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<readonly ProjectEntry[]>(
 					client, "project.unset_property", input, options,
 					ProjectUnset_propertyRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
 				),
 			unset_variable: (input: ProjectUnset_variableRequest, options?: HostInvokeOptions) =>
 				call<readonly ProjectEntry[]>(
 					client, "project.unset_variable", input, options,
 					ProjectUnset_variableRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
 				),
 			variables: (input?: ProjectVariablesRequest, options?: HostInvokeOptions) =>
 				call<readonly ProjectEntry[]>(
 					client, "project.variables", input, options,
 					ProjectVariablesRequest,
-					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
 				),
 			write: (input: WriteProjectRequest, options?: HostInvokeOptions) =>
 				call<ProjectFile>(
@@ -2687,7 +2687,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<string | null>(
 					client, "settings.get", input, options,
 					SettingsGetRequest,
-					(candidate: unknown) => (typeof candidate === "string" || candidate === null),
+					(candidate: unknown, strict = false) => (typeof candidate === "string" || candidate === null),
 				),
 		},
 		styles: {
@@ -2695,7 +2695,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "styles.apply", input, options,
 					StylesApplyRequest,
-					(candidate: unknown) => candidate === null,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 		},
 	};

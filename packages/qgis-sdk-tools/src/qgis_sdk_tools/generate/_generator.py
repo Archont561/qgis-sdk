@@ -623,5 +623,11 @@ class _Generator:
         name = self.name_for(schema)
         if name is not None:
             return name
-        predicate = _inline_validator(schema, "candidate")
-        return f"(candidate: unknown) => {predicate}"
+        # The generator travels with the predicate for the same reason it does
+        # with the type: a union of titled objects validated as ``isRecord`` and
+        # nothing else, so `layers.get` accepted a reply with no `kind` at all.
+        # The lambda carries ``strict`` itself, with the same default a named
+        # validator has, because `call` hands it the flag for a request and
+        # nothing for a response.
+        predicate = _inline_validator(schema, "candidate", self)
+        return f"(candidate: unknown, strict = false) => {predicate}"

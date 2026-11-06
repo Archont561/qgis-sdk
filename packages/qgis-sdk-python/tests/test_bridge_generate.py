@@ -275,6 +275,78 @@ def test_a_titled_object_inside_a_union_is_named_and_nullable() -> None:
     assert "export function FeatureGeometry(value: unknown, strict = false)" in rendered
 
 
+def test_a_union_result_keeps_its_named_interfaces() -> None:
+    """A result that is one of two titled objects renders as those interfaces.
+
+    TASK-87 made ``layers.get`` answer a vector layer or a raster layer, and the
+    generated method answered ``Record<string, unknown> | Record<string, unknown>``
+    because the renderer was handed no generator: a page could validate the
+    reply and still not read a field off it.
+    """
+    described = _single(
+        "sites.read",
+        request={"type": "object", "properties": {}, "additionalProperties": False},
+        result={
+            "anyOf": [
+                {
+                    "type": "object",
+                    "title": "VectorReading",
+                    "properties": {"kind": {"enum": ["vector"]}},
+                    "required": ["kind"],
+                    "additionalProperties": False,
+                },
+                {
+                    "type": "object",
+                    "title": "RasterReading",
+                    "properties": {"kind": {"enum": ["raster"]}},
+                    "required": ["kind"],
+                    "additionalProperties": False,
+                },
+            ]
+        },
+    )
+
+    generated = generate_typescript(described)
+
+    assert "export interface VectorReading {" in generated
+    assert "export interface RasterReading {" in generated
+    assert "Promise<VectorReading | RasterReading>" in generated
+
+
+def test_a_union_result_is_validated_by_its_named_validators() -> None:
+    """``isRecord`` is not a validator: a reply without its discriminator is refused."""
+    described = _single(
+        "sites.read",
+        request={"type": "object", "properties": {}, "additionalProperties": False},
+        result={
+            "anyOf": [
+                {
+                    "type": "object",
+                    "title": "VectorReading",
+                    "properties": {"kind": {"enum": ["vector"]}},
+                    "required": ["kind"],
+                    "additionalProperties": False,
+                },
+                {
+                    "type": "object",
+                    "title": "RasterReading",
+                    "properties": {"kind": {"enum": ["raster"]}},
+                    "required": ["kind"],
+                    "additionalProperties": False,
+                },
+            ]
+        },
+    )
+
+    generated = generate_typescript(described)
+
+    assert (
+        "(candidate: unknown, strict = false) => (VectorReading(candidate, strict) || "
+        "RasterReading(candidate, strict))" in generated
+    )
+    assert "isRecord(candidate) || isRecord(candidate)" not in generated
+
+
 def test_an_open_map_inside_a_union_renders_as_a_record() -> None:
     described = _single(
         "sites.mixed",
@@ -782,7 +854,7 @@ def test_a_non_object_result_is_validated_by_an_inline_predicate() -> None:
     )
     generated = generate_typescript(described)
     assert "Promise<null>" in generated
-    assert "(candidate: unknown) => candidate === null" in generated
+    assert "(candidate: unknown, strict = false) => candidate === null" in generated
 
 
 def test_the_checked_in_host_client_is_current() -> None:
