@@ -96,6 +96,21 @@ budget while `Linux checks` ran the same file green on the same commit, and
 the lane passed on the next run - recorded in doc-14 as load-sensitive, not
 as a defect this gate fixed.
 
+Rehearsal (2026-11-06). The gate merged as `71e6b62` (PR #170) and the owner's
+"do rehearsal and merge" cut one prerelease tag per scope on that commit:
+`python-v0.10.0-rc.1` (run 42278465791) and `ts-v0.7.0-rc.1` (run 42278466448),
+both entirely green. The Python run stamped `0.10.0-rc.1`, verified the stamped
+manifests and the shared contract, built three wheels and three Conda outputs,
+verified the wheel without uploading, skipped the prefix.dev upload for a
+prerelease and published a GitHub prerelease; npm, ui and both GitHub Packages
+jobs skipped. The bridge run stamped `0.7.0-rc.1`, built the bridge, packed the
+bridge and alias tarballs with the alias smoke install, dry-ran the npm publish
+and the GitHub Packages publish, and published its prerelease; pypi, conda and
+the ui jobs skipped. Nothing was consumed: PyPI still serves 0.9.0 as `latest`
+for the three distributions and npm still lists `@archont561/qgis-sdk` at 0.6.0
+with no 0.7.0 at all. Recorded in doc-14 under "0.10.0 rc rehearsal
+(2026-11-06)".
+
 AC 4 stays open on purpose. This pull request records the artifacts and the
 checks and posts no date for 1.0.0; nothing is tagged and nothing is uploaded.
 `python-v0.10.0` and `ts-v0.7.0` - or the `-rc.1` pair first - are cut on one
