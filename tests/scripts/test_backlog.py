@@ -203,6 +203,40 @@ def test_no_broken_relative_links() -> None:
     assert not broken, "broken links:\n" + "\n".join(broken)
 
 
+def test_record_ids_are_unique() -> None:
+    """Two records may not answer to the same id.
+
+    Document numbers are allocated in creation order by hand, so a new plan can
+    take a number another plan already holds - which is what happened when the
+    coverage review was written as ``doc-27`` while ``doc-27`` was the m-11
+    sprint train. Nothing else notices: the files have different names, the
+    front matter is well formed, and a link naming either id resolves to whichever
+    record the reader lands on. `backlog doctor` reports this, but it is not run
+    on every change.
+    """
+    declared: dict[str, list[Path]] = {}
+    for path in sorted(BACKLOG.rglob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        if not text.startswith("---\n"):
+            continue
+        end = text.find("\n---\n", 4)
+        if end == -1:
+            continue
+        match = re.search(r"^id:\s*(\S+)\s*$", text[4:end], re.MULTILINE)
+        if match is None:
+            continue
+        declared.setdefault(match.group(1), []).append(path)
+
+    clashes = {
+        identifier: paths for identifier, paths in declared.items() if len(paths) > 1
+    }
+    assert not clashes, "duplicate record ids:\n" + "\n".join(
+        f"{identifier}: "
+        + ", ".join(path.relative_to(ROOT).as_posix() for path in paths)
+        for identifier, paths in sorted(clashes.items())
+    )
+
+
 @pytest.mark.parametrize("identifier", sorted(milestone_files()))
 def test_milestone_exit_criteria_cover_both_packages(identifier: str) -> None:
     """Each milestone states an exit criterion per artifact, not one in general."""

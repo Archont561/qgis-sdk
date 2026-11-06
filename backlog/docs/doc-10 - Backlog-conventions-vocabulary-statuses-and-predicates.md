@@ -254,6 +254,12 @@ document:
 - `task edit -t` does not rename the file; `decision` has no `edit` subcommand;
   sub-task IDs are `TASK-N.M` and must be passed as such to `--dep`.
 - `backlog doctor` fails on cycles and duplicate IDs — run it after bulk edits.
+- `tests/scripts/test_backlog.py` is the same checks as a gate: relative links,
+  `milestone:` against the doc-4 inventory, milestone sections, and record-id
+  uniqueness. `.github/workflows/backlog.yml` runs it on every `backlog/**`
+  change, because `ci.yml` ignores that path and would otherwise never execute it.
+  A backlog-only pull request therefore still shows one status, `backlog drift`;
+  run the file locally before pushing, since a merge here is otherwise unguarded.
 
 ## 9. Related
 
