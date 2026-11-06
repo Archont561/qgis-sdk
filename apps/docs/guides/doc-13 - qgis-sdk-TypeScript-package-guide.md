@@ -1144,7 +1144,7 @@ again.
 kind. A client acknowledges every stream frame it delivered, so the host can
 tell a slow consumer from a dead one and holds a bounded number of frames in
 flight instead of filling a queue
-([decision-59](../../../backlog/decisions/decision-59%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md)):
+([decision-59](../../../backlog/decisions/decision-59%20-%20Carry-large-and-binary-payloads-across-the-bridge-and-agent-boundaries-by-reference-with-bounded-pages-and-backpressure.md)):
 
 - `subscribe(operation, handlers, { acknowledge })` acknowledges by default;
   pass `acknowledge: false` only when you drive the frames yourself.
