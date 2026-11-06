@@ -103,15 +103,15 @@ RASTER_HOLE_POINT = CanvasPoint(x=21.15, y=52.05)
 RASTER_VALUE = 1.0
 # -- the layer-kind fixtures (TASK-91) ----------------------------------------
 #: The mesh both backends describe: an SMS/ADCIRC ``.2dm`` three-vertex,
-#: one-triangle surface with no dataset groups. The file is text, so it is
-#: checked in and reviewable; MDAL reads it natively and the fake is told the
-#: same three numbers, including the zero groups - a mesh with geometry and no
-#: result on it is a mesh, not a broken one.
+#: one-triangle surface with no result file beside it. The file is text, so it is
+#: checked in and reviewable; MDAL reads it natively and reports one dataset
+#: group holding no datasets, which is what the fake is told too - a mesh with
+#: geometry and no result on it is a mesh, not a broken one.
 MESH_DATASET = FIXTURE_ROOT / "lagoon.2dm"
 MESH_NAME = "lagoon"
 MESH_VERTICES = 3
 MESH_FACES = 1
-MESH_GROUPS = 0
+MESH_GROUPS = 1
 #: The annotation layer both backends create. It has no dataset: the contract is
 #: that a new one starts empty and is listed like any other layer.
 ANNOTATION_NAME = "notes"

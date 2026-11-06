@@ -21,6 +21,7 @@ from qgis.core import (
     QgsMapLayer,
     QgsMeshLayer,
     QgsPointCloudLayer,
+    QgsProject,
     QgsProviderRegistry,
     QgsTiledSceneLayer,
     QgsVectorFileWriter,
@@ -120,8 +121,15 @@ class NativeLayers:
 
         An annotation layer has no dataset: it is a drawing surface the project
         holds, so the name is the identity and a new one starts empty.
+
+        ``LayerOptions`` takes the project's transform context and has no
+        default constructor, which is the one thing a caller has to bring: an
+        annotation layer is created *into* a project's coordinate world.
         """
-        layer = QgsAnnotationLayer(name, QgsAnnotationLayer.LayerOptions())
+        options = QgsAnnotationLayer.LayerOptions(
+            QgsProject.instance().transformContext()
+        )
+        layer = QgsAnnotationLayer(name, options)
         self._remember(layer)
         return _describe_annotation(layer)
 
