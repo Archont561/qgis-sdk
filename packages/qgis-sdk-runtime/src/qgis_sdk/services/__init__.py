@@ -26,7 +26,8 @@ from .notifications import (
     NotificationsBase,
 )
 from .processing import Processing, ProviderRegistration
-from .project import Project
+from .project import Project, ProjectChanged, ProjectWatchCanceller
+from .rasters import Rasters
 from .settings import Settings
 from .styles import Styles
 
@@ -62,7 +63,10 @@ __all__ = [
     "Processing",
     "Progress",
     "Project",
+    "ProjectChanged",
+    "ProjectWatchCanceller",
     "ProviderRegistration",
+    "Rasters",
     "Settings",
     "Styles",
     "Ui",

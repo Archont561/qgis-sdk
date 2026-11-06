@@ -38,6 +38,7 @@ from qgis_sdk.services import (
     Processing,
     Progress,
     Project,
+    Rasters,
     Settings,
     Styles,
     Ui,
@@ -59,7 +60,17 @@ T = TypeVar("T")
 #: they reach Qt widgets, the interface or the live project, where a call from
 #: another thread crashes QGIS instead of merely being slow (decision-69).
 GUI_BOUND_CAPABILITIES: Final = frozenset(
-    {"actions", "canvas", "desktop", "files", "layers", "project", "streams", "ui"}
+    {
+        "actions",
+        "canvas",
+        "desktop",
+        "files",
+        "layers",
+        "project",
+        "rasters",
+        "streams",
+        "ui",
+    }
 )
 
 #: ``(context type, capability, thread)`` triples already reported, so one
@@ -213,6 +224,7 @@ class PluginContext(_Context):
         "_network",
         "_processing",
         "_project",
+        "_rasters",
         "_settings",
         "_styles",
         "_ui",
@@ -226,6 +238,7 @@ class PluginContext(_Context):
         "desktop",
         "network",
         "layers",
+        "rasters",
         "features",
         "canvas",
         "project",
@@ -248,6 +261,10 @@ class PluginContext(_Context):
     desktop: Capability[DesktopAccess] = Capability()
     network: Capability[Network] = Capability()
     layers: Capability[Layers] = Capability()
+    #: Raster bands, statistics, point samples and an explicit export (TASK-87):
+    #: the half of a layer a page reads cell by cell rather than feature by
+    #: feature. A host with no ``QgsRasterLayer`` refuses it by name.
+    rasters: Capability[Rasters] = Capability()
     #: Layer data and the expressions that select it (decision-54 point 3): a
     #: layer is a description, a feature is data, and editing is an explicitly
     #: opened session rather than another method here.
@@ -279,6 +296,7 @@ class PluginContext(_Context):
         desktop: DesktopAccess | None = None,
         network: Network | None = None,
         layers: Layers | None = None,
+        rasters: Rasters | None = None,
         features: Features | None = None,
         canvas: Canvas | None = None,
         project: Project | None = None,
@@ -301,6 +319,7 @@ class PluginContext(_Context):
             _desktop=desktop,
             _network=network,
             _layers=layers,
+            _rasters=rasters,
             _features=features,
             _canvas=canvas,
             _project=project,
@@ -360,6 +379,7 @@ class UiContext(_Context):
         "_log",
         "_network",
         "_project",
+        "_rasters",
         "_settings",
         "_streams",
         "_styles",
@@ -377,6 +397,7 @@ class UiContext(_Context):
         "desktop",
         "settings",
         "layers",
+        "rasters",
         "features",
         "canvas",
         "project",
@@ -401,6 +422,9 @@ class UiContext(_Context):
     #: What the catalogue's pickers list and the ``FileInput`` mints through
     #: the plugin's own services, handed to its surfaces.
     layers: Capability[Layers] = Capability()
+    #: The plugin's raster service, shared like ``layers`` so a surface handler
+    #: reads the same cells a page does.
+    rasters: Capability[Rasters] = Capability()
     #: The plugin's feature and expression service, shared like ``layers`` so a
     #: surface handler reads the same data a page does.
     features: Capability[Features] = Capability()
@@ -429,6 +453,7 @@ class UiContext(_Context):
         actions: ViewActions | None = None,
         settings: Settings | None = None,
         layers: Layers | None = None,
+        rasters: Rasters | None = None,
         features: Features | None = None,
         canvas: Canvas | None = None,
         project: Project | None = None,
@@ -454,6 +479,7 @@ class UiContext(_Context):
             _desktop=desktop,
             _settings=settings,
             _layers=layers,
+            _rasters=rasters,
             _features=features,
             _canvas=canvas,
             _project=project,

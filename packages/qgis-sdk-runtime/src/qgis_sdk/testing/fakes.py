@@ -23,11 +23,13 @@ from qgis_sdk.models import (
     AlgorithmRun,
     Catalogue,
     GeometryType,
+    LayerInfo,
     ProviderInfo,
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmRejectedError,
     QgisSdkLayerNotFoundError,
     QgisSdkStyleIncompatibleError,
+    QgisSdkUnsupportedCapabilityError,
     RunResult,
     TypedRun,
     VectorExport,
@@ -43,6 +45,9 @@ from qgis_sdk.services import (
     Notification,
     NotificationsBase,
 )
+
+from .project import FakeProject
+from .rasters import FakeRasters
 
 if TYPE_CHECKING:
     from qgis_sdk.files import FilesService
@@ -241,13 +246,19 @@ class FakeLayers:
     prove the same disposal rules the native adapter must honour.
     """
 
-    def __init__(self, scope: ResourceScope) -> None:
+    def __init__(
+        self, scope: ResourceScope, *, rasters: FakeRasters | None = None
+    ) -> None:
         self._scope = scope
         self._datasets: dict[str, dict[str, object]] = {}
         self._layers: dict[str, VectorLayerInfo] = {}
         self._sources: dict[str, Path] = {}
         self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
         self._selections: dict[str, tuple[int, ...]] = {}
+        #: The sibling raster fake, when the test built one: ``list_layers``
+        #: then answers both kinds and a raster id reaching a vector-only
+        #: method is refused by name, exactly as the native adapter does.
+        self._rasters = rasters
         scope.on_close(self._release)
 
     def register(
@@ -293,14 +304,19 @@ class FakeLayers:
         self._selections[layer_id] = ()
         return info
 
-    def list_layers(self) -> tuple[VectorLayerInfo, ...]:
-        """Return opened layers in the order they were opened."""
+    def list_layers(self) -> tuple[LayerInfo, ...]:
+        """Return every opened layer, of both kinds, in the order opened."""
         self._scope.ensure_open()
-        return tuple(self._layers.values())
+        opened: list[LayerInfo] = list(self._layers.values())
+        if self._rasters is not None:
+            opened.extend(self._rasters.list_layers())
+        return tuple(opened)
 
-    def layer(self, layer_id: str) -> VectorLayerInfo:
-        """Return one opened layer."""
+    def layer(self, layer_id: str) -> LayerInfo:
+        """Return one opened layer, of either kind."""
         self._scope.ensure_open()
+        if layer_id not in self._layers and self._rasters is not None:
+            return self._rasters.raster(layer_id)
         return self._require(layer_id)
 
     def selection(self, layer_id: str) -> tuple[int, ...]:
@@ -351,28 +367,14 @@ class FakeLayers:
         try:
             return self._layers[layer_id]
         except KeyError:
-            raise QgisSdkLayerNotFoundError(layer_id) from None
-
-
-class FakeProject:
-    """A ``Project`` backend that records owned layer membership."""
-
-    def __init__(self, layers: Layers, scope: ResourceScope) -> None:
-        self._layers = layers
-        self._scope = scope
-        self._layer_ids: list[str] = []
-
-    def layer_ids(self) -> tuple[str, ...]:
-        """Return membership in the order layers were added."""
-        self._scope.ensure_open()
-        return tuple(self._layer_ids)
-
-    def add_layer(self, layer_id: str) -> None:
-        """Add an owned layer once; a repeat add is a no-op."""
-        self._scope.ensure_open()
-        self._layers.layer(layer_id)
-        if layer_id not in self._layer_ids:
-            self._layer_ids.append(layer_id)
+            pass
+        if self._rasters is not None and layer_id in self._rasters.opened_layers():
+            raise QgisSdkUnsupportedCapabilityError(
+                layer_id,
+                "this layer is a raster; fields, features, styles and a vector "
+                "export are vector work - read it through ctx.rasters",
+            )
+        raise QgisSdkLayerNotFoundError(layer_id)
 
 
 class FakeSettings:

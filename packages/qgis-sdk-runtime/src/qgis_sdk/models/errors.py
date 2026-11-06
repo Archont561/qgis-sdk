@@ -116,6 +116,50 @@ class QgisSdkThemeNotFoundError(QgisSdkError):
         super().__init__(f"No map theme {theme!r} is available in this project")
 
 
+class QgisSdkRasterBandError(QgisSdkError):
+    """A band number outside the raster's ``1..band_count`` range.
+
+    ``band_count`` travels with the message so a caller that guessed hears what
+    the raster actually has; nothing is read and no zeros are invented.
+    """
+
+    code = "raster_band_out_of_range"
+
+    def __init__(self, layer_id: str, band: int, band_count: int) -> None:
+        self.layer_id = layer_id
+        self.band = band
+        self.band_count = band_count
+        super().__init__(
+            f"Raster {layer_id!r} has {band_count} band(s); band {band} does not exist"
+        )
+
+
+class QgisSdkProjectFileError(QgisSdkError):
+    """A project file could not be read, written or saved.
+
+    ``detail`` is the host's own message when it gave one. A failed write leaves
+    the previous file in place: the project is written to a staged path and
+    replaces its destination only after the writer finished.
+    """
+
+    code = "project_file_error"
+
+    def __init__(self, path: str, detail: str) -> None:
+        self.path = path
+        self.detail = detail
+        super().__init__(f"Project file {path!r}: {detail}")
+
+
+class QgisSdkBookmarkNotFoundError(QgisSdkError):
+    """No bookmark with this name exists in the project."""
+
+    code = "bookmark_not_found"
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"No bookmark {name!r} is available in this project")
+
+
 class QgisSdkExportRefusedError(QgisSdkError):
     """An export cannot start as requested: the destination fails a precondition.
 

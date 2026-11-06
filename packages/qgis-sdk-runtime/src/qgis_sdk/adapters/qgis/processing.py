@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Annotated, Any, get_args, get_origin
 
 from qgis.core import (
+    Qgis,
     QgsApplication,
     QgsFeature,
     QgsFeatureSink,
@@ -47,7 +48,9 @@ from qgis.core import (
     QgsProcessingParameterFeatureSink,
     QgsProcessingParameterField,
     QgsProcessingParameterFile,
+    QgsProcessingParameterMapLayer,
     QgsProcessingParameterNumber,
+    QgsProcessingParameterRasterLayer,
     QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
     QgsProcessingProvider,
@@ -69,6 +72,7 @@ from qgis_sdk.models import (
     ColourParameter,
     FieldParameter,
     FileParameter,
+    LayerParameter,
     MetresParameter,
     RangeParameter,
     parameter_kinds,
@@ -78,6 +82,7 @@ from qgis_sdk.providers import Provider
 from .algorithms import NativeAlgorithms, _processing
 from .layers import NativeLayers
 from .project import NativeProject
+from .rasters import NativeRasters
 
 __all__ = ["NativeProcessing", "NativeProcessingProvider"]
 
@@ -115,11 +120,23 @@ _PARAMETER_CLASSES: dict[str, type] = {
         QgsProcessingParameterEnum,
         QgsProcessingParameterField,
         QgsProcessingParameterFile,
+        QgsProcessingParameterMapLayer,
         QgsProcessingParameterNumber,
+        QgsProcessingParameterRasterLayer,
         QgsProcessingParameterString,
         QgsProcessingParameterVectorLayer,
     )
 }
+
+
+def _rasters_of(bridge: Any) -> Any:
+    """Return the provider's raster service, or refuse a raster input by name."""
+    rasters = getattr(bridge, "rasters", None)
+    if rasters is None:
+        raise QgsProcessingException(
+            "this host has no raster service, so a raster input cannot be read"
+        )
+    return rasters
 
 
 def _marker(annotation: Any, marker_type: type) -> Any:
@@ -134,7 +151,15 @@ def _parameter(kind: str, name: str, annotation: Any = None) -> Any:
     """Build the Processing parameter a declared kind deserves."""
     cls = _PARAMETER_CLASSES[parameter_kinds()[kind].processing]
     if kind == LAYER_PARAMETER:
-        return cls(name, name)
+        # A layer input names its kind (TASK-87): Processing has one parameter
+        # class per kind, so the kind chooses the class rather than a filter
+        # that the toolbox could ignore.
+        wanted = (_marker(annotation, LayerParameter) or LayerParameter()).kind
+        if wanted == "raster":
+            return QgsProcessingParameterRasterLayer(name, name)
+        if wanted == "any":
+            return QgsProcessingParameterMapLayer(name, name)
+        return QgsProcessingParameterVectorLayer(name, name)
     if kind == METRES_PARAMETER:
         metres = _marker(annotation, MetresParameter) or MetresParameter()
         parameter = cls(
@@ -329,11 +354,32 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
             options = get_args(self._description.annotations[name])
             return options[self.parameterAsEnum(parameters, name, context)]
         if kind == LAYER_PARAMETER:
+            # The SDK owns the layers it opened, so the picked layer is
+            # re-opened through the same service the rest of the bridge uses -
+            # the raster service when the input asked for a raster.
+            wanted = (
+                _marker(self._description.annotations[name], LayerParameter)
+                or LayerParameter()
+            ).kind
+            if wanted == "raster":
+                raster = self.parameterAsRasterLayer(parameters, name, context)
+                if raster is None:
+                    raise QgsProcessingException(f"{name} requires a raster layer")
+                return _rasters_of(self._bridge).open_raster(Path(raster.source())).id
+            if wanted == "any":
+                # One parameter class lists both kinds (a MapLayer parameter), so
+                # the picked layer's own type decides which service re-opens it.
+                picked = self.parameterAsMapLayer(parameters, name, context)
+                if picked is None:
+                    raise QgsProcessingException(f"{name} requires a map layer")
+                if picked.type() == Qgis.LayerType.Raster:
+                    return (
+                        _rasters_of(self._bridge).open_raster(Path(picked.source())).id
+                    )
+                return self._bridge.layers.open_vector(Path(picked.source())).id
             layer = self.parameterAsVectorLayer(parameters, name, context)
             if layer is None:
                 raise QgsProcessingException(f"{name} requires a vector layer")
-            # The SDK owns layers it opened, so the picked layer is re-opened
-            # through the same service the rest of the bridge uses.
             return self._bridge.layers.open_vector(Path(layer.source())).id
         if kind == METRES_PARAMETER:
             return self.parameterAsDouble(parameters, name, context)
@@ -385,10 +431,15 @@ class NativeProcessingProvider(QgsProcessingProvider):
         project: NativeProject,
         scope: ResourceScope,
         authority: HostAuthority | None = None,
+        rasters: NativeRasters | None = None,
     ) -> None:
         super().__init__()
         self._provider = provider
         self.layers = layers
+        #: The raster service a raster ``LayerInput`` re-opens through
+        #: (TASK-87). Without one, a raster input on an algorithm refuses by
+        #: name - the dialog would otherwise accept a layer nothing can read.
+        self.rasters = rasters
         # Not ``self.algorithms``: that is ``QgsProcessingProvider.algorithms()``,
         # which the registry calls to enumerate what this provider offers.
         self.algorithm_service = algorithms
@@ -448,12 +499,14 @@ class NativeProcessing:
         project: NativeProject,
         scope: ResourceScope,
         authority: HostAuthority | None = None,
+        rasters: NativeRasters | None = None,
     ) -> None:
         self._layers = layers
         self._algorithms = algorithms
         self._project = project
         self._scope = scope
         self._authority = authority if authority is not None else HostAuthority()
+        self._rasters = rasters
 
     def register_provider(self, provider: Provider) -> NativeProcessingProvider:
         """Advertise ``provider``; ``unregister()`` on the result removes it."""
@@ -465,6 +518,7 @@ class NativeProcessing:
             project=self._project,
             scope=self._scope,
             authority=self._authority,
+            rasters=self._rasters,
         )
 
 
@@ -476,6 +530,7 @@ def register_provider(
     project: NativeProject,
     scope: ResourceScope,
     authority: HostAuthority | None = None,
+    rasters: NativeRasters | None = None,
 ) -> NativeProcessingProvider:
     """Register ``provider`` with QGIS and return the adapter that owns it.
 
@@ -494,6 +549,7 @@ def register_provider(
         project=project,
         scope=scope,
         authority=authority,
+        rasters=rasters,
     )
     if not QgsApplication.processingRegistry().addProvider(bridge):
         raise QgisSdkDeclarationError(

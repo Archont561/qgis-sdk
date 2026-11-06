@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -50,13 +50,25 @@ class ExportPlan:
     overwrite: bool = False
 
 
-def plan_export(destination: Path, *, overwrite: bool) -> ExportPlan:
-    """Validate ``destination`` and return the plan, or refuse with every reason."""
+def plan_export(
+    destination: Path,
+    *,
+    overwrite: bool,
+    drivers: Mapping[str, str] = EXPORT_DRIVERS,
+) -> ExportPlan:
+    """Validate ``destination`` and return the plan, or refuse with every reason.
+
+    ``drivers`` is the suffix-to-driver table the destination is checked
+    against: OGR's for a vector export, GDAL's for a raster one. Everything
+    else - existence, the parent directory, ``overwrite``, staging, the
+    source-safety recheck - is the same policy for both, which is why the table
+    is a parameter rather than a second function.
+    """
     destination = Path(destination)
     reasons: list[str] = []
-    driver = EXPORT_DRIVERS.get(destination.suffix.lower())
+    driver = drivers.get(destination.suffix.lower())
     if driver is None:
-        known = ", ".join(sorted(EXPORT_DRIVERS))
+        known = ", ".join(sorted(drivers))
         reasons.append(
             f"unsupported format {destination.suffix or '(no suffix)'!r}; "
             f"the destination must end in one of {known}"

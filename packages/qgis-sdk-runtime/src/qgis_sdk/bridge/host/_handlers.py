@@ -23,15 +23,18 @@ from qgis_sdk.models import (
     DEFAULT_FEATURE_PAGE,
     AlgorithmInfo,
     CanvasExtent,
+    CanvasPoint,
     FeatureQuery,
     FileRef,
     Geometry,
     NetworkRequest,
+    ProjectChange,
     QgisSdkDecodeError,
     QgisSdkResponseTooLargeError,
     Response,
     RunResult,
     ZoomTarget,
+    layer_info,
 )
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
@@ -43,6 +46,8 @@ from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.network import NetworkTransport
+from qgis_sdk.services.project import Project
+from qgis_sdk.services.rasters import Rasters
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
     from qgis_sdk.bridge.dispatch import Dispatcher, ViewBinding
@@ -90,10 +95,12 @@ def _handlers(
     authority = services.authority
 
     def layers_list(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
-        return _page_of(services.layers.list_layers(), payload)
+        return _page_of(
+            [layer_info(info) for info in services.layers.list_layers()], payload
+        )
 
     def layers_get(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
-        return _plain(services.layers.layer(payload["layer_id"]))
+        return layer_info(services.layers.layer(payload["layer_id"]))
 
     def layers_open_vector(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
         path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
@@ -274,6 +281,148 @@ def _handlers(
     def canvas_capture(binding: ViewBinding, payload: Mapping[str, Any]) -> _Capture:
         return _Capture(_canvas(services), payload["shape"])
 
+    def rasters_open(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _rasters(services).open_raster(path).to_wire()
+
+    def rasters_get(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _rasters(services).raster(payload["layer_id"]).to_wire()
+
+    def rasters_statistics(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return (
+            _rasters(services)
+            .statistics(payload["layer_id"], int(payload["band"]))
+            .to_wire()
+        )
+
+    def rasters_sample(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return (
+            _rasters(services)
+            .sample(
+                payload["layer_id"],
+                CanvasPoint.from_wire(payload["point"]),
+                band=_optional_int(payload.get("band")),
+            )
+            .to_wire()
+        )
+
+    def project_tree(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _project(services).layer_tree().to_wire()
+
+    def project_add_layer(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return (
+            _project(services)
+            .add_layer(payload["layer_id"], group=payload.get("group"))
+            .to_wire()
+        )
+
+    def project_remove_layer(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _project(services).remove_layer(payload["layer_id"]).to_wire()
+
+    def project_move_layer(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return (
+            _project(services)
+            .move_layer(
+                payload["layer_id"],
+                group=payload.get("group"),
+                index=_optional_int(payload.get("index")),
+            )
+            .to_wire()
+        )
+
+    def project_set_visible(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return (
+            _project(services)
+            .set_visible(payload["node_id"], bool(payload["visible"]))
+            .to_wire()
+        )
+
+    def project_crs(binding: ViewBinding, payload: Mapping[str, Any]) -> str | None:
+        return _project(services).crs()
+
+    def project_set_crs(binding: ViewBinding, payload: Mapping[str, Any]) -> str:
+        return _project(services).set_crs(payload["auth_id"])
+
+    def project_variables(binding: ViewBinding, payload: Mapping[str, Any]) -> list:
+        return [entry.to_wire() for entry in _project(services).variables()]
+
+    def project_set_variable(binding: ViewBinding, payload: Mapping[str, Any]) -> list:
+        return [
+            entry.to_wire()
+            for entry in _project(services).set_variable(
+                payload["name"], payload["value"]
+            )
+        ]
+
+    def project_unset_variable(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> list:
+        return [
+            entry.to_wire()
+            for entry in _project(services).unset_variable(payload["name"])
+        ]
+
+    def project_properties(binding: ViewBinding, payload: Mapping[str, Any]) -> list:
+        return [entry.to_wire() for entry in _project(services).custom_properties()]
+
+    def project_set_property(binding: ViewBinding, payload: Mapping[str, Any]) -> list:
+        return [
+            entry.to_wire()
+            for entry in _project(services).set_custom_property(
+                payload["name"], payload["value"]
+            )
+        ]
+
+    def project_unset_property(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> list:
+        return [
+            entry.to_wire()
+            for entry in _project(services).unset_custom_property(payload["name"])
+        ]
+
+    def project_bookmarks(binding: ViewBinding, payload: Mapping[str, Any]) -> list:
+        return [bookmark.to_wire() for bookmark in _project(services).bookmarks()]
+
+    def project_bookmark(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _project(services).bookmark(payload["name"]).to_wire()
+
+    def project_add_bookmark(binding: ViewBinding, payload: Mapping[str, Any]) -> list:
+        return [
+            bookmark.to_wire()
+            for bookmark in _project(services).add_bookmark(
+                payload["name"], CanvasExtent.from_wire(payload["extent"])
+            )
+        ]
+
+    def project_remove_bookmark(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> list:
+        return [
+            bookmark.to_wire()
+            for bookmark in _project(services).remove_bookmark(payload["name"])
+        ]
+
+    def project_read(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _project(services).read(path).to_wire()
+
+    def project_write(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.WRITE)
+        return (
+            _project(services)
+            .write(path, overwrite=bool(payload.get("overwrite", False)))
+            .to_wire()
+        )
+
+    def project_save(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _project(services).save().to_wire()
+
+    def project_changed(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> _WatchProject:
+        return _WatchProject(_project(services))
+
     return {
         "canvas.capture": canvas_capture,
         "canvas.center": canvas_center,
@@ -287,9 +436,34 @@ def _handlers(
         "canvas.zoom_to": canvas_zoom_to,
         "layers.list": layers_list,
         "layers.get": layers_get,
+        "rasters.open": rasters_open,
+        "rasters.get": rasters_get,
+        "rasters.statistics": rasters_statistics,
+        "rasters.sample": rasters_sample,
         "layers.open_vector": layers_open_vector,
         "files.export": files_export,
         "project.layer_ids": project_layer_ids,
+        "project.tree": project_tree,
+        "project.add_layer": project_add_layer,
+        "project.remove_layer": project_remove_layer,
+        "project.move_layer": project_move_layer,
+        "project.set_visible": project_set_visible,
+        "project.crs": project_crs,
+        "project.set_crs": project_set_crs,
+        "project.variables": project_variables,
+        "project.set_variable": project_set_variable,
+        "project.unset_variable": project_unset_variable,
+        "project.properties": project_properties,
+        "project.set_property": project_set_property,
+        "project.unset_property": project_unset_property,
+        "project.bookmarks": project_bookmarks,
+        "project.bookmark": project_bookmark,
+        "project.add_bookmark": project_add_bookmark,
+        "project.remove_bookmark": project_remove_bookmark,
+        "project.read": project_read,
+        "project.write": project_write,
+        "project.save": project_save,
+        "project.changed": project_changed,
         "settings.get": settings_get,
         "notifications.info": notifications_info,
         "styles.apply": styles_apply,
@@ -310,6 +484,47 @@ def _handlers(
         "algorithms.run": algorithms_run,
         "network.fetch": network_fetch,
     }
+
+
+def _rasters(services: HostServices) -> Rasters:
+    if services.rasters is None:
+        raise QgisSdkBridgeError("this host has no raster service configured")
+    return services.rasters
+
+
+def _project(services: HostServices) -> Project:
+    if services.project is None:  # pragma: no cover - a required field
+        raise QgisSdkBridgeError("this host has no project service configured")
+    return services.project
+
+
+class _WatchProject:
+    """The push source behind ``project.changed``.
+
+    The project calls back whenever it changes, and the sink turns each frame
+    into one ``data`` event; the frames are the project's own order, which is
+    the order a page re-reads in. Disposal before the first change cancels the
+    subscription, so a closed page leaves no listener behind.
+    """
+
+    def __init__(self, project: Project) -> None:
+        self._project = project
+        self._cancel: Callable[[], None] | None = None
+        self._done = False
+
+    def start(self, sink: StreamSink) -> None:
+        def deliver(change: ProjectChange) -> None:
+            sink.emit(change.to_wire())
+
+        # The stream does not complete: a page follows the project until it
+        # unsubscribes, so only disposal or an error ends it.
+        self._cancel = self._project.watch_changes(deliver)
+
+    def close(self) -> None:
+        if self._done or self._cancel is None:
+            return
+        self._done = True
+        self._cancel()
 
 
 def _algorithms(services: HostServices) -> Algorithms:

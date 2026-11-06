@@ -27,7 +27,15 @@ from pathlib import Path
 
 from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
-from qgis_sdk.models import VectorExport, VectorLayerInfo, ZoomTarget
+from qgis_sdk.models import (
+    CanvasPoint,
+    RasterLayerInfo,
+    RasterSample,
+    RasterStatistics,
+    VectorExport,
+    VectorLayerInfo,
+    ZoomTarget,
+)
 from qgis_sdk.services import Cancellation, Progress
 
 from .algorithms import buffer_layer
@@ -87,6 +95,32 @@ class LocalGisWorkflow:
         if self.ctx.has("canvas"):
             self.ctx.canvas.zoom_to(ZoomTarget.layer(output.id))
         return output
+
+    def open_raster(self, source: Path) -> RasterLayerInfo:
+        """Open a local raster and present it: a raster is a layer too.
+
+        The layers service lists both kinds and the project holds both, so a
+        raster takes the same path a vector layer does - open, then add - and
+        the answer is a :class:`RasterLayerInfo` with the bands the file
+        declares rather than a vector layer's geometry and fields.
+        """
+        info = self.ctx.rasters.open_raster(Path(source))
+        self.ctx.project.add_layer(info.id)
+        return info
+
+    def sample(self, layer_id: str, point: CanvasPoint) -> RasterSample:
+        """Read every band where the user points.
+
+        The point arrives in whatever CRS the caller's map is in; the service
+        reprojects it and answers where it landed, so the plugin does not have
+        to know the raster's CRS first. ``None`` for a value is a no-data cell
+        or a point outside the raster - never a zero.
+        """
+        return self.ctx.rasters.sample(layer_id, point)
+
+    def band_statistics(self, layer_id: str, band: int = 1) -> RasterStatistics:
+        """What a band holds: minimum, maximum, mean, deviation and the counts."""
+        return self.ctx.rasters.statistics(layer_id, band)
 
     def export(
         self, layer_id: str, destination: Path, *, overwrite: bool = False

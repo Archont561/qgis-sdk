@@ -138,6 +138,74 @@ def native(command: list[str]) -> int:
     return status
 
 
+#: The reference projects' own suites, one run each: the pure target of
+#: ``examples/simple``, its ``qgis`` target, then ``examples/server``. The three
+#: used to be one ``&&`` chain in the Pixi task, which meant a failing pure run
+#: hid whether the native half passed and the job reported "exit code 1" without
+#: naming a test.
+REFERENCE_EXAMPLE_RUNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("simple-pure", ("--project", "examples/simple")),
+    ("simple-qgis", ("--project", "examples/simple", "--target", "qgis")),
+    ("server-pure", ("--project", "examples/server")),
+)
+REFERENCE_EXAMPLE_LOGS = Path("reference-example")
+
+
+def reference_example_command(arguments: tuple[str, ...]) -> list[str]:
+    """The ``qgis-sdk test`` invocation for one reference-project run.
+
+    ``-rfEs`` for the same reason ``NATIVE_COMMAND`` carries it: ``-q`` alone
+    prints no short summary, so the log the annotation reads would name nothing.
+    """
+    return [
+        sys.executable,
+        "-m",
+        "qgis_sdk_tools",
+        "test",
+        *arguments,
+        "-q",
+        "-rfEs",
+    ]
+
+
+def reference_example(command: list[str] | None = None) -> int:
+    """Run each reference project's suite on its own, annotating every failure.
+
+    An explicit ``command`` replaces the three runs, so the helper is testable
+    without a reference project on disk. Every run executes even after one
+    fails - a red pure target used to hide the native result - and the first
+    non-zero status is the one the step reports.
+    """
+    runs = (
+        (("override", tuple(command)),)
+        if command
+        else tuple(
+            (label, tuple(reference_example_command(arguments)))
+            for label, arguments in REFERENCE_EXAMPLE_RUNS
+        )
+    )
+    status = 0
+    REFERENCE_EXAMPLE_LOGS.mkdir(parents=True, exist_ok=True)
+    for label, run in runs:
+        log = REFERENCE_EXAMPLE_LOGS / f"{label}.log"
+        code = run_logged(list(run), log)
+        if code == 0:
+            continue
+        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+        # The tail is the last few tracebacks, so the summary is what names them.
+        named = failures(text)
+        if named:
+            annotation(
+                f"reference example: {label}: {len(named)} failed", "\n".join(named)
+            )
+        annotation(
+            f"reference example: {label}: pytest",
+            "\n".join(text.splitlines()[-80:]),
+        )
+        status = status or code
+    return status
+
+
 def lts_command(module: str) -> list[str]:
     """The pytest command for one LTS module, run on its own.
 
@@ -485,10 +553,12 @@ def main(argv: list[str] | None = None) -> int:
     bun = commands.add_parser("report-bun")
     bun.add_argument("log", type=Path)
     bun.add_argument("--title", required=True)
+    reference = commands.add_parser("reference-example")
+    reference.add_argument("command", nargs=argparse.REMAINDER)
     commands.add_parser("report-steps")
     commands.add_parser("bun-ui")
     args = parser.parse_args(argv)
-    if args.action in ("run-log", "native", "lts"):
+    if args.action in ("run-log", "native", "lts", "reference-example"):
         command = args.command
         if command and command[0] == "--":
             command = command[1:]
@@ -496,6 +566,8 @@ def main(argv: list[str] | None = None) -> int:
             return native(command or NATIVE_COMMAND)
         if args.action == "lts":
             return lts(command)
+        if args.action == "reference-example":
+            return reference_example(command)
         if not command:
             parser.error("run-log requires a command after --")
         return run_logged(command, args.log)

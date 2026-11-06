@@ -35,9 +35,12 @@ from types import MappingProxyType
 from typing import Annotated, Any
 
 from .files import FileRef
+from .layers import LayerKind
 
 __all__ = [
     "COLOUR_PATTERN",
+    "LAYER_KINDS_FOR_INPUT",
+    "AnyLayerInput",
     "Colour",
     "ColourParameter",
     "CrsInput",
@@ -55,16 +58,39 @@ __all__ = [
     "ParameterKind",
     "Range",
     "RangeParameter",
+    "RasterInput",
     "parameter_kinds",
 ]
 
 #: ``#RRGGBB`` or ``#RRGGBBAA``, the one colour spelling every host reads back.
 COLOUR_PATTERN = re.compile(r"\A#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\Z")
 
+#: The kinds a :class:`LayerParameter` may name. ``any`` is the picker that
+#: lists both; it is not a layer kind, so it is spelled here and not in
+#: :data:`qgis_sdk.models.layers.LAYER_KIND_NAMES`.
+LAYER_KINDS_FOR_INPUT: tuple[str, ...] = ("vector", "raster", "any")
+
 
 @dataclass(frozen=True, slots=True)
 class LayerParameter:
-    """The input receives a vector layer chosen by the user."""
+    """The input receives a layer chosen by the user, of one kind.
+
+    ``kind`` narrows what the picker offers and what the host accepts: the
+    default ``"vector"`` keeps every existing declaration's meaning, ``"raster"``
+    is the raster-only picker TASK-87 adds, and ``"any"`` lists both. The kind
+    travels on the wire as ``layer_kind`` so a page renders the same control the
+    native form does, and the host refuses a value of the wrong kind by name
+    rather than letting the handler discover it.
+    """
+
+    kind: LayerKind = "vector"
+
+    def __post_init__(self) -> None:
+        if self.kind not in LAYER_KINDS_FOR_INPUT:
+            raise ValueError(
+                f"a layer input is {', '.join(LAYER_KINDS_FOR_INPUT)}; "
+                f"not {self.kind!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +171,13 @@ class ColourParameter:
 LayerInput = Annotated[str, LayerParameter()]
 """A vector layer id the host fills from a layer picker."""
 
+
+RasterInput = Annotated[str, LayerParameter(kind="raster")]
+"""A raster layer id the host fills from a raster-only picker (TASK-87)."""
+
+AnyLayerInput = Annotated[str, LayerParameter(kind="any")]
+"""A layer id of either kind: one picker lists vectors and rasters together."""
+
 CrsInput = Annotated[str, CrsParameter()]
 """An authority code (``EPSG:3857``) the host fills from a CRS picker."""
 
@@ -212,6 +245,8 @@ class ParameterKind:
             payload["step"] = marker.step
         if isinstance(marker, ColourParameter) and not marker.alpha:
             payload["alpha"] = False
+        if isinstance(marker, LayerParameter) and marker.kind != "vector":
+            payload["layer_kind"] = marker.kind
         return payload
 
 

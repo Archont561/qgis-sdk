@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:73e9a9af19011512deb933358c8cfa673871210417c0fdd69895807ee4e11b7e";
+export const HOST_FINGERPRINT = "sha256:3872588815ca6f58719e8ccea633466a998f7e60908e591751428756d213f97a";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -41,7 +41,32 @@ export const HOST_OPERATIONS = [
 	"layers.open_vector",
 	"network.fetch",
 	"notifications.info",
+	"project.add_bookmark",
+	"project.add_layer",
+	"project.bookmark",
+	"project.bookmarks",
+	"project.changed",
+	"project.crs",
 	"project.layer_ids",
+	"project.move_layer",
+	"project.properties",
+	"project.read",
+	"project.remove_bookmark",
+	"project.remove_layer",
+	"project.save",
+	"project.set_crs",
+	"project.set_property",
+	"project.set_variable",
+	"project.set_visible",
+	"project.tree",
+	"project.unset_property",
+	"project.unset_variable",
+	"project.variables",
+	"project.write",
+	"rasters.get",
+	"rasters.open",
+	"rasters.sample",
+	"rasters.statistics",
 	"settings.get",
 	"styles.apply",
 ] as const;
@@ -152,6 +177,11 @@ export interface AlgorithmSummary {
 	readonly provider: string;
 }
 
+export interface BandRequest {
+	readonly band: number;
+	readonly layer_id: string;
+}
+
 export interface BlobChunk {
 	readonly checksum: string;
 	readonly data_base64: string;
@@ -175,6 +205,11 @@ export interface BlobRequest {
 	readonly blob: BlobRef;
 	readonly length?: number;
 	readonly offset?: number;
+}
+
+export interface Bookmark {
+	readonly extent: CanvasExtent;
+	readonly name: string;
 }
 
 export interface CanvasCenterRequest {
@@ -365,14 +400,26 @@ export interface IdPage {
 	readonly truncated: boolean;
 }
 
+export interface LayerNode {
+	readonly id: string;
+	readonly kind: "layer" | "group";
+	readonly name: string;
+	readonly parent: string | null;
+	readonly visible: boolean;
+}
+
 export interface LayerPage {
-	readonly items: readonly VectorLayerInfo[];
+	readonly items: readonly (VectorLayerInfo | RasterLayerInfo)[];
 	readonly next_cursor?: string;
 	readonly truncated: boolean;
 }
 
 export interface LayerRequest {
 	readonly layer_id: string;
+}
+
+export interface LayerTree {
+	readonly nodes: readonly LayerNode[];
 }
 
 export interface MapThemes {
@@ -391,6 +438,10 @@ export interface NetworkFetchData {
 
 export interface NotificationsInfoRequest {
 	readonly message: string;
+}
+
+export interface OpenRasterRequest {
+	readonly file: FileRef;
 }
 
 export interface OpenVectorRequest {
@@ -427,6 +478,103 @@ export interface ParameterInfo {
 	readonly required: boolean;
 }
 
+export interface ProjectAdd_bookmarkRequest {
+	readonly extent: CanvasExtent;
+	readonly name: string;
+}
+
+export interface ProjectAdd_layerRequest {
+	readonly group?: string;
+	readonly layer_id: string;
+}
+
+export interface ProjectBookmarkRequest {
+	readonly name: string;
+}
+
+export interface ProjectBookmarksRequest {
+	readonly [key: string]: never;
+}
+
+export interface ProjectChange {
+	readonly kind: "crs" | "layers" | "tree" | "variables" | "properties" | "bookmarks";
+	readonly layer_ids?: readonly string[];
+}
+
+export interface ProjectChangedRequest {
+	readonly [key: string]: never;
+}
+
+export interface ProjectCrsRequest {
+	readonly [key: string]: never;
+}
+
+export interface ProjectEntry {
+	readonly key: string;
+	readonly value: string;
+}
+
+export interface ProjectFile {
+	readonly path: string;
+}
+
+export interface ProjectMove_layerRequest {
+	readonly group?: string;
+	readonly index?: number;
+	readonly layer_id: string;
+}
+
+export interface ProjectPropertiesRequest {
+	readonly [key: string]: never;
+}
+
+export interface ProjectRemove_bookmarkRequest {
+	readonly name: string;
+}
+
+export interface ProjectRemove_layerRequest {
+	readonly layer_id: string;
+}
+
+export interface ProjectSaveRequest {
+	readonly [key: string]: never;
+}
+
+export interface ProjectSet_crsRequest {
+	readonly auth_id: string;
+}
+
+export interface ProjectSet_propertyRequest {
+	readonly name: string;
+	readonly value: string;
+}
+
+export interface ProjectSet_variableRequest {
+	readonly name: string;
+	readonly value: string;
+}
+
+export interface ProjectSet_visibleRequest {
+	readonly node_id: string;
+	readonly visible: boolean;
+}
+
+export interface ProjectTreeRequest {
+	readonly [key: string]: never;
+}
+
+export interface ProjectUnset_propertyRequest {
+	readonly name: string;
+}
+
+export interface ProjectUnset_variableRequest {
+	readonly name: string;
+}
+
+export interface ProjectVariablesRequest {
+	readonly [key: string]: never;
+}
+
 export interface ProviderInfo {
 	readonly id: string;
 	readonly label: string;
@@ -437,6 +585,41 @@ export interface ProviderPage {
 	readonly items: readonly ProviderInfo[];
 	readonly next_cursor?: string;
 	readonly truncated: boolean;
+}
+
+export interface RasterLayerInfo {
+	readonly band_count: number;
+	readonly crs: string | null;
+	readonly data_types: readonly string[];
+	readonly extent: CanvasExtent;
+	readonly id: string;
+	readonly kind: "raster";
+	readonly name: string;
+	readonly no_data: readonly (number | null)[];
+	readonly resolution: readonly number[];
+}
+
+export interface RasterRequest {
+	readonly layer_id: string;
+}
+
+export interface RasterSample {
+	readonly point: CanvasPoint;
+	readonly values: readonly (number | null)[];
+}
+
+export interface RasterStatistics {
+	readonly band: number;
+	readonly maximum: number | null;
+	readonly mean: number | null;
+	readonly minimum: number | null;
+	readonly no_data_count: number;
+	readonly std_dev: number | null;
+	readonly valid_count: number;
+}
+
+export interface ReadProjectRequest {
+	readonly file: FileRef;
 }
 
 export interface RunAlgorithmRequest {
@@ -455,6 +638,12 @@ export interface RunOutput {
 export interface RunResult {
 	readonly algorithm: string;
 	readonly outputs: readonly RunOutput[];
+}
+
+export interface SampleRequest {
+	readonly band?: number;
+	readonly layer_id: string;
+	readonly point: CanvasPoint;
 }
 
 export interface SettingsGetRequest {
@@ -476,7 +665,13 @@ export interface VectorLayerInfo {
 	readonly field_names: readonly string[];
 	readonly geometry_type: "point" | "line" | "polygon" | "none";
 	readonly id: string;
+	readonly kind: "vector";
 	readonly name: string;
+}
+
+export interface WriteProjectRequest {
+	readonly file: FileRef;
+	readonly overwrite?: boolean;
 }
 
 export interface ZoomRequest {
@@ -604,6 +799,20 @@ export function AlgorithmSummary(value: unknown, strict = false): value is Algor
 	return true;
 }
 
+export function BandRequest(value: unknown, strict = false): value is BandRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("band" in value)) return false;
+	if (value["band"] !== undefined && !((isSafeInteger(value["band"]) && value["band"] >= 1))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["band", "layer_id"])) return false;
+	return true;
+}
+
 export function BlobChunk(value: unknown, strict = false): value is BlobChunk {
 	if (!isRecord(value)) return false;
 	if (!("offset" in value)) return false;
@@ -680,6 +889,20 @@ export function BlobRequest(value: unknown, strict = false): value is BlobReques
 		return false;
 	}
 	if (strict && !hasOnly(value, ["blob", "length", "offset"])) return false;
+	return true;
+}
+
+export function Bookmark(value: unknown, strict = false): value is Bookmark {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("extent" in value)) return false;
+	if (value["extent"] !== undefined && !(CanvasExtent(value["extent"], strict))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["extent", "name"])) return false;
 	return true;
 }
 
@@ -1178,11 +1401,37 @@ export function IdPage(value: unknown, strict = false): value is IdPage {
 	return true;
 }
 
+export function LayerNode(value: unknown, strict = false): value is LayerNode {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("visible" in value)) return false;
+	if (!("parent" in value)) return false;
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "layer" || value["kind"] === "group"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["parent"] !== undefined && !((typeof value["parent"] === "string" || value["parent"] === null))) {
+		return false;
+	}
+	if (value["visible"] !== undefined && !(typeof value["visible"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["id", "kind", "name", "parent", "visible"])) return false;
+	return true;
+}
+
 export function LayerPage(value: unknown, strict = false): value is LayerPage {
 	if (!isRecord(value)) return false;
 	if (!("items" in value)) return false;
 	if (!("truncated" in value)) return false;
-	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => VectorLayerInfo(item, strict))))) {
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => (VectorLayerInfo(item, strict) || RasterLayerInfo(item, strict)))))) {
 		return false;
 	}
 	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
@@ -1202,6 +1451,16 @@ export function LayerRequest(value: unknown, strict = false): value is LayerRequ
 		return false;
 	}
 	if (strict && !hasOnly(value, ["layer_id"])) return false;
+	return true;
+}
+
+export function LayerTree(value: unknown, strict = false): value is LayerTree {
+	if (!isRecord(value)) return false;
+	if (!("nodes" in value)) return false;
+	if (value["nodes"] !== undefined && !((Array.isArray(value["nodes"]) && value["nodes"].every((item) => LayerNode(item, strict))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["nodes"])) return false;
 	return true;
 }
 
@@ -1255,6 +1514,16 @@ export function NotificationsInfoRequest(value: unknown, strict = false): value 
 		return false;
 	}
 	if (strict && !hasOnly(value, ["message"])) return false;
+	return true;
+}
+
+export function OpenRasterRequest(value: unknown, strict = false): value is OpenRasterRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
 	return true;
 }
 
@@ -1368,6 +1637,230 @@ export function ParameterInfo(value: unknown, strict = false): value is Paramete
 	return true;
 }
 
+export function ProjectAdd_bookmarkRequest(value: unknown, strict = false): value is ProjectAdd_bookmarkRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("extent" in value)) return false;
+	if (value["extent"] !== undefined && !(CanvasExtent(value["extent"], strict))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["extent", "name"])) return false;
+	return true;
+}
+
+export function ProjectAdd_layerRequest(value: unknown, strict = false): value is ProjectAdd_layerRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["group"] !== undefined && !(typeof value["group"] === "string")) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["group", "layer_id"])) return false;
+	return true;
+}
+
+export function ProjectBookmarkRequest(value: unknown, strict = false): value is ProjectBookmarkRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name"])) return false;
+	return true;
+}
+
+export function ProjectBookmarksRequest(value: unknown, strict = false): value is ProjectBookmarksRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function ProjectChange(value: unknown, strict = false): value is ProjectChange {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (value["kind"] !== undefined && !((value["kind"] === "crs" || value["kind"] === "layers" || value["kind"] === "tree" || value["kind"] === "variables" || value["kind"] === "properties" || value["kind"] === "bookmarks"))) {
+		return false;
+	}
+	if (value["layer_ids"] !== undefined && !((Array.isArray(value["layer_ids"]) && value["layer_ids"].every((item) => typeof item === "string")))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["kind", "layer_ids"])) return false;
+	return true;
+}
+
+export function ProjectChangedRequest(value: unknown, strict = false): value is ProjectChangedRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function ProjectCrsRequest(value: unknown, strict = false): value is ProjectCrsRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function ProjectEntry(value: unknown, strict = false): value is ProjectEntry {
+	if (!isRecord(value)) return false;
+	if (!("key" in value)) return false;
+	if (!("value" in value)) return false;
+	if (value["key"] !== undefined && !(typeof value["key"] === "string")) {
+		return false;
+	}
+	if (value["value"] !== undefined && !(typeof value["value"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["key", "value"])) return false;
+	return true;
+}
+
+export function ProjectFile(value: unknown, strict = false): value is ProjectFile {
+	if (!isRecord(value)) return false;
+	if (!("path" in value)) return false;
+	if (value["path"] !== undefined && !(typeof value["path"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["path"])) return false;
+	return true;
+}
+
+export function ProjectMove_layerRequest(value: unknown, strict = false): value is ProjectMove_layerRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["group"] !== undefined && !(typeof value["group"] === "string")) {
+		return false;
+	}
+	if (value["index"] !== undefined && !((isSafeInteger(value["index"]) && value["index"] >= 0))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["group", "index", "layer_id"])) return false;
+	return true;
+}
+
+export function ProjectPropertiesRequest(value: unknown, strict = false): value is ProjectPropertiesRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function ProjectRemove_bookmarkRequest(value: unknown, strict = false): value is ProjectRemove_bookmarkRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name"])) return false;
+	return true;
+}
+
+export function ProjectRemove_layerRequest(value: unknown, strict = false): value is ProjectRemove_layerRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id"])) return false;
+	return true;
+}
+
+export function ProjectSaveRequest(value: unknown, strict = false): value is ProjectSaveRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function ProjectSet_crsRequest(value: unknown, strict = false): value is ProjectSet_crsRequest {
+	if (!isRecord(value)) return false;
+	if (!("auth_id" in value)) return false;
+	if (value["auth_id"] !== undefined && !(typeof value["auth_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["auth_id"])) return false;
+	return true;
+}
+
+export function ProjectSet_propertyRequest(value: unknown, strict = false): value is ProjectSet_propertyRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("value" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["value"] !== undefined && !(typeof value["value"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name", "value"])) return false;
+	return true;
+}
+
+export function ProjectSet_variableRequest(value: unknown, strict = false): value is ProjectSet_variableRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("value" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["value"] !== undefined && !(typeof value["value"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name", "value"])) return false;
+	return true;
+}
+
+export function ProjectSet_visibleRequest(value: unknown, strict = false): value is ProjectSet_visibleRequest {
+	if (!isRecord(value)) return false;
+	if (!("node_id" in value)) return false;
+	if (!("visible" in value)) return false;
+	if (value["node_id"] !== undefined && !(typeof value["node_id"] === "string")) {
+		return false;
+	}
+	if (value["visible"] !== undefined && !(typeof value["visible"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["node_id", "visible"])) return false;
+	return true;
+}
+
+export function ProjectTreeRequest(value: unknown, strict = false): value is ProjectTreeRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function ProjectUnset_propertyRequest(value: unknown, strict = false): value is ProjectUnset_propertyRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name"])) return false;
+	return true;
+}
+
+export function ProjectUnset_variableRequest(value: unknown, strict = false): value is ProjectUnset_variableRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name"])) return false;
+	return true;
+}
+
+export function ProjectVariablesRequest(value: unknown, strict = false): value is ProjectVariablesRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
 export function ProviderInfo(value: unknown, strict = false): value is ProviderInfo {
 	if (!isRecord(value)) return false;
 	if (!("id" in value)) return false;
@@ -1400,6 +1893,116 @@ export function ProviderPage(value: unknown, strict = false): value is ProviderP
 		return false;
 	}
 	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function RasterLayerInfo(value: unknown, strict = false): value is RasterLayerInfo {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("band_count" in value)) return false;
+	if (!("data_types" in value)) return false;
+	if (!("no_data" in value)) return false;
+	if (!("extent" in value)) return false;
+	if (!("resolution" in value)) return false;
+	if (!("crs" in value)) return false;
+	if (value["band_count"] !== undefined && !((isSafeInteger(value["band_count"]) && value["band_count"] >= 1))) {
+		return false;
+	}
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["data_types"] !== undefined && !((Array.isArray(value["data_types"]) && value["data_types"].every((item) => typeof item === "string")))) {
+		return false;
+	}
+	if (value["extent"] !== undefined && !(CanvasExtent(value["extent"], strict))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "raster"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["no_data"] !== undefined && !((Array.isArray(value["no_data"]) && value["no_data"].every((item) => (typeof item === "number" && Number.isFinite(item) || item === null))))) {
+		return false;
+	}
+	if (value["resolution"] !== undefined && !((Array.isArray(value["resolution"]) && value["resolution"].every((item) => typeof item === "number" && Number.isFinite(item))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["band_count", "crs", "data_types", "extent", "id", "kind", "name", "no_data", "resolution"])) return false;
+	return true;
+}
+
+export function RasterRequest(value: unknown, strict = false): value is RasterRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id"])) return false;
+	return true;
+}
+
+export function RasterSample(value: unknown, strict = false): value is RasterSample {
+	if (!isRecord(value)) return false;
+	if (!("point" in value)) return false;
+	if (!("values" in value)) return false;
+	if (value["point"] !== undefined && !(CanvasPoint(value["point"], strict))) {
+		return false;
+	}
+	if (value["values"] !== undefined && !((Array.isArray(value["values"]) && value["values"].every((item) => (typeof item === "number" && Number.isFinite(item) || item === null))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["point", "values"])) return false;
+	return true;
+}
+
+export function RasterStatistics(value: unknown, strict = false): value is RasterStatistics {
+	if (!isRecord(value)) return false;
+	if (!("band" in value)) return false;
+	if (!("minimum" in value)) return false;
+	if (!("maximum" in value)) return false;
+	if (!("mean" in value)) return false;
+	if (!("std_dev" in value)) return false;
+	if (!("valid_count" in value)) return false;
+	if (!("no_data_count" in value)) return false;
+	if (value["band"] !== undefined && !((isSafeInteger(value["band"]) && value["band"] >= 1))) {
+		return false;
+	}
+	if (value["maximum"] !== undefined && !((typeof value["maximum"] === "number" && Number.isFinite(value["maximum"]) || value["maximum"] === null))) {
+		return false;
+	}
+	if (value["mean"] !== undefined && !((typeof value["mean"] === "number" && Number.isFinite(value["mean"]) || value["mean"] === null))) {
+		return false;
+	}
+	if (value["minimum"] !== undefined && !((typeof value["minimum"] === "number" && Number.isFinite(value["minimum"]) || value["minimum"] === null))) {
+		return false;
+	}
+	if (value["no_data_count"] !== undefined && !((isSafeInteger(value["no_data_count"]) && value["no_data_count"] >= 0))) {
+		return false;
+	}
+	if (value["std_dev"] !== undefined && !((typeof value["std_dev"] === "number" && Number.isFinite(value["std_dev"]) || value["std_dev"] === null))) {
+		return false;
+	}
+	if (value["valid_count"] !== undefined && !((isSafeInteger(value["valid_count"]) && value["valid_count"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["band", "maximum", "mean", "minimum", "no_data_count", "std_dev", "valid_count"])) return false;
+	return true;
+}
+
+export function ReadProjectRequest(value: unknown, strict = false): value is ReadProjectRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
 	return true;
 }
 
@@ -1454,6 +2057,23 @@ export function RunResult(value: unknown, strict = false): value is RunResult {
 	return true;
 }
 
+export function SampleRequest(value: unknown, strict = false): value is SampleRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("point" in value)) return false;
+	if (value["band"] !== undefined && !((isSafeInteger(value["band"]) && value["band"] >= 1))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (value["point"] !== undefined && !(CanvasPoint(value["point"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["band", "layer_id", "point"])) return false;
+	return true;
+}
+
 export function SettingsGetRequest(value: unknown, strict = false): value is SettingsGetRequest {
 	if (!isRecord(value)) return false;
 	if (!("key" in value)) return false;
@@ -1493,6 +2113,7 @@ export function ThemeRequest(value: unknown, strict = false): value is ThemeRequ
 
 export function VectorLayerInfo(value: unknown, strict = false): value is VectorLayerInfo {
 	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
 	if (!("id" in value)) return false;
 	if (!("name" in value)) return false;
 	if (!("geometry_type" in value)) return false;
@@ -1510,10 +2131,26 @@ export function VectorLayerInfo(value: unknown, strict = false): value is Vector
 	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
 		return false;
 	}
+	if (value["kind"] !== undefined && !((value["kind"] === "vector"))) {
+		return false;
+	}
 	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
 		return false;
 	}
-	if (strict && !hasOnly(value, ["crs", "field_names", "geometry_type", "id", "name"])) return false;
+	if (strict && !hasOnly(value, ["crs", "field_names", "geometry_type", "id", "kind", "name"])) return false;
+	return true;
+}
+
+export function WriteProjectRequest(value: unknown, strict = false): value is WriteProjectRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (value["overwrite"] !== undefined && !(typeof value["overwrite"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file", "overwrite"])) return false;
 	return true;
 }
 
@@ -1576,6 +2213,16 @@ export function NetworkFetchEvent(value: unknown, strict = false): value is Netw
 	return false;
 }
 
+/** One event of `project.changed`, narrowed by its kind. */
+export type ProjectChangedEvent =
+	| { readonly kind: "data"; readonly payload: ProjectChange };
+
+export function ProjectChangedEvent(value: unknown, strict = false): value is ProjectChangedEvent {
+	if (!isRecord(value)) return false;
+	if (value.kind === "data") return ProjectChange(value.payload, strict);
+	return false;
+}
+
 /** Every operation this surface declares, as callable methods. */
 export interface HostOperations {
 	readonly algorithms: {
@@ -1619,7 +2266,7 @@ export interface HostOperations {
 		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
 	};
 	readonly layers: {
-		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
+		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo | RasterLayerInfo>;
 		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<LayerPage>;
 		readonly open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
 	};
@@ -1630,7 +2277,34 @@ export interface HostOperations {
 		readonly info: (input: NotificationsInfoRequest, options?: HostInvokeOptions) => Promise<null>;
 	};
 	readonly project: {
+		readonly add_bookmark: (input: ProjectAdd_bookmarkRequest, options?: HostInvokeOptions) => Promise<readonly Bookmark[]>;
+		readonly add_layer: (input: ProjectAdd_layerRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
+		readonly bookmark: (input: ProjectBookmarkRequest, options?: HostInvokeOptions) => Promise<Bookmark>;
+		readonly bookmarks: (input?: ProjectBookmarksRequest, options?: HostInvokeOptions) => Promise<readonly Bookmark[]>;
+		readonly changed: (input: ProjectChangedRequest, handlers: HostStreamHandlers<ProjectChangedEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
+		readonly crs: (input?: ProjectCrsRequest, options?: HostInvokeOptions) => Promise<string | null>;
 		readonly layer_ids: (input?: PageRequest, options?: HostInvokeOptions) => Promise<IdPage>;
+		readonly move_layer: (input: ProjectMove_layerRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
+		readonly properties: (input?: ProjectPropertiesRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly read: (input: ReadProjectRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
+		readonly remove_bookmark: (input: ProjectRemove_bookmarkRequest, options?: HostInvokeOptions) => Promise<readonly Bookmark[]>;
+		readonly remove_layer: (input: ProjectRemove_layerRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
+		readonly save: (input?: ProjectSaveRequest, options?: HostInvokeOptions) => Promise<ProjectFile>;
+		readonly set_crs: (input: ProjectSet_crsRequest, options?: HostInvokeOptions) => Promise<string>;
+		readonly set_property: (input: ProjectSet_propertyRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly set_variable: (input: ProjectSet_variableRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly set_visible: (input: ProjectSet_visibleRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
+		readonly tree: (input?: ProjectTreeRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
+		readonly unset_property: (input: ProjectUnset_propertyRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly unset_variable: (input: ProjectUnset_variableRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly variables: (input?: ProjectVariablesRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly write: (input: WriteProjectRequest, options?: HostInvokeOptions) => Promise<ProjectFile>;
+	};
+	readonly rasters: {
+		readonly get: (input: RasterRequest, options?: HostInvokeOptions) => Promise<RasterLayerInfo>;
+		readonly open: (input: OpenRasterRequest, options?: HostInvokeOptions) => Promise<RasterLayerInfo>;
+		readonly sample: (input: SampleRequest, options?: HostInvokeOptions) => Promise<RasterSample>;
+		readonly statistics: (input: BandRequest, options?: HostInvokeOptions) => Promise<RasterStatistics>;
 	};
 	readonly settings: {
 		readonly get: (input: SettingsGetRequest, options?: HostInvokeOptions) => Promise<string | null>;
@@ -1699,7 +2373,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<string | null>(
 					client, "canvas.crs", input, options,
 					CanvasCrsRequest,
-					(candidate: unknown) => (typeof candidate === "string" || candidate === null),
+					(candidate: unknown, strict = false) => (typeof candidate === "string" || candidate === null),
 				),
 			extent: (input?: CanvasExtentRequest, options?: HostInvokeOptions) =>
 				call<CanvasExtent>(
@@ -1717,13 +2391,13 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "canvas.refresh", input, options,
 					CanvasRefreshRequest,
-					(candidate: unknown) => candidate === null,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 			scale: (input?: CanvasScaleRequest, options?: HostInvokeOptions) =>
 				call<number>(
 					client, "canvas.scale", input, options,
 					CanvasScaleRequest,
-					(candidate: unknown) => typeof candidate === "number" && Number.isFinite(candidate),
+					(candidate: unknown, strict = false) => typeof candidate === "number" && Number.isFinite(candidate),
 				),
 			themes: (input?: CanvasThemesRequest, options?: HostInvokeOptions) =>
 				call<MapThemes>(
@@ -1814,10 +2488,10 @@ export function createHost(client: HostClientLike): HostOperations {
 		},
 		layers: {
 			get: (input: LayerRequest, options?: HostInvokeOptions) =>
-				call<VectorLayerInfo>(
+				call<VectorLayerInfo | RasterLayerInfo>(
 					client, "layers.get", input, options,
 					LayerRequest,
-					VectorLayerInfo,
+					(candidate: unknown, strict = false) => (VectorLayerInfo(candidate, strict) || RasterLayerInfo(candidate, strict)),
 				),
 			list: (input?: PageRequest, options?: HostInvokeOptions) =>
 				call<LayerPage>(
@@ -1845,15 +2519,167 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "notifications.info", input, options,
 					NotificationsInfoRequest,
-					(candidate: unknown) => candidate === null,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 		},
 		project: {
+			add_bookmark: (input: ProjectAdd_bookmarkRequest, options?: HostInvokeOptions) =>
+				call<readonly Bookmark[]>(
+					client, "project.add_bookmark", input, options,
+					ProjectAdd_bookmarkRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => Bookmark(item, strict))),
+				),
+			add_layer: (input: ProjectAdd_layerRequest, options?: HostInvokeOptions) =>
+				call<LayerTree>(
+					client, "project.add_layer", input, options,
+					ProjectAdd_layerRequest,
+					LayerTree,
+				),
+			bookmark: (input: ProjectBookmarkRequest, options?: HostInvokeOptions) =>
+				call<Bookmark>(
+					client, "project.bookmark", input, options,
+					ProjectBookmarkRequest,
+					Bookmark,
+				),
+			bookmarks: (input?: ProjectBookmarksRequest, options?: HostInvokeOptions) =>
+				call<readonly Bookmark[]>(
+					client, "project.bookmarks", input, options,
+					ProjectBookmarksRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => Bookmark(item, strict))),
+				),
+			changed: (input: ProjectChangedRequest, handlers: HostStreamHandlers<ProjectChangedEvent>, options?: HostInvokeOptions) =>
+				open<ProjectChangedEvent>(
+					client, "project.changed", input, handlers, options,
+					ProjectChangedRequest,
+					ProjectChangedEvent,
+				),
+			crs: (input?: ProjectCrsRequest, options?: HostInvokeOptions) =>
+				call<string | null>(
+					client, "project.crs", input, options,
+					ProjectCrsRequest,
+					(candidate: unknown, strict = false) => (typeof candidate === "string" || candidate === null),
+				),
 			layer_ids: (input?: PageRequest, options?: HostInvokeOptions) =>
 				call<IdPage>(
 					client, "project.layer_ids", input, options,
 					PageRequest,
 					IdPage,
+				),
+			move_layer: (input: ProjectMove_layerRequest, options?: HostInvokeOptions) =>
+				call<LayerTree>(
+					client, "project.move_layer", input, options,
+					ProjectMove_layerRequest,
+					LayerTree,
+				),
+			properties: (input?: ProjectPropertiesRequest, options?: HostInvokeOptions) =>
+				call<readonly ProjectEntry[]>(
+					client, "project.properties", input, options,
+					ProjectPropertiesRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
+				),
+			read: (input: ReadProjectRequest, options?: HostInvokeOptions) =>
+				call<LayerTree>(
+					client, "project.read", input, options,
+					ReadProjectRequest,
+					LayerTree,
+				),
+			remove_bookmark: (input: ProjectRemove_bookmarkRequest, options?: HostInvokeOptions) =>
+				call<readonly Bookmark[]>(
+					client, "project.remove_bookmark", input, options,
+					ProjectRemove_bookmarkRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => Bookmark(item, strict))),
+				),
+			remove_layer: (input: ProjectRemove_layerRequest, options?: HostInvokeOptions) =>
+				call<LayerTree>(
+					client, "project.remove_layer", input, options,
+					ProjectRemove_layerRequest,
+					LayerTree,
+				),
+			save: (input?: ProjectSaveRequest, options?: HostInvokeOptions) =>
+				call<ProjectFile>(
+					client, "project.save", input, options,
+					ProjectSaveRequest,
+					ProjectFile,
+				),
+			set_crs: (input: ProjectSet_crsRequest, options?: HostInvokeOptions) =>
+				call<string>(
+					client, "project.set_crs", input, options,
+					ProjectSet_crsRequest,
+					(candidate: unknown, strict = false) => typeof candidate === "string",
+				),
+			set_property: (input: ProjectSet_propertyRequest, options?: HostInvokeOptions) =>
+				call<readonly ProjectEntry[]>(
+					client, "project.set_property", input, options,
+					ProjectSet_propertyRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
+				),
+			set_variable: (input: ProjectSet_variableRequest, options?: HostInvokeOptions) =>
+				call<readonly ProjectEntry[]>(
+					client, "project.set_variable", input, options,
+					ProjectSet_variableRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
+				),
+			set_visible: (input: ProjectSet_visibleRequest, options?: HostInvokeOptions) =>
+				call<LayerTree>(
+					client, "project.set_visible", input, options,
+					ProjectSet_visibleRequest,
+					LayerTree,
+				),
+			tree: (input?: ProjectTreeRequest, options?: HostInvokeOptions) =>
+				call<LayerTree>(
+					client, "project.tree", input, options,
+					ProjectTreeRequest,
+					LayerTree,
+				),
+			unset_property: (input: ProjectUnset_propertyRequest, options?: HostInvokeOptions) =>
+				call<readonly ProjectEntry[]>(
+					client, "project.unset_property", input, options,
+					ProjectUnset_propertyRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
+				),
+			unset_variable: (input: ProjectUnset_variableRequest, options?: HostInvokeOptions) =>
+				call<readonly ProjectEntry[]>(
+					client, "project.unset_variable", input, options,
+					ProjectUnset_variableRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
+				),
+			variables: (input?: ProjectVariablesRequest, options?: HostInvokeOptions) =>
+				call<readonly ProjectEntry[]>(
+					client, "project.variables", input, options,
+					ProjectVariablesRequest,
+					(candidate: unknown, strict = false) => (Array.isArray(candidate) && candidate.every((item) => ProjectEntry(item, strict))),
+				),
+			write: (input: WriteProjectRequest, options?: HostInvokeOptions) =>
+				call<ProjectFile>(
+					client, "project.write", input, options,
+					WriteProjectRequest,
+					ProjectFile,
+				),
+		},
+		rasters: {
+			get: (input: RasterRequest, options?: HostInvokeOptions) =>
+				call<RasterLayerInfo>(
+					client, "rasters.get", input, options,
+					RasterRequest,
+					RasterLayerInfo,
+				),
+			open: (input: OpenRasterRequest, options?: HostInvokeOptions) =>
+				call<RasterLayerInfo>(
+					client, "rasters.open", input, options,
+					OpenRasterRequest,
+					RasterLayerInfo,
+				),
+			sample: (input: SampleRequest, options?: HostInvokeOptions) =>
+				call<RasterSample>(
+					client, "rasters.sample", input, options,
+					SampleRequest,
+					RasterSample,
+				),
+			statistics: (input: BandRequest, options?: HostInvokeOptions) =>
+				call<RasterStatistics>(
+					client, "rasters.statistics", input, options,
+					BandRequest,
+					RasterStatistics,
 				),
 		},
 		settings: {
@@ -1861,7 +2687,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<string | null>(
 					client, "settings.get", input, options,
 					SettingsGetRequest,
-					(candidate: unknown) => (typeof candidate === "string" || candidate === null),
+					(candidate: unknown, strict = false) => (typeof candidate === "string" || candidate === null),
 				),
 		},
 		styles: {
@@ -1869,7 +2695,7 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "styles.apply", input, options,
 					StylesApplyRequest,
-					(candidate: unknown) => candidate === null,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 		},
 	};

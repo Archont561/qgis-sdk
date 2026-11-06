@@ -15,6 +15,7 @@ from qgis_sdk import describe
 from qgis_sdk.models import (
     QgisSdkAlgorithmRejectedError,
     QgisSdkExportRefusedError,
+    QgisSdkLayerNotFoundError,
     QgisSdkUnsupportedCapabilityError,
 )
 from qgis_sdk.models.canvas import CanvasExtent
@@ -29,7 +30,9 @@ def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
         "buffer",
         "choose_export_directory",
         "export_layer",
+        "open_elevation",
         "open_fixture",
+        "sample_elevation",
         "selected_features",
     ]
 
@@ -52,6 +55,45 @@ def test_open_fixture_presents_the_bundled_points(fake_host: FakeHost) -> None:
     assert info.name == "points"
     assert info.geometry_type == "point"
     assert fake_host.project.layer_ids() == (info.id,)
+
+
+def test_open_elevation_presents_a_raster_beside_the_vectors(
+    fake_host: FakeHost,
+) -> None:
+    """A raster is a layer too: it is opened, listed and added like one."""
+    info = fake_host.runtime.actions["open_elevation"]()
+
+    assert (info.name, info.kind, info.band_count) == ("elevation", "raster", 1)
+    assert fake_host.project.layer_ids() == (info.id,)
+    assert [layer.kind for layer in fake_host.layers.list_layers()] == ["raster"]
+
+
+def test_sample_elevation_reads_the_band_at_a_point(fake_host: FakeHost) -> None:
+    info = fake_host.runtime.actions["open_elevation"]()
+
+    sample = fake_host.runtime.actions["sample_elevation"](
+        layer_id=info.id, x=21.05, y=52.15
+    )
+    at_hole = fake_host.runtime.actions["sample_elevation"](
+        layer_id=info.id, x=21.15, y=52.05
+    )
+
+    assert sample.values == (1.0,)
+    assert at_hole.values == (None,)
+    statistics = LocalGisWorkflow(fake_host.context).band_statistics(info.id)
+    assert statistics.valid_count == 5
+    assert statistics.no_data_count == 1
+    assert statistics.mean == pytest.approx(3.2)
+
+
+def test_a_vector_layer_is_refused_by_the_raster_picker(fake_host: FakeHost) -> None:
+    """The declared kind is enforced: a vector id is not a raster id."""
+    vector = fake_host.runtime.actions["open_fixture"]()
+
+    with pytest.raises(QgisSdkLayerNotFoundError):
+        fake_host.runtime.actions["sample_elevation"](
+            layer_id=vector.id, x=21.05, y=52.15
+        )
 
 
 def test_selected_features_reads_what_the_host_selected(fake_host: FakeHost) -> None:

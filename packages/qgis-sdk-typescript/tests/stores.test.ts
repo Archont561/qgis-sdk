@@ -8,6 +8,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { QgisSdkError } from "../src/errors";
+import type { RasterLayerInfo, VectorLayerInfo } from "../src/generated/host";
 import { QgisSdk } from "../src/qgis-sdk";
 import {
 	type FormFieldKind,
@@ -354,6 +356,7 @@ describe("HostQueryStore", () => {
 		harness.expectInvoke("layers.get", async () => {
 			await reply.promise;
 			return {
+				kind: "vector",
 				id: "a",
 				name: "A",
 				geometry_type: "point",
@@ -373,6 +376,7 @@ describe("HostQueryStore", () => {
 		expect(store.getSnapshot().status).toBe("loading");
 
 		harness.expectInvoke("layers.get", () => ({
+			kind: "vector",
 			id: "a",
 			name: "A",
 			geometry_type: "point",
@@ -380,6 +384,66 @@ describe("HostQueryStore", () => {
 			field_names: ["fid", "name"],
 		}));
 		await expect(store.refresh()).resolves.toEqual(["fid", "name"]);
+		harness.assertSatisfied();
+		qgis.close();
+	});
+
+	test("layersQuery keeps the vector layers of a mixed page", async () => {
+		const raster: RasterLayerInfo = {
+			kind: "raster",
+			id: "elevation",
+			name: "Elevation",
+			band_count: 1,
+			data_types: ["Float32"],
+			no_data: [-9999],
+			extent: { x_min: 21, y_min: 52, x_max: 21.3, y_max: 52.2 },
+			resolution: [0.1, 0.1],
+			crs: "EPSG:4326",
+		};
+		const vector: VectorLayerInfo = {
+			kind: "vector",
+			id: "roads",
+			name: "Roads",
+			geometry_type: "line",
+			crs: null,
+			field_names: ["fid"],
+		};
+		const harness = createBridgeHarness(formSchema, {
+			granted: ["layers.list"],
+		});
+		harness.expectInvoke("layers.list", () => ({
+			items: [raster, vector],
+			truncated: false,
+		}));
+		const qgis = QgisSdk.fromBridgeSchema(formSchema, { transport: harness });
+		await expect(layersQuery(qgis).refresh()).resolves.toEqual([vector]);
+		harness.assertSatisfied();
+		qgis.close();
+	});
+
+	test("layerFieldsQuery refuses a raster layer by name", async () => {
+		const harness = createBridgeHarness(formSchema, {
+			granted: ["layers.get"],
+		});
+		harness.expectInvoke("layers.get", () => ({
+			kind: "raster",
+			id: "elevation",
+			name: "Elevation",
+			band_count: 1,
+			data_types: ["Float32"],
+			no_data: [-9999],
+			extent: { x_min: 21, y_min: 52, x_max: 21.3, y_max: 52.2 },
+			resolution: [0.1, 0.1],
+			crs: null,
+		}));
+		const qgis = QgisSdk.fromBridgeSchema(formSchema, { transport: harness });
+		const store = layerFieldsQuery(qgis, "elevation");
+		await expect(store.refresh()).resolves.toBeUndefined();
+		const state = store.getSnapshot();
+		expect(state.status).toBe("error");
+		if (state.status !== "error") throw new Error("expected an error state");
+		expect(state.error).toBeInstanceOf(QgisSdkError);
+		expect((state.error as QgisSdkError).code).toBe("unsupported_layer_kind");
 		harness.assertSatisfied();
 		qgis.close();
 	});

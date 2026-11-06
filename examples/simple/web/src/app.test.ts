@@ -14,6 +14,7 @@ import schema, {
 } from "./bridge.schema";
 
 const SOURCE: Open_fixtureResult = {
+	kind: "vector",
 	id: "points-1",
 	name: "points",
 	geometry_type: "point",
@@ -21,6 +22,7 @@ const SOURCE: Open_fixtureResult = {
 	crs: "EPSG:4326",
 };
 const OUTPUT: BufferResult = {
+	kind: "vector",
 	id: "buffer-1",
 	name: "buffer",
 	geometry_type: "polygon",

@@ -154,6 +154,9 @@ def test_the_guard_covers_exactly_the_capabilities_that_reach_gui_state() -> Non
         "files",
         "layers",
         "project",
+        # Asking a raster for its statistics reads a GDAL dataset through the
+        # provider QGIS owns, which is the same GUI-affine rule as layers.
+        "rasters",
         "streams",
         "ui",
     }

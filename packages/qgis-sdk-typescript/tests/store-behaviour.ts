@@ -147,6 +147,7 @@ export const formSchema: BridgeSchema<
 type SitesOp = "sites.summary" | "sites.watch";
 
 const layer = (id: string): VectorLayerInfo => ({
+	kind: "vector",
 	id,
 	name: id.toUpperCase(),
 	geometry_type: "point",

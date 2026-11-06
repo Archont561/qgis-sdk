@@ -1997,6 +1997,227 @@ a pan does - notifying the extent stream without being a zoom - and
 happened. A layer, theme or selection the test
 never declared refuses by name, exactly as QGIS does.
 
+## Rasters
+
+`ctx.rasters` reads rasters. A raster is not a vector layer with different
+fields - it has bands, per-band statistics and a pixel grid - so it is a service
+of its own, and `ctx.layers` only reports *that* a raster exists:
+`Layers.list_layers()` returns vectors and rasters together, each with its
+`kind`, and `VectorLayerInfo`/`RasterLayerInfo` are the two shapes a caller
+branches on. The model for both is `LayerInfo`.
+
+```python
+info = self.ctx.rasters.open_raster(Path("/data/dem.tif"))
+info.kind          # "raster"
+info.band_count    # 1
+info.data_types    # ("Float64",) - per band, in band order
+info.no_data       # (-9999.0,)   - per band; None where the band declares none
+info.extent        # CanvasExtent(x_min, y_min, x_max, y_max) - no CRS of its own
+info.resolution    # (x, y) map units per pixel
+info.crs           # "EPSG:4326", or None when the file names none
+
+self.ctx.project.add_layer(info.id)          # a raster is a layer too
+stats = self.ctx.rasters.statistics(info.id, 1)
+value = self.ctx.rasters.sample(info.id, CanvasPoint(x=21.05, y=52.15))
+```
+
+### Bands are 1-based, and missing data is `None`
+
+`statistics(layer_id, band)` answers `RasterStatistics(band, minimum, maximum,
+mean, std_dev, valid_count, no_data_count)`, and `valid_count + no_data_count`
+is the number of cells the band covers. A band with no valid cell - and a band
+that was never measured - answers `None` for the four values rather than a
+zero, because "no data" and "all zeros" are different answers. Asking for band
+`0` or `band_count + 1` raises `QgisSdkRasterBandError`; asking about a vector
+layer's id raises `QgisSdkLayerNotFoundError`, because a raster call is not a
+vector call.
+
+`sample(layer_id, point, *, band=None)` reads every band, or one band, at a
+point. A no-data pixel, or a point outside the raster, answers `None` for that
+band - never a zero. `point.crs` names the CRS the caller's numbers are in: the
+service transforms the point into the raster's CRS itself and answers with
+`RasterSample.point`, so a plugin does not have to know the raster's CRS before
+it can ask. A point with no CRS is read as being in the raster's own.
+
+### The export is a call you put in a job
+
+`export_raster(layer_id, destination, *, overwrite=False)` writes under the same
+policy `Layers.export_vector` applies: the destination comes from the caller, the
+format follows the suffix (`RASTER_EXPORT_DRIVERS` - `GTiff` for `.tif`, `AAIGrid`
+for `.asc`), an existing file is replaced only with `overwrite=True`, a
+destination that is the raster's own source is refused, and a failure leaves
+neither a partial file nor a half-written one. It blocks for as long as the write
+takes, so call it inside a `@job`.
+
+It is not a host operation: a page never supplies a filesystem destination
+(decision-20), and the deferral is recorded by name in
+`qgis_sdk.bridge.host.DEFERRED_HOST_METHODS` rather than forgotten. A page asks
+its plugin action, which runs the export as a job and hands the result back as a
+`FileRef` - the layouts precedent from decision-54 point 3.
+
+### On the wire
+
+`rasters.open(FileRef)`, `rasters.get`, `rasters.statistics` and `rasters.sample`
+are the four operations, behind two grants: `rasters.open` for opening a file the
+view holds a read ref for, `rasters.read` for the three reads. `layers.list` and
+`layers.get` answer both kinds, so a page lists a project's rasters and vectors
+in one pass; `layers.get` returns `VectorLayerInfo | RasterLayerInfo`, and a
+consumer branches on `kind`.
+
+A form asks for a raster with the declared kind, not with a name convention:
+`layer_id: RasterInput` (equivalently `Annotated[str, LayerParameter(kind="raster")]`)
+renders a raster-only picker natively, as a Processing `Raster Layer` parameter,
+and puts `layer_kind: "raster"` on the wire for a page. `AnyLayerInput` lists
+both; a plain `LayerInput` stays vectors-only, which is what every existing
+declaration means. The host refuses a value of the wrong kind by name instead of
+letting the handler discover it.
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeRasters` takes a `ResourceScope` and a declared dataset:
+`register(source, name=..., extent=..., band_count=..., data_types=...,
+no_data=..., resolution=..., crs=..., values=..., holes=..., statistics=...,
+dataset_path=...)`. The three limits are deliberate. Statistics are *declared*,
+not computed - a fake that computed a mean would be a second raster engine whose
+arithmetic had to agree with GDAL to the last bit. Sampling answers the declared
+value for a point inside the box and `None` outside it, with `holes` naming the
+points a band is empty at. And a point whose `crs` differs from the raster's
+raises `QgisSdkUnsupportedCapabilityError`, because the fake has no CRS database
+and treating two coordinate systems as one is worse than saying so. Export is
+real: the declared file is copied under the shared policy, so refusal, staging,
+commit and cleanup run the same code the native adapter runs.
+
+The native backend reads through GDAL (`QgsRasterLayer`), computes statistics
+over the whole band rather than a sample of it, and samples through the
+provider's own `sample`, so a value is the provider's answer and not the SDK's
+approximation. `tests/services/test_rasters_contract.py` holds both backends to
+one set of numbers over the checked-in `elevation.asc`, and
+`test_rasters_native.py` proves the four things only a real GDAL can answer: the
+band's declared type, that the statistics cover every cell, a sample reprojected
+from another CRS, and that an export is a GeoTIFF GDAL reopens.
+
+`tests/features/raster_reads.feature` states the same rules as scenarios a
+reader can check against this section - a grid described band by band, a raster
+listed beside the vectors, a value for the cell under a point and nothing for a
+hole, a band whose counts add up to its size - driven by `tests/service_steps.py`
+over the fakes above.
+
+## The project
+
+`ctx.project` is the open project: its layer tree, its CRS, its variables and
+custom properties, its bookmarks, its file - and a stream of the changes it made.
+
+```python
+tree = self.ctx.project.layer_tree()        # LayerTree(nodes=...)
+node = tree.nodes[0]                        # LayerNode(id, name, kind, visible, parent)
+self.ctx.project.add_layer(info.id, group="Elevation")
+self.ctx.project.move_layer(info.id, group="Elevation", index=0)
+self.ctx.project.set_visible(group_id, False)
+
+self.ctx.project.set_variable("author", "Ada")     # project variables
+self.ctx.project.set_custom_property("sdk", "yes") # QGIS custom properties
+self.ctx.project.add_bookmark("home", extent)      # name + CanvasExtent
+self.ctx.project.set_crs("EPSG:3857")
+```
+
+### The layer tree is a model, not a handle
+
+`layer_tree()` answers the whole tree as `LayerTree(nodes)`, each `LayerNode`
+naming its `kind` (`"layer"` or `"group"`), whether it is `visible`, and its
+`parent` group id - a flat, ordered list, root first, so a caller can rebuild the
+hierarchy without a `QgsLayerTreeGroup` in sight. Groups carry their own ids,
+which is why `parent` is never a name; a group and a layer may share a name and
+the tree keeps them apart.
+
+Every mutation answers the tree it produced, so a caller that just moved
+something does not ask again and disagree with itself. `add_layer(layer_id, *,
+group=None)` adds into a group by id or into the root, and moves a layer that is
+already in the tree rather than adding it twice; `move_layer(layer_id, *,
+group=None, index=None)` repositions it, where an `index` past the end of the
+destination is refused by name rather than clamped; `remove_layer` takes the
+layer out of the project; `set_visible(node_id, visible)` hides a layer or a whole
+group. `layer_ids()` stays as the cheap flat answer.
+
+### Variables, properties and bookmarks
+
+`variables()` and `custom_properties()` answer the project's `ProjectEntry`
+lists, `set_variable`/`set_custom_property` set one and answer the list,
+`unset_variable`/`unset_custom_property` remove one. They are two different QGIS
+stores - scope variables a user can see in Project Properties, and custom
+properties that belong to the project object - and the SDK keeps them apart
+rather than folding one into the other.
+
+`bookmarks()` answers `Bookmark(name, extent)`; `bookmark(name)` answers one and
+raises `QgisSdkBookmarkNotFoundError` for a name the project does not carry;
+`add_bookmark(name, extent)` and `remove_bookmark(name)` change them, and both
+answer the list they produced. A
+bookmark stores an extent without a CRS - the project's own - so
+`ZoomTarget.to_extent(...)` is what turns one into a zoom.
+
+### The file
+
+`write(destination, *, overwrite=False)` and `save()` write the project;
+`read(path)` replaces the open project with the one in the file. They take a
+`Path`, never a `FileRef`: a service reads paths, and the *host* is what refuses
+to let a page name one. An existing destination is replaced only with
+`overwrite=True` (`QgisSdkProjectFileError`), and a failure leaves the previous
+file intact. The native adapter writes and reads a real `.qgs` through
+`QgsProject`; the fake writes a small, documented JSON document, so a pure test
+round-trips a project without QGIS and the contract test proves both formats
+carry the same model - CRS, tree, variables, properties, bookmarks.
+
+### The change stream
+
+`watch_changes(on_change)` calls `on_change` with one `ProjectChange(kind,
+layer_ids)` per change, in the order the project produced them, and returns the
+canceller. `kind` is `"layers"` for anything that adds, removes, moves or hides a
+node, `"crs"`, `"variables"`, `"properties"` or `"bookmarks"`. Over the bridge it
+is the `project.changed` stream: one `data` frame per change, in order. The
+native adapter lets QGIS's own signals through for changes the service did not
+make - a user dragging a layer in the legend, another plugin setting the CRS -
+and reports its own changes once, so a frame is a change and not a change plus
+its echo.
+
+### On the wire
+
+Twenty-two `project.*` operations - twenty-one calls and one stream - behind two
+grants: `project.read` for everything that only looks (`layer_ids`, `tree`,
+`crs`, `variables`, `properties`, `bookmarks`, `bookmark`, `changed`), and
+`project.write` for everything that changes
+(`add_layer`, `remove_layer`, `move_layer`, `set_visible`, `set_crs`,
+`set_variable`, `unset_variable`, `set_property`, `unset_property`,
+`add_bookmark`, `remove_bookmark`, `read`, `write`, `save`). Most operations
+answer the tree or the list they produced.
+
+Seven of them carry the `destructive` annotation the agent consent list reads -
+`read` (it replaces the open project), `write`, `save`, `remove_layer`,
+`remove_bookmark`, `unset_variable`, `unset_property` - so a destructive tool can
+be set to "ask each time" and an audit log can mark the call
+([decision-27](../../../backlog/decisions/decision-27%20-%20Expose-curated-host-services-to-web-views-as-generated-namespaces.md)
+point 2, [decision-49](../../../backlog/decisions/decision-49%20-%20Expose-the-runtime-to-agents-over-a-loopback-transport-with-the-MCP-server-in-the-tools-for-developers-and-users-alike.md)
+point 4). `project.read` and `project.write` take a `FileRef` the view holds;
+`project.save` rewrites the file the project already has and fails by name on a
+project that was never saved.
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeProject` takes a `ResourceScope` and the layers service it
+reads names from. `add_layer`, `remove_layer`, `move_layer`, `set_visible`,
+`set_crs`, `set_variable`, `set_custom_property`, `add_bookmark` and
+`remove_bookmark` arrange and mutate it; `set_tree(nodes)` declares a nested
+structure outright, since building a tree is *setup* rather than a service call -
+QGIS's own group dialog does that. `read`, `write` and `save` use the fake's
+private JSON format, and `watch_changes` delivers the same ordered frames the
+native adapter does. A layer id the layers service never opened, a layer already
+in the tree under another group, a bookmark nobody declared and an index past
+the end all refuse by name.
+
+`tests/features/project_service.feature` states the rules of this section as
+scenarios: a CRS read back normalised, a nested group structure round-tripping
+through the project file, visibility that belongs to the node it was toggled on,
+a layer added into the deepest group, and the change stream delivering the
+frames in the order the calls were made.
+
 ## Providers: algorithms in the QGIS Processing toolbox
 
 A provider is both an algorithm namespace and the registration that makes its

@@ -43,6 +43,7 @@ from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.layers import Layers
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
+from qgis_sdk.services.rasters import Rasters
 from qgis_sdk.services.settings import Settings
 from qgis_sdk.services.styles import Styles
 from qgis_sdk.testing import FakeNetworkTransport, reply
@@ -53,6 +54,7 @@ ORIGIN = "qgis://desktop"
 #: (decision-64) is on the wire and whose plugin-local ``execute`` is not.
 PROTOCOLS: dict[str, type] = {
     "Layers": Layers,
+    "Rasters": Rasters,
     "Project": Project,
     "Settings": Settings,
     "Styles": Styles,
@@ -307,6 +309,9 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "expressions.evaluate",
         "canvas.read",
         "canvas.control",
+        "rasters.read",
+        "rasters.open",
+        "project.write",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.
@@ -330,10 +335,17 @@ def test_the_description_is_the_manifest_in_the_generator_shape() -> None:
         # A result is a closed object, nothing at all, one of the bare JSON
         # scalars, or a union - anything open-ended would generate a type a page
         # cannot narrow, which is the drift this assertion exists to catch.
+        items = result.get("items") or {}
         assert (
             result.get("additionalProperties") is False
             or result.get("type") in {"null", "number", "string", "boolean"}
             or "anyOf" in result
+            # An array of one declared object is narrowable in exactly the way
+            # a page needs: the element has a name and a closed shape.
+            or (
+                result.get("type") == "array"
+                and items.get("additionalProperties") is False
+            )
         ), action["id"]
     for stream in described["streams"]:
         assert stream["request"]["type"] == "object"
@@ -391,6 +403,7 @@ def test_layers_get_returns_a_plain_value_and_never_a_native_object() -> None:
     reply = _call(dispatcher, "layers.get", {"layer_id": "layer-0"})
     assert reply["ok"] is True
     assert reply["value"] == {
+        "kind": "vector",
         "id": "layer-0",
         "name": "Layer 0",
         "geometry_type": "point",

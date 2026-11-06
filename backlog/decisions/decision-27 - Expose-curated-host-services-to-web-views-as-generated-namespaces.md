@@ -143,3 +143,75 @@ content)` writes through a `write` ref, and the `network.fetch` stream answers
 one request through the view's `NetworkGrant` over the TASK-5 transport. The
 generated module exports `FileRef` and `HttpHeader` under their titles; the
 `StyleRef` brand, `tryX` unions and advertised grants stay deferred.
+
+## Status review, 2026-11-06 (TASK-87, TASK-88)
+
+Five sprints later the surface is **59 operations - 54 calls and 5 streams -
+behind 19 canonical grants**, and the rules above still decide each one. What
+this review adds is the accounting: what the growth settled, what it changed
+about the rules, and what is still open from the second slice.
+
+What holds, unchanged:
+
+- **The inventory is declared, never inferred.** Every operation is a
+  `HostOperation` in `qgis_sdk.bridge.host` with a canonical grant, a `gui`
+  affinity and the Protocol method it wraps, and the reflection test still fails
+  when a Protocol method is neither an operation nor an entry in
+  `DEFERRED_HOST_METHODS`. Ten methods are deferred today, each with its reason
+  and owner: the two unpaged/unbounded reads (`Layers.selection`,
+  `Layers.export_vector`), the two filesystem-destination calls a page may not
+  make (`Rasters.export_raster`, `Layers.export_vector`), the mutation the
+  protocol does not have yet (`Settings.set`), four notification levels and a
+  button, and the plugin-local `Algorithms.execute`.
+- **Handles, not paths.** Every operation a page can reach that touches a file
+  takes a `FileRef` the host minted: `layers.open_vector`, `rasters.open`,
+  `files.export`, `project.read`, `project.write`. `project.save` names no path
+  at all.
+- **Paging for what a project cannot bound.** `layers.list`, `algorithms.list`
+  and `features.page` page; variables, custom properties and bookmarks are
+  answered whole, because a project file bounds them and a page that had to loop
+  would call four times to draw one panel.
+- **Stream-first for what is slow or unbounded.** Four of the five streams
+  arrived with the services that needed them: `features.page` (one page per
+  frame), `canvas.extent_changed`, `canvas.capture` (one frame, then complete)
+  and `project.changed` (one frame per change, never completing).
+  `algorithms.run` stayed a call: the four-operation Processing slice runs one
+  algorithm and answers its outputs, and progress over it is still the deferred
+  job surface.
+- **Additive wire, bumped only when it has to be.** `HOST_SCHEMA_VERSION` is
+  still 1 and `BRIDGE_PROTOCOL_VERSION` still 2. `HOST_FINGERPRINT` moved once
+  per slice, which is what a frontend compares; titles, handler names and the
+  display-only annotations below stay out of it, so a rewording does not
+  invalidate a client.
+
+What this sprint added to the rules:
+
+- **One annotation, declared beside the operation.** `HostOperation.destructive`
+  was open in point 2 and is now a field: seven operations carry it
+  (`project.read`, `project.write`, `project.save`, `project.remove_layer`,
+  `project.remove_bookmark`, `project.unset_variable`,
+  `project.unset_property`), it crosses in the manifest, and a test pins the list
+  so an operation cannot become destructive by accident or stay quiet on purpose.
+  The agent consent list (decision-49 point 4) and `AGENT001` read this field;
+  nothing infers it from a name.
+- **One kind, three faces.** `LayerParameter(kind=...)` narrows the native
+  picker, the Processing parameter and the wire (`layer_kind`), so "a raster
+  input" is one declaration rather than three spellings that can drift. A layer
+  input that names no kind is still vectors-only, which is what every
+  declaration written before this sprint means.
+- **Two models, one union.** `layers.get` answers `VectorLayerInfo |
+  RasterLayerInfo` discriminated by `kind`, instead of one object with the
+  union of both shapes; the generated TypeScript narrows with a single
+  comparison.
+
+Still deferred from the earlier amendments, and none of it is claimed by the
+growth: generated `tryX` result unions (the throwing form ships), a branded
+`StyleRef`, the `createBridgeClient` composition, client-side serialisation of
+GUI-affine calls (every operation is `gui`; a caller still serialises itself),
+and advertising *grants* rather than operation ids in the handshake.
+
+The consequence for the next slice is the one this document opened with: the
+surface is now wide enough that "expose the Protocol" is no longer the question
+- layouts, the remaining layer kinds and the connection service each land as
+their own declared operations, with their own grants, and the deferred list is
+where a reader finds out why the ones that did not are absent.

@@ -5,7 +5,7 @@
 import { type BridgeSchema, defineBridgeSchema } from "@archont561/qgis-sdk";
 
 export const PLUGIN_ID = "simple";
-export const CONTRACT_FINGERPRINT = "sha256:838ea7b3697c29d655bce6f5f3b3024f9af39866c5cf17147358030cf9c2ba4f";
+export const CONTRACT_FINGERPRINT = "sha256:587c38517d8dd28b1cd4d40805d8408074a5aaef749b7a9be6bb931e12bed77f";
 export const PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -13,7 +13,9 @@ export const OPERATIONS = [
 	"buffer",
 	"choose_export_directory",
 	"export_layer",
+	"open_elevation",
 	"open_fixture",
+	"sample_elevation",
 	"selected_features",
 ] as const;
 
@@ -33,6 +35,7 @@ export interface BufferResult {
 	readonly field_names: readonly string[];
 	readonly geometry_type: "point" | "line" | "polygon" | "none";
 	readonly id: string;
+	readonly kind: "vector";
 	readonly name: string;
 }
 
@@ -52,6 +55,30 @@ export interface Export_layerResult {
 	readonly path: string;
 }
 
+export interface Open_elevationRequest {
+	readonly [key: string]: never;
+}
+
+export interface Open_elevationResult {
+	readonly band_count: number;
+	readonly crs: string | null;
+	readonly data_types: readonly string[];
+	readonly extent: Open_elevationResultExtent;
+	readonly id: string;
+	readonly kind: "raster";
+	readonly name: string;
+	readonly no_data: readonly (number | null)[];
+	readonly resolution: readonly number[];
+}
+
+export interface Open_elevationResultExtent {
+	readonly crs: string | null;
+	readonly x_max: number;
+	readonly x_min: number;
+	readonly y_max: number;
+	readonly y_min: number;
+}
+
 export interface Open_fixtureRequest {
 	readonly [key: string]: never;
 }
@@ -61,7 +88,26 @@ export interface Open_fixtureResult {
 	readonly field_names: readonly string[];
 	readonly geometry_type: "point" | "line" | "polygon" | "none";
 	readonly id: string;
+	readonly kind: "vector";
 	readonly name: string;
+}
+
+export interface Sample_elevationRequest {
+	/** @qgis-sdk-kind layer */
+	readonly layer_id: string;
+	readonly x: number;
+	readonly y: number;
+}
+
+export interface Sample_elevationResult {
+	readonly point: Sample_elevationResultPoint;
+	readonly values: readonly (number | null)[];
+}
+
+export interface Sample_elevationResultPoint {
+	readonly crs: string | null;
+	readonly x: number;
+	readonly y: number;
 }
 
 export interface Selected_featuresRequest {
@@ -74,7 +120,9 @@ export interface Operations {
 	readonly buffer: { readonly request: BufferRequest; readonly result: BufferResult };
 	readonly choose_export_directory: { readonly request: Choose_export_directoryRequest; readonly result: string };
 	readonly export_layer: { readonly request: Export_layerRequest; readonly result: Export_layerResult };
+	readonly open_elevation: { readonly request: Open_elevationRequest; readonly result: Open_elevationResult };
 	readonly open_fixture: { readonly request: Open_fixtureRequest; readonly result: Open_fixtureResult };
+	readonly sample_elevation: { readonly request: Sample_elevationRequest; readonly result: Sample_elevationResult };
 	readonly selected_features: { readonly request: Selected_featuresRequest; readonly result: readonly number[] };
 }
 
@@ -152,6 +200,11 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 								"type": "null"
 							}
 						]
+					},
+					"kind": {
+						"enum": [
+							"vector"
+						]
 					}
 				},
 				"additionalProperties": false,
@@ -160,7 +213,8 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 					"name",
 					"geometry_type",
 					"field_names",
-					"crs"
+					"crs",
+					"kind"
 				]
 			}
 		},
@@ -221,6 +275,119 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 			}
 		},
 		{
+			"id": "open_elevation",
+			"title": "Open the bundled elevation raster",
+			"handler": "open_elevation",
+			"request": {
+				"type": "object",
+				"properties": {},
+				"additionalProperties": false
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"band_count": {
+						"type": "integer",
+						"minimum": -9007199254740991,
+						"maximum": 9007199254740991
+					},
+					"data_types": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"no_data": {
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						}
+					},
+					"extent": {
+						"type": "object",
+						"properties": {
+							"x_min": {
+								"type": "number"
+							},
+							"y_min": {
+								"type": "number"
+							},
+							"x_max": {
+								"type": "number"
+							},
+							"y_max": {
+								"type": "number"
+							},
+							"crs": {
+								"anyOf": [
+									{
+										"type": "string"
+									},
+									{
+										"type": "null"
+									}
+								]
+							}
+						},
+						"additionalProperties": false,
+						"required": [
+							"x_min",
+							"y_min",
+							"x_max",
+							"y_max",
+							"crs"
+						]
+					},
+					"resolution": {
+						"type": "array",
+						"items": {
+							"type": "number"
+						}
+					},
+					"crs": {
+						"anyOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"kind": {
+						"enum": [
+							"raster"
+						]
+					}
+				},
+				"additionalProperties": false,
+				"required": [
+					"id",
+					"name",
+					"band_count",
+					"data_types",
+					"no_data",
+					"extent",
+					"resolution",
+					"crs",
+					"kind"
+				]
+			}
+		},
+		{
 			"id": "open_fixture",
 			"title": "Open the fixture dataset",
 			"handler": "open_fixture",
@@ -261,6 +428,11 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 								"type": "null"
 							}
 						]
+					},
+					"kind": {
+						"enum": [
+							"vector"
+						]
 					}
 				},
 				"additionalProperties": false,
@@ -269,7 +441,87 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 					"name",
 					"geometry_type",
 					"field_names",
-					"crs"
+					"crs",
+					"kind"
+				]
+			}
+		},
+		{
+			"id": "sample_elevation",
+			"title": "Sample the elevation raster",
+			"handler": "sample_elevation",
+			"request": {
+				"type": "object",
+				"properties": {
+					"layer_id": {
+						"type": "string",
+						"x-qgis-sdk": {
+							"kind": "layer",
+							"layer_kind": "raster"
+						}
+					},
+					"x": {
+						"type": "number"
+					},
+					"y": {
+						"type": "number"
+					}
+				},
+				"additionalProperties": false,
+				"required": [
+					"layer_id",
+					"x",
+					"y"
+				]
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"point": {
+						"type": "object",
+						"properties": {
+							"x": {
+								"type": "number"
+							},
+							"y": {
+								"type": "number"
+							},
+							"crs": {
+								"anyOf": [
+									{
+										"type": "string"
+									},
+									{
+										"type": "null"
+									}
+								]
+							}
+						},
+						"additionalProperties": false,
+						"required": [
+							"x",
+							"y",
+							"crs"
+						]
+					},
+					"values": {
+						"type": "array",
+						"items": {
+							"anyOf": [
+								{
+									"type": "number"
+								},
+								{
+									"type": "null"
+								}
+							]
+						}
+					}
+				},
+				"additionalProperties": false,
+				"required": [
+					"point",
+					"values"
 				]
 			}
 		},

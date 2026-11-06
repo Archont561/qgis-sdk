@@ -14,6 +14,7 @@ from qgis_sdk.services.features import Features
 from qgis_sdk.services.layers import Layers
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
+from qgis_sdk.services.rasters import Rasters
 from qgis_sdk.services.settings import Settings
 from qgis_sdk.services.styles import Styles
 
@@ -48,6 +49,9 @@ class HostServices:
     #: The map the user is looking at (TASK-85). A server host has no canvas, so
     #: the ``canvas.*`` operations are declared there and fail by name.
     canvas: Canvas | None = None
+    #: Raster reads (TASK-87). Without one the ``rasters.*`` operations are
+    #: declared and fail by name, never silently answered with nothing.
+    rasters: Rasters | None = None
     authority: HostAuthority = field(default_factory=HostAuthority)
     network: NetworkTransport | None = None
     algorithms: Algorithms | None = None
@@ -88,6 +92,7 @@ class HostServices:
             notifications=context.notifications,
             features=context.features if context.has("features") else None,
             canvas=context.canvas if context.has("canvas") else None,
+            rasters=context.rasters if context.has("rasters") else None,
             authority=authority if authority is not None else HostAuthority(),
             network=network,
             algorithms=context.algorithms if context.has("algorithms") else None,

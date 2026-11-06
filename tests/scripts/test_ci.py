@@ -83,6 +83,49 @@ def test_native_failure_names_every_failed_test_before_the_log_tail(tmp_path: Pa
     assert named.count("%0A") == 1
 
 
+def test_reference_example_names_the_failed_test_it_ran(tmp_path: Path):
+    """The step was three commands joined by ``&&``: the second never ran after
+    the first failed and the job said only "exit code 1".
+
+    Each run now keeps a log of its own, so the annotation names the test that
+    failed instead of the rerun that has to rediscover it.
+    """
+    command = (
+        "import sys; print('running'); "
+        "print('FAILED examples/simple/tests/test_workflow_qgis.py::test_raster - "
+        "AssertionError: (0.1, 0.1) != (0.1000000'); "
+        "print('1 failed, 24 passed'); sys.exit(1)"
+    )
+    result = run_ci(
+        "reference-example", "--", sys.executable, "-c", command, cwd=tmp_path
+    )
+    assert result.returncode == 1
+    named = next(
+        line
+        for line in result.stdout.splitlines()
+        if line.startswith("::error title=reference example: override: 1 failed")
+    )
+    assert "test_workflow_qgis.py::test_raster" in named
+    assert "0.1000000" in named
+    assert "running" not in named
+    logged = (tmp_path / "reference-example" / "override.log").read_text()
+    assert "1 failed, 24 passed" in logged
+
+
+def test_reference_example_leaves_a_green_run_without_annotations(tmp_path: Path):
+    result = run_ci(
+        "reference-example",
+        "--",
+        sys.executable,
+        "-c",
+        "print('25 passed')",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0
+    assert "::error" not in result.stdout
+    assert "25 passed" in (tmp_path / "reference-example" / "override.log").read_text()
+
+
 def test_annotations_limit_coverage_and_report_failed_steps(tmp_path: Path):
     log = tmp_path / "coverage-output.log"
     log.write_text("\n".join(f"ERROR case {n}" for n in range(45)), encoding="utf-8")

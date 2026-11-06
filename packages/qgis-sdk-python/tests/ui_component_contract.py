@@ -23,11 +23,17 @@ from qgis_sdk.core import (
 )
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobHandle, JobService, job
-from qgis_sdk.models import FileRef, QgisSdkFormError, QgisSdkUiError
+from qgis_sdk.models import (
+    FileRef,
+    QgisSdkFormError,
+    QgisSdkUiError,
+)
+from qgis_sdk.models.canvas import CanvasExtent
 from qgis_sdk.testing import (
     FakeFiles,
     FakeLayers,
     FakeProject,
+    FakeRasters,
     FakeViewControl,
     FakeWorkers,
     RecordingLog,
@@ -91,10 +97,12 @@ class Rendering:
         *,
         native: bool,
         runtime: PluginRuntime | None = None,
+        raster_dataset: Path | None = None,
     ) -> None:
         self.ctx = ctx
         self.scope = scope
         self.dataset = dataset
+        self.raster_dataset = raster_dataset
         self.native = native
         self.runtime = runtime
 
@@ -129,6 +137,13 @@ class Rendering:
         self.ctx.project.add_layer(info.id)
         return info.id
 
+    def add_raster(self) -> str:
+        """Open the fixture raster and add it to the project."""
+        assert self.raster_dataset is not None
+        info = self.ctx.rasters.open_raster(self.raster_dataset)
+        self.ctx.project.add_layer(info.id)
+        return info.id
+
 
 def make_rendering(
     request: pytest.FixtureRequest, tmp_path: Path, backend: str
@@ -138,6 +153,7 @@ def make_rendering(
     notifications = RecordingNotifications(scope)
     dataset = tmp_path / "sites.geojson"
     dataset.write_text(GEOJSON, encoding="utf-8")
+    raster_dataset = Path(__file__).parent / "fixtures" / "reference" / "elevation.asc"
     if backend == "native":
         request.getfixturevalue("qgis_app")
         from qgis.core import QgsProject
@@ -147,7 +163,15 @@ def make_rendering(
             scope, settings_prefix="components", notifications=notifications
         )
     else:
-        layers = FakeLayers(scope)
+        rasters = FakeRasters(scope)
+        rasters.register(
+            raster_dataset,
+            name="elevation",
+            extent=CanvasExtent(x_min=21.0, y_min=52.0, x_max=21.3, y_max=52.2),
+            crs="EPSG:4326",
+            values=(1.0,),
+        )
+        layers = FakeLayers(scope, rasters=rasters)
         layers.register(
             dataset, name="sites", geometry_type="point", field_names=("name", "kind")
         )
@@ -155,6 +179,7 @@ def make_rendering(
             notifications,
             scope,
             layers=layers,
+            rasters=rasters,
             project=FakeProject(layers, scope),
             files=FakeFiles(scope),
             log=RecordingLog(scope, "catalogue"),
@@ -177,12 +202,18 @@ def make_rendering(
         view_scope,
         actions=ViewActions(runtime, view_id="catalogue.test#1"),
         layers=context.layers,
+        rasters=context.rasters if context.has("rasters") else None,
         project=context.project,
         files=context.files,
         log=context.log,
     )
     yield Rendering(
-        ctx, view_scope, dataset, native=backend == "native", runtime=runtime
+        ctx,
+        view_scope,
+        dataset,
+        native=backend == "native",
+        runtime=runtime,
+        raster_dataset=raster_dataset,
     )
     runtime.unload()
     if not scope.closed:
@@ -337,6 +368,38 @@ def test_a_layer_picker_refuses_an_id_the_project_does_not_hold(
         picker.set_value("layer-9")
 
 
+def test_a_raster_picker_lists_only_rasters(rendering: Rendering) -> None:
+    """``LayerPicker(kind="raster")`` is the raster half of one picker (TASK-87)."""
+    vector_id = rendering.add_layer()
+    raster_id = rendering.add_raster()
+    picker = rendering.attach(LayerPicker("elevation", kind="raster"))
+    picker.refresh()
+
+    assert [option.id for option in picker.options()] == [raster_id]
+    picker.set_value(raster_id)
+    assert picker.value() == raster_id
+    with pytest.raises(QgisSdkFormError, match="not in the project"):
+        picker.set_value(vector_id)
+
+
+def test_an_any_kind_picker_lists_both_kinds(rendering: Rendering) -> None:
+    vector_id = rendering.add_layer()
+    raster_id = rendering.add_raster()
+    picker = rendering.attach(LayerPicker("layer", kind="any"))
+    picker.refresh()
+
+    assert {option.id for option in picker.options()} == {vector_id, raster_id}
+
+
+def test_a_vector_picker_lists_only_vectors(rendering: Rendering) -> None:
+    vector_id = rendering.add_layer()
+    rendering.add_raster()
+    picker = rendering.attach(LayerPicker("layer"))
+    picker.refresh()
+
+    assert [option.id for option in picker.options()] == [vector_id]
+
+
 def test_a_field_picker_follows_its_layer_picker(rendering: Rendering) -> None:
     layer = LayerPicker("layer")
     field = FieldPicker("attribute", of=layer)
@@ -469,9 +532,12 @@ __all__ = [
     "test_a_file_input_without_a_files_service_refuses_by_name",
     "test_a_layer_picker_lists_the_project_and_follows_additions",
     "test_a_layer_picker_refuses_an_id_the_project_does_not_hold",
+    "test_a_raster_picker_lists_only_rasters",
     "test_a_snapshot_is_the_component_s_semantic_node",
     "test_a_value_outside_the_component_s_rule_is_refused_and_nothing_changes",
     "test_a_value_set_is_the_value_read",
+    "test_a_vector_picker_lists_only_vectors",
+    "test_an_any_kind_picker_lists_both_kinds",
     "test_subscriptions_drop_with_the_scope",
     "test_the_initial_value_is_the_same_under_both_renderings",
 ]

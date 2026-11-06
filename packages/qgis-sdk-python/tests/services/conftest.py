@@ -33,7 +33,7 @@ import pytest
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, CentroidRequest
-from qgis_sdk.models.canvas import CanvasExtent
+from qgis_sdk.models.canvas import CanvasExtent, CanvasPoint
 from qgis_sdk.services import (
     Algorithms,
     Canvas,
@@ -41,6 +41,7 @@ from qgis_sdk.services import (
     Layers,
     Notifications,
     Project,
+    Rasters,
     Settings,
     Styles,
 )
@@ -74,6 +75,34 @@ FIXTURE_EXTENT = CanvasExtent(
 # The map theme both backends declare: a theme is project configuration, not a
 # canvas operation, so each backend is asked to provide one by name.
 DECLARED_THEME = "reference"
+
+# -- the raster fixture (TASK-87) -------------------------------------------
+# A three-by-two ASCII grid, because the file has to be readable in review; the
+# native backend converts it to a GeoTIFF at setup, which is the format the
+# contract is about. Both backends declare the same numbers.
+RASTER_DATASET = FIXTURE_ROOT / "elevation.asc"
+RASTER_NAME = "elevation"
+RASTER_EXTENT = CanvasExtent(x_min=21.0, y_min=52.0, x_max=21.3, y_max=52.2)
+RASTER_RESOLUTION = (0.1, 0.1)
+RASTER_BAND_COUNT = 1
+RASTER_DATA_TYPE = "Float64"
+RASTER_NO_DATA = -9999.0
+# 1, 2, 3 in the top row; 4, no-data, 6 in the bottom one.
+RASTER_MINIMUM = 1.0
+RASTER_MAXIMUM = 6.0
+RASTER_MEAN = 3.2
+#: GDAL's statistics pass reports the *sample* standard deviation, dividing the
+#: squared deviations by ``n - 1``: five valid cells give a divisor of four.
+RASTER_STD_DEV = 1.9235384061671346
+RASTER_VALID_CELLS = 5
+RASTER_NO_DATA_CELLS = 1
+#: Column 0 of the top row, and the hole in the bottom row beside it.
+RASTER_VALUE_POINT = CanvasPoint(x=21.05, y=52.15)
+RASTER_HOLE_POINT = CanvasPoint(x=21.15, y=52.05)
+RASTER_VALUE = 1.0
+#: The nested group structure the project-tree contract builds on both backends.
+ROOT_GROUP = "Elevation"
+CHILD_GROUP = "Detail"
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +156,24 @@ class Services:
     #: Declares a map theme over whatever layers the project holds, because
     #: ``apply_theme`` picks a theme and never creates one.
     declare_theme: Callable[[str], None] | None = None
+    #: Raster reads (TASK-87). ``None`` while a backend has not joined the
+    #: raster contract, so one slice failing is one test failing.
+    rasters: Rasters | None = None
+    #: Opens the fixture raster and answers its layer id. Native converts the
+    #: checked-in grid to a GeoTIFF first; the fake declares the same numbers.
+    open_raster: Callable[[], str] | None = None
+    #: The raster file the backend actually reads: the checked-in grid for the
+    #: fake, the GeoTIFF the native backend built from it.
+    raster_dataset: Path | None = None
+    #: A fresh directory one test may write project files into.
+    project_directory: Callable[[], Path] | None = None
+    #: Creates the nested group structure (``ROOT_GROUP`` -> ``CHILD_GROUP``)
+    #: in the project and answers the two group ids, deepest last. Building a
+    #: tree is project *setup* - QGIS's own group dialog does it - and the
+    #: service edits a tree it was given. The ids are the backend's own: the
+    #: fake mints them, QGIS gives a group no id at all and the adapter derives
+    #: one, so a contract test names what the backend reported.
+    declare_groups: Callable[[], tuple[str, str]] | None = None
 
 
 def _native_available() -> bool:
@@ -147,6 +194,7 @@ _SESSION_TOKEN = f"{os.getpid()}-{int(__import__('time').time())}"
 _WORK_ROOT = Path(tempfile.mkdtemp(prefix="qgis-sdk-algorithms-"))
 _WORK_DIRECTORIES = 0
 _FEATURE_DIRECTORIES = 0
+_PROJECT_DIRECTORIES = 0
 
 
 def _algorithm_work_directory() -> Path:
@@ -171,6 +219,62 @@ def _feature_work_directory() -> Path:
     directory = _WORK_ROOT / f"features-{_FEATURE_DIRECTORIES}"
     directory.mkdir(parents=True)
     return directory
+
+
+def _project_work_directory() -> Path:
+    """Return a fresh directory for one backend's project files."""
+    global _PROJECT_DIRECTORIES
+    _PROJECT_DIRECTORIES += 1
+    directory = _WORK_ROOT / f"project-{_PROJECT_DIRECTORIES}"
+    directory.mkdir(parents=True)
+    return directory
+
+
+#: The GeoTIFF the native backend reads, built once per session from the
+#: checked-in grid: the fixture itself stays reviewable text, and the format the
+#: contract is about is produced by the same GDAL a plugin ships with.
+_GEOTIFF: list[Path] = []
+
+
+def _geotiff_fixture() -> Path:
+    """Convert ``elevation.asc`` to a GeoTIFF, once per session."""
+    if _GEOTIFF:
+        return _GEOTIFF[0]
+    from qgis.core import (
+        QgsCoordinateReferenceSystem,
+        QgsCoordinateTransformContext,
+        QgsRasterFileWriter,
+        QgsRasterLayer,
+        QgsRasterPipe,
+    )
+
+    source = QgsRasterLayer(str(RASTER_DATASET), RASTER_NAME, "gdal")
+    if not source.isValid():
+        pytest.fail(f"the raster fixture {RASTER_DATASET} is not readable")
+    # The grid's own ``.prj`` is a sidecar the driver may or may not load, and
+    # the contract is about a raster that knows its CRS: the conversion declares
+    # it outright so the GeoTIFF carries EPSG:4326 either way.
+    crs = source.crs()
+    if not crs.isValid():
+        crs = QgsCoordinateReferenceSystem(FIXTURE_CRS)
+    destination = _WORK_ROOT / "elevation.tif"
+    pipe = QgsRasterPipe()
+    if not pipe.set(source.dataProvider().clone()):
+        pytest.fail("the raster fixture's provider refused the writer's pipe")
+    writer = QgsRasterFileWriter(str(destination))
+    writer.setOutputFormat("GTiff")
+    written = writer.writeRaster(
+        pipe,
+        source.width(),
+        source.height(),
+        source.extent(),
+        crs,
+        QgsCoordinateTransformContext(),
+    )
+    if written != QgsRasterFileWriter.NoError:
+        pytest.fail(f"the raster fixture could not be written: {written}")
+    _GEOTIFF.append(destination)
+    return destination
 
 
 #: What the fake answers a drawing with: the shape each capture session asks
@@ -208,19 +312,24 @@ def _point_wkt(x: float, y: float):
 
 
 def _fake_services() -> Services:
+    from qgis_sdk.models import RasterStatistics
     from qgis_sdk.testing import (
         FakeAlgorithms,
         FakeCanvas,
         FakeFiles,
         FakeLayers,
         FakeProject,
+        FakeRasters,
         FakeSettings,
         FakeStyles,
         RecordingNotifications,
     )
 
     scope = ResourceScope()
-    layers = FakeLayers(scope)
+    # The raster fake first, because the vector fake holds it: a raster is a
+    # layer too, so ``list_layers`` answers both kinds (TASK-87).
+    rasters = FakeRasters(scope)
+    layers = FakeLayers(scope, rasters=rasters)
     layers.register(
         FIXTURE_DATASET,
         name=FIXTURE_NAME,
@@ -293,6 +402,49 @@ def _fake_services() -> Services:
     )
     del editable
     styles = FakeStyles(layers, scope)
+    rasters.register(
+        RASTER_DATASET,
+        name=RASTER_NAME,
+        extent=RASTER_EXTENT,
+        band_count=RASTER_BAND_COUNT,
+        data_types=(RASTER_DATA_TYPE,),
+        no_data=(RASTER_NO_DATA,),
+        resolution=RASTER_RESOLUTION,
+        crs=FIXTURE_CRS,
+        values=(RASTER_VALUE,),
+        holes=((RASTER_HOLE_POINT.x, RASTER_HOLE_POINT.y),),
+        statistics={
+            1: RasterStatistics(
+                band=1,
+                minimum=RASTER_MINIMUM,
+                maximum=RASTER_MAXIMUM,
+                mean=RASTER_MEAN,
+                std_dev=RASTER_STD_DEV,
+                valid_count=RASTER_VALID_CELLS,
+                no_data_count=RASTER_NO_DATA_CELLS,
+            )
+        },
+    )
+    project = FakeProject(layers, scope)
+    project_directory = _project_work_directory()
+
+    def declare_groups() -> tuple[str, str]:
+        from qgis_sdk.models import LayerNode
+
+        project.set_tree(
+            (
+                LayerNode(id="group-root", name=ROOT_GROUP, kind="group"),
+                LayerNode(
+                    id="group-child",
+                    name=CHILD_GROUP,
+                    kind="group",
+                    parent="group-root",
+                ),
+            )
+        )
+        root_id, child_id = project.layer_tree().group_ids()
+        return root_id, child_id
+
     canvas = FakeCanvas(
         scope,
         layer_extents={FIXTURE_NAME: FIXTURE_EXTENT},
@@ -309,7 +461,12 @@ def _fake_services() -> Services:
         editable_layer=lambda: "editable",
         fixture_layer=lambda: FIXTURE_NAME,
         layers=layers,
-        project=FakeProject(layers, scope),
+        rasters=rasters,
+        open_raster=lambda: rasters.open_raster(RASTER_DATASET).id,
+        raster_dataset=RASTER_DATASET,
+        project=project,
+        project_directory=lambda: project_directory,
+        declare_groups=declare_groups,
         settings=FakeSettings(scope),
         styles=styles,
         notifications=RecordingNotifications(scope),
@@ -334,19 +491,39 @@ def _native_services() -> Services:
         NativeLayers,
         NativeNotifications,
         NativeProject,
+        NativeRasters,
         NativeSettings,
     )
     from qgis_sdk.adapters.qgis.styles import NativeStyles
 
     # Contract tests share one application, so each backend instance starts from
-    # an empty project instead of inheriting the previous test's layers.
+    # an empty project instead of inheriting the previous test's layers - and an
+    # empty *file*, so a test that saves before reading is not answering with
+    # the file another test read.
     QgsProject.instance().removeAllMapLayers()
+    _forget_project_file(QgsProject.instance())
 
     work_directory = _algorithm_work_directory()
     scope = ResourceScope()
-    layers = NativeLayers(scope)
-    project = NativeProject(layers, scope)
+    rasters = NativeRasters(scope)
+    layers = NativeLayers(scope, rasters=rasters)
+    project = NativeProject(layers, scope, rasters=rasters)
     styles = NativeStyles(layers, scope)
+    project_directory = _project_work_directory()
+    raster_file = _geotiff_fixture()
+    opened_rasters: dict[str, str] = {}
+
+    def open_raster() -> str:
+        if "id" not in opened_rasters:
+            opened_rasters["id"] = rasters.open_raster(raster_file).id
+        return opened_rasters["id"]
+
+    def declare_groups() -> tuple[str, str]:
+        root = QgsProject.instance().layerTreeRoot()
+        root_group = root.insertGroup(0, ROOT_GROUP)
+        root_group.addGroup(CHILD_GROUP)
+        root_id, child_id = project.layer_tree().group_ids()
+        return root_id, child_id
 
     def select(layer_id: str, feature_ids: Sequence[int]) -> None:
         # Selecting is a host action: the curated contract reads a selection and
@@ -399,7 +576,12 @@ def _native_services() -> Services:
             layers, scope, working_directory=work_directory, files=files
         ),
         layers=layers,
+        rasters=rasters,
+        open_raster=open_raster,
+        raster_dataset=raster_file,
         project=project,
+        project_directory=lambda: project_directory,
+        declare_groups=declare_groups,
         # A per-session prefix keeps the run out of the real profile's keys and
         # keeps one test's values out of the next one's.
         settings=NativeSettings(scope, prefix=f"qgis-sdk-contract/{_SESSION_TOKEN}"),
@@ -439,6 +621,32 @@ def _offscreen_canvas():
     )
     _CANVASES.append(canvas)
     return canvas
+
+
+def _forget_project_file(project: object) -> None:
+    """Start the shared project from nothing, file name included.
+
+    ``clear()`` is what QGIS's own "New project" does: it drops the layers, the
+    properties, the variables, the bookmarks *and* the file name, so a test that
+    reads or saves cannot answer with what the previous test wrote. A build that
+    keeps ``clear()`` away falls back to clearing the name alone, and failing
+    both is not fatal: it only means the tests share a file name, which is what
+    the contract refuses to assume either way.
+    """
+    clear = getattr(project, "clear", None)
+    if clear is not None:
+        try:
+            clear()
+            return
+        except (TypeError, RuntimeError):  # pragma: no cover - signature drift
+            pass
+    setter = getattr(project, "setFileName", None)
+    if setter is None:  # pragma: no cover - a build that keeps it protected
+        return
+    try:
+        setter("")
+    except (TypeError, RuntimeError):  # pragma: no cover - signature drift
+        return
 
 
 def _left_button():

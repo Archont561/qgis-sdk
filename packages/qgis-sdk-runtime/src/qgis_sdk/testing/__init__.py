@@ -14,7 +14,6 @@ from .fakes import (
     FakeAlgorithms,
     FakeLayers,
     FakeProcessing,
-    FakeProject,
     FakeSettings,
     FakeStyles,
     RecordingLog,
@@ -29,6 +28,8 @@ from .network import (
     QgisSdkNetworkFakeError,
     reply,
 )
+from .project import FakeProject
+from .rasters import FakeRasters
 from .server import FakeServerInterface, RegisteredFilter
 from .ui import (
     BuiltSurface,
@@ -55,6 +56,7 @@ __all__ = [
     "FakeNetworkTransport",
     "FakeProcessing",
     "FakeProject",
+    "FakeRasters",
     "FakeServerInterface",
     "FakeSettings",
     "FakeStyles",
