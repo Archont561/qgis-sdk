@@ -103,6 +103,52 @@ def test_native_edits_by_the_user_reach_the_state_and_its_listeners(
     ]
 
 
+def test_every_layer_kind_mounts_and_offers_only_its_own_kind(
+    rendering: Rendering,
+) -> None:
+    """TASK-91: one combo-box filter per kind, and ``any`` still lists them all.
+
+    An annotation layer is used because a project can hold one without a file:
+    the point cloud, vector tile and tiled scene fixtures are opened through the
+    service contract instead, where the provider has to read them.
+    """
+    from qgis.core import QgsAnnotationLayer
+
+    annotation = QgsAnnotationLayer(
+        "notes",
+        QgsAnnotationLayer.LayerOptions(QgsProject.instance().transformContext()),
+    )
+    QgsProject.instance().addMapLayer(annotation)
+    try:
+        for kind in (
+            "vector",
+            "raster",
+            "mesh",
+            "point_cloud",
+            "vector_tile",
+            "tiled_scene",
+            "any",
+        ):
+            picker = rendering.attach(LayerPicker(f"{kind}_pick", kind=kind))
+            assert isinstance(picker.widget, QgsMapLayerComboBox)
+
+        own = rendering.attach(LayerPicker("annotation_pick", kind="annotation"))
+        own.widget.setLayer(annotation)
+        assert own.value() == annotation.id()
+
+        every = rendering.attach(LayerPicker("every_pick", kind="any"))
+        every.widget.setLayer(annotation)
+        assert every.value() == annotation.id()
+
+        # A vector picker is not offered an annotation layer at all: the filter
+        # is the kind the input asked for, not a label on the same list.
+        foreign = rendering.attach(LayerPicker("vector_pick", kind="vector"))
+        foreign.widget.setLayer(annotation)
+        assert foreign.widget.currentLayer() is None
+    finally:
+        QgsProject.instance().removeMapLayer(annotation.id())
+
+
 def test_native_pickers_are_the_qgis_widgets(rendering: Rendering) -> None:
     layer = rendering.attach(LayerPicker("layer"))
     field = rendering.attach(FieldPicker("attribute", of=layer))

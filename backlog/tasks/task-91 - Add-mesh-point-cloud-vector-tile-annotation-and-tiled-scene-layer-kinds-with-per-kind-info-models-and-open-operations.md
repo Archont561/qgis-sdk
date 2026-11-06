@@ -3,10 +3,10 @@ id: TASK-91
 title: >-
   Add mesh, point cloud, vector tile, annotation and tiled-scene layer kinds
   with per-kind info models and open operations
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-11-06 21:40'
+updated_date: '2026-11-07 09:10'
 labels: []
 milestone: m-10
 dependencies:
@@ -23,7 +23,7 @@ decision-54 point 4. LayerInfo kinds mesh, point_cloud, vector_tile, annotation,
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Each kind opens from a fixture source, lists with its info and filters in LayerInput(kind=) on the native form, in Processing and on the wire (native tests).
+- [x] #1 Each kind opens from a fixture source, lists with its info and filters in LayerInput(kind=) on the native form, in Processing and on the wire (native tests).
 - [x] #2 Host operations regenerated and typed; doc-22 rows complete.
 - [x] #3 doc-12/doc-13 document the kinds and which operations apply to which.
 <!-- AC:END -->
@@ -67,8 +67,26 @@ with `kind` as the discriminator. `HOST_FINGERPRINT` moved with the surface.
 and a created annotation layer; `tests/host.types.ts` and `tests/stores.test.ts`
 type and read the seven-way union.
 
-**Open.** AC 1's native half holds for mesh and annotation. A vector tile, a
-point cloud and a tiled scene need a binary fixture (MBTiles, LAS/COPC, a 3D
-Tiles tileset) that this repository does not hold, so their native opens are
-proven only through the adapter's shared dispatch, not by an opened file - see
-doc-22's layer-kind row. Closing that gap is the remaining work on this AC.
+**Fixtures for the native halves.** AC 1 needs a file per kind, and the three
+that a text repository cannot hold are built by
+`tests/layer_kind_fixtures.py` instead of being committed as blobs: a LAS 1.2
+file (`struct`: a 227-byte header and three 20-byte point records at
+`0.01 m` scale), an MBTiles database (`sqlite3`: the specification's two tables,
+`format = pbf`, and one gzipped empty MVT per zoom) and a 3D Tiles
+`tileset.json` (JSON: one root tile with a region and no content, which 3D Tiles
+allows). `test_layer_kinds.py` reads each one back field by field in the *pure*
+lane - header size, offset to point data, record length and declared extent; the
+MBTiles tables and metadata; the tileset's region - so a builder PDAL or the
+Cesium provider would refuse fails before the opt-in native run ever starts.
+
+**The native half of AC 1 is closed.** `tests/services/test_layers_contract.py`
+now opens all five kinds through one contract: the checked-in `lagoon.2dm`
+(mesh) and a created annotation layer as before, plus the built point cloud, MBTiles
+source and tileset, each in its own per-backend directory. Both backends answer
+the same assertions - the kind, the name, the fields that kind has, and that the
+layer lists beside the others - with the numbers a provider owns (a point
+cloud's extra attribute names, a tile source's zoom range) asserted as
+structural facts rather than as one provider's values; the fake's exact numbers
+stay pinned in `test_layer_kinds.py`. `test_ui_components_native.py` gained the
+native-form half: a picker mounts for every kind, `annotation` and `any` offer a
+created annotation layer and a `vector` picker is not offered it at all.

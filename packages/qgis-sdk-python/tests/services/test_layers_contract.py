@@ -90,6 +90,68 @@ def test_an_annotation_layer_starts_empty_and_is_created_by_name(
     assert info in services.layers.list_layers()
 
 
+def test_a_point_cloud_opens_and_lists_with_its_points(services: Services) -> None:
+    """TASK-91: the LAS fixture is read by the provider, not described by the test."""
+    assert services.open_point_cloud is not None, (
+        "this backend has not joined the kind contract"
+    )
+    layer_id = services.open_point_cloud()
+
+    info = services.layers.layer(layer_id)
+
+    assert info.kind == "point_cloud"
+    assert info.name == conftest.POINT_CLOUD_NAME
+    assert info.point_count == conftest.POINT_CLOUD_COUNT
+    # PDAL's dimension names are the LAS specification's, and ``Z`` is the one
+    # every point cloud carries; which others a provider adds is its business,
+    # so the contract asks for the one both backends declare.
+    assert "Z" in info.attribute_names
+    assert info in services.layers.list_layers()
+
+
+def test_a_vector_tile_source_opens_and_lists_with_its_provider(
+    services: Services,
+) -> None:
+    """A tile source answers where its tiles come from and at which zooms."""
+    assert services.open_vector_tile is not None, (
+        "this backend has not joined the kind contract"
+    )
+    layer_id = services.open_vector_tile()
+
+    info = services.layers.layer(layer_id)
+
+    assert info.kind == "vector_tile"
+    assert info.name == conftest.VECTOR_TILE_NAME
+    assert isinstance(info.source_type, str) and info.source_type
+    # The exact range is the provider's to report - MBTiles stores it in its
+    # metadata, a service in its capabilities - so the contract asks for an
+    # ordered range rather than for one provider's numbers.
+    assert 0 <= info.min_zoom <= info.max_zoom
+    assert info in services.layers.list_layers()
+
+
+def test_a_tiled_scene_opens_and_lists_with_the_box_it_covers(
+    services: Services,
+) -> None:
+    """A 3D scene answers an extent; it has no tile count a page could wait for."""
+    assert services.open_tiled_scene is not None, (
+        "this backend has not joined the kind contract"
+    )
+    layer_id = services.open_tiled_scene()
+
+    info = services.layers.layer(layer_id)
+
+    assert info.kind == "tiled_scene"
+    assert info.name == conftest.TILED_SCENE_NAME
+    box = info.extent
+    assert box.x_min < box.x_max
+    assert box.y_min < box.y_max
+    # A tiled scene's own CRS is not a project CRS: the box is in the scene's
+    # coordinate reference, and claiming one it did not read would be wrong.
+    assert box.crs is None
+    assert info in services.layers.list_layers()
+
+
 def test_unknown_layer_identifier_is_reported(services: Services) -> None:
     with pytest.raises(QgisSdkLayerNotFoundError) as error:
         services.layers.layer("no-such-layer")

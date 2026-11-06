@@ -12,10 +12,15 @@ grant name, the answer typed per kind.
 
 from __future__ import annotations
 
+import gzip
+import json
+import sqlite3
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import layer_kind_fixtures as fixture_files
 import pytest
 from qgis_sdk.bridge import Dispatcher
 from qgis_sdk.bridge.authority import HostAuthority
@@ -626,3 +631,90 @@ def test_every_open_is_typed_and_answered_by_a_handler(tmp_path: Path) -> None:
         assert answered["value"]["kind"] == kind
 
     scope.close()
+
+
+# -- the fixtures a native half opens ----------------------------------------
+# TASK-91's native half needs one file per kind. The mesh is a checked-in ``.2dm``
+# and an annotation layer is created rather than opened; the other three are
+# containers a text repository cannot review as blobs - a LAS point cloud, an
+# MBTiles vector tile source and a 3D Tiles tileset - so the suite builds them
+# instead. These tests are what keeps the builders honest in the pure lane: a
+# builder that wrote a header PDAL refuses would otherwise only fail inside the
+# opt-in native run, where nobody reads the diff.
+
+
+def test_the_point_cloud_fixture_is_a_las_1_2_file_the_provider_can_read(
+    tmp_path: Path,
+) -> None:
+    path = fixture_files.write_point_cloud(tmp_path / "survey.las")
+
+    raw = path.read_bytes()
+
+    assert raw[:4] == b"LASF"
+    assert raw[24:26] == bytes((1, 2)), "version 1.2"
+    assert struct.unpack_from("<H", raw, 94)[0] == 227, "header size"
+    assert struct.unpack_from("<I", raw, 96)[0] == 227, "offset to point data"
+    assert raw[104] == 0, "point data format 0"
+    assert struct.unpack_from("<H", raw, 105)[0] == 20, "point record length"
+    assert struct.unpack_from("<I", raw, 107)[0] == len(
+        fixture_files.POINT_CLOUD_POINTS
+    )
+    assert len(raw) == 227 + 20 * len(fixture_files.POINT_CLOUD_POINTS)
+
+
+def test_the_point_cloud_fixture_declares_the_box_its_points_cover(
+    tmp_path: Path,
+) -> None:
+    """A LAS header carries the extent, and PDAL trusts it: it must be right."""
+    raw = fixture_files.write_point_cloud(tmp_path / "survey.las").read_bytes()
+
+    max_x, min_x, max_y, min_y, max_z, min_z = struct.unpack_from("<6d", raw, 179)
+    xs = [x for x, _, _ in fixture_files.POINT_CLOUD_POINTS]
+    ys = [y for _, y, _ in fixture_files.POINT_CLOUD_POINTS]
+    zs = [z for _, _, z in fixture_files.POINT_CLOUD_POINTS]
+
+    assert (min_x, max_x) == (min(xs), max(xs))
+    assert (min_y, max_y) == (min(ys), max(ys))
+    assert (min_z, max_z) == (min(zs), max(zs))
+
+
+def test_the_vector_tile_fixture_is_an_mbtiles_database_with_a_tile(
+    tmp_path: Path,
+) -> None:
+    path = fixture_files.write_vector_tiles(tmp_path / "basemap.mbtiles")
+
+    with sqlite3.connect(path) as database:
+        tables = {
+            row[0]
+            for row in database.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        metadata = dict(database.execute("SELECT name, value FROM metadata"))
+        (tile,) = database.execute("SELECT tile_data FROM tiles").fetchone()
+
+    assert {"metadata", "tiles"} <= tables
+    assert metadata["format"] == "pbf", "MBTiles serves Mapbox vector tiles"
+    assert metadata["name"] == fixture_files.VECTOR_TILE_NAME
+    assert metadata["minzoom"] == "0"
+    assert metadata["maxzoom"] == "2"
+    # An empty MVT message is a valid tile with no layers: the contract opens
+    # the layer, it never renders one, so the tile only has to be well formed.
+    assert gzip.decompress(tile) == b""
+
+
+def test_the_tiled_scene_fixture_is_a_tileset_covering_the_declared_region(
+    tmp_path: Path,
+) -> None:
+    path = fixture_files.write_tiled_scene(tmp_path / "scene" / "tileset.json")
+
+    tileset = json.loads(path.read_text(encoding="utf-8"))
+
+    assert tileset["asset"]["version"] == "1.0"
+    assert tileset["root"]["boundingVolume"]["region"] == list(
+        fixture_files.TILED_SCENE_REGION
+    )
+    # No content: opening a scene builds the tile index from the tileset, and a
+    # tile with no content is the smallest tileset 3D Tiles allows.
+    assert "content" not in tileset["root"]
+    assert tileset["root"]["geometricError"] == 0

@@ -7,7 +7,8 @@ created_date: '2026-10-26 10:20'
 # M10 sprint train and 0.11.0 dependency order
 
 **Status:** Running. The TASK-90 gate passed with the 0.10.0 pair on
-2026-11-06, so the train has started: sprint 1 (TASK-91) is implemented. Orders
+2026-11-06, so the train has started: sprint 1 (TASK-91) is implemented and
+Done, all five layer kinds opening natively. Next is sprint 2 (TASK-93). Orders
 work the m-10 tasks already declare; adds no scope. Sprint membership lives here
 and in the milestone body ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
@@ -31,7 +32,8 @@ project service, canvas, features and layouts. Remaining rows of
 
 - **Sprint 1: TASK-91.** Mesh, point cloud, vector tile, annotation,
   tiled-scene kinds with info models, open operations, pickers and
-  `LayerInput(kind=)`.
+  `LayerInput(kind=)`. Done, PR #173: the three containers the native half
+  opens are built by `tests/layer_kind_fixtures.py` rather than committed.
 - **Sprint 2: TASK-93.** Renderer, symbol and labelling models; style
   manager; QML and SLD both ways. The largest model surface; its own sprint.
 - **Sprint 3: TASK-92.** Connections registry, browse, open from a
