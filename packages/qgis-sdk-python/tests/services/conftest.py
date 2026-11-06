@@ -85,13 +85,15 @@ RASTER_NAME = "elevation"
 RASTER_EXTENT = CanvasExtent(x_min=21.0, y_min=52.0, x_max=21.3, y_max=52.2)
 RASTER_RESOLUTION = (0.1, 0.1)
 RASTER_BAND_COUNT = 1
-RASTER_DATA_TYPE = "Float32"
+RASTER_DATA_TYPE = "Float64"
 RASTER_NO_DATA = -9999.0
 # 1, 2, 3 in the top row; 4, no-data, 6 in the bottom one.
 RASTER_MINIMUM = 1.0
 RASTER_MAXIMUM = 6.0
 RASTER_MEAN = 3.2
-RASTER_STD_DEV = 1.7204650534085253
+#: GDAL's statistics pass reports the *sample* standard deviation, dividing the
+#: squared deviations by ``n - 1``: five valid cells give a divisor of four.
+RASTER_STD_DEV = 1.9235384061671346
 RASTER_VALID_CELLS = 5
 RASTER_NO_DATA_CELLS = 1
 #: Column 0 of the top row, and the hole in the bottom row beside it.
@@ -239,6 +241,7 @@ def _geotiff_fixture() -> Path:
     if _GEOTIFF:
         return _GEOTIFF[0]
     from qgis.core import (
+        QgsCoordinateReferenceSystem,
         QgsCoordinateTransformContext,
         QgsRasterFileWriter,
         QgsRasterLayer,
@@ -248,6 +251,12 @@ def _geotiff_fixture() -> Path:
     source = QgsRasterLayer(str(RASTER_DATASET), RASTER_NAME, "gdal")
     if not source.isValid():
         pytest.fail(f"the raster fixture {RASTER_DATASET} is not readable")
+    # The grid's own ``.prj`` is a sidecar the driver may or may not load, and
+    # the contract is about a raster that knows its CRS: the conversion declares
+    # it outright so the GeoTIFF carries EPSG:4326 either way.
+    crs = source.crs()
+    if not crs.isValid():
+        crs = QgsCoordinateReferenceSystem(FIXTURE_CRS)
     destination = _WORK_ROOT / "elevation.tif"
     pipe = QgsRasterPipe()
     if not pipe.set(source.dataProvider().clone()):
@@ -259,7 +268,7 @@ def _geotiff_fixture() -> Path:
         source.width(),
         source.height(),
         source.extent(),
-        source.crs(),
+        crs,
         QgsCoordinateTransformContext(),
     )
     if written != QgsRasterFileWriter.NoError:

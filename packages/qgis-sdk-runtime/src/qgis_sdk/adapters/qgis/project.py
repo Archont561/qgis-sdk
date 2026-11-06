@@ -66,6 +66,10 @@ __all__ = ["GROUP_ID_PREFIX", "NativeProject"]
 #: colliding with the layer id of a layer that happens to share the name.
 GROUP_ID_PREFIX = "group:"
 
+#: The project scope custom properties are stored under. ``QgsProject`` keeps
+#: them as scoped entries, which is the one spelling a 3.x and a 4.x build share.
+PROPERTY_SCOPE = "qgis-sdk"
+
 
 class NativeProject:
     """Edit the application's ``QgsProject`` and read it back."""
@@ -229,25 +233,40 @@ class NativeProject:
     def custom_properties(self) -> tuple[ProjectEntry, ...]:
         """Return the project's custom properties."""
         self._scope.ensure_open()
-        values = self._project.customProperties()
         return tuple(
-            ProjectEntry(str(key), str(value)) for key, value in values.items()
+            ProjectEntry(key, str(self._project.readEntry(PROPERTY_SCOPE, key)))
+            for key in self._property_keys()
         )
 
     def set_custom_property(self, name: str, value: str) -> tuple[ProjectEntry, ...]:
         """Set one custom property and answer the list it produced."""
         self._scope.ensure_open()
-        self._project.setCustomProperty(name, value)
+        with self._editing():
+            self._project.writeEntry(PROPERTY_SCOPE, name, value)
         self._notify("properties")
         return self.custom_properties()
 
     def unset_custom_property(self, name: str) -> tuple[ProjectEntry, ...]:
         """Remove one custom property; an absent name is a no-op."""
         self._scope.ensure_open()
-        if name in self._project.customProperties():
-            self._project.removeCustomProperty(name)
+        if name in self._property_keys():
+            with self._editing():
+                self._project.removeEntry(PROPERTY_SCOPE, name)
             self._notify("properties")
         return self.custom_properties()
+
+    def _property_keys(self) -> tuple[str, ...]:
+        """Return the scoped keys, without the scope prefix the project stores.
+
+        ``entryList`` answers the full path it stored (``qgis-sdk/author``) on
+        some builds and the bare key on others, so the prefix is stripped when
+        it is there and left alone when it is not.
+        """
+        prefix = f"{PROPERTY_SCOPE}/"
+        return tuple(
+            key.removeprefix(prefix)
+            for key in (str(raw) for raw in self._project.entryList(PROPERTY_SCOPE, ""))
+        )
 
     # -- bookmarks ----------------------------------------------------------
 
@@ -368,12 +387,16 @@ class NativeProject:
             lambda: self._notify("variables", from_signal=True)
         )
         bridge = self._project.layerTreeRegistryBridge()
-        bridge.layerAdded.connect(
-            lambda _node: self._notify("layers", from_signal=True)
-        )
-        bridge.layerRemoved.connect(
-            lambda _layer: self._notify("layers", from_signal=True)
-        )
+        for name in ("layersAdded", "layerAdded"):
+            signal = getattr(bridge, name, None)
+            if signal is not None:
+                signal.connect(lambda *_args: self._notify("layers", from_signal=True))
+                break
+        for name in ("layersWillBeRemoved", "layerRemoved", "layerWillBeRemoved"):
+            signal = getattr(bridge, name, None)
+            if signal is not None:
+                signal.connect(lambda *_args: self._notify("layers", from_signal=True))
+                break
 
     @contextmanager
     def _editing(self) -> Iterator[None]:
@@ -433,9 +456,21 @@ class NativeProject:
             self._walk(child, node.id, nodes)
 
     def _group(self, group: str) -> QgsLayerTreeGroup:
-        for node in self._root().findGroups():
-            if _group_id_of(node) == group:
-                return node
+        """Return the group whose derived id is ``group``.
+
+        The walk is this module's own rather than ``findGroups()``: the id a
+        caller holds came from :meth:`_walk`, so the lookup that resolves it has
+        to derive it the same way, and a build whose ``findGroups`` stops at the
+        first level must not make a nested group unreachable.
+        """
+        pending = [self._root()]
+        while pending:
+            for child in pending.pop().children():
+                if _is_layer(child):
+                    continue
+                if _group_id_of(child) == group:
+                    return child
+                pending.append(child)
         raise QgisSdkLayerNotFoundError(group)
 
     def _group_or_root(self, group: str | None) -> Any:
@@ -455,12 +490,12 @@ class NativeProject:
     def _bookmarks(self) -> list[tuple[str, Any]]:
         """Return ``(name, extent)`` pairs, in the manager's order."""
         manager = self._project.bookmarkManager()
-        return [(str(b.name()), b.extent()) for b in manager.bookmarks().values()]
+        return [(str(b.name()), b.extent()) for b in _bookmark_list(manager)]
 
     def _replace_bookmarks(self, boxes: list[tuple[str, CanvasExtent]]) -> None:
         """Rewrite the manager so it holds exactly ``boxes``, names and order kept."""
         manager = self._project.bookmarkManager()
-        for bookmark in manager.bookmarks().values():
+        for bookmark in _bookmark_list(manager):
             manager.removeBookmark(bookmark.id())
         crs = self._project.crs()
         for name, extent in boxes:
@@ -493,6 +528,17 @@ def _group_id_of(node: Any) -> str:
     if not names:
         return ""
     return GROUP_ID_PREFIX + "/".join(reversed(names))
+
+
+def _bookmark_list(manager: Any) -> list[Any]:
+    """Return the manager's bookmarks as a list.
+
+    ``QgsBookmarkManager.bookmarks()`` answers a name-keyed map on a 3.x build
+    and a plain list on a 4.x one, so the callers index neither.
+    """
+    bookmarks = manager.bookmarks()
+    values = getattr(bookmarks, "values", None)
+    return list(bookmarks if values is None else values())
 
 
 def _extent(box: Any) -> CanvasExtent:

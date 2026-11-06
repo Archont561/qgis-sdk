@@ -433,7 +433,7 @@ exists - `layers.list` and `layers.get` answer both kinds, each with its `kind`.
 ```ts
 const info = await qgis.host.rasters.open({ file: ref }); // RasterLayerInfo
 info.band_count;   // 1
-info.data_types;   // readonly ("Float32")[]
+info.data_types;   // readonly ("Float64")[]
 info.no_data;      // readonly (number | null)[]
 info.resolution;   // readonly number[] - (x, y) map units per pixel
 

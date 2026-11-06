@@ -2010,7 +2010,7 @@ branches on. The model for both is `LayerInfo`.
 info = self.ctx.rasters.open_raster(Path("/data/dem.tif"))
 info.kind          # "raster"
 info.band_count    # 1
-info.data_types    # ("Float32",) - per band, in band order
+info.data_types    # ("Float64",) - per band, in band order
 info.no_data       # (-9999.0,)   - per band; None where the band declares none
 info.extent        # CanvasExtent(x_min, y_min, x_max, y_max) - no CRS of its own
 info.resolution    # (x, y) map units per pixel

@@ -74,7 +74,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
                 minimum=1.0,
                 maximum=6.0,
                 mean=3.2,
-                std_dev=1.7204650534085253,
+                std_dev=1.9235384061671346,
                 valid_count=5,
                 no_data_count=1,
             )
