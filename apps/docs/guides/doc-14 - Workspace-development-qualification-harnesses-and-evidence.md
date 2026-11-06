@@ -1976,3 +1976,138 @@ The release assets are the three wheels, the three `.conda` files
 a prerelease. The prefix.dev uploads and the release-asset CDN are attested by
 the run logs; Conda is still not reproducible in this sandbox, and the native
 QGIS rows remain CI evidence rather than local runs.
+
+## 0.10.0 release gate (2026-11-06)
+
+What was run on this checkout on Linux x86-64 with CPython 3.11.2, pytest
+9.2.0, Ruff 0.17.4 and Alint 0.21.1, the runtime and the tools imported from
+their `src` trees in throwaway `venv`s. **No QGIS, no Qt, no bun and no pixi
+are present in this sandbox**, so the native layers, the Bun suites
+(bridge, stores, components, docs) and the Conda build are recorded as *not
+run* below and are carried by the `Linux checks`, `Linux coverage`,
+`QGIS 3.44 LTS`, `build-and-check-site` and `autorelease` rows. The
+TypeScript package, the components and the scaffold pin **are** stamped,
+because this minor moves the host catalogue; the Python trio is stamped with
+it.
+
+- **Required work (AC 1).** TASK-84, 85, 86, 87, 88 and 89 are Done and
+  TASK-90 is this gate. Every service landed with its contract, fake, native
+  adapter, host operations, grant name and coverage-map rows in the same
+  change (decision-54 point 1).
+- **Pure Python suite at the branch head, unstamped (AC 1).**
+  `pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests`
+  **2686 passed, 107 skipped, 7 deselected**. The skips are the native
+  layers, each naming what it lacks.
+- **Developer scripts and policy (AC 1).** `pytest -c tests/scripts/pyproject.toml
+  tests/scripts` came back **296 passed, 9 failed** on the first run, and the
+  nine were one cause: the freshly rebuilt `venv` had no `PyYAML`, so
+  `test_ci.py` and the seven UI-publish-shell tests failed on
+  `ModuleNotFoundError: No module named 'yaml'`. With `pyyaml` installed the
+  same command is **305 passed**, which is what every stamped-tree run below
+  reports. `alint check .` **9/9**, `ruff check .` clean, `ruff format --check .`
+  **510 files**, `biome check .` **196 files** (Biome 2.5.15, installed for this
+  gate) and `check-gherkin` **9 feature files**.
+- **Generated files agree with their sources (AC 3).**
+  `packages/qgis-sdk-python/scripts/generate_bridge_clients.py` rewrote
+  nothing - `unchanged .../src/generated/host.ts` and every client under
+  `tests/contracts/generated/` - and `git status -- packages/qgis-sdk-typescript`
+  is empty afterwards. `qgis-sdk bridge generate --check` in `examples/simple`
+  reports `web/src/bridge.schema.ts is up to date`.
+- **Version policy, rehearsed (AC 2).** `release.py plan --scope python
+  --trigger dispatch --bump minor` answers `python-v0.10.0` "forced release
+  from python-v0.9.0" and `--scope typescript` answers `ts-v0.7.0` from
+  `ts-v0.6.0`. `classify` gives `0.10.0` for `python-v0.10.0` and `0.10.0rc1`,
+  `prerelease: true`, for `python-v0.10.0-rc.1`; `0.7.0` and `0.7.0rc1` for the
+  TypeScript pair. Both are real minor moves with a `-rc.1` rehearsal
+  available, and the protocol versions stay independent of all of it.
+- **The bridge pair (AC 5).** `HOST_FINGERPRINT` moves from
+  `sha256:16790dc8c4d77ef5b5f22636702e913f3d6fb63275d0ae3e5a4ca6e8001a9abd`
+  (bridge 0.6.0) to
+  `sha256:9aa12425fcbffd493608456671505acf0eb625ee4cb91f391d2a9bc84b2c5c56`,
+  which is what makes a bridge minor mandatory rather than optional.
+  `HOST_SCHEMA_VERSION` is **1** in both languages and
+  `PLUGIN_DESCRIPTION_SCHEMA_VERSION` is **1**;
+  `BRIDGE_PROTOCOL_VERSION` is **2** on both sides and has been since the
+  stream `ack` landed earlier in this train, so this gate changes the protocol
+  not at all. `verify-versions` reports the contract version at 1 in Python
+  and TypeScript, and the catalogue the fingerprint covers is 63 operations
+  (58 calls, 5 streams), 22 grant names, 9 with the destructive annotation.
+- **doc-22 (AC 5).** The coverage map lists every 0.10.0 service as complete -
+  features, expressions, editing, rasters, layouts and atlases, the full
+  project, and the canvas - every one of the 63 operations has a row, every
+  grant name appears, and `tests/scripts/test_service_coverage.py` passes.
+  Two rows were corrected in this gate rather than left to argue for something
+  the code stopped doing: the payload row now says the delivery landed in
+  0.10.0 with only the `QWebEngineView` measurement open, and the grant
+  vocabulary row is complete with the deferred audit named.
+- **The migration notes (AC 1).** doc-12 gained `## 0.10.0 migration notes`
+  and doc-13 `## 0.7.0 migration notes`, both final rather than
+  "(in progress)", so the site routes `python-migration/v0-10` and
+  `typescript-migration/v0-7` as released pages. They cover the three shapes
+  that changed (`LayerInfo` as a union, `VectorLayerInfo.kind`, `FakeProject`'s
+  module), the four new capabilities and their by-name refusals, every model,
+  schema constant, error and fake the services add, the grant vocabulary's
+  twelve new names against the ten a 0.9 project already lists, `@tool` and
+  `start`, the protocol-2 `ack` and `gap` semantics, `readBlob` and
+  `followSubscription`, and a checklist for a 0.9 project. The docs build and
+  its link check are Bun jobs and are CI-carried; the anchors were checked by
+  hand against the headings they name.
+- **The stamp (AC 2).** `release.py stamp --version 0.10.0 --scope python`
+  moved the kit, runtime and tools manifests, the kit's exact pins (runtime,
+  tools and `tools[mcp]`, all `==0.10.0`), the tools' runtime range
+  (`>=0.10.0,<0.11`), the recipe's three versions and both examples' windows
+  (`>=0.10,<0.11`); `--version 0.7.0 --scope typescript` moved the bridge
+  `package.json`, the alias (and its pin) and `SDK_NPM_VERSION`. By hand, as
+  the 0.8.0 gate predicted: the components' peer range to `>=0.7.0 <0.8.0`
+  **in both the scoped package and its alias**, the one `SDK_NPM_VERSION`
+  literal in `test_scaffold_web.py`, and the status lines of the root README
+  and the five package READMEs. `verify-versions` then agrees on 0.10.0 for
+  the Python scope, 0.7.0 for the TypeScript scope and 0.1.0 for the ui
+  manifests with the peer range holding the bridge, and every scope passes its
+  own `--scope` run. The stamp also writes `qgis-sdk-release-changelog.md`;
+  it is tag input, not repository content, so it was removed rather than
+  committed with no tag to spend.
+- **On the stamped tree (AC 1, AC 3).** Pure suite **2692 passed, 106 skipped,
+  7 deselected** (118 s; the unstamped head collected five fewer outcomes,
+  the difference being the version literals the stamp moves), `tests/scripts`
+  **305 passed**, Ruff clean and formatted over 510 files, Biome 196 files,
+  Alint 9/9, gherlint 9 features. `examples/simple` **26 passed, 8 deselected**
+  and `examples/server` **8 passed** through the installed `qgis-sdk test`,
+  with `check` clean on 11 and 3 files.
+- **Artifacts (AC 3).** `build-python --scope python` builds and twine-checks
+  `qgis_sdk-0.10.0-py3-none-any.whl` (`83ea762f...`),
+  `qgis_sdk_runtime-0.10.0-py3-none-any.whl` (`b3cc3a32...`, 173 modules) and
+  `qgis_sdk_tools-0.10.0-py3-none-any.whl` (`3d3af62e...`, 66 modules), each
+  carrying `LICENSE` in `dist-info/licenses` and `Requires-Python: >=3.11`.
+  The kit pins `qgis-sdk-runtime==0.10.0` and `qgis-sdk-tools==0.10.0` with
+  `qgis-sdk-tools[mcp]==0.10.0` behind the `mcp` extra; the tools declare
+  `qgis-sdk-runtime<0.11,>=0.10.0` and `typer==0.27.3`. `verify-python`
+  passes all three.
+- **A clean installation (AC 3).** A fresh CPython 3.11.2 `venv` installs the
+  three wheels `--no-index` from `dist/pypi` over a `typer==0.27.3` + `rich`
+  base: **10 distributions**, `pip check` clean. Its `qgis-sdk new demo10`
+  writes `qgis-sdk-runtime>=0.10,<0.11` and `qgis-sdk-tools>=0.10,<0.11`,
+  `qgis-sdk check demo10` is *checked 3 files: no problems*, and
+  `check --grants` prints the three clients and the operation matrix.
+- **A project from the previous minor (AC 3).** The same scaffold with both
+  windows moved to `>=0.9,<0.10` is read by the installed 0.10.0 tools as
+  **`VERSION001`** ("pins `qgis-sdk-runtime>=0.9,<0.10`, outside the runtime
+  range this qgis-sdk-tools release supports (>=0.10.0,<0.11)") and
+  **`VERSION004`** ("declares `qgis-sdk-runtime>=0.9,<0.10` but the
+  importable runtime is 0.10.0"), each with its remediation, *checked 3 files:
+  2 problems* - a report, not a crash.
+- **Not run here, and where it is run.** The native service legs
+  (`tests/services/test_{canvas,features,rasters,layouts,project,...}_native.py`,
+  the offscreen `QgsLayoutExporter` and the `QGIS_SDK_NATIVE_SERVICES=1` job),
+  the Desktop harnesses and the in-process `QgsServer` in `QGIS 3.44 LTS`; the
+  pre-push splits of the pure suite in `Linux checks` and `Linux coverage`;
+  the Bun suites (`bridge`, `stores`, `components`, `ui alias`, `docs`, the
+  docs link check, typecheck and `bun pm pack`) in `checks` and
+  `build-and-check-site`; and Conda, which is unreachable from this sandbox.
+  The Windows and macOS QGIS rows stay *unqualified* per TASK-33.
+- **Approval (AC 4).** This record is a gate, not a release: nothing is
+  tagged, nothing is uploaded, and no date is promised for 1.0.0. The two tags
+  this minor would spend - `python-v0.10.0` and `ts-v0.7.0`, or their `-rc.1`
+  rehearsals first - are cut only on an explicit "publish", on the merge
+  commit of the stamp pull request and on one authorization for the pair,
+  because the bridge is released with the Python minor here.
