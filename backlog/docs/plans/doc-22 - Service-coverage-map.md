@@ -127,6 +127,24 @@ These are exploratory tasks, not accepted APIs or release commitments.
 | --- | --- | --- | --- |
 | Custom expressions | Plugin-owned registration of custom expression functions, separate from evaluate/validate | [TASK-128](../../tasks/task-128%20-%20Explore-owned-custom-QGIS-expression-function-declarations.md) | unassigned |
 | QGIS validity checks | Owned registration and lifecycle of layout and other validity checks | [TASK-129](../../tasks/task-129%20-%20Explore-owned-QGIS-layout-and-other-validity-check-declarations.md) | unassigned |
+| Attribute forms | Owned form configuration per field: editor widgets, aliases, defaults, constraints and layer actions, as a typed description | [TASK-149](../../tasks/task-149%20-%20Explore-attribute-forms-and-editor-widgets-as-a-service.md) | unassigned |
+| Schema / fields | Field add/rename/delete/type on the features service, and whether the field calculator is an operation or a composition | [TASK-150](../../tasks/task-150%20-%20Explore-field-and-schema-management-on-the-features-service.md) | unassigned |
+| Selection | Selection as a write: by ids, expression or extent, plus `clear` and a change stream; grant undecided | [TASK-151](../../tasks/task-151%20-%20Add-selection-as-a-writable-capability-with-a-change-stream.md) | unassigned |
+| Map tools | Identify, measure, snapping, rubber bands, layer context-menu entries and layer signals, beyond `@tool` capture | [TASK-152](../../tasks/task-152%20-%20Explore-map-tools-and-layer-interaction-beyond-geometry-capture.md) | unassigned |
+| Locator | A desktop-only locator-filter declaration with typed results and an activation that reaches an action | [TASK-153](../../tasks/task-153%20-%20Offer-locator-filters-as-a-plugin-declaration.md) | unassigned |
+| Plugin-owned objects | One registration and ownership model for layer-tree indicators, property pages, canvas items, custom renderers, expression functions and validity checks | [TASK-154](../../tasks/task-154%20-%20Explore-plugin-owned-registration-of-QGIS-objects-the-SDK-does-not-model.md) | unassigned |
+| Memory layers | Create and own a scratch layer so an intermediate result does not have to be written to disk | [TASK-155](../../tasks/task-155%20-%20Create-and-own-memory-layers-from-the-layers-service.md) | unassigned |
+| Data sources | Provider plus datasource parameters behind `open_vector`, so PostGIS, WMS/WFS, XYZ, vector tiles and virtual layers are expressible | [TASK-156](../../tasks/task-156%20-%20Decide-how-the-SDK-opens-non-file-and-remote-data-sources.md) | unassigned |
+| Map themes / visibility | Theme authoring and layer visibility, placed between the project and style services | [TASK-157](../../tasks/task-157%20-%20Place-map-theme-authoring-and-layer-visibility-between-project-and-styles.md) | unassigned |
+| Temporal / 3D / diagrams | Explicit accept-or-decline for time filtering, 3D views and diagram renderers | [TASK-158](../../tasks/task-158%20-%20Decide-the-temporal-3D-and-diagram-surface.md) | unassigned |
+| Documentation exit path | A going-deeper page, the two places the SDK contradicts PyQGIS advice, a troubleshooting page and a migration narrative | [TASK-159](../../tasks/task-159%20-%20Add-the-going-deeper-exit-pages-and-the-two-places-the-SDK-contradicts-PyQGIS-advice.md) | unassigned |
+
+The eleven rows from `TASK-149` to `TASK-159` came out of the
+[PyQGIS corpus coverage review](doc-31%20-%20PyQGIS-corpus-coverage-review.md),
+which compares pyqgis.com's guide corpus with this map: each row is a capability
+the corpus teaches that had no surface here *and* no task. None has a milestone,
+an owner or a release; each closes with a recommendation, and a declined one
+should end as a decision record rather than as silence.
 
 See the [session synthesis](doc-28%20-%20Session-synthesis-worker-jobs-API-ergonomics-and-PyQGIS-safety.md)
 for UI, dependency injection and other proposals and their status.
@@ -148,8 +166,13 @@ starts.
 
 | Area | Note |
 | --- | --- |
-| Map tools beyond point/line/polygon capture (identify, snapping, custom cursors) | `@tool` of decision-54 covers capture only; `ctx.desktop` remains the escape hatch |
-| 3D map views | no service; `ctx.desktop` only |
 | Processing model designer integration | models run (TASK-94); authoring them is QGIS's UI |
 | Native installers for standalone apps | conda recipe is the input ([decision-58](../../decisions/decision-58%20-%20Publish-plugins-to-the-official-QGIS-repository-from-the-tools-and-ship-standalone-apps-as-conda-packages.md)) |
 | macOS QGIS row | unqualified until a leg exists ([decision-57](../../decisions/decision-57%20-%20Support-QGIS-4-LTR-and-latest-on-Linux-and-Windows-with-a-native-CI-leg-per-row-and-keep-QGIS-3-out-of-scope.md)) |
+
+Map tools beyond point/line/polygon capture and 3D map views have left this
+table: each now has an exploratory task in the proposals above
+([TASK-152](../../tasks/task-152%20-%20Explore-map-tools-and-layer-interaction-beyond-geometry-capture.md),
+[TASK-158](../../tasks/task-158%20-%20Decide-the-temporal-3D-and-diagram-surface.md)),
+because the corpus review showed they were being rediscovered every session
+rather than decided.
