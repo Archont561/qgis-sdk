@@ -2122,6 +2122,39 @@ it.
 - **Approval (AC 4).** This record is a gate, not a release: nothing is
   tagged, nothing is uploaded, and no date is promised for 1.0.0. The two tags
   this minor would spend - `python-v0.10.0` and `ts-v0.7.0`, or their `-rc.1`
-  rehearsals first - are cut only on an explicit "publish", on the merge
-  commit of the stamp pull request and on one authorization for the pair,
-  because the bridge is released with the Python minor here.
+  rehearsals first - are spent on explicit authorization, on the merge commit
+  of the stamp pull request and on one authorization for the pair, because the
+  bridge is released with the Python minor here. The rehearsal half of that
+  was given and ran on `71e6b62`; the stable pair still waits for "publish".
+
+## 0.10.0 rc rehearsal (2026-11-06)
+
+The gate merged as `71e6b62` (PR #170) and both scopes were rehearsed on that
+commit with a prerelease tag each, in one authorization, because this minor
+releases the bridge with the Python kit. Prerelease tags dry-run the
+registries, so the rehearsal spends no version space.
+
+| Tag | `release.yml` run | Outcome |
+| --- | --- | --- |
+| `python-v0.10.0-rc.1` | [42278465791](https://github.com/Archont561/qgis-sdk/actions/runs/42278465791) | every job green: `build` classified the tag, stamped `0.10.0-rc.1` for scope `python`, passed "Verify the stamped manifests and the shared contract", recorded the support matrix, built and twine-checked the three wheels and the three Conda outputs; `pypi` ran "Verify the wheel without uploading" with every publish step skipped; `conda` ran "Skip prefix.dev upload for prereleases"; `github-release` published the prerelease with the three wheels, the three `.conda` files and `SHA256SUMS`. `npm`, `ui`, `github-packages` and `github-packages-ui` skipped, as a Python-only scope must |
+| `ts-v0.7.0-rc.1` | [42278466448](https://github.com/Archont561/qgis-sdk/actions/runs/42278466448) | every job green: `build` stamped `0.7.0-rc.1` for scope `typescript`, passed the same stamped-manifest and contract verification, built the bridge; `npm` packed the bridge and alias tarballs, smoke-tested the alias against the bridge tarball and ran "Dry-run the publish"; `github-packages` ran "Dry-run GitHub Packages publish"; `github-release` published the prerelease with both `.tgz` files and `SHA256SUMS`. `pypi`, `conda`, `ui` and `github-packages-ui` skipped |
+
+Nothing was consumed: PyPI still serves `qgis-sdk`, `qgis-sdk-runtime` and
+`qgis-sdk-tools` 0.9.0 as `latest`, and npm lists
+`@archont561/qgis-sdk` at `0.6.0` as `latest` with no `0.7.0` version at all.
+The two GitHub releases are prereleases
+(`python-v0.10.0-rc.1`, `ts-v0.7.0-rc.1`) carrying
+`qgis_sdk-0.10.0rc1-py3-none-any.whl`,
+`qgis_sdk_runtime-0.10.0rc1-py3-none-any.whl`,
+`qgis_sdk_tools-0.10.0rc1-py3-none-any.whl`,
+`qgis-sdk-0.10.0rc1-pyh6d2027d_0.conda`,
+`qgis-sdk-runtime-0.10.0rc1-pyh4616a5c_0.conda`,
+`qgis-sdk-tools-0.10.0rc1-pyh4616a5c_0.conda`,
+`archont561-qgis-sdk-0.7.0-rc.1.tgz` and `qgis-sdk-0.7.0-rc.1.tgz`. The
+Conda names carry PEP 440's `0.10.0rc1` spelling, which is what
+`rattler-build` derives from the tag.
+
+**What is still missing for a release.** The stable pair -
+`python-v0.10.0` and `ts-v0.7.0` on the same commit - needs its own explicit
+authorization, because that is the run that uploads to PyPI, prefix.dev, npm
+and GitHub Packages for real.
