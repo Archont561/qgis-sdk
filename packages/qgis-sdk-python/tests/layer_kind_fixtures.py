@@ -59,7 +59,6 @@ VECTOR_TILE_MAX_ZOOM = 2
 #: metres - the same box the three reference points cover, so the scene sits
 #: where the rest of the fixtures do.
 TILED_SCENE_REGION = (21.0, 52.0, 21.2, 52.2, 0.0, 60.0)
-TILED_SCENE_NAME = "scene"
 
 
 def write_point_cloud(

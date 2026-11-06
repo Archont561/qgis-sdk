@@ -90,3 +90,22 @@ structural facts rather than as one provider's values; the fake's exact numbers
 stay pinned in `test_layer_kinds.py`. `test_ui_components_native.py` gained the
 native-form half: a picker mounts for every kind, `annotation` and `any` offer a
 created annotation layer and a `vector` picker is not offered it at all.
+
+**Two adapter defects the native run found (2026-11-07).** Opening a real file of
+each kind for the first time is what caught them; the fake and the wire could
+not, because neither has a provider to ask:
+
+- a point cloud was constructed with the provider's *library* name
+  (`pointcloud`), not the metadata key its provider registers with
+  `QgsProviderRegistry` (`pdal`). The registry answers an unknown key with no
+  provider and an invalid layer, so every LAS read as a missing file;
+- a vector tile layer's data source is a `QgsDataSourceUri`, not a path: the
+  layer reads `type` out of it to choose a provider and the provider reads its
+  own parameters from the same string. Handing it a bare path left the layer
+  invalid with no source type at all. `open_vector_tile` now builds
+  `type=mbtiles&url=…` through `QgsDataSourceUri` (`.mbtiles` and `.vtpk`;
+  any other suffix is refused by name instead of reported as missing).
+
+Both are pinned in `tests/test_layer_kinds_native.py`. The tiled-scene fixture's layer
+is named `tileset`, because a 3D Tiles set is a `tileset.json` and this adapter
+names a layer after its file's stem.

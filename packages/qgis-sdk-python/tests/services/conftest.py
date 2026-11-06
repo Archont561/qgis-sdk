@@ -129,7 +129,10 @@ POINT_CLOUD_COUNT = len(fixture_files.POINT_CLOUD_POINTS)
 VECTOR_TILE_DATASET = FIXTURE_ROOT / "basemap.mbtiles"
 VECTOR_TILE_NAME = fixture_files.VECTOR_TILE_NAME
 TILED_SCENE_DATASET = FIXTURE_ROOT / "scene" / "tileset.json"
-TILED_SCENE_NAME = fixture_files.TILED_SCENE_NAME
+#: A 3D Tiles set is called ``tileset.json`` by convention, and every adapter in
+#: this repository names a layer after its file's stem - so the name a page sees
+#: is ``tileset``, not the folder the file sits in.
+TILED_SCENE_NAME = TILED_SCENE_DATASET.stem
 
 #: The nested group structure the project-tree contract builds on both backends.
 ROOT_GROUP = "Elevation"

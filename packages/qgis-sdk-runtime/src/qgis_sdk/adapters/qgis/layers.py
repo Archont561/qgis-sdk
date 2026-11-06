@@ -18,6 +18,7 @@ from qgis.core import (
     Qgis,
     QgsAnnotationLayer,
     QgsCoordinateTransformContext,
+    QgsDataSourceUri,
     QgsMapLayer,
     QgsMeshLayer,
     QgsPointCloudLayer,
@@ -105,14 +106,29 @@ class NativeLayers:
         return _describe_mesh(layer)
 
     def open_point_cloud(self, source: Path) -> PointCloudLayerInfo:
-        """Open a point cloud and describe its point count and attributes."""
-        layer = QgsPointCloudLayer(str(source), Path(source).stem, "pointcloud")
+        """Open a point cloud and describe its point count and attributes.
+
+        ``pdal`` is the *metadata* key the point cloud provider registers with
+        ``QgsProviderRegistry``; ``pointcloud`` is the name of its library and
+        of the layer type, not something the registry answers to. A key it does
+        not know is answered with no provider and an invalid layer, which reads
+        as a broken file rather than as a wrong name - so the key is the one
+        QGIS itself passes.
+        """
+        layer = QgsPointCloudLayer(str(source), Path(source).stem, "pdal")
         self._remember(layer)
         return _describe_point_cloud(layer)
 
     def open_vector_tile(self, source: Path) -> VectorTileLayerInfo:
-        """Open a vector tile layer and describe its source type and zooms."""
-        layer = QgsVectorTileLayer(str(source), Path(source).stem)
+        """Open a vector tile layer and describe its source type and zooms.
+
+        A vector tile layer's data source is a ``QgsDataSourceUri``, not a file
+        path: the layer reads ``type`` out of it to choose a provider, and the
+        provider reads its own parameters out of the same string. An MBTiles file
+        is therefore ``type=mbtiles&url=<path>``; a bare path carries no source
+        type at all, and the layer comes back invalid with no provider.
+        """
+        layer = QgsVectorTileLayer(_vector_tile_source(source), Path(source).stem)
         self._remember(layer)
         return _describe_vector_tile(layer)
 
@@ -297,6 +313,34 @@ def _describe_other(layer: QgsMapLayer) -> LayerInfo:
 def _authid(layer: QgsMapLayer) -> str | None:
     """The layer's authority code, or ``None`` when it has no CRS of its own."""
     return layer.crs().authid() or None
+
+
+#: The vector tile source types this adapter opens, by file suffix. A vector tile
+#: source is a container QGIS reads through its own provider, and the URI has to
+#: name the type before the provider can decode the rest of it.
+_VECTOR_TILE_SOURCE_TYPES = {".mbtiles": "mbtiles", ".vtpk": "vtpk"}
+
+
+def _vector_tile_source(source: Path) -> str:
+    """Return the data-source URI a vector tile layer reads for ``source``.
+
+    Built with ``QgsDataSourceUri`` rather than by joining strings, because that
+    is what percent-encodes the path once and decodes it once: a temp directory
+    with a space in it must survive the round trip, and a path that carries ``&``
+    must not become a second parameter.
+    """
+    suffix = Path(source).suffix.lower()
+    source_type = _VECTOR_TILE_SOURCE_TYPES.get(suffix)
+    if source_type is None:
+        raise QgisSdkUnsupportedCapabilityError(
+            Path(source).name,
+            f"a {suffix or 'file with no suffix'} is not a vector tile source "
+            f"this SDK opens; {', '.join(_VECTOR_TILE_SOURCE_TYPES)} are",
+        )
+    uri = QgsDataSourceUri()
+    uri.setParam("type", source_type)
+    uri.setParam("url", str(source))
+    return bytes(uri.encodedUri()).decode()
 
 
 def _describe_mesh(layer: QgsMeshLayer) -> MeshLayerInfo:
