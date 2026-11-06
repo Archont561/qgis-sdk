@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from qgis.core import (
+    QgsBookmark,
     QgsCoordinateReferenceSystem,
     QgsProject,
     QgsRectangle,
@@ -234,7 +235,7 @@ class NativeProject:
         """Return the project's custom properties."""
         self._scope.ensure_open()
         return tuple(
-            ProjectEntry(key, str(self._project.readEntry(PROPERTY_SCOPE, key)))
+            ProjectEntry(key, self._property_value(key))
             for key in self._property_keys()
         )
 
@@ -254,6 +255,18 @@ class NativeProject:
                 self._project.removeEntry(PROPERTY_SCOPE, name)
             self._notify("properties")
         return self.custom_properties()
+
+    def _property_value(self, key: str) -> str:
+        """Return one stored value, whichever shape the reader answers.
+
+        ``readEntry`` returns the value itself on one build and a
+        ``(value, found)`` pair on the next, so the pair is unwrapped rather than
+        a string that spells both being handed to a page.
+        """
+        stored = self._project.readEntry(PROPERTY_SCOPE, key)
+        if isinstance(stored, tuple | list) and len(stored) == 2:
+            stored = stored[0]
+        return str(stored)
 
     def _property_keys(self) -> tuple[str, ...]:
         """Return the scoped keys, without the scope prefix the project stores.
@@ -382,21 +395,42 @@ class NativeProject:
         if self._connected:
             return
         self._connected = True
-        self._project.crsChanged.connect(lambda: self._notify("crs", from_signal=True))
-        self._project.customVariablesChanged.connect(
-            lambda: self._notify("variables", from_signal=True)
+        self._connect_signal(
+            self._project,
+            "crsChanged",
+            lambda *_: self._notify("crs", from_signal=True),
         )
-        bridge = self._project.layerTreeRegistryBridge()
-        for name in ("layersAdded", "layerAdded"):
-            signal = getattr(bridge, name, None)
-            if signal is not None:
-                signal.connect(lambda *_args: self._notify("layers", from_signal=True))
+        self._connect_signal(
+            self._project,
+            "customVariablesChanged",
+            lambda *_: self._notify("variables", from_signal=True),
+        )
+        # QGIS reports a layer entering or leaving the project on the project
+        # itself (``layerWasAdded``/``layerWillBeRemoved``); the registry
+        # bridge's own pair is spelled differently from one build to the next.
+        for name in ("layerWasAdded", "layersAdded", "layerAdded"):
+            if self._connect_signal(
+                self._project,
+                name,
+                lambda *_: self._notify("layers", from_signal=True),
+            ):
                 break
-        for name in ("layersWillBeRemoved", "layerRemoved", "layerWillBeRemoved"):
-            signal = getattr(bridge, name, None)
-            if signal is not None:
-                signal.connect(lambda *_args: self._notify("layers", from_signal=True))
+        for name in ("layerWillBeRemoved", "layersWillBeRemoved", "layerRemoved"):
+            if self._connect_signal(
+                self._project,
+                name,
+                lambda *_: self._notify("layers", from_signal=True),
+            ):
                 break
+
+    @staticmethod
+    def _connect_signal(source: Any, name: str, handler: Any) -> bool:
+        """Connect ``handler`` to ``source.name`` when that member is a signal."""
+        connect = getattr(getattr(source, name, None), "connect", None)
+        if connect is None:
+            return False
+        connect(handler)
+        return True
 
     @contextmanager
     def _editing(self) -> Iterator[None]:
@@ -499,7 +533,16 @@ class NativeProject:
             manager.removeBookmark(bookmark.id())
         crs = self._project.crs()
         for name, extent in boxes:
-            manager.addBookmark(QgsReferencedRectangle(_box(extent), crs), name)
+            rectangle = QgsReferencedRectangle(_box(extent), crs)
+            try:
+                manager.addBookmark(rectangle, name)
+            except TypeError:
+                # The other spelling of the same call: a bookmark object that
+                # carries its own name, which is all this build accepts.
+                bookmark = QgsBookmark()
+                bookmark.setName(name)
+                bookmark.setExtent(rectangle)
+                manager.addBookmark(bookmark)
 
     def _release(self) -> None:
         """Drop the listeners; the project itself belongs to the application."""
