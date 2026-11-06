@@ -1,10 +1,10 @@
 ---
 id: TASK-90
 title: Prepare and qualify 0.10.0 release
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-11-06 20:30'
+updated_date: '2026-11-06 19:45'
 labels: []
 milestone: m-9
 dependencies:
@@ -29,12 +29,45 @@ Explicit release gate for the services II release (m-9, decision-54), not eviden
 - [x] #1 Required work has verified outcomes and test/artifact evidence across the Python suite, tests/scripts, the opt-in harnesses the milestone touched and the example projects; doc-12/doc-13 migration notes cover every added or renamed name.
 - [x] #2 Use valid SemVer and prereleases such as -rc.1; update actual manifests only for released packages (runtime, tools, kit at one version; the tools runtime range moves with it) and keep protocol versions independent.
 - [x] #3 Validate compatibility, licenses, generated-file consistency and clean installation where applicable; qgis-sdk check on a project from the previous minor reports what changed rather than crashing.
-- [ ] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks. (Open: the artifacts and checks are recorded in this pull request and doc-14; the approval is the owner's "publish", which has not been given.)
+- [x] #4 Record artifacts/checks and explicit publishing approval; no stable 1.0.0 promise, automatic publication or invented passing checks. (Approved with "publish" after the green `-rc.1` rehearsal; released as `python-v0.10.0` and `ts-v0.7.0` on `71e6b62`, recorded in doc-14 under "Released afterwards".); no stable 1.0.0 promise, automatic publication or invented passing checks.
 - [x] #5 The bridge pair is confirmed with evidence: the next @archont561/qgis-sdk minor (regenerated generated/host.ts, HOST_FINGERPRINT moved, HOST_SCHEMA_VERSION and BRIDGE_PROTOCOL_VERSION unchanged) is gated in the same run and tagged on the same merge commit only on the same explicit authorization; release.py verify-versions agrees on the contract version in both languages; doc-22 shows every 0.10.0 service complete. (The values this minor ships are
 `HOST_SCHEMA_VERSION` 1 and `BRIDGE_PROTOCOL_VERSION` 2: the protocol moved to 2
 earlier in the train, with the stream `ack`, and neither moved in this gate - see
 the notes below.)
 <!-- AC:END -->
+
+## Released (2026-11-06)
+
+Owner said "publish", after the gate merged as `71e6b62` (PR #170) and the
+`-rc.1` pair had run green on that commit. Two annotated tags on the same
+commit, one authorization for both scopes because this minor releases the
+bridge with the kit:
+
+- `python-v0.10.0` (run 42280008092) - `build`, `pypi`, `conda` and
+  `github-release` succeeded; `npm`, `ui`, `github-packages` and
+  `github-packages-ui` skipped. The three PyPI uploads, the three prefix.dev
+  uploads and the GitHub Release were real; the prerelease skip steps were
+  themselves skipped.
+- `ts-v0.7.0` (run 42280008166) - `build`, `npm`, `github-packages` and
+  `github-release` succeeded; `pypi`, `conda`, `ui` and `github-packages-ui`
+  skipped. "Publish to npm", "Publish the alias to npm" and "Publish to GitHub
+  Packages" all ran.
+
+PyPI serves 0.10.0 as `latest` for `qgis-sdk`, `qgis-sdk-runtime` and
+`qgis-sdk-tools` (`83ea762f`, `b3cc3a32`, `3d3af62e`), the same three wheel
+digests this gate built and checked locally. npm serves
+`@archont561/qgis-sdk` 0.7.0 as `latest` and its alias `qgis-sdk` at 0.7.0, and
+the packed tarball carries `HOST_FINGERPRINT` `sha256:9aa12425...`, the value
+the Python side declares. A fresh CPython 3.11.2 venv installing the published
+`qgis-sdk[mcp]==0.10.0` resolves `mcp 2.3.0` + `mcp-types 2.3.0` with a clean
+`pip check`, renders `qgis-sdk mcp --help`, and scaffolds a server project with
+`>=0.10,<0.11` windows that `check` passes.
+
+Both GitHub Releases are stable, carrying the three wheels and three `.conda`
+files with `SHA256SUMS` (Python) and the two `.tgz` files with `SHA256SUMS`
+(bridge). All five criteria are checked and the task is Done. The prefix.dev and
+GitHub Packages uploads are attested by the run logs; Conda and the native QGIS
+rows remain outside this sandbox.
 
 ## Implementation Notes
 
