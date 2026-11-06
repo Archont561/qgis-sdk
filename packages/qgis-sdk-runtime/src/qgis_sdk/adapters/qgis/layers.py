@@ -362,7 +362,11 @@ def _describe_mesh(layer: QgsMeshLayer) -> MeshLayerInfo:
 
 
 def _describe_point_cloud(layer: QgsPointCloudLayer) -> PointCloudLayerInfo:
-    """Translate a point cloud into its point total and attribute names."""
+    """Translate a point cloud into its point total and attribute names.
+
+    ``QgsPointCloudAttributeCollection`` counts with ``count()``: it is a
+    ``QVector``-like container, not a Qt list, and it has no ``size()``.
+    """
     attributes = layer.attributes()
     return PointCloudLayerInfo(
         id=layer.id(),
@@ -370,7 +374,7 @@ def _describe_point_cloud(layer: QgsPointCloudLayer) -> PointCloudLayerInfo:
         crs=_authid(layer),
         point_count=int(layer.pointCount()),
         attribute_names=tuple(
-            attributes.at(index).name() for index in range(attributes.size())
+            attributes.at(index).name() for index in range(attributes.count())
         ),
     )
 

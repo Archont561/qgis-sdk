@@ -21,7 +21,7 @@ import pytest
 pytestmark = pytest.mark.qgis
 
 try:
-    from qgis.core import QgsVectorTileLayer
+    from qgis.core import QgsDataSourceUri, QgsVectorTileLayer
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"the vector tile source needs QGIS: {error}", allow_module_level=True)
 
@@ -37,8 +37,13 @@ def test_a_vector_tile_source_names_its_type_and_its_path(tmp_path: Path) -> Non
 
     uri = _vector_tile_source(tiles)
 
-    assert uri.startswith("type=mbtiles")
-    assert f"url={tiles}" in uri
+    # The value is percent-encoded on the way out and decoded on the way in, so
+    # the assertion is the round trip rather than the bytes: a temp directory
+    # with a space in its name has to survive both halves.
+    parsed = QgsDataSourceUri()
+    parsed.setEncodedUri(uri)
+    assert parsed.param("type") == "mbtiles"
+    assert parsed.param("url") == str(tiles)
     layer = QgsVectorTileLayer(uri, tiles.stem)
     assert layer.isValid(), layer.error().message() if layer.error() else uri
 
