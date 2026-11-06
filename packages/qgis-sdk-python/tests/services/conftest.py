@@ -33,8 +33,10 @@ import pytest
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, CentroidRequest
+from qgis_sdk.models.canvas import CanvasExtent
 from qgis_sdk.services import (
     Algorithms,
+    Canvas,
     Features,
     Layers,
     Notifications,
@@ -63,6 +65,15 @@ FIXTURE_CRS = "EPSG:4326"
 WORKING_CRS = "EPSG:3857"
 # A projected CRS whose map units are US survey feet: metres would be wrong.
 FEET_CRS = "EPSG:2227"
+# The box around the three reference points. The fake is told it; the native
+# canvas computes it from the geometry, and the contract asserts one covers the
+# other rather than pretending the two are byte-identical.
+FIXTURE_EXTENT = CanvasExtent(
+    x_min=21.0, y_min=52.0, x_max=21.2, y_max=52.2, crs=FIXTURE_CRS
+)
+# The map theme both backends declare: a theme is project configuration, not a
+# canvas operation, so each backend is asked to provide one by name.
+DECLARED_THEME = "reference"
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +114,19 @@ class Services:
     #: The file behind :attr:`editable_layer` when a backend writes one to disk.
     #: ``None`` for a backend whose editable layer exists only in memory.
     editable_dataset: Path | None = None
+    #: The map the user is looking at (TASK-85). ``None`` while a backend has not
+    #: joined the canvas contract, so one slice failing is one test failing.
+    canvas: Canvas | None = None
+    #: Draws ``shape`` on the canvas the way a user would, so an open capture
+    #: session answers. Selecting is a host action in the features contract for
+    #: the same reason: the curated surface reads a drawing, it does not make one.
+    draw: Callable[[str], None] | None = None
+    #: Whether a capture session is open - the canvas-equivalent of asking the
+    #: map tool, so ``capture`` and its canceller can be asserted on both backends.
+    is_drawing: Callable[[], bool] | None = None
+    #: Declares a map theme over whatever layers the project holds, because
+    #: ``apply_theme`` picks a theme and never creates one.
+    declare_theme: Callable[[str], None] | None = None
 
 
 def _native_available() -> bool:
@@ -149,6 +173,31 @@ def _feature_work_directory() -> Path:
     return directory
 
 
+#: What the fake answers a drawing with: the shape each capture session asks
+#: for, as the WKT the fake never converts. The vertices are the same ones the
+#: native driver clicks, so both backends describe the same drawing.
+_DRAWN_WKT = {
+    "point": ("POINT (21.1 52.1)", 1, 1),
+    "line": ("LINESTRING (21 52, 21.2 52.2)", 1, 2),
+    "polygon": ("POLYGON ((21 52, 21.2 52, 21.2 52.2, 21 52))", 1, 4),
+}
+
+
+def _drawn_geometry(shape: str):
+    """The geometry the fake hands back for a finished drawing of ``shape``."""
+    from qgis_sdk.models import Geometry
+
+    value, parts, vertices = _DRAWN_WKT[shape]
+    return Geometry(
+        encoding="wkt",
+        value=value,
+        geometry_type=shape,
+        crs=FIXTURE_CRS,
+        part_count=parts,
+        vertex_count=vertices,
+    )
+
+
 def _point_wkt(x: float, y: float):
     """A WKT point the fake declares; the fake never converts encodings."""
     from qgis_sdk.models import Geometry
@@ -161,6 +210,7 @@ def _point_wkt(x: float, y: float):
 def _fake_services() -> Services:
     from qgis_sdk.testing import (
         FakeAlgorithms,
+        FakeCanvas,
         FakeFiles,
         FakeLayers,
         FakeProject,
@@ -243,7 +293,16 @@ def _fake_services() -> Services:
     )
     del editable
     styles = FakeStyles(layers, scope)
+    canvas = FakeCanvas(
+        scope,
+        layer_extents={FIXTURE_NAME: FIXTURE_EXTENT},
+        themes=(DECLARED_THEME,),
+    )
     return Services(
+        canvas=canvas,
+        draw=lambda shape: canvas.draw(_drawn_geometry(shape)),
+        is_drawing=lambda: bool(canvas.open_captures()),
+        declare_theme=lambda name: canvas.declare_theme(name),
         files=files,
         algorithms=algorithms,
         features=features,
@@ -271,6 +330,7 @@ def _native_services() -> Services:
     from qgis.core import QgsProject
     from qgis_sdk.adapters.qgis import (
         NativeAlgorithms,
+        NativeCanvas,
         NativeLayers,
         NativeNotifications,
         NativeProject,
@@ -302,6 +362,11 @@ def _native_services() -> Services:
 
     features = NativeFeatures(layers, scope)
 
+    # A canvas for the canvas contract: real, offscreen, and sized, because a
+    # canvas with no output size reports no scale at all.
+    native_canvas = _offscreen_canvas()
+    canvas = NativeCanvas(scope, layers=layers, canvas=native_canvas)
+
     # A layer the features tests ask for is opened when they ask: this backend
     # starts with nothing open, which is a fact the algorithms contract asserts.
     opened: dict[str, str] = {}
@@ -321,6 +386,10 @@ def _native_services() -> Services:
         return _open(editable_copy)
 
     return Services(
+        canvas=canvas,
+        draw=lambda shape: _draw_on(native_canvas, shape),
+        is_drawing=lambda: _is_drawing(native_canvas),
+        declare_theme=lambda name: _declare_theme(name),
         files=files,
         features=features,
         editable_layer=editable_layer,
@@ -345,6 +414,85 @@ def _native_services() -> Services:
         select=select,
         work_directory=work_directory,
     )
+
+
+#: The canvases this session built. QgsMapCanvas is a plain QObject owned by
+#: Python here, so a reference has to outlive the test that used it.
+_CANVASES: list[object] = []
+
+
+def _offscreen_canvas():
+    """A sized ``QgsMapCanvas`` on the fixture CRS, for the native contract."""
+    from qgis.core import QgsCoordinateReferenceSystem, QgsRectangle
+    from qgis.gui import QgsMapCanvas
+
+    canvas = QgsMapCanvas()
+    canvas.resize(800, 600)
+    canvas.setDestinationCrs(QgsCoordinateReferenceSystem(FIXTURE_CRS))
+    canvas.setExtent(
+        QgsRectangle(
+            FIXTURE_EXTENT.x_min,
+            FIXTURE_EXTENT.y_min,
+            FIXTURE_EXTENT.x_max,
+            FIXTURE_EXTENT.y_max,
+        )
+    )
+    _CANVASES.append(canvas)
+    return canvas
+
+
+def _left_button():
+    """The left mouse button, spelled for the binding this QGIS uses."""
+    from qgis.PyQt.QtCore import Qt
+
+    return getattr(Qt, "MouseButton", Qt).LeftButton
+
+
+#: The clicks a user makes to draw each shape, in canvas coordinates: a point is
+#: one click, a line ends on a repeated click, and a polygon closes on its first
+#: vertex - the gestures the capture tool documents.
+_DRAWN_POINTS: dict[str, list[tuple[float, float]]] = {
+    "point": [(21.1, 52.1)],
+    "line": [(21.0, 52.0), (21.2, 52.2), (21.2, 52.2)],
+    "polygon": [(21.0, 52.0), (21.2, 52.0), (21.2, 52.2), (21.0, 52.0)],
+}
+
+
+def _draw_on(canvas, shape: str) -> None:
+    """Click ``shape`` onto the canvas, as the user of a capture tool would.
+
+    The tool is reached through the canvas rather than through the adapter, so
+    this drives the same object QGIS would hand a click to.
+    """
+    from qgis.core import QgsPointXY
+    from qgis_sdk.adapters.qgis.canvas import _CaptureTool
+
+    tool = canvas.mapTool()
+    if not isinstance(tool, _CaptureTool):
+        pytest.fail("no capture tool is installed on the canvas")
+    for x, y in _DRAWN_POINTS[shape]:
+        tool.canvasClicked(QgsPointXY(x, y), _left_button())
+
+
+def _is_drawing(canvas) -> bool:
+    """Whether a capture tool is installed, i.e. a drawing is in progress."""
+    from qgis_sdk.adapters.qgis.canvas import _CaptureTool
+
+    return isinstance(canvas.mapTool(), _CaptureTool)
+
+
+def _declare_theme(name: str) -> None:
+    """Insert one map theme over the project's layers.
+
+    A theme is a record in the project's collection; the canvas only ever picks
+    one, so this is the test's job and not the adapter's.
+    """
+    from qgis.core import QgsMapThemeCollection, QgsProject
+
+    record = QgsMapThemeCollection.MapThemeRecord()
+    for layer in QgsProject.instance().mapLayers().values():
+        record.addLayerRecord(QgsMapThemeCollection.MapThemeLayerRecord(layer))
+    QgsProject.instance().mapThemeCollection().insert(name, record)
 
 
 BACKENDS: dict[str, Callable[[], Services]] = {"fake": _fake_services}

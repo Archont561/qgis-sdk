@@ -228,12 +228,15 @@ def app_context(
     plugin_id: str,
     window: Any | None = None,
     ui: Any | None = None,
+    canvas: Any | None = None,
 ) -> PluginContext:
     """The context an app host offers: every curated service, no ``iface``.
 
     ``ctx.host`` is ``app``, ``ctx.desktop`` refuses by name - there is no
     ``QgisInterface`` behind a standalone application - and ``ctx.ui`` exists
-    exactly when there is a window to open surfaces in. That is the whole
+    exactly when there is a window to open surfaces in. ``canvas`` is that
+    window's ``QgsMapCanvas``, so a graphical app has ``ctx.canvas`` and a
+    headless one has no view at all. That is the whole
     difference from a Desktop plugin, and it is stated here rather than inferred
     from a missing attribute somewhere downstream (decision-52 point 4).
     """
@@ -245,6 +248,7 @@ def app_context(
         iface=None,
         notifications=AppNotifications(window, tag=f"qgis-sdk app: {plugin_id}"),
         host=Host.APP,
+        canvas=canvas,
     )
     return context if ui is None else context.with_services(ui=ui)
 
@@ -278,6 +282,7 @@ class QtAppSurface:
             ResourceScope(),
             plugin_id=self._plugin_id,
             window=self._window,
+            canvas=self._canvas,
             ui=self._surfaces,
         )
         if gui:

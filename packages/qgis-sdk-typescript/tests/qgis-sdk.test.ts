@@ -377,6 +377,7 @@ test("`host` is the curated surface on the same client, with every grant by defa
 	expect(Object.keys(qgis.host).sort()).toEqual([
 		"algorithms",
 		"blob",
+		"canvas",
 		"editing",
 		"expressions",
 		"features",

@@ -17,6 +17,7 @@ from qgis_sdk.models import (
     QgisSdkExportRefusedError,
     QgisSdkUnsupportedCapabilityError,
 )
+from qgis_sdk.models.canvas import CanvasExtent
 from simple.plugin import EXPORT_DIRECTORY_KEY, app
 from simple.workflow import LocalGisWorkflow
 
@@ -72,6 +73,18 @@ def test_buffer_creates_a_styled_new_layer_and_keeps_the_source(
     assert fake_host.styles.applied(output.id) == (LocalGisWorkflow.OUTPUT_STYLE,)
     assert fake_host.project.layer_ids() == (source.id, output.id)
     assert fake_host.layers.layer(source.id) == source
+
+
+def test_buffer_moves_the_map_onto_the_new_layer(fake_host: FakeHost) -> None:
+    """The output is presented where the user is looking, not only added."""
+    source = fake_host.runtime.actions["open_fixture"]()
+
+    output = fake_host.runtime.actions["buffer"](source.id, 500.0, WORKING_CRS)
+
+    extent = fake_host.canvas.extent()
+    assert extent == CanvasExtent(0.0, 0.0, 100.0, 100.0, WORKING_CRS)
+    assert fake_host.canvas.drawn() == ()
+    assert output.id in fake_host.project.layer_ids()
 
 
 def test_centroid_runs_the_generated_request_and_the_fake_records_it(

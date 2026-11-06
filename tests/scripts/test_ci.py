@@ -649,3 +649,134 @@ def test_skill_tests_are_not_run_or_trigger_ci():
     )
     assert ".agents/skills" not in python_package["scripts"]["test"]
     assert not (root / ".agents/skills/skill-creator/tests").exists()
+
+
+# -- Gherkin linting ---------------------------------------------------------
+
+FEATURES_ROOT = "packages/qgis-sdk-python/tests/features"
+
+
+def _checkout(tmp_path: Path, feature: str = "Feature: A\n\n  Scenario: B\n") -> Path:
+    """A throwaway checkout with one feature file where the lint looks."""
+    directory = tmp_path / FEATURES_ROOT
+    directory.mkdir(parents=True)
+    (directory / "sample.feature").write_text(feature, encoding="utf-8")
+    return tmp_path
+
+
+def _stub(tmp_path: Path, reported: str = "", status: int = 0) -> Path:
+    """A stand-in for gherlint: it prints ``reported`` and exits ``status``."""
+    stub = tmp_path / "gherlint"
+    stub.write_text(
+        f"#!/bin/sh\ncat <<'REPORT'\n{reported}\nREPORT\nexit {status}\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    return stub
+
+
+def test_check_gherkin_passes_a_file_the_linter_does_not_complain_about(
+    tmp_path: Path,
+):
+    root = _checkout(tmp_path)
+    result = run_ci(
+        "check-gherkin",
+        "--root",
+        str(root),
+        "--gherlint",
+        str(_stub(tmp_path)),
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0
+    assert "1 feature file(s) clean" in result.stdout
+
+
+def test_check_gherkin_fails_on_a_finding_even_though_the_linter_exits_zero(
+    tmp_path: Path,
+):
+    """gherlint always exits zero, so the findings are counted from its report."""
+    root = _checkout(tmp_path)
+    finding = (
+        f"{root / FEATURES_ROOT / 'sample.feature'}:3:3: "
+        "Scenario does not contain any When step (missing-when-step)"
+    )
+    stub = _stub(tmp_path, reported=f"************* sample.feature\n{finding}")
+    result = run_ci(
+        "check-gherkin", "--root", str(root), "--gherlint", str(stub), cwd=tmp_path
+    )
+    assert result.returncode == 1
+    assert "missing-when-step" in result.stdout
+    assert "1 finding(s)" in result.stdout
+
+
+def test_check_gherkin_fails_when_a_feature_file_sits_outside_the_lint(
+    tmp_path: Path,
+):
+    root = _checkout(tmp_path)
+    elsewhere = root / "packages" / "elsewhere"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "stray.feature").write_text("Feature: Stray\n", encoding="utf-8")
+    result = run_ci(
+        "check-gherkin",
+        "--root",
+        str(root),
+        "--gherlint",
+        str(_stub(tmp_path)),
+        cwd=tmp_path,
+    )
+    assert result.returncode == 1
+    assert "stray.feature is outside the linted directories" in result.stdout
+    assert "FEATURE_DIRECTORIES" in result.stdout
+
+
+def test_check_gherkin_reports_a_missing_linter_rather_than_passing(tmp_path: Path):
+    root = _checkout(tmp_path)
+    result = run_ci(
+        "check-gherkin",
+        "--root",
+        str(root),
+        "--gherlint",
+        str(tmp_path / "no-such-gherlint"),
+        cwd=tmp_path,
+    )
+    assert result.returncode == 127
+    assert "gherlint is missing" in result.stdout
+
+
+def test_check_gherkin_fails_when_the_linter_itself_fails(tmp_path: Path):
+    root = _checkout(tmp_path)
+    result = run_ci(
+        "check-gherkin",
+        "--root",
+        str(root),
+        "--gherlint",
+        str(_stub(tmp_path, reported="boom", status=3)),
+        cwd=tmp_path,
+    )
+    assert result.returncode == 3
+    assert "gherlint exited with 3" in result.stdout
+
+
+def test_every_feature_file_in_the_checkout_is_linted():
+    """The invariant behind the checks: no scenario escapes the linted tree."""
+    import ci
+
+    root = SCRIPT.parents[1]
+    files = ci.feature_files(root)
+    assert files, "the checkout has no feature file; the lint would pass vacuously"
+    assert ci.unlinted_features(root) == []
+    assert all(
+        str(path.relative_to(root)).startswith(ci.FEATURE_DIRECTORIES) for path in files
+    )
+
+
+def test_the_linter_policy_file_is_where_the_linter_reads_it():
+    """`gherlint` reads `gherlint.toml` from the working directory it is run in."""
+    root = SCRIPT.parents[1]
+    policy = root / "gherlint.toml"
+    assert policy.is_file()
+    import tomllib
+
+    disabled = tomllib.loads(policy.read_text(encoding="utf-8"))["reporting"]["disable"]
+    # Exactly the one message the Background rule cannot satisfy both ways.
+    assert disabled == ["missing-given-step"]

@@ -79,6 +79,14 @@ jobs:
         id: s07
         run: pixi run -e default format-python-check
 
+      # Every `*.feature` file is linted, and a feature file outside the
+      # directories the check knows is a failure rather than a file that
+      # quietly stops being linted. The task keeps gherlint's pydantic 1 in a
+      # venv of its own, so the default environment's pydantic 2 is untouched.
+      - name: Lint Gherkin feature files
+        id: s27
+        run: pixi run -e default lint-features
+
       - name: Test release tooling
         id: s09
         run: pixi run -e default test-release-tool

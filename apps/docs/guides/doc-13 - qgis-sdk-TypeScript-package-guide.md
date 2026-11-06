@@ -242,7 +242,9 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   `network.fetch` stream, `algorithms.providers`, `algorithms.list`,
   `algorithms.describe`, `algorithms.run` (below) and, since 0.10.0,
   `features.page`, `features.get`, `expressions.evaluate`,
-  `expressions.validate` and `editing.begin/add/update/delete/commit/rollback`.
+  `expressions.validate`, `editing.begin/add/update/delete/commit/rollback`,
+  and the `canvas` namespace with its `canvas.extent_changed` and
+  `canvas.capture` streams.
   Anything else of the QGIS API is not reachable from a page; the operations it
   would need wait for their owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
@@ -264,7 +266,8 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   before its first call.
 - **Reached through a grant, never wholesale.** Every operation belongs to one
   grant (`layers.read`, `layers.open`, `project.read`, `files.export`,
-  `algorithms.read`, `algorithms.run`, `network.fetch`, ...), and the page is
+  `algorithms.read`, `algorithms.run`, `network.fetch`, `canvas.read`,
+  `canvas.control`, ...), and the page is
   registered with `register_host_operations(only=...)`: what
   `[tool.qgis-sdk.web] grants` does not name is *absent* on this side too, so
   `host.settings` is `undefined` rather than a call that fails. The same names
@@ -375,6 +378,47 @@ operation like any host id: `harness.expectInvoke("algorithms.run", (payload)
 `web/src/processing.schema.ts` for `native` from the runtime's own snapshot
 and grants `algorithms.run`; `bindings` regenerates it against the project's
 QGIS, so a registry that differs shows up as drift rather than a stale type.
+
+### The map canvas from a page
+
+The `canvas` namespace is the view the user is looking at. Two grants split it:
+`canvas.read` for `extent()`, `scale()`, `crs()`, `center()`, `themes()` and the
+`extent_changed` stream, and `canvas.control` for `zoom_to`, `refresh`,
+`apply_theme` and `capture` - a page that may draw a scale bar cannot pan the map
+under somebody's cursor.
+
+```ts
+const extent = await qgis.host.canvas.extent();      // CanvasExtent
+await qgis.host.canvas.zoom_to({ kind: "layer", layer_id: layer.id, margin: 0.1 });
+const themes = await qgis.host.canvas.themes();      // MapThemes
+
+const stop = await qgis.host.canvas.extent_changed({}, {
+	onEvent: (event) => console.info(event.payload.x_min, event.payload.x_max),
+	onTerminal: (terminal) => console.info("stopped following:", terminal.kind),
+});
+```
+
+- **An extent is four numbers and a CRS.** `CanvasExtent { x_min, y_min, x_max,
+  y_max, crs? }`; `CanvasPoint` is the centre in the same CRS. Nothing here is a
+  native rectangle, so a page can draw a box or place a marker without a host
+  object.
+- **`zoom_to` answers where the map landed**, not `null`: a real canvas grows the
+  box to the window's aspect ratio, so the answer is at least what was asked for
+  and is what a page should draw against. `kind` is `layer`, `selection` or
+  `extent`; `margin` is a fraction of the target's span added on every side, and
+  a target the canvas cannot honour fails by name instead of moving nothing.
+- **Applying a theme is `canvas.apply_theme({name})`**, which returns the new
+  `MapThemes`: `active` is always one of `names`, and an unknown name fails with
+  the name in the message rather than leaving a stale label on screen.
+- **`canvas.capture` is a stream with one event.** Subscribe with
+  `{shape: "point" | "line" | "polygon"}`, receive the drawn geometry as one
+  `data` frame and a `complete` terminal; the tool is removed when the
+  subscription ends, whichever way it ends. A page cannot finish a drawing - the
+  user does - so the subscription is how a page waits for one.
+- **`canvas.extent_changed` is ordered per subscription.** `seq` starts at zero
+  and increases by one, so a gap is detectable; a refresh is not a move and
+  produces no frame. A server host has no canvas: every operation is declared and
+  fails by name there.
 
 ## The schema module and `QgisSdk`
 

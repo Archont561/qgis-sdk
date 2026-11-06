@@ -96,6 +96,16 @@ test("the host module names its surface and advertises its version", () => {
 		"algorithms.providers",
 		"algorithms.run",
 		"blob.get",
+		"canvas.apply_theme",
+		"canvas.capture",
+		"canvas.center",
+		"canvas.crs",
+		"canvas.extent",
+		"canvas.extent_changed",
+		"canvas.refresh",
+		"canvas.scale",
+		"canvas.themes",
+		"canvas.zoom_to",
 		"editing.add",
 		"editing.begin",
 		"editing.commit",
@@ -811,4 +821,164 @@ test("a style is applied to a layer and the call answers with nothing", async ()
 		layer_id: "parcels",
 		style: "<qgis></qgis>",
 	});
+});
+
+test("the canvas answers its extent, scale, CRS and centre", async () => {
+	const extent = {
+		x_min: 21.0,
+		y_min: 52.0,
+		x_max: 21.2,
+		y_max: 52.2,
+		crs: "EPSG:4326",
+	};
+	const { client, sent } = scripted(extent);
+	const host = createHost(client);
+
+	expect(await host.canvas.extent()).toEqual(extent);
+	expect(sent[0]?.operation).toBe("canvas.extent");
+
+	const point = { x: 21.1, y: 52.1, crs: "EPSG:4326" };
+	const { client: centred, sent: reads } = scripted(point);
+	expect(await createHost(centred).canvas.center()).toEqual(point);
+	expect(reads[0]?.operation).toBe("canvas.center");
+
+	const { client: scaled, sent: scales } = scripted(25000);
+	expect(await createHost(scaled).canvas.scale()).toBe(25000);
+	expect(scales[0]?.operation).toBe("canvas.scale");
+
+	const { client: crs, sent: crses } = scripted("EPSG:3857");
+	expect(await createHost(crs).canvas.crs()).toBe("EPSG:3857");
+	expect(crses[0]?.operation).toBe("canvas.crs");
+});
+
+test("a zoom sends its target and answers where the canvas landed", async () => {
+	const landed = { x_min: 0, y_min: 0, x_max: 10, y_max: 10, crs: "EPSG:3857" };
+	const { client, sent } = scripted(landed);
+	const answer = await createHost(client).canvas.zoom_to({
+		kind: "layer",
+		layer_id: "parcels",
+		margin: 0.1,
+	});
+
+	expect(answer).toEqual(landed);
+	expect(sent[0]?.operation).toBe("canvas.zoom_to");
+	expect(sent[0]?.payload).toEqual({
+		kind: "layer",
+		layer_id: "parcels",
+		margin: 0.1,
+	});
+
+	// `extent` carries the box, so the same operation zooms to what a page
+	// computed; a margin outside the declared bound never leaves the page.
+	const { client: boxed, sent: boxes } = scripted(landed);
+	await createHost(boxed).canvas.zoom_to({
+		kind: "extent",
+		extent: { x_min: 0, y_min: 0, x_max: 10, y_max: 10 },
+	});
+	expect(boxes[0]?.payload).toEqual({
+		kind: "extent",
+		extent: { x_min: 0, y_min: 0, x_max: 10, y_max: 10 },
+	});
+
+	const { client: unsent, sent: nothing } = scripted(landed);
+	await expect(
+		createHost(unsent).canvas.zoom_to({
+			kind: "layer",
+			layer_id: "parcels",
+			margin: 99,
+		}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+});
+
+test("a refresh is a mutation that answers with nothing", async () => {
+	const { client, sent } = scripted(null);
+	expect(await createHost(client).canvas.refresh()).toBe(null);
+	expect(sent[0]?.operation).toBe("canvas.refresh");
+});
+
+test("themes are names with an active one, and applying one answers the new list", async () => {
+	const themes = { names: ["print", "draft"], active: "print" };
+	const { client, sent } = scripted(themes);
+	const host = createHost(client);
+
+	expect(await host.canvas.themes()).toEqual(themes);
+	expect(sent[0]?.operation).toBe("canvas.themes");
+
+	const { client: applying, sent: applications } = scripted({
+		names: ["print", "draft"],
+		active: "draft",
+	});
+	const applied = await createHost(applying).canvas.apply_theme({
+		name: "draft",
+	});
+	expect(applied.active).toBe("draft");
+	expect(applications[0]?.operation).toBe("canvas.apply_theme");
+	expect(applications[0]?.payload).toEqual({ name: "draft" });
+
+	// `active` being one of `names` is the host's guarantee - a JSON schema
+	// cannot say "one of another array's items" - so the page reads the list
+	// and the name rather than guessing which style the map is drawn in.
+});
+
+test("the extent stream frames a move with a growing sequence", async () => {
+	const { client, sent, emit, end } = scripted(null);
+	const frames: unknown[] = [];
+	const terminals: HostStreamTerminal[] = [];
+
+	await createHost(client).canvas.extent_changed(
+		{},
+		{
+			onEvent: (event) => frames.push(event.payload),
+			onTerminal: (terminal) => terminals.push(terminal),
+		},
+	);
+
+	expect(sent[0]?.operation).toBe("canvas.extent_changed");
+	const first = { x_min: 0, y_min: 0, x_max: 1, y_max: 1, crs: "EPSG:4326" };
+	const second = { x_min: 0, y_min: 0, x_max: 2, y_max: 2, crs: "EPSG:4326" };
+	emit({ kind: "data", payload: first });
+	emit({ kind: "data", payload: second });
+	end({ kind: "complete" });
+
+	expect(frames).toEqual([first, second]);
+	expect(terminals).toEqual([{ kind: "complete" }]);
+});
+
+test("a capture is a stream that answers with the geometry the user drew", async () => {
+	const { client, sent, emit, end } = scripted(null);
+	const drawn: unknown[] = [];
+	const handle = await createHost(client).canvas.capture(
+		{ shape: "polygon" },
+		{
+			onEvent: (event) => drawn.push(event.payload),
+			onTerminal: () => undefined,
+		},
+	);
+
+	expect(sent[0]?.operation).toBe("canvas.capture");
+	expect(sent[0]?.payload).toEqual({ shape: "polygon" });
+	emit({
+		kind: "data",
+		payload: {
+			encoding: "wkt",
+			value: "POLYGON ((0 0, 1 0, 1 1, 0 0))",
+			geometry_type: "polygon",
+			crs: "EPSG:4326",
+			part_count: 1,
+			vertex_count: 4,
+			is_empty: false,
+		},
+	});
+	end({ kind: "complete" });
+	expect(drawn).toHaveLength(1);
+
+	// A shape nobody can draw never reaches the host.
+	const { client: unsent, sent: nothing } = scripted(null);
+	await expect(
+		createHost(unsent).canvas.capture({ shape: "hexagon" } as never, {}),
+	).rejects.toThrow(QgisSdkHostContractError);
+	expect(nothing.length).toBe(0);
+
+	handle.close();
 });

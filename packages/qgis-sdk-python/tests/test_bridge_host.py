@@ -31,10 +31,13 @@ from qgis_sdk.bridge.host import (
     register_host_operations,
 )
 from qgis_sdk.bridge.protocol import BRIDGE_PROTOCOL_VERSION, HOST_SCHEMA_VERSION
+from qgis_sdk.models.canvas import CanvasExtent, ZoomTarget
 from qgis_sdk.models.errors import QgisSdkBridgeError
+from qgis_sdk.models.features import Geometry
 from qgis_sdk.models.layers import VectorLayerInfo
 from qgis_sdk.network import NetworkGrant
 from qgis_sdk.services.algorithms import Algorithms
+from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.layers import Layers
@@ -57,6 +60,7 @@ PROTOCOLS: dict[str, type] = {
     "Algorithms": Algorithms,
     "Features": Features,
     "EditingSession": EditingSession,
+    "Canvas": Canvas,
 }
 
 
@@ -301,6 +305,8 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "features.read",
         "features.edit",
         "expressions.evaluate",
+        "canvas.read",
+        "canvas.control",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.
@@ -321,11 +327,14 @@ def test_the_description_is_the_manifest_in_the_generator_shape() -> None:
     for action in described["actions"]:
         assert action["request"]["type"] == "object"
         result = action["result"]
+        # A result is a closed object, nothing at all, one of the bare JSON
+        # scalars, or a union - anything open-ended would generate a type a page
+        # cannot narrow, which is the drift this assertion exists to catch.
         assert (
             result.get("additionalProperties") is False
-            or result.get("type") == "null"
+            or result.get("type") in {"null", "number", "string", "boolean"}
             or "anyOf" in result
-        )
+        ), action["id"]
     for stream in described["streams"]:
         assert stream["request"]["type"] == "object"
         assert "result" not in stream
@@ -1251,3 +1260,300 @@ def test_host_services_from_a_context_carry_algorithms_and_files() -> None:
     assert services.algorithms is algorithms
     assert services.files is files
     assert services.authority is files.authority
+
+
+# -- the map canvas ----------------------------------------------------------
+
+#: The box the canvas tests move onto: the fixture's reference points, in WGS 84.
+CANVAS_BOX = CanvasExtent(
+    x_min=21.0, y_min=52.0, x_max=21.2, y_max=52.2, crs="EPSG:4326"
+)
+
+
+def _canvased(
+    *, canvas: object | None = None, themes: tuple[str, ...] = ("dark",)
+) -> tuple[Dispatcher, object, Any]:
+    """A dispatcher whose host has a canvas, and that canvas, and a binding."""
+    from qgis_sdk.core import ResourceScope
+    from qgis_sdk.testing import FakeCanvas
+
+    if canvas is None:
+        canvas = FakeCanvas(
+            ResourceScope(),
+            extent=CANVAS_BOX,
+            layer_extents={"layer-0": CANVAS_BOX},
+            themes=themes,
+        )
+    services = _services(1)
+    services = HostServices(
+        layers=services.layers,
+        project=services.project,
+        settings=services.settings,
+        styles=services.styles,
+        notifications=services.notifications,
+        authority=services.authority,
+        canvas=canvas,
+    )
+    dispatcher = _dispatcher(services)
+    return dispatcher, canvas, dispatcher.bind(view_id="view-1", origin=ORIGIN)
+
+
+def test_the_canvas_answers_its_extent_scale_crs_and_centre() -> None:
+    dispatcher, _canvas, binding = _canvased()
+
+    extent = _call(dispatcher, "canvas.extent", binding=binding)
+    assert extent["ok"] is True
+    assert extent["value"] == {
+        "x_min": 21.0,
+        "y_min": 52.0,
+        "x_max": 21.2,
+        "y_max": 52.2,
+        "crs": "EPSG:4326",
+    }
+    assert _call(dispatcher, "canvas.scale", binding=binding)["value"] == pytest.approx(
+        400.0
+    )
+    assert _call(dispatcher, "canvas.crs", binding=binding)["value"] == "EPSG:4326"
+    centre = _call(dispatcher, "canvas.center", binding=binding)["value"]
+    assert centre == {"x": 21.1, "y": 52.1, "crs": "EPSG:4326"}
+
+
+def test_zooming_to_a_layer_answers_where_the_canvas_landed() -> None:
+    dispatcher, _canvas, binding = _canvased()
+
+    landed = _call(
+        dispatcher,
+        "canvas.zoom_to",
+        {"kind": "layer", "layer_id": "layer-0", "margin": 0.0},
+        binding=binding,
+    )
+
+    assert landed["ok"] is True
+    assert landed["value"] == {
+        "x_min": 21.0,
+        "y_min": 52.0,
+        "x_max": 21.2,
+        "y_max": 52.2,
+        "crs": "EPSG:4326",
+    }
+    assert (
+        _call(dispatcher, "canvas.extent", binding=binding)["value"] == landed["value"]
+    )
+
+
+def test_zooming_to_an_extent_the_page_computed_is_one_request() -> None:
+    dispatcher, _canvas, binding = _canvased()
+
+    zoomed = _call(
+        dispatcher,
+        "canvas.zoom_to",
+        {
+            "kind": "extent",
+            "extent": {
+                "x_min": 20.0,
+                "y_min": 51.0,
+                "x_max": 21.0,
+                "y_max": 52.0,
+                "crs": "EPSG:4326",
+            },
+            "margin": 0.5,
+        },
+        binding=binding,
+    )
+
+    assert zoomed["ok"] is True
+    assert zoomed["value"]["x_min"] == pytest.approx(19.5)
+    assert zoomed["value"]["x_max"] == pytest.approx(21.5)
+
+
+def test_a_zoom_the_canvas_cannot_honour_fails_by_name() -> None:
+    dispatcher, _canvas, binding = _canvased()
+
+    unknown = _call(
+        dispatcher,
+        "canvas.zoom_to",
+        {"kind": "layer", "layer_id": "layer-9"},
+        binding=binding,
+    )
+    assert unknown["ok"] is False
+    assert unknown["error"]["code"] == BridgeErrorCode.OPERATION_FAILED.value
+    assert "layer-9" in unknown["error"]["message"]
+
+    nothing = _call(
+        dispatcher,
+        "canvas.zoom_to",
+        {"kind": "selection", "layer_id": "layer-0"},
+        binding=binding,
+    )
+    assert nothing["ok"] is False
+    assert "nothing is selected" in nothing["error"]["message"]
+
+
+def test_a_zoom_request_that_is_neither_a_layer_nor_an_extent_is_refused() -> None:
+    dispatcher, _canvas, binding = _canvased()
+
+    payload = _call(dispatcher, "canvas.zoom_to", {"kind": "map"}, binding=binding)
+
+    assert payload["ok"] is False
+    assert payload["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
+
+
+def test_themes_are_listed_and_one_of_them_is_applied() -> None:
+    dispatcher, _canvas, binding = _canvased(themes=("dark", "print"))
+
+    listed = _call(dispatcher, "canvas.themes", binding=binding)
+    assert listed["value"] == {"names": ["dark", "print"], "active": None}
+
+    applied = _call(
+        dispatcher, "canvas.apply_theme", {"name": "print"}, binding=binding
+    )
+    assert applied["ok"] is True
+    assert applied["value"] == {"names": ["dark", "print"], "active": "print"}
+
+    unknown = _call(
+        dispatcher, "canvas.apply_theme", {"name": "missing"}, binding=binding
+    )
+    assert unknown["ok"] is False
+    assert "missing" in unknown["error"]["message"]
+
+
+def test_a_refresh_redraws_without_moving_the_canvas() -> None:
+    dispatcher, canvas, binding = _canvased()
+
+    result = _call(dispatcher, "canvas.refresh", binding=binding)
+
+    assert result["ok"] is True
+    assert result["value"] is None
+    assert canvas.refreshes == 1
+    assert canvas.extent() == CANVAS_BOX
+
+
+def test_the_extent_stream_follows_the_canvas_until_it_is_unsubscribed() -> None:
+    dispatcher, canvas, binding = _canvased()
+
+    opened = _subscribe(dispatcher, "canvas.extent_changed", binding=binding)
+    assert opened["ok"] is True
+    subscription_id = opened["value"]["subscription_id"]
+    assert dispatcher.pump(binding) == []
+
+    canvas.zoom_to(ZoomTarget.to_extent(CANVAS_BOX))
+    (frame,) = dispatcher.pump(binding)
+    assert frame["event"]["kind"] == "data"
+    assert frame["event"]["payload"]["x_min"] == 21.0
+    assert frame["seq"] == 0
+
+    canvas.zoom_to(
+        ZoomTarget.to_extent(CanvasExtent(20.0, 51.0, 21.0, 52.0, "EPSG:4326"))
+    )
+    (second,) = dispatcher.pump(binding)
+    assert second["seq"] == 1
+    assert second["event"]["payload"]["x_min"] == 20.0
+
+    closed = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "unsubscribe",
+            "call_id": "unsub",
+            "subscription_id": subscription_id,
+        },
+    )
+    assert closed["ok"] is True
+    assert canvas.subscriptions() == 0
+
+    canvas.zoom_to(ZoomTarget.to_extent(CANVAS_BOX))
+    assert dispatcher.pump(binding) == []
+
+
+def test_a_capture_stream_answers_the_drawn_geometry_and_completes() -> None:
+    dispatcher, canvas, binding = _canvased()
+
+    opened = _subscribe(
+        dispatcher, "canvas.capture", {"shape": "point"}, binding=binding
+    )
+    assert opened["ok"] is True
+    assert canvas.open_captures() == ("point",)
+
+    canvas.draw(
+        Geometry(
+            encoding="wkt",
+            value="POINT (21.1 52.1)",
+            geometry_type="point",
+            crs="EPSG:4326",
+            part_count=1,
+            vertex_count=1,
+        )
+    )
+    data, terminal = dispatcher.pump(binding)
+
+    assert data["event"]["kind"] == "data"
+    assert data["event"]["payload"]["geometry_type"] == "point"
+    assert data["event"]["payload"]["value"] == "POINT (21.1 52.1)"
+    assert terminal["terminal"] == {"kind": "complete"}
+    # The completed session is gone: nothing is left installed on the canvas.
+    assert canvas.open_captures() == ()
+
+
+def test_an_unsubscribed_capture_leaves_no_tool_behind() -> None:
+    dispatcher, canvas, binding = _canvased()
+
+    opened = _subscribe(
+        dispatcher, "canvas.capture", {"shape": "polygon"}, binding=binding
+    )
+    assert canvas.open_captures() == ("polygon",)
+
+    dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "unsubscribe",
+            "call_id": "unsub",
+            "subscription_id": opened["value"]["subscription_id"],
+        },
+    )
+
+    assert canvas.open_captures() == ()
+    assert canvas.drawn() == ()
+
+
+def test_a_capture_of_a_shape_no_tool_draws_fails_before_a_subscription() -> None:
+    dispatcher, canvas, binding = _canvased()
+
+    opened = _subscribe(
+        dispatcher, "canvas.capture", {"shape": "hexagon"}, binding=binding
+    )
+
+    assert opened["ok"] is False
+    assert opened["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
+    assert canvas.open_captures() == ()
+
+
+def test_a_host_without_a_canvas_declares_the_operations_and_names_the_gap() -> None:
+    """A server host advertises ``canvas.*`` and refuses each call by name."""
+    dispatcher = _dispatcher(_services(1))
+
+    for operation in ("canvas.extent", "canvas.themes", "canvas.refresh"):
+        refused = _call(dispatcher, operation)
+        assert refused["ok"] is False
+        assert refused["error"]["code"] == BridgeErrorCode.OPERATION_FAILED.value
+        assert "canvas" in refused["error"]["message"]
+
+
+def test_the_canvas_grants_split_reading_from_controlling() -> None:
+    """Looking is one permission; moving the map under the user is another."""
+    from qgis_sdk.bridge.host import granted_operations
+
+    assert granted_operations(["canvas.read"]) == (
+        "canvas.extent",
+        "canvas.scale",
+        "canvas.crs",
+        "canvas.center",
+        "canvas.themes",
+        "canvas.extent_changed",
+    )
+    assert granted_operations(["canvas.control"]) == (
+        "canvas.zoom_to",
+        "canvas.refresh",
+        "canvas.apply_theme",
+        "canvas.capture",
+    )

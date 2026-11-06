@@ -19,9 +19,9 @@ from the serialized bridge schema and host fingerprint, so adding a toolbar
 button does not move the wire. The unified :func:`qgis_sdk.describe` exposes
 them; :func:`describe_bindings` remains available for existing callers.
 
-Bindings refuse jobs and streams; bind an application action that submits the
-job or opens a surface for the stream. A plain unregistered function cannot be
-placed by the host. The trigger rule the Desktop host
+Bindings refuse jobs, streams and tools; bind an application action that
+submits the job, opens a surface for the stream or calls ``start`` on the tool.
+A plain unregistered function cannot be placed by the host. The trigger rule the Desktop host
 applies is decision-55's: an action without inputs runs on the GUI thread; one
 that returns a job handle reports through the message bar; a *typed* action
 bound without a surface of its own is a ``UI003`` finding, and the host
@@ -244,6 +244,11 @@ def _bind(target: Any, binding: Binding, decorator: str) -> Any:
             raise QgisSdkDeclarationError(
                 f"{decorator} cannot bind a @stream ({target.__name__}); "
                 "bind an @action that opens a surface over it"
+            )
+        if hasattr(target, "__qgis_sdk_tool__"):
+            raise QgisSdkDeclarationError(
+                f"{decorator} cannot bind a @tool ({target.__name__}); "
+                "bind an @action that calls start() on it"
             )
     else:
         raise QgisSdkDeclarationError(

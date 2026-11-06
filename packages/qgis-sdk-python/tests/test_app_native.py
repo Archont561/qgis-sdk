@@ -66,7 +66,11 @@ from qgis_sdk.adapters.app import QtAppBackend
 from qgis_sdk.app import AppSession
 from qgis_sdk.core import Host, PluginContext, WorkerContext
 from qgis_sdk.jobs import job
-from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
+from qgis_sdk.models import (
+    CanvasExtent,
+    QgisSdkUnsupportedCapabilityError,
+    ZoomTarget,
+)
 from qgis_sdk.ui import Dialog, Dock
 
 GUI = __GUI__
@@ -153,11 +157,24 @@ def main() -> int:
         found["ping"] = session.runtime.actions["ping"](value=3)
         found["layers"] = list(context.project.layer_ids())
         found["loops"] = [state.name for state in session.loops.inventory()]
+        found["has_canvas"] = context.has("canvas")
         if GUI:
             window = session.surface.window
             found["window"] = type(window).__name__
             found["is_main_window"] = isinstance(window, QMainWindow)
             found["canvas"] = len(window.findChildren(QgsMapCanvas))
+            # The window's own canvas is what the plugin sees as `ctx.canvas`,
+            # not a second one the runtime made for it.
+            zoomed = context.canvas.zoom_to(
+                ZoomTarget.to_extent(CanvasExtent(20.0, 51.0, 21.0, 52.0, "EPSG:4326"))
+            )
+            found["zoomed"] = [
+                zoomed.x_min,
+                zoomed.y_min,
+                zoomed.x_max,
+                zoomed.y_max,
+            ]
+            found["same_canvas"] = context.canvas.extent() == zoomed
             found["toolbars"] = [
                 action.text()
                 for bar in window.findChildren(QToolBar)
@@ -243,6 +260,9 @@ def test_the_app_runs_headless_on_a_real_qgis(tmp_path: Path) -> None:
     assert found["loops"] == ["job-pump"]
     assert found["desktop_refused"]
     assert found["ui_refused"]
+    # A headless app has no view, so the capability is absent rather than a
+    # service that refuses every call.
+    assert found["has_canvas"] is False
     assert found["report"]["exited"] is True
     assert found["report"]["stopped_loops"] == ["job-pump"]
 
@@ -256,6 +276,11 @@ def test_the_window_carries_the_canvas_and_the_declared_bindings(
     assert found["window"] == "QMainWindow"
     assert found["is_main_window"] is True
     assert found["canvas"] >= 1
+    assert found["has_canvas"] is True
+    assert found["same_canvas"] is True
+    x_min, y_min, x_max, y_max = found["zoomed"]
+    assert x_min <= 20.0 and x_max >= 21.0
+    assert y_min <= 51.0 and y_max >= 52.0
     assert "Ping" in found["toolbars"]
     # The Plugins family menu, and the plugin's own submenu inside it.
     assert "Plugins" in found["menus"]

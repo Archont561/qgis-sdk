@@ -9,6 +9,7 @@ because they implement its service protocols and must version with them
 """
 
 from .app import FakeAppBackend, FakeAppSurface, FakeLoop
+from .canvas import DEFAULT_EXTENT, FakeCanvas
 from .fakes import (
     FakeAlgorithms,
     FakeLayers,
@@ -39,10 +40,12 @@ from .ui import (
 )
 
 __all__ = [
+    "DEFAULT_EXTENT",
     "BuiltSurface",
     "FakeAlgorithms",
     "FakeAppBackend",
     "FakeAppSurface",
+    "FakeCanvas",
     "FakeEditingSession",
     "FakeFeatures",
     "FakeFiles",

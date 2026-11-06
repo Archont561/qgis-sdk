@@ -20,8 +20,10 @@ from qgis_sdk.adapters.desktop import (
 )
 from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.models import BufferRequest
+from qgis_sdk.models.canvas import CanvasExtent
 from qgis_sdk.testing import (
     FakeAlgorithms,
+    FakeCanvas,
     FakeLayers,
     FakeProject,
     FakeSettings,
@@ -46,6 +48,7 @@ class FakeHost:
     styles: FakeStyles
     settings: FakeSettings
     notifications: RecordingNotifications
+    canvas: FakeCanvas
 
 
 @pytest.fixture
@@ -73,6 +76,17 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     algorithms.script_run("native:centroids", {"OUTPUT": centroids})
     project = FakeProject(layers, scope)
     styles = FakeStyles(layers, scope)
+    # The buffered output is the layer the workflow presents, so the fake canvas
+    # knows where that layer is: zooming onto a layer it was never told about
+    # refuses, on the fake as on QGIS. The fake numbers the layers it opens in
+    # order, and the workflow opens the fixture first and the output second.
+    canvas = FakeCanvas(
+        scope,
+        layer_extents={
+            "layer-1": CanvasExtent(0.0, 0.0, 10.0, 10.0, "EPSG:4326"),
+            "layer-2": CanvasExtent(0.0, 0.0, 100.0, 100.0, WORKING_CRS),
+        },
+    )
     settings = FakeSettings(scope)
     notifications = RecordingNotifications(scope)
     context = PluginContext(
@@ -83,6 +97,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         settings=settings,
         styles=styles,
         algorithms=algorithms,
+        canvas=canvas,
     )
     factory = create_class_factory(app, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)
@@ -97,6 +112,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
             styles=styles,
             settings=settings,
             notifications=notifications,
+            canvas=canvas,
         )
     finally:
         adapter.unload()

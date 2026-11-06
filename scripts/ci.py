@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -282,6 +283,109 @@ def check_generated() -> int:
     )
 
 
+#: Where the BDD scenarios live, relative to the checkout root. Every
+#: ``*.feature`` file in the tree has to sit below one of these; a new directory
+#: is a failure rather than a file that quietly stops being linted.
+FEATURE_DIRECTORIES = ("packages/qgis-sdk-python/tests/features",)
+
+#: What gherlint prints for one finding: ``<path>:<line>:<column>: <message>``.
+#: The tool always exits with zero, so the findings are counted from the report
+#: instead of from the status. The ``***** <path>`` headers do not match.
+GHERLINIT_FINDING = re.compile(r"^\S+\.feature:\d+:\d+:")
+
+
+def feature_files(root: Path = ROOT) -> list[Path]:
+    """Every feature file in the checkout, in a stable order."""
+    return sorted(
+        path
+        for path in root.rglob("*.feature")
+        if not {"node_modules", ".git", "dist", "build"} & set(path.parts)
+    )
+
+
+def unlinted_features(root: Path = ROOT) -> list[Path]:
+    """The feature files that sit outside :data:`FEATURE_DIRECTORIES`."""
+    covered = [(root / directory).resolve() for directory in FEATURE_DIRECTORIES]
+    return [
+        path
+        for path in feature_files(root)
+        if not any(path.resolve().is_relative_to(directory) for directory in covered)
+    ]
+
+
+def _gherlint(executable: str | None) -> str | None:
+    """Find the linter: an explicit path, or the one on ``PATH``."""
+    if executable:
+        return executable if Path(executable).exists() else None
+    return shutil.which("gherlint")
+
+
+def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
+    """Lint every feature file with gherlint; one finding is a failure.
+
+    ``gherlint`` pins pydantic 1, which cannot share an environment with the
+    runtime's ``mcp`` extra, so CI installs it into a venv of its own and passes
+    the executable here. A missing linter is reported as a missing tool rather
+    than passing, because a check that silently runs nothing is worse than none.
+    """
+    stray = unlinted_features(root)
+    if stray:
+        for path in stray:
+            print(f"{path.relative_to(root)} is outside the linted directories")
+        print(
+            "::error title=feature file outside the lint::Add its directory to "
+            "FEATURE_DIRECTORIES in scripts/ci.py so every scenario is linted."
+        )
+        return 1
+    files = feature_files(root)
+    if not files:
+        print(
+            "::error title=no feature files::The checkout has no *.feature file to lint."
+        )
+        return 1
+    tool = _gherlint(executable)
+    if tool is None:
+        print(
+            "::error title=gherlint is missing::Install the linter "
+            "(`pip install gherlint==0.5.0`, or the `bdd` extra) and re-run. Its "
+            "pydantic 1 dependency is why it is not part of the runtime's dev extra."
+        )
+        return 127
+    findings: list[str] = []
+    for directory in FEATURE_DIRECTORIES:
+        target = root / directory
+        if not target.is_dir():
+            continue
+        result = subprocess.run(
+            [tool, "lint", str(target)],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = result.stdout + result.stderr
+        if result.returncode:
+            sys.stdout.write(output)
+            print(
+                f"::error title=gherlint failed::gherlint exited with "
+                f"{result.returncode} on {directory}."
+            )
+            return status_code(result.returncode)
+        findings.extend(
+            line for line in output.splitlines() if GHERLINIT_FINDING.match(line)
+        )
+    if findings:
+        for line in findings:
+            print(line)
+        print(
+            f"::error title=gherlint findings::{len(findings)} finding(s) across "
+            f"{len(files)} feature file(s); gherlint lists code and message per line."
+        )
+        return 1
+    print(f"gherlint: {len(files)} feature file(s) clean")
+    return 0
+
+
 FATAL_MARKERS = ("Fatal Python error", "Segmentation fault")
 """What an aborted pytest prints before it dies.
 
@@ -364,6 +468,18 @@ def main(argv: list[str] | None = None) -> int:
     lts_parser = commands.add_parser("lts")
     lts_parser.add_argument("command", nargs=argparse.REMAINDER)
     commands.add_parser("check-generated")
+    gherkin = commands.add_parser("check-gherkin")
+    gherkin.add_argument(
+        "--gherlint",
+        default=None,
+        help="the linter to run; defaults to gherlint on PATH",
+    )
+    gherkin.add_argument(
+        "--root",
+        type=Path,
+        default=ROOT,
+        help="the checkout to lint; defaults to this script's repository",
+    )
     coverage = commands.add_parser("annotate-coverage")
     coverage.add_argument("log", type=Path)
     bun = commands.add_parser("report-bun")
@@ -385,6 +501,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_logged(command, args.log)
     if args.action == "check-generated":
         return check_generated()
+    if args.action == "check-gherkin":
+        return check_gherkin(args.gherlint, args.root)
     if args.action == "annotate-coverage":
         annotate_coverage(args.log)
     elif args.action == "report-bun":
