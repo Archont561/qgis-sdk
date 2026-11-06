@@ -39,8 +39,8 @@ the notes below.)
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Gate run on this branch, built on `main` `7eed0a9` (the PR #169 merge), and
-recorded in doc-14 under "0.10.0 release gate (2026-11-06)". The stamp is in
+Gate run on this branch, built on `main` `7eed0a9` (the PR #169 merge), opened
+as PR #170, and recorded in doc-14 under "0.10.0 release gate (2026-11-06)". The stamp is in
 this pull request; the gate itself spends nothing.
 
 AC 1 (evidence, migration notes). Pure Python suite 2686 passed / 107 skipped /
@@ -89,6 +89,12 @@ catalogue behind the fingerprint is 63 operations / 22 grants / 9 destructive.
 doc-22 shows every 0.10.0 service complete, with the payload and vocabulary rows
 corrected to say what landed rather than what was planned;
 `test_service_coverage.py` passes.
+
+The pull request's eight rows are green on `4bf3b6f`; the first attempt's
+`Linux coverage` failed once on `test_plugin_http_limits.py`'s 64-session
+budget while `Linux checks` ran the same file green on the same commit, and
+the lane passed on the next run - recorded in doc-14 as load-sensitive, not
+as a defect this gate fixed.
 
 AC 4 stays open on purpose. This pull request records the artifacts and the
 checks and posts no date for 1.0.0; nothing is tagged and nothing is uploaded.

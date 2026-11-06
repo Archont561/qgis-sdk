@@ -7,8 +7,8 @@ created_date: '2026-10-26 10:20'
 # M9 sprint train and 0.10.0 dependency order
 
 **Status:** Sprints 1-5 landed (#162, #163, #164, #167, #169) and the
-TASK-90 gate is in review; it records the evidence, writes the 0.10.0 and
-0.7.0 migration notes and stamps the pair, and it spends no tag. Orders work the m-9 tasks already declare;
+TASK-90 gate is in review as #170; it records the evidence, writes the 0.10.0
+and 0.7.0 migration notes and stamps the pair, and it spends no tag. Orders work the m-9 tasks already declare;
 adds no scope. Sprint membership lives here and in the milestone body
 ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 

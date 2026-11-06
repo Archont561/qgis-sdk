@@ -2105,6 +2105,20 @@ it.
   docs link check, typecheck and `bun pm pack`) in `checks` and
   `build-and-check-site`; and Conda, which is unreachable from this sandbox.
   The Windows and macOS QGIS rows stay *unqualified* per TASK-33.
+- **The pull request's own rows (AC 1).** Pull request #170: eight rows, all
+  green on `4bf3b6f` - `checks`, `Linux checks`, `Linux coverage`,
+  `QGIS 3.44 LTS`, `cross-platform` on both runners, `build and check the
+  site` and `backlog drift`. The first attempt's `Linux coverage` failed on
+  `packages/qgis-sdk-python/tests/test_plugin_http_limits.py::test_the_session_budget_answers_503_with_its_code`
+  ("an exhausted budget must not look like 400") while `Linux checks` ran the
+  same file green on the same commit; the test opens 64 event streams against a
+  hard 64-session budget and refuses the 65th, it passes four times in this
+  sandbox - once of them under `--cov`, at 40.8 s - and the coverage lane passed
+  on the next run of the same tests. It is recorded as load-sensitive and left
+  alone: nothing in this change touches the HTTP server, and a test is not
+  "fixed" by a change nobody has seen fail. The docs site's `sources.test.ts`
+  did catch one real defect - the 0.7.0 notes linked decision-59 under
+  TASK-102's file name - which is fixed in `d0a2f70`.
 - **Approval (AC 4).** This record is a gate, not a release: nothing is
   tagged, nothing is uploaded, and no date is promised for 1.0.0. The two tags
   this minor would spend - `python-v0.10.0` and `ts-v0.7.0`, or their `-rc.1`
