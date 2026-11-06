@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:9aa12425fcbffd493608456671505acf0eb625ee4cb91f391d2a9bc84b2c5c56";
+export const HOST_FINGERPRINT = "sha256:5c1a612b602ea52856c43c6a7a7c342b0e73ba63b80b264263bd11e67d341a4e";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -38,7 +38,12 @@ export const HOST_OPERATIONS = [
 	"files.export",
 	"layers.get",
 	"layers.list",
+	"layers.open_annotation",
+	"layers.open_mesh",
+	"layers.open_point_cloud",
+	"layers.open_tiled_scene",
 	"layers.open_vector",
+	"layers.open_vector_tile",
 	"layouts.atlas",
 	"layouts.export",
 	"layouts.list",
@@ -179,6 +184,14 @@ export interface AlgorithmSummary {
 	readonly label: string;
 	readonly name: string;
 	readonly provider: string;
+}
+
+export interface AnnotationLayerInfo {
+	readonly crs: string | null;
+	readonly id: string;
+	readonly item_count: number;
+	readonly kind: "annotation";
+	readonly name: string;
 }
 
 export interface AtlasExport {
@@ -451,7 +464,7 @@ export interface LayerNode {
 }
 
 export interface LayerPage {
-	readonly items: readonly (VectorLayerInfo | RasterLayerInfo)[];
+	readonly items: readonly (VectorLayerInfo | RasterLayerInfo | MeshLayerInfo | PointCloudLayerInfo | VectorTileLayerInfo | AnnotationLayerInfo | TiledSceneLayerInfo)[];
 	readonly next_cursor?: string;
 	readonly truncated: boolean;
 }
@@ -497,6 +510,16 @@ export interface MapThemes {
 	readonly names: readonly string[];
 }
 
+export interface MeshLayerInfo {
+	readonly crs: string | null;
+	readonly face_count: number;
+	readonly group_count: number;
+	readonly id: string;
+	readonly kind: "mesh";
+	readonly name: string;
+	readonly vertex_count: number;
+}
+
 export interface NetworkFetchData {
 	readonly base64: string | null;
 	readonly headers: readonly HttpHeader[];
@@ -510,11 +533,31 @@ export interface NotificationsInfoRequest {
 	readonly message: string;
 }
 
+export interface OpenAnnotationRequest {
+	readonly name: string;
+}
+
+export interface OpenMeshRequest {
+	readonly file: FileRef;
+}
+
+export interface OpenPointCloudRequest {
+	readonly file: FileRef;
+}
+
 export interface OpenRasterRequest {
 	readonly file: FileRef;
 }
 
+export interface OpenTiledSceneRequest {
+	readonly file: FileRef;
+}
+
 export interface OpenVectorRequest {
+	readonly file: FileRef;
+}
+
+export interface OpenVectorTileRequest {
 	readonly file: FileRef;
 }
 
@@ -546,6 +589,15 @@ export interface ParameterInfo {
 	readonly optional: boolean;
 	readonly options: readonly string[];
 	readonly required: boolean;
+}
+
+export interface PointCloudLayerInfo {
+	readonly attribute_names: readonly string[];
+	readonly crs: string | null;
+	readonly id: string;
+	readonly kind: "point_cloud";
+	readonly name: string;
+	readonly point_count: number;
 }
 
 export interface ProjectAdd_bookmarkRequest {
@@ -730,6 +782,14 @@ export interface ThemeRequest {
 	readonly name: string;
 }
 
+export interface TiledSceneLayerInfo {
+	readonly crs: string | null;
+	readonly extent: CanvasExtent;
+	readonly id: string;
+	readonly kind: "tiled_scene";
+	readonly name: string;
+}
+
 export interface VectorLayerInfo {
 	readonly crs: string | null;
 	readonly field_names: readonly string[];
@@ -737,6 +797,16 @@ export interface VectorLayerInfo {
 	readonly id: string;
 	readonly kind: "vector";
 	readonly name: string;
+}
+
+export interface VectorTileLayerInfo {
+	readonly crs: string | null;
+	readonly id: string;
+	readonly kind: "vector_tile";
+	readonly max_zoom: number;
+	readonly min_zoom: number;
+	readonly name: string;
+	readonly source_type: string;
 }
 
 export interface WriteProjectRequest {
@@ -866,6 +936,32 @@ export function AlgorithmSummary(value: unknown, strict = false): value is Algor
 		return false;
 	}
 	if (strict && !hasOnly(value, ["deprecated", "group", "id", "label", "name", "provider"])) return false;
+	return true;
+}
+
+export function AnnotationLayerInfo(value: unknown, strict = false): value is AnnotationLayerInfo {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("item_count" in value)) return false;
+	if (!("crs" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["item_count"] !== undefined && !((isSafeInteger(value["item_count"]) && value["item_count"] >= 0))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "annotation"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "id", "item_count", "kind", "name"])) return false;
 	return true;
 }
 
@@ -1611,7 +1707,7 @@ export function LayerPage(value: unknown, strict = false): value is LayerPage {
 	if (!isRecord(value)) return false;
 	if (!("items" in value)) return false;
 	if (!("truncated" in value)) return false;
-	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => (VectorLayerInfo(item, strict) || RasterLayerInfo(item, strict)))))) {
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => (VectorLayerInfo(item, strict) || RasterLayerInfo(item, strict) || MeshLayerInfo(item, strict) || PointCloudLayerInfo(item, strict) || VectorTileLayerInfo(item, strict) || AnnotationLayerInfo(item, strict) || TiledSceneLayerInfo(item, strict)))))) {
 		return false;
 	}
 	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
@@ -1734,6 +1830,40 @@ export function MapThemes(value: unknown, strict = false): value is MapThemes {
 	return true;
 }
 
+export function MeshLayerInfo(value: unknown, strict = false): value is MeshLayerInfo {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("vertex_count" in value)) return false;
+	if (!("face_count" in value)) return false;
+	if (!("group_count" in value)) return false;
+	if (!("crs" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["face_count"] !== undefined && !((isSafeInteger(value["face_count"]) && value["face_count"] >= 0))) {
+		return false;
+	}
+	if (value["group_count"] !== undefined && !((isSafeInteger(value["group_count"]) && value["group_count"] >= 0))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "mesh"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["vertex_count"] !== undefined && !((isSafeInteger(value["vertex_count"]) && value["vertex_count"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "face_count", "group_count", "id", "kind", "name", "vertex_count"])) return false;
+	return true;
+}
+
 export function NetworkFetchData(value: unknown, strict = false): value is NetworkFetchData {
 	if (!isRecord(value)) return false;
 	if (!("url" in value)) return false;
@@ -1774,6 +1904,36 @@ export function NotificationsInfoRequest(value: unknown, strict = false): value 
 	return true;
 }
 
+export function OpenAnnotationRequest(value: unknown, strict = false): value is OpenAnnotationRequest {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (value["name"] !== undefined && !(typeof value["name"] === "string" && new RegExp("^(?:.*\\S.*)$").test(value["name"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["name"])) return false;
+	return true;
+}
+
+export function OpenMeshRequest(value: unknown, strict = false): value is OpenMeshRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
+	return true;
+}
+
+export function OpenPointCloudRequest(value: unknown, strict = false): value is OpenPointCloudRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
+	return true;
+}
+
 export function OpenRasterRequest(value: unknown, strict = false): value is OpenRasterRequest {
 	if (!isRecord(value)) return false;
 	if (!("file" in value)) return false;
@@ -1784,7 +1944,27 @@ export function OpenRasterRequest(value: unknown, strict = false): value is Open
 	return true;
 }
 
+export function OpenTiledSceneRequest(value: unknown, strict = false): value is OpenTiledSceneRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
+	return true;
+}
+
 export function OpenVectorRequest(value: unknown, strict = false): value is OpenVectorRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
+	return true;
+}
+
+export function OpenVectorTileRequest(value: unknown, strict = false): value is OpenVectorTileRequest {
 	if (!isRecord(value)) return false;
 	if (!("file" in value)) return false;
 	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
@@ -1891,6 +2071,36 @@ export function ParameterInfo(value: unknown, strict = false): value is Paramete
 		return false;
 	}
 	if (strict && !hasOnly(value, ["advanced", "default_json", "description", "destination", "extension", "hidden", "kind", "label", "maximum", "minimum", "multiple", "name", "number_type", "optional", "options", "required"])) return false;
+	return true;
+}
+
+export function PointCloudLayerInfo(value: unknown, strict = false): value is PointCloudLayerInfo {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("point_count" in value)) return false;
+	if (!("attribute_names" in value)) return false;
+	if (!("crs" in value)) return false;
+	if (value["attribute_names"] !== undefined && !((Array.isArray(value["attribute_names"]) && value["attribute_names"].every((item) => typeof item === "string")))) {
+		return false;
+	}
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "point_cloud"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["point_count"] !== undefined && !((isSafeInteger(value["point_count"]) && value["point_count"] >= 0))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["attribute_names", "crs", "id", "kind", "name", "point_count"])) return false;
 	return true;
 }
 
@@ -2368,6 +2578,32 @@ export function ThemeRequest(value: unknown, strict = false): value is ThemeRequ
 	return true;
 }
 
+export function TiledSceneLayerInfo(value: unknown, strict = false): value is TiledSceneLayerInfo {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("extent" in value)) return false;
+	if (!("crs" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["extent"] !== undefined && !(CanvasExtent(value["extent"], strict))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "tiled_scene"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "extent", "id", "kind", "name"])) return false;
+	return true;
+}
+
 export function VectorLayerInfo(value: unknown, strict = false): value is VectorLayerInfo {
 	if (!isRecord(value)) return false;
 	if (!("kind" in value)) return false;
@@ -2395,6 +2631,40 @@ export function VectorLayerInfo(value: unknown, strict = false): value is Vector
 		return false;
 	}
 	if (strict && !hasOnly(value, ["crs", "field_names", "geometry_type", "id", "kind", "name"])) return false;
+	return true;
+}
+
+export function VectorTileLayerInfo(value: unknown, strict = false): value is VectorTileLayerInfo {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("source_type" in value)) return false;
+	if (!("min_zoom" in value)) return false;
+	if (!("max_zoom" in value)) return false;
+	if (!("crs" in value)) return false;
+	if (value["crs"] !== undefined && !((typeof value["crs"] === "string" || value["crs"] === null))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "vector_tile"))) {
+		return false;
+	}
+	if (value["max_zoom"] !== undefined && !((isSafeInteger(value["max_zoom"]) && value["max_zoom"] >= 0))) {
+		return false;
+	}
+	if (value["min_zoom"] !== undefined && !((isSafeInteger(value["min_zoom"]) && value["min_zoom"] >= 0))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["source_type"] !== undefined && !(typeof value["source_type"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["crs", "id", "kind", "max_zoom", "min_zoom", "name", "source_type"])) return false;
 	return true;
 }
 
@@ -2523,9 +2793,14 @@ export interface HostOperations {
 		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
 	};
 	readonly layers: {
-		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo | RasterLayerInfo>;
+		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo | RasterLayerInfo | MeshLayerInfo | PointCloudLayerInfo | VectorTileLayerInfo | AnnotationLayerInfo | TiledSceneLayerInfo>;
 		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<LayerPage>;
+		readonly open_annotation: (input: OpenAnnotationRequest, options?: HostInvokeOptions) => Promise<AnnotationLayerInfo>;
+		readonly open_mesh: (input: OpenMeshRequest, options?: HostInvokeOptions) => Promise<MeshLayerInfo>;
+		readonly open_point_cloud: (input: OpenPointCloudRequest, options?: HostInvokeOptions) => Promise<PointCloudLayerInfo>;
+		readonly open_tiled_scene: (input: OpenTiledSceneRequest, options?: HostInvokeOptions) => Promise<TiledSceneLayerInfo>;
 		readonly open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
+		readonly open_vector_tile: (input: OpenVectorTileRequest, options?: HostInvokeOptions) => Promise<VectorTileLayerInfo>;
 	};
 	readonly layouts: {
 		readonly atlas: (input: AtlasLayoutRequest, options?: HostInvokeOptions) => Promise<AtlasExport>;
@@ -2751,10 +3026,10 @@ export function createHost(client: HostClientLike): HostOperations {
 		},
 		layers: {
 			get: (input: LayerRequest, options?: HostInvokeOptions) =>
-				call<VectorLayerInfo | RasterLayerInfo>(
+				call<VectorLayerInfo | RasterLayerInfo | MeshLayerInfo | PointCloudLayerInfo | VectorTileLayerInfo | AnnotationLayerInfo | TiledSceneLayerInfo>(
 					client, "layers.get", input, options,
 					LayerRequest,
-					(candidate: unknown, strict = false) => (VectorLayerInfo(candidate, strict) || RasterLayerInfo(candidate, strict)),
+					(candidate: unknown, strict = false) => (VectorLayerInfo(candidate, strict) || RasterLayerInfo(candidate, strict) || MeshLayerInfo(candidate, strict) || PointCloudLayerInfo(candidate, strict) || VectorTileLayerInfo(candidate, strict) || AnnotationLayerInfo(candidate, strict) || TiledSceneLayerInfo(candidate, strict)),
 				),
 			list: (input?: PageRequest, options?: HostInvokeOptions) =>
 				call<LayerPage>(
@@ -2762,11 +3037,41 @@ export function createHost(client: HostClientLike): HostOperations {
 					PageRequest,
 					LayerPage,
 				),
+			open_annotation: (input: OpenAnnotationRequest, options?: HostInvokeOptions) =>
+				call<AnnotationLayerInfo>(
+					client, "layers.open_annotation", input, options,
+					OpenAnnotationRequest,
+					AnnotationLayerInfo,
+				),
+			open_mesh: (input: OpenMeshRequest, options?: HostInvokeOptions) =>
+				call<MeshLayerInfo>(
+					client, "layers.open_mesh", input, options,
+					OpenMeshRequest,
+					MeshLayerInfo,
+				),
+			open_point_cloud: (input: OpenPointCloudRequest, options?: HostInvokeOptions) =>
+				call<PointCloudLayerInfo>(
+					client, "layers.open_point_cloud", input, options,
+					OpenPointCloudRequest,
+					PointCloudLayerInfo,
+				),
+			open_tiled_scene: (input: OpenTiledSceneRequest, options?: HostInvokeOptions) =>
+				call<TiledSceneLayerInfo>(
+					client, "layers.open_tiled_scene", input, options,
+					OpenTiledSceneRequest,
+					TiledSceneLayerInfo,
+				),
 			open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) =>
 				call<VectorLayerInfo>(
 					client, "layers.open_vector", input, options,
 					OpenVectorRequest,
 					VectorLayerInfo,
+				),
+			open_vector_tile: (input: OpenVectorTileRequest, options?: HostInvokeOptions) =>
+				call<VectorTileLayerInfo>(
+					client, "layers.open_vector_tile", input, options,
+					OpenVectorTileRequest,
+					VectorTileLayerInfo,
 				),
 		},
 		layouts: {

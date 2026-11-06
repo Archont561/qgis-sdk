@@ -6,9 +6,10 @@ created_date: '2026-10-26 10:20'
 ---
 # M10 sprint train and 0.11.0 dependency order
 
-**Status:** Planning; starts after the TASK-90 gate. Orders work the m-10
-tasks already declare; adds no scope. Sprint membership lives here and in the
-milestone body ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
+**Status:** Running. The TASK-90 gate passed with the 0.10.0 pair on
+2026-11-06, so the train has started: sprint 1 (TASK-91) is implemented. Orders
+work the m-10 tasks already declare; adds no scope. Sprint membership lives here
+and in the milestone body ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
 ## 1. Where m-10 starts from
 

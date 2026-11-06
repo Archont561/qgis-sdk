@@ -139,6 +139,26 @@ def _rasters_of(bridge: Any) -> Any:
     return rasters
 
 
+#: The ``Qgis::ProcessingSourceType`` a map-layer parameter is narrowed to, per
+#: layer kind.
+#:
+#: QGIS 3.44 has a parameter class of its own only for a vector and for a raster
+#: layer; the other kinds exist as *source types*, which is what
+#: ``QgsProcessingParameterMapLayer.setDataTypes`` restricts a parameter to. So a
+#: mesh input is a map-layer parameter narrowed to ``Mesh`` rather than a
+#: ``QgsProcessingParameterMeshLayer`` class that no QGIS release has. A tiled
+#: scene is deliberately absent: ``Qgis::ProcessingSourceType`` gains
+#: ``TiledScene`` only in QGIS 4.0, so that input stays an unrestricted
+#: map-layer parameter - a restriction the running Processing does not know would
+#: refuse the toolbox silently.
+_LAYER_SOURCE_TYPES: dict[str, str] = {
+    "mesh": "Mesh",
+    "point_cloud": "PointCloud",
+    "vector_tile": "VectorTile",
+    "annotation": "Annotation",
+}
+
+
 def _marker(annotation: Any, marker_type: type) -> Any:
     if get_origin(annotation) is not Annotated:
         return None
@@ -151,15 +171,20 @@ def _parameter(kind: str, name: str, annotation: Any = None) -> Any:
     """Build the Processing parameter a declared kind deserves."""
     cls = _PARAMETER_CLASSES[parameter_kinds()[kind].processing]
     if kind == LAYER_PARAMETER:
-        # A layer input names its kind (TASK-87): Processing has one parameter
-        # class per kind, so the kind chooses the class rather than a filter
-        # that the toolbox could ignore.
+        # A layer input names its kind (TASK-87, TASK-91), and the kind decides
+        # what the toolbox offers: a dedicated class where Processing has one, a
+        # map-layer parameter narrowed to that kind's source type where it does
+        # not - never a filter the parameter can ignore.
         wanted = (_marker(annotation, LayerParameter) or LayerParameter()).kind
+        if wanted == "vector":
+            return QgsProcessingParameterVectorLayer(name, name)
         if wanted == "raster":
             return QgsProcessingParameterRasterLayer(name, name)
-        if wanted == "any":
-            return QgsProcessingParameterMapLayer(name, name)
-        return QgsProcessingParameterVectorLayer(name, name)
+        parameter = QgsProcessingParameterMapLayer(name, name)
+        source_type = _LAYER_SOURCE_TYPES.get(wanted)
+        if source_type is not None:
+            parameter.setDataTypes([getattr(Qgis.ProcessingSourceType, source_type)])
+        return parameter
     if kind == METRES_PARAMETER:
         metres = _marker(annotation, MetresParameter) or MetresParameter()
         parameter = cls(

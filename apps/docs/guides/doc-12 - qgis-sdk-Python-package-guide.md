@@ -1084,7 +1084,7 @@ up by name when a component is mounted.
 
 | Component | Value | Native widget |
 |---|---|---|
-| `LayerPicker(name, kind="vector"\|"raster"\|"any")` | layer id or `None` | `QgsMapLayerComboBox` (follows the project) |
+| `LayerPicker(name, kind="vector"\|"raster"\|"mesh"\|"point_cloud"\|"vector_tile"\|"annotation"\|"tiled_scene"\|"any")` | layer id or `None` | `QgsMapLayerComboBox` (follows the project) |
 | `FieldPicker(name, of=<LayerPicker>)` | field name or `None` | `QgsFieldComboBox` (follows `of`) |
 | `CrsPicker(name)` | `"EPSG:4326"` or `None` | `QgsProjectionSelectionWidget` |
 | `FileInput(name, filters=("*.csv",))` | file `FileRef` or `None` | `QgsFileWidget` |
@@ -1146,9 +1146,9 @@ current ref.
 over `FakeLayers`/`FakeProject`/`FakeFiles` and never mounts it; the same
 contract tests the runtime runs natively (`tests/ui_component_contract.py`)
 pass against that state. `LayerPicker.refresh()` re-reads the project under
-the fake (natively `QgsMapLayerComboBox` follows the project on its own);
-`kind="raster"` lists nothing under the fake until the all-layer-types
-service lands. Note the names `FileInput`, `DirectoryInput` and
+the fake (natively `QgsMapLayerComboBox` follows the project on its own), and
+every kind filters the same list, so `kind="mesh"` offers the meshes the fake
+holds and `kind="any"` offers all seven. Note the names `FileInput`, `DirectoryInput` and
 `Colour` exist twice: as parameter *markers* in `qgis_sdk.models` (what a
 handler's signature declares) and as *components* in `qgis_sdk.ui` (what a
 surface shows); import the one you mean, or alias.
@@ -2061,8 +2061,9 @@ its plugin action, which runs the export as a job and hands the result back as a
 are the four operations, behind two grants: `rasters.open` for opening a file the
 view holds a read ref for, `rasters.read` for the three reads. `layers.list` and
 `layers.get` answer both kinds, so a page lists a project's rasters and vectors
-in one pass; `layers.get` returns `VectorLayerInfo | RasterLayerInfo`, and a
-consumer branches on `kind`.
+in one pass; `layers.get` returns one of the seven kind descriptions (see
+[Layer kinds](#layer-kinds-mesh-point-cloud-vector-tile-annotation-and-tiled-scene)
+below), and a consumer branches on `kind`.
 
 A form asks for a raster with the declared kind, not with a name convention:
 `layer_id: RasterInput` (equivalently `Annotated[str, LayerParameter(kind="raster")]`)
@@ -2101,6 +2102,198 @@ reader can check against this section - a grid described band by band, a raster
 listed beside the vectors, a value for the cell under a point and nothing for a
 hole, a band whose counts add up to its size - driven by `tests/service_steps.py`
 over the fakes above.
+
+## Layer kinds: mesh, point cloud, vector tile, annotation and tiled scene
+
+A project holds more than vectors and rasters. It holds a mesh of a
+hydrodynamic model, a point cloud of a survey, a vector tile layer of a
+basemap, an annotation layer a plugin drew and a 3D tiled scene - and a plugin
+that can only see two of them cannot list a project honestly.
+
+Seven kinds, named once in `LAYER_KIND_NAMES` in the order the wire reads them:
+
+```python
+from qgis_sdk.models import LAYER_KIND_NAMES
+
+LAYER_KIND_NAMES
+# ("vector", "raster", "mesh", "point_cloud", "vector_tile", "annotation",
+#  "tiled_scene")
+```
+
+Each kind answers its own description, with the numbers that kind actually has,
+and never a field borrowed from a kind it is not. All seven carry `id`, `name`,
+`crs` and a `kind` that says which one it is.
+
+| Kind | Model | What it answers | Open it with |
+| --- | --- | --- | --- |
+| vector | `VectorLayerInfo` | `geometry_type`, `field_names` | `ctx.layers.open_vector(path)` |
+| raster | `RasterLayerInfo` | `band_count`, `data_types`, `no_data`, `extent`, `resolution` | `ctx.rasters.open_raster(path)` |
+| mesh | `MeshLayerInfo` | `vertex_count`, `face_count`, `group_count` | `ctx.layers.open_mesh(path)` |
+| point cloud | `PointCloudLayerInfo` | `point_count`, `attribute_names` | `ctx.layers.open_point_cloud(path)` |
+| vector tile | `VectorTileLayerInfo` | `source_type`, `min_zoom`, `max_zoom` | `ctx.layers.open_vector_tile(path)` |
+| annotation | `AnnotationLayerInfo` | `item_count` | `ctx.layers.open_annotation(name)` |
+| tiled scene | `TiledSceneLayerInfo` | `extent` | `ctx.layers.open_tiled_scene(path)` |
+
+```python
+mesh = self.ctx.layers.open_mesh(Path("/data/lagoon.2dm"))
+mesh.kind          # "mesh"
+mesh.vertex_count  # 3312
+mesh.face_count    # 6240
+mesh.group_count   # 2 - the dataset groups the mesh carries
+
+cloud = self.ctx.layers.open_point_cloud(Path("/data/survey.laz"))
+cloud.point_count      # 1_204_318
+cloud.attribute_names  # ("X", "Y", "Z", "Intensity", "ReturnNumber")
+
+tiles = self.ctx.layers.open_vector_tile(Path("/data/basemap.mbtiles"))
+tiles.source_type      # "xyz" - the tile scheme, not the URL
+tiles.min_zoom, tiles.max_zoom   # 0, 14
+
+notes = self.ctx.layers.open_annotation("Field notes")
+notes.item_count       # 0 - a new annotation layer starts empty
+
+scene = self.ctx.layers.open_tiled_scene(Path("/data/city.slpk"))
+scene.extent           # CanvasExtent(x_min=21.0, y_min=52.0, ...)
+```
+
+### What each kind does not answer, and why
+
+- **A vector tile layer has no source path.** Its scheme, zoom range and name are
+  the description; the URL or the container is the URI the layer was opened
+  from, and a description that carried it would leak tokens into a page.
+- **An annotation layer is created, not opened.** It has no dataset: the name is
+  the identity, and the items are what a plugin drew into it. `open_annotation`
+  takes the name rather than a path, and a name that collides with an existing
+  annotation layer is the host's answer to give, not the SDK's to guess.
+- **A tiled scene answers a box, not a tile count.** The provider reads a tile
+  total asynchronously and QGIS 3.44 has no synchronous equivalent, so the
+  description carries the `extent` rather than a number invented to look
+  complete.
+- **A mesh's counts can be zero.** They come from the provider, which reports
+  zero for a dataset it has not read yet. An unread mesh is still a mesh the
+  project holds, so the description reports the zero rather than hiding the layer.
+
+### Which operations apply to which kind
+
+`list_layers()` and `layer(layer_id)` answer every kind, and so do the project
+operations: a mesh is a layer in the tree, may be moved, hidden and removed like
+any other. The rest is vector work, and a call that reaches the wrong kind says
+so by name rather than answering an empty result:
+
+| Service | Applies to | Anything else |
+| --- | --- | --- |
+| `Layers.list_layers`, `Layers.layer` | every kind | — |
+| `Project.*` (tree, visibility, removal) | every kind | — |
+| `Files.export` over a layer destination | vector, raster | refused by the file authority |
+| `Layers.selection`, `Features.*`, `Expressions.*`, `Editing*`, `Layers.export_vector` | vector only | `QgisSdkUnsupportedCapabilityError` naming the kind |
+| `Rasters.*` | raster only | `QgisSdkLayerNotFoundError` from the raster service |
+
+```python
+mesh = self.ctx.layers.open_mesh(Path("/data/lagoon.2dm"))
+self.ctx.layers.selection(mesh.id)
+# QgisSdkUnsupportedCapabilityError: this layer is a mesh; fields, features,
+# styles and a vector export are vector work - read it through the service its
+# kind belongs to
+```
+
+### A layer input names its kind
+
+A form asks for a kind, and the picker, the Processing parameter and the wire
+all follow the same declaration:
+
+```python
+from qgis_sdk.models import AnnotationInput, MeshInput, TiledSceneInput
+
+@action
+def inspect(self, mesh: MeshInput, scene: TiledSceneInput) -> None:
+    self.ctx.jobs.run(...)
+
+AnnotationInput   # Annotated[str, LayerParameter(kind="annotation")]
+```
+
+- Natively the picker is a `QgsMapLayerComboBox` filtered by the kind's
+  `Qgis::LayerFilter`.
+- In Processing the kind narrows the parameter's accepted source types: a vector
+  is a `Vector Layer` parameter and a raster a `Raster Layer` one, while mesh,
+  point cloud, vector tile and annotation are a `Map Layer` parameter whose
+  `dataTypes()` is set to `Qgis::ProcessingSourceType.Mesh`, `PointCloud`,
+  `VectorTile` and `Annotation`. Those four have no parameter class of their own
+  in QGIS 3.x - the source-type enum is how Processing says "a map layer, but
+  only of this kind" - so the SDK narrows instead of importing a class that does
+  not exist. A tiled scene accepts any map layer, because
+  `Qgis::ProcessingSourceType` gains `TiledScene` only in QGIS 4.0.
+- On the wire the field carries `layer_kind`, so a page renders the same control.
+- `LAYER_KINDS_FOR_INPUT` is the one list of accepted kinds - every layer kind
+  plus `"any"` - and a name outside it is refused where it is declared.
+
+### On the wire
+
+Five operations, all behind the one grant `layers.open`:
+
+| Operation | Request | Result |
+| --- | --- | --- |
+| `layers.open_mesh` | `{ file: FileRef }` | `MeshLayerInfo` |
+| `layers.open_point_cloud` | `{ file: FileRef }` | `PointCloudLayerInfo` |
+| `layers.open_vector_tile` | `{ file: FileRef }` | `VectorTileLayerInfo` |
+| `layers.open_annotation` | `{ name: string }` | `AnnotationLayerInfo` |
+| `layers.open_tiled_scene` | `{ file: FileRef }` | `TiledSceneLayerInfo` |
+
+`layers.list` answers `anyOf` the seven descriptions and `layers.get` answers one
+of them; the discriminator is `kind`. Adding a kind did not add a grant: a
+project grants "open a layer", not "open a mesh", and the authority a page needs
+is the same read ref it needed for a vector.
+
+### Testing without QGIS
+
+`FakeLayers.register_layer(source, name=..., kind=..., crs=..., **detail)` declares
+a dataset of one of the five kinds, where `detail` is exactly the fields that
+kind's description carries; a misspelt or missing one is refused where the test
+arranged it. `register_annotation(name, item_count=..., crs=...)` declares what
+opening that annotation layer answers - and opening an undeclared name creates an
+empty one, as the native adapter does.
+
+```python
+layers = FakeLayers(scope, rasters=rasters)
+layers.register_layer(
+    Path("lagoon.2dm"),
+    name="lagoon",
+    kind="mesh",
+    crs="EPSG:4326",
+    vertex_count=4,
+    face_count=2,
+    group_count=1,
+)
+layers.open_mesh(Path("lagoon.2dm")).vertex_count   # 4
+layers.open_point_cloud(Path("lagoon.2dm"))
+# QgisSdkLayerNotFoundError: a dataset is opened as the kind it was declared as
+```
+
+The fake answers from the declaration rather than from the bytes, so a pure test
+names a path it never writes. `tests/features/layer_kinds.feature` states the
+same rules as scenarios a reader can check against this section: each kind
+answering its own numbers, the seven listed beside each other, a dataset opened
+as the wrong kind refused as missing, and a layer input whose picker offers the
+kind it names.
+
+Both backends answer the same contract for the two kinds a repository can hold a
+reviewable fixture of: `tests/services/test_layers_contract.py` opens the
+checked-in `lagoon.2dm` through MDAL and creates an annotation layer by name, and
+fails if either backend reports a different mesh, a different item count, or
+refuses a mesh with a message that does not name the kind. A vector tile, a point
+cloud and a tiled scene need a binary dataset (MBTiles, LAS/COPC, a 3D Tiles
+tileset) that a text repository cannot hold, so those three are proven on the
+fake and through the adapter's one `_DESCRIBERS` dispatch; their native halves
+open no file yet, and doc-22 records that as the remaining gap for the kinds.
+
+### What a 0.10 plugin has to change: nothing
+
+The widening is additive. A plain `LayerInput` is still a vector picker, a
+`VectorLayerInfo` still constructs with the arguments it took, `layers.list`
+still answers in the order it answered (vectors first, then the kinds a plugin
+opened, then rasters), and every refusal a 0.10 project relied on still arrives
+with the same error type. Three things are new and opt-in: a layer input may name
+another kind, `LayerPicker` accepts the kinds `LAYER_KINDS_FOR_INPUT` lists, and
+`LayerInfo` covers more models than the two it did.
 
 ## Print layouts and atlases
 

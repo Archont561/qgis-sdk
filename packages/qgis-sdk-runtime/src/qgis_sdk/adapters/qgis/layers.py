@@ -3,34 +3,47 @@
 Native module: importing it needs a QGIS installation, so nothing on the pure
 side may import it (``tests/test_pure_imports.py`` guards that). The adapter
 returns :class:`~qgis_sdk.models.layers.LayerInfo` values - a
-:class:`~qgis_sdk.models.layers.VectorLayerInfo` or, when a sibling
-``NativeRasters`` opened it, a
+:class:`~qgis_sdk.models.layers.VectorLayerInfo`, one of the five other kinds
+this module opens itself, or, when a sibling ``NativeRasters`` opened it, a
 :class:`~qgis_sdk.models.layers.RasterLayerInfo` - and never a PyQGIS handle.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qgis.core import (
     Qgis,
+    QgsAnnotationLayer,
     QgsCoordinateTransformContext,
+    QgsMapLayer,
+    QgsMeshLayer,
+    QgsPointCloudLayer,
     QgsProviderRegistry,
+    QgsTiledSceneLayer,
     QgsVectorFileWriter,
     QgsVectorLayer,
+    QgsVectorTileLayer,
 )
 
 import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
+    AnnotationLayerInfo,
+    CanvasExtent,
     GeometryType,
     LayerInfo,
+    MeshLayerInfo,
+    PointCloudLayerInfo,
     QgisSdkExportFailedError,
     QgisSdkLayerNotFoundError,
     QgisSdkUnsupportedCapabilityError,
+    TiledSceneLayerInfo,
     VectorExport,
     VectorLayerInfo,
+    VectorTileLayerInfo,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, no import cycle at runtime
@@ -62,6 +75,11 @@ class NativeLayers:
     ) -> None:
         self._scope = scope
         self._layers: dict[str, QgsVectorLayer] = {}
+        #: The layers of the five other kinds this adapter opened (TASK-91), each
+        #: with the description its kind answers, keyed by layer id. The PyQGIS
+        #: handle is kept only so the scope can drop it with everything else.
+        self._native_others: dict[str, QgsMapLayer] = {}
+        self._others: dict[str, LayerInfo] = {}
         self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
         #: The sibling raster adapter, when the host built one: ``list_layers``
         #: answers both kinds and a raster id reaching a vector-only method is
@@ -79,22 +97,60 @@ class NativeLayers:
         self._export_sources[layer.id()] = _capture_source(layer)
         return _describe(layer)
 
+    def open_mesh(self, source: Path) -> MeshLayerInfo:
+        """Open a mesh dataset and describe its vertices, faces and groups."""
+        layer = QgsMeshLayer(str(source), Path(source).stem, "mdal")
+        self._remember(layer)
+        return _describe_mesh(layer)
+
+    def open_point_cloud(self, source: Path) -> PointCloudLayerInfo:
+        """Open a point cloud and describe its point count and attributes."""
+        layer = QgsPointCloudLayer(str(source), Path(source).stem, "pointcloud")
+        self._remember(layer)
+        return _describe_point_cloud(layer)
+
+    def open_vector_tile(self, source: Path) -> VectorTileLayerInfo:
+        """Open a vector tile layer and describe its source type and zooms."""
+        layer = QgsVectorTileLayer(str(source), Path(source).stem)
+        self._remember(layer)
+        return _describe_vector_tile(layer)
+
+    def open_annotation(self, name: str) -> AnnotationLayerInfo:
+        """Create an annotation layer of the project under ``name``.
+
+        An annotation layer has no dataset: it is a drawing surface the project
+        holds, so the name is the identity and a new one starts empty.
+        """
+        layer = QgsAnnotationLayer(name, QgsAnnotationLayer.LayerOptions())
+        self._remember(layer)
+        return _describe_annotation(layer)
+
+    def open_tiled_scene(self, source: Path) -> TiledSceneLayerInfo:
+        """Open a 3D tiled scene and describe the box it occupies."""
+        layer = QgsTiledSceneLayer(str(source), Path(source).stem, "cesiumtiles")
+        self._remember(layer)
+        return _describe_tiled_scene(layer)
+
     def list_layers(self) -> tuple[LayerInfo, ...]:
-        """Return every opened layer, of both kinds, in the order opened.
+        """Return every opened layer, of every kind, in the order opened.
 
         Vector layers come first because they are the ones this adapter owns;
-        the rasters follow in the order their own adapter opened them. A caller
-        that needs one order reads the project's tree instead.
+        the five other kinds follow in the order they were opened, and the
+        rasters after them, in the order their own adapter opened them. A
+        caller that needs one order reads the project's tree instead.
         """
         self._scope.ensure_open()
         opened: list[LayerInfo] = [_describe(layer) for layer in self._layers.values()]
+        opened.extend(self._others.values())
         if self._rasters is not None:
             opened.extend(self._rasters.list_layers())
         return tuple(opened)
 
     def layer(self, layer_id: str) -> LayerInfo:
-        """Return the description of one opened layer, of either kind."""
+        """Return the description of one opened layer, of any kind."""
         self._scope.ensure_open()
+        if layer_id in self._others:
+            return self._others[layer_id]
         if layer_id not in self._layers and self._rasters is not None:
             return self._rasters.raster(layer_id)
         return _describe(self._require(layer_id))
@@ -143,11 +199,34 @@ class NativeLayers:
         self._scope.ensure_open()
         return self._require(layer_id)
 
+    def _remember(self, layer: QgsMapLayer) -> None:
+        """Refuse an invalid layer, otherwise remember it and its description.
+
+        Every provider answers a layer that is invalid when it cannot read the
+        dataset, so an unreadable file and a file of another kind are the same
+        refusal: a layer this runtime does not have. The description is built
+        here rather than by the caller so a layer is never remembered without
+        the description ``layer()`` has to answer.
+        """
+        self._scope.ensure_open()
+        if not layer.isValid():
+            raise QgisSdkLayerNotFoundError(layer.source() or layer.name())
+        self._native_others[layer.id()] = layer
+        self._others[layer.id()] = _describe_other(layer)
+
     def _require(self, layer_id: str) -> QgsVectorLayer:
         try:
             return self._layers[layer_id]
         except KeyError:
             pass
+        other = self._others.get(layer_id)
+        if other is not None:
+            raise QgisSdkUnsupportedCapabilityError(
+                layer_id,
+                f"this layer is a {other.kind}; fields, features, styles and a "
+                "vector export are vector work - read it through the service its "
+                "kind belongs to (ctx.rasters for a raster)",
+            )
         if self._rasters is not None and self._rasters.knows(layer_id):
             raise QgisSdkUnsupportedCapabilityError(
                 layer_id,
@@ -159,6 +238,8 @@ class NativeLayers:
     def _release(self) -> None:
         """Drop this runtime's references; the scope closes exactly once."""
         self._layers.clear()
+        self._native_others.clear()
+        self._others.clear()
         self._export_sources.clear()
 
 
@@ -187,6 +268,114 @@ def _capture_source(layer: QgsVectorLayer) -> export_policy.SourceIdentity | Non
         # A source that cannot be decoded remains readable, but cannot be
         # exported because its physical dataset cannot be protected safely.
         return None
+
+
+#: How a layer of another kind is described. Keyed by the PyQGIS class each
+#: ``open_*`` method built, so the description a layer answers is chosen by what
+#: the provider produced rather than by what the caller asked for.
+_DESCRIBERS: dict[type, Callable[[QgsMapLayer], LayerInfo]] = {}
+
+
+def _describe_other(layer: QgsMapLayer) -> LayerInfo:
+    """Return the description a layer of any kind answers."""
+    for layer_class, describe in _DESCRIBERS.items():
+        if isinstance(layer, layer_class):
+            return describe(layer)
+    raise QgisSdkUnsupportedCapabilityError(
+        layer.name(), f"{type(layer).__name__} is not a layer kind this SDK describes"
+    )
+
+
+def _authid(layer: QgsMapLayer) -> str | None:
+    """The layer's authority code, or ``None`` when it has no CRS of its own."""
+    return layer.crs().authid() or None
+
+
+def _describe_mesh(layer: QgsMeshLayer) -> MeshLayerInfo:
+    """Translate a mesh layer into vertices, faces and dataset groups.
+
+    The counts come from the provider, which reports zero for a dataset it has
+    not read yet - an unread mesh is still a mesh this project holds, and a
+    description that refused to answer would hide it from the layer list.
+    """
+    provider = layer.dataProvider()
+    return MeshLayerInfo(
+        id=layer.id(),
+        name=layer.name(),
+        crs=_authid(layer),
+        vertex_count=int(provider.vertexCount()) if provider is not None else 0,
+        face_count=int(provider.faceCount()) if provider is not None else 0,
+        group_count=int(layer.datasetGroupCount()),
+    )
+
+
+def _describe_point_cloud(layer: QgsPointCloudLayer) -> PointCloudLayerInfo:
+    """Translate a point cloud into its point total and attribute names."""
+    attributes = layer.attributes()
+    return PointCloudLayerInfo(
+        id=layer.id(),
+        name=layer.name(),
+        crs=_authid(layer),
+        point_count=int(layer.pointCount()),
+        attribute_names=tuple(
+            attributes.at(index).name() for index in range(attributes.size())
+        ),
+    )
+
+
+def _describe_vector_tile(layer: QgsVectorTileLayer) -> VectorTileLayerInfo:
+    """Translate a vector tile layer into its source type and zoom range."""
+    return VectorTileLayerInfo(
+        id=layer.id(),
+        name=layer.name(),
+        crs=_authid(layer),
+        source_type=layer.sourceType(),
+        min_zoom=int(layer.sourceMinZoom()),
+        max_zoom=int(layer.sourceMaxZoom()),
+    )
+
+
+def _describe_annotation(layer: QgsAnnotationLayer) -> AnnotationLayerInfo:
+    """Translate an annotation layer into how many items it holds."""
+    return AnnotationLayerInfo(
+        id=layer.id(),
+        name=layer.name(),
+        crs=_authid(layer),
+        item_count=len(layer.items()),
+    )
+
+
+def _describe_tiled_scene(layer: QgsTiledSceneLayer) -> TiledSceneLayerInfo:
+    """Translate a tiled scene into the box it occupies.
+
+    A tiled scene has no cheap tile count: the provider reads one asynchronously
+    and 3.44 has no synchronous total, so the description carries the extent
+    rather than a number it would have to invent.
+    """
+    extent = layer.extent()
+    return TiledSceneLayerInfo(
+        id=layer.id(),
+        name=layer.name(),
+        crs=_authid(layer),
+        extent=CanvasExtent(
+            x_min=extent.xMinimum(),
+            y_min=extent.yMinimum(),
+            x_max=extent.xMaximum(),
+            y_max=extent.yMaximum(),
+            crs=None,
+        ),
+    )
+
+
+_DESCRIBERS.update(
+    {
+        QgsMeshLayer: _describe_mesh,
+        QgsPointCloudLayer: _describe_point_cloud,
+        QgsVectorTileLayer: _describe_vector_tile,
+        QgsAnnotationLayer: _describe_annotation,
+        QgsTiledSceneLayer: _describe_tiled_scene,
+    }
+)
 
 
 def _describe(layer: QgsVectorLayer) -> VectorLayerInfo:

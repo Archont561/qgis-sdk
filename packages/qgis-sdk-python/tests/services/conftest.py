@@ -101,6 +101,24 @@ RASTER_NO_DATA_CELLS = 1
 RASTER_VALUE_POINT = CanvasPoint(x=21.05, y=52.15)
 RASTER_HOLE_POINT = CanvasPoint(x=21.15, y=52.05)
 RASTER_VALUE = 1.0
+# -- the layer-kind fixtures (TASK-91) ----------------------------------------
+#: The mesh both backends describe: an SMS/ADCIRC ``.2dm`` three-vertex,
+#: one-triangle surface with no dataset groups. The file is text, so it is
+#: checked in and reviewable; MDAL reads it natively and the fake is told the
+#: same three numbers, including the zero groups - a mesh with geometry and no
+#: result on it is a mesh, not a broken one.
+MESH_DATASET = FIXTURE_ROOT / "lagoon.2dm"
+MESH_NAME = "lagoon"
+MESH_VERTICES = 3
+MESH_FACES = 1
+MESH_GROUPS = 0
+#: The annotation layer both backends create. It has no dataset: the contract is
+#: that a new one starts empty and is listed like any other layer.
+ANNOTATION_NAME = "notes"
+#: The box the three mesh vertices cover, which a tiled scene answers instead of
+#: a tile count.
+MESH_EXTENT = (21.0, 52.0, 21.2, 52.2)
+
 #: The nested group structure the project-tree contract builds on both backends.
 ROOT_GROUP = "Elevation"
 CHILD_GROUP = "Detail"
@@ -204,6 +222,16 @@ class Services:
     #: The raster file the backend actually reads: the checked-in grid for the
     #: fake, the GeoTIFF the native backend built from it.
     raster_dataset: Path | None = None
+    #: Opens the mesh fixture and answers its layer id (TASK-91). ``None`` while a
+    #: backend has not joined the layer-kind contract, so one slice failing is one
+    #: test failing.
+    open_mesh: Callable[[], str] | None = None
+    #: The mesh file the backend actually reads.
+    mesh_dataset: Path | None = None
+    #: Creates an annotation layer under the name it is given and answers its id.
+    #: An annotation layer is created rather than opened, so the contract names
+    #: it; both backends start one empty.
+    open_annotation: Callable[[str], str] | None = None
     #: A fresh directory one test may write project files into.
     project_directory: Callable[[], Path] | None = None
     #: Creates the nested group structure (``ROOT_GROUP`` -> ``CHILD_GROUP``)
@@ -511,6 +539,18 @@ def _fake_services() -> Services:
             )
         },
     )
+    # The mesh the layer-kind contract opens, declared with the numbers the
+    # ``.2dm`` fixture holds so both backends report the same three. No CRS is
+    # declared because the file has none: MDAL reads no projection out of a
+    # ``.2dm``, so the native layer answers null and the fake must agree.
+    layers.register_layer(
+        MESH_DATASET,
+        name=MESH_NAME,
+        kind="mesh",
+        vertex_count=MESH_VERTICES,
+        face_count=MESH_FACES,
+        group_count=MESH_GROUPS,
+    )
     project = FakeProject(layers, scope)
     project_directory = _project_work_directory()
 
@@ -556,6 +596,9 @@ def _fake_services() -> Services:
         layout_template=template,
         open_raster=lambda: rasters.open_raster(RASTER_DATASET).id,
         raster_dataset=RASTER_DATASET,
+        open_mesh=lambda: layers.open_mesh(MESH_DATASET).id,
+        mesh_dataset=MESH_DATASET,
+        open_annotation=lambda name: layers.open_annotation(name).id,
         project=project,
         project_directory=lambda: project_directory,
         declare_groups=declare_groups,
@@ -604,11 +647,20 @@ def _native_services() -> Services:
     project_directory = _project_work_directory()
     raster_file = _geotiff_fixture()
     opened_rasters: dict[str, str] = {}
+    opened_meshes: dict[str, str] = {}
 
     def open_raster() -> str:
         if "id" not in opened_rasters:
             opened_rasters["id"] = rasters.open_raster(raster_file).id
         return opened_rasters["id"]
+
+    def open_mesh() -> str:
+        if "mesh" not in opened_meshes:
+            opened_meshes["mesh"] = layers.open_mesh(MESH_DATASET).id
+        return opened_meshes["mesh"]
+
+    def open_annotation(name: str) -> str:
+        return layers.open_annotation(name).id
 
     def declare_groups() -> tuple[str, str]:
         root = QgsProject.instance().layerTreeRoot()
@@ -752,6 +804,9 @@ def _native_services() -> Services:
         layout_template=template_file,
         open_raster=open_raster,
         raster_dataset=raster_file,
+        open_mesh=open_mesh,
+        mesh_dataset=MESH_DATASET,
+        open_annotation=open_annotation,
         project=project,
         project_directory=lambda: project_directory,
         declare_groups=declare_groups,

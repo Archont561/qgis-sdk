@@ -12,6 +12,7 @@ from qgis_sdk.models import (
     QgisSdkExportFailedError,
     QgisSdkExportRefusedError,
     QgisSdkLayerNotFoundError,
+    QgisSdkUnsupportedCapabilityError,
     VectorExport,
 )
 
@@ -34,6 +35,59 @@ def test_opened_layer_is_listed_and_looked_up_by_id(services: Services) -> None:
 
     assert info in services.layers.list_layers()
     assert services.layers.layer(info.id) == info
+
+
+def test_a_mesh_lists_beside_the_vectors_and_answers_its_own_numbers(
+    services: Services,
+) -> None:
+    """TASK-91: a mesh is a layer, and its description is a mesh's."""
+    assert services.open_mesh is not None, (
+        "this backend has not joined the kind contract"
+    )
+    layer_id = services.open_mesh()
+
+    info = services.layers.layer(layer_id)
+
+    assert info.kind == "mesh"
+    assert info.name == conftest.MESH_NAME
+    assert info.vertex_count == conftest.MESH_VERTICES
+    assert info.face_count == conftest.MESH_FACES
+    assert info.group_count == conftest.MESH_GROUPS
+    # The ``.2dm`` carries no projection, so a mesh says it has none instead of
+    # borrowing the project's - a page that assumed one would draw it wrong.
+    assert info.crs is None
+    # A mesh lists beside the other kinds rather than in place of them, and each
+    # entry still carries the kind it was described as.
+    services.open_raster()
+    listed = services.layers.list_layers()
+    assert info in listed
+    assert {entry.kind for entry in listed} >= {"mesh", "raster"}
+
+
+def test_a_mesh_is_not_vector_work(services: Services) -> None:
+    """Every vector-only method refuses a mesh by name rather than by accident."""
+    assert services.open_mesh is not None
+    layer_id = services.open_mesh()
+
+    with pytest.raises(QgisSdkUnsupportedCapabilityError) as error:
+        services.layers.selection(layer_id)
+
+    assert "is a mesh" in str(error.value)
+
+
+def test_an_annotation_layer_starts_empty_and_is_created_by_name(
+    services: Services,
+) -> None:
+    """An annotation layer has no dataset, so the contract is: a new one is empty."""
+    assert services.open_annotation is not None
+    layer_id = services.open_annotation(conftest.ANNOTATION_NAME)
+
+    info = services.layers.layer(layer_id)
+
+    assert info.kind == "annotation"
+    assert info.name == conftest.ANNOTATION_NAME
+    assert info.item_count == 0
+    assert info in services.layers.list_layers()
 
 
 def test_unknown_layer_identifier_is_reported(services: Services) -> None:

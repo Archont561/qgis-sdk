@@ -34,7 +34,7 @@ layers.prepare_environment()
 
 # Step definitions and fixtures shared between the BDD features and the
 # ordinary tests; declared here so every module sees the same ones.
-pytest_plugins = ["bridge_steps", "service_steps"]
+pytest_plugins = ["bridge_steps", "layer_kind_steps", "service_steps"]
 
 
 def pytest_configure(config: pytest.Config) -> None:

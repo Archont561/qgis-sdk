@@ -9,7 +9,11 @@
 
 import { describe, expect, test } from "bun:test";
 import { QgisSdkError } from "../src/errors";
-import type { RasterLayerInfo, VectorLayerInfo } from "../src/generated/host";
+import type {
+	MeshLayerInfo,
+	RasterLayerInfo,
+	VectorLayerInfo,
+} from "../src/generated/host";
 import { QgisSdk } from "../src/qgis-sdk";
 import {
 	type FormFieldKind,
@@ -408,11 +412,22 @@ describe("HostQueryStore", () => {
 			crs: null,
 			field_names: ["fid"],
 		};
+		// A mesh in the same page is skipped like the raster: the query answers
+		// vector layers, and a kind it does not describe is not its business.
+		const mesh: MeshLayerInfo = {
+			kind: "mesh",
+			id: "lagoon",
+			name: "Lagoon",
+			vertex_count: 3,
+			face_count: 1,
+			group_count: 0,
+			crs: "EPSG:4326",
+		};
 		const harness = createBridgeHarness(formSchema, {
 			granted: ["layers.list"],
 		});
 		harness.expectInvoke("layers.list", () => ({
-			items: [raster, vector],
+			items: [raster, mesh, vector],
 			truncated: false,
 		}));
 		const qgis = QgisSdk.fromBridgeSchema(formSchema, { transport: harness });
@@ -444,6 +459,33 @@ describe("HostQueryStore", () => {
 		if (state.status !== "error") throw new Error("expected an error state");
 		expect(state.error).toBeInstanceOf(QgisSdkError);
 		expect((state.error as QgisSdkError).code).toBe("unsupported_layer_kind");
+		harness.assertSatisfied();
+		qgis.close();
+	});
+
+	test("layerFieldsQuery refuses a mesh by name", async () => {
+		// A layer of another kind is refused with the kind it actually is, so a
+		// page that bound the wrong picker reads *why* rather than "not found".
+		const harness = createBridgeHarness(formSchema, {
+			granted: ["layers.get"],
+		});
+		harness.expectInvoke("layers.get", () => ({
+			kind: "mesh",
+			id: "lagoon",
+			name: "Lagoon",
+			vertex_count: 3,
+			face_count: 1,
+			group_count: 0,
+			crs: null,
+		}));
+		const qgis = QgisSdk.fromBridgeSchema(formSchema, { transport: harness });
+		const store = layerFieldsQuery(qgis, "lagoon");
+		await expect(store.refresh()).resolves.toBeUndefined();
+		const state = store.getSnapshot();
+		expect(state.status).toBe("error");
+		if (state.status !== "error") throw new Error("expected an error state");
+		expect((state.error as QgisSdkError).code).toBe("unsupported_layer_kind");
+		expect((state.error as QgisSdkError).message).toContain("is a mesh");
 		harness.assertSatisfied();
 		qgis.close();
 	});

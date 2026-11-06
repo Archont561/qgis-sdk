@@ -204,6 +204,9 @@ def test_providers_do_not_change_the_plugin_description_or_the_host_contract() -
 
     assert describe_plugin(WithProviders).to_dict() == describe_plugin(Plain).to_dict()
     # Providers are host-side registrations, not page-callable operations: the
-    # host contract the generated clients pin does not move (decision-42).
+    # host contract the generated clients pin does not move (decision-42). The
+    # literal is the fingerprint the layer kinds moved (TASK-91); a slice that
+    # changes the host surface updates it, a plugin that declares providers
+    # must not.
     assert HOST_SCHEMA_VERSION == 1
-    assert contract_fingerprint(host_description()).startswith("sha256:9aa12425")
+    assert contract_fingerprint(host_description()).startswith("sha256:5c1a612b")
