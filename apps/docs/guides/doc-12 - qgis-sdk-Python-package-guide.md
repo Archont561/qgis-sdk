@@ -2096,6 +2096,12 @@ one set of numbers over the checked-in `elevation.asc`, and
 band's declared type, that the statistics cover every cell, a sample reprojected
 from another CRS, and that an export is a GeoTIFF GDAL reopens.
 
+`tests/features/raster_reads.feature` states the same rules as scenarios a
+reader can check against this section - a grid described band by band, a raster
+listed beside the vectors, a value for the cell under a point and nothing for a
+hole, a band whose counts add up to its size - driven by `tests/service_steps.py`
+over the fakes above.
+
 ## The project
 
 `ctx.project` is the open project: its layer tree, its CRS, its variables and
@@ -2205,6 +2211,12 @@ private JSON format, and `watch_changes` delivers the same ordered frames the
 native adapter does. A layer id the layers service never opened, a layer already
 in the tree under another group, a bookmark nobody declared and an index past
 the end all refuse by name.
+
+`tests/features/project_service.feature` states the rules of this section as
+scenarios: a CRS read back normalised, a nested group structure round-tripping
+through the project file, visibility that belongs to the node it was toggled on,
+a layer added into the deepest group, and the change stream delivering the
+frames in the order the calls were made.
 
 ## Providers: algorithms in the QGIS Processing toolbox
 
