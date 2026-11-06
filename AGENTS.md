@@ -10,6 +10,7 @@
 
 ## Development guidance
 
+- **New features start with the TDD and BDD skills, before any source edit.** Read [TDD](.agents/skills/tdd/SKILL.md) and [BDD scenarios](.agents/skills/bdd-scenarios/SKILL.md) (with [BDD patterns](.agents/skills/bdd-patterns/SKILL.md)) as the first step of the work, then write the acceptance scenario for the behaviour and a failing test at the agreed seam before writing the implementation. The order is: scenario → red test → minimal green code → refactor, one vertical slice at a time; no feature code lands whose behaviour is neither specified in `packages/qgis-sdk-python/tests/features` nor proven by a test that failed first. Retro-fitting tests for code that was written first is a defect to fix in the same change, not a substitute.
 - For behavior changes and bug fixes, follow [TDD](.agents/skills/tdd/SKILL.md). For behavior-preserving structural changes, follow [refactor](.agents/skills/refactor/SKILL.md); consult [clean-code principles](.agents/skills/clean-code-principles/SKILL.md) for design decisions.
 - Use [the Backlog.md skill](.agents/skills/backlog/SKILL.md) for backlog operations; prefer the CLI over editing task metadata directly.
 - For Python QGIS SDK and TypeScript bridge work, consult the [workspace skill](.agents/skills/qgis-sdk/SKILL.md).

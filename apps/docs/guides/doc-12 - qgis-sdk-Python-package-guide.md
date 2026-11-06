@@ -2102,6 +2102,113 @@ listed beside the vectors, a value for the cell under a point and nothing for a
 hole, a band whose counts add up to its size - driven by `tests/service_steps.py`
 over the fakes above.
 
+## Print layouts and atlases
+
+`ctx.layouts` exports what the print designer composed. A layout is not a canvas
+and not a layer: it is a page or a stack of pages the user drew, with maps,
+labels and legends on it, and what a plugin wants from one is a *file*.
+
+```python
+for info in self.ctx.layouts.list():
+    print(info.name, info.page_count, info.atlas)
+
+info = self.ctx.layouts.load_template(self.ctx.files.grant_file(Path("/data/report.qpt")))
+
+handle = self.ctx.layouts.export("report", format="pdf")           # a job
+export = handle.result                # LayoutExport(path, format, pages, bytes)
+export.bytes, export.pages            # the file on disk, and how much of it
+
+run = self.ctx.layouts.render_atlas(  # every page, here and now
+    "atlas", pattern="sheet-{index:02d}-{feature_id}"
+).pages                              # tuple[AtlasPage], coverage order
+```
+
+### Listing and loading are calls; exporting is a job
+
+`list()` reads the project's layout manager and `load_template(FileRef)` adds a
+layout to the project, both in microseconds on the thread that owns the project.
+An export is minutes of rendering, so `export()` and `run_atlas()` submit a
+`@job` and answer a `JobHandle`: the render runs on the host's worker backend,
+which on Desktop is one `QgsTask` - a named row in the QGIS task manager whose
+bar follows the render's progress and whose cancel button asks it to stop.
+`render()` and `render_atlas()` are the same work without a job, for the caller
+that has to answer inside one request; that is what the host operations use.
+
+A cancelled export stops between pages and raises `QgisSdkJobCancelledError`;
+the file it was writing is not published, so a cancelled atlas leaves the pages
+it already finished and nothing half-written.
+
+### A template is named after its file
+
+A `.qpt` carries no name of its own, so `report.qpt` loads as a layout called
+`report`. A name the project already holds gains a numeric suffix (`report (2)`)
+rather than replacing the layout the user composed - the same answer the print
+designer's duplicate-name dialog gives. The template crosses as a `FileRef`
+minted by `ctx.files`, like every other input path: a bare string is refused.
+
+### PNG and SVG hold one page; PDF holds all of them
+
+`LAYOUT_FORMATS` is `pdf`, `png` and `svg`, and the format is a name, not a
+suffix (`"report.pdf"` is refused by naming `pdf`). A PNG or an SVG of a layout
+with more than one page is refused by name - the alternative is a file that
+quietly means "the first page". A PDF carries every page, which is why
+`LayoutExport.pages` reports how many the file holds.
+
+`LayoutSettings(dpi=300, rasterize=False, georeference=False)` is the render
+settings: `dpi` is the resolution a vector page rasterises at, `rasterize` asks
+for the whole page as one image (what a page with unsupported effects needs), and
+`georeference` writes a world file beside the export so the result opens as a map
+rather than a picture.
+
+### An atlas page names its feature
+
+`run_atlas()` writes one file per coverage feature, in the atlas's own order, and
+each `AtlasPage(index, feature_id, path)` names the feature it was drawn for -
+the one thing a caller can join a file back to its record with. The default
+pattern is `page-{index:03d}`; a pattern may use `{index}` and `{feature_id}`
+(`{index:02d}` and the rest of the format spec are allowed) and an unknown
+placeholder is refused by name before anything renders. A layout without an
+enabled atlas is refused too: no backend can enable one over a coverage layer
+for a caller.
+
+### On the wire
+
+`layouts.list`, `layouts.load_template(FileRef)`, `layouts.export` and
+`layouts.atlas` are the four operations, behind three grants: `layouts.read` for
+the list, `layouts.write` for loading a template (it edits the project) and
+`layouts.export` for both renders. The two render operations carry the
+`destructive` annotation, because an export replaces the file a page's own write
+ref already names - `overwrite: true` is what allows it, and the annotation is
+what the agent consent list reads to ask first.
+
+The page never names a directory and never receives a path: an export with no
+destination lands in the host's own output directory, and every answer is a
+`FileRef` - `file` for an export, `directory` plus one `file` per page for an
+atlas. A page's export is one request that ends with the file, not a job: the
+wire has no way to follow a job, so the job forms stay the plugin's own path
+(they are recorded by name in `DEFERRED_HOST_METHODS`).
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeLayouts` takes a scope, a worker backend and a working
+directory, and is told what the project holds: `declare_layout(name, pages=...)`
+and `declare_atlas(name, coverage_layer=..., feature_ids=...)`. Three limits are
+deliberate. Rendering writes a marker file rather than a page - each format gets
+its own recognisable header, so a test can prove *which* format was written, and
+a fake that drew pages would be a second renderer to keep in agreement with QGIS.
+The atlas iterates the coverage ids it was given, so the `index`/`feature_id`
+pairs a test asserts are the ones a real coverage layer produces. And every
+export goes through `qgis_sdk.exports`, so the format, destination, overwrite,
+staging, commit and cleanup path is the code the native adapter runs.
+
+The native backend is `QgsLayoutManager` for the list and the template,
+`QgsLayoutExporter` for the two renders, and `QgsLayoutAtlas.beginRender`/
+`seekTo`/`endRender` for the iteration - the exporter's own multi-file overloads
+name their files from the layout's file-name expression, which would put a
+project setting between the caller's pattern and the file on disk.
+`tests/services/test_layouts_contract.py` holds both backends to one contract;
+`tests/features/layout_exports.feature` states the same rules as scenarios.
+
 ## The project
 
 `ctx.project` is the open project: its layer tree, its CRS, its variables and

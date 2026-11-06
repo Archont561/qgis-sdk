@@ -41,6 +41,7 @@ from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.layers import Layers
+from qgis_sdk.services.layouts import Layouts
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
 from qgis_sdk.services.rasters import Rasters
@@ -63,6 +64,7 @@ PROTOCOLS: dict[str, type] = {
     "Features": Features,
     "EditingSession": EditingSession,
     "Canvas": Canvas,
+    "Layouts": Layouts,
 }
 
 
@@ -312,6 +314,9 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "rasters.read",
         "rasters.open",
         "project.write",
+        "layouts.read",
+        "layouts.write",
+        "layouts.export",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.

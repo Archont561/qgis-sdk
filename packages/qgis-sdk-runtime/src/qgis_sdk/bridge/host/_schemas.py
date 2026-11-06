@@ -14,6 +14,7 @@ from qgis_sdk.models.features import (
     MAX_FEATURE_PAGE,
 )
 from qgis_sdk.models.layers import RASTER_LAYER_INFO
+from qgis_sdk.models.layouts import LAYOUT_FORMATS
 
 #: Rows a page gets when it does not ask for a size.
 DEFAULT_PAGE = 50
@@ -29,6 +30,11 @@ MAX_PAGE = 200
 #: Ceiling for one blob chunk. A client asks for the next chunk until
 #: ``next_offset`` is null, so one message stays far below the inline cap.
 BLOB_CHUNK_BYTES = 64 * 1024
+
+#: Ceiling for one layout's render resolution. A PDF or an image above this is
+#: measured in gigabytes of raster, so the host refuses the ask by name rather
+#: than letting a page stall the task bar.
+MAX_LAYOUT_DPI = 1200
 
 GUI = "gui"
 WORKER = "worker"
@@ -445,3 +451,89 @@ EDIT_PENDING_RESULT = _object(
     required=("session_id", "pending"),
 )
 EDIT_PENDING_RESULT["title"] = "EditPendingResult"
+
+
+# -- print layouts and atlases (TASK-89) --------------------------------------
+
+#: What a page sends to load a template: a ref this host minted for a ``.qpt``.
+#: The layout lands under the file's own stem, so there is no name to send.
+LOAD_LAYOUT_TEMPLATE_REQUEST = _object({"file": FILE_REF}, required=("file",))
+LOAD_LAYOUT_TEMPLATE_REQUEST["title"] = "LoadLayoutTemplateRequest"
+
+#: The render settings every export shares. ``dpi`` is what a vector page
+#: rasterises at when an item cannot be written as vectors, ``rasterize`` asks
+#: for the whole page as one image, and ``georeference`` writes a world file
+#: beside the export.
+_LAYOUT_RENDER_SETTINGS = {
+    "dpi": {"type": "integer", "minimum": 1, "maximum": MAX_LAYOUT_DPI},
+    "rasterize": {"type": "boolean"},
+    "georeference": {"type": "boolean"},
+}
+
+#: One layout export: a name, a format and whether an existing file may be
+#: replaced. The page never names a path - the host writes into its own output
+#: directory and hands back a ref - so ``overwrite`` is the only authority it
+#: has over a file that already exists.
+EXPORT_LAYOUT_REQUEST = _object(
+    {
+        "layout": {"type": "string"},
+        "format": {"enum": sorted(LAYOUT_FORMATS)},
+        "destination": FILE_REF,
+        **_LAYOUT_RENDER_SETTINGS,
+        "overwrite": {"type": "boolean"},
+    },
+    required=("layout",),
+)
+EXPORT_LAYOUT_REQUEST["title"] = "ExportLayoutRequest"
+
+#: One atlas run. ``pattern`` names each file without its suffix and may use
+#: ``{index}`` and ``{feature_id}``; the host refuses an unknown placeholder
+#: before anything is rendered.
+ATLAS_LAYOUT_REQUEST = _object(
+    {
+        "layout": {"type": "string"},
+        "format": {"enum": sorted(LAYOUT_FORMATS)},
+        "pattern": {"type": "string"},
+        **_LAYOUT_RENDER_SETTINGS,
+        "overwrite": {"type": "boolean"},
+    },
+    required=("layout",),
+)
+ATLAS_LAYOUT_REQUEST["title"] = "AtlasLayoutRequest"
+
+#: A finished export, as the view sees it: the file is a ref the host minted for
+#: this view, never the path the exporter wrote.
+LAYOUT_EXPORT_RESULT = _object(
+    {
+        "file": FILE_REF,
+        "format": {"enum": sorted(LAYOUT_FORMATS)},
+        "pages": {"type": "integer", "minimum": 1},
+        "bytes": {"type": "integer", "minimum": 0},
+    },
+    required=("file", "format", "pages", "bytes"),
+)
+LAYOUT_EXPORT_RESULT["title"] = "LayoutExport"
+
+#: One atlas page: the file as a ref, the page number a user counts from one and
+#: the coverage feature it was drawn for (``None`` outside a coverage layer).
+ATLAS_PAGE_RESULT = _object(
+    {
+        "index": {"type": "integer", "minimum": 1},
+        "feature_id": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        "file": FILE_REF,
+    },
+    required=("index", "feature_id", "file"),
+)
+ATLAS_PAGE_RESULT["title"] = "AtlasPage"
+
+#: Every file one atlas run wrote, in coverage order, plus the directory ref the
+#: host minted for the run so a page can name where they went.
+ATLAS_EXPORT_RESULT = _object(
+    {
+        "directory": FILE_REF,
+        "format": {"enum": sorted(LAYOUT_FORMATS)},
+        "pages": _array(ATLAS_PAGE_RESULT),
+    },
+    required=("directory", "format", "pages"),
+)
+ATLAS_EXPORT_RESULT["title"] = "AtlasExport"

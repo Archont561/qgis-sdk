@@ -1,10 +1,10 @@
-"""Steps for the raster-read and project-service features.
+"""Steps for the raster, project and layout features.
 
-Both features describe a backend the way a plugin author meets it - open,
-describe, sample, measure, edit the tree - so the worlds here are built from the
-SDK's own fakes: the same objects a plugin's pure tests construct. Each scenario
-gets a fresh world, which is what makes the numbers it asserts the numbers of
-one grid rather than of whatever ran before it.
+The features describe a backend the way a plugin author meets it - open,
+describe, sample, measure, edit the tree, export a print layout - so the worlds
+here are built from the SDK's own fakes: the same objects a plugin's pure tests
+construct. Each scenario gets a fresh world, which is what makes the numbers it
+asserts the numbers of one grid rather than of whatever ran before it.
 """
 
 from __future__ import annotations
@@ -29,7 +29,14 @@ from qgis_sdk.models import (
     RasterStatistics,
     VectorLayerInfo,
 )
-from qgis_sdk.testing import FakeLayers, FakeProject, FakeRasters
+from qgis_sdk.testing import (
+    FakeFiles,
+    FakeLayers,
+    FakeLayouts,
+    FakeProject,
+    FakeRasters,
+    FakeWorkers,
+)
 
 REFERENCE = Path(__file__).resolve().parent / "fixtures" / "reference"
 GRID = REFERENCE / "elevation.asc"
@@ -444,3 +451,385 @@ def stream_order(project_world: ProjectWorld, kinds: str) -> None:
     expected = kinds.replace(" then ", " ").split()
 
     assert [frame.kind for frame in project_world.frames] == expected
+
+
+# -- print layouts (TASK-89) -----------------------------------------------------
+
+#: The three reference points, in the order the fixture stores them: the ids an
+#: atlas iterates are the feature ids the file gave the rows.
+ATLAS_FEATURES = (1, 2, 3)
+
+
+@dataclass
+class LayoutWorld:
+    """The fake runtime the layout scenarios arrange and observe."""
+
+    scope: ResourceScope
+    layouts: FakeLayouts
+    files: FakeFiles
+    workers: FakeWorkers
+    directory: Path
+    listed: tuple = ()
+    handle: object | None = None
+    export: object | None = None
+    atlas: object | None = None
+    refusal: Exception | None = None
+    progress: list[float] = field(default_factory=list)
+    destination: Path | None = None
+    template: Path | None = None
+    #: The one-page layout the background declared, by name.
+    single_page_layout: str = ""
+    #: The file's timestamp before a replacing export, for the overwrite Then.
+    replaced_from: int = 0
+
+    def drive(self) -> None:
+        """One round trip through the layouts service's own job service."""
+        service = self.layouts.jobs
+        service.tick()
+        self.workers.run_all()
+        service.tick()
+
+    def info(self, name: str):
+        """The description of one declared layout, by name."""
+        for entry in self.layouts.list():
+            if entry.name == name:
+                return entry
+        raise AssertionError(f"the project holds no layout called {name!r}")
+
+
+@given(
+    parsers.parse('a runtime with the layout backend and a one-page layout "{name}"'),
+    target_fixture="layout_world",
+)
+def layout_runtime(tmp_path: Path, name: str) -> LayoutWorld:
+    scope = ResourceScope()
+    workers = FakeWorkers()
+    files = FakeFiles(scope, owner="plugin:feature")
+    directory = tmp_path / "exports"
+    directory.mkdir()
+    layouts = FakeLayouts(
+        scope, workers=workers, files=files, working_directory=directory
+    )
+    layouts.declare_layout(name)
+    return LayoutWorld(
+        scope=scope,
+        layouts=layouts,
+        files=files,
+        workers=workers,
+        directory=directory,
+        single_page_layout=name,
+    )
+
+
+@given(parsers.parse('the project holds a two-page layout "{name}"'))
+def declare_layout(layout_world: LayoutWorld, name: str) -> None:
+    layout_world.layouts.declare_layout(name, pages=2)
+
+
+@given(
+    parsers.parse('the project holds an atlas "{name}" over the three reference points')
+)
+def declare_atlas(layout_world: LayoutWorld, name: str) -> None:
+    layout_world.layouts.declare_atlas(
+        name, coverage_layer="points", feature_ids=ATLAS_FEATURES
+    )
+
+
+@when("the plugin lists the print layouts")
+def list_layouts(layout_world: LayoutWorld) -> None:
+    layout_world.listed = layout_world.layouts.list()
+
+
+@then(parsers.parse('the project reports "{name}" with {pages:d} page and no atlas'))
+@then(parsers.parse('the project reports "{name}" with {pages:d} pages and no atlas'))
+def described_layout(layout_world: LayoutWorld, name: str, pages: int) -> None:
+    assert layout_world.listed, "the plugin has not listed the layouts yet"
+    described = {entry.name: entry for entry in layout_world.listed}
+
+    assert name in described
+    assert described[name].id == name
+    assert described[name].page_count == pages
+    assert described[name].atlas is None
+
+
+@then(parsers.parse('the project reports "{name}" with a coverage layer'))
+def described_atlas(layout_world: LayoutWorld, name: str) -> None:
+    described = {entry.name: entry for entry in layout_world.listed}
+    atlas = described[name].atlas
+
+    assert atlas is not None
+    assert atlas.enabled is True
+    assert atlas.coverage_layer == "points"
+
+
+@given(parsers.parse('the plugin exports "{name}" as a {format}'))
+@when(parsers.parse('the plugin exports "{name}" as a {format}'))
+def export_layout(layout_world: LayoutWorld, name: str, format: str) -> None:
+    try:
+        layout_world.handle = layout_world.layouts.export(name, format=format.lower())
+    except Exception as error:  # noqa: BLE001 - the refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@when(
+    parsers.parse('the plugin exports "{name}" as a {format} and watches its progress')
+)
+def export_layout_and_watch(layout_world: LayoutWorld, name: str, format: str) -> None:
+    handle = layout_world.layouts.export(name, format=format.lower())
+    handle.on_progress(layout_world.progress.append)
+    layout_world.handle = handle
+
+
+@then("the export has not started")
+def export_not_started(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.jobs import JobStatus
+
+    assert layout_world.handle is not None
+    assert layout_world.handle.status is JobStatus.QUEUED
+
+
+@when("the job is driven to its end")
+def drive_job(layout_world: LayoutWorld) -> None:
+    layout_world.drive()
+
+
+@then(parsers.parse("the job succeeded with a {format} of {pages:d} pages"))
+def job_succeeded(layout_world: LayoutWorld, format: str, pages: int) -> None:
+    from qgis_sdk.jobs import JobStatus
+
+    assert layout_world.handle is not None
+    assert layout_world.handle.status is JobStatus.SUCCEEDED
+    export = layout_world.handle.result
+    layout_world.export = export
+
+    assert export.format == format.lower()
+    assert export.pages == pages
+    assert export.bytes > 0
+    assert Path(export.path).is_file()
+
+
+@then("the exported file is inside the host's output directory")
+def exported_inside_directory(layout_world: LayoutWorld) -> None:
+    assert layout_world.export is not None
+    written = Path(layout_world.export.path)
+
+    assert written.parent == layout_world.directory
+    assert written.suffix == ".pdf"
+
+
+@then("the progress ends at 1.0 and never went backwards")
+def progress_reached_the_end(layout_world: LayoutWorld) -> None:
+    seen = layout_world.progress
+
+    assert seen, "an export that produced a file reported no progress"
+    assert seen == sorted(seen)
+    assert seen[-1] == pytest.approx(1.0)
+
+
+@when("the export is cancelled before its body runs")
+def cancel_export(layout_world: LayoutWorld) -> None:
+    assert layout_world.handle is not None
+    assert layout_world.handle.cancel() is True
+
+
+@then("the job is cancelled and no PDF was written")
+def cancelled_without_a_file(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.jobs import JobStatus
+    from qgis_sdk.models import QgisSdkJobCancelledError
+
+    assert layout_world.handle is not None
+    assert layout_world.handle.status is JobStatus.CANCELLED
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = layout_world.handle.result
+    assert not list(layout_world.directory.glob("report*.pdf"))
+
+
+@then(parsers.parse("the export is a {format} of {pages:d} page"))
+@then(parsers.parse("the export is a {format} of {pages:d} pages"))
+def exported_as(layout_world: LayoutWorld, format: str, pages: int) -> None:
+    assert layout_world.handle is not None
+    export = layout_world.handle.result
+    layout_world.export = export
+
+    assert export.format == format.lower()
+    assert export.pages == pages
+    assert Path(export.path).suffix == ".png"
+    assert Path(export.path).is_file()
+
+
+@when(parsers.parse('the plugin exports "{name}" to a path it typed'))
+def export_to_a_path(layout_world: LayoutWorld, name: str) -> None:
+    typed = layout_world.directory / "typed-by-hand.pdf"
+    layout_world.destination = typed
+    try:
+        layout_world.layouts.render(name, destination=str(typed))
+    except Exception as error:  # noqa: BLE001 - the refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@when(parsers.parse('the plugin exports "{name}" to a ref the host minted'))
+@given(parsers.parse('"{name}" was exported to a ref the host minted'))
+def export_to_a_ref(layout_world: LayoutWorld, name: str) -> None:
+    destination = layout_world.directory / f"{name}-granted.pdf"
+    ref = layout_world.files.grant_file(
+        destination, operations=("write",), overwrite=True
+    )
+    layout_world.destination = destination
+    try:
+        # The blocking form: the scenario is about where the file landed, and a
+        # job would need its own "driven to its end" step in between.
+        layout_world.export = layout_world.layouts.render(name, destination=ref)
+    except Exception as error:  # noqa: BLE001 - a refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@then("the SDK refuses the destination as not a ref")
+def refused_as_not_a_ref(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.models import QgisSdkExportRefusedError
+
+    assert isinstance(layout_world.refusal, QgisSdkExportRefusedError)
+    assert "FileRef" in str(layout_world.refusal)
+    assert layout_world.destination is not None
+    assert not layout_world.destination.exists()
+
+
+@then("the export landed where the ref named")
+def landed_where_the_ref_named(layout_world: LayoutWorld) -> None:
+    assert layout_world.export is not None
+
+    assert layout_world.destination is not None
+    assert layout_world.export.path == str(layout_world.destination)
+    assert layout_world.destination.is_file()
+
+
+@when("the same ref is exported to again")
+def export_to_the_same_ref(layout_world: LayoutWorld) -> None:
+    layout_world.refusal = None
+    assert layout_world.destination is not None
+    ref = layout_world.files.grant_file(
+        layout_world.destination, operations=("write",), overwrite=True
+    )
+    try:
+        layout_world.layouts.render("report", destination=ref)
+    except Exception as error:  # noqa: BLE001 - the refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@then("the SDK refuses the destination as existing")
+def refused_as_existing(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.models import QgisSdkExportRefusedError
+
+    assert isinstance(layout_world.refusal, QgisSdkExportRefusedError)
+    assert "overwrite" in str(layout_world.refusal)
+
+
+@when("the same ref is exported to with overwrite")
+def export_with_overwrite(layout_world: LayoutWorld) -> None:
+    assert layout_world.destination is not None
+    before = layout_world.destination.stat().st_mtime_ns
+    ref = layout_world.files.grant_file(
+        layout_world.destination, operations=("write",), overwrite=True
+    )
+    layout_world.export = layout_world.layouts.render(
+        "report", destination=ref, overwrite=True
+    )
+    layout_world.replaced_from = before
+
+
+@then("the export replaced the file")
+def replaced_the_file(layout_world: LayoutWorld) -> None:
+    assert layout_world.export is not None
+    assert layout_world.destination is not None
+    assert layout_world.export.path == str(layout_world.destination)
+    assert layout_world.destination.stat().st_mtime_ns >= layout_world.replaced_from
+
+
+@when(parsers.parse('the atlas "{name}" is run with the pattern "{pattern}"'))
+def run_atlas_with_pattern(layout_world: LayoutWorld, name: str, pattern: str) -> None:
+    try:
+        layout_world.atlas = layout_world.layouts.render_atlas(name, pattern=pattern)
+    except Exception as error:  # noqa: BLE001 - the refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@when(parsers.parse('the atlas "{name}" is run'))
+def run_atlas(layout_world: LayoutWorld, name: str) -> None:
+    try:
+        layout_world.atlas = layout_world.layouts.render_atlas(name)
+    except Exception as error:  # noqa: BLE001 - the refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@then(parsers.parse("the atlas wrote {count:d} files, one for each feature"))
+def atlas_files(layout_world: LayoutWorld, count: int) -> None:
+    assert layout_world.atlas is not None
+    run = layout_world.atlas
+
+    assert len(run.pages) == count
+    assert tuple(page.feature_id for page in run.pages) == ATLAS_FEATURES
+    assert tuple(page.index for page in run.pages) == (1, 2, 3)
+    for page in run.pages:
+        assert Path(page.path).is_file()
+
+
+@then("the file names are the ones the pattern asks for")
+def atlas_names(layout_world: LayoutWorld) -> None:
+    assert layout_world.atlas is not None
+
+    for page in layout_world.atlas.pages:
+        assert Path(page.path).name == (f"sheet-{page.index:02d}-{page.feature_id}.pdf")
+
+
+@then(parsers.parse('the SDK refuses the pattern\'s unknown field "{field}"'))
+def refused_pattern_field(layout_world: LayoutWorld, field: str) -> None:
+    from qgis_sdk.models import QgisSdkExportRefusedError
+
+    assert isinstance(layout_world.refusal, QgisSdkExportRefusedError)
+    assert field in str(layout_world.refusal)
+
+
+@then("the SDK refuses the atlas as missing")
+def refused_missing_atlas(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.models import QgisSdkExportRefusedError
+
+    assert isinstance(layout_world.refusal, QgisSdkExportRefusedError)
+    assert "no atlas" in str(layout_world.refusal)
+
+
+@then("the SDK refuses the destination as holding more than one page")
+def refused_multi_page_image(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.models import QgisSdkExportRefusedError
+
+    assert isinstance(layout_world.refusal, QgisSdkExportRefusedError)
+    assert "one page" in str(layout_world.refusal)
+
+
+@when(parsers.parse('the plugin loads the template "{filename}"'))
+def load_template(layout_world: LayoutWorld, filename: str) -> None:
+    template = layout_world.directory / filename
+    template.write_text("<!-- the fake only has to find the template -->")
+    layout_world.template = template
+    layout_world.listed = (
+        layout_world.layouts.load_template(
+            layout_world.files.grant_file(template, operations=("read",))
+        ),
+    )
+
+
+@when("the plugin loads the template as a path it typed")
+def load_template_as_a_path(layout_world: LayoutWorld) -> None:
+    template = layout_world.directory / "templated.qpt"
+    template.write_text("<!-- the fake only has to find the template -->")
+    layout_world.template = template
+    try:
+        layout_world.layouts.load_template(template)
+    except Exception as error:  # noqa: BLE001 - the refusal is what a Then asserts
+        layout_world.refusal = error
+
+
+@then("the SDK refuses the template as not a ref")
+def refused_template_as_path(layout_world: LayoutWorld) -> None:
+    from qgis_sdk.models import QgisSdkExportRefusedError
+
+    assert isinstance(layout_world.refusal, QgisSdkExportRefusedError)
+    assert "FileRef" in str(layout_world.refusal)

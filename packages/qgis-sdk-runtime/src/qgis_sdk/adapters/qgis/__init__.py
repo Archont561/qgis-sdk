@@ -25,6 +25,7 @@ if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
     from .features import NativeFeatureEditing, NativeFeatures
     from .jobs import DEFAULT_INTERVAL_MS, QgsJobPump
     from .layers import NativeLayers
+    from .layouts import NativeLayouts
     from .log import NativeLog
     from .network import NativeNetworkTransport
     from .notifications import NativeNotifications
@@ -45,6 +46,7 @@ __all__ = [
     "NativeFeatureEditing",
     "NativeFeatures",
     "NativeLayers",
+    "NativeLayouts",
     "NativeLog",
     "NativeNetworkTransport",
     "NativeNotifications",
@@ -70,6 +72,7 @@ _EXPORTS: dict[str, str] = {
     "NativeFeatureEditing": ".features",
     "NativeFeatures": ".features",
     "NativeLayers": ".layers",
+    "NativeLayouts": ".layouts",
     "NativeLog": ".log",
     "NativeNetworkTransport": ".network",
     "NativeNotifications": ".notifications",

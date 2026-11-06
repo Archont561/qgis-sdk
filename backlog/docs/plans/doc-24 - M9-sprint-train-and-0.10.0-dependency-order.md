@@ -6,8 +6,8 @@ created_date: '2026-10-26 10:20'
 ---
 # M9 sprint train and 0.10.0 dependency order
 
-**Status:** Sprints 1-4 landed (#162, #163, #164, #167); sprint 5 (TASK-89)
-is next and the TASK-90 gate last. Orders work the m-9 tasks already declare;
+**Status:** Sprints 1-5 landed (#162, #163, #164, #167, #169); the TASK-90
+gate is last. Orders work the m-9 tasks already declare;
 adds no scope. Sprint membership lives here and in the milestone body
 ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
@@ -53,6 +53,8 @@ table for 0.10.0 is `ctx.desktop.iface` today. Authority is three dialects.
   full project service and layer tree in the same pull request (they share
   the `Layers.list` change). Landed as PR #167 (`785f5c1`).
 - **Sprint 5: TASK-89.** Layouts and atlas as jobs on the task manager.
+  Landed as PR #169 (`1b0c986`): `layouts.*` as four host operations behind
+  three grants, both renders destructive, `HOST_FINGERPRINT` moved once.
 - **Gate: TASK-90.** `python-v0.10.0` paired with the next `ts-v*` minor
   (regenerated host manifest), one merge commit, explicit authorization.
 

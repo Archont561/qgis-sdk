@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "JOB_PUMP_LOOP",
+    "LAYOUT_PUMP_LOOP",
     "AppNotifications",
     "AppWindowInterface",
     "QtAppBackend",
@@ -51,6 +52,11 @@ __all__ = [
 #: The name the app's job pump is registered under. Named because shutdown
 #: reports the loops it stops (decision-69 point 4).
 JOB_PUMP_LOOP: Final = "job-pump"
+
+#: The second pump: the layouts service submits an export to a job service of
+#: its own, so that a plugin which declares no jobs still gets a progress bar
+#: (TASK-89).
+LAYOUT_PUMP_LOOP: Final = "layouts-job-pump"
 
 #: ``@menu("Vector/...")`` -> the menu this window opens for that family. An app
 #: has one menu bar, so every family is a menu in it, created on first use.
@@ -352,12 +358,24 @@ class QtAppSurface:
         """Place the UI and start the job pump; return the loops started."""
         loops: list[NamedLoop] = []
         service = runtime.jobs
-        if service is not None:
-            from qgis_sdk.adapters.qgis.jobs import QgsJobPump
+        layouts = self._context.layouts if self._context.has("layouts") else None
+        if service is None and layouts is None:
+            return tuple(loops)
+        from qgis_sdk.adapters.qgis.jobs import QgsJobPump
 
+        if service is not None:
             pump = QgsJobPump(service, name=JOB_PUMP_LOOP, parent=self._window)
             pump.start()
             loops.append(pump)
+        # An export of a print layout submits to the layouts service's own job
+        # service, which needs its own tick whether or not the plugin declares
+        # jobs of its own (TASK-89).
+        if layouts is not None:
+            layout_pump = QgsJobPump(
+                layouts.jobs, name=LAYOUT_PUMP_LOOP, parent=self._window
+            )
+            layout_pump.start()
+            loops.append(layout_pump)
         if self._surfaces is not None and self._bindings is not None:
             self._surfaces.attach(runtime, self._context)
             self._bindings.install(runtime)

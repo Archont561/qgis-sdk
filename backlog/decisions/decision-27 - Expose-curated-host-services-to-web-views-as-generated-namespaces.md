@@ -210,6 +210,38 @@ growth: generated `tryX` result unions (the throwing form ships), a branded
 GUI-affine calls (every operation is `gui`; a caller still serialises itself),
 and advertising *grants* rather than operation ids in the handshake.
 
+## Status review, 2026-11-06, second pass (TASK-89)
+
+Layouts close the sprint that opened this review: the surface is now **63
+operations - 58 calls and 5 streams - behind 22 canonical grants**, and the two
+rules this slice leaned on hardest are the two worth writing down.
+
+- **A render a page waits for is a call, and the job stays the plugin's.** A
+  print-layout export is minutes of work, so the plugin API submits it as a
+  `@job` (`Layouts.export`, `Layouts.run_atlas`) and answers a handle with a bar
+  and a cancel button in the task manager. The wire has no way to follow a job,
+  so the host exposes the *blocking* forms (`Layouts.render`,
+  `Layouts.render_atlas`) as `layouts.export` and `layouts.atlas`: one request
+  that ends with the file. Both job forms are therefore in
+  `DEFERRED_HOST_METHODS` with that reason, which is the twelfth and thirteenth
+  deferred method - and the first pair deferred because the protocol lacks a
+  feature rather than because authority forbids one.
+- **Refs out, not just refs in.** `layouts.export` answers `{file: FileRef}`
+  and `layouts.atlas` answers a `directory` ref plus one `file` per page, each
+  with the `feature_id` it was drawn for. The exporter's path never crosses,
+  which is the same rule decision-20 applies to inputs, read in the other
+  direction. Destinations work the same way: the page's write ref is resolved
+  against the calling binding, re-minted for the plugin's own files service, and
+  the export replaces an existing file only when `overwrite` is set - which is
+  why `layouts.export` and `layouts.atlas` join the destructive list (nine
+  operations now, still declared one by one and still pinned by a test).
+
+`HOST_SCHEMA_VERSION` remains 1, `BRIDGE_PROTOCOL_VERSION` remains 2, and
+`HOST_FINGERPRINT` moved once for the slice (`sha256:9aa12425...`). The three
+grants (`layouts.read`, `layouts.write`, `layouts.export`) follow the
+`<service>.<operation>` shape: the list is one read, loading a template edits the
+project, and both renders write a file.
+
 The consequence for the next slice is the one this document opened with: the
 surface is now wide enough that "expose the Protocol" is no longer the question
 - layouts, the remaining layer kinds and the connection service each land as

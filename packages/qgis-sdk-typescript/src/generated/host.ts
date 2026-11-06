@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:3872588815ca6f58719e8ccea633466a998f7e60908e591751428756d213f97a";
+export const HOST_FINGERPRINT = "sha256:9aa12425fcbffd493608456671505acf0eb625ee4cb91f391d2a9bc84b2c5c56";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -39,6 +39,10 @@ export const HOST_OPERATIONS = [
 	"layers.get",
 	"layers.list",
 	"layers.open_vector",
+	"layouts.atlas",
+	"layouts.export",
+	"layouts.list",
+	"layouts.load_template",
 	"network.fetch",
 	"notifications.info",
 	"project.add_bookmark",
@@ -177,6 +181,34 @@ export interface AlgorithmSummary {
 	readonly provider: string;
 }
 
+export interface AtlasExport {
+	readonly directory: FileRef;
+	readonly format: "pdf" | "png" | "svg";
+	readonly pages: readonly AtlasPage[];
+}
+
+export interface AtlasInfo {
+	readonly coverage_layer: string | null;
+	readonly enabled: boolean;
+	readonly filename_expression: string | null;
+}
+
+export interface AtlasLayoutRequest {
+	readonly dpi?: number;
+	readonly format?: "pdf" | "png" | "svg";
+	readonly georeference?: boolean;
+	readonly layout: string;
+	readonly overwrite?: boolean;
+	readonly pattern?: string;
+	readonly rasterize?: boolean;
+}
+
+export interface AtlasPage {
+	readonly feature_id: number | null;
+	readonly file: FileRef;
+	readonly index: number;
+}
+
 export interface BandRequest {
 	readonly band: number;
 	readonly layer_id: string;
@@ -305,6 +337,16 @@ export interface EditUpdateRequest {
 	readonly session_id: string;
 }
 
+export interface ExportLayoutRequest {
+	readonly destination?: FileRef;
+	readonly dpi?: number;
+	readonly format?: "pdf" | "png" | "svg";
+	readonly georeference?: boolean;
+	readonly layout: string;
+	readonly overwrite?: boolean;
+	readonly rasterize?: boolean;
+}
+
 export interface ExportRequest {
 	readonly content: string;
 	readonly file: FileRef;
@@ -420,6 +462,34 @@ export interface LayerRequest {
 
 export interface LayerTree {
 	readonly nodes: readonly LayerNode[];
+}
+
+export interface LayoutExport {
+	readonly bytes: number;
+	readonly file: FileRef;
+	readonly format: "pdf" | "png" | "svg";
+	readonly pages: number;
+}
+
+export interface LayoutInfo {
+	readonly atlas: AtlasInfo | null;
+	readonly id: string;
+	readonly name: string;
+	readonly page_count: number;
+}
+
+export interface Layouts {
+	readonly items: readonly LayoutInfo[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
+export interface LayoutsListRequest {
+	readonly [key: string]: never;
+}
+
+export interface LoadLayoutTemplateRequest {
+	readonly file: FileRef;
 }
 
 export interface MapThemes {
@@ -799,6 +869,88 @@ export function AlgorithmSummary(value: unknown, strict = false): value is Algor
 	return true;
 }
 
+export function AtlasExport(value: unknown, strict = false): value is AtlasExport {
+	if (!isRecord(value)) return false;
+	if (!("directory" in value)) return false;
+	if (!("format" in value)) return false;
+	if (!("pages" in value)) return false;
+	if (value["directory"] !== undefined && !(FileRef(value["directory"], strict))) {
+		return false;
+	}
+	if (value["format"] !== undefined && !((value["format"] === "pdf" || value["format"] === "png" || value["format"] === "svg"))) {
+		return false;
+	}
+	if (value["pages"] !== undefined && !((Array.isArray(value["pages"]) && value["pages"].every((item) => AtlasPage(item, strict))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["directory", "format", "pages"])) return false;
+	return true;
+}
+
+export function AtlasInfo(value: unknown, strict = false): value is AtlasInfo {
+	if (!isRecord(value)) return false;
+	if (!("enabled" in value)) return false;
+	if (!("coverage_layer" in value)) return false;
+	if (!("filename_expression" in value)) return false;
+	if (value["coverage_layer"] !== undefined && !((typeof value["coverage_layer"] === "string" || value["coverage_layer"] === null))) {
+		return false;
+	}
+	if (value["enabled"] !== undefined && !(typeof value["enabled"] === "boolean")) {
+		return false;
+	}
+	if (value["filename_expression"] !== undefined && !((typeof value["filename_expression"] === "string" || value["filename_expression"] === null))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["coverage_layer", "enabled", "filename_expression"])) return false;
+	return true;
+}
+
+export function AtlasLayoutRequest(value: unknown, strict = false): value is AtlasLayoutRequest {
+	if (!isRecord(value)) return false;
+	if (!("layout" in value)) return false;
+	if (value["dpi"] !== undefined && !((isSafeInteger(value["dpi"]) && value["dpi"] >= 1 && value["dpi"] <= 1200))) {
+		return false;
+	}
+	if (value["format"] !== undefined && !((value["format"] === "pdf" || value["format"] === "png" || value["format"] === "svg"))) {
+		return false;
+	}
+	if (value["georeference"] !== undefined && !(typeof value["georeference"] === "boolean")) {
+		return false;
+	}
+	if (value["layout"] !== undefined && !(typeof value["layout"] === "string")) {
+		return false;
+	}
+	if (value["overwrite"] !== undefined && !(typeof value["overwrite"] === "boolean")) {
+		return false;
+	}
+	if (value["pattern"] !== undefined && !(typeof value["pattern"] === "string")) {
+		return false;
+	}
+	if (value["rasterize"] !== undefined && !(typeof value["rasterize"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["dpi", "format", "georeference", "layout", "overwrite", "pattern", "rasterize"])) return false;
+	return true;
+}
+
+export function AtlasPage(value: unknown, strict = false): value is AtlasPage {
+	if (!isRecord(value)) return false;
+	if (!("index" in value)) return false;
+	if (!("feature_id" in value)) return false;
+	if (!("file" in value)) return false;
+	if (value["feature_id"] !== undefined && !((isSafeInteger(value["feature_id"]) || value["feature_id"] === null))) {
+		return false;
+	}
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (value["index"] !== undefined && !((isSafeInteger(value["index"]) && value["index"] >= 1))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["feature_id", "file", "index"])) return false;
+	return true;
+}
+
 export function BandRequest(value: unknown, strict = false): value is BandRequest {
 	if (!isRecord(value)) return false;
 	if (!("layer_id" in value)) return false;
@@ -1128,6 +1280,34 @@ export function EditUpdateRequest(value: unknown, strict = false): value is Edit
 		return false;
 	}
 	if (strict && !hasOnly(value, ["attributes", "feature_id", "geometry", "session_id"])) return false;
+	return true;
+}
+
+export function ExportLayoutRequest(value: unknown, strict = false): value is ExportLayoutRequest {
+	if (!isRecord(value)) return false;
+	if (!("layout" in value)) return false;
+	if (value["destination"] !== undefined && !(FileRef(value["destination"], strict))) {
+		return false;
+	}
+	if (value["dpi"] !== undefined && !((isSafeInteger(value["dpi"]) && value["dpi"] >= 1 && value["dpi"] <= 1200))) {
+		return false;
+	}
+	if (value["format"] !== undefined && !((value["format"] === "pdf" || value["format"] === "png" || value["format"] === "svg"))) {
+		return false;
+	}
+	if (value["georeference"] !== undefined && !(typeof value["georeference"] === "boolean")) {
+		return false;
+	}
+	if (value["layout"] !== undefined && !(typeof value["layout"] === "string")) {
+		return false;
+	}
+	if (value["overwrite"] !== undefined && !(typeof value["overwrite"] === "boolean")) {
+		return false;
+	}
+	if (value["rasterize"] !== undefined && !(typeof value["rasterize"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["destination", "dpi", "format", "georeference", "layout", "overwrite", "rasterize"])) return false;
 	return true;
 }
 
@@ -1461,6 +1641,83 @@ export function LayerTree(value: unknown, strict = false): value is LayerTree {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["nodes"])) return false;
+	return true;
+}
+
+export function LayoutExport(value: unknown, strict = false): value is LayoutExport {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (!("format" in value)) return false;
+	if (!("pages" in value)) return false;
+	if (!("bytes" in value)) return false;
+	if (value["bytes"] !== undefined && !((isSafeInteger(value["bytes"]) && value["bytes"] >= 0))) {
+		return false;
+	}
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (value["format"] !== undefined && !((value["format"] === "pdf" || value["format"] === "png" || value["format"] === "svg"))) {
+		return false;
+	}
+	if (value["pages"] !== undefined && !((isSafeInteger(value["pages"]) && value["pages"] >= 1))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["bytes", "file", "format", "pages"])) return false;
+	return true;
+}
+
+export function LayoutInfo(value: unknown, strict = false): value is LayoutInfo {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (!("page_count" in value)) return false;
+	if (!("atlas" in value)) return false;
+	if (value["atlas"] !== undefined && !((AtlasInfo(value["atlas"], strict) || value["atlas"] === null))) {
+		return false;
+	}
+	if (value["id"] !== undefined && !(typeof value["id"] === "string")) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (value["page_count"] !== undefined && !((isSafeInteger(value["page_count"]) && value["page_count"] >= 1))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["atlas", "id", "name", "page_count"])) return false;
+	return true;
+}
+
+export function Layouts(value: unknown, strict = false): value is Layouts {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => LayoutInfo(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function LayoutsListRequest(value: unknown, strict = false): value is LayoutsListRequest {
+	if (!isRecord(value)) return false;
+	if (strict && !hasOnly(value, [])) return false;
+	return true;
+}
+
+export function LoadLayoutTemplateRequest(value: unknown, strict = false): value is LoadLayoutTemplateRequest {
+	if (!isRecord(value)) return false;
+	if (!("file" in value)) return false;
+	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["file"])) return false;
 	return true;
 }
 
@@ -2270,6 +2527,12 @@ export interface HostOperations {
 		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<LayerPage>;
 		readonly open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
 	};
+	readonly layouts: {
+		readonly atlas: (input: AtlasLayoutRequest, options?: HostInvokeOptions) => Promise<AtlasExport>;
+		readonly export: (input: ExportLayoutRequest, options?: HostInvokeOptions) => Promise<LayoutExport>;
+		readonly list: (input?: LayoutsListRequest, options?: HostInvokeOptions) => Promise<Layouts>;
+		readonly load_template: (input: LoadLayoutTemplateRequest, options?: HostInvokeOptions) => Promise<LayoutInfo>;
+	};
 	readonly network: {
 		readonly fetch: (input: FetchRequest, handlers: HostStreamHandlers<NetworkFetchEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
 	};
@@ -2504,6 +2767,32 @@ export function createHost(client: HostClientLike): HostOperations {
 					client, "layers.open_vector", input, options,
 					OpenVectorRequest,
 					VectorLayerInfo,
+				),
+		},
+		layouts: {
+			atlas: (input: AtlasLayoutRequest, options?: HostInvokeOptions) =>
+				call<AtlasExport>(
+					client, "layouts.atlas", input, options,
+					AtlasLayoutRequest,
+					AtlasExport,
+				),
+			export: (input: ExportLayoutRequest, options?: HostInvokeOptions) =>
+				call<LayoutExport>(
+					client, "layouts.export", input, options,
+					ExportLayoutRequest,
+					LayoutExport,
+				),
+			list: (input?: LayoutsListRequest, options?: HostInvokeOptions) =>
+				call<Layouts>(
+					client, "layouts.list", input, options,
+					LayoutsListRequest,
+					Layouts,
+				),
+			load_template: (input: LoadLayoutTemplateRequest, options?: HostInvokeOptions) =>
+				call<LayoutInfo>(
+					client, "layouts.load_template", input, options,
+					LoadLayoutTemplateRequest,
+					LayoutInfo,
 				),
 		},
 		network: {

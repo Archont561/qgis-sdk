@@ -29,6 +29,7 @@ from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
 from qgis_sdk.models import (
     CanvasPoint,
+    LayoutExport,
     RasterLayerInfo,
     RasterSample,
     RasterStatistics,
@@ -128,4 +129,24 @@ class LocalGisWorkflow:
         """Write a layer to a file the caller named; explicit, never implied."""
         return self.ctx.layers.export_vector(
             layer_id, Path(destination), overwrite=overwrite
+        )
+
+    def print_layout(
+        self, name: str, destination: Path, *, overwrite: bool = False
+    ) -> LayoutExport:
+        """Write one of the project's print layouts to a PDF the caller named.
+
+        The layout is the user's own work - a page composed in the print
+        designer - so the workflow only asks which one by name and where the
+        file goes. ``render`` is the blocking form: the caller here is an action
+        that answers once, and the export job (``ctx.layouts.export``) is what a
+        plugin uses when it wants a bar and a cancel button instead.
+        """
+        return self.ctx.layouts.render(
+            name,
+            format="pdf",
+            destination=self.ctx.files.grant_file(
+                Path(destination), operations=("write",), overwrite=overwrite
+            ),
+            overwrite=overwrite,
         )

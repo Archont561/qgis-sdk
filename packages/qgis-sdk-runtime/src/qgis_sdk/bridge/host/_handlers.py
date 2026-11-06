@@ -27,6 +27,7 @@ from qgis_sdk.models import (
     FeatureQuery,
     FileRef,
     Geometry,
+    LayoutSettings,
     NetworkRequest,
     ProjectChange,
     QgisSdkDecodeError,
@@ -45,6 +46,7 @@ from qgis_sdk.network.client import NetworkDefaults, build_request
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.features import EditingSession, Features
+from qgis_sdk.services.layouts import Layouts
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
 from qgis_sdk.services.rasters import Rasters
@@ -157,6 +159,58 @@ def _handlers(
         }
         result = _algorithms(services).run(payload["algorithm_id"], params)
         return _result_for_view(services, binding, result)
+
+    def layouts_list(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _page_of(_layouts(services).list(), payload)
+
+    def layouts_load_template(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _plain(_layouts(services).load_template(_plugin_file(services, path)))
+
+    def layouts_export(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        overwrite = bool(payload.get("overwrite", False))
+        destination = None
+        if payload.get("destination") is not None:
+            path = authority.resolve_file(
+                binding, payload["destination"], FileOperation.WRITE
+            )
+            destination = _plugin_file(
+                services, path, writable=True, overwrite=overwrite
+            )
+        export = _layouts(services).render(
+            payload["layout"],
+            format=payload.get("format", "pdf"),
+            destination=destination,
+            settings=_layout_settings(payload),
+            overwrite=overwrite,
+        )
+        return {
+            "file": authority.grant_file(binding, export.path).to_wire(),
+            "format": export.format,
+            "pages": export.pages,
+            "bytes": export.bytes,
+        }
+
+    def layouts_atlas(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        run = _layouts(services).render_atlas(
+            payload["layout"],
+            format=payload.get("format", "pdf"),
+            pattern=payload.get("pattern"),
+            settings=_layout_settings(payload),
+            overwrite=bool(payload.get("overwrite", False)),
+        )
+        return {
+            "directory": authority.grant_directory(binding, run.directory).to_wire(),
+            "format": run.format,
+            "pages": [
+                {
+                    "index": page.index,
+                    "feature_id": page.feature_id,
+                    "file": authority.grant_file(binding, page.path).to_wire(),
+                }
+                for page in run.pages
+            ],
+        }
 
     def network_fetch(binding: ViewBinding, payload: Mapping[str, Any]) -> _Fetch:
         grant = authority.require_network(binding)
@@ -481,9 +535,54 @@ def _handlers(
         "algorithms.providers": algorithms_providers,
         "algorithms.list": algorithms_list,
         "algorithms.describe": algorithms_describe,
+        "layouts.list": layouts_list,
+        "layouts.load_template": layouts_load_template,
+        "layouts.export": layouts_export,
+        "layouts.atlas": layouts_atlas,
         "algorithms.run": algorithms_run,
         "network.fetch": network_fetch,
     }
+
+
+def _layouts(services: HostServices) -> Layouts:
+    if services.layouts is None:
+        raise QgisSdkBridgeError("this host has no layouts service configured")
+    return services.layouts
+
+
+def _plugin_file(
+    services: HostServices,
+    path: Any,
+    *,
+    writable: bool = False,
+    overwrite: bool = False,
+) -> FileRef:
+    """Re-mint one of the view's paths as a ref the plugin's files service holds.
+
+    The view's ref names a path *for the view*; a service on this side of the
+    seam resolves refs through the plugin's files service, so a path has to
+    cross as the plugin's own ref - and it is refused here when the plugin has
+    no files service, never quietly turned back into a string (decision-20: a
+    path is not authority, on either side of the bridge).
+    """
+    files = services.files
+    if files is None:
+        raise QgisSdkBridgeError(
+            "this host has no files service to hand a plugin-side ref out"
+        )
+    # A destination need not exist yet, and a read grant insists it does; a
+    # write grant is the one an export destination can carry.
+    operations: tuple[str, ...] = ("write",) if writable else ("read",)
+    return files.grant_file(path, operations=operations, overwrite=overwrite)
+
+
+def _layout_settings(payload: Mapping[str, Any]) -> LayoutSettings:
+    """Build the render settings a page declared, defaulting what it left out."""
+    return LayoutSettings(
+        dpi=int(payload.get("dpi", LayoutSettings().dpi)),
+        rasterize=bool(payload.get("rasterize", False)),
+        georeference=bool(payload.get("georeference", False)),
+    )
 
 
 def _rasters(services: HostServices) -> Rasters:

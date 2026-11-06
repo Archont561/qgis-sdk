@@ -384,6 +384,7 @@ test("`host` is the curated surface on the same client, with every grant by defa
 		"files",
 		"granted",
 		"layers",
+		"layouts",
 		"network",
 		"notifications",
 		"project",

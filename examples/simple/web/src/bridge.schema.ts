@@ -5,7 +5,7 @@
 import { type BridgeSchema, defineBridgeSchema } from "@archont561/qgis-sdk";
 
 export const PLUGIN_ID = "simple";
-export const CONTRACT_FINGERPRINT = "sha256:587c38517d8dd28b1cd4d40805d8408074a5aaef749b7a9be6bb931e12bed77f";
+export const CONTRACT_FINGERPRINT = "sha256:59c27c9f73ae9105c4950c75de9d94e633e4fc0bfd65cc23615af4e40488da06";
 export const PLUGIN_DESCRIPTION_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -13,6 +13,7 @@ export const OPERATIONS = [
 	"buffer",
 	"choose_export_directory",
 	"export_layer",
+	"export_layout",
 	"open_elevation",
 	"open_fixture",
 	"sample_elevation",
@@ -52,6 +53,19 @@ export interface Export_layerRequest {
 
 export interface Export_layerResult {
 	readonly driver: string;
+	readonly path: string;
+}
+
+export interface Export_layoutRequest {
+	readonly file_name: string;
+	readonly layout: string;
+	readonly overwrite?: boolean;
+}
+
+export interface Export_layoutResult {
+	readonly bytes: number;
+	readonly format: string;
+	readonly pages: number;
 	readonly path: string;
 }
 
@@ -120,6 +134,7 @@ export interface Operations {
 	readonly buffer: { readonly request: BufferRequest; readonly result: BufferResult };
 	readonly choose_export_directory: { readonly request: Choose_export_directoryRequest; readonly result: string };
 	readonly export_layer: { readonly request: Export_layerRequest; readonly result: Export_layerResult };
+	readonly export_layout: { readonly request: Export_layoutRequest; readonly result: Export_layoutResult };
 	readonly open_elevation: { readonly request: Open_elevationRequest; readonly result: Open_elevationResult };
 	readonly open_fixture: { readonly request: Open_fixtureRequest; readonly result: Open_fixtureResult };
 	readonly sample_elevation: { readonly request: Sample_elevationRequest; readonly result: Sample_elevationResult };
@@ -271,6 +286,58 @@ const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<Operations,
 				"required": [
 					"path",
 					"driver"
+				]
+			}
+		},
+		{
+			"id": "export_layout",
+			"title": "Export a print layout",
+			"handler": "export_layout",
+			"request": {
+				"type": "object",
+				"properties": {
+					"layout": {
+						"type": "string"
+					},
+					"file_name": {
+						"type": "string"
+					},
+					"overwrite": {
+						"type": "boolean"
+					}
+				},
+				"additionalProperties": false,
+				"required": [
+					"layout",
+					"file_name"
+				]
+			},
+			"result": {
+				"type": "object",
+				"properties": {
+					"path": {
+						"type": "string"
+					},
+					"format": {
+						"type": "string"
+					},
+					"pages": {
+						"type": "integer",
+						"minimum": -9007199254740991,
+						"maximum": 9007199254740991
+					},
+					"bytes": {
+						"type": "integer",
+						"minimum": -9007199254740991,
+						"maximum": 9007199254740991
+					}
+				},
+				"additionalProperties": false,
+				"required": [
+					"path",
+					"format",
+					"pages",
+					"bytes"
 				]
 			}
 		},

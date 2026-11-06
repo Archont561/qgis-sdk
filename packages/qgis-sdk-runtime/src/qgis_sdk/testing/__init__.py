@@ -22,6 +22,7 @@ from .fakes import (
 from .features import FakeEditingSession, FakeFeatures, FakeLayer
 from .files import FakeFiles
 from .jobs import FakeWorkers, ThreadWorkers
+from .layouts import FakeLayouts
 from .network import (
     FakeNetworkTransport,
     PendingRequest,
@@ -52,6 +53,7 @@ __all__ = [
     "FakeFiles",
     "FakeLayer",
     "FakeLayers",
+    "FakeLayouts",
     "FakeLoop",
     "FakeNetworkTransport",
     "FakeProcessing",
