@@ -141,7 +141,7 @@ class _NativeLayoutsBackend:
         which is also the name the fake adds, so both backends answer the same.
         """
         core = self._core
-        document = _template_document(core, template)
+        document = _template_document(template)
         layout = core.QgsPrintLayout(core.QgsProject.instance())
         layout.loadFromTemplate(document, core.QgsReadWriteContext(), False)
         manager = self._manager()
@@ -274,18 +274,27 @@ class _NativeLayoutsBackend:
         return layout
 
 
-def _template_document(core: Any, template: Path) -> Any:
-    """Parse a ``.qpt`` file, refusing anything QGIS could not read as one."""
+def _template_document(template: Path) -> Any:
+    """Parse a ``.qpt`` file, refusing anything QGIS could not read as one.
+
+    ``QFile`` and ``QDomDocument`` are Qt classes, not ``qgis.core`` ones: the
+    template is read as bytes and parsed by Qt's own XML reader, which is what
+    ``QgsLayout.loadFromTemplate`` takes. PyQt5 spells the open mode on
+    ``QIODevice`` and PyQt6 nests the same name in an enum, so both are read.
+    """
+    from qgis.PyQt.QtCore import QFile, QIODevice
+    from qgis.PyQt.QtXml import QDomDocument
+
     path = str(template)
-    file = core.QFile(path)
-    mode = getattr(core.QIODevice, "OpenModeFlag", core.QIODevice)
+    file = QFile(path)
+    mode = getattr(QIODevice, "OpenModeFlag", QIODevice)
     if not file.open(mode.ReadOnly):
         raise QgisSdkExportRefusedError(path, ["the template file could not be read"])
     try:
         content = file.readAll()
     finally:
         file.close()
-    document = core.QDomDocument()
+    document = QDomDocument()
     if not document.setContent(content):
         raise QgisSdkExportRefusedError(
             path,

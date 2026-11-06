@@ -250,7 +250,10 @@ def test_an_export_lands_where_the_minted_ref_names(services: Services) -> None:
         ),
     )
 
-    assert export.path == str(path)
+    # ``resolve`` is what the service canonicalises with, and macOS and Windows
+    # spell the same temp directory differently (``/private/var``, a short name),
+    # so the assertion is "the export is this file", not "the strings match".
+    assert conftest.Path(export.path).samefile(path)
     assert path.is_file()
 
 
@@ -268,7 +271,7 @@ def test_an_existing_destination_needs_the_overwrite_flag(services: Services) ->
 
     replaced = layouts.render(conftest.LAYOUT_NAME, destination=ref, overwrite=True)
 
-    assert replaced.path == str(path)
+    assert conftest.Path(replaced.path).samefile(path)
 
 
 # -- the atlas -------------------------------------------------------------------

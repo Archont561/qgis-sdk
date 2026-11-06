@@ -158,6 +158,65 @@ test("the host module names its surface and advertises its version", () => {
 	]);
 });
 
+const ref: FileRef = {
+	kind: "file",
+	id: "0123456789abcdef",
+	name: "report.pdf",
+	operations: ["read"],
+};
+
+const layout = {
+	id: "report",
+	name: "report",
+	page_count: 2,
+	atlas: null,
+};
+
+test("the layouts surface sends the layout and validates the ref it gets back", async () => {
+	const { client, sent } = scripted({ items: [layout], truncated: false });
+	const listed = await createHost(client).layouts.list();
+	expect(listed.items[0]?.name).toBe("report");
+	expect(sent[0]?.operation).toBe("layouts.list");
+});
+
+test("an export sends the destination ref and answers a ref rather than a path", async () => {
+	const { client, sent } = scripted({ file: ref, format: "pdf", pages: 2, bytes: 42 });
+	const exported = await createHost(client).layouts.export({
+		layout: "report",
+		format: "pdf",
+		destination: ref,
+		overwrite: true,
+	});
+	expect(exported.file.id).toBe(ref.id);
+	expect(exported.pages).toBe(2);
+	expect(sent[0]?.payload).toEqual({
+		layout: "report",
+		format: "pdf",
+		destination: ref,
+		overwrite: true,
+	});
+});
+
+test("an atlas answers one ref per page, each with its coverage feature", async () => {
+	const { client } = scripted({
+		directory: { ...ref, kind: "directory", name: "atlas", operations: [] },
+		format: "pdf",
+		pages: [{ index: 1, feature_id: 7, file: ref }],
+	});
+	const atlas = await createHost(client).layouts.atlas({
+		layout: "atlas",
+		pattern: "sheet-{index}",
+	});
+	expect(atlas.pages[0]?.feature_id).toBe(7);
+	expect(atlas.pages[0]?.file.id).toBe(ref.id);
+});
+
+test("a template is a ref, so a path never reaches the host", async () => {
+	const { client } = scripted(layout);
+	const added = await createHost(client).layouts.load_template({ file: ref });
+	expect(added.name).toBe("report");
+});
+
 test("a read is sent as the declared operation and validated on the way back", async () => {
 	const { client, sent } = scripted(page);
 	const result = await createHost(client).layers.list({ limit: 1 });
