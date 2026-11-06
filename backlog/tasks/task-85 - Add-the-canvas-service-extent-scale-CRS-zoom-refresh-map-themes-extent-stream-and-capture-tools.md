@@ -3,10 +3,10 @@ id: TASK-85
 title: >-
   Add the canvas service: extent, scale, CRS, zoom, refresh, map themes, extent
   stream and capture tools
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-11-04 00:00'
+updated_date: '2026-11-06 15:19'
 labels: []
 milestone: m-9
 dependencies:
@@ -86,3 +86,7 @@ grants and the host without a canvas; `tests/test_canvas_tools.py` covers the
 declaration and the runner. The native half is opt-in with
 `QGIS_SDK_NATIVE_SERVICES=1`, so it runs in CI rather than in a QGIS-free
 workspace.
+
+**Delivered on PR #164** (`41e5d8d`, 2026-11-06) as sprint 3 of the 0.10.0 train:
+`canvas.*` on Desktop and in the app window, `@tool` capture, the extent stream,
+and the reference example zooming to an algorithm's output.

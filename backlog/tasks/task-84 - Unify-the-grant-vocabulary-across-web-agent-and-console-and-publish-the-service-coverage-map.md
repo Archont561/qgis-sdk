@@ -3,9 +3,10 @@ id: TASK-84
 title: >-
   Unify the grant vocabulary across web, agent and console, and publish the
   service coverage map
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
+updated_date: '2026-11-06 15:19'
 labels: []
 milestone: m-9
 dependencies:
@@ -34,5 +35,12 @@ Known gap, recorded rather than guessed: console grants are declared, validated 
 <!-- AC:BEGIN -->
 - [x] #1 The grant tables accept the same names, reject the same unknown ones with one finding, and `check --grants` prints the matrix (pure tests). The agent table this named was withdrawn with decision-49; the HTTP allowlist takes its place as a client and names actions (decision-71).
 - [x] #2 doc-22 lists every current host operation in its '## Host operations' table, and `tests/scripts/test_service_coverage.py` fails when an operation is missing, stale, duplicated, or a grant name is absent.
-- [ ] #3 doc-12/doc-13 describe the single vocabulary. **Half done:** both guides are written. The consent-list/audit half waits on TASK-105 (decision-71 point 3), because decision-49 was withdrawn and no audit log exists yet.
+- [ ] #3 doc-12/doc-13 describe the single vocabulary. **Half done:** both guides are written. The consent-list/audit half waits on TASK-105 (decision-71 point 3), because decision-49 was withdrawn and no audit log exists yet; it is that task's criterion now, which is why it stays unchecked here.
 <!-- AC:END -->
+
+**Delivered on PR #162** (`8e6de08`, 2026-10-31) as sprint 1 of the 0.10.0 train:
+one grant vocabulary across the page, the console and the HTTP allowlist,
+`qgis-sdk check --grants` printing the matrix, and doc-22 as the enforced source
+of truth behind `tests/scripts/test_service_coverage.py`. AC 3's consent-list and
+audit half moved to TASK-105 with decision-71 point 3, so the vocabulary and the
+map this task owned are what closed it.
