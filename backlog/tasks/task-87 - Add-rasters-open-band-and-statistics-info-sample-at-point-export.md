@@ -1,10 +1,10 @@
 ---
 id: TASK-87
 title: 'Add rasters: open, band and statistics info, sample at point, export'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-11-06 00:00'
+updated_date: '2026-11-06 15:19'
 labels: []
 milestone: m-9
 dependencies:
@@ -90,3 +90,18 @@ renderings.
 **Documentation.** doc-22 gains the Rasters row and four operation rows;
 doc-12 and doc-13 document the service; the reference example opens the bundled
 raster (`open_elevation`, `sample_elevation`) and reads a band's statistics.
+
+**Delivered on PR #167** (merge commit `785f5c1`, 2026-11-06), with TASK-88 in
+one pull request because the two share the `Layers.list` change. Three
+follow-ups came out of that pull request's CI rather than its first draft: the
+generated client validates a union result with its named validators, the
+`layers.*` queries keep the kinded union through the TypeScript stores, and the
+reference example compares a grid's pixels-per-unit with `pytest.approx`,
+because QGIS answers the box divided by the cell count - `0.09999999999999998`
+for a 0.1 degree cell. The rules a plugin author meets are stated as six
+scenarios in `tests/features/raster_reads.feature`, over `FakeRasters`.
+Validation: ruff check and format clean, Python suite 2625 passed / 31 skipped /
+82 native deselected, `tests/scripts` 305, the reference examples 24 pure and 8
+QGIS plus `examples/server` 8 through the CI step, gherlint clean on all eight
+feature files; CI run 42240353104 green (checks, Linux coverage, QGIS 3.44 LTS,
+cross-platform macOS and Windows, site, backlog drift).

@@ -3,10 +3,10 @@ id: TASK-86
 title: >-
   Add the features and expressions services: paged iteration, filters, geometry
   models, attribute read, editing sessions, evaluate and validate
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-10-31 00:00'
+updated_date: '2026-11-06 15:19'
 labels: []
 milestone: m-9
 dependencies:
@@ -80,3 +80,9 @@ and in doc-12 ("Why there is no `with` statement, and no `iter_features()`"):
 no context manager beside the explicit session, no `iter_features()` generator,
 and no part/vertex iterator - `Geometry` carries counts and the encoded payload,
 and part/vertex accessors are an additive later change.
+
+**Delivered on PR #163** (`be62853`, 2026-10-31) as sprint 2 of the 0.10.0 train,
+in the same pull request as TASK-102: paged iteration with server-side filters,
+the three geometry encodings, attribute read, explicit editing sessions and
+evaluate/validate. AC 4 and AC 5 are answered in decision-72 rather than by new
+surface, which is what the two criteria asked for.

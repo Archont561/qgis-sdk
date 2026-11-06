@@ -6,9 +6,10 @@ created_date: '2026-10-26 10:20'
 ---
 # M9 sprint train and 0.10.0 dependency order
 
-**Status:** Planning; starts after the TASK-83 gate. Orders work the m-9
-tasks already declare; adds no scope. Sprint membership lives here and in the
-milestone body ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
+**Status:** Sprints 1-4 landed (#162, #163, #164, #167); sprint 5 (TASK-89)
+is next and the TASK-90 gate last. Orders work the m-9 tasks already declare;
+adds no scope. Sprint membership lives here and in the milestone body
+([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
 ## 1. Where m-9 starts from
 
@@ -34,8 +35,8 @@ table for 0.10.0 is `ctx.desktop.iface` today. Authority is three dialects.
 
 - **Sprint 1: TASK-84.** One vocabulary, console grants, `check --grants`,
   doc-22 as the enforced source of truth. Small; first because every later
-  sprint fills the map. Landed on `d751a18`: decision-71 re-grounded the
-  "agent" table onto the plugin HTTP allowlist (decision-49 withdrawn) and
+  sprint fills the map. Landed as PR #162 (`8e6de08`): decision-71 re-grounded
+  the "agent" table onto the plugin HTTP allowlist (decision-49 withdrawn) and
   deferred the destructive annotation to TASK-105; the vocabulary, console
   grants, matrix and the enforced map are in, AC 3's documentation half with
   them.
@@ -43,12 +44,14 @@ table for 0.10.0 is `ctx.desktop.iface` today. Authority is three dialects.
   `qgis.host.blob`, bounded pages and stream `ack` (decision-59, measured
   in a real view), then features, geometry models, paging, editing
   sessions and expressions on top of them. First because rasters and
-  layouts reuse the answers.
+  layouts reuse the answers. Landed as PR #163 (`be62853`); TASK-102 stays
+  in progress on AC 3's measurement, which needs a real `QWebEngineView` and
+  a status review in decision-59.
 - **Sprint 3: TASK-85.** Canvas on Desktop and in the app window, `@tool`
-  capture, the extent stream.
+  capture, the extent stream. Landed as PR #164 (`41e5d8d`).
 - **Sprint 4: TASK-87 with TASK-88.** Kinded `LayerInfo` and rasters; the
   full project service and layer tree in the same pull request (they share
-  the `Layers.list` change).
+  the `Layers.list` change). Landed as PR #167 (`785f5c1`).
 - **Sprint 5: TASK-89.** Layouts and atlas as jobs on the task manager.
 - **Gate: TASK-90.** `python-v0.10.0` paired with the next `ts-v*` minor
   (regenerated host manifest), one merge commit, explicit authorization.

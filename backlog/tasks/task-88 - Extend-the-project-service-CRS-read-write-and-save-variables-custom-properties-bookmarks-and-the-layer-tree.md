@@ -3,10 +3,10 @@ id: TASK-88
 title: >-
   Extend the project service: CRS, read, write and save, variables, custom
   properties, bookmarks and the layer tree
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-10-26T10:11:00Z'
-updated_date: '2026-11-06 00:00'
+updated_date: '2026-11-06 15:19'
 labels: []
 milestone: m-9
 dependencies:
@@ -82,3 +82,16 @@ annotation.
 rows plus the annotation note; doc-12 and doc-13 document the service;
 decision-27 carries the status review for the grown surface (59 operations, 19
 grants, 7 destructive, 10 deferred).
+
+**Delivered on PR #167** (merge commit `785f5c1`, 2026-11-06), with TASK-87. The
+native adapter needed three QGIS-version spellings before it was green - a
+`readEntry` that answers `(value, found)`, a bookmark manager that takes either
+a `QgsReferencedRectangle` or a `QgsBookmark`, and project-level signals rather
+than a registry-bridge guess - and each is written as the dual form with a shape
+or `TypeError` guard instead of one build's spelling. The rules are stated as
+eight scenarios in `tests/features/project_service.feature`. Validation: ruff
+check and format clean, Python suite 2625 passed / 31 skipped / 82 native
+deselected, `tests/scripts` 305, the reference examples 24 pure and 8 QGIS plus
+`examples/server` 8 through the CI step, gherlint clean on all eight feature
+files; CI run 42240353104 green (checks, Linux coverage, QGIS 3.44 LTS,
+cross-platform macOS and Windows, site, backlog drift).
