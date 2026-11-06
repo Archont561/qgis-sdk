@@ -18,17 +18,21 @@ from qgis_sdk.adapters.desktop import (
     create_class_factory,
     host,
 )
+from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, RasterStatistics
 from qgis_sdk.models.canvas import CanvasExtent
 from qgis_sdk.testing import (
     FakeAlgorithms,
     FakeCanvas,
     FakeLayers,
+    FakeLayouts,
     FakeProject,
     FakeRasters,
     FakeSettings,
     FakeStyles,
+    FakeWorkers,
     RecordingNotifications,
 )
 from simple.plugin import ELEVATION, FIXTURE, app
@@ -51,11 +55,13 @@ class FakeHost:
     notifications: RecordingNotifications
     canvas: FakeCanvas
     rasters: FakeRasters
+    layouts: FakeLayouts
 
 
 @pytest.fixture
 def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     scope = ResourceScope()
+    files = FilesService(HostAuthority(), scope, owner="plugin:simple")
     # The rasters first: a raster is a layer too, so the layer fake holds it and
     # `list_layers` answers both kinds (TASK-87).
     rasters = FakeRasters(scope)
@@ -115,6 +121,15 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     )
     settings = FakeSettings(scope)
     notifications = RecordingNotifications(scope)
+    # One layout to export, the way a project with a composed page answers; the
+    # fake writes a marker file where QGIS would render the page.
+    layouts = FakeLayouts(
+        scope,
+        workers=FakeWorkers(),
+        files=files,
+        working_directory=tmp_path / "layouts",
+    )
+    layouts.declare_layout("report", pages=2)
     context = PluginContext(
         notifications=notifications,
         scope=scope,
@@ -125,6 +140,8 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         algorithms=algorithms,
         canvas=canvas,
         rasters=rasters,
+        layouts=layouts,
+        files=files,
     )
     factory = create_class_factory(app, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)
@@ -141,6 +158,7 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
             notifications=notifications,
             canvas=canvas,
             rasters=rasters,
+            layouts=layouts,
         )
     finally:
         adapter.unload()

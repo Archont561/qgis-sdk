@@ -11,6 +11,8 @@ from qgis_sdk.bridge.host._schemas import (
     _NOTHING,
     ALGORITHM_INFO,
     ALGORITHM_SUMMARY,
+    ATLAS_EXPORT_RESULT,
+    ATLAS_LAYOUT_REQUEST,
     BLOB_CHUNK,
     BLOB_REQUEST,
     EDIT_ADD_REQUEST,
@@ -21,6 +23,7 @@ from qgis_sdk.bridge.host._schemas import (
     EDIT_SESSION_REQUEST,
     EDIT_SESSION_RESULT,
     EDIT_UPDATE_REQUEST,
+    EXPORT_LAYOUT_REQUEST,
     EXPRESSION_REQUEST,
     FEATURE_PAGE_RESULT,
     FEATURE_QUERY,
@@ -29,6 +32,8 @@ from qgis_sdk.bridge.host._schemas import (
     FETCH_RESPONSE,
     GUI,
     LAYER_INFO,
+    LAYOUT_EXPORT_RESULT,
+    LOAD_LAYOUT_TEMPLATE_REQUEST,
     PAGE_REQUEST,
     PROVIDER_INFO,
     RASTER_LAYER_INFO,
@@ -56,6 +61,7 @@ from qgis_sdk.models.features import (
     GEOMETRY,
 )
 from qgis_sdk.models.layers import RASTER_SAMPLE, RASTER_STATISTICS
+from qgis_sdk.models.layouts import LAYOUT_INFO
 from qgis_sdk.models.project import (
     BOOKMARK,
     LAYER_TREE,
@@ -70,6 +76,10 @@ _PROJECT_ENTRIES = _array(PROJECT_ENTRY)
 
 #: The project's bookmarks, bounded the same way.
 _BOOKMARKS = _array(BOOKMARK)
+
+#: The project's print layouts, paged like every other list: a project file
+#: bounds how many it can hold, but "bounded" is not "small enough to inline".
+_LAYOUTS = _page_result(LAYOUT_INFO)
 
 
 @dataclass(frozen=True, slots=True)
@@ -778,6 +788,53 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         events={"data": PROJECT_CHANGE},
     ),
     HostOperation(
+        id="layouts.list",
+        title="List the project's print layouts",
+        source="Layouts.list",
+        grant="layouts.read",
+        affinity=GUI,
+        request=_object({}),
+        result=_LAYOUTS,
+        result_name="Layouts",
+    ),
+    HostOperation(
+        id="layouts.load_template",
+        title="Load a print-layout template into the project",
+        source="Layouts.load_template",
+        grant="layouts.write",
+        affinity=GUI,
+        request=LOAD_LAYOUT_TEMPLATE_REQUEST,
+        result=LAYOUT_INFO,
+        result_name="LayoutInfo",
+    ),
+    HostOperation(
+        id="layouts.export",
+        title="Export one layout to a PDF, PNG or SVG file",
+        source="Layouts.render",
+        grant="layouts.export",
+        affinity=GUI,
+        request=EXPORT_LAYOUT_REQUEST,
+        result=LAYOUT_EXPORT_RESULT,
+        request_name="ExportLayoutRequest",
+        result_name="LayoutExport",
+        # Overwrite is the reason: the export replaces a file the page's own
+        # write ref already names, and the annotation is what the agent consent
+        # list reads to ask first (decision-49 point 4).
+        destructive=True,
+    ),
+    HostOperation(
+        id="layouts.atlas",
+        title="Run one layout's atlas, one file per coverage feature",
+        source="Layouts.render_atlas",
+        grant="layouts.export",
+        affinity=GUI,
+        request=ATLAS_LAYOUT_REQUEST,
+        result=ATLAS_EXPORT_RESULT,
+        request_name="AtlasLayoutRequest",
+        result_name="AtlasExport",
+        destructive=True,
+    ),
+    HostOperation(
         id="network.fetch",
         title="Perform one HTTP request through the view's network grant",
         source="NetworkTransport.send",
@@ -812,6 +869,15 @@ DEFERRED_HOST_METHODS: Mapping[str, str] = {
         "a page exports through `files.export` and a host-minted write ref, and a "
         "plugin action resolves a bare file name against a host-chosen directory "
         "(the reference plugin's `export_layer`)"
+    ),
+    "Layouts.export": (
+        "submits the render as a job and answers its handle; a page has no "
+        "job-status operation to follow one with, so `layouts.export` runs the "
+        "same render in the request that asked for it and answers the file"
+    ),
+    "Layouts.run_atlas": (
+        "the job form of `layouts.atlas`: one task in the plugin's task bar. A "
+        "page's run is the request itself, which ends with one ref per page"
     ),
     "Settings.set": "mutates persisted state; arrives with the mutation slice",
     "EditingSession.close": (

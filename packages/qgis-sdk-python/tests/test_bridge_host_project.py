@@ -44,6 +44,9 @@ DESTRUCTIVE = {
     "project.remove_bookmark",
     "project.unset_variable",
     "project.unset_property",
+    # TASK-89: an export replaces a file the page's own write ref names.
+    "layouts.export",
+    "layouts.atlas",
 }
 
 

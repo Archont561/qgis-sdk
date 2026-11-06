@@ -91,6 +91,21 @@ class QgisSdkStyleIncompatibleError(QgisSdkError):
         )
 
 
+class QgisSdkLayoutNotFoundError(QgisSdkError):
+    """No print layout with this name exists in the project.
+
+    A layout is named by its own name, so the message repeats exactly what the
+    caller asked for: a typo, a template that was never loaded and a project
+    with no layouts at all are three answers a caller can tell apart by listing.
+    """
+
+    code = "layout_not_found"
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"No print layout {name!r} is available in this project")
+
+
 class QgisSdkStyleNotFoundError(QgisSdkError):
     """No reviewed style with this identifier is packaged with the SDK."""
 

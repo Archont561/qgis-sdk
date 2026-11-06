@@ -16,6 +16,7 @@ from .contracts import (
 from .features import EditingSession, Features
 from .files import Files
 from .layers import Layers
+from .layouts import Layouts
 from .log import LOG_LEVELS, Log, LogBase, LogLevel, LogListener, LogRecord
 from .network import BlockingNetwork, Deliver, Network, NetworkTransport, Params
 from .notifications import (
@@ -46,6 +47,7 @@ __all__ = [
     "Features",
     "Files",
     "Layers",
+    "Layouts",
     "Log",
     "LogBase",
     "LogLevel",

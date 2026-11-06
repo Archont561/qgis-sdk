@@ -460,6 +460,58 @@ sample.values; // readonly (number | null)[] - None per band, never 0
   (decision-20): the export is a plugin action that runs it as a job and returns
   a `FileRef`.
 
+### Print layouts from a page
+
+The `layouts` namespace exports what the print designer composed. Three grants
+split it: `layouts.read` for `list()`, `layouts.write` for `load_template` (it
+adds a layout to the project) and `layouts.export` for `export` and `atlas`.
+
+```ts
+const { items } = await qgis.host.layouts.list();   // LayoutInfo[]
+items[0].name;        // "report"
+items[0].page_count;  // 2
+items[0].atlas;       // AtlasInfo | null
+
+const layout = await qgis.host.layouts.load_template({ file: templateRef });
+
+const exported = await qgis.host.layouts.export({
+	layout: layout.name,
+	format: "pdf",
+	destination: saveRef,   // a write ref the host minted for this view
+	overwrite: true,        // required to replace a file that already exists
+});
+exported.file;            // FileRef - the path the exporter wrote never crosses
+exported.pages;           // 2
+exported.bytes;           // size on disk
+
+const atlas = await qgis.host.layouts.atlas({
+	layout: "atlas",
+	format: "pdf",
+	pattern: "sheet-{index:02d}-{feature_id}",
+});
+atlas.directory;                  // FileRef for the directory
+atlas.pages[0].file;              // FileRef
+atlas.pages[0].feature_id;        // the coverage feature it was drawn for
+```
+
+- **Refs in, refs out.** `load_template` takes a `FileRef` (a string path is
+  refused), `export` takes an optional write ref as `destination`, and every
+  answer is a ref the host minted for *this* view. Omit `destination` and the
+  export lands in the host's own output directory, still as a ref.
+- **Both render operations are destructive.** An export replaces the file the
+  page's write ref names, so the manifest marks `layouts.export` and
+  `layouts.atlas` `destructive: true` and the agent consent list can ask first.
+- **One page or many.** `format` is `"pdf" | "png" | "svg"`; a `png` or `svg` of
+  a multi-page layout fails by name rather than writing the first page, and a
+  PDF reports how many pages it holds in `pages`.
+- **A page waits for the file.** The wire has no job to follow, so these
+  operations run the render inside the request and answer when it is written;
+  the plugin's own `ctx.layouts.export()` is the job form, with a bar and a
+  cancel button in the QGIS task manager.
+- **An atlas answers one ref per page**, in coverage order, each with the
+  `feature_id` it was drawn for - plus a `directory` ref for the run. A pattern
+  may use `{index}` and `{feature_id}`; an unknown placeholder fails by name.
+
 ### The project from a page
 
 `project` is the open project: the layer tree, the CRS, variables, custom

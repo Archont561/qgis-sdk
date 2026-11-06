@@ -153,6 +153,10 @@ def test_the_guard_covers_exactly_the_capabilities_that_reach_gui_state() -> Non
         "desktop",
         "files",
         "layers",
+        # A print layout is a project object the designer owns; the export the
+        # layouts service runs is its own job, so the capability itself stays
+        # on the driving thread (TASK-89).
+        "layouts",
         "project",
         # Asking a raster for its statistics reads a GDAL dataset through the
         # provider QGIS owns, which is the same GUI-affine rule as layers.

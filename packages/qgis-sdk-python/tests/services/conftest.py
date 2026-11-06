@@ -39,6 +39,7 @@ from qgis_sdk.services import (
     Canvas,
     Features,
     Layers,
+    Layouts,
     Notifications,
     Project,
     Rasters,
@@ -104,6 +105,22 @@ RASTER_VALUE = 1.0
 ROOT_GROUP = "Elevation"
 CHILD_GROUP = "Detail"
 
+# -- the print-layout fixture (TASK-89) --------------------------------------
+#: The layout both backends describe: two pages, no atlas. Two on purpose - it
+#: is the smallest layout an image export has to refuse and a PDF has to hold.
+LAYOUT_NAME = "report"
+LAYOUT_PAGES = 2
+#: A one-page layout, for the formats that hold exactly one image.
+SINGLE_PAGE_LAYOUT = "cover"
+#: The layout whose atlas covers the three reference points, in feature order.
+ATLAS_NAME = "atlas"
+ATLAS_FEATURE_IDS = (1, 2, 3)
+ATLAS_PATTERN = "sheet-{index:02d}-{feature_id}"
+#: The layout a ``.qpt`` template carries: loading the template adds this name,
+#: so the file is named after it and the native backend saves a layout of that
+#: name as the template.
+TEMPLATE_LAYOUT = "templated"
+
 
 @dataclass(frozen=True, slots=True)
 class Services:
@@ -133,6 +150,28 @@ class Services:
     #: the fixture so a commit writes to a file the test owns; the fake declares
     #: its own layer, so nothing on disk is touched.
     editable_layer: Callable[[], str] | None = None
+    #: Print layouts and atlases (TASK-89). ``None`` while a backend has not
+    #: joined the layouts contract, so one slice failing is one test failing.
+    layouts: Layouts | None = None
+    #: Builds the layouts the contract describes: two pages, a one-page layout,
+    #: an atlas over the three reference points, and a ``.qpt`` template.
+    #: Declaring is *setup*, like ``declare_groups``: the native backend has to
+    #: put them in the project and open the coverage layer, and the fake has to
+    #: be told the same names, so the layouts tests ask for exactly that.
+    declare_layouts: Callable[[], None] | None = None
+    #: Drives the layouts service's own job service one round trip - submit,
+    #: run the worker body, deliver - because the service owns that job service
+    #: (a plugin that declares no jobs still exports as a job).
+    drive_layouts: Callable[[], None] | None = None
+    #: The work items the layouts jobs asked the worker backend to show, oldest
+    #: first: a test reads their ``progress`` to see the fractions a render
+    #: reported one at a time, which delivery coalesces per tick.
+    layout_work_items: Callable[[], tuple] | None = None
+    #: The directory a destination-less export is written into.
+    layout_directory: Callable[[], Path] | None = None
+    #: The ``.qpt`` template ``load_template`` loads, named after the layout it
+    #: carries so both backends add the same name to the project.
+    layout_template: Callable[[], Path] | None = None
     #: The id of the layer holding the reference points (ids 1-3, values a-c).
     #: The fakes key layers by name; a native layer's id is the one QGIS gave it
     #: when it opened the file, so a contract test names the layer the backend
@@ -195,6 +234,7 @@ _WORK_ROOT = Path(tempfile.mkdtemp(prefix="qgis-sdk-algorithms-"))
 _WORK_DIRECTORIES = 0
 _FEATURE_DIRECTORIES = 0
 _PROJECT_DIRECTORIES = 0
+_LAYOUT_DIRECTORIES = 0
 
 
 def _algorithm_work_directory() -> Path:
@@ -226,6 +266,20 @@ def _project_work_directory() -> Path:
     global _PROJECT_DIRECTORIES
     _PROJECT_DIRECTORIES += 1
     directory = _WORK_ROOT / f"project-{_PROJECT_DIRECTORIES}"
+    directory.mkdir(parents=True)
+    return directory
+
+
+def _layout_work_directory() -> Path:
+    """Return a fresh directory for one backend's layout exports and template.
+
+    One per backend, not one per test: a destination-less export numbers its own
+    files in here (``report.pdf``, ``report-2.pdf``), so a test that exports
+    twice sees the numbering the service documents rather than a fresh name.
+    """
+    global _LAYOUT_DIRECTORIES
+    _LAYOUT_DIRECTORIES += 1
+    directory = _WORK_ROOT / f"layouts-{_LAYOUT_DIRECTORIES}"
     directory.mkdir(parents=True)
     return directory
 
@@ -318,10 +372,12 @@ def _fake_services() -> Services:
         FakeCanvas,
         FakeFiles,
         FakeLayers,
+        FakeLayouts,
         FakeProject,
         FakeRasters,
         FakeSettings,
         FakeStyles,
+        FakeWorkers,
         RecordingNotifications,
     )
 
@@ -352,6 +408,36 @@ def _fake_services() -> Services:
         crs=FIXTURE_CRS,
     )
     files = FakeFiles(scope, owner="plugin:contract")
+    layout_workers = FakeWorkers()
+    layout_directory = _layout_work_directory()
+    layouts = FakeLayouts(
+        scope,
+        workers=layout_workers,
+        files=files,
+        working_directory=layout_directory,
+    )
+
+    def declare_layouts() -> None:
+        """Declare the layouts the contract describes, and write a template."""
+        layouts.declare_layout(LAYOUT_NAME, pages=LAYOUT_PAGES)
+        layouts.declare_layout(SINGLE_PAGE_LAYOUT)
+        layouts.declare_atlas(
+            ATLAS_NAME,
+            coverage_layer=FIXTURE_NAME,
+            feature_ids=ATLAS_FEATURE_IDS,
+        )
+        template().write_text("<!-- the fake only has to find the template -->")
+
+    def template() -> Path:
+        return layout_directory / f"{TEMPLATE_LAYOUT}.qpt"
+
+    def drive_layouts() -> None:
+        """One round trip through the layouts service's own job service."""
+        service = layouts.jobs
+        service.tick()
+        layout_workers.run_all()
+        service.tick()
+
     algorithms = FakeAlgorithms(layers, scope, files=files)
     algorithms.declare_output(
         BufferRequest,
@@ -462,6 +548,12 @@ def _fake_services() -> Services:
         fixture_layer=lambda: FIXTURE_NAME,
         layers=layers,
         rasters=rasters,
+        layouts=layouts,
+        declare_layouts=declare_layouts,
+        drive_layouts=drive_layouts,
+        layout_work_items=lambda: tuple(layout_workers.items),
+        layout_directory=lambda: layout_directory,
+        layout_template=template,
         open_raster=lambda: rasters.open_raster(RASTER_DATASET).id,
         raster_dataset=RASTER_DATASET,
         project=project,
@@ -539,6 +631,81 @@ def _native_services() -> Services:
 
     features = NativeFeatures(layers, scope)
 
+    from qgis_sdk.adapters.qgis import NativeLayouts
+    from qgis_sdk.testing import FakeWorkers
+
+    layout_workers = FakeWorkers()
+    layout_directory = _layout_work_directory()
+    # A fake worker backend on purpose: the contract is about the *render*, and
+    # running the body when the test says so keeps an offscreen QgsLayoutExporter
+    # off a Qt event loop the pure suite does not have. The real QgsTask path is
+    # ``tests/test_jobs_tasks_native.py``'s subject.
+    layouts = NativeLayouts(
+        scope,
+        workers=layout_workers,
+        files=files,
+        working_directory=layout_directory,
+    )
+
+    def template_file() -> Path:
+        return layout_directory / f"{TEMPLATE_LAYOUT}.qpt"
+
+    def declare_layouts() -> None:
+        """Put the contract's layouts in the project, and save the template."""
+        from qgis.core import (
+            QgsLayoutItemPage,
+            QgsPrintLayout,
+            QgsProject,
+            QgsReadWriteContext,
+            QgsVectorLayer,
+        )
+
+        manager = QgsProject.instance().layoutManager()
+        # The coverage layer is opened the way a user opens one, and added to the
+        # project, because an atlas reads its features from a layer the project
+        # holds rather than from a file on its own.
+        layer = QgsVectorLayer(str(FIXTURE_DATASET), FIXTURE_NAME, "ogr")
+        if not layer.isValid():
+            pytest.fail(f"the layout coverage layer {FIXTURE_DATASET} is not readable")
+        QgsProject.instance().addMapLayer(layer)
+        for name, pages in (
+            (LAYOUT_NAME, LAYOUT_PAGES),
+            (SINGLE_PAGE_LAYOUT, 1),
+            (ATLAS_NAME, 1),
+        ):
+            if manager.layoutByName(name) is not None:
+                continue
+            layout = QgsPrintLayout(QgsProject.instance())
+            layout.initializeDefaults()
+            layout.setName(name)
+            for _ in range(pages - 1):
+                page = QgsLayoutItemPage(layout)
+                page.setPageSize("A4")
+                layout.pageCollection().addPage(page)
+            manager.addLayout(layout)
+        atlas = manager.layoutByName(ATLAS_NAME).atlas()
+        atlas.setCoverageLayer(layer)
+        # The template's own expression: the SDK's runs name the files itself,
+        # so this is only what the layout manager stores.
+        atlas.setFilenameExpression("'sheet-' || @atlas_featureid")
+        atlas.setEnabled(True)
+        # The template is saved from a layout of its own name and the layout is
+        # removed again, so loading the file adds that name to the project.
+        existing = manager.layoutByName(TEMPLATE_LAYOUT)
+        if existing is not None:
+            manager.removeLayout(existing)
+        source = QgsPrintLayout(QgsProject.instance())
+        source.initializeDefaults()
+        source.setName(TEMPLATE_LAYOUT)
+        if not source.saveAsTemplate(str(template_file()), QgsReadWriteContext()):
+            pytest.fail("the layout template fixture could not be written")
+
+    def drive_layouts() -> None:
+        service = layouts.jobs
+        service.tick()
+        layout_workers.run_all()
+        service.tick()
+
     # A canvas for the canvas contract: real, offscreen, and sized, because a
     # canvas with no output size reports no scale at all.
     native_canvas = _offscreen_canvas()
@@ -577,6 +744,12 @@ def _native_services() -> Services:
         ),
         layers=layers,
         rasters=rasters,
+        layouts=layouts,
+        declare_layouts=declare_layouts,
+        drive_layouts=drive_layouts,
+        layout_work_items=lambda: tuple(layout_workers.items),
+        layout_directory=lambda: layout_directory,
+        layout_template=template_file,
         open_raster=open_raster,
         raster_dataset=raster_file,
         project=project,

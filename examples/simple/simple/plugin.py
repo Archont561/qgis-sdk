@@ -27,6 +27,7 @@ from qgis_sdk.models import (
     CanvasPoint,
     CrsInput,
     LayerInput,
+    LayoutExport,
     Metres,
     QgisSdkExportRefusedError,
     RasterInput,
@@ -105,6 +106,21 @@ def export_layer(
     """Write a layer inside the chosen export directory."""
     return LocalGisWorkflow(ctx).export(
         layer_id, _destination(ctx, file_name), overwrite=overwrite
+    )
+
+
+@app.action(id="export_layout", title="Export a print layout")
+def export_layout(
+    ctx: PluginContext, layout: str, file_name: str, overwrite: bool = False
+) -> LayoutExport:
+    """Write one of the project's print layouts to a PDF beside the exports.
+
+    The layout is the user's, chosen by name from ``layouts.list()``; the file
+    is written inside the configured export directory, like every other export
+    this plugin makes.
+    """
+    return LocalGisWorkflow(ctx).print_layout(
+        layout, _destination(ctx, file_name), overwrite=overwrite
     )
 
 

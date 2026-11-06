@@ -26,6 +26,7 @@ from .algorithms import NativeAlgorithms
 from .canvas import NativeCanvas
 from .features import NativeFeatures
 from .layers import NativeLayers
+from .layouts import NativeLayouts
 from .log import NativeLog
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
@@ -99,6 +100,10 @@ def native_plugin_context(
     algorithms = NativeAlgorithms(
         layers, scope, working_directory=working_directory, files=files
     )
+    # One worker backend for the context: the layouts service renders through it
+    # exactly as ``ctx.jobs`` does, so an export is one task in the task bar.
+    workers = QgsTaskWorkers(scope)
+    layouts = NativeLayouts(scope, workers=workers, files=files)
     return PluginContext(
         notifications=(
             notifications if notifications is not None else NativeNotifications(scope)
@@ -110,12 +115,13 @@ def native_plugin_context(
         layers=layers,
         rasters=rasters,
         features=features,
+        layouts=layouts,
         canvas=canvas_service,
         project=project,
         settings=NativeSettings(scope, prefix=settings_prefix),
         styles=NativeStyles(layers, scope),
         algorithms=algorithms,
-        workers=QgsTaskWorkers(scope),
+        workers=workers,
         processing=NativeProcessing(
             layers=layers,
             algorithms=algorithms,

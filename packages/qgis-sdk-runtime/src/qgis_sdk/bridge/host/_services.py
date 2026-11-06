@@ -12,6 +12,7 @@ from qgis_sdk.services.canvas import Canvas
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.features import Features
 from qgis_sdk.services.layers import Layers
+from qgis_sdk.services.layouts import Layouts
 from qgis_sdk.services.network import NetworkTransport
 from qgis_sdk.services.project import Project
 from qgis_sdk.services.rasters import Rasters
@@ -52,6 +53,11 @@ class HostServices:
     #: Raster reads (TASK-87). Without one the ``rasters.*`` operations are
     #: declared and fail by name, never silently answered with nothing.
     rasters: Rasters | None = None
+    #: Print layouts and atlases (TASK-89). The operations answer through the
+    #: blocking render forms, so a page's export is one request that ends with a
+    #: file ref; the job forms are the plugin's own path, with a bar and a
+    #: cancel button in the task manager.
+    layouts: Layouts | None = None
     authority: HostAuthority = field(default_factory=HostAuthority)
     network: NetworkTransport | None = None
     algorithms: Algorithms | None = None
@@ -93,6 +99,7 @@ class HostServices:
             features=context.features if context.has("features") else None,
             canvas=context.canvas if context.has("canvas") else None,
             rasters=context.rasters if context.has("rasters") else None,
+            layouts=context.layouts if context.has("layouts") else None,
             authority=authority if authority is not None else HostAuthority(),
             network=network,
             algorithms=context.algorithms if context.has("algorithms") else None,

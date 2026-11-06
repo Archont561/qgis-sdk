@@ -16,6 +16,7 @@ from qgis_sdk.models import (
     QgisSdkAlgorithmRejectedError,
     QgisSdkExportRefusedError,
     QgisSdkLayerNotFoundError,
+    QgisSdkLayoutNotFoundError,
     QgisSdkUnsupportedCapabilityError,
 )
 from qgis_sdk.models.canvas import CanvasExtent
@@ -30,6 +31,7 @@ def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
         "buffer",
         "choose_export_directory",
         "export_layer",
+        "export_layout",
         "open_elevation",
         "open_fixture",
         "sample_elevation",
@@ -169,6 +171,36 @@ def test_export_writes_into_the_chosen_directory(
 
     assert export.path == str(exports / "points.geojson")
     assert (exports / "points.geojson").is_file()
+
+
+def test_export_layout_writes_the_layout_as_a_pdf(
+    fake_host: FakeHost, tmp_path: Path
+) -> None:
+    """The example's PDF export: a composed page becomes a file, once asked."""
+    exports = tmp_path / "layouts-out"
+    exports.mkdir()
+    fake_host.settings.set(EXPORT_DIRECTORY_KEY, str(exports))
+
+    export = fake_host.runtime.actions["export_layout"]("report", "report.pdf")
+
+    assert export.format == "pdf"
+    assert export.pages == 2
+    assert export.path == str(exports / "report.pdf")
+    assert (exports / "report.pdf").is_file()
+    assert (exports / "report.pdf").read_bytes().startswith(b"%PDF")
+
+
+def test_export_layout_refuses_a_layout_the_project_does_not_hold(
+    fake_host: FakeHost, tmp_path: Path
+) -> None:
+    exports = tmp_path / "layouts-out"
+    exports.mkdir()
+    fake_host.settings.set(EXPORT_DIRECTORY_KEY, str(exports))
+
+    with pytest.raises(QgisSdkLayoutNotFoundError) as missing:
+        fake_host.runtime.actions["export_layout"]("no-such-layout", "x.pdf")
+
+    assert missing.value.name == "no-such-layout"
 
 
 def test_export_without_a_chosen_directory_is_refused(fake_host: FakeHost) -> None:

@@ -32,6 +32,7 @@ from qgis_sdk.services import (
     Features,
     Files,
     Layers,
+    Layouts,
     Log,
     Network,
     Notifications,
@@ -66,6 +67,7 @@ GUI_BOUND_CAPABILITIES: Final = frozenset(
         "desktop",
         "files",
         "layers",
+        "layouts",
         "project",
         "rasters",
         "streams",
@@ -220,6 +222,7 @@ class PluginContext(_Context):
         "_files",
         "_jobs",
         "_layers",
+        "_layouts",
         "_log",
         "_network",
         "_processing",
@@ -241,6 +244,7 @@ class PluginContext(_Context):
         "rasters",
         "features",
         "canvas",
+        "layouts",
         "project",
         "settings",
         "styles",
@@ -269,6 +273,11 @@ class PluginContext(_Context):
     #: layer is a description, a feature is data, and editing is an explicitly
     #: opened session rather than another method here.
     features: Capability[Features] = Capability()
+    #: Print layouts and atlases (TASK-89): list them, load a template, export
+    #: one as a job, iterate an atlas. The job forms submit the render to the
+    #: host's worker backend, so an export is a task in the task bar; a host
+    #: that cannot render layouts refuses the capability by name.
+    layouts: Capability[Layouts] = Capability()
     project: Capability[Project] = Capability()
     settings: Capability[Settings] = Capability()
     styles: Capability[Styles] = Capability()
@@ -298,6 +307,7 @@ class PluginContext(_Context):
         layers: Layers | None = None,
         rasters: Rasters | None = None,
         features: Features | None = None,
+        layouts: Layouts | None = None,
         canvas: Canvas | None = None,
         project: Project | None = None,
         settings: Settings | None = None,
@@ -321,6 +331,7 @@ class PluginContext(_Context):
             _layers=layers,
             _rasters=rasters,
             _features=features,
+            _layouts=layouts,
             _canvas=canvas,
             _project=project,
             _settings=settings,
@@ -586,6 +597,10 @@ class WorkerContext:
         "files": "file dialogs are GUI state; resolve a path before submitting",
         "iface": "the QGIS interface belongs to the driving thread",
         "layers": "layers are GUI-affine; pass plain values and re-read them on delivery",
+        "layouts": (
+            "print layouts belong to the project; ctx.layouts.export submits the "
+            "render as its own job, and a job body cannot submit one"
+        ),
         "network": "the network client suspends on the driving thread, not on a worker",
         "notifications": "the message bar is GUI state; report through the job outcome",
         "project": "the project service is owned by the driving thread",

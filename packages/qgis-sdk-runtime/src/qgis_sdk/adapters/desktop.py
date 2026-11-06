@@ -81,6 +81,7 @@ class DesktopLifecycleAdapter:
         self._runtime = PluginRuntime(app, self._context)
         self._sessions: list[Any] = []
         self._job_pump: Any = None
+        self._layout_pump: Any = None
 
     @property
     def iface(self) -> object | None:
@@ -129,14 +130,32 @@ class DesktopLifecycleAdapter:
         self._start_job_pump()
 
     def _start_job_pump(self) -> None:
-        """Tick the plugin's jobs on the GUI thread while it runs (TASK-116)."""
+        """Tick the plugin's jobs on the GUI thread while it runs (TASK-116).
+
+        Two services can need a tick: the plugin's own ``ctx.jobs``, when it
+        declares one, and the layouts service's, which submits an export as a
+        task in the task bar whether or not the plugin declares jobs of its
+        own (TASK-89). One pump each, both stopped on unload.
+        """
         service = self._runtime.jobs
-        if service is None:
+        context = self._context
+        layouts = context.layouts if context.has("layouts") else None
+        if service is None and layouts is None:
+            return
+        if not _qt_running():
+            # A host without the Qt bindings - the reference workflow's own pure
+            # tests, a fake-backed runtime - has no event loop to tick on: the
+            # test drives its jobs by hand, so there is nothing to pump and no
+            # pump to import.
             return
         from qgis_sdk.adapters.qgis.jobs import QgsJobPump
 
-        self._job_pump = QgsJobPump(service)
-        self._job_pump.start()
+        if service is not None:
+            self._job_pump = QgsJobPump(service)
+            self._job_pump.start()
+        if layouts is not None:
+            self._layout_pump = QgsJobPump(layouts.jobs, name="layouts-job-pump")
+            self._layout_pump.start()
 
     def unload(self) -> None:
         """Dispose owned resources; repeated calls are safe."""
@@ -144,10 +163,22 @@ class DesktopLifecycleAdapter:
             # Stop delivery before anything the callbacks read is disposed.
             self._job_pump.stop()
             self._job_pump = None
+        if self._layout_pump is not None:
+            self._layout_pump.stop()
+            self._layout_pump = None
         sessions, self._sessions = self._sessions, []
         for session in sessions:
             session.close()
         self._runtime.unload()
+
+
+def _qt_running() -> bool:
+    """Whether this process has the Qt bindings a job pump is built on."""
+    try:
+        from qgis.PyQt.QtCore import QTimer  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def create_class_factory(
