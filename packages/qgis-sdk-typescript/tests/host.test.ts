@@ -180,7 +180,12 @@ test("the layouts surface sends the layout and validates the ref it gets back", 
 });
 
 test("an export sends the destination ref and answers a ref rather than a path", async () => {
-	const { client, sent } = scripted({ file: ref, format: "pdf", pages: 2, bytes: 42 });
+	const { client, sent } = scripted({
+		file: ref,
+		format: "pdf",
+		pages: 2,
+		bytes: 42,
+	});
 	const exported = await createHost(client).layouts.export({
 		layout: "report",
 		format: "pdf",
