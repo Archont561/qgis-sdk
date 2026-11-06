@@ -2266,7 +2266,7 @@ export interface HostOperations {
 		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
 	};
 	readonly layers: {
-		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<Record<string, unknown> | Record<string, unknown>>;
+		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo | RasterLayerInfo>;
 		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<LayerPage>;
 		readonly open_vector: (input: OpenVectorRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
 	};
@@ -2277,27 +2277,27 @@ export interface HostOperations {
 		readonly info: (input: NotificationsInfoRequest, options?: HostInvokeOptions) => Promise<null>;
 	};
 	readonly project: {
-		readonly add_bookmark: (input: ProjectAdd_bookmarkRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
+		readonly add_bookmark: (input: ProjectAdd_bookmarkRequest, options?: HostInvokeOptions) => Promise<readonly Bookmark[]>;
 		readonly add_layer: (input: ProjectAdd_layerRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
 		readonly bookmark: (input: ProjectBookmarkRequest, options?: HostInvokeOptions) => Promise<Bookmark>;
-		readonly bookmarks: (input?: ProjectBookmarksRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
+		readonly bookmarks: (input?: ProjectBookmarksRequest, options?: HostInvokeOptions) => Promise<readonly Bookmark[]>;
 		readonly changed: (input: ProjectChangedRequest, handlers: HostStreamHandlers<ProjectChangedEvent>, options?: HostInvokeOptions) => Promise<HostStreamHandle>;
 		readonly crs: (input?: ProjectCrsRequest, options?: HostInvokeOptions) => Promise<string | null>;
 		readonly layer_ids: (input?: PageRequest, options?: HostInvokeOptions) => Promise<IdPage>;
 		readonly move_layer: (input: ProjectMove_layerRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
-		readonly properties: (input?: ProjectPropertiesRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
+		readonly properties: (input?: ProjectPropertiesRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
 		readonly read: (input: ReadProjectRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
-		readonly remove_bookmark: (input: ProjectRemove_bookmarkRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
+		readonly remove_bookmark: (input: ProjectRemove_bookmarkRequest, options?: HostInvokeOptions) => Promise<readonly Bookmark[]>;
 		readonly remove_layer: (input: ProjectRemove_layerRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
 		readonly save: (input?: ProjectSaveRequest, options?: HostInvokeOptions) => Promise<ProjectFile>;
 		readonly set_crs: (input: ProjectSet_crsRequest, options?: HostInvokeOptions) => Promise<string>;
-		readonly set_property: (input: ProjectSet_propertyRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
-		readonly set_variable: (input: ProjectSet_variableRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
+		readonly set_property: (input: ProjectSet_propertyRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly set_variable: (input: ProjectSet_variableRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
 		readonly set_visible: (input: ProjectSet_visibleRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
 		readonly tree: (input?: ProjectTreeRequest, options?: HostInvokeOptions) => Promise<LayerTree>;
-		readonly unset_property: (input: ProjectUnset_propertyRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
-		readonly unset_variable: (input: ProjectUnset_variableRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
-		readonly variables: (input?: ProjectVariablesRequest, options?: HostInvokeOptions) => Promise<readonly Record<string, unknown>[]>;
+		readonly unset_property: (input: ProjectUnset_propertyRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly unset_variable: (input: ProjectUnset_variableRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
+		readonly variables: (input?: ProjectVariablesRequest, options?: HostInvokeOptions) => Promise<readonly ProjectEntry[]>;
 		readonly write: (input: WriteProjectRequest, options?: HostInvokeOptions) => Promise<ProjectFile>;
 	};
 	readonly rasters: {
@@ -2488,7 +2488,7 @@ export function createHost(client: HostClientLike): HostOperations {
 		},
 		layers: {
 			get: (input: LayerRequest, options?: HostInvokeOptions) =>
-				call<Record<string, unknown> | Record<string, unknown>>(
+				call<VectorLayerInfo | RasterLayerInfo>(
 					client, "layers.get", input, options,
 					LayerRequest,
 					(candidate: unknown) => (isRecord(candidate) || isRecord(candidate)),
@@ -2524,7 +2524,7 @@ export function createHost(client: HostClientLike): HostOperations {
 		},
 		project: {
 			add_bookmark: (input: ProjectAdd_bookmarkRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly Bookmark[]>(
 					client, "project.add_bookmark", input, options,
 					ProjectAdd_bookmarkRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
@@ -2542,7 +2542,7 @@ export function createHost(client: HostClientLike): HostOperations {
 					Bookmark,
 				),
 			bookmarks: (input?: ProjectBookmarksRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly Bookmark[]>(
 					client, "project.bookmarks", input, options,
 					ProjectBookmarksRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
@@ -2572,7 +2572,7 @@ export function createHost(client: HostClientLike): HostOperations {
 					LayerTree,
 				),
 			properties: (input?: ProjectPropertiesRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly ProjectEntry[]>(
 					client, "project.properties", input, options,
 					ProjectPropertiesRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
@@ -2584,7 +2584,7 @@ export function createHost(client: HostClientLike): HostOperations {
 					LayerTree,
 				),
 			remove_bookmark: (input: ProjectRemove_bookmarkRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly Bookmark[]>(
 					client, "project.remove_bookmark", input, options,
 					ProjectRemove_bookmarkRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
@@ -2608,13 +2608,13 @@ export function createHost(client: HostClientLike): HostOperations {
 					(candidate: unknown) => typeof candidate === "string",
 				),
 			set_property: (input: ProjectSet_propertyRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly ProjectEntry[]>(
 					client, "project.set_property", input, options,
 					ProjectSet_propertyRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
 				),
 			set_variable: (input: ProjectSet_variableRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly ProjectEntry[]>(
 					client, "project.set_variable", input, options,
 					ProjectSet_variableRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
@@ -2632,19 +2632,19 @@ export function createHost(client: HostClientLike): HostOperations {
 					LayerTree,
 				),
 			unset_property: (input: ProjectUnset_propertyRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly ProjectEntry[]>(
 					client, "project.unset_property", input, options,
 					ProjectUnset_propertyRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
 				),
 			unset_variable: (input: ProjectUnset_variableRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly ProjectEntry[]>(
 					client, "project.unset_variable", input, options,
 					ProjectUnset_variableRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),
 				),
 			variables: (input?: ProjectVariablesRequest, options?: HostInvokeOptions) =>
-				call<readonly Record<string, unknown>[]>(
+				call<readonly ProjectEntry[]>(
 					client, "project.variables", input, options,
 					ProjectVariablesRequest,
 					(candidate: unknown) => (Array.isArray(candidate) && candidate.every((item) => isRecord(item))),

@@ -35,10 +35,12 @@ export { FormStore, formStore, labelFor, schemaFields } from "./stores/form";
 export type {
 	HostQueryLoader,
 	HostQueryState,
+	LayerInfo,
 	LayersQueryOptions,
 } from "./stores/host-query";
 export {
 	HostQueryStore,
+	isVectorLayer,
 	layerFieldsQuery,
 	layersQuery,
 } from "./stores/host-query";

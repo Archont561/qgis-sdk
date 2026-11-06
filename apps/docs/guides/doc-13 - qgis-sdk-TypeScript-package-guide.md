@@ -256,8 +256,10 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   handed back in `next_cursor`: anything else is refused as `invalid_payload`
   instead of being read as "start over", and the generated validator refuses it
   before the call leaves the page.
-- **Typed results.** `host.layers.get` returns `VectorLayerInfo`, not a record:
-  `geometry_type` is one of the declared literals and `crs` is `string | null`.
+- **Typed results.** `host.layers.get` returns the layer's own interface, not a
+  record: `VectorLayerInfo | RasterLayerInfo`, discriminated by `kind`, so
+  `geometry_type` is one of the declared literals, `crs` is `string | null` on
+  both, and `band_count` is reachable only after `kind === "raster"`.
 - **The same asymmetry as plugin operations.** Arguments are closed (an unknown
   one is a `QgisSdkHostContractError` before the transport), responses are
   additive (a field a newer host added is tolerated, a missing one is refused).
@@ -714,10 +716,14 @@ Reads the curated host surface after the handshake. When `qgis.host.granted`
 lacks the operation the query needs it settles on `refused` (with the operation
 id and a message) **without a call**, so a page can say "add `layers.read` to
 the page's grants" instead of surfacing a `not_authorized` fault.
-`layersQuery(qgis, { pageSize? })` follows `layers.list` to the last page;
-`layerFieldsQuery(qgis, layerId)` reads `layers.get` for a `field` input whose
-`of` names a layer input. Both need the `layers.read` grant, which the
-scaffold's `[tool.qgis-sdk.web] grants` now lists.
+`layersQuery(qgis, { pageSize? })` follows `layers.list` to the last page and
+keeps the vector layers: `isVectorLayer` narrows one entry of the kinded union,
+so a raster in the project is skipped rather than offered as a layer a vector
+picker could not fill. `layerFieldsQuery(qgis, layerId)` reads `layers.get` for
+a `field` input whose `of` names a layer input, and settles on
+`unsupported_layer_kind` when that layer is a raster - a raster has no fields,
+and an empty select would read as "this layer has none". Both need the
+`layers.read` grant, which the scaffold's `[tool.qgis-sdk.web] grants` lists.
 
 ### Misuse, and the shared behaviour suite
 

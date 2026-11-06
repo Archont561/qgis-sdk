@@ -40,6 +40,7 @@ interface Registry {
 }
 
 const layer: VectorLayerInfo = {
+	kind: "vector",
 	id: "layer-9",
 	name: "buffered",
 	geometry_type: "polygon",

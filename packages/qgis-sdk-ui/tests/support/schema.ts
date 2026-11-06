@@ -156,6 +156,7 @@ export const schema: BridgeSchema<Operations, Streams> = defineBridgeSchema<
 });
 
 export const ROADS: VectorLayerInfo = {
+	kind: "vector",
 	id: "roads-1",
 	name: "roads",
 	geometry_type: "line",
@@ -164,6 +165,7 @@ export const ROADS: VectorLayerInfo = {
 };
 
 export const RIVERS: VectorLayerInfo = {
+	kind: "vector",
 	id: "rivers-2",
 	name: "rivers",
 	geometry_type: "line",

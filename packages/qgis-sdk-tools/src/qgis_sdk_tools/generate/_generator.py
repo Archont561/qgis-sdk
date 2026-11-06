@@ -605,7 +605,13 @@ class _Generator:
         )
 
     def _type_name(self, schema: Mapping[str, Any], fallback: str) -> str:
-        return self.name_for(schema) or _inline_type(schema)
+        # ``fallback`` sits unused in the signature on purpose: a caller passes
+        # the name it would give an unnamed object, but a schema that reaches
+        # here unnamed is rendered inline instead. The generator travels with the
+        # render so a union of titled objects keeps its interfaces - without it
+        # ``layers.get`` answered ``Record<string, unknown> | Record<string, unknown>``
+        # and a page could not read a field off the reply it just validated.
+        return self.name_for(schema) or _inline_type(schema, self)
 
     def _accepts(self, schema: Mapping[str, Any]) -> str:
         """Return the predicate ``call`` should use for this value.

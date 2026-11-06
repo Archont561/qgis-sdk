@@ -11,6 +11,7 @@ import {
 	type HostOperationId,
 	type HostOperations,
 	type LayerPage,
+	type RasterLayerInfo,
 	type VectorLayerInfo,
 } from "@/host";
 
@@ -48,8 +49,23 @@ void operations.layers.get({
 const page = operations.layers.list();
 const typed: Promise<LayerPage> = page;
 void typed;
-// @ts-expect-error A page's items are VectorLayerInfo, never a loose record.
+// @ts-expect-error A page's items are layer infos, never a list of strings.
 const wrongItems: Promise<readonly string[]> = page;
+
+// Every kind of layer crosses the wire, so a union of two titled interfaces
+// renders as those interfaces and not as a pair of open maps (TASK-87).
+declare const anyLayer: Awaited<ReturnType<typeof operations.layers.get>>;
+void (anyLayer.kind satisfies "vector" | "raster");
+if (anyLayer.kind === "raster") {
+	const bands: number = anyLayer.band_count;
+	void bands;
+} else {
+	const fields: readonly string[] = anyLayer.field_names;
+	void fields;
+}
+declare const rasterOnly: RasterLayerInfo;
+// @ts-expect-error A raster layer carries bands, not fields.
+void rasterOnly.field_names;
 
 const geometry: VectorLayerInfo["geometry_type"] = "point";
 void geometry;
