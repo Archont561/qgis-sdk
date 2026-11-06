@@ -3959,6 +3959,247 @@ published for the bridge, and no `ts-v*` tag exists.
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
 
+## 0.10.0 migration notes
+
+`0.10.0` closes the m-9 milestone: the four service areas the desktop still
+answered only through `ctx.desktop` - the map canvas, layer data, raster cells
+and print layouts - now have a contract, a fake, a native host and a grant name
+like every service before them, and the project service grew the rest of what
+the desktop can do
+([decision-54](../../../backlog/decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)).
+It is paired with `@archont561/qgis-sdk` `0.7.0`, a bridge minor, because the
+host manifest moved; the TypeScript side of the same release is in
+[doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md#070-migration-notes).
+
+**Nothing a 0.9 project does today stops working.** Every name, signature and
+refusal a 0.9 release answered still answers the same way; there is no renamed
+method, no moved import and no rewritten manifest in this minor. Three shapes
+changed and are listed first because a type checker notices them before a test
+does.
+
+### Three shapes that changed, and nothing else
+
+- **`LayerInfo` is a union.** It was the vector description; it is now
+  `VectorLayerInfo | RasterLayerInfo`, and both carry a `kind` field
+  (`"vector"` or `"raster"`, published as `LAYER_KIND_NAMES`). Code that read
+  `info.geometry_type` on a `LayerInfo` keeps working because the vector branch
+  still has it; code that *annotates* a variable `LayerInfo` and passes it to
+  something taking `VectorLayerInfo` needs the narrow type, which `layer_info()`
+  and the new `is` checks make explicit. `layer_info(info)` is the one serializer
+  both branches share, so a page and a console describe a layer the same way.
+- **`VectorLayerInfo` gained `kind`.** It is a defaulted field, so
+  `VectorLayerInfo(id=..., name=..., geometry_type=..., field_names=..., crs=...)`
+  still constructs; a positional call that filled every field now leaves `kind`
+  at `"vector"`.
+- **`FakeProject` moved modules.** `qgis_sdk.testing.FakeProject` is the same
+  class with the same behaviour, now defined beside the native project adapter's
+  contract in `qgis_sdk/testing/project.py` rather than in `testing/fakes.py`.
+  The import path a test uses did not change; a deep import into
+  `qgis_sdk.testing.fakes` for it did.
+
+### Four new capabilities on the context
+
+`PluginContext` grew `canvas`, `features`, `rasters` and `layouts`, each declared
+like `layers` and each answered **by name** on a host that cannot serve it:
+`ctx.canvas` on a QGIS Server, which keeps the capability in order to refuse it,
+and on a bare `QgisApplication`, which has no view and reports
+`ctx.has("canvas")` false; `ctx.layouts`, `ctx.rasters` and `ctx.features` where
+the host composed none of them. The answer is a
+`QgisSdkUnsupportedCapabilityError` carrying the capability's name, not an
+`AttributeError`, and a `@job` body still sees none of the four - the restricted
+worker context is unchanged.
+
+### Features, expressions and editing
+
+`ctx.features` is layer *data*, split from `ctx.layers`, which stays a
+description:
+
+- `page(layer_id, FeatureQuery)` answers a `FeaturePage`; the default page is
+  `DEFAULT_FEATURE_PAGE` (100) and `MAX_FEATURE_PAGE` (1000) is refused above,
+  by name, rather than silently clamped. `FeatureQuery` carries `limit`,
+  `cursor`, `expression`, `bbox`, `ids`, `encoding` and `with_geometry`, so
+  paging, filtering and iteration are one request shape instead of three
+  methods.
+- `feature(layer_id, feature_id, ...)` reads one; `Geometry` is `wkb`, `wkt` or
+  `geojson` (`GEOMETRY_ENCODINGS`) with the declared `GEOMETRY_TYPES` name, part
+  and vertex counts and an `is_empty` flag - no `QgsGeometry` handle crosses the
+  contract.
+- `evaluate(text, ...)` answers an `ExpressionOutcome` and `check(text, ...)` an
+  `ExpressionCheck`. "Valid, value `null`" and "invalid, message" are different
+  answers on purpose.
+- `begin_edit(layer_id)` answers an `EditingSession` with `add`, `update`,
+  `delete`, `commit`, `rollback`, `pending` and `close`, and `EditOutcome`
+  reports what was applied. The session's lifetime is the view that opened it;
+  no cross-provider atomicity is promised, and a provider that cannot buffer
+  refuses the session rather than pretending.
+
+New names: `Feature`, `FeaturePage`, `FeatureQuery`, `Geometry`, `GeometryType`,
+`EditOutcome`, `ExpressionOutcome`, `ExpressionCheck`, `EDIT_KINDS`,
+`GEOMETRY_ENCODINGS`, `GEOMETRY_TYPES`, `DEFAULT_FEATURE_PAGE`,
+`MAX_FEATURE_PAGE`, the `FEATURE`, `FEATURE_PAGE`, `FEATURE_QUERY`, `GEOMETRY`,
+`EDIT_OUTCOME`, `EXPRESSION_OUTCOME` and `EXPRESSION_CHECK` JSON schemas,
+`QgisSdkFeatureEditError`, and the fakes `FakeFeatures`, `FakeEditingSession`
+and `FakeLayer`. The section to read is
+[Features, expressions and editing](#features-expressions-and-editing).
+
+### Rasters
+
+`ctx.rasters` answers the half of a layer a page reads cell by cell:
+`open_raster(path)`, `raster(layer_id)`, `statistics(layer_id, band)` (1-based
+bands, a `QgisSdkRasterBandError` outside the count), `sample(...)` for one
+point across bands, and `export_raster(...)`, which is a plain call: a raster
+export is `files.export` over a raster-owned destination, so there is no raster
+writer of its own and the destinations it accepts are `RASTER_EXPORT_DRIVERS`
+(`.tif`, `.tiff`, `.nc`). A hole in the data is `None`, never `0.0`.
+New names: `RasterLayerInfo`, `RasterStatistics`, `RasterSample`, `RasterExport`,
+`RASTER_LAYER_INFO`, `RASTER_STATISTICS`, `RASTER_SAMPLE`,
+`RASTER_EXPORT_DRIVERS`, and `FakeRasters`. See
+[Rasters](#rasters).
+
+### Print layouts and atlases
+
+`ctx.layouts` exports what the print designer composed, and it is the first
+service whose work is a **job** rather than a call:
+
+- `list()` and `load_template(FileRef)` are calls. A template loads under its
+  file's name (`report.qpt` becomes `report`) and a name the project already
+  holds gains a numeric suffix, so loading never replaces a layout the user
+  composed.
+- `export(layout, format=..., destination=..., settings=..., overwrite=...)`
+  submits the render and answers a `JobHandle`; `render(...)` does the same work
+  and waits. `run_atlas(...)` and `render_atlas(...)` are the pair for an atlas,
+  one file per coverage feature, with `pattern` naming each file and the tokens
+  `{index}` and `{feature_id}` (`ATLAS_TOKENS`, default
+  `DEFAULT_ATLAS_PATTERN` = `page-{index:03d}`).
+- Formats are `LAYOUT_FORMATS` (`pdf`, `png`, `svg`); `SINGLE_PAGE_FORMATS`
+  (png, svg) hold one page, so asking for one of them on a multi-page layout is
+  refused by name instead of writing `_1`, `_2` files behind the author's back.
+  `LayoutSettings` carries `dpi`, `rasterize` and `georeference`.
+- `layouts.jobs` is the job service the export submits to, so the host pumps it
+  beside `ctx.jobs`: a plugin that declares no jobs of its own still gets one
+  task per export, with a bar and a cancel button. `qgis_sdk.layouts` holds the
+  shared half (`LayoutService`, `LayoutBackend`, `ATLAS_JOB_ID`,
+  `EXPORT_JOB_ID`) that the fake and the native adapter both build on.
+
+New names: `LayoutInfo`, `LayoutSettings`, `LayoutExport`, `AtlasPage`,
+`AtlasExport`, `AtlasRequest`, `LAYOUT_INFO`, `LAYOUT_FORMATS`,
+`LAYOUT_SUFFIXES`, `SINGLE_PAGE_FORMATS`, `ATLAS_INFO`, `ATLAS_PAGE`,
+`ATLAS_EXPORT`, `ATLAS_TOKENS`, `DEFAULT_ATLAS_PATTERN`,
+`QgisSdkLayoutNotFoundError`, `QgisSdkExportRefusedError`,
+`QgisSdkExportFailedError`, the `qgis_sdk.layouts` module and `FakeLayouts`.
+See [Print layouts and atlases](#print-layouts-and-atlases).
+
+### The map canvas, and `@tool`
+
+`ctx.canvas` reads and moves the map the user is looking at: `extent()`,
+`scale()`, `crs()`, `center()`, `zoom_to(ZoomTarget)`, `refresh()`,
+`themes()`/`apply_theme(name)` and `capture(...)`. Reads and changes are
+different grants - `canvas.read` against `canvas.control` - and `zoom_to`
+answers with the extent it actually landed on, which is not always the one that
+was asked for.
+
+Capture is a **declaration**, not a widget: `@tool(captures="point"|"line"|"polygon")`
+marks a method that takes a `Geometry`, `start(method, ctx)` asks the canvas for
+the drawing and answers a canceller, and the method runs on the GUI thread when
+the geometry arrives. `ToolDescription` and `declared_tools()` are what a
+console lists; a binding refuses an `@tool` the way it refuses a `@job`, so the
+button goes on an `@action` that calls `start` beside the tool it starts. The
+extent stream is `watch_extent(listener)`, which answers a `CaptureCanceller`
+like `capture` does.
+
+New names: `Canvas`, `CanvasExtent`, `CanvasPoint`, `ZoomTarget`, `MapThemes`,
+`CaptureShape`, `CaptureCanceller`, `ExtentListener`, `tool`, `start`,
+`ToolDescription`, `declared_tools`, `TOOL_ATTRIBUTE`, `ZOOM_KINDS`,
+`ZOOM_REQUEST`, `CAPTURE_SHAPES`, `CAPTURE_REQUEST`, `MAP_THEMES`,
+`CANVAS_EXTENT`, `CANVAS_POINT`, `MAX_ZOOM_MARGIN`,
+`QgisSdkThemeNotFoundError`, and `FakeCanvas` with `DEFAULT_EXTENT`. See
+[The map canvas](#the-map-canvas).
+
+### The project, in full
+
+`ctx.project` grew from three reads to the whole project: `crs`/`set_crs`,
+`variables`/`set_variable`/`unset_variable`, `custom_properties`/
+`set_custom_property`/`unset_custom_property`, `bookmarks`/`add_bookmark`/
+`remove_bookmark`/`bookmark`, `layer_tree`, `add_layer`/`remove_layer`/
+`move_layer`/`set_visible`, `read(source)`/`write(destination)`/`save()` and the
+`watch_changes(listener)` stream. The layer tree is a model
+(`LayerTree`/`LayerNode`, `LayerNode.kind` naming the `LayerKind`) and never a
+`QgsLayerTreeGroup` handle, so it survives being sent to a page.
+`QgisSdkBookmarkNotFoundError` and `QgisSdkProjectFileError` are the refusals;
+`AnyLayerInput`/`RasterInput` are the inputs `add_layer` accepts. See
+[The project](#the-project).
+
+### One grant vocabulary, and the console
+
+A host operation is still `<service>.<operation>`, and the name that selects it
+is still one grant name. The vocabulary now covers the new services, so a 0.10
+catalogue publishes **22 grant names** where 0.9 published ten; the ten a 0.9
+project already lists are unchanged and mean what they meant. The twelve new
+ones are `blob.read`, `canvas.control`, `canvas.read`, `expressions.evaluate`,
+`features.edit`, `features.read`, `layouts.export`, `layouts.read`,
+`layouts.write`, `project.write`, `rasters.open` and `rasters.read`.
+
+- `[tool.qgis-sdk.web] grants` narrows the page as before, now with the wider
+  vocabulary; an unknown or stale name is `GRANT001` in `qgis-sdk check`, in
+  whichever section it appears.
+- `[tool.qgis-sdk.console] grants` is new: the developer's console reaches every
+  operation by default, and a list narrows it with the same names.
+- `qgis-sdk check --grants` prints the client × operation matrix - what the page
+  reaches, what the console reaches, and what the plugin HTTP allowlist names
+  (actions and streams, not operations) - so a typo is visible before it narrows
+  a surface in silence.
+
+### Testing without QGIS
+
+The fakes grew with the services and stay pure: `FakeCanvas` (with
+`DEFAULT_EXTENT`), `FakeFeatures`, `FakeEditingSession`, `FakeLayer`,
+`FakeRasters` and `FakeLayouts` (marker files, declared code coverage ids,
+declared values and holes). Each has a contract suite the native adapter is run
+through as well, so a behaviour that only the fake has is a defect in the fake.
+The scenarios are in `tests/features/` and `tests/services/`, and every
+service section above ends with its own *Testing without QGIS* note.
+
+### The bridge moves, the contract version does not
+
+This is the first Python minor since 0.7.0 that a page notices. The host
+manifest moved, so `HOST_FINGERPRINT` does, and `@archont561/qgis-sdk` is
+released with this minor as `0.7.0`
+([decision-25](../../../backlog/decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+Two versions deliberately do **not** move:
+
+- `PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`, and so does
+  `HOST_SCHEMA_VERSION`: the description and the operation envelope keep their
+  shape, only the catalogue grows.
+- `BRIDGE_PROTOCOL_VERSION` is `2`, not `3`. It moved from `1` to `2` earlier in
+  this train, with the stream `ack` that
+  [backpressure](#backpressure-ack-and-in-flight-frames) needs; nothing in this
+  minor changes the protocol again.
+
+What a page must do for `0.7.0` - the new namespaces, `readBlob`,
+`followSubscription`, the `ack` default and the regenerated host module - is in
+[doc-13's 0.7.0 notes](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md#070-migration-notes).
+
+### The checklist for a 0.9 project
+
+1. Nothing has to change: `pip install qgis-sdk==0.10.0` and the plugin runs.
+2. Move the window: `qgis-sdk-runtime>=0.10,<0.11` and
+   `qgis-sdk-tools>=0.10,<0.11`. A project left on `>=0.9,<0.10` is read by the
+   new tools as `VERSION001` - a finding with its remediation, not a crash.
+3. If the project narrows a page's authority, re-read `check --grants`: the
+   vocabulary grew, and a new service is unreachable until its grant is listed.
+4. Annotate `LayerInfo` where the branch matters; `kind` and `layer_info()` are
+   how a vector and a raster are told apart.
+5. Re-run the plugin's tests against the fakes. Nothing in them changed shape,
+   and `FakeProject`'s deep import is the one exception noted above.
+
+### Manifests
+
+`pyproject.toml` and `recipe.yaml` carry `0.10.0`; the bridge's `package.json`
+carries `0.7.0`, and `@archont561/qgis-sdk-ui` `0.1.0` holds the bridge with a
+`>=0.7.0 <0.8.0` peer range in both the components and their alias. Verify with
+`python scripts/release.py verify-versions --scope python --version 0.10.0` and
+`--scope typescript --version 0.7.0`.
+
 ## 0.9.0 migration notes
 
 `0.9.0` closes the m-8 milestone: the one plugin class

@@ -24,7 +24,10 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 `bridge/host.py` + regenerated manifest; grant: name in the shared vocabulary.
 ✓ done, ◐ partial, — missing, n/a not applicable.
 
-## Shipped (0.5.0)
+## Shipped
+
+The minor an area landed in is in the Area column: (0.5.0) through (0.10.0),
+newest last.
 
 | Area | Service / operations | contract | models | fake | native | host | grant | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -37,7 +40,7 @@ handle; fake: `qgis_sdk.testing`; native: `adapters/qgis/`; host: operation in
 | Features (0.10.0) | `features.page`, `features.feature`, paging/filters, geometry encodings | ✓ | `Feature`, `FeaturePage`, `FeatureQuery`, `Geometry` | ✓ (`FakeFeatures`, declared encodings, no conversion) | ✓ (`QgsFeatureRequest`, `$id > cursor`) | `features.page` stream, `features.get` | `features.read` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); 100 features a page by default, 1000 at most, an over-size ask refused by name |
 | Expressions (0.10.0) | `expressions.evaluate`, `expressions.validate` | ✓ | `ExpressionOutcome`, `ExpressionCheck` | ✓ (documented subset; functions refused by name) | ✓ (`QgsExpression` in a prepared context) | `expressions.evaluate`, `expressions.validate` | `expressions.evaluate` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); "valid, value null" and "invalid, message" are different answers |
 | Editing (0.10.0) | `Features.begin_edit`, `EditingSession.add/update/delete/commit/rollback` | ✓ | `EditOutcome` | ✓ (declares `atomic=True/False`) | ✓ (the layer's edit buffer) | `editing.begin/add/update/delete/commit/rollback` | `features.edit` | complete ([TASK-86](../../tasks/task-86%20-%20Add-the-features-and-expressions-services-paged-iteration-filters-geometry-models-attribute-read-editing-sessions-evaluate-and-validate.md)); session lifetime is the view, no cross-provider atomicity promised |
-| Rasters (0.10.0) | `rasters.open/info/statistics/sample`, `LayerInfo.kind` | ✓ | `RasterLayerInfo`, `RasterStatistics`, `RasterSample` | ✓ (`FakeRasters`, declared values and holes) | ✓ (GDAL through `QgsRasterLayer`) | `rasters.open/get/statistics/sample` | `rasters.open`, `rasters.read` | complete ([TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md)); a raster export is `files.export` over a raster-owned destination — no raster writer of its own |
+| Rasters (0.10.0) | `rasters.open/raster/statistics/sample`, `LayerInfo.kind` | ✓ | `RasterLayerInfo`, `RasterStatistics`, `RasterSample` | ✓ (`FakeRasters`, declared values and holes) | ✓ (GDAL through `QgsRasterLayer`) | `rasters.open/get/statistics/sample` | `rasters.open`, `rasters.read` | complete ([TASK-87](../../tasks/task-87%20-%20Add-rasters-open-band-and-statistics-info-sample-at-point-export.md)); a raster export is `files.export` over a raster-owned destination — no raster writer of its own |
 | Layouts and atlases (0.10.0) | `layouts.list`, `load_template`, `export`, `render`, `run_atlas`, `render_atlas` | ✓ | `LayoutInfo`, `LayoutExport`, `AtlasPage`, `AtlasExport`, `LayoutSettings` | ✓ (`FakeLayouts`, marker files, declared coverage ids) | ✓ (`QgsLayoutManager`, `QgsLayoutExporter`, offscreen) | `layouts.list`, `layouts.load_template`, `layouts.export`, `layouts.atlas` | `layouts.read`, `layouts.write`, `layouts.export` | complete ([TASK-89](../../tasks/task-89%20-%20Add-layouts-and-atlas-list-template-load-export-to-PDF-PNG-and-SVG-as-jobs-atlas-iteration-with-progress.md)); export and atlas are jobs with a bar and a cancel button, the wire forms are one request that ends with a ref, and the two render operations carry the destructive annotation because an export replaces the file a page's own write ref names |
 | Project, full (0.10.0) | `project.crs/set_crs`, `read/write/save`, variables, custom properties, bookmarks, `layer_tree`/`add_layer`/`remove_layer`/`move_layer`/`set_visible`, `watch_changes` | ✓ | `LayerTreeNode`, `Bookmark`, `ProjectEntry`, `WriteOutcome` | ✓ (private JSON format) | ✓ (`.qgs` through `QgsProject`) | `project.*` — see the table below | `project.read`, `project.write` | complete ([TASK-88](../../tasks/task-88%20-%20Extend-the-project-service-CRS-read-write-and-save-variables-custom-properties-bookmarks-and-the-layer-tree.md)); the layer tree is a model, never a `QgsLayerTreeGroup` handle |
 | Network | get/post/request, blocking + async, limits | ✓ | ✓ | ✓ | ✓ | `network.fetch` stream | ✓ | complete |
@@ -148,17 +151,23 @@ second list somewhere else.
 
 ## Planned
 
+The three 0.10.0 rows below are the services that landed in this release rather
+than a later one: they stay in this table because their tasks are open on
+something narrower than the service - the canvas on its server refusal, the
+payloads on a measurement, the vocabulary on the deferred audit - and the status
+column says what did land.
+
 | Area | Service / operations | Task | Milestone | Status |
 | --- | --- | --- | --- | --- |
-| Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | landed (doc-12, doc-13 and the example use `zoom_to`) |
+| Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | complete (the extent, zoom, themes, refresh and capture calls plus the two streams; a server refuses each by name, and doc-12, doc-13 and the example use `zoom_to`) |
 | Layer kinds | mesh, point cloud, vector tile, annotation, tiled scene | [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) | 0.11.0 | planned |
 | Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only) | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | planned |
 | Symbology | renderers, symbols, labelling, style manager, QML/SLD both ways | [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md) | 0.11.0 | planned |
 | Processing breadth | multi-layer outputs, `run_model`, `batch`, help text rendering | [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md) | 0.11.0 | planned |
-| Large payloads | `BlobRef`, `qgis.host.blob`, bounded pages, stream `ack` (decision-59) | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) | 0.10.0 | planned |
+| Large payloads | `BlobRef`, `qgis.host.blob`, bounded pages, stream `ack` (decision-59) | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) | 0.10.0 | landed in 0.10.0 (the ref, the blob fetch, bounded pages and `ack`); the task stays open only for the cap and page-size measurement in a real `QWebEngineView` and decision-59's status review |
 | Log | `ctx.log` debug/info/warning/error, correlation ids, agent log stream (decision-63) | [TASK-106](../../tasks/task-106%20-%20Add-ctx.log-crash-capture-into-it-the-Report-a-problem-surface-and-qgis-sdk-diagnose-with-no-telemetry.md) (minimum in [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md)) | 1.0.0 | planned |
 | i18n | `qgis.host.i18n` locale and strings (decision-60) | [TASK-103](../../tasks/task-103%20-%20Add-i18n-through-Qt-catalogues-shared-with-the-page-and-the-accessibility-rule-UI005.md) | 1.0.0 | planned |
-| Grant vocabulary | `<service>.<operation>` across page, console and the HTTP allowlist; `check --grants` | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) | 0.10.0 | in progress (vocabulary, console grants, matrix and this map landed; agent consent and audit deferred) |
+| Grant vocabulary | `<service>.<operation>` across page, console and the HTTP allowlist; `check --grants` | [TASK-84](../../tasks/task-84%20-%20Unify-the-grant-vocabulary-across-web-agent-and-console-and-publish-the-service-coverage-map.md) | 0.10.0 | complete (the vocabulary, `[tool.qgis-sdk.console] grants`, the matrix, this map and `check --grants` landed; the agent consent and audit the decision listed are deferred with decision-49's withdrawal) |
 
 ## Proposals awaiting a decision
 

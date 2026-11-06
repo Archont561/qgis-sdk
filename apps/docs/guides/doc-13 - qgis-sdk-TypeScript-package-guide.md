@@ -1120,6 +1120,129 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
 
+## 0.7.0 migration notes
+
+`0.7.0` is the bridge minor that pairs with the Python `0.10.0` release: the
+host catalogue grew the four service areas the desktop already had, so the
+manifest, the generated host module and the fingerprint moved with it
+([decision-25](../../../backlog/decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+A page built against `0.6.0` has to move to `0.7.0` to talk to a `0.10.0`
+plugin, and the moves it needs are listed at the end of this section.
+
+**What moved, and what deliberately did not.** `HOST_FINGERPRINT` is
+`sha256:9aa12425...` where `0.6.0` carried `sha256:16790dc8...`, so a client
+that pins the fingerprint must take the new value. `HOST_SCHEMA_VERSION` stays
+`1` and so does `PLUGIN_DESCRIPTION_SCHEMA_VERSION`: the envelope and the plugin
+description keep their shape and only the operation catalogue grew.
+`BRIDGE_PROTOCOL_VERSION` is `2`, not `3` - it moved to `2` earlier in this
+train, for the `ack` below, and nothing in this minor changes the protocol
+again.
+
+### The wire: `ack`, and what a `gap` now means
+
+`BRIDGE_PROTOCOL_VERSION` went from `1` to `2`, and the difference is one frame
+kind. A client acknowledges every stream frame it delivered, so the host can
+tell a slow consumer from a dead one and holds a bounded number of frames in
+flight instead of filling a queue
+([decision-59](../../../backlog/decisions/decision-59%20-%20Carry-large-and-binary-payloads-across-the-bridge-and-agent-boundaries-by-reference-with-bounded-pages-and-backpressure.md)):
+
+- `subscribe(operation, handlers, { acknowledge })` acknowledges by default;
+  pass `acknowledge: false` only when you drive the frames yourself.
+- A producer that outruns the client is terminated with `{ kind: "gap" }` - *not*
+  `complete`. A page that treats the two alike shows stale data, and one that
+  reopens silently hides that frames were lost.
+- `followSubscription(subscribe, handlers, options)` is the third option:
+  reopen, report the resume through `onResume` with the terminal and the drop
+  count, and stop after `maxResubscribes`. It retries `gap` alone by default,
+  because `complete`, `cancelled`, `disposed` and `error` are answers.
+- `BridgeCall.kind` gained `"ack"`, and the scripted host records the sequence
+  numbers it was sent in `harness.acknowledgements`.
+- An envelope you build by hand declares `protocol: 2`. The types now read the
+  constant (`ProtocolVersion`) instead of the literal `1`, so `0.6.0` code that
+  copied `protocol: 1` is the one thing a type checker points at.
+
+### Large payloads by reference
+
+A result above the inline ceiling arrives as a `BlobRef` (`id`, `size`,
+`media_type`, `checksum`, `expires_at`, `kind`), and `readBlob` fetches it in
+chunks over `qgis.blob.get`:
+
+- `readBlob(client, ref, options)` answers a `BlobFetcher`; `ReadBlobOptions`
+  carries the chunk size and an abort signal. `BlobChunk` is the wire shape
+  (`offset`, `length`, `size`, `data_base64`, `next_offset`, and so on), and
+  `decodeBase64`/`sha256Hex` are the two helpers a caller needs to check a
+  chunk against the ref's `checksum`.
+- A ref is owned by the view that received it and expires; `QgisSdkBridgeBlobError`
+  is the answer once it has. Nothing is fetched unless the page asks, so a large
+  result costs nothing until it is read.
+- The page-side description - what the ledger holds and when it is released -
+  is in [Results too large to send](#results-too-large-to-send-blobref).
+
+### The host namespaces the client gained
+
+The generated module's `qgis` object now answers the whole catalogue; each
+namespace has the page-side guide section named beside it:
+
+| Namespace | Reachable through it |
+| --- | --- |
+| `qgis.canvas` | `extent`, `scale`, `crs`, `center`, `zoom_to`, `refresh`, `themes`, `apply_theme`, and the two streams `capture` and `extent_changed` ([The map canvas from a page](#the-map-canvas-from-a-page)) |
+| `qgis.features` | `page` as a stream, `get` ([Features, expressions and editing from a page](#features-expressions-and-editing-from-a-page)) |
+| `qgis.expressions` | `evaluate`, `validate`; "valid, value null" and "invalid, message" are different answers |
+| `qgis.editing` | `begin`, `add`, `update`, `delete`, `commit`, `rollback`; the session id is the view's, and it ends when the view does |
+| `qgis.rasters` | `open`, `get`, `statistics`, `sample` ([Rasters from a page](#rasters-from-a-page)) |
+| `qgis.layouts` | `list`, `load_template`, `export`, `atlas` ([Print layouts from a page](#print-layouts-from-a-page)) |
+| `qgis.project` | `crs`/`set_crs`, `variables`/`set_variable`/`unset_variable`, `properties`/`set_property`/`unset_property`, `bookmarks` and the three bookmark calls, `tree`/`add_layer`/`remove_layer`/`move_layer`/`set_visible`, `read`/`write`/`save`, and the `changed` stream ([The project from a page](#the-project-from-a-page)) |
+| `qgis.blob` | `get`, the chunk fetch behind `readBlob` |
+
+An export and an atlas are one request each, not a job: the request ends when
+the file is on disk, with a `FileRef` - or a directory ref and a page list for
+an atlas - in the result. Both carry the destructive annotation, because an
+export replaces the file the page's own write ref named, and both accept an
+`overwrite` flag that the host's file authority checks before anything is
+written.
+
+### `layers.list` answers both kinds
+
+`layers.list` and `layers.get` answer a `LayerInfo`, which is now
+`VectorLayerInfo | RasterLayerInfo` and carries `kind` on both sides. Use the
+`isVectorLayer(info)` guard rather than reading `geometry_type`: it narrows the
+union, so a raster's missing field is a compile error. The host-query stores
+follow the same rule - a field picker skips a raster while listing, and a field
+store pointed at one settles on `unsupported_layer_kind` rather than an empty
+list that reads as "this layer happens to have no fields".
+
+### The components' peer range
+
+`@archont561/qgis-sdk-ui` stays at `0.1.0` and its peer range on
+`@archont561/qgis-sdk` moves to `>=0.7.0 <0.8.0`, in the package and in its
+alias. A project installing the components beside bridge `0.7.0` needs that
+widened range; nothing about the elements changed.
+
+### What a `0.6.0` page must do
+
+1. Move `@archont561/qgis-sdk` to `0.7.0` and the components' peer range with
+   it - a `0.6.0` client is refused by a `0.10.0` host, because the fingerprint
+   moved.
+2. Regenerate whatever client the project generates: the manifest is a new
+   catalogue, and `qgis-sdk bridge generate --check` (in this repository,
+   `examples/simple`) reports it.
+3. Grep for `protocol: 1` and `BRIDGE_PROTOCOL_VERSION === 1`; the protocol is
+   `2`. `subscribe` acknowledges for you unless you pass `acknowledge: false`.
+4. Handle `{ kind: "gap" }` - with `followSubscription`, or by reopening and
+   saying so. It was possible to ignore in `0.6.0` only because a producer could
+   not outrun the queue.
+5. Narrow `LayerInfo` where the code means a vector layer.
+6. Everything else keeps working: export names, store names, the `QgisSdk`
+   instance, the four framework entries and the `@archont561/qgis-sdk-ui`
+   elements are unchanged.
+
+### Manifests
+
+`package.json` carries `0.7.0`, the alias package carries `0.7.0` and pins the
+scoped name to it, and `SDK_NPM_VERSION` in the Python scaffold writes `0.7.0`
+into a new project's page manifest. Verify with
+`python scripts/release.py verify-versions --scope typescript --version 0.7.0`.
+
 ## 0.6.0 migration notes
 
 **Two bridge error classes are gone.** `QgisSdkBridgeSequenceError` and
@@ -1140,8 +1263,8 @@ was never public.
 `HOST_SCHEMA_VERSION` (1) and `BRIDGE_PROTOCOL_VERSION` (1) carry the
 values 0.5.0 had, so a page built against a 0.5 host needs no edit. The
 Python side of the same release is in
-[doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md) under *Next minor
-(unreleased) migration notes*.
+[doc-12](doc-12%20-%20qgis-sdk-Python-package-guide.md#080-migration-notes)
+under *0.8.0 migration notes*.
 
 ## 0.5.0 migration notes
 
