@@ -395,43 +395,51 @@ test("every kind opens through its own operation and answers its own interface",
 	expect(opened.vertex_count).toBe(3);
 	expect(opened.kind).toBe("mesh");
 
-	const cloud = await createHost(scripted({
-		kind: "point_cloud",
-		id: "survey",
-		name: "Survey",
-		point_count: 12,
-		attribute_names: ["X", "Y", "Z"],
-		crs: "EPSG:4326",
-	}).client).layers.open_point_cloud({ file: picked });
+	const cloud = await createHost(
+		scripted({
+			kind: "point_cloud",
+			id: "survey",
+			name: "Survey",
+			point_count: 12,
+			attribute_names: ["X", "Y", "Z"],
+			crs: "EPSG:4326",
+		}).client,
+	).layers.open_point_cloud({ file: picked });
 	expect(cloud.attribute_names).toEqual(["X", "Y", "Z"]);
 
-	const tiles = await createHost(scripted({
-		kind: "vector_tile",
-		id: "basemap",
-		name: "Basemap",
-		source_type: "xyz",
-		min_zoom: 0,
-		max_zoom: 14,
-		crs: null,
-	}).client).layers.open_vector_tile({ file: picked });
+	const tiles = await createHost(
+		scripted({
+			kind: "vector_tile",
+			id: "basemap",
+			name: "Basemap",
+			source_type: "xyz",
+			min_zoom: 0,
+			max_zoom: 14,
+			crs: null,
+		}).client,
+	).layers.open_vector_tile({ file: picked });
 	expect(tiles.max_zoom).toBe(14);
 
-	const notes = await createHost(scripted({
-		kind: "annotation",
-		id: "notes",
-		name: "Field notes",
-		item_count: 0,
-		crs: null,
-	}).client).layers.open_annotation({ name: "Field notes" });
+	const notes = await createHost(
+		scripted({
+			kind: "annotation",
+			id: "notes",
+			name: "Field notes",
+			item_count: 0,
+			crs: null,
+		}).client,
+	).layers.open_annotation({ name: "Field notes" });
 	expect(notes.item_count).toBe(0);
 
-	const scene = await createHost(scripted({
-		kind: "tiled_scene",
-		id: "city",
-		name: "City",
-		extent: { x_min: 21, y_min: 52, x_max: 21.3, y_max: 52.2 },
-		crs: null,
-	}).client).layers.open_tiled_scene({ file: picked });
+	const scene = await createHost(
+		scripted({
+			kind: "tiled_scene",
+			id: "city",
+			name: "City",
+			extent: { x_min: 21, y_min: 52, x_max: 21.3, y_max: 52.2 },
+			crs: null,
+		}).client,
+	).layers.open_tiled_scene({ file: picked });
 	expect(scene.extent.x_max).toBe(21.3);
 
 	// A blank name is what the wire refuses, so the page never asks the host
