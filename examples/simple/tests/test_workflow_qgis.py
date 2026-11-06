@@ -250,7 +250,10 @@ def test_the_bundled_raster_opens_and_answers_a_sample(desktop: Any) -> None:
     info = desktop.runtime.actions["open_elevation"]()
 
     assert (info.kind, info.band_count, info.crs) == ("raster", 1, "EPSG:4326")
-    assert info.resolution == (0.1, 0.1)
+    # A grid's pixel size is the box divided by the cell count, so QGIS answers
+    # 0.09999999999999998 for a 0.1-degree cell: compare to the precision the
+    # file states, the way the SDK's own raster contract does.
+    assert info.resolution == pytest.approx((0.1, 0.1))
 
     sample = desktop.runtime.actions["sample_elevation"](
         layer_id=info.id, x=21.05, y=52.15
