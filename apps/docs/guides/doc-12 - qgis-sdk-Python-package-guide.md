@@ -2402,6 +2402,194 @@ project setting between the caller's pattern and the file on disk.
 `tests/services/test_layouts_contract.py` holds both backends to one contract;
 `tests/features/layout_exports.feature` states the same rules as scenarios.
 
+## Symbology, labelling and the style manager
+
+`ctx.styles` is how a layer is drawn. It answers eight calls, in one place:
+
+| Call | Answers | Replaces what the layer had |
+| --- | --- | --- |
+| `symbology(layer_id)` | a `Renderer` | — |
+| `set_symbology(layer_id, renderer)` | `None` | yes |
+| `labelling(layer_id)` | a `Labelling` | — |
+| `set_labelling(layer_id, labelling)` | `None` | yes |
+| `apply_style(layer_id, style)` | `None` | yes - a packaged QML, checked first |
+| `export_style(layer_id, format)` | `StyleText` | — |
+| `import_style(layer_id, text, format)` | `None` | yes - the renderer *and* the labelling |
+| `list_styles(kind=None)` | `tuple[StyleEntry, ...]` | — |
+
+The renderer surface is curated on purpose, which is what decision-16 asked for:
+four renderers, three symbols, one simple labelling. Anything else is refused by
+name rather than described as the nearest thing it resembles.
+
+```python
+from qgis_sdk.models import (
+    CategorizedRenderer, Category, GraduatedClass, GraduatedRenderer,
+    Labelling, MarkerSymbol, Rule, RuleBasedRenderer, SingleSymbolRenderer,
+)
+
+layer_id = self.ctx.layers.open_vector(Path("/data/points.geojson")).id
+
+self.ctx.styles.set_symbology(
+    layer_id,
+    CategorizedRenderer(
+        field="kind",
+        categories=(
+            Category(value="park", label="Park", symbol=MarkerSymbol("#2ca25f", size=4)),
+            Category(value="school", label="School", symbol=MarkerSymbol("#3182bd", size=4)),
+        ),
+    ),
+)
+renderer = self.ctx.styles.symbology(layer_id)
+renderer.kind                 # "categorized"
+renderer.categories[0].value  # "park"
+```
+
+`RENDERER_KIND_NAMES` is the vocabulary - `single_symbol`, `categorized`,
+`graduated`, `rule_based` - and `kind` is the discriminator on the wire, exactly
+as the layer kinds do it. The four descriptions:
+
+| Renderer | Carries | A fresh layer's default |
+| --- | --- | --- |
+| `SingleSymbolRenderer` | `symbol` | yes |
+| `CategorizedRenderer` | `field`, `categories` (each `value`, `label`, `symbol`) | — |
+| `GraduatedRenderer` | `field`, `mode`, `classes` (each `lower`, `upper`, `label`, `symbol`) | — |
+| `RuleBasedRenderer` | `rules` (each `filter`, `label`, `symbol`, `enabled`) | — |
+
+### Three symbols, and the geometry that draws them
+
+`MarkerSymbol` (a point), `LineSymbol` (a polyline) and `FillSymbol` (a polygon)
+carry the colour, the size or width, and an outline. `SYMBOLS_FOR_GEOMETRY` says
+which symbol each geometry draws, and a symbol of the wrong one is refused before
+anything is set:
+
+```python
+lines = self.ctx.layers.open_vector(Path("/data/lines.geojson")).id
+self.ctx.styles.set_symbology(lines, SingleSymbolRenderer(MarkerSymbol("#ff0000")))
+# QgisSdkStyleIncompatibleError: a single_symbol renderer draws marker symbols;
+# the layer is line geometry, drawn by line
+```
+
+QGIS would accept that and then draw nothing, which is the silent failure this
+refusal exists to prevent. An outline width of `0` is legal and means "no
+outline": it round-trips as the zero it is, on both backends, from the same
+`symbol_fits_geometry` rule.
+
+### Labelling is simple, and off by default
+
+```python
+self.ctx.styles.set_labelling(
+    layer_id, Labelling(enabled=True, field="name", size=10, color="#000000")
+)
+self.ctx.styles.labelling(layer_id).field   # "name"
+
+self.ctx.styles.set_labelling(layer_id, Labelling())   # back off
+```
+
+`Labelling(enabled=True)` without a field is refused where it is declared: a
+label with nothing to say is a caller's bug, not a setting. A layer carrying a
+rule-based labelling (several label styles chosen by expression) is refused with
+`QgisSdkUnsupportedCapabilityError` rather than flattened to its first rule, and
+labels switched on with no labelling object answer `Labelling()` - nothing to
+draw, nothing claimed.
+
+### Graduated modes name a classification method
+
+`GRADUATED_MODES` is `equal_interval`, `quantile`, `jenks`, `std_dev`, `pretty`
+and `custom`. Each of the first five is a QGIS *classification method*; the
+deprecated renderer `mode` enum is never touched. `custom` is last because it is
+an answer rather than a request: QGIS reports it for a renderer whose ranges were
+edited by hand, and refusing it would make `symbology()` fail on any layer the
+user banded themselves.
+
+### QML and SLD cross as text
+
+```python
+text = self.ctx.styles.export_style(layer_id, "qml")     # StyleText(format="qml", ...)
+self.ctx.styles.import_style(layer_id, text.text, "qml")
+```
+
+`STYLE_FORMATS` is `qml` and `sld`; the caller says which dialect it holds rather
+than the host sniffing the first character, and text of the other dialect is
+refused as `QgisSdkStyleTextError`. The two dialects do not promise the same
+thing:
+
+- **QML reproduces the renderer.** It is QGIS's own format and carries the kind,
+  the field, the categories or ranges and their symbols.
+- **SLD reproduces the drawing.** SLD has no notion of "categorized": QGIS writes
+  it as one rule per category and reads it back as a rule-based renderer. What
+  survives is what the map looks like - the colours, in order - and that is what
+  the contract asserts. A page that needs the renderer kind back saves QML.
+
+### What is refused, and why
+
+| Refused | Instead of |
+| --- | --- |
+| a heatmap, a point-displacement or a merged renderer | describing it as a single symbol and painting a lie |
+| a nested rule group, an else rule, a rule with no symbol | flattening the tree and repainting the layer |
+| a rule-based labelling | showing the first of its label styles as "the" labelling |
+| a symbol its geometry cannot draw | a layer that renders nothing and reports success |
+| a mesh, a raster, a point cloud | a renderer no provider of that kind reads |
+| a mode, a marker shape or a style-manager kind outside the named tuples | a name that means one thing here and a typo there |
+
+### On the wire
+
+Seven operations under four grants - two of the grants are new with this slice:
+
+| Operation | Grant | Request | Result |
+| --- | --- | --- | --- |
+| `symbology.get` | `symbology.read` | `{ layer_id }` | `Renderer` (a union of the four, by `kind`) |
+| `symbology.set` | `symbology.write` | `{ layer_id, renderer }` | `null` |
+| `labelling.get` | `symbology.read` | `{ layer_id }` | `Labelling` |
+| `labelling.set` | `symbology.write` | `{ layer_id, labelling }` | `null` |
+| `styles.list` | `styles.read` | `{ kind?, cursor?, limit? }` | a page of `StyleEntry` (`items`, `truncated`, `next_cursor`) |
+| `styles.export` | `styles.read` | `{ layer_id, format }` | `StyleText` |
+| `styles.import` | `styles.write` | `{ layer_id, text, format }` | `null` |
+
+`styles.apply`, `symbology.set`, `labelling.set` and `styles.import` carry the
+`destructive` annotation, because each replaces how a layer is drawn or labelled:
+a tool set to "ask each time" asks before these. `styles.export` and
+`styles.list` are reads, so a page that only wants to show the current renderer
+needs `symbology.read` and nothing else.
+
+```typescript
+const renderer = await host.symbology.get({ layer_id });
+if (renderer.kind === "categorized") {
+  renderer.categories.map((category) => category.label);
+}
+await host.symbology.set({ layer_id, renderer });
+```
+
+`kind` narrows the result, so a page that reads `categories` only compiles once it
+has said `categorized` - the union does the checking, not a cast.
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeStyles(layers, scope, styles=(...))` answers from the
+description it was given: a renderer set is a renderer read back, a labelling is
+stored per layer, and a fresh layer starts with the single symbol its geometry
+implies - `#808080`, as a marker, a line or a fill. The style-manager names are
+declared at construction (`StyleEntry(name, kind)`), and its style text is a
+small JSON document of its own rather than a QML approximation, so a test asserts
+the round trip without pretending to be QGIS:
+
+```python
+styles = FakeStyles(layers, scope, styles=(StyleEntry("circle", "symbol"),))
+styles.symbology(layer_id).kind                     # "single_symbol" - nothing set yet
+styles.set_symbology(layer_id, SingleSymbolRenderer(MarkerSymbol("#ff0000")))
+styles.symbology(layer_id).symbol.color             # "#ff0000"
+styles.list_styles("symbol")[0].name                # "circle"
+```
+
+`tests/features/symbology.feature` states the rules of this section as
+scenarios - every renderer round-tripping, the symbol's colour and outline, the
+labelling on and off, style text both ways, the style-manager listing, and the
+two refusals a page can hit. `tests/services/test_symbology_contract.py` holds
+both backends to the same round trips, including the QML and SLD claims;
+`tests/services/test_native_styles_symbology.py` proves the parts only real QGIS
+can: every renderer through QML, a fill symbol on a polygon layer, a
+`QgsHeatmapRenderer` refused by name, a rule-based labelling refused, and the
+real default style listing what `list_styles` answers.
+
 ## The project
 
 `ctx.project` is the open project: its layer tree, its CRS, its variables and

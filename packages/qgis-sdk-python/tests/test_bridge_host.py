@@ -317,6 +317,12 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "layouts.read",
         "layouts.write",
         "layouts.export",
+        # TASK-93: a layer's appearance is read and written under its own two
+        # grants, apart from applying a packaged style.
+        "symbology.read",
+        "symbology.write",
+        "styles.read",
+        "styles.write",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.
