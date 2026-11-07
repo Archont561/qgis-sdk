@@ -13,7 +13,7 @@ from qgis_sdk.models.features import (
     GEOMETRY_ENCODINGS,
     MAX_FEATURE_PAGE,
 )
-from qgis_sdk.models.layers import RASTER_LAYER_INFO
+from qgis_sdk.models.layers import LAYER_INFO_SCHEMAS
 from qgis_sdk.models.layouts import LAYOUT_FORMATS
 
 #: Rows a page gets when it does not ask for a size.
@@ -58,24 +58,26 @@ def _array(items: Mapping[str, Any]) -> dict:
 #: One schema object, reused by every operation that returns a vector layer, so
 #: the generated module names it once and both a get and a page item share the
 #: type. ``kind`` is the discriminator the union below narrows by, so a page
-#: reads one field to know which description it holds.
-VECTOR_LAYER_INFO = _object(
-    {
-        "kind": {"enum": ["vector"]},
-        "id": {"type": "string"},
-        "name": {"type": "string"},
-        "geometry_type": {"enum": ["point", "line", "polygon", "none"]},
-        "field_names": _array({"type": "string"}),
-        "crs": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-    },
-    required=("kind", "id", "name", "geometry_type", "field_names", "crs"),
-)
-VECTOR_LAYER_INFO["title"] = "VectorLayerInfo"
+#: reads one field to know which description it holds. Every layer schema comes
+#: from the model module, where the shape a fake or a native adapter serializes
+#: and the shape a page validates are one declaration rather than two that
+#: happen to agree.
+VECTOR_LAYER_INFO = LAYER_INFO_SCHEMAS["vector"]
+#: The other kinds, named so an operation that returns exactly one of them reads
+#: as the model it returns.
+RASTER_LAYER_INFO = LAYER_INFO_SCHEMAS["raster"]
+MESH_LAYER_INFO = LAYER_INFO_SCHEMAS["mesh"]
+POINT_CLOUD_LAYER_INFO = LAYER_INFO_SCHEMAS["point_cloud"]
+VECTOR_TILE_LAYER_INFO = LAYER_INFO_SCHEMAS["vector_tile"]
+ANNOTATION_LAYER_INFO = LAYER_INFO_SCHEMAS["annotation"]
+TILED_SCENE_LAYER_INFO = LAYER_INFO_SCHEMAS["tiled_scene"]
 
-#: Either kind of layer (TASK-87). The raster half comes from the model module
-#: so the shape a fake or a native adapter serializes and the shape a page
-#: validates are the same declaration, not two that happen to agree.
-LAYER_INFO: dict[str, Any] = {"anyOf": [VECTOR_LAYER_INFO, RASTER_LAYER_INFO]}
+#: Any kind of layer. The order is the model's wire order, so the generated
+#: union narrows by ``kind`` and a page that holds a description reads one field
+#: to know which it has.
+LAYER_INFO: dict[str, Any] = {
+    "anyOf": [LAYER_INFO_SCHEMAS[kind] for kind in LAYER_INFO_SCHEMAS]
+}
 
 
 #: The paging request, also shared: a page size and a cursor. The cursor is the

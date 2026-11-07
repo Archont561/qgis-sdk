@@ -108,6 +108,35 @@ def _handlers(
         path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
         return _plain(services.layers.open_vector(path))
 
+    def layers_open_mesh(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _plain(services.layers.open_mesh(path))
+
+    def layers_open_point_cloud(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> Any:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _plain(services.layers.open_point_cloud(path))
+
+    def layers_open_vector_tile(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> Any:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _plain(services.layers.open_vector_tile(path))
+
+    def layers_open_annotation(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        # An annotation layer is created inside the project, so the request
+        # carries the name it is created under rather than a file to read: a
+        # page that could name a path here would be asking to open a file the
+        # authority never resolved.
+        return _plain(services.layers.open_annotation(str(payload["name"])))
+
+    def layers_open_tiled_scene(
+        binding: ViewBinding, payload: Mapping[str, Any]
+    ) -> Any:
+        path = authority.resolve_file(binding, payload["file"], FileOperation.READ)
+        return _plain(services.layers.open_tiled_scene(path))
+
     def files_export(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
         written = authority.export_file(binding, payload["file"], payload["content"])
         return {"bytes_written": written, "name": str(payload["file"].get("name", ""))}
@@ -495,6 +524,11 @@ def _handlers(
         "rasters.statistics": rasters_statistics,
         "rasters.sample": rasters_sample,
         "layers.open_vector": layers_open_vector,
+        "layers.open_mesh": layers_open_mesh,
+        "layers.open_point_cloud": layers_open_point_cloud,
+        "layers.open_vector_tile": layers_open_vector_tile,
+        "layers.open_annotation": layers_open_annotation,
+        "layers.open_tiled_scene": layers_open_tiled_scene,
         "files.export": files_export,
         "project.layer_ids": project_layer_ids,
         "project.tree": project_tree,

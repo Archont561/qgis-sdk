@@ -35,11 +35,12 @@ from types import MappingProxyType
 from typing import Annotated, Any
 
 from .files import FileRef
-from .layers import LayerKind
+from .layers import LAYER_KIND_NAMES, LayerKind
 
 __all__ = [
     "COLOUR_PATTERN",
     "LAYER_KINDS_FOR_INPUT",
+    "AnnotationInput",
     "AnyLayerInput",
     "Colour",
     "ColourParameter",
@@ -53,22 +54,28 @@ __all__ = [
     "FileParameter",
     "LayerInput",
     "LayerParameter",
+    "MeshInput",
     "Metres",
     "MetresParameter",
     "ParameterKind",
+    "PointCloudInput",
     "Range",
     "RangeParameter",
     "RasterInput",
+    "TiledSceneInput",
+    "VectorTileInput",
     "parameter_kinds",
 ]
 
 #: ``#RRGGBB`` or ``#RRGGBBAA``, the one colour spelling every host reads back.
 COLOUR_PATTERN = re.compile(r"\A#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\Z")
 
-#: The kinds a :class:`LayerParameter` may name. ``any`` is the picker that
-#: lists both; it is not a layer kind, so it is spelled here and not in
-#: :data:`qgis_sdk.models.layers.LAYER_KIND_NAMES`.
-LAYER_KINDS_FOR_INPUT: tuple[str, ...] = ("vector", "raster", "any")
+#: The kinds a :class:`LayerParameter` may name: every layer kind, in the order
+#: :data:`qgis_sdk.models.layers.LAYER_KIND_NAMES` states them, plus ``any``,
+#: the picker that lists all of them. ``any`` is not a layer kind, so it is
+#: spelled here and not there; the rest is derived, so a kind cannot be described
+#: and yet refused as an input.
+LAYER_KINDS_FOR_INPUT: tuple[str, ...] = (*LAYER_KIND_NAMES, "any")
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,8 +83,9 @@ class LayerParameter:
     """The input receives a layer chosen by the user, of one kind.
 
     ``kind`` narrows what the picker offers and what the host accepts: the
-    default ``"vector"`` keeps every existing declaration's meaning, ``"raster"``
-    is the raster-only picker TASK-87 adds, and ``"any"`` lists both. The kind
+    default ``"vector"`` keeps every existing declaration's meaning, every other
+    layer kind names a picker that offers that kind alone, and ``"any"`` lists all
+    of them. The kind
     travels on the wire as ``layer_kind`` so a page renders the same control the
     native form does, and the host refuses a value of the wrong kind by name
     rather than letting the handler discover it.
@@ -175,8 +183,23 @@ LayerInput = Annotated[str, LayerParameter()]
 RasterInput = Annotated[str, LayerParameter(kind="raster")]
 """A raster layer id the host fills from a raster-only picker (TASK-87)."""
 
+MeshInput = Annotated[str, LayerParameter(kind="mesh")]
+"""A mesh layer id the host fills from a mesh-only picker (TASK-91)."""
+
+PointCloudInput = Annotated[str, LayerParameter(kind="point_cloud")]
+"""A point cloud layer id, from a point-cloud-only picker (TASK-91)."""
+
+VectorTileInput = Annotated[str, LayerParameter(kind="vector_tile")]
+"""A vector tile layer id, from a vector-tile-only picker (TASK-91)."""
+
+AnnotationInput = Annotated[str, LayerParameter(kind="annotation")]
+"""An annotation layer id, from an annotation-only picker (TASK-91)."""
+
+TiledSceneInput = Annotated[str, LayerParameter(kind="tiled_scene")]
+"""A tiled scene id, from a tiled-scene-only picker (TASK-91)."""
+
 AnyLayerInput = Annotated[str, LayerParameter(kind="any")]
-"""A layer id of either kind: one picker lists vectors and rasters together."""
+"""A layer id of any kind: one picker lists every kind together."""
 
 CrsInput = Annotated[str, CrsParameter()]
 """An authority code (``EPSG:3857``) the host fills from a CRS picker."""

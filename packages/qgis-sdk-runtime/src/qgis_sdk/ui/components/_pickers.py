@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from typing import Any, Literal
 
 from qgis_sdk.models import (
+    LAYER_KIND_NAMES,
+    LAYER_KINDS_FOR_INPUT,
     QgisSdkFormError,
     QgisSdkLayerNotFoundError,
     QgisSdkUiError,
@@ -39,11 +41,27 @@ class _Picker(Input):
         return [{"id": option.id, "label": option.label} for option in self.options()]
 
 
+#: The kinds a picker accepts: every ``LayerInput`` kind, plus ``"any"``. Spelled
+#: as a type for editors; the gate is :data:`LAYER_KINDS_FOR_INPUT` at runtime.
+LayerKindInput = Literal[
+    "vector",
+    "raster",
+    "mesh",
+    "point_cloud",
+    "vector_tile",
+    "annotation",
+    "tiled_scene",
+    "any",
+]
+
+
 class LayerPicker(_Picker):
     """A layer of the open project; the value is its layer id or ``None``.
 
-    ``kind`` filters what is listed: ``"vector"`` (the default), ``"raster"``
-    or ``"any"``. Natively this is ``QgsMapLayerComboBox``, which follows the
+    ``kind`` filters what is listed: ``"vector"`` (the default), any other layer
+    kind, or ``"any"``, which lists all of them. The list of accepted kinds is the
+    one a ``LayerInput`` accepts, so a picker cannot refuse a kind the input
+    lets a declaration name. Natively this is ``QgsMapLayerComboBox``, which follows the
     project on its own; under the fake the list comes from ``ctx.layers`` -
     the all-kinds service TASK-87 lands - and :meth:`refresh` re-reads it. The
     project is consulted first so the picker matches the tree's order, and a
@@ -57,14 +75,15 @@ class LayerPicker(_Picker):
         self,
         name: str | None = None,
         *,
-        kind: Literal["vector", "raster", "any"] = "vector",
+        kind: LayerKindInput = "vector",
         label: str | None = None,
         value: object = None,
         required: bool = False,
     ) -> None:
-        if kind not in ("vector", "raster", "any"):
+        if kind not in LAYER_KINDS_FOR_INPUT:
             raise QgisSdkUiError(
-                f"LayerPicker {name!r}: kind must be vector, raster or any, got {kind!r}"
+                f"LayerPicker {name!r}: kind must be one of "
+                f"{', '.join(LAYER_KINDS_FOR_INPUT)}, got {kind!r}"
             )
         self.layer_kind = kind
         super().__init__(name, label=label, value=value, required=required)
@@ -73,9 +92,7 @@ class LayerPicker(_Picker):
         ctx = self._ctx
         if ctx is None or not ctx.has("layers"):
             return ()
-        wanted = (
-            ("vector", "raster") if self.layer_kind == "any" else (self.layer_kind,)
-        )
+        wanted = LAYER_KIND_NAMES if self.layer_kind == "any" else (self.layer_kind,)
         known = {
             info.id: info for info in ctx.layers.list_layers() if info.kind in wanted
         }

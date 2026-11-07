@@ -22,6 +22,7 @@ from contract_sample.bridge_plugin import app as sites_app
 from qgis_sdk import describe
 from qgis_sdk.bridge.host import host_description
 from qgis_sdk.models.errors import QgisSdkBridgeError
+from qgis_sdk.models.layers import LAYER_INFO_NAMES, LAYER_KIND_NAMES
 from qgis_sdk_tools.__main__ import app
 from qgis_sdk_tools.generate import (
     DEFAULT_SCHEMA_PATH,
@@ -791,14 +792,16 @@ def test_both_contract_errors_carry_the_shared_wire_code() -> None:
 
 def test_the_host_module_names_the_public_types_the_manifest_declared() -> None:
     generated = generate_host_typescript()
-    assert "export interface VectorLayerInfo {" in generated
-    assert "export interface RasterLayerInfo {" in generated
+    # Every layer kind has its own interface (TASK-87, TASK-91), and the names
+    # come from the model module rather than from this test, so a kind added
+    # there without reaching the wire fails here.
+    for name in LAYER_INFO_NAMES.values():
+        assert f"export interface {name} {{" in generated, name
     assert "export interface LayerPage {" in generated
-    # One page lists both kinds (TASK-87): the discriminator is the ``kind``
-    # field, so the element type is a union rather than two page types.
-    assert (
-        "readonly items: readonly (VectorLayerInfo | RasterLayerInfo)[];" in generated
-    )
+    # One page lists every kind: the discriminator is the ``kind`` field, so the
+    # element type is a union rather than a page type per kind.
+    union = " | ".join(LAYER_INFO_NAMES[kind] for kind in LAYER_KIND_NAMES)
+    assert f"readonly items: readonly ({union})[];" in generated
     assert "VectorLayerInfo(item, strict)" in generated
     # A tighter bound than the safe-integer range is enforced client-side too.
     assert 'value["limit"] >= 1 && value["limit"] <= 200' in generated

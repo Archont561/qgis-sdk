@@ -21,9 +21,13 @@ from qgis_sdk.models import (
     AlgorithmInfo,
     AlgorithmRequest,
     AlgorithmRun,
+    AnnotationLayerInfo,
+    CanvasExtent,
     Catalogue,
     GeometryType,
     LayerInfo,
+    MeshLayerInfo,
+    PointCloudLayerInfo,
     ProviderInfo,
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmRejectedError,
@@ -31,9 +35,11 @@ from qgis_sdk.models import (
     QgisSdkStyleIncompatibleError,
     QgisSdkUnsupportedCapabilityError,
     RunResult,
+    TiledSceneLayerInfo,
     TypedRun,
     VectorExport,
     VectorLayerInfo,
+    VectorTileLayerInfo,
     validate_parameters,
 )
 from qgis_sdk.processing.runs import coerce_run, output_class, plan_destinations
@@ -239,6 +245,45 @@ class FakeAlgorithms:
 _EMPTY_COLLECTION = '{"type": "FeatureCollection", "features": []}\n'
 
 
+#: How each kind's description is built from a declaration's fields. One table
+#: rather than five branches, so "the fake accepts what the model accepts" is a
+#: property of the file rather than of five places that could drift apart.
+_OTHER_KINDS: dict[str, tuple[type, tuple[str, ...]]] = {
+    "mesh": (MeshLayerInfo, ("vertex_count", "face_count", "group_count")),
+    "point_cloud": (PointCloudLayerInfo, ("point_count", "attribute_names")),
+    "vector_tile": (VectorTileLayerInfo, ("source_type", "min_zoom", "max_zoom")),
+    "tiled_scene": (TiledSceneLayerInfo, ("extent",)),
+}
+
+
+def _detail(kind: str, detail: Mapping[str, object]) -> dict[str, object]:
+    """The keyword arguments one kind's model takes, from a declaration.
+
+    ``extent`` is accepted as the mapping a test writes down (four numbers) or
+    as a box already built, because writing ``CanvasExtent(...)`` in every
+    declaration would hide the numbers the test is about behind a constructor.
+    """
+    assert kind in _OTHER_KINDS, kind
+    _model, fields = _OTHER_KINDS[kind]
+    unknown = set(detail) - set(fields)
+    if unknown:
+        raise QgisSdkDeclarationError(
+            f"a {kind} layer has no field {min(unknown)!r}; it declares "
+            f"{', '.join(fields)}"
+        )
+    missing = [field for field in fields if field not in detail]
+    if missing:
+        raise QgisSdkDeclarationError(
+            f"a {kind} layer declares {', '.join(fields)}; {missing[0]!r} is missing"
+        )
+    values = dict(detail)
+    if kind == "tiled_scene" and isinstance(values["extent"], Mapping):
+        values["extent"] = CanvasExtent(**values["extent"])  # type: ignore[arg-type]
+    if kind == "point_cloud":
+        values["attribute_names"] = tuple(values["attribute_names"])  # type: ignore[arg-type]
+    return values
+
+
 class FakeLayers:
     """A ``Layers`` backend over datasets declared in the test.
 
@@ -252,6 +297,11 @@ class FakeLayers:
         self._scope = scope
         self._datasets: dict[str, dict[str, object]] = {}
         self._layers: dict[str, VectorLayerInfo] = {}
+        #: Layers of the five other kinds TASK-91 adds, in the order opened, and
+        #: the annotation layers a scenario declared before opening one.
+        self._others: dict[str, LayerInfo] = {}
+        self._annotations: dict[str, AnnotationLayerInfo] = {}
+        self._annotation_names: set[str] = set()
         self._sources: dict[str, Path] = {}
         self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
         self._selections: dict[str, tuple[int, ...]] = {}
@@ -273,12 +323,114 @@ class FakeLayers:
     ) -> None:
         """Declare a dataset; ``dataset_path`` models a container URI's file."""
         self._datasets[str(source)] = {
+            "kind": "vector",
             "source": Path(dataset_path) if dataset_path is not None else Path(source),
             "name": name,
             "geometry_type": geometry_type,
             "field_names": tuple(field_names),
             "crs": crs,
+            "detail": {},
         }
+
+    def register_layer(
+        self,
+        source: Path,
+        *,
+        name: str,
+        kind: str,
+        crs: str | None = None,
+        dataset_path: Path | None = None,
+        **detail: object,
+    ) -> None:
+        """Declare a mesh, point cloud, vector tile or tiled scene dataset.
+
+        ``detail`` is exactly the fields the kind's description carries
+        (``vertex_count``, ``face_count`` and ``group_count`` for a mesh, and so
+        on), so a declaration that misspells one is refused here, where the test
+        arranged it, rather than at serialization. The description is built
+        eagerly for the same reason: a negative count is a bug in the test.
+        """
+        if kind not in _OTHER_KINDS:
+            raise QgisSdkDeclarationError(
+                f"{kind!r} is not a layer kind a declaration opens; "
+                f"{', '.join(_OTHER_KINDS)} are"
+            )
+        fields = _detail(kind, detail)
+        model, _names = _OTHER_KINDS[kind]
+        model(id="declared", name=name, crs=crs, **fields)  # type: ignore[call-arg]
+        self._datasets[str(source)] = {
+            "kind": kind,
+            "source": Path(dataset_path) if dataset_path is not None else Path(source),
+            "name": name,
+            "crs": crs,
+            "detail": fields,
+        }
+
+    def register_annotation(
+        self, name: str, *, item_count: int = 0, crs: str | None = None
+    ) -> None:
+        """Declare what opening the annotation layer ``name`` answers.
+
+        An annotation layer has no dataset to open, so what a test declares is
+        the layer a project already holds - its items and its CRS - and opening
+        an undeclared name creates an empty one.
+        """
+        AnnotationLayerInfo(id="declared", name=name, item_count=item_count, crs=crs)
+        self._annotations[name] = AnnotationLayerInfo(
+            id="declared", name=name, item_count=item_count, crs=crs
+        )
+
+    def open_mesh(self, source: Path) -> MeshLayerInfo:
+        """Return a new mesh layer for a declared mesh dataset."""
+        return self._open_kind(source, "mesh")  # type: ignore[return-value]
+
+    def open_point_cloud(self, source: Path) -> PointCloudLayerInfo:
+        """Return a new point cloud layer for a declared point cloud dataset."""
+        return self._open_kind(source, "point_cloud")  # type: ignore[return-value]
+
+    def open_vector_tile(self, source: Path) -> VectorTileLayerInfo:
+        """Return a new vector tile layer for a declared tile source."""
+        return self._open_kind(source, "vector_tile")  # type: ignore[return-value]
+
+    def open_tiled_scene(self, source: Path) -> TiledSceneLayerInfo:
+        """Return a new tiled scene for a declared scene dataset."""
+        return self._open_kind(source, "tiled_scene")  # type: ignore[return-value]
+
+    def open_annotation(self, name: str) -> AnnotationLayerInfo:
+        """Create an annotation layer, empty unless the test declared one."""
+        self._scope.ensure_open()
+        layer_id = f"layer-{len(self._layers) + len(self._others) + 1}"
+        declared = self._annotations.get(name)
+        info = AnnotationLayerInfo(
+            id=layer_id,
+            name=name,
+            item_count=0 if declared is None else declared.item_count,
+            crs=None if declared is None else declared.crs,
+        )
+        self._others[layer_id] = info
+        return info
+
+    def _open_kind(self, source: Path, kind: str) -> LayerInfo:
+        """Open a declared dataset as ``kind``, or refuse it as missing.
+
+        A dataset declared as another kind is *missing* rather than mistyped: on
+        a native host the provider for ``kind`` is handed the file and answers an
+        invalid layer, which is the same refusal a name nobody declared gets.
+        """
+        self._scope.ensure_open()
+        declared = self._datasets.get(str(source))
+        if declared is None or declared["kind"] != kind:
+            raise QgisSdkLayerNotFoundError(str(source))
+        model, _fields = _OTHER_KINDS[kind]
+        layer_id = f"layer-{len(self._layers) + len(self._others) + 1}"
+        info = model(
+            id=layer_id,
+            name=str(declared["name"]),
+            crs=declared["crs"],  # type: ignore[arg-type]
+            **declared["detail"],  # type: ignore[arg-type]
+        )
+        self._others[layer_id] = info
+        return info
 
     def open_vector(self, source: Path) -> VectorLayerInfo:
         """Return a new layer for a declared dataset."""
@@ -308,6 +460,7 @@ class FakeLayers:
         """Return every opened layer, of both kinds, in the order opened."""
         self._scope.ensure_open()
         opened: list[LayerInfo] = list(self._layers.values())
+        opened.extend(self._others.values())
         if self._rasters is not None:
             opened.extend(self._rasters.list_layers())
         return tuple(opened)
@@ -315,6 +468,8 @@ class FakeLayers:
     def layer(self, layer_id: str) -> LayerInfo:
         """Return one opened layer, of either kind."""
         self._scope.ensure_open()
+        if layer_id in self._others:
+            return self._others[layer_id]
         if layer_id not in self._layers and self._rasters is not None:
             return self._rasters.raster(layer_id)
         return self._require(layer_id)
@@ -359,6 +514,8 @@ class FakeLayers:
 
     def _release(self) -> None:
         self._layers.clear()
+        self._others.clear()
+        self._annotations.clear()
         self._sources.clear()
         self._export_sources.clear()
         self._selections.clear()
@@ -368,6 +525,14 @@ class FakeLayers:
             return self._layers[layer_id]
         except KeyError:
             pass
+        other = self._others.get(layer_id)
+        if other is not None:
+            raise QgisSdkUnsupportedCapabilityError(
+                layer_id,
+                f"this layer is a {other.kind}; fields, features, styles and a "
+                "vector export are vector work - read it through the service "
+                f"its kind belongs to (ctx.rasters for a raster)",
+            )
         if self._rasters is not None and layer_id in self._rasters.opened_layers():
             raise QgisSdkUnsupportedCapabilityError(
                 layer_id,

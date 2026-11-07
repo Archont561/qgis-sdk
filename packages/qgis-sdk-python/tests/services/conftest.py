@@ -28,6 +28,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import layer_kind_fixtures as fixture_files
 import layers as test_layers
 import pytest
 from qgis_sdk.core import ResourceScope
@@ -101,6 +102,38 @@ RASTER_NO_DATA_CELLS = 1
 RASTER_VALUE_POINT = CanvasPoint(x=21.05, y=52.15)
 RASTER_HOLE_POINT = CanvasPoint(x=21.15, y=52.05)
 RASTER_VALUE = 1.0
+# -- the layer-kind fixtures (TASK-91) ----------------------------------------
+#: The mesh both backends describe: an SMS/ADCIRC ``.2dm`` three-vertex,
+#: one-triangle surface with no result file beside it. The file is text, so it is
+#: checked in and reviewable; MDAL reads it natively and reports one dataset
+#: group holding no datasets, which is what the fake is told too - a mesh with
+#: geometry and no result on it is a mesh, not a broken one.
+MESH_DATASET = FIXTURE_ROOT / "lagoon.2dm"
+MESH_NAME = "lagoon"
+MESH_VERTICES = 3
+MESH_FACES = 1
+MESH_GROUPS = 1
+#: The annotation layer both backends create. It has no dataset: the contract is
+#: that a new one starts empty and is listed like any other layer.
+ANNOTATION_NAME = "notes"
+#: The box the three mesh vertices cover, which a tiled scene answers instead of
+#: a tile count.
+MESH_EXTENT = (21.0, 52.0, 21.2, 52.2)
+#: The three containers the native half opens are built by
+#: :mod:`layer_kind_fixtures` rather than committed: a LAS header, an MBTiles
+#: database and a ``tileset.json`` are either binary or a directory of one file,
+#: so the fake keys the same paths and one contract test names one file.
+POINT_CLOUD_DATASET = FIXTURE_ROOT / "survey.las"
+POINT_CLOUD_NAME = fixture_files.POINT_CLOUD_NAME
+POINT_CLOUD_COUNT = len(fixture_files.POINT_CLOUD_POINTS)
+VECTOR_TILE_DATASET = FIXTURE_ROOT / "basemap.mbtiles"
+VECTOR_TILE_NAME = fixture_files.VECTOR_TILE_NAME
+TILED_SCENE_DATASET = FIXTURE_ROOT / "scene" / "tileset.json"
+#: A 3D Tiles set is called ``tileset.json`` by convention, and every adapter in
+#: this repository names a layer after its file's stem - so the name a page sees
+#: is ``tileset``, not the folder the file sits in.
+TILED_SCENE_NAME = TILED_SCENE_DATASET.stem
+
 #: The nested group structure the project-tree contract builds on both backends.
 ROOT_GROUP = "Elevation"
 CHILD_GROUP = "Detail"
@@ -204,6 +237,26 @@ class Services:
     #: The raster file the backend actually reads: the checked-in grid for the
     #: fake, the GeoTIFF the native backend built from it.
     raster_dataset: Path | None = None
+    #: Opens the mesh fixture and answers its layer id (TASK-91). ``None`` while a
+    #: backend has not joined the layer-kind contract, so one slice failing is one
+    #: test failing.
+    open_mesh: Callable[[], str] | None = None
+    #: The mesh file the backend actually reads.
+    mesh_dataset: Path | None = None
+    #: Creates an annotation layer under the name it is given and answers its id.
+    #: An annotation layer is created rather than opened, so the contract names
+    #: it; both backends start one empty.
+    open_annotation: Callable[[str], str] | None = None
+    #: Opens the point cloud, vector tile and tiled-scene fixtures (TASK-91) and
+    #: answers each layer's id. The three files are built rather than checked in
+    #: (``layer_kind_fixtures``); ``None`` while a backend has not joined the kind
+    #: contract, so one slice failing is one test failing.
+    open_point_cloud: Callable[[], str] | None = None
+    point_cloud_dataset: Path | None = None
+    open_vector_tile: Callable[[], str] | None = None
+    vector_tile_dataset: Path | None = None
+    open_tiled_scene: Callable[[], str] | None = None
+    tiled_scene_dataset: Path | None = None
     #: A fresh directory one test may write project files into.
     project_directory: Callable[[], Path] | None = None
     #: Creates the nested group structure (``ROOT_GROUP`` -> ``CHILD_GROUP``)
@@ -235,6 +288,7 @@ _WORK_DIRECTORIES = 0
 _FEATURE_DIRECTORIES = 0
 _PROJECT_DIRECTORIES = 0
 _LAYOUT_DIRECTORIES = 0
+_LAYER_KIND_DIRECTORIES = 0
 
 
 def _algorithm_work_directory() -> Path:
@@ -242,6 +296,20 @@ def _algorithm_work_directory() -> Path:
     global _WORK_DIRECTORIES
     _WORK_DIRECTORIES += 1
     directory = _WORK_ROOT / f"services-{_WORK_DIRECTORIES}"
+    directory.mkdir(parents=True)
+    return directory
+
+
+def _layer_kind_work_directory() -> Path:
+    """Return a fresh directory for one native layer-kind backend's fixtures.
+
+    The three containers are written here rather than checked in: a LAS file and
+    an MBTiles database are binary, and a tileset is a directory. Each backend
+    gets its own, so one test can never read a file another test wrote.
+    """
+    global _LAYER_KIND_DIRECTORIES
+    _LAYER_KIND_DIRECTORIES += 1
+    directory = _WORK_ROOT / f"layer-kinds-{_LAYER_KIND_DIRECTORIES}"
     directory.mkdir(parents=True)
     return directory
 
@@ -511,6 +579,49 @@ def _fake_services() -> Services:
             )
         },
     )
+    # The mesh the layer-kind contract opens, declared with the numbers the
+    # ``.2dm`` fixture holds so both backends report the same three. No CRS is
+    # declared because the file has none: MDAL reads no projection out of a
+    # ``.2dm``, so the native layer answers null and the fake must agree.
+    layers.register_layer(
+        MESH_DATASET,
+        name=MESH_NAME,
+        kind="mesh",
+        vertex_count=MESH_VERTICES,
+        face_count=MESH_FACES,
+        group_count=MESH_GROUPS,
+    )
+    # The three containers the native half builds are declared with the numbers
+    # the built files hold. A point cloud's attributes are PDAL's dimension
+    # names, of which the contract asks for ``Z`` on both backends; a vector
+    # tile's zoom range is what its MBTiles metadata says; a tiled scene answers
+    # the box its tileset's region covers.
+    layers.register_layer(
+        POINT_CLOUD_DATASET,
+        name=POINT_CLOUD_NAME,
+        kind="point_cloud",
+        point_count=POINT_CLOUD_COUNT,
+        attribute_names=("X", "Y", "Z"),
+    )
+    layers.register_layer(
+        VECTOR_TILE_DATASET,
+        name=VECTOR_TILE_NAME,
+        kind="vector_tile",
+        source_type="mbtiles",
+        min_zoom=fixture_files.VECTOR_TILE_MIN_ZOOM,
+        max_zoom=fixture_files.VECTOR_TILE_MAX_ZOOM,
+    )
+    layers.register_layer(
+        TILED_SCENE_DATASET,
+        name=TILED_SCENE_NAME,
+        kind="tiled_scene",
+        extent={
+            "x_min": fixture_files.TILED_SCENE_REGION[0],
+            "y_min": fixture_files.TILED_SCENE_REGION[1],
+            "x_max": fixture_files.TILED_SCENE_REGION[2],
+            "y_max": fixture_files.TILED_SCENE_REGION[3],
+        },
+    )
     project = FakeProject(layers, scope)
     project_directory = _project_work_directory()
 
@@ -556,6 +667,15 @@ def _fake_services() -> Services:
         layout_template=template,
         open_raster=lambda: rasters.open_raster(RASTER_DATASET).id,
         raster_dataset=RASTER_DATASET,
+        open_mesh=lambda: layers.open_mesh(MESH_DATASET).id,
+        mesh_dataset=MESH_DATASET,
+        open_annotation=lambda name: layers.open_annotation(name).id,
+        open_point_cloud=lambda: layers.open_point_cloud(POINT_CLOUD_DATASET).id,
+        point_cloud_dataset=POINT_CLOUD_DATASET,
+        open_vector_tile=lambda: layers.open_vector_tile(VECTOR_TILE_DATASET).id,
+        vector_tile_dataset=VECTOR_TILE_DATASET,
+        open_tiled_scene=lambda: layers.open_tiled_scene(TILED_SCENE_DATASET).id,
+        tiled_scene_dataset=TILED_SCENE_DATASET,
         project=project,
         project_directory=lambda: project_directory,
         declare_groups=declare_groups,
@@ -603,12 +723,55 @@ def _native_services() -> Services:
     styles = NativeStyles(layers, scope)
     project_directory = _project_work_directory()
     raster_file = _geotiff_fixture()
+    # The point cloud, vector tile and tiled-scene fixtures (TASK-91), built once
+    # per backend. A layer kind is opened the way a user opens it: the provider
+    # is handed a real file and the description is what it read out of it.
+    layer_kind_directory = _layer_kind_work_directory()
+    point_cloud_file = fixture_files.write_point_cloud(
+        layer_kind_directory / "survey.las"
+    )
+    vector_tile_file = fixture_files.write_vector_tiles(
+        layer_kind_directory / "basemap.mbtiles"
+    )
+    tiled_scene_file = fixture_files.write_tiled_scene(
+        layer_kind_directory / "scene" / "tileset.json"
+    )
     opened_rasters: dict[str, str] = {}
+    opened_meshes: dict[str, str] = {}
+    opened_kinds: dict[str, str] = {}
 
     def open_raster() -> str:
         if "id" not in opened_rasters:
             opened_rasters["id"] = rasters.open_raster(raster_file).id
         return opened_rasters["id"]
+
+    def open_mesh() -> str:
+        if "mesh" not in opened_meshes:
+            opened_meshes["mesh"] = layers.open_mesh(MESH_DATASET).id
+        return opened_meshes["mesh"]
+
+    def open_annotation(name: str) -> str:
+        return layers.open_annotation(name).id
+
+    def _open_once(kind: str, opener: Callable[[], str]) -> str:
+        if kind not in opened_kinds:
+            opened_kinds[kind] = opener()
+        return opened_kinds[kind]
+
+    def open_point_cloud() -> str:
+        return _open_once(
+            "point_cloud", lambda: layers.open_point_cloud(point_cloud_file).id
+        )
+
+    def open_vector_tile() -> str:
+        return _open_once(
+            "vector_tile", lambda: layers.open_vector_tile(vector_tile_file).id
+        )
+
+    def open_tiled_scene() -> str:
+        return _open_once(
+            "tiled_scene", lambda: layers.open_tiled_scene(tiled_scene_file).id
+        )
 
     def declare_groups() -> tuple[str, str]:
         root = QgsProject.instance().layerTreeRoot()
@@ -752,6 +915,15 @@ def _native_services() -> Services:
         layout_template=template_file,
         open_raster=open_raster,
         raster_dataset=raster_file,
+        open_mesh=open_mesh,
+        mesh_dataset=MESH_DATASET,
+        open_annotation=open_annotation,
+        open_point_cloud=open_point_cloud,
+        point_cloud_dataset=point_cloud_file,
+        open_vector_tile=open_vector_tile,
+        vector_tile_dataset=vector_tile_file,
+        open_tiled_scene=open_tiled_scene,
+        tiled_scene_dataset=tiled_scene_file,
         project=project,
         project_directory=lambda: project_directory,
         declare_groups=declare_groups,

@@ -51,8 +51,11 @@ newest last.
 
 ## Host operations
 
-Every operation the host answers, as of 0.10.0 ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
-point 5). The id is `<service>.<operation>`; the grant is the name that selects it
+Every operation the host answers, as of the 0.11.0 development line: the 0.10.0
+surface plus the layer kinds of [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
+point 5). The five `layers.open_*` rows of the other kinds reuse `layers.open`,
+so the grant vocabulary does not grow with a kind: a project grants "open a
+layer", not "open a mesh". The id is `<service>.<operation>`; the grant is the name that selects it
 in `[tool.qgis-sdk.web] grants` and `[tool.qgis-sdk.console] grants`, and `wraps`
 is the Protocol method the operation answers, so a reader can follow a name to
 the code.
@@ -68,6 +71,11 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `layers.list` | `layers.read` | Layers (vector and raster) | `Layers.list_layers` |
 | `layers.get` | `layers.read` | Layers | `Layers.layer` |
 | `layers.open_vector` | `layers.open` | Layers (vector) | `Layers.open_vector` |
+| `layers.open_mesh` | `layers.open` | Layers (mesh) | `Layers.open_mesh` |
+| `layers.open_point_cloud` | `layers.open` | Layers (point cloud) | `Layers.open_point_cloud` |
+| `layers.open_vector_tile` | `layers.open` | Layers (vector tile) | `Layers.open_vector_tile` |
+| `layers.open_annotation` | `layers.open` | Layers (annotation) | `Layers.open_annotation` |
+| `layers.open_tiled_scene` | `layers.open` | Layers (tiled scene) | `Layers.open_tiled_scene` |
 | `rasters.open` | `rasters.open` | Rasters | `Rasters.open_raster` |
 | `rasters.get` | `rasters.read` | Rasters | `Rasters.raster` |
 | `rasters.statistics` | `rasters.read` | Rasters | `Rasters.statistics` |
@@ -160,7 +168,7 @@ column says what did land.
 | Area | Service / operations | Task | Milestone | Status |
 | --- | --- | --- | --- | --- |
 | Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | complete (the extent, zoom, themes, refresh and capture calls plus the two streams; a server refuses each by name, and doc-12, doc-13 and the example use `zoom_to`) |
-| Layer kinds | mesh, point cloud, vector tile, annotation, tiled scene | [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) | 0.11.0 | planned |
+| Layer kinds | mesh, point cloud, vector tile, annotation, tiled scene | [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) | 0.11.0 | complete (the five kinds, their models, layer inputs and pickers, the Processing source-type narrowing and the five host operations); all five open natively - mesh over the checked-in `lagoon.2dm`, annotation by creation, and point cloud, vector tile and tiled scene over files `tests/layer_kind_fixtures.py` builds (a LAS 1.2 point cloud, an MBTiles source, a 3D Tiles `tileset.json`) rather than committing binaries the review cannot read; the release waits for the 0.11.0 gate |
 | Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only) | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | planned |
 | Symbology | renderers, symbols, labelling, style manager, QML/SLD both ways | [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md) | 0.11.0 | planned |
 | Processing breadth | multi-layer outputs, `run_model`, `batch`, help text rendering | [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md) | 0.11.0 | planned |

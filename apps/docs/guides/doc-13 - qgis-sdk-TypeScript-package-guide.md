@@ -257,9 +257,9 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   instead of being read as "start over", and the generated validator refuses it
   before the call leaves the page.
 - **Typed results.** `host.layers.get` returns the layer's own interface, not a
-  record: `VectorLayerInfo | RasterLayerInfo`, discriminated by `kind`, so
+  record: one of the seven kind descriptions, discriminated by `kind`, so
   `geometry_type` is one of the declared literals, `crs` is `string | null` on
-  both, and `band_count` is reachable only after `kind === "raster"`.
+  every one, and `band_count` is reachable only after `kind === "raster"`.
 - **The same asymmetry as plugin operations.** Arguments are closed (an unknown
   one is a `QgisSdkHostContractError` before the transport), responses are
   additive (a field a newer host added is tolerated, a missing one is refused).
@@ -447,8 +447,9 @@ sample.values; // readonly (number | null)[] - None per band, never 0
 
 - **Two grants.** `rasters.open` for opening a file the view holds a read ref
   for; `rasters.read` for `get`, `statistics` and `sample`.
-- **`LayerInfo` is a union.** `layers.get` answers `VectorLayerInfo |
-  RasterLayerInfo`, and the discriminator is `kind` (`"vector"` / `"raster"`), so
+- **`LayerInfo` is a union of seven.** `layers.get` answers `VectorLayerInfo |
+  RasterLayerInfo | MeshLayerInfo | PointCloudLayerInfo | VectorTileLayerInfo |
+  AnnotationLayerInfo | TiledSceneLayerInfo`, and the discriminator is `kind`, so
   a page narrows with one comparison rather than guessing from the fields.
 - **A band number is 1-based** and outside `1..band_count` fails by name
   (`operation_failed`, with the band in the message); a no-data pixel or a point
@@ -459,6 +460,60 @@ sample.values; // readonly (number | null)[] - None per band, never 0
 - **No export operation.** A page never names a filesystem destination
   (decision-20): the export is a plugin action that runs it as a job and returns
   a `FileRef`.
+
+### Every layer kind from a page
+
+A project holds more than vectors and rasters, and the generated client says so:
+each kind has its own interface and each has its own `open` operation, all behind
+the one grant `layers.open`.
+
+```ts
+const mesh = await qgis.host.layers.open_mesh({ file: ref }); // MeshLayerInfo
+mesh.kind;         // "mesh"
+mesh.vertex_count; // 3312
+mesh.face_count;   // 6240
+mesh.group_count;  // 2 - the dataset groups the mesh carries
+
+const cloud = await qgis.host.layers.open_point_cloud({ file: cloudRef });
+cloud.point_count;     // 1204318
+cloud.attribute_names; // readonly string[]
+
+const tiles = await qgis.host.layers.open_vector_tile({ file: tilesRef });
+tiles.source_type;     // "xyz"
+tiles.min_zoom;        // 0
+tiles.max_zoom;        // 14
+
+// An annotation layer is created under a name, not opened from a file.
+const notes = await qgis.host.layers.open_annotation({ name: "Field notes" });
+notes.item_count;      // 0
+
+const scene = await qgis.host.layers.open_tiled_scene({ file: sceneRef });
+scene.extent;          // { x_min, y_min, x_max, y_max, crs }
+```
+
+- **`kind` discriminates all seven.** `layers.list` answers a `LayerPage` whose
+  `items` are the union; switch on `kind` to reach a field, and the compiler
+  refuses a field the kind does not have.
+- **`layers.open_annotation` takes a name.** The request is `{ name: string }`
+  with a non-blank pattern, not a `FileRef`: an annotation layer is a drawing
+  surface the project holds, so there is no file to resolve and nothing for the
+  file authority to check.
+- **A tiled scene answers a box.** There is no `tile_count` in the interface
+  because QGIS has no synchronous one; `extent` is what the host can answer
+  honestly.
+- **One grant for five operations.** `layers.open` covers every kind, so a page
+  that could open a vector can open a mesh too - and a page granted nothing new
+  gets nothing new.
+- **Vector-only work still refuses.** `features.*`, `expressions.*`,
+  `editing.*` and `layers.export_vector` fail by name for another kind
+  (`unsupported_layer_kind`), so a page shows the refusal instead of an empty
+  table that reads as "this layer has no features".
+
+`isVectorLayer(info)` still narrows to `VectorLayerInfo`, which is what the
+host-query stores need; a page that wants the other kinds switches on `kind`
+directly. Nothing about the fingerprint's *meaning* changed: it moved because the
+surface grew, and a `0.7.0` client is refused by a host that gained these five
+operations until it is regenerated against it.
 
 ### Print layouts from a page
 
@@ -1201,12 +1256,12 @@ export replaces the file the page's own write ref named, and both accept an
 `overwrite` flag that the host's file authority checks before anything is
 written.
 
-### `layers.list` answers both kinds
+### `layers.list` answers every kind
 
-`layers.list` and `layers.get` answer a `LayerInfo`, which is now
-`VectorLayerInfo | RasterLayerInfo` and carries `kind` on both sides. Use the
+`layers.list` and `layers.get` answer a `LayerInfo`, which is the union of the
+seven descriptions and carries `kind` on every one of them. Use the
 `isVectorLayer(info)` guard rather than reading `geometry_type`: it narrows the
-union, so a raster's missing field is a compile error. The host-query stores
+union, so a mesh's missing field is a compile error. The host-query stores
 follow the same rule - a field picker skips a raster while listing, and a field
 store pointed at one settles on `unsupported_layer_kind` rather than an empty
 list that reads as "this layer happens to have no fields".

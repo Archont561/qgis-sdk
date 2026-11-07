@@ -3,10 +3,15 @@
 import { QgisSdkBridgeAbortedError } from "../bridge";
 import { QgisSdkError } from "../errors";
 import type {
+	AnnotationLayerInfo,
 	HostOperationId,
 	LayerPage,
+	MeshLayerInfo,
+	PointCloudLayerInfo,
 	RasterLayerInfo,
+	TiledSceneLayerInfo,
 	VectorLayerInfo,
+	VectorTileLayerInfo,
 } from "../generated/host";
 import type { QgisSdkCore, QgisSdkHost } from "../qgis-sdk";
 import { asError, BaseStore } from "./base";
@@ -118,15 +123,22 @@ export interface LayersQueryOptions {
 	readonly pageSize?: number;
 }
 
-/** Either kind of layer a `layers.list` page may hold. */
-export type LayerInfo = VectorLayerInfo | RasterLayerInfo;
+/** Any kind of layer a `layers.list` page may hold. */
+export type LayerInfo =
+	| VectorLayerInfo
+	| RasterLayerInfo
+	| MeshLayerInfo
+	| PointCloudLayerInfo
+	| VectorTileLayerInfo
+	| AnnotationLayerInfo
+	| TiledSceneLayerInfo;
 
 /**
  * Whether one entry of `layers.list` is a vector layer.
  *
- * `layers.list` answers both kinds (decision-54 point 3), so a consumer that
+ * `layers.list` answers every kind (decision-54 point 3), so a consumer that
  * means "a vector layer" says so with this guard instead of reading a field
- * only one kind has. It narrows the union, so a raster's missing `geometry_type`
+ * only one kind has. It narrows the union, so a mesh's missing `geometry_type`
  * is a compile error rather than an `undefined` at runtime.
  */
 export function isVectorLayer(info: LayerInfo): info is VectorLayerInfo {
@@ -135,8 +147,9 @@ export function isVectorLayer(info: LayerInfo): info is VectorLayerInfo {
 
 /**
  * Every vector layer of the project, following `layers.list` pages to the
- * end: what a layer picker binds to. Needs the `layers.read` grant. A raster
- * in the project is skipped, not an error - a raster has no fields to pick.
+ * end: what a vector layer picker binds to. Needs the `layers.read` grant. A
+ * layer of another kind in the project is skipped, not an error - only a vector
+ * has the fields this query answers.
  */
 export function layersQuery(
 	qgis: QgisSdkCore<unknown, unknown>,
@@ -167,10 +180,10 @@ export function layersQuery(
  * a layer input: `layers.get` under the `layers.read` grant. A layer's CRS is
  * on the same reply; a project CRS query is not on the wire yet.
  *
- * A raster layer has no fields, so asking for them settles the store on an
- * `unsupported_layer_kind` error rather than an empty list: a field input
- * pointed at a raster is a wiring mistake, and an empty select would read as
- * "this layer happens to have none".
+ * A layer of another kind has no fields, so asking for them settles the store on
+ * an `unsupported_layer_kind` error naming that kind rather than an empty list:
+ * a field input pointed at a mesh is a wiring mistake, and an empty select would
+ * read as "this layer happens to have none".
  */
 export function layerFieldsQuery(
 	qgis: QgisSdkCore<unknown, unknown>,
@@ -180,7 +193,7 @@ export function layerFieldsQuery(
 		const layer = await host.layers.get({ layer_id: layerId }, { signal });
 		if (!isVectorLayer(layer)) {
 			throw new QgisSdkError(
-				`layer "${layerId}" is a raster: a raster has no fields`,
+				`layer "${layerId}" is a ${layer.kind}: only a vector layer has fields`,
 				"unsupported_layer_kind",
 			);
 		}

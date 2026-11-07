@@ -90,9 +90,17 @@ __all__ = ["Rendering", "load_ui", "mount"]
 _INT_MIN, _INT_MAX = -(2**31), 2**31 - 1
 _REAL_MAX = 1e15
 
+#: One combo-box filter per layer kind (TASK-91). ``Qgis.LayerFilter`` names every
+#: kind, so a picker offers the kind the input asks for and no other; ``any`` is
+#: the picker that lists them all.
 _LAYER_FILTERS = {
     "vector": QgsMapLayerProxyModel.Filter.VectorLayer,
     "raster": QgsMapLayerProxyModel.Filter.RasterLayer,
+    "mesh": QgsMapLayerProxyModel.Filter.MeshLayer,
+    "point_cloud": QgsMapLayerProxyModel.Filter.PointCloudLayer,
+    "vector_tile": QgsMapLayerProxyModel.Filter.VectorTileLayer,
+    "annotation": QgsMapLayerProxyModel.Filter.AnnotationLayer,
+    "tiled_scene": QgsMapLayerProxyModel.Filter.TiledSceneLayer,
     "any": QgsMapLayerProxyModel.Filter.All,
 }
 
