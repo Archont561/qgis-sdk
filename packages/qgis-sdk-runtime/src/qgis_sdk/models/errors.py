@@ -106,6 +106,82 @@ class QgisSdkLayoutNotFoundError(QgisSdkError):
         super().__init__(f"No print layout {name!r} is available in this project")
 
 
+class QgisSdkConnectionNotFoundError(QgisSdkError):
+    """No registered data-source connection answers this provider and name.
+
+    The registry lookup (TASK-92) is over the connections QGIS keeps in its
+    settings; this is unrelated to :class:`QgisSdkConnectionError`, which is a
+    transport failing to reach a peer. The message names both halves so a name
+    that exists under another provider is distinguishable from a name that
+    exists nowhere.
+    """
+
+    code = "connection_not_found"
+
+    def __init__(self, provider: str, name: str) -> None:
+        self.provider = provider
+        self.name = name
+        if name:
+            message = f"No connection {name!r} is registered for provider {provider!r}"
+        else:
+            message = f"Provider {provider!r} holds no registered connections"
+        super().__init__(message)
+
+
+class QgisSdkConnectionItemNotFoundError(QgisSdkError):
+    """No schema, table or view with this name is in the connection.
+
+    A browse and an open name the same ``(schema, name)`` pair, so a typo and a
+    table the connection genuinely does not hold are the same refusal - the
+    database decides, and this class never guesses.
+    """
+
+    code = "connection_item_not_found"
+
+    def __init__(self, connection: str, schema: str, name: str) -> None:
+        self.connection = connection
+        self.schema = schema
+        self.name = name
+        where = f" in schema {schema!r}" if schema else ""
+        super().__init__(f"No item {name!r}{where} of connection {connection!r} exists")
+
+
+class QgisSdkConnectionUnavailableError(QgisSdkError):
+    """A registered connection exists but its provider refused to answer.
+
+    Different from :class:`QgisSdkConnectionNotFoundError`: the lookup
+    succeeded, the database behind it did not answer its catalog. The message
+    is the provider's own refusal with any ``password=`` token redacted, because
+    it crosses to a page and a provider error can quote what it refused.
+    """
+
+    code = "connection_unavailable"
+
+    def __init__(self, provider: str, name: str, detail: str) -> None:
+        self.provider = provider
+        self.name = name
+        self.detail = detail
+        super().__init__(
+            f"Connection {name!r} of provider {provider!r} refused: {detail}"
+        )
+
+
+class QgisSdkAuthConfigNotFoundError(QgisSdkError):
+    """No authentication configuration with this id is in the registry.
+
+    The identifier is the seven-character ``authcfg`` reference QGIS spends;
+    the message repeats the id, never anything the id stands for.
+    """
+
+    code = "auth_config_not_found"
+
+    def __init__(self, auth_config: str) -> None:
+        self.auth_config = auth_config
+        super().__init__(
+            f"No authentication configuration {auth_config!r} is registered"
+        )
+
+
 class QgisSdkStyleTextError(QgisSdkError):
     """A style document could not be read in the dialect the caller named.
 

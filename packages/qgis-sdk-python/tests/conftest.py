@@ -36,6 +36,7 @@ layers.prepare_environment()
 # ordinary tests; declared here so every module sees the same ones.
 pytest_plugins = [
     "bridge_steps",
+    "connections_steps",
     "layer_kind_steps",
     "service_steps",
     "symbology_steps",

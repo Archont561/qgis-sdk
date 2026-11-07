@@ -8,9 +8,12 @@ created_date: '2026-10-26 10:20'
 
 **Status:** Running. The TASK-90 gate passed with the 0.10.0 pair on
 2026-11-06, so the train has started: sprint 1 (TASK-91) is implemented and
-Done, all five layer kinds opening natively. Next is sprint 2 (TASK-93). Orders
-work the m-10 tasks already declare; adds no scope. Sprint membership lives here
-and in the milestone body ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
+Done, all five layer kinds opening natively; sprint 2 (TASK-93) is implemented
+and Done, symbology, labelling and the style manager behind the curated
+surface. Next is sprint 3 (TASK-92), connections and auth configuration ids.
+Orders work the m-10 tasks already declare; adds no scope. Sprint membership
+lives here and in the milestone body
+([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
 
 ## 1. Where m-10 starts from
 
@@ -36,6 +39,9 @@ project service, canvas, features and layouts. Remaining rows of
   opens are built by `tests/layer_kind_fixtures.py` rather than committed.
 - **Sprint 2: TASK-93.** Renderer, symbol and labelling models; style
   manager; QML and SLD both ways. The largest model surface; its own sprint.
+  Done, PR #174: QML reproduces the renderer and SLD the drawing (QGIS reads
+  its own SLD export back as rule-based), and `custom` is a readable graduated
+  mode.
 - **Sprint 3: TASK-92.** Connections registry, browse, open from a
   connection, auth configuration ids - never secrets; PostGIS row recorded
   or blocked by environment.

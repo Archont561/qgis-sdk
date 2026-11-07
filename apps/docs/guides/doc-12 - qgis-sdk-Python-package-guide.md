@@ -2590,9 +2590,142 @@ can: every renderer through QML, a fill symbol on a polygon layer, a
 `QgsHeatmapRenderer` refused by name, a rule-based labelling refused, and the
 real default style listing what `list_styles` answers.
 
-## The project
+## Connections and authentication configurations
 
-`ctx.project` is the open project: its layer tree, its CRS, its variables and
+`ctx.connections` is the registry QGIS itself keeps: the GeoPackage files and
+PostGIS databases the user named once and reopens by name. decision-54 point 4
+asks for it "over the provider connection registry, with `auth` as
+configuration ids, never secrets", and that is the whole design:
+
+```python
+for connection in self.ctx.connections.list_connections():
+    connection.name        # "survey"
+    connection.provider    # "ogr" - see below
+    connection.auth_config # "a1b2c3d", or None
+
+items = self.ctx.connections.browse("ogr", "survey")
+items[0].name        # "roads"
+items[0].kind        # "vector"
+items[0].geometries  # ("line",)
+
+layer = self.ctx.connections.open_layer("ogr", "survey", "", "roads")
+layer.id             # the opened layer, in layers.list like any other
+```
+
+| Call | Answers | Notes |
+| --- | --- | --- |
+| `list_connections()` | every registered database connection | across providers |
+| `connection(provider, name)` | one `ConnectionInfo` | refuses an unknown by name |
+| `browse(provider, name, schema=None)` | `ConnectionItem`s | schemas first, or tables |
+| `open_layer(provider, name, schema, item)` | `VectorLayerInfo` | the table lands in `layers.list` |
+| `test(provider, name)` | a `ConnectionTest` verdict | never an exception |
+| `auth_configurations()` | `AuthConfiguration`s | ids and names only |
+| `attach_auth_config(provider, name, auth_config)` | `None` | replaces the authentication |
+
+### A GeoPackage connection is provider `ogr`
+
+The provider is the key whose registry holds the connection - QGIS's own
+provider key, not a friendlier name. A GeoPackage connection is registered
+under `ogr`, because QGIS implements the GeoPackage connection methods in its
+OGR provider ("GPKG methods are implemented in OGR", in QGIS's own data-item
+source); a PostGIS connection is `postgres`. The description reports what the
+registry says, and a caller that special-cases providers keys on those.
+
+### No secret crosses a description
+
+A `ConnectionInfo` is a name, a provider and the *id* of the authentication
+configuration the connection spends - seven characters that reference a
+secret, never the secret itself. The connection's URI, the one place a
+password can appear in plaintext, is read and dropped before the model is
+built; an `AuthConfiguration` is an id and a name, which is all QGIS's own
+"base configs (not decrypted data)" answer carries. The wire schemas carry
+exactly these fields, and the contract asserts it against a connection whose
+settings **do** hold a password.
+
+### Browsing is one level at a time
+
+A schema-capable connection answers its schemas first (`kind="schema"`) and
+one schema's tables when a schema is named; a GeoPackage has no schemas and
+answers its tables directly. A table's `kind` is `vector`, `aspatial`, `raster`,
+`view`, `materialized_view` or `foreign`, and `geometries` reuses the layer
+vocabulary (`point`, `line`, `polygon`, `none`).
+
+### What is refused, and why
+
+| Refused | Instead of |
+| --- | --- |
+| an unknown provider or connection | an empty answer that reads as "no connections" |
+| an unknown schema or table | a guess at the nearest name |
+| a schema passed to `open_layer` | opening a directory as a file |
+| a raster table | a vector description of something no vector provider reads |
+| a provider the SDK does not open tables for | an opened layer with a guessed provider key |
+| an auth id the registry does not hold | attaching a reference to nothing |
+| a configuration on a file-based connection | a credential field a GeoPackage cannot spend |
+
+A connection that exists but will not answer is a different thing again:
+`test` returns `ConnectionTest(valid=False, message=...)` - "this connection is
+broken" is the answer the call exists to give, so it is a verdict, not an
+exception. `browse` and `open_layer` on the same connection raise
+`QgisSdkConnectionUnavailableError` with the provider's own refusal (password
+tokens redacted).
+
+### Attaching replaces the authentication
+
+`attach_auth_config` swaps the connection's authentication configuration and
+clears the stored password as it writes back - the old password stops being
+stored and stops being spent. It is the one write this surface owns, and it is
+annotated `destructive` *and* `credential` on the wire.
+
+### On the wire
+
+Seven operations under five grants:
+
+| Operation | Grant | Request | Result |
+| --- | --- | --- | --- |
+| `connections.list` | `connections.read` | `{ cursor?, limit? }` | a page of `ConnectionInfo` |
+| `connections.describe` | `connections.read` | `{ provider, connection }` | `ConnectionInfo` |
+| `connections.browse` | `connections.read` | `{ provider, connection, schema? }` | a page of `ConnectionItem` |
+| `connections.open_layer` | `layers.open` | `{ provider, connection, schema, item }` | `VectorLayerInfo` |
+| `connections.test` | `connections.read` | `{ provider, connection }` | `ConnectionTest` |
+| `auth.configurations` | `auth.read` | `{ cursor?, limit? }` | a page of `AuthConfiguration` |
+| `auth.attach` | `auth.write` | `{ provider, connection, auth_config }` | `null` |
+
+`auth.attach` carries `destructive`; `connections.browse`, `connections.test`,
+`connections.open_layer`, `auth.configurations` and `auth.attach` carry
+`credential` (as does `network.fetch`, whose request may name an `auth_config`).
+The agent consent list shows the two annotations distinctly - "will this change
+my project?" and "will this touch my credentials?" are different questions. A
+page that only lists connections needs `connections.read` and nothing else.
+
+### Testing without QGIS
+
+`qgis_sdk.testing.FakeConnections(layers)` is declaration-driven: a test
+declares the connections, their schemas and their tables (with the fields and
+geometry an opened layer answers), plus the authentication configurations by
+name - the fake picks the id, exactly as the registry does natively. Two
+declaration flags model what a fake cannot pretend: `valid=False` makes `test`
+answer a declared refusal, and `accepts_auth=False` makes attachment fail the
+way a file-based connection's does.
+
+```python
+connections = FakeConnections(layers)
+connections.declare_connection("survey", schemas=(), accepts_auth=False)
+connections.declare_table("survey", "roads", geometries=("line",), fields=("name",))
+connections.browse("ogr", "survey")[0].kind   # "vector"
+```
+
+`tests/features/connections.feature` states these rules as scenarios; both
+backends are held to them by
+`tests/services/test_connections_contract.py`, over a GeoPackage fixture
+`tests/connection_fixtures.py` builds (a SQLite file with the geometry
+dialect) and a PostGIS connection that runs against a server
+`QGIS_SDK_TEST_POSTGIS` names or is recorded as blocked by environment. What
+only real QGIS can prove - a registered password that never crosses a
+description, an attach that replaces it in the settings - is
+`tests/services/test_native_connections.py`.
+
+## The project
+ its layer tree, its CRS, its variables and
 custom properties, its bookmarks, its file - and a stream of the changes it made.
 
 ```python

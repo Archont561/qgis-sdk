@@ -57,6 +57,12 @@ from qgis_sdk.models.canvas import (
     MAP_THEMES,
     ZOOM_REQUEST,
 )
+from qgis_sdk.models.connections import (
+    AUTH_CONFIGURATION,
+    CONNECTION_INFO,
+    CONNECTION_ITEM,
+    CONNECTION_TEST,
+)
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.models.features import (
     EDIT_OUTCOME,
@@ -107,12 +113,20 @@ class HostOperation:
     lists stay in step, and ``grant`` is the canonical permission an application
     checks - a namespace-wide flag would grant every future method at once.
 
-    ``destructive`` is the one annotation the agent surface reads (decision-27
+    ``destructive`` is the annotation the agent surface reads (decision-27
     point 2, decision-49 point 4): an operation that replaces or discards
     project state - a write, a save, a read over the open project, a removal -
     says so here, so the consent list can ask each time and the audit log can
     mark the call. A read never carries it, and nothing infers it from the
     operation's name.
+
+    ``credential`` is its own annotation, never folded into ``destructive``
+    (TASK-92): an operation that authenticates with stored material or reads or
+    re-binds the authentication registry says so here. The two axes answer
+    different questions - "will this change my project?" and "will this touch
+    my credentials?" - and the consent list shows them distinctly, so a read
+    that spends a password is not hidden among the writes and a write that
+    never authenticates is not dressed up as a credential act.
     """
 
     id: str
@@ -126,6 +140,7 @@ class HostOperation:
     request_name: str | None = None
     result_name: str | None = None
     destructive: bool = False
+    credential: bool = False
 
     def to_description(self) -> dict[str, Any]:
         """Return the action- or stream-shaped record the generator understands."""
@@ -144,6 +159,7 @@ class HostOperation:
         if self.result_name is not None:
             described["result_name"] = self.result_name
         described["destructive"] = self.destructive
+        described["credential"] = self.credential
         return described
 
 
@@ -314,6 +330,132 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         result=_NOTHING,
         request_name="ImportStyleRequest",
         destructive=True,
+    ),
+    HostOperation(
+        id="connections.list",
+        title="List the registered data-source connections",
+        source="Connections.list_connections",
+        grant="connections.read",
+        affinity=GUI,
+        request=PAGE_REQUEST,
+        result=_page_result(CONNECTION_INFO),
+        request_name="PageRequest",
+        result_name="ConnectionPage",
+    ),
+    HostOperation(
+        id="connections.describe",
+        title="Describe one registered connection",
+        source="Connections.connection",
+        grant="connections.read",
+        affinity=GUI,
+        request=_object(
+            {
+                "provider": {"type": "string"},
+                "connection": {"type": "string"},
+            },
+            required=("provider", "connection"),
+        ),
+        result=CONNECTION_INFO,
+        request_name="ConnectionRequest",
+        result_name="ConnectionInfo",
+    ),
+    HostOperation(
+        id="connections.browse",
+        title="Browse the schemas or the tables one connection holds",
+        source="Connections.browse",
+        grant="connections.read",
+        affinity=GUI,
+        request=_object(
+            {
+                "provider": {"type": "string"},
+                "connection": {"type": "string"},
+                "schema": {"type": "string"},
+            },
+            required=("provider", "connection"),
+        ),
+        result=_page_result(CONNECTION_ITEM),
+        request_name="ConnectionBrowseRequest",
+        result_name="ConnectionItemPage",
+        # A browse queries the database with the authentication the connection
+        # stores; a page cannot walk a server's catalog without spending it.
+        credential=True,
+    ),
+    HostOperation(
+        id="connections.open_layer",
+        title="Open one table of a connection as a vector layer",
+        source="Connections.open_layer",
+        grant="layers.open",
+        affinity=GUI,
+        request=_object(
+            {
+                "provider": {"type": "string"},
+                "connection": {"type": "string"},
+                "schema": {"type": "string"},
+                "item": {"type": "string"},
+            },
+            required=("provider", "connection", "schema", "item"),
+        ),
+        result=VECTOR_LAYER_INFO,
+        request_name="ConnectionItemRequest",
+        result_name="VectorLayerInfo",
+        # Opening the table authenticates exactly as browsing it does.
+        credential=True,
+    ),
+    HostOperation(
+        id="connections.test",
+        title="Test whether one registered connection answers",
+        source="Connections.test",
+        grant="connections.read",
+        affinity=GUI,
+        request=_object(
+            {
+                "provider": {"type": "string"},
+                "connection": {"type": "string"},
+            },
+            required=("provider", "connection"),
+        ),
+        result=CONNECTION_TEST,
+        request_name="ConnectionRequest",
+        result_name="ConnectionTest",
+        # Testing spends the stored authentication against the server: the one
+        # call whose whole purpose is to try the credential.
+        credential=True,
+    ),
+    HostOperation(
+        id="auth.configurations",
+        title="List the authentication configurations by id and name",
+        source="Connections.auth_configurations",
+        grant="auth.read",
+        affinity=GUI,
+        request=PAGE_REQUEST,
+        result=_page_result(AUTH_CONFIGURATION),
+        request_name="PageRequest",
+        result_name="AuthConfigurationPage",
+        # Reading the credential registry is a credential act even though the
+        # answer carries ids and names only.
+        credential=True,
+    ),
+    HostOperation(
+        id="auth.attach",
+        title="Attach one authentication configuration to one connection",
+        source="Connections.attach_auth_config",
+        grant="auth.write",
+        affinity=GUI,
+        request=_object(
+            {
+                "provider": {"type": "string"},
+                "connection": {"type": "string"},
+                "auth_config": {"type": "string"},
+            },
+            required=("provider", "connection", "auth_config"),
+        ),
+        result=_NOTHING,
+        request_name="AuthAttachRequest",
+        # It replaces how the connection authenticates - the old password or
+        # configuration stops being spent - and it re-binds a credential, so it
+        # carries both annotations and the consent list asks twice over.
+        destructive=True,
+        credential=True,
     ),
     HostOperation(
         id="layers.open_vector",
@@ -1019,6 +1161,9 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         request=FETCH_REQUEST,
         events={"data": FETCH_RESPONSE},
         request_name="FetchRequest",
+        # The request may name an ``auth_config``: the fetch then spends an
+        # authentication configuration the caller never sees the secret of.
+        credential=True,
     ),
 )
 

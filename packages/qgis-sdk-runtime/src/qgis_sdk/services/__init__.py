@@ -2,6 +2,7 @@
 
 from .algorithms import Algorithms
 from .canvas import Canvas, CaptureCanceller, ExtentListener
+from .connections import Connections
 from .contracts import (
     Cancellation,
     DesktopAccess,
@@ -40,6 +41,7 @@ __all__ = [
     "Cancellation",
     "Canvas",
     "CaptureCanceller",
+    "Connections",
     "Deliver",
     "DesktopAccess",
     "EditingSession",
