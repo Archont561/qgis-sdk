@@ -4524,6 +4524,197 @@ published for the bridge, and no `ts-v*` tag exists.
   `python scripts/release.py verify-versions --scope python --version 0.3.0`
   and `--scope typescript --version 0.2.0`.
 
+## 0.11.0 migration notes
+
+`0.11.0` closes the m-10 milestone: every layer kind QGIS opens now has a
+contract, a fake and a native adapter of its own - mesh, point cloud, vector
+tile, annotation and tiled scene beside vector and raster - and the release
+carries registered connections with auth configuration ids, symbology,
+labelling and the style manager, and the Processing breadth items (model
+files as runs, batches as one job, every output kind)
+([decision-54](../../../backlog/decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)).
+It is paired with `@archont561/qgis-sdk` `0.8.0`, a bridge minor, because the
+host manifest grew from 63 operations and 22 grants to 84 and 29; the
+TypeScript side of the same release is in
+[doc-13](doc-13%20-%20qgis-sdk-TypeScript-package-guide.md#080-migration-notes).
+
+**Nothing a 0.10 project does today stops working.** Every name, signature
+and refusal a 0.10 release answered still answers the same way; there is no
+renamed method, no moved import and no rewritten manifest in this minor. Two
+surfaces widen, and a type checker notices one of them before a test does.
+
+### The two surfaces that widened
+
+- **`LayerInfo` is a seven-kind union.** It was
+  `VectorLayerInfo | RasterLayerInfo`; it is now those two plus
+  `MeshLayerInfo`, `PointCloudLayerInfo`, `VectorTileLayerInfo`,
+  `AnnotationLayerInfo` and `TiledSceneLayerInfo`, each carrying its own
+  `kind` value (`"mesh"`, `"point_cloud"`, `"vector_tile"`, `"annotation"`,
+  `"tiled_scene"`). `LAYER_KIND_NAMES` grew from two values to seven and
+  `LAYER_KINDS_FOR_INPUT` from three to eight (`"any"` stays last). Code
+  that read `info.name` or `info.crs` keeps working because every branch has
+  them; code that *annotates* a variable `LayerInfo` and passes it to
+  something taking one branch narrows with the `is` checks or the new
+  `layer_kind_of(info)`, which answers the kind by name and refuses nothing.
+  The geometry-bearing fields stay vector-only (`geometry_type`,
+  `field_names`), so a caller that needs them still narrows to
+  `VectorLayerInfo` first - `layer_info(info)` keeps doing that in one call.
+- **`Algorithms` gained `run_model`, `batch` and `jobs`, and `RunResult`
+  gained the `layers` output kind.** A structural implementation of the
+  `Algorithms` protocol written against 0.10 must add the three members (the
+  fakes and both native adapters have them); a caller of the protocol gains
+  three calls and loses nothing. `RunResult.outputs` values may now also be
+  a `tuple` of `VectorLayerInfo` for a multiple-layers result, read with the
+  new `RunResult.layers(name)` (the same shape `to_wire()` tags `"layers"`,
+  see below); 0.10 had no such output, so no existing reader sees one.
+
+### Every layer kind opens
+
+- **Models.** `MeshLayerInfo`, `PointCloudLayerInfo`, `VectorTileLayerInfo`,
+  `AnnotationLayerInfo` and `TiledSceneLayerInfo`, with their schema
+  constants (`MESH_LAYER_INFO`, `POINT_CLOUD_LAYER_INFO`,
+  `VECTOR_TILE_LAYER_INFO`, `ANNOTATION_LAYER_INFO`,
+  `TILED_SCENE_LAYER_INFO`) added to `LAYER_INFO_SCHEMAS` and
+  `LAYER_INFO_NAMES`. `PointCloudLayerInfo` carries `point_count` and a
+  `crs` like the others.
+- **`Layers` calls.** `open_mesh(source)`, `open_point_cloud(source)`,
+  `open_vector_tile(source)`, `open_annotation(name)` and
+  `open_tiled_scene(source)` answer the matching info model, and
+  `list_layers` answers all seven kinds. The calls that need a vector
+  layer (`export_vector`, the selection and feature calls) keep refusing
+  anything else by kind name, and `layer_info(info)` keeps narrowing to
+  `VectorLayerInfo` in one call.
+- **Inputs and pickers.** `MeshInput`, `PointCloudInput`, `VectorTileInput`,
+  `AnnotationInput` and `TiledSceneInput` join `VectorInput` and
+  `RasterInput`, and `LayerInput(kind=...)` accepts all seven kinds plus
+  `"any"`; the default `"vector"` keeps every existing declaration's
+  meaning. A Processing parameter that names one kind refuses the others by
+  name at declaration and at run time.
+
+### Registered connections and auth configurations
+
+`ctx.connections` is the new capability (decision-54 point 1). It lists the
+provider registry one level at a time, opens a table as a vector layer and
+tests a connection as a verdict:
+
+- `list_connections() -> tuple[ConnectionInfo, ...]` and
+  `connection(provider, name) -> ConnectionInfo` describe what is
+  registered - by name, never by secret;
+- `browse(...)` answers one level of `ConnectionItem`s (`ITEM_GEOMETRIES`
+  and `CONNECTION_ITEM_KINDS` name their shapes), and
+  `open_layer(provider, name, table)` opens one as a `VectorLayerInfo`;
+- `test(provider, name) -> ConnectionTest` is a verdict, not an exception;
+- `auth_configurations() -> tuple[AuthConfiguration, ...]` answers ids and
+  names only - never a password or any other secret - and
+  `attach_auth_config(provider, name, auth_config)` re-binds one id to a
+  connection.
+
+The models (`ConnectionInfo`, `ConnectionItem`, `ConnectionTest`,
+`AuthConfiguration`, with `CONNECTION_INFO`, `CONNECTION_ITEM`,
+`CONNECTION_TEST` and `AUTH_CONFIGURATION` schemas and their
+`*_from_wire` readers) live in `qgis_sdk.models.connections`, re-exported
+from `qgis_sdk.models`. The errors are by-name refusals like every other
+service: `QgisSdkConnectionNotFoundError`, `QgisSdkConnectionItemNotFoundError`,
+`QgisSdkConnectionUnavailableError` and `QgisSdkAuthConfigNotFoundError`
+join the existing vocabulary.
+
+### Symbology, labelling and the style manager
+
+`ctx.styles`, which answered one call in 0.10 (`apply_style`), now also
+reads and writes what a layer draws with and manages its named styles:
+
+- `symbology(layer_id) -> Renderer` / `set_symbology(layer_id, renderer)`
+  with the curated renderer union (decision-16): `SingleSymbolRenderer`,
+  `CategorizedRenderer`, `GraduatedRenderer` and `RuleBasedRenderer`, their
+  `Category`, `GraduatedClass` and `Rule` records, the three symbols
+  (`MarkerSymbol`, `FillSymbol`, `LineSymbol`) and
+  `RENDERER_KIND_NAMES`, `RENDERER_SCHEMAS`, `SYMBOLS_FOR_GEOMETRY` and
+  `MARKER_SHAPES` for the checks;
+- `labelling(layer_id) -> Labelling` / `set_labelling(layer_id, labelling)`
+  with one simple `Labelling` model;
+- `list_styles(kind=None) -> tuple[StyleEntry, ...]`, and
+  `export_style(layer_id, format) -> StyleText` /
+  `import_style(layer_id, text, format)` for QML and SLD both ways
+  (`STYLE_FORMATS`). `subsymbol` exists in the metadata a `Symbol` carries,
+  not as its own model. A malformed style text is refused by name with
+  `QgisSdkStyleTextError`.
+
+### Model files, batches and every output kind
+
+- **`run_model(model, params=None) -> RunResult`** runs a `.model3` model
+  the plugin holds a `FileRef` to (decision-20). The model describes
+  itself - its parameters are the modeler's own, its outputs are the
+  exposed child outputs - and the run follows the same validation,
+  destination allocation and output conversion path as `run`;
+  `result.algorithm` is the model ref's name.
+- **`batch(runs)` is one job.** It answers a `JobHandle` (`id`, `status`,
+  `result`, `cancel`) with one progress fraction per request and a
+  cancellation check between them; `ctx.algorithms.jobs()` lists the live
+  handles. The request vocabulary lives in `qgis_sdk.batch`:
+  `BatchItem`, `BatchParam`, `BatchScalar`, `BatchValue`, `BatchRequest`
+  and `BATCH_JOB_ID`.
+- **Every output kind.** Function algorithms may declare raster, file,
+  folder, number, string, boolean, HTML and multiple-layers results
+  (`OutputKind`, `output_kind_for`, `output_kinds`; the aliases
+  `FolderOutput`, `HtmlOutput` and `MultipleLayers` beside the plain
+  returns), `OutputInfo` describes them as their kind, and a
+  `FileRef` is what a folder or HTML report comes back as - readable by the
+  plugin that ran the algorithm. On the wire, `RunResult.to_wire()` tags
+  each output `vector`, `layers`, `file` or `value` (the `RunOutput`
+  records in the bridge schemas), which is how a multi-layer result crosses
+  at all.
+
+### The grant vocabulary
+
+Seven names join the twenty-two a 0.10 project lists: `connections.read`,
+`auth.read`, `auth.write` (the credential pair - a grant the console treats
+as sensitive), `symbology.read`, `symbology.write`, `styles.read` and
+`styles.write`. The five layer-kind opens run under the existing
+`layers.open`, and `algorithms.run_model` and `algorithms.batch` run under
+the existing `algorithms.run`, so a project that grants what it granted in
+0.10 keeps running; it grants the new names only when it uses the new
+services.
+
+### Testing without QGIS
+
+- `FakeConnections` declares what a test needs: `declare_connection`,
+  `declare_table` and `declare_auth_configuration(name) -> id` (an id, not
+  a secret), then answers the whole `Connections` protocol.
+- `FakeLayers` gained the five `open_*` calls; `FakeAlgorithms` gained
+  `model_runs` (what `run_model` was called with), `script_run_model` and
+  `batch`.
+- The test fixtures the suite itself uses are readable examples:
+  `tests/layer_kind_fixtures.py` builds the three container formats the
+  native half opens (a LAS 1.2 point cloud, an MBTiles source, a 3D Tiles
+  `tileset.json`) rather than committing binaries; `tests/connection_fixtures.py`
+  builds the GeoPackage connection surface; `tests/fixtures/reference/report.model3`
+  is checked-in modeler output (internal version 2).
+
+### The bridge moves, the contract version does not
+
+The host manifest grew to 84 operations (79 calls, 5 streams) and 29 grant
+names, so `@archont561/qgis-sdk` is released as `0.8.0` with this kit and
+the components' peer range moves to `>=0.8.0 <0.9.0`.
+`BRIDGE_PROTOCOL_VERSION` is still **2**, `HOST_SCHEMA_VERSION` is still
+**1**, and the plugin description contract is still **1** - a `0.7.0` page
+and a `0.8.0` host speak the same protocol, and the manifest a page
+generates from its plugin description does not change shape.
+
+### The checklist for a 0.10 project
+
+1. Upgrade `qgis-sdk` to `0.11.0`; the kit brings `qgis-sdk-runtime==0.11.0`
+   and `qgis-sdk-tools==0.11.0`. The scaffold windows move to
+   `>=0.11,<0.12`.
+2. Nothing to rename. If you annotated a `LayerInfo` where one branch is
+   required, narrow it (`layer_kind_of`, the `is` checks).
+3. If you implement the `Algorithms` protocol yourself (not the fakes or
+   the native adapters), add `run_model`, `batch` and `jobs`.
+4. Grant the new names only for the new services (`connections.*`,
+   `auth.*`, `styles.*`, `symbology.*`); what you granted in 0.10 is still
+   sufficient for everything it ran.
+5. The npm side is `@archont561/qgis-sdk` `0.8.0` or the unscoped `qgis-sdk`
+   alias at the same version.
+
 ## 0.10.0 migration notes
 
 `0.10.0` closes the m-9 milestone: the four service areas the desktop still

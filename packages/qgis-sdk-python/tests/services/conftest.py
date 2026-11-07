@@ -917,7 +917,9 @@ def _native_services() -> Services:
         config = QgsAuthMethodConfig()
         config.setName(name)
         manager = QgsApplication.authManager()
-        if not manager.storeAuthenticationConfig(config):
+        stored = manager.storeAuthenticationConfig(config)
+        kept = bool(config.id()) and config.id() in manager.configIds()
+        if not stored or not kept:
             pytest.skip(
                 "the authentication registry needs a master password this "
                 "environment does not set"

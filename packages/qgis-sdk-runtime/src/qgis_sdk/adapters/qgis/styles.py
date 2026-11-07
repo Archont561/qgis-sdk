@@ -26,7 +26,6 @@ import tempfile
 from pathlib import Path
 
 from qgis.core import (
-    QColor,
     QgsCategorizedSymbolRenderer,
     QgsClassificationCustom,
     QgsClassificationEqualInterval,
@@ -50,6 +49,7 @@ from qgis.core import (
     QgsVectorLayer,
     QgsVectorLayerSimpleLabeling,
 )
+from qgis.PyQt.QtGui import QColor
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (

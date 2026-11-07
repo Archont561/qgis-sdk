@@ -6,11 +6,10 @@ created_date: '2026-10-26 10:20'
 ---
 # M10 sprint train and 0.11.0 dependency order
 
-**Status:** Running. The TASK-90 gate passed with the 0.10.0 pair on
-2026-11-06, so the train has started: sprint 1 (TASK-91) is implemented and
-Done, all five layer kinds opening natively; sprint 2 (TASK-93) is implemented
-and Done, symbology, labelling and the style manager behind the curated
-surface. Next is sprint 3 (TASK-92), connections and auth configuration ids.
+**Status:** The four sprints landed (#173, #174, #175, #176; merged as
+`81ba5833`, `f3c7ed67`, `e4da5a39` and `e5e24c87` on 2026-11-07) and the
+TASK-95 gate is in review as #177; it records the evidence, writes the
+0.11.0 and 0.8.0 migration notes and stamps the pair, and it spends no tag.
 Orders work the m-10 tasks already declare; adds no scope. Sprint membership
 lives here and in the milestone body
 ([doc-10](../doc-10%20-%20Backlog-conventions-vocabulary-statuses-and-predicates.md)).
@@ -44,11 +43,18 @@ project service, canvas, features and layouts. Remaining rows of
   mode.
 - **Sprint 3: TASK-92.** Connections registry, browse, open from a
   connection, auth configuration ids - never secrets; PostGIS row recorded
-  or blocked by environment.
+  or blocked by environment. Done, PR #175: the fixture file is built by
+  `tests/connection_fixtures.py`, a registered password is proven never to
+  cross a description, and the PostGIS row runs against `QGIS_SDK_TEST_POSTGIS`
+  or is recorded as blocked by environment.
 - **Sprint 4: TASK-94.** Processing discovery and help, every output kind,
-  `run_model`, `batch` as a job.
-- **Gate: TASK-95.** `python-v0.11.0` paired with the next `ts-v*` minor;
-  doc-22 complete or out of scope by decision for every row.
+  `run_model`, `batch` as a job. Done, PR #176: the `.model3` fixture is
+  checked-in modeler output (internal version 2), `batch` is one job with a
+  fraction per request and a cancellation check between them, and discovery
+  and help narrowed to TASK-109 (decision-54 point 4).
+- **Gate: TASK-95.** `python-v0.11.0` paired with the `ts-v0.8.0` bridge
+  minor; doc-22 complete or out of scope by decision for every row. In
+  review as #177.
 
 ## 4. Hygiene at sprint start
 
