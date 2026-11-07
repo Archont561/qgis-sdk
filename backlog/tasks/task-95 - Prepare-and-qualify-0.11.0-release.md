@@ -95,8 +95,17 @@ windows moved to `>=0.10,<0.11` is read as `VERSION001` (outside the range
 this tools release supports, `>=0.11.0,<0.12`) and `VERSION004` (the
 importable runtime is 0.11.0), each with its remediation - *checked 3
 files: 2 problems*, a report of what changed, not a crash. The native
-rows, the smoke and opt-in harnesses, the Bun suites, `check-generated`
-(pixi) and Conda are not runnable in this sandbox and are CI-carried.
+rows, the smoke and opt-in harnesses, the Processing snapshot check, the
+`check-generated` (pixi) lane and Conda are not runnable in this sandbox
+and are CI-carried. The TypeScript lanes *were* run here (bun 1.4.4
+installed from npm for the gate): 315 bridge tests, 12 alias, 100 ui and
+13 ui-alias, 42 docs tests, the site build and `check-links` (12167
+links, 0 broken), both typechecks and the reference page's Vitest chain -
+green after this gate repaired what the sprint merges left red: the
+`RunAlgorithmRequest` re-export in `src/host.ts` (now
+`BatchRequestRunsItem`, renamed in the manifest by the batch vocabulary),
+`host.test.ts`'s 63-operation catalogue and `qgis-sdk.test.ts`'s 17-key
+`qgis.host` list. The rename is recorded in doc-13's 0.8.0 notes.
 
 AC 4 (approval). doc-14's "0.11.0 release gate (2026-11-07)" records every
 lane, command and artifact above, including what was not run and where it

@@ -1312,13 +1312,18 @@ page makes to use them are listed at the end of this section.
 **What moved, and what deliberately did not.** `HOST_FINGERPRINT` is
 `sha256:2c686bb06a3cf63aca219e2a1751a4f00d574472e20ea9cfb52c318bfeed7ec3`
 where `0.7.0` carried `sha256:9aa12425...`, so a client that pins the
-fingerprint must take the new value. `HOST_SCHEMA_VERSION` stays `1` and so
-does `PLUGIN_DESCRIPTION_SCHEMA_VERSION`: the envelope and the plugin
-description keep their shape and only the operation catalogue grew, from 63
-operations and 22 grant names to **84 operations (79 calls, 5 streams) and
-29 grants**. `BRIDGE_PROTOCOL_VERSION` is still `2` - it moved to `2` for
-the stream `ack` in the `0.7.0` train, and nothing here changes the
-protocol, the frame kinds or the `gap` semantics again.
+fingerprint must take the new value. One type name moved with the manifest:
+the request of `algorithms.run`, `RunAlgorithmRequest` in `0.7.0`, is now
+**`BatchRequestRunsItem`** - the same `{ algorithm_id, params }` shape,
+renamed because a batch request item *is* the run request and the two now
+share one schema. A page that imported `RunAlgorithmRequest` renames the
+import; nothing else about the call changes. `HOST_SCHEMA_VERSION` stays
+`1` and so does `PLUGIN_DESCRIPTION_SCHEMA_VERSION`: the envelope and the
+plugin description keep their shape and only the operation catalogue grew,
+from 63 operations and 22 grant names to **84 operations (79 calls, 5
+streams) and 29 grants**. `BRIDGE_PROTOCOL_VERSION` is still `2` - it
+moved to `2` for the stream `ack` in the `0.7.0` train, and nothing here
+changes the protocol, the frame kinds or the `gap` semantics again.
 
 ### The typed surface grows
 
@@ -1364,8 +1369,10 @@ and `./testing` remain the opt-in entry points.
 1. Move `@archont561/qgis-sdk` (or `qgis-sdk`) to `0.8.0`; reinstall the
    components at `0.1.0` so their peer range resolves.
 2. If you pin `HOST_FINGERPRINT`, take the `0.8.0` value.
-3. Nothing to rename and nothing to re-envelope: `protocol` is `2` as
-   before. The typed catalogue simply has twenty-one more calls.
+3. If you imported `RunAlgorithmRequest`, rename it to
+   `BatchRequestRunsItem`. Nothing else to rename and nothing to
+   re-envelope: `protocol` is `2` as before. The typed catalogue simply has
+   twenty-one more calls.
 4. Read the `"layers"` case if you consume `RunResult`-style tagged outputs.
 
 ## 0.7.0 migration notes

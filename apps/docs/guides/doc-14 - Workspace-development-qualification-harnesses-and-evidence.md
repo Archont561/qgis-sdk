@@ -2206,14 +2206,16 @@ and the native QGIS rows remain CI evidence rather than local runs.
 What was run on this checkout on Linux x86-64 with CPython 3.11.2, pytest
 9.1.1, Ruff 0.17.1, Alint 0.20.1, twine 7.0.0 and build 1.6.1 (with
 hatchling 1.32.4 as the backend the manifests pin), the runtime and the tools
-imported from their `src` trees in throwaway `venv`s. **No QGIS, no Qt, no bun
-and no pixi are present in this sandbox**, so the native layers, the smoke and
-opt-in harnesses, the Bun suites (bridge, stores, components, docs) and the
-Conda build are recorded as *not run* below and are carried by the
-`Linux checks`, `Linux coverage`, `QGIS 3.44 LTS`, `build-and-check-site` and
-`autorelease` rows. The TypeScript package, the components and the scaffold
-pin **are** stamped, because this minor moves the host catalogue again; the
-Python trio is stamped with it.
+imported from their `src` trees in throwaway `venv`s. **No QGIS, no Qt and no
+pixi are present in this sandbox** - and no bun at the start of the gate, so
+bun 1.4.4 was installed from npm to run the TypeScript lanes here rather
+than defer them. The native layers, the smoke and opt-in harnesses, the
+Conda build and the pixi-owned generated-files check are recorded as *not
+run* below and are carried by the `Linux checks`, `Linux coverage`,
+`QGIS 3.44 LTS`, `build-and-check-site` and `autorelease` rows. The
+TypeScript package, the components and the scaffold pin **are** stamped,
+because this minor moves the host catalogue again; the Python trio is
+stamped with it.
 
 - **Required work (AC 1).** TASK-91, 92, 93 and 94 are Done - layer kinds
   (PR #173, `81ba5833`), symbology, labelling and the style manager (PR #174,
@@ -2284,8 +2286,8 @@ Python trio is stamped with it.
   `test_service_coverage.py` passes against the updated map.
 - **The migration notes (AC 1).** doc-12 gained `## 0.11.0 migration notes`
   and doc-13 `## 0.8.0 migration notes`, both final rather than
-  "(in progress)", so the site routes `python-migration/v0-11` and
-  `typescript-migration/v0-8` as released pages. They cover the one shape
+  "(in progress)", so the site routes `python/migration/v0-11` and
+  `typescript/migration/v0-8` as released pages. They cover the one shape
   family that widened (`LayerInfo` as a seven-kind union, `LayerKind`,
   `LAYER_KIND_NAMES`, `LAYER_KINDS_FOR_INPUT`, `LayerInput`), the two
   surfaces that grew (`Algorithms` gaining `run_model`, `batch` and `jobs`;
@@ -2295,12 +2297,15 @@ Python trio is stamped with it.
   models and `QgisSdkConnection*` errors, the renderer, symbol and labelling
   models with `QgisSdkStyleTextError`, `RunOutput`'s four wire kinds,
   `OutputKind` and the eight non-vector result faces, `qgis_sdk.batch` and
-  `FakeConnections` - plus the seven new grant names (`connections.read`,
-  `auth.read`, `auth.write`, `symbology.read`, `symbology.write`,
-  `styles.read`, `styles.write`) against the twenty-two a 0.10 project
+  `FakeConnections` - plus the one renamed type
+  (`RunAlgorithmRequest` to `BatchRequestRunsItem`, the same
+  `{ algorithm_id, params }` shape) and the seven new grant names
+  (`connections.read`, `auth.read`, `auth.write`, `symbology.read`,
+  `symbology.write`, `styles.read`, `styles.write`) against the twenty-two
+  a 0.10 project
   already lists, and a checklist for a 0.10
-  project. The docs build and its link check are Bun jobs and are
-  CI-carried; the anchors were checked by hand against the headings they
+  project. The docs build and its link check ran here under bun (see
+  below); the anchors were checked by hand against the headings they
   name.
 - **The stamp (AC 2).** `release.py stamp --version 0.11.0 --scope python`
   moved the kit, runtime and tools manifests, the kit's exact pins (runtime,
@@ -2358,17 +2363,39 @@ Python trio is stamped with it.
   **`VERSION004`** ("declares `qgis-sdk-runtime>=0.10,<0.11` but the
   importable runtime is 0.11.0"), each with its remediation, *checked 3
   files: 2 problems* - a report of what changed, not a crash.
+- **The TypeScript lanes run here, and the defects they caught (AC 1).** The
+  first gate run of `bun run --filter '@archont561/qgis-sdk' build` failed
+  with *No matching export in `src/generated/host.ts` for import
+  `RunAlgorithmRequest`*: the sprints had regenerated the manifest three
+  times without moving `src/host.ts`'s curated re-export list, which still
+  named the `0.7.0` request of `algorithms.run` (the type is
+  `BatchRequestRunsItem` now, the same `{ algorithm_id, params }` shape) and
+  never grew with the new surfaces. Two test fixtures were stale the same
+  way - `host.test.ts` still pinned the 63-operation catalogue and
+  `qgis-sdk.test.ts` the 17-key `qgis.host` list. This gate repairs all
+  three (the rename is recorded in doc-13's 0.8.0 notes), and with bun
+  1.4.4 installed the TypeScript lanes run here: `bun test
+  packages/qgis-sdk-typescript/tests` **315 pass, 0 fail** (bridge, stores,
+  React/Vue/Svelte adapters, testing harness, surface and validate suites),
+  the alias suite **12 pass**, `qgis-sdk-ui` **100 pass** and its alias
+  **13 pass** under `--conditions=browser`, the docs suite **42 pass**, the
+  site build **99 pages** and `check-links` **12167 internal links on 139
+  pages, 0 broken**, the bridge and UI typechecks green, and the reference
+  page's Vitest chain (`bun run test --filter simple-web`) **6 of 6 tasks**.
+  The four README-mirror policy rules pass over the six edited status lines.
 - **Not run here, and where it is run.** The 97 native rows (the five
   layer-kind native tests, the connections/auth native suite, the symbology
   native suite, `test_algorithms_native.py`'s model and batch rows, and the
   rest of `tests/services/..._native.py`), the seven `smoke` rows and the
   opt-in harnesses (`QGIS_SDK_NATIVE_SERVICES=1`, the webengine probes and
-  the Desktop lifecycle rows) run in `QGIS 3.44 LTS`; the pre-push splits of
-  the pure suite run in `Linux checks` and `Linux coverage`; the Bun suites
-  (`bridge`, `stores`, `components`, `ui alias`, `docs`, the docs link check,
-  typecheck and `bun pm pack`) run in `checks` and `build-and-check-site`;
-  `check-generated` needs pixi; and Conda is unreachable from this sandbox.
-  The Windows and macOS QGIS rows stay *unqualified* per TASK-33.
+  the Desktop lifecycle rows) run in `QGIS 3.44 LTS`, as does the
+  Processing snapshot check (`generate_processing_snapshot.py --check`
+  needs QGIS bindings); the pre-push splits of the pure suite and the
+  coverage thresholds run in `Linux checks` and `Linux coverage`; the
+  Windows and macOS halves run in `cross-platform`; `check-generated` needs
+  pixi; `actionlint` and `convco` are CI tooling not present here; and
+  Conda is unreachable from this sandbox. The Windows and macOS QGIS rows
+  stay *unqualified* per TASK-33.
 - **Approval (AC 4).** This record is a gate, not a release: nothing is
   tagged, nothing is uploaded, and no date is promised for 1.0.0. The two
   tags this minor would spend - `python-v0.11.0` and `ts-v0.8.0`, or their

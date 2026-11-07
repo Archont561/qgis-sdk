@@ -43,9 +43,9 @@
     },
     "packages/qgis-sdk-alias": {
       "name": "qgis-sdk",
-      "version": "0.5.0",
+      "version": "0.8.0",
       "dependencies": {
-        "@archont561/qgis-sdk": "0.4.0",
+        "@archont561/qgis-sdk": "0.8.0",
       },
       "peerDependencies": {
         "react": ">=18",
@@ -64,7 +64,7 @@
     },
     "packages/qgis-sdk-typescript": {
       "name": "@archont561/qgis-sdk",
-      "version": "0.5.0",
+      "version": "0.8.0",
       "devDependencies": {
         "@archont561/bun-test-utils": "^0.1.0",
         "@types/node": "26.6.5",
@@ -118,7 +118,7 @@
         "vue": "3.5.44",
       },
       "peerDependencies": {
-        "@archont561/qgis-sdk": ">=0.4.0 <0.5.0",
+        "@archont561/qgis-sdk": ">=0.8.0 <0.9.0",
         "@lit/react": ">=1",
         "react": ">=18",
         "svelte": ">=5",
@@ -138,7 +138,7 @@
         "@archont561/qgis-sdk-ui": "0.1.0",
       },
       "peerDependencies": {
-        "@archont561/qgis-sdk": ">=0.4.0 <0.5.0",
+        "@archont561/qgis-sdk": ">=0.8.0 <0.9.0",
         "@lit/react": ">=1",
         "react": ">=18",
         "svelte": ">=5",
