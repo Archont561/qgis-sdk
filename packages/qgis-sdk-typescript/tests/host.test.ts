@@ -92,10 +92,14 @@ test("the host module names its surface and advertises its version", () => {
 	expect(HOST_SCHEMA_VERSION).toBe(1);
 	expect(HOST_FINGERPRINT.startsWith("sha256:")).toBe(true);
 	expect(HOST_OPERATIONS).toEqual([
+		"algorithms.batch",
 		"algorithms.describe",
 		"algorithms.list",
 		"algorithms.providers",
 		"algorithms.run",
+		"algorithms.run_model",
+		"auth.attach",
+		"auth.configurations",
 		"blob.get",
 		"canvas.apply_theme",
 		"canvas.capture",
@@ -107,6 +111,11 @@ test("the host module names its surface and advertises its version", () => {
 		"canvas.scale",
 		"canvas.themes",
 		"canvas.zoom_to",
+		"connections.browse",
+		"connections.describe",
+		"connections.list",
+		"connections.open_layer",
+		"connections.test",
 		"editing.add",
 		"editing.begin",
 		"editing.commit",
@@ -118,6 +127,8 @@ test("the host module names its surface and advertises its version", () => {
 		"features.get",
 		"features.page",
 		"files.export",
+		"labelling.get",
+		"labelling.set",
 		"layers.get",
 		"layers.list",
 		"layers.open_annotation",
@@ -160,6 +171,11 @@ test("the host module names its surface and advertises its version", () => {
 		"rasters.statistics",
 		"settings.get",
 		"styles.apply",
+		"styles.export",
+		"styles.import",
+		"styles.list",
+		"symbology.get",
+		"symbology.set",
 	]);
 });
 

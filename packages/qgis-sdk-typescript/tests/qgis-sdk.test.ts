@@ -376,13 +376,16 @@ test("`host` is the curated surface on the same client, with every grant by defa
 	expect(qgis.host.granted).toEqual([...HOST_OPERATIONS]);
 	expect(Object.keys(qgis.host).sort()).toEqual([
 		"algorithms",
+		"auth",
 		"blob",
 		"canvas",
+		"connections",
 		"editing",
 		"expressions",
 		"features",
 		"files",
 		"granted",
+		"labelling",
 		"layers",
 		"layouts",
 		"network",
@@ -391,6 +394,7 @@ test("`host` is the curated surface on the same client, with every grant by defa
 		"rasters",
 		"settings",
 		"styles",
+		"symbology",
 		"theme",
 	]);
 	harness.expectInvoke("layers.list", (payload) => {
