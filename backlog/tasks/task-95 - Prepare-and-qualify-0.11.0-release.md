@@ -95,8 +95,43 @@ windows moved to `>=0.10,<0.11` is read as `VERSION001` (outside the range
 this tools release supports, `>=0.11.0,<0.12`) and `VERSION004` (the
 importable runtime is 0.11.0), each with its remediation - *checked 3
 files: 2 problems*, a report of what changed, not a crash. The native
-rows, the smoke and opt-in harnesses, the Bun suites, `check-generated`
-(pixi) and Conda are not runnable in this sandbox and are CI-carried.
+rows, the smoke and opt-in harnesses, the Processing snapshot check, the
+`check-generated` (pixi) lane and Conda are not runnable in this sandbox
+and are qualified by CI. The Bun lanes were run here (bun installed from
+npm for the gate, pinned to the 1.4.2 `pixi.toml` names for the coverage
+numbers): 318 bridge tests, 12 alias, 100 ui and 13 ui-alias, 42 docs
+tests, the site build and `check-links` (12596 links on 141 pages, 0
+broken), both typechecks, both coverage lanes and the reference page's
+Vitest chain. The pure lane is 2850 passed, 28 skipped.
+
+AC 4 is where this gate did most of its work: the sprint merges handed
+over red and the gate repaired eleven inherited defects, each recorded in
+doc-14's gate section. The TypeScript side was the stale `RunAlgorithmRequest`
+re-export in `src/host.ts` (now `BatchRequestRunsItem`), two fixtures
+pinning the 0.7.0 catalogue (63 operations, 17 host keys), and
+`src/generated/host.ts` at 76.5%/65.5% against the per-file 90% bar -
+`tests/generated-host.test.ts` sweeps every generated guard and
+`createHost` arrow, taking it to 95.6%/100%. The native side was
+`adapters/qgis/styles.py` importing `QColor` from `qgis.core`; destination
+allocation refusing every model run because a model names its destinations
+after its children (`native:centroids_1:CENTROIDS`); a GeoPackage `ogr`
+connection whose refused `Schemas` operation read as an unavailable
+connection; a `NoGeometry` column reported as the kind `"none"`; the FID
+column described as a field; and `run_model` answering under names no
+caller could read, now named from the description the `.model3` document
+declares (`centroids`, `report`) with the child's name as the fallback.
+The app probe learned TASK-94's third pump, two fixtures that passed on a
+QGIS capability this environment lacks now skip as blocked by environment,
+and the UI pack test rebuilds a partial `dist`. The rename is recorded in
+doc-13's 0.8.0 notes.
+
+The pull request's own rows (#177) then ran fully green: `Linux checks`
+(fake and native suites), `Linux coverage`, `QGIS 3.44 LTS`,
+`cross-platform` on macOS and Windows, `build and check the site`,
+`backlog drift`, `lock guard` and the aggregate `checks`; `deploy to
+GitHub Pages` and `relock` are skipped on a pull request by design. The
+native rows this sandbox cannot run are therefore qualified by the LTS
+row, not left unqualified.
 
 AC 4 (approval). doc-14's "0.11.0 release gate (2026-11-07)" records every
 lane, command and artifact above, including what was not run and where it
