@@ -293,11 +293,6 @@ class NativeAlgorithms:
                 # A model answers under the child destination's name, in the
                 # case its file declares; the caller reads the model's.
                 lowered = {key.lower(): value for key, value in rename.items()}
-                if True:
-                    raise QgisSdkAlgorithmFailedError(
-                        label,
-                        f"PROBE answered={sorted(raw)} named={sorted(rename.items())}",
-                    )
                 raw = {
                     lowered.get(key.lower(), key): value for key, value in raw.items()
                 }

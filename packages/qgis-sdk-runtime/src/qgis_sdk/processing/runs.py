@@ -77,58 +77,60 @@ def model_output_names(info: AlgorithmInfo) -> tuple[AlgorithmInfo, dict[str, st
     (``CENTROIDS``); version 2 of the format names the exposed output after
     its description instead - ``Centroids`` becomes ``centroids`` and
     ``Report`` becomes ``report`` - because the child's name belongs to the
-    child that writes it. The loaded file may hand the results back under
-    either name, so the rule answers both the description the caller reads
-    (an ``AlgorithmInfo`` whose outputs carry the derived names) and the
-    mapping that re-keys the run's raw outputs onto them.
+    child that writes it. A loaded model describes those outputs twice: as
+    output definitions, whose description is often empty and whose name is
+    the destination's, and as the destination parameters the format derives,
+    whose description is the designer's. The description decides, the tail of
+    the child output's name is the fallback, and the mapping answers both the
+    description the caller reads (an ``AlgorithmInfo`` whose outputs carry
+    the derived names) and the names a run answers under.
     """
 
-    def derived(label: str, fallback: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or fallback
+    def derived(label: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+
+    def tail(name: str) -> str:
+        return name.rsplit(":", 1)[-1].lower()
 
     names: dict[str, str] = {}
-    taken: set[str] = set()
     for output in info.outputs:
-        candidate = derived(output.label, output.name.lower())
-        suffix = 2
+        names[output.name] = derived(output.label) or tail(output.name)
+    # The destination parameter is the same output seen from the run's side,
+    # and its description is the one the designer wrote, so it wins.
+    for parameter in info.parameters:
+        if not parameter.destination:
+            continue
+        names[parameter.name] = (
+            derived(parameter.label)
+            or names.get(parameter.name)
+            or tail(parameter.name)
+        )
+    taken: set[str] = set()
+    for key, candidate in list(names.items()):
         base = candidate
+        suffix = 2
         while candidate in taken:
             candidate = f"{base}_{suffix}"
             suffix += 1
         taken.add(candidate)
-        names[output.name] = candidate
-    # A loaded model answers under the destinations the format derives for
-    # its children - ``native:centroids_1:CENTROIDS``, which this Processing
-    # lower-cases - and those are parameters, not outputs, so they are named
-    # by their description too. Matching is by lower-cased name at the call
-    # site: the file's case is not the case the run answers with.
-    extra: list[OutputInfo] = []
+        names[key] = candidate
     declared = {output.name for output in info.outputs}
+    described = [replace(output, name=names[output.name]) for output in info.outputs]
     for parameter in info.parameters:
-        if not parameter.destination or parameter.name in names:
+        if not parameter.destination:
             continue
-        tail = parameter.name.rsplit(":", 1)[-1].lower()
-        candidate = derived(parameter.label, tail)
-        names[parameter.name] = candidate
-        if candidate not in declared:
-            extra.append(
-                OutputInfo(
-                    name=candidate,
-                    kind=DESTINATION_OUTPUT_KINDS.get(parameter.kind, "outputFile"),
-                    label=parameter.label,
-                )
+        candidate = names[parameter.name]
+        if candidate in {output.name for output in described}:
+            continue
+        described.append(
+            OutputInfo(
+                name=candidate,
+                kind=DESTINATION_OUTPUT_KINDS.get(parameter.kind, "outputFile"),
+                label=parameter.label,
             )
-            declared.add(candidate)
-    return (
-        replace(
-            info,
-            outputs=tuple(
-                replace(output, name=names[output.name]) for output in info.outputs
-            )
-            + tuple(extra),
-        ),
-        names,
-    )
+        )
+        declared.add(candidate)
+    return replace(info, outputs=tuple(described)), names
 
 
 def coerce_run(
