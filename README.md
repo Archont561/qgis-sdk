@@ -15,8 +15,9 @@ plugin logic without QGIS, and use the same actions in native and web
 interfaces. Generate typed TypeScript clients, run your plugin from source,
 and build an installable ZIP with its own private SDK runtime.
 
-> Status: experimental `0.x` - Python kit `0.10.0`, TypeScript SDK `0.7.0`,
-> web components `0.1.0`. The 0.10.0 minor moved the host catalogue, so the
+> Status: experimental `0.x` - Python kit `0.11.0`, TypeScript SDK `0.8.0`,
+> web components `0.1.0`. The 0.11.0 minor moved the host catalogue again
+> (layer kinds, connections, symbology and Processing breadth), so the
 > bridge is released with it; a package's number moves only when its own
 > content does. Every `0.Y.0` carries migration notes; nothing is promised
 > stable before `1.0.0`.

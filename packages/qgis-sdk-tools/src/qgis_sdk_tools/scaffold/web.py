@@ -40,7 +40,7 @@ __all__ = [
 LF: Final = "\n"
 
 SDK_NPM_PACKAGE: Final = "@archont561/qgis-sdk"
-SDK_NPM_VERSION: Final = "0.7.0"
+SDK_NPM_VERSION: Final = "0.8.0"
 """The published bridge this scaffold is written against, pinned exactly.
 
 ``scripts/release.py stamp --scope typescript`` moves it with every bridge
