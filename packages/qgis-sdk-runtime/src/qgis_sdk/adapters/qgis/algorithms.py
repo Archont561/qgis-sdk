@@ -103,6 +103,34 @@ def _processing():
     return processing
 
 
+def _declared_outputs(model: Any) -> dict[str, str]:
+    """What a loaded model declares about its exposed outputs, by description.
+
+    ``modelOutputDefinitions`` is the designer's own map, so it survives a
+    Processing that answers the derived destination parameters without
+    carrying their descriptions. Each entry is keyed twice - by the model
+    output's name and by the ``child:output`` destination the run answers
+    under - because either can be the name a run produces.
+    """
+    declared: dict[str, str] = {}
+    definitions = getattr(model, "modelOutputDefinitions", None)
+    if definitions is None:
+        return declared
+    for name, output in dict(definitions() or {}).items():
+        text = output.description() if hasattr(output, "description") else ""
+        if not text:
+            continue
+        declared[str(name)] = text
+        child = output.childId() if hasattr(output, "childId") else ""
+        child_output = (
+            output.childOutputName() if hasattr(output, "childOutputName") else ""
+        )
+        if child:
+            declared[f"{child}:{child_output or name}"] = text
+            declared[f"{child}:{name}"] = text
+    return declared
+
+
 class NativeAlgorithms:
     """Run registered operations through QGIS Processing.
 
@@ -215,7 +243,9 @@ class NativeAlgorithms:
         # The model names its exposed outputs, not the children that write
         # them; the run is described by those names and its raw outputs are
         # re-keyed onto them.
-        info, output_names = model_output_names(algorithm_info(loaded, "model"))
+        info, output_names = model_output_names(
+            algorithm_info(loaded, "model"), _declared_outputs(loaded)
+        )
         return self._run_described(
             info,
             dict(params or {}),

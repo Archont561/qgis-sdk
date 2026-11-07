@@ -70,7 +70,10 @@ DEFAULT_EXTENSIONS: dict[str, str] = {
 }
 
 
-def model_output_names(info: AlgorithmInfo) -> tuple[AlgorithmInfo, dict[str, str]]:
+def model_output_names(
+    info: AlgorithmInfo,
+    descriptions: Mapping[str, str] | None = None,
+) -> tuple[AlgorithmInfo, dict[str, str]]:
     """A model's outputs, named the way version 2 of the format derives them.
 
     A model exposes a *child* output, and the child names it after itself
@@ -84,7 +87,13 @@ def model_output_names(info: AlgorithmInfo) -> tuple[AlgorithmInfo, dict[str, st
     the child output's name is the fallback, and the mapping answers both the
     description the caller reads (an ``AlgorithmInfo`` whose outputs carry
     the derived names) and the names a run answers under.
+
+    ``descriptions`` is what the loaded model itself declares - keyed by an
+    output's own name or by the ``child:output`` destination it exposes - and
+    it is the source that survives a QGIS which drops descriptions from the
+    parameter definitions. It wins over both.
     """
+    declared_text = dict(descriptions or {})
 
     def derived(label: str) -> str:
         return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
@@ -94,16 +103,16 @@ def model_output_names(info: AlgorithmInfo) -> tuple[AlgorithmInfo, dict[str, st
 
     names: dict[str, str] = {}
     for output in info.outputs:
-        names[output.name] = derived(output.label) or tail(output.name)
+        text = declared_text.get(output.name, output.label)
+        names[output.name] = derived(text) or tail(output.name)
     # The destination parameter is the same output seen from the run's side,
     # and its description is the one the designer wrote, so it wins.
     for parameter in info.parameters:
         if not parameter.destination:
             continue
+        text = declared_text.get(parameter.name, parameter.label)
         names[parameter.name] = (
-            derived(parameter.label)
-            or names.get(parameter.name)
-            or tail(parameter.name)
+            derived(text) or names.get(parameter.name) or tail(parameter.name)
         )
     taken: set[str] = set()
     for key, candidate in list(names.items()):
