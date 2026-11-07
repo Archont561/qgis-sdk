@@ -28,6 +28,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import connection_fixtures as connection_files
 import layer_kind_fixtures as fixture_files
 import layers as test_layers
 import pytest
@@ -38,6 +39,7 @@ from qgis_sdk.models.canvas import CanvasExtent, CanvasPoint
 from qgis_sdk.services import (
     Algorithms,
     Canvas,
+    Connections,
     Features,
     Layers,
     Layouts,
@@ -179,6 +181,18 @@ class Services:
     #: Layer data, expressions and editing (TASK-86). ``None`` while a backend
     #: has not joined the contract, so one slice failing is one test failing.
     features: Features | None = None
+    #: Registered data-source connections and auth configuration ids (TASK-92).
+    #: ``None`` while a backend has not joined the contract.
+    connections: Connections | None = None
+    #: Put one authentication configuration in the registry and answer the id
+    #: the registry gave it; cleaned up with the backend's scope. A test never
+    #: writes an id it expects back, because the registry chooses it on both
+    #: backends.
+    declare_auth_configuration: Callable[[str], str] | None = None
+    #: The PostGIS fixture connection's name when the backend holds one;
+    #: ``None`` records "blocked by environment" - no server answers, so the
+    #: row is recorded rather than pretended (TASK-92's acceptance criterion).
+    postgis_connection: str | None = None
     #: A layer that may be edited, freshly prepared for one test. Native copies
     #: the fixture so a commit writes to a file the test owns; the fake declares
     #: its own layer, so nothing on disk is touched.
@@ -438,6 +452,7 @@ def _fake_services() -> Services:
     from qgis_sdk.testing import (
         FakeAlgorithms,
         FakeCanvas,
+        FakeConnections,
         FakeFiles,
         FakeLayers,
         FakeLayouts,
@@ -556,6 +571,61 @@ def _fake_services() -> Services:
     )
     del editable
     styles = FakeStyles(layers, scope)
+    # The connections registry (TASK-92): the GeoPackage fixture every backend
+    # declares, the PostGIS one the fake always holds, and the connection
+    # nothing serves. The GeoPackage answers provider ``ogr`` because that is
+    # the registry key its native half is listed under - QGIS implements the
+    # GeoPackage connection methods in OGR.
+    connections = FakeConnections(layers)
+    connections.declare_connection(
+        connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
+    )
+    connections.declare_table(
+        connection_files.GPKG_CONNECTION,
+        connection_files.GPKG_ROADS,
+        kind=connection_files.GPKG_ROADS_KIND,
+        geometries=connection_files.GPKG_ROADS_GEOMETRIES,
+        fields=connection_files.GPKG_ROADS_FIELDS,
+        crs=connection_files.FIXTURE_CRS,
+    )
+    connections.declare_table(
+        connection_files.GPKG_CONNECTION,
+        connection_files.GPKG_PLACES,
+        kind=connection_files.GPKG_PLACES_KIND,
+        geometries=connection_files.GPKG_PLACES_GEOMETRIES,
+        fields=connection_files.GPKG_PLACES_FIELDS,
+        crs=connection_files.FIXTURE_CRS,
+    )
+    connections.declare_table(
+        connection_files.GPKG_CONNECTION,
+        connection_files.GPKG_NOTES,
+        kind=connection_files.GPKG_NOTES_KIND,
+        geometries=connection_files.GPKG_NOTES_GEOMETRIES,
+        fields=connection_files.GPKG_NOTES_FIELDS,
+    )
+    connections.declare_connection(
+        connection_files.POSTGIS_CONNECTION,
+        provider="postgres",
+        schemas=(connection_files.POSTGIS_SCHEMA,),
+    )
+    connections.declare_table(
+        connection_files.POSTGIS_CONNECTION,
+        connection_files.POSTGIS_POINTS,
+        provider="postgres",
+        schema=connection_files.POSTGIS_SCHEMA,
+        kind=connection_files.POSTGIS_POINTS_KIND,
+        geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
+        fields=connection_files.POSTGIS_POINTS_FIELDS,
+        crs=connection_files.FIXTURE_CRS,
+    )
+    connections.declare_connection(
+        connection_files.BROKEN_CONNECTION,
+        provider="postgres",
+        valid=False,
+        message=(
+            "connection to server at 127.0.0.1, port 1 failed: Connection refused"
+        ),
+    )
     rasters.register(
         RASTER_DATASET,
         name=RASTER_NAME,
@@ -681,6 +751,9 @@ def _fake_services() -> Services:
         declare_groups=declare_groups,
         settings=FakeSettings(scope),
         styles=styles,
+        connections=connections,
+        declare_auth_configuration=connections.declare_auth_configuration,
+        postgis_connection=connection_files.POSTGIS_CONNECTION,
         notifications=RecordingNotifications(scope),
         scope=scope,
         dataset=FIXTURE_DATASET,
@@ -706,6 +779,7 @@ def _native_services() -> Services:
         NativeRasters,
         NativeSettings,
     )
+    from qgis_sdk.adapters.qgis.connections import NativeConnections
     from qgis_sdk.adapters.qgis.styles import NativeStyles
 
     # Contract tests share one application, so each backend instance starts from
@@ -721,6 +795,7 @@ def _native_services() -> Services:
     layers = NativeLayers(scope, rasters=rasters)
     project = NativeProject(layers, scope, rasters=rasters)
     styles = NativeStyles(layers, scope)
+    connections = NativeConnections(layers)
     project_directory = _project_work_directory()
     raster_file = _geotiff_fixture()
     # The point cloud, vector tile and tiled-scene fixtures (TASK-91), built once
@@ -736,6 +811,58 @@ def _native_services() -> Services:
     tiled_scene_file = fixture_files.write_tiled_scene(
         layer_kind_directory / "scene" / "tileset.json"
     )
+    # The connections registry (TASK-92): the fixture GeoPackage file is built
+    # and its connection registered in QGIS's own settings, and the scope
+    # removes it again - a contract run never leaves a trace in the profile.
+    from qgis.core import QgsProviderRegistry
+
+    registry = QgsProviderRegistry.instance()
+    gpkg_file = connection_files.write_geopackage(
+        layer_kind_directory / connection_files.GPKG_FILE
+    )
+    ogr = registry.providerMetadata("ogr")
+    stored = ogr.createConnection(str(gpkg_file), {})
+    stored.store(connection_files.GPKG_CONNECTION)
+    scope.on_close(lambda: ogr.deleteConnection(connection_files.GPKG_CONNECTION))
+    # The connection nothing serves: registered with a password in its settings
+    # so the no-secret claim has a secret to refuse, and pointed at a dead port
+    # so ``test`` has a verdict to answer - neither needs a server.
+    postgres = registry.providerMetadata("postgres")
+    broken = postgres.createConnection(connection_files.BROKEN_URI, {})
+    broken.store(connection_files.BROKEN_CONNECTION)
+    scope.on_close(
+        lambda: postgres.deleteConnection(connection_files.BROKEN_CONNECTION)
+    )
+    # The PostGIS row: registered when QGIS_SDK_TEST_POSTGIS names a server that
+    # holds ``public.points``; otherwise the row is blocked by environment.
+    postgis_connection = None
+    postgis_uri = os.environ.get("QGIS_SDK_TEST_POSTGIS")
+    if postgis_uri:
+        remote = postgres.createConnection(postgis_uri, {})
+        remote.store(connection_files.POSTGIS_CONNECTION)
+        scope.on_close(
+            lambda: postgres.deleteConnection(connection_files.POSTGIS_CONNECTION)
+        )
+        postgis_connection = connection_files.POSTGIS_CONNECTION
+
+    def declare_auth_configuration(name: str) -> str:
+        from qgis.core import QgsApplication, QgsAuthMethodConfig
+
+        config = QgsAuthMethodConfig()
+        config.setName(name)
+        manager = QgsApplication.authManager()
+        if not manager.storeAuthenticationConfig(config):
+            pytest.skip(
+                "the authentication registry needs a master password this "
+                "environment does not set"
+            )
+
+        def remove() -> None:
+            manager.removeAuthenticationConfig(config.id())
+
+        scope.on_close(remove)
+        return config.id()
+
     opened_rasters: dict[str, str] = {}
     opened_meshes: dict[str, str] = {}
     opened_kinds: dict[str, str] = {}
@@ -931,6 +1058,9 @@ def _native_services() -> Services:
         # keeps one test's values out of the next one's.
         settings=NativeSettings(scope, prefix=f"qgis-sdk-contract/{_SESSION_TOKEN}"),
         styles=styles,
+        connections=connections,
+        declare_auth_configuration=declare_auth_configuration,
+        postgis_connection=postgis_connection,
         notifications=NativeNotifications(scope),
         scope=scope,
         dataset=FIXTURE_DATASET,

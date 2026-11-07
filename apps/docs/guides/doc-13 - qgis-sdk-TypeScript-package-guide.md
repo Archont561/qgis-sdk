@@ -572,6 +572,56 @@ await qgis.host.styles.import({ layer_id, format: "qml", text: qml.text });
   dialect it holds. QGIS reads a categorized renderer back out of SLD as
   rule-based, so a page that needs the renderer kind back round-trips QML.
 
+### Connections from a page
+
+`host.connections` browses the provider connection registry and opens one of
+its tables; `host.auth` lists authentication configurations and re-binds one.
+The models are flat and closed - a description is a name, a provider and an
+auth config *id*, never a credential:
+
+```ts
+const { items } = await qgis.host.connections.list({ limit: 20 });
+items[0].name;         // "survey"
+items[0].provider;     // "ogr" - QGIS's own registry key (see the Python guide)
+items[0].auth_config;  // "a1b2c3d" | null
+
+const tables = await qgis.host.connections.browse({ provider: "ogr", connection: "survey" });
+tables.items[0].kind;        // "vector" | "aspatial" | "raster" | "view" | ...
+tables.items[0].geometries;  // readonly ("point" | "line" | "polygon" | "none")[]
+
+const layer = await qgis.host.connections.open_layer({
+  provider: "ogr", connection: "survey", schema: "", item: "roads",
+}); // VectorLayerInfo - the table lands in layers.list like any other
+
+const verdict = await qgis.host.connections.test({ provider: "postgres", connection: "warehouse" });
+if (!verdict.valid) {
+  verdict.message; // the provider's own refusal, password tokens redacted
+}
+
+const configs = await qgis.host.auth.configurations({ limit: 20 });
+await qgis.host.auth.attach({
+  provider: "postgres", connection: "warehouse", auth_config: configs.items[0]!.id,
+});
+```
+
+- **`test` is a verdict, not an exception.** A registered connection that will
+  not answer is `ConnectionTest` with `valid: false` and the provider's
+  message; a lookup miss (unknown provider or name) is the refusal.
+- **Two annotations, shown distinctly.** `auth.attach` is `destructive` (it
+  replaces how a connection authenticates) and `credential`; `connections.browse`,
+  `connections.test`, `connections.open_layer` and `auth.configurations` are
+  `credential` without being `destructive`. The consent list asks "will this
+  change my project?" and "will this touch my credentials?" as two questions -
+  a read that spends a password is not hidden among the writes.
+- **Grants split read from spend.** `connections.read` covers the four read
+  calls (including `test`), `layers.open` covers `open_layer` - the same
+  authority as opening a file - `auth.read` lists configurations and
+  `auth.write` attaches one. A page that only lists connections carries no
+  write grant.
+- **A browse is one level.** With no `schema`, a schema-capable connection
+  answers its `kind: "schema"` entries and a GeoPackage answers its tables; a
+  named schema answers that schema's tables.
+
 ### Print layouts from a page
 
 The `layouts` namespace exports what the print designer composed. Three grants

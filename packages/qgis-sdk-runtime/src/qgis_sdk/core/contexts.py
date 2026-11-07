@@ -28,6 +28,7 @@ from qgis_sdk.services import (
     Algorithms,
     Cancellation,
     Canvas,
+    Connections,
     DesktopAccess,
     Features,
     Files,
@@ -64,6 +65,7 @@ GUI_BOUND_CAPABILITIES: Final = frozenset(
     {
         "actions",
         "canvas",
+        "connections",
         "desktop",
         "files",
         "layers",
@@ -217,6 +219,7 @@ class PluginContext(_Context):
     __slots__ = (
         "_algorithms",
         "_canvas",
+        "_connections",
         "_desktop",
         "_features",
         "_files",
@@ -245,6 +248,7 @@ class PluginContext(_Context):
         "features",
         "canvas",
         "layouts",
+        "connections",
         "project",
         "settings",
         "styles",
@@ -278,6 +282,10 @@ class PluginContext(_Context):
     #: host's worker backend, so an export is a task in the task bar; a host
     #: that cannot render layouts refuses the capability by name.
     layouts: Capability[Layouts] = Capability()
+    #: Registered data-source connections and authentication configuration ids
+    #: (TASK-92): browse the provider registry and open one of its tables. A
+    #: host with no ``QgsProviderRegistry`` refuses the capability by name.
+    connections: Capability[Connections] = Capability()
     project: Capability[Project] = Capability()
     settings: Capability[Settings] = Capability()
     styles: Capability[Styles] = Capability()
@@ -308,6 +316,7 @@ class PluginContext(_Context):
         rasters: Rasters | None = None,
         features: Features | None = None,
         layouts: Layouts | None = None,
+        connections: Connections | None = None,
         canvas: Canvas | None = None,
         project: Project | None = None,
         settings: Settings | None = None,
@@ -332,6 +341,7 @@ class PluginContext(_Context):
             _rasters=rasters,
             _features=features,
             _layouts=layouts,
+            _connections=connections,
             _canvas=canvas,
             _project=project,
             _settings=settings,

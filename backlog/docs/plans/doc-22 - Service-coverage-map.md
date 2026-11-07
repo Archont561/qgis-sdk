@@ -113,6 +113,13 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `styles.list` | `styles.read` | Styles (the style manager) | `Styles.list_styles` |
 | `styles.export` | `styles.read` | Styles (QML or SLD text) | `Styles.export_style` |
 | `styles.import` | `styles.write` | Styles (QML or SLD text, destructive) | `Styles.import_style` |
+| `connections.list` | `connections.read` | Connections (the provider registry) | `Connections.list_connections` |
+| `connections.describe` | `connections.read` | Connections (one entry) | `Connections.connection` |
+| `connections.browse` | `connections.read` | Connections (schemas and tables) | `Connections.browse` |
+| `connections.open_layer` | `layers.open` | Connections (a table as a layer) | `Connections.open_layer` |
+| `connections.test` | `connections.read` | Connections (a verdict) | `Connections.test` |
+| `auth.configurations` | `auth.read` | Auth (ids and names only) | `Connections.auth_configurations` |
+| `auth.attach` | `auth.write` | Auth (attach to a connection, destructive) | `Connections.attach_auth_config` |
 | `files.export` | `files.export` | Files (authority) | `HostAuthority.export_file` |
 | `blob.get` | `blob.read` | Payloads above the inline ceiling | `HostAuthority.read_blob` |
 | `features.page` | `features.read` | Features (a bounded page stream) | `Features.page` |
@@ -134,7 +141,7 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `layouts.export` | `layouts.export` | Layouts (a render, destructive) | `Layouts.render` |
 | `layouts.atlas` | `layouts.export` | Layouts (an atlas run, destructive) | `Layouts.render_atlas` |
 | `notifications.info` | `notifications.info` | Notifications | `Notifications.info` |
-| `network.fetch` | `network.fetch` | Network | `NetworkTransport.send` |
+| `network.fetch` | `network.fetch` | Network (may spend an auth config) | `NetworkTransport.send` |
 | `canvas.extent` | `canvas.read` | Canvas (the view) | `Canvas.extent` |
 | `canvas.scale` | `canvas.read` | Canvas | `Canvas.scale` |
 | `canvas.crs` | `canvas.read` | Canvas | `Canvas.crs` |
@@ -146,21 +153,37 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `canvas.apply_theme` | `canvas.control` | Canvas (map themes) | `Canvas.apply_theme` |
 | `canvas.capture` | `canvas.control` | Canvas (a capture stream) | `Canvas.capture` |
 
-Thirteen operations carry the `destructive` annotation, and nothing infers it from
-a name: `project.read` (it replaces the open project), `project.write`,
+Fourteen operations carry the `destructive` annotation, and nothing infers it
+from a name: `project.read` (it replaces the open project), `project.write`,
 `project.save`, `project.remove_layer`, `project.remove_bookmark`,
 `project.unset_variable`, `project.unset_property`, `layouts.export` and
-`layouts.atlas` (both replace a file the page's own write ref already names), and
+`layouts.atlas` (both replace a file the page's own write ref already names),
 `styles.apply`, `symbology.set`, `labelling.set` and `styles.import` (each
 replaces how a layer is drawn, labelled or both - a packaged style is applied
 *over* whatever the layer had, and a style document replaces the renderer and the
-labelling together). The annotation is
+labelling together), and `auth.attach` (it replaces how a connection
+authenticates - the old password or configuration stops being spent). The
+annotation is
 declared beside the operation (`HostOperation.destructive`), crosses in the
 manifest, and is the flag the agent consent list reads so a destructive tool can
 be set to "ask each time" ([decision-49](../../decisions/decision-49%20-%20Expose-the-runtime-to-agents-over-a-loopback-transport-with-the-MCP-server-in-the-tools-for-developers-and-users-alike.md)
 point 4, [decision-27](../../decisions/decision-27%20-%20Expose-curated-host-services-to-web-views-as-generated-namespaces.md)
 point 2). `tests/test_bridge_host_project.py` pins the list, so adding one
 without the annotation fails.
+
+Six operations carry the `credential` annotation, its own axis beside
+`destructive` and never folded into it (TASK-92): `network.fetch` (its request
+may name an `auth_config`, and the fetch then spends it),
+`connections.browse`, `connections.test` and `connections.open_layer` (each
+authenticates with the material the connection stores to read a catalog or open
+a table), `auth.configurations` (it reads the credential registry) and
+`auth.attach` (it re-binds one - and carries `destructive` too). The agent
+consent list shows the two axes distinctly, so a read that spends a password is
+not hidden among the writes and a write that never authenticates is not dressed
+up as a credential act; a redacted description - `connections.list` and
+`connections.describe` - is not a credential act at all. The annotation is
+declared beside the operation (`HostOperation.credential`) and crosses in the
+manifest, and `tests/test_bridge_host_project.py` pins the list.
 
 Two checks keep the table honest: `tests/scripts/test_service_coverage.py` fails
 when an operation declared in `qgis_sdk.bridge.host.HOST_OPERATIONS` has no row
@@ -182,7 +205,7 @@ column says what did land.
 | --- | --- | --- | --- | --- |
 | Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | complete (the extent, zoom, themes, refresh and capture calls plus the two streams; a server refuses each by name, and doc-12, doc-13 and the example use `zoom_to`) |
 | Layer kinds | mesh, point cloud, vector tile, annotation, tiled scene | [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) | 0.11.0 | complete (the five kinds, their models, layer inputs and pickers, the Processing source-type narrowing and the five host operations); all five open natively - mesh over the checked-in `lagoon.2dm`, annotation by creation, and point cloud, vector tile and tiled scene over files `tests/layer_kind_fixtures.py` builds (a LAS 1.2 point cloud, an MBTiles source, a 3D Tiles `tileset.json`) rather than committing binaries the review cannot read; the release waits for the 0.11.0 gate |
-| Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only) | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | planned |
+| Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only), `auth.attach` | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | complete (the provider registry listed, described and browsed one level at a time, a table opened as a vector layer, `test` answered as a verdict rather than an exception, and auth configurations as ids and names only with `auth.attach` re-binding one); a GeoPackage connection answers provider `ogr` because QGIS implements the GeoPackage connection methods in OGR, the fixture file is built by `tests/connection_fixtures.py` rather than committed, a registered password is proven never to cross a description, and the PostGIS row runs against a server `QGIS_SDK_TEST_POSTGIS` names holding `public.points` or is recorded as **blocked by environment**; the release waits for the 0.11.0 gate |
 | Symbology | `styles.symbology/set_symbology/labelling/set_labelling/list_styles/export_style/import_style`, renderers, symbols and labelling | [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md) | 0.11.0 | complete (four renderers - single symbol, categorized, graduated, rule-based - three symbols, one simple labelling, the style manager's three name lists and QML/SLD text both ways); the renderer union is curated on purpose (decision-16), QML reproduces the renderer and SLD reproduces the drawing, and `custom` is a *readable* graduated mode because QGIS reports it for a hand-banded layer; the release waits for the 0.11.0 gate |
 | Processing breadth | multi-layer outputs, `run_model`, `batch`, help text rendering | [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md) | 0.11.0 | planned |
 | Large payloads | `BlobRef`, `qgis.host.blob`, bounded pages, stream `ack` (decision-59) | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) | 0.10.0 | landed in 0.10.0 (the ref, the blob fetch, bounded pages and `ack`); the task stays open only for the cap and page-size measurement in a real `QWebEngineView` and decision-59's status review |

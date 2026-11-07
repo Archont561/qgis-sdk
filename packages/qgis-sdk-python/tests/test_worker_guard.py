@@ -150,6 +150,9 @@ def test_the_guard_covers_exactly_the_capabilities_that_reach_gui_state() -> Non
         # The canvas is a Qt widget: moving it off the GUI thread crashes QGIS
         # rather than merely being slow (TASK-85).
         "canvas",
+        # ``connections.open_layer`` opens a provider layer exactly as
+        # ``layers.open_vector`` does (TASK-92).
+        "connections",
         "desktop",
         "files",
         "layers",

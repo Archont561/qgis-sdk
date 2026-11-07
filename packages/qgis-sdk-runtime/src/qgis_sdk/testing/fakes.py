@@ -25,8 +25,12 @@ from qgis_sdk.models import (
     AlgorithmRequest,
     AlgorithmRun,
     AnnotationLayerInfo,
+    AuthConfiguration,
     CanvasExtent,
     Catalogue,
+    ConnectionInfo,
+    ConnectionItem,
+    ConnectionTest,
     FillSymbol,
     GeometryType,
     Labelling,
@@ -38,6 +42,9 @@ from qgis_sdk.models import (
     ProviderInfo,
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmRejectedError,
+    QgisSdkAuthConfigNotFoundError,
+    QgisSdkConnectionItemNotFoundError,
+    QgisSdkConnectionNotFoundError,
     QgisSdkLayerNotFoundError,
     QgisSdkStyleIncompatibleError,
     QgisSdkStyleTextError,
@@ -837,3 +844,208 @@ class FakeProcessing:
         if self._live.get(provider_id) is registration:
             del self._live[provider_id]
             self.events.append(("unregister", provider_id))
+
+
+class FakeConnections:
+    """A ``Connections`` backend over connections declared in the test.
+
+    The fake stores descriptions and answers from them, and its one piece of
+    real behaviour is the same the native adapter enforces: **nothing secret is
+    stored or answered**. A declaration carries an authentication configuration
+    *id*, never the material behind it, and :meth:`attach_auth_config` swaps the
+    id the description answers - which is what "attaching" means at this
+    boundary.
+
+    A declaration also says what the fake will not pretend: ``valid=False``
+    makes :meth:`test` answer the refusal (a message the test wrote, because
+    the fake has no provider to refuse with) and ``accepts_auth=False`` makes
+    attachment fail the way a file-based connection's does natively.
+    """
+
+    def __init__(self, layers: FakeLayers) -> None:
+        self._layers = layers
+        self._connections: dict[tuple[str, str], dict[str, object]] = {}
+        self._tables: dict[tuple[str, str], list[dict[str, object]]] = {}
+        self._auth: dict[str, AuthConfiguration] = {}
+        self._opened = 0
+
+    def declare_connection(
+        self,
+        name: str,
+        *,
+        provider: str = "ogr",
+        auth_config: str | None = None,
+        schemas: Sequence[str] = (),
+        valid: bool = True,
+        message: str | None = None,
+        accepts_auth: bool = True,
+    ) -> None:
+        """Declare one registered connection and the schemas it browses to."""
+        key = (provider, name)
+        self._connections[key] = {
+            "auth_config": auth_config,
+            "schemas": tuple(schemas),
+            "valid": valid,
+            "message": message,
+            "accepts_auth": accepts_auth,
+        }
+        self._tables.setdefault(key, [])
+
+    def declare_table(
+        self,
+        connection: str,
+        name: str,
+        *,
+        provider: str = "ogr",
+        schema: str = "",
+        kind: str = "vector",
+        geometries: Sequence[str] = (),
+        fields: Sequence[str] = (),
+        crs: str | None = None,
+    ) -> None:
+        """Declare one table or view inside a declared connection.
+
+        ``fields`` and ``crs`` are not browse-item fields - the wire item does
+        not carry them - they are what :meth:`open_layer` answers on the opened
+        :class:`VectorLayerInfo`, exactly as a provider would read them off the
+        table. ``kind`` is the browse kind; ``"schema"`` is refused here because
+        a schema is declared on the connection, not inside it.
+        """
+        key = (provider, connection)
+        if key not in self._connections:
+            raise QgisSdkDeclarationError(
+                f"connection {connection!r} of provider {provider!r} is not "
+                "declared before its tables"
+            )
+        item = ConnectionItem(
+            name=name,
+            schema=schema,
+            kind=kind,
+            geometries=tuple(geometries),
+        )
+        self._tables[key].append(
+            {
+                "item": item,
+                "fields": tuple(fields),
+                "crs": crs,
+            }
+        )
+
+    def declare_auth_configuration(self, name: str) -> str:
+        """Declare one authentication configuration and answer its id.
+
+        The id is the registry's to choose here exactly as it is natively
+        (``QgsAuthManager`` assigns one), so a test keeps the id it is handed
+        and never writes one it expects back.
+        """
+        auth_config = f"cfg{len(self._auth) + 1:04d}"
+        self._auth[auth_config] = AuthConfiguration(id=auth_config, name=name)
+        return auth_config
+
+    def list_connections(self) -> tuple[ConnectionInfo, ...]:
+        return tuple(self._describe(key) for key in self._connections)
+
+    def connection(self, provider: str, name: str) -> ConnectionInfo:
+        self._require(provider, name)
+        return self._describe((provider, name))
+
+    def browse(
+        self, provider: str, name: str, schema: str | None = None
+    ) -> tuple[ConnectionItem, ...]:
+        key = self._require(provider, name)
+        declared = self._connections[key]
+        schemas: tuple[str, ...] = declared["schemas"]  # type: ignore[assignment]
+        if not schema:
+            if schemas:
+                return tuple(
+                    ConnectionItem(name=each, schema="", kind="schema")
+                    for each in schemas
+                )
+            return tuple(entry["item"] for entry in self._tables[key])  # type: ignore[misc]
+        if schema not in schemas:
+            raise QgisSdkConnectionItemNotFoundError(name, schema, "")
+        return tuple(
+            entry["item"]  # type: ignore[misc]
+            for entry in self._tables[key]
+            if entry["item"].schema == schema  # type: ignore[union-attr]
+        )
+
+    def open_layer(
+        self, provider: str, name: str, schema: str, item: str
+    ) -> VectorLayerInfo:
+        key = self._require(provider, name)
+        for entry in self._tables[key]:
+            declared: ConnectionItem = entry["item"]  # type: ignore[assignment]
+            if declared.name != item or declared.schema != (schema or ""):
+                continue
+            if declared.kind == "schema":
+                raise QgisSdkUnsupportedCapabilityError(
+                    "connections.open_layer",
+                    "a schema is browsed, not opened",
+                )
+            if declared.kind == "raster":
+                raise QgisSdkUnsupportedCapabilityError(
+                    "connections.open_layer",
+                    "a raster table is opened by its raster provider, not "
+                    "described as a vector layer",
+                )
+            self._opened += 1
+            source = Path(f"fake-connection:{provider}:{name}:{schema or '-'}:{item}")
+            fields: tuple[str, ...] = entry["fields"]  # type: ignore[assignment]
+            self._layers.register(
+                source,
+                name=item,
+                geometry_type=(
+                    declared.geometries[0] if declared.geometries else "none"
+                ),
+                field_names=fields,
+                crs=entry["crs"],
+            )
+            return self._layers.open_vector(source)
+        # No table answers: a schema name passed as the item is refused as what
+        # it is, not as a typo - the same rule the native adapter applies.
+        schemas = self._connections[key]["schemas"]
+        if not schema and item in schemas:  # type: ignore[operator]
+            raise QgisSdkUnsupportedCapabilityError(
+                "connections.open_layer",
+                "a schema is browsed, not opened",
+            )
+        raise QgisSdkConnectionItemNotFoundError(name, schema or "", item)
+
+    def test(self, provider: str, name: str) -> ConnectionTest:
+        key = self._require(provider, name)
+        declared = self._connections[key]
+        if declared["valid"]:
+            return ConnectionTest(valid=True)
+        message = declared["message"] or "the declared connection does not answer"
+        return ConnectionTest(valid=False, message=str(message))
+
+    def auth_configurations(self) -> tuple[AuthConfiguration, ...]:
+        return tuple(self._auth.values())
+
+    def attach_auth_config(self, provider: str, name: str, auth_config: str) -> None:
+        key = self._require(provider, name)
+        if auth_config not in self._auth:
+            raise QgisSdkAuthConfigNotFoundError(auth_config)
+        declared = self._connections[key]
+        if not declared["accepts_auth"]:
+            raise QgisSdkUnsupportedCapabilityError(
+                "auth.attach",
+                f"connection {name!r} of provider {provider!r} authenticates "
+                "without a configuration; there is none to attach",
+            )
+        declared["auth_config"] = auth_config
+
+    def _require(self, provider: str, name: str) -> tuple[str, str]:
+        key = (provider, name)
+        if key not in self._connections:
+            raise QgisSdkConnectionNotFoundError(provider, name)
+        return key
+
+    def _describe(self, key: tuple[str, str]) -> ConnectionInfo:
+        declared = self._connections[key]
+        return ConnectionInfo(
+            name=key[1],
+            provider=key[0],
+            auth_config=declared["auth_config"],  # type: ignore[arg-type]
+        )

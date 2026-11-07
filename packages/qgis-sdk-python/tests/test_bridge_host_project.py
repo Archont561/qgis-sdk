@@ -53,6 +53,23 @@ DESTRUCTIVE = {
     "symbology.set",
     "labelling.set",
     "styles.import",
+    # TASK-92: attaching an authentication configuration replaces how a
+    # connection authenticates - the old password stops being spent.
+    "auth.attach",
+}
+
+#: The operations that spend stored authentication material or read or re-bind
+#: the credential registry. Its own axis, never folded into ``destructive``
+#: (TASK-92): the consent list asks "will this change my project?" and "will
+#: this touch my credentials?" as two questions, and a read that spends a
+#: password must not hide among the writes.
+CREDENTIAL = {
+    "network.fetch",
+    "connections.browse",
+    "connections.test",
+    "connections.open_layer",
+    "auth.configurations",
+    "auth.attach",
 }
 
 
@@ -157,6 +174,24 @@ def test_every_operation_says_whether_it_is_destructive() -> None:
 
     for action in host_description()["actions"]:
         assert isinstance(action["destructive"], bool), action["id"]
+
+
+def test_the_credential_annotation_names_exactly_the_operations_that_touch_them() -> (
+    None
+):
+    declared = {operation.id for operation in HOST_OPERATIONS if operation.credential}
+
+    assert declared == CREDENTIAL
+
+
+def test_every_operation_says_whether_it_touches_credentials() -> None:
+    from qgis_sdk.bridge.host import host_description
+
+    described = host_description()
+    for record in [*described["actions"], *described["streams"]]:
+        assert isinstance(record["credential"], bool), record["id"]
+        # The two axes cross in one record: showing one never hides the other.
+        assert {"destructive", "credential"} <= set(record), record["id"]
 
 
 # -- the tree ---------------------------------------------------------------

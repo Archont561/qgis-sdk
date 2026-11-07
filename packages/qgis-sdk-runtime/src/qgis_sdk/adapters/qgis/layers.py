@@ -99,6 +99,20 @@ class NativeLayers:
         self._export_sources[layer.id()] = _capture_source(layer)
         return _describe(layer)
 
+    def adopt_vector(self, layer: QgsVectorLayer) -> VectorLayerInfo:
+        """Describe and register a vector layer another adapter opened.
+
+        ``connections.open_layer`` (TASK-92) builds its layer from a provider
+        connection's table URI rather than a file path; the description and the
+        scope-owned registry stay this service's to own, so the layer lands here
+        instead of a second registry growing beside it. The caller checked
+        ``layer.isValid()`` and raised its own refusal.
+        """
+        self._scope.ensure_open()
+        self._layers[layer.id()] = layer
+        self._export_sources[layer.id()] = _capture_source(layer)
+        return _describe(layer)
+
     def open_mesh(self, source: Path) -> MeshLayerInfo:
         """Open a mesh dataset and describe its vertices, faces and groups."""
         layer = QgsMeshLayer(str(source), Path(source).stem, "mdal")

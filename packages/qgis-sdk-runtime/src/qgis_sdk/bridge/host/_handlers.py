@@ -47,6 +47,7 @@ from qgis_sdk.models.errors import (
 from qgis_sdk.network.client import NetworkDefaults, build_request
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.canvas import Canvas
+from qgis_sdk.services.connections import Connections
 from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.layouts import Layouts
 from qgis_sdk.services.network import NetworkTransport
@@ -211,6 +212,47 @@ def _handlers(
     def styles_import(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
         services.styles.import_style(
             payload["layer_id"], payload["text"], payload["format"]
+        )
+
+    def connections_list(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _page_of(_connections(services).list_connections(), payload)
+
+    def connections_describe(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        return _wire(
+            _connections(services).connection(
+                payload["provider"], payload["connection"]
+            )
+        )
+
+    def connections_browse(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _page_of(
+            _connections(services).browse(
+                payload["provider"], payload["connection"], payload.get("schema")
+            ),
+            payload,
+        )
+
+    def connections_open_layer(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        return _wire(
+            _connections(services).open_layer(
+                payload["provider"],
+                payload["connection"],
+                payload["schema"],
+                payload["item"],
+            )
+        )
+
+    def connections_test(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        return _wire(
+            _connections(services).test(payload["provider"], payload["connection"])
+        )
+
+    def auth_configurations(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _page_of(_connections(services).auth_configurations(), payload)
+
+    def auth_attach(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
+        _connections(services).attach_auth_config(
+            payload["provider"], payload["connection"], payload["auth_config"]
         )
 
     def algorithms_providers(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
@@ -604,6 +646,13 @@ def _handlers(
         "styles.list": styles_list,
         "styles.export": styles_export,
         "styles.import": styles_import,
+        "connections.list": connections_list,
+        "connections.describe": connections_describe,
+        "connections.browse": connections_browse,
+        "connections.open_layer": connections_open_layer,
+        "connections.test": connections_test,
+        "auth.configurations": auth_configurations,
+        "auth.attach": auth_attach,
         "blob.get": blob_get,
         "features.page": features_page,
         "features.get": features_get,
@@ -631,6 +680,12 @@ def _layouts(services: HostServices) -> Layouts:
     if services.layouts is None:
         raise QgisSdkBridgeError("this host has no layouts service configured")
     return services.layouts
+
+
+def _connections(services: HostServices) -> Connections:
+    if services.connections is None:
+        raise QgisSdkBridgeError("this host has no connections service configured")
+    return services.connections
 
 
 def _plugin_file(

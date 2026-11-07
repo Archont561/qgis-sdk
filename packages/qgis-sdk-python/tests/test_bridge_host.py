@@ -38,6 +38,7 @@ from qgis_sdk.models.layers import VectorLayerInfo
 from qgis_sdk.network import NetworkGrant
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.canvas import Canvas
+from qgis_sdk.services.connections import Connections
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.features import EditingSession, Features
 from qgis_sdk.services.layers import Layers
@@ -65,6 +66,7 @@ PROTOCOLS: dict[str, type] = {
     "EditingSession": EditingSession,
     "Canvas": Canvas,
     "Layouts": Layouts,
+    "Connections": Connections,
 }
 
 
@@ -323,6 +325,11 @@ def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
         "symbology.write",
         "styles.read",
         "styles.write",
+        # TASK-92: the connection registry and the auth configuration listing
+        # read under one grant each, and re-binding a credential is its own.
+        "connections.read",
+        "auth.read",
+        "auth.write",
     }
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.

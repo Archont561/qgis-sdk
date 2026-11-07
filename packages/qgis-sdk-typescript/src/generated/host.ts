@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:82e60b50db30877cf9f73755b90f452df7709d01fd5ea0f3639da8a658d12546";
+export const HOST_FINGERPRINT = "sha256:f5656e0c4505b51beb3c8b637baebaaaa2cba24b01c0eea894c6a9cfe7a75786";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -14,6 +14,8 @@ export const HOST_OPERATIONS = [
 	"algorithms.list",
 	"algorithms.providers",
 	"algorithms.run",
+	"auth.attach",
+	"auth.configurations",
 	"blob.get",
 	"canvas.apply_theme",
 	"canvas.capture",
@@ -25,6 +27,11 @@ export const HOST_OPERATIONS = [
 	"canvas.scale",
 	"canvas.themes",
 	"canvas.zoom_to",
+	"connections.browse",
+	"connections.describe",
+	"connections.list",
+	"connections.open_layer",
+	"connections.test",
 	"editing.add",
 	"editing.begin",
 	"editing.commit",
@@ -229,6 +236,23 @@ export interface AtlasPage {
 	readonly index: number;
 }
 
+export interface AuthAttachRequest {
+	readonly auth_config: string;
+	readonly connection: string;
+	readonly provider: string;
+}
+
+export interface AuthConfiguration {
+	readonly id: string;
+	readonly name: string;
+}
+
+export interface AuthConfigurationPage {
+	readonly items: readonly AuthConfiguration[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
 export interface BandRequest {
 	readonly band: number;
 	readonly layer_id: string;
@@ -320,6 +344,54 @@ export interface Category {
 	readonly label: string;
 	readonly symbol: MarkerSymbol | LineSymbol | FillSymbol;
 	readonly value: string;
+}
+
+export interface ConnectionBrowseRequest {
+	readonly connection: string;
+	readonly provider: string;
+	readonly schema?: string;
+}
+
+export interface ConnectionInfo {
+	readonly auth_config: string | null;
+	readonly name: string;
+	readonly provider: string;
+}
+
+export interface ConnectionItem {
+	readonly geometries: readonly ("point" | "line" | "polygon" | "none")[];
+	readonly kind: "schema" | "vector" | "aspatial" | "raster" | "view" | "materialized_view" | "foreign";
+	readonly name: string;
+	readonly schema: string;
+}
+
+export interface ConnectionItemPage {
+	readonly items: readonly ConnectionItem[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
+export interface ConnectionItemRequest {
+	readonly connection: string;
+	readonly item: string;
+	readonly provider: string;
+	readonly schema: string;
+}
+
+export interface ConnectionPage {
+	readonly items: readonly ConnectionInfo[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
+export interface ConnectionRequest {
+	readonly connection: string;
+	readonly provider: string;
+}
+
+export interface ConnectionTest {
+	readonly message: string | null;
+	readonly valid: boolean;
 }
 
 export interface EditAddRequest {
@@ -1175,6 +1247,55 @@ export function AtlasPage(value: unknown, strict = false): value is AtlasPage {
 	return true;
 }
 
+export function AuthAttachRequest(value: unknown, strict = false): value is AuthAttachRequest {
+	if (!isRecord(value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("connection" in value)) return false;
+	if (!("auth_config" in value)) return false;
+	if (value["auth_config"] !== undefined && !(typeof value["auth_config"] === "string")) {
+		return false;
+	}
+	if (value["connection"] !== undefined && !(typeof value["connection"] === "string")) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["auth_config", "connection", "provider"])) return false;
+	return true;
+}
+
+export function AuthConfiguration(value: unknown, strict = false): value is AuthConfiguration {
+	if (!isRecord(value)) return false;
+	if (!("id" in value)) return false;
+	if (!("name" in value)) return false;
+	if (value["id"] !== undefined && !(typeof value["id"] === "string" && new RegExp("^(?:.*\\S.*)$").test(value["id"]))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string" && new RegExp("^(?:.*\\S.*)$").test(value["name"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["id", "name"])) return false;
+	return true;
+}
+
+export function AuthConfigurationPage(value: unknown, strict = false): value is AuthConfigurationPage {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => AuthConfiguration(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
 export function BandRequest(value: unknown, strict = false): value is BandRequest {
 	if (!isRecord(value)) return false;
 	if (!("layer_id" in value)) return false;
@@ -1409,6 +1530,147 @@ export function Category(value: unknown, strict = false): value is Category {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["label", "symbol", "value"])) return false;
+	return true;
+}
+
+export function ConnectionBrowseRequest(value: unknown, strict = false): value is ConnectionBrowseRequest {
+	if (!isRecord(value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("connection" in value)) return false;
+	if (value["connection"] !== undefined && !(typeof value["connection"] === "string")) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (value["schema"] !== undefined && !(typeof value["schema"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["connection", "provider", "schema"])) return false;
+	return true;
+}
+
+export function ConnectionInfo(value: unknown, strict = false): value is ConnectionInfo {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("auth_config" in value)) return false;
+	if (value["auth_config"] !== undefined && !((typeof value["auth_config"] === "string" || value["auth_config"] === null))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string" && new RegExp("^(?:.*\\S.*)$").test(value["name"]))) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string" && new RegExp("^(?:.*\\S.*)$").test(value["provider"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["auth_config", "name", "provider"])) return false;
+	return true;
+}
+
+export function ConnectionItem(value: unknown, strict = false): value is ConnectionItem {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("schema" in value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("geometries" in value)) return false;
+	if (value["geometries"] !== undefined && !((Array.isArray(value["geometries"]) && value["geometries"].every((item) => (item === "point" || item === "line" || item === "polygon" || item === "none"))))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "schema" || value["kind"] === "vector" || value["kind"] === "aspatial" || value["kind"] === "raster" || value["kind"] === "view" || value["kind"] === "materialized_view" || value["kind"] === "foreign"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string" && new RegExp("^(?:.*\\S.*)$").test(value["name"]))) {
+		return false;
+	}
+	if (value["schema"] !== undefined && !(typeof value["schema"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["geometries", "kind", "name", "schema"])) return false;
+	return true;
+}
+
+export function ConnectionItemPage(value: unknown, strict = false): value is ConnectionItemPage {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => ConnectionItem(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function ConnectionItemRequest(value: unknown, strict = false): value is ConnectionItemRequest {
+	if (!isRecord(value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("connection" in value)) return false;
+	if (!("schema" in value)) return false;
+	if (!("item" in value)) return false;
+	if (value["connection"] !== undefined && !(typeof value["connection"] === "string")) {
+		return false;
+	}
+	if (value["item"] !== undefined && !(typeof value["item"] === "string")) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (value["schema"] !== undefined && !(typeof value["schema"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["connection", "item", "provider", "schema"])) return false;
+	return true;
+}
+
+export function ConnectionPage(value: unknown, strict = false): value is ConnectionPage {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => ConnectionInfo(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function ConnectionRequest(value: unknown, strict = false): value is ConnectionRequest {
+	if (!isRecord(value)) return false;
+	if (!("provider" in value)) return false;
+	if (!("connection" in value)) return false;
+	if (value["connection"] !== undefined && !(typeof value["connection"] === "string")) {
+		return false;
+	}
+	if (value["provider"] !== undefined && !(typeof value["provider"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["connection", "provider"])) return false;
+	return true;
+}
+
+export function ConnectionTest(value: unknown, strict = false): value is ConnectionTest {
+	if (!isRecord(value)) return false;
+	if (!("valid" in value)) return false;
+	if (!("message" in value)) return false;
+	if (value["message"] !== undefined && !((typeof value["message"] === "string" || value["message"] === null))) {
+		return false;
+	}
+	if (value["valid"] !== undefined && !(typeof value["valid"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["message", "valid"])) return false;
 	return true;
 }
 
@@ -3242,6 +3504,10 @@ export interface HostOperations {
 		readonly providers: (input?: PageRequest, options?: HostInvokeOptions) => Promise<ProviderPage>;
 		readonly run: (input: RunAlgorithmRequest, options?: HostInvokeOptions) => Promise<RunResult>;
 	};
+	readonly auth: {
+		readonly attach: (input: AuthAttachRequest, options?: HostInvokeOptions) => Promise<null>;
+		readonly configurations: (input?: PageRequest, options?: HostInvokeOptions) => Promise<AuthConfigurationPage>;
+	};
 	readonly blob: {
 		readonly get: (input: BlobRequest, options?: HostInvokeOptions) => Promise<BlobChunk>;
 	};
@@ -3256,6 +3522,13 @@ export interface HostOperations {
 		readonly scale: (input?: CanvasScaleRequest, options?: HostInvokeOptions) => Promise<number>;
 		readonly themes: (input?: CanvasThemesRequest, options?: HostInvokeOptions) => Promise<MapThemes>;
 		readonly zoom_to: (input: ZoomRequest, options?: HostInvokeOptions) => Promise<CanvasExtent>;
+	};
+	readonly connections: {
+		readonly browse: (input: ConnectionBrowseRequest, options?: HostInvokeOptions) => Promise<ConnectionItemPage>;
+		readonly describe: (input: ConnectionRequest, options?: HostInvokeOptions) => Promise<ConnectionInfo>;
+		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<ConnectionPage>;
+		readonly open_layer: (input: ConnectionItemRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo>;
+		readonly test: (input: ConnectionRequest, options?: HostInvokeOptions) => Promise<ConnectionTest>;
 	};
 	readonly editing: {
 		readonly add: (input: EditAddRequest, options?: HostInvokeOptions) => Promise<EditAddResult>;
@@ -3375,6 +3648,20 @@ export function createHost(client: HostClientLike): HostOperations {
 					RunResult,
 				),
 		},
+		auth: {
+			attach: (input: AuthAttachRequest, options?: HostInvokeOptions) =>
+				call<null>(
+					client, "auth.attach", input, options,
+					AuthAttachRequest,
+					(candidate: unknown, strict = false) => candidate === null,
+				),
+			configurations: (input?: PageRequest, options?: HostInvokeOptions) =>
+				call<AuthConfigurationPage>(
+					client, "auth.configurations", input, options,
+					PageRequest,
+					AuthConfigurationPage,
+				),
+		},
 		blob: {
 			get: (input: BlobRequest, options?: HostInvokeOptions) =>
 				call<BlobChunk>(
@@ -3443,6 +3730,38 @@ export function createHost(client: HostClientLike): HostOperations {
 					client, "canvas.zoom_to", input, options,
 					ZoomRequest,
 					CanvasExtent,
+				),
+		},
+		connections: {
+			browse: (input: ConnectionBrowseRequest, options?: HostInvokeOptions) =>
+				call<ConnectionItemPage>(
+					client, "connections.browse", input, options,
+					ConnectionBrowseRequest,
+					ConnectionItemPage,
+				),
+			describe: (input: ConnectionRequest, options?: HostInvokeOptions) =>
+				call<ConnectionInfo>(
+					client, "connections.describe", input, options,
+					ConnectionRequest,
+					ConnectionInfo,
+				),
+			list: (input?: PageRequest, options?: HostInvokeOptions) =>
+				call<ConnectionPage>(
+					client, "connections.list", input, options,
+					PageRequest,
+					ConnectionPage,
+				),
+			open_layer: (input: ConnectionItemRequest, options?: HostInvokeOptions) =>
+				call<VectorLayerInfo>(
+					client, "connections.open_layer", input, options,
+					ConnectionItemRequest,
+					VectorLayerInfo,
+				),
+			test: (input: ConnectionRequest, options?: HostInvokeOptions) =>
+				call<ConnectionTest>(
+					client, "connections.test", input, options,
+					ConnectionRequest,
+					ConnectionTest,
 				),
 		},
 		editing: {

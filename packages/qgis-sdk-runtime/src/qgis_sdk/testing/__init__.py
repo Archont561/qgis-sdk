@@ -12,6 +12,7 @@ from .app import FakeAppBackend, FakeAppSurface, FakeLoop
 from .canvas import DEFAULT_EXTENT, FakeCanvas
 from .fakes import (
     FakeAlgorithms,
+    FakeConnections,
     FakeLayers,
     FakeProcessing,
     FakeSettings,
@@ -48,6 +49,7 @@ __all__ = [
     "FakeAppBackend",
     "FakeAppSurface",
     "FakeCanvas",
+    "FakeConnections",
     "FakeEditingSession",
     "FakeFeatures",
     "FakeFiles",

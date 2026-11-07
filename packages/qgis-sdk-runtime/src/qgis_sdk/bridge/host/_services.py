@@ -9,6 +9,7 @@ from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import PluginContext
 from qgis_sdk.services.algorithms import Algorithms
 from qgis_sdk.services.canvas import Canvas
+from qgis_sdk.services.connections import Connections
 from qgis_sdk.services.contracts import Notifications
 from qgis_sdk.services.features import Features
 from qgis_sdk.services.layers import Layers
@@ -53,6 +54,10 @@ class HostServices:
     #: Raster reads (TASK-87). Without one the ``rasters.*`` operations are
     #: declared and fail by name, never silently answered with nothing.
     rasters: Rasters | None = None
+    #: Registered data-source connections and authentication configs (TASK-92).
+    #: Without one the ``connections.*`` and ``auth.*`` operations are declared
+    #: and fail by name, never silently answered with an empty registry.
+    connections: Connections | None = None
     #: Print layouts and atlases (TASK-89). The operations answer through the
     #: blocking render forms, so a page's export is one request that ends with a
     #: file ref; the job forms are the plugin's own path, with a bar and a
@@ -100,6 +105,7 @@ class HostServices:
             canvas=context.canvas if context.has("canvas") else None,
             rasters=context.rasters if context.has("rasters") else None,
             layouts=context.layouts if context.has("layouts") else None,
+            connections=context.connections if context.has("connections") else None,
             authority=authority if authority is not None else HostAuthority(),
             network=network,
             algorithms=context.algorithms if context.has("algorithms") else None,
