@@ -14,11 +14,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from qgis_sdk.jobs import JobStatus
 from qgis_sdk.models import (
+    AlgorithmRun,
     BufferRequest,
     CentroidRequest,
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmRejectedError,
+    QgisSdkJobCancelledError,
     QgisSdkLayerNotFoundError,
     QgisSdkStaleHandleError,
     VectorLayerInfo,
@@ -630,3 +633,83 @@ def test_describe_sees_a_provider_registered_at_runtime(
     assert sample_provider.id not in {
         p.id for p in native_services.algorithms.providers()
     }
+
+
+# -- the model file and the batch (TASK-94) ----------------------------------
+
+
+def _reports(native_services: Services):
+    """Three report runs of the statistics algorithm - a batch of reports."""
+    source = native_services.fixture_layer()
+    return [
+        AlgorithmRun(
+            "native:basicstatisticsforfields",
+            {"INPUT_LAYER": source, "FIELD_NAME": "value"},
+        )
+        for _ in range(3)
+    ]
+
+
+def test_the_model_file_runs_and_writes_its_report(native_services: Services) -> None:
+    """The checked-in ``.model3`` runs end to end through real Processing."""
+    source = native_services.layers.open_vector(native_services.dataset)
+    assert native_services.model_file is not None
+    model = native_services.model_file()
+
+    result = native_services.algorithms.run_model(model, {"FEATS": source.id})
+
+    assert result.algorithm == model.name
+    centroids = result.vector("centroids")
+    assert (centroids.geometry_type, centroids.id != source.id) == ("point", True)
+    report = native_services.files.resolve(result.file("report"))
+    assert report.suffix == ".html"
+    # A real report, not just a file: the statistics child wrote its table.
+    assert "<" in report.read_text(encoding="utf-8")
+
+
+def test_a_batch_of_three_reports_runs_one_report_each(
+    native_services: Services,
+) -> None:
+    handle = native_services.algorithms.batch(_reports(native_services))
+
+    native_services.drive_algorithms()
+    results = handle.result
+
+    assert len(results) == 3
+    for result in results:
+        report = native_services.files.resolve(result.file("OUTPUT_HTML_FILE"))
+        assert report.is_file()
+        assert result.value("COUNT") == 3
+
+
+def test_a_batch_of_three_reports_reports_one_fraction_per_report(
+    native_services: Services,
+) -> None:
+    handle = native_services.algorithms.batch(_reports(native_services))
+    native_services.algorithms.jobs.tick()
+    assert native_services.algorithm_work_items is not None
+    items = native_services.algorithm_work_items()
+    assert items, "the batch job never reached the worker backend"
+
+    reported: list[float] = []
+    assert items[-1].progress is not None
+    items[-1].progress.observe(reported.append)
+
+    native_services.drive_algorithms()
+
+    assert handle.status is JobStatus.SUCCEEDED
+    assert reported == pytest.approx([1 / 3, 2 / 3, 1.0])
+
+
+def test_a_cancelled_batch_of_reports_stops_before_the_next_report(
+    native_services: Services,
+) -> None:
+    handle = native_services.algorithms.batch(_reports(native_services))
+
+    assert handle.cancel() is True
+    native_services.drive_algorithms()
+
+    assert handle.status is JobStatus.CANCELLED
+    assert handle.error is None
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = handle.result

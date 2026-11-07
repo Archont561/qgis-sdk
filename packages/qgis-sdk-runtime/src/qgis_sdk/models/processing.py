@@ -28,23 +28,33 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields
-from typing import Any, ClassVar
+from types import MappingProxyType
+from typing import Annotated, Any, ClassVar, get_args, get_origin
 
 from .errors import QgisSdkAlgorithmNotFoundError, QgisSdkAlgorithmRejectedError
 from .files import FileRef
-from .layers import VectorLayerInfo
+from .layers import RasterLayerInfo, VectorLayerInfo
 
 __all__ = [
     "DESTINATION_KINDS",
     "LAYER_KINDS",
     "AlgorithmInfo",
+    "AlgorithmResult",
     "AlgorithmRun",
     "Catalogue",
+    "FolderOutput",
+    "FolderOutputParameter",
+    "HtmlOutput",
+    "HtmlOutputParameter",
+    "MultipleLayers",
     "OutputInfo",
+    "OutputKind",
     "ParameterInfo",
     "ProviderInfo",
     "RunResult",
     "TypedRun",
+    "output_kind_for",
+    "output_kinds",
     "validate_parameters",
 ]
 
@@ -171,6 +181,177 @@ class OutputInfo:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> OutputInfo:
         return cls(name=data["name"], kind=data["kind"], label=data.get("label", ""))
+
+
+# -- declared result kinds ---------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class FolderOutputParameter:
+    """Marker: the ``FileRef`` result is the folder the algorithm produced.
+
+    ``FileRef`` alone means one file (``outputFile``); the marker selects
+    ``outputFolder`` the way :class:`~qgis_sdk.models.parameters.FolderParameter`
+    selects a folder input. The usual spelling is the alias (decision-42):
+    ``def run(ctx) -> FolderOutput: ...``.
+    """
+
+
+@dataclass(frozen=True, slots=True)
+class HtmlOutputParameter:
+    """Marker: the ``FileRef`` result is the algorithm's HTML report.
+
+    The usual spelling is the alias: ``def run(ctx) -> HtmlOutput: ...``.
+    """
+
+
+#: The produced folder, as an annotation (see :class:`FolderOutputParameter`).
+FolderOutput = Annotated[FileRef, FolderOutputParameter()]
+
+#: The produced HTML report, as an annotation (see :class:`HtmlOutputParameter`).
+HtmlOutput = Annotated[FileRef, HtmlOutputParameter()]
+
+#: Several produced layers, in the order the algorithm made them.
+MultipleLayers = tuple[VectorLayerInfo, ...]
+
+#: Whatever a declared algorithm may produce, one entry of the kind table.
+AlgorithmResult = (
+    VectorLayerInfo
+    | RasterLayerInfo
+    | FileRef
+    | float
+    | str
+    | bool
+    | tuple[VectorLayerInfo, ...]
+)
+
+
+@dataclass(frozen=True, slots=True)
+class OutputKind:
+    """One declared result kind, with the face it shows to each host.
+
+    ``name`` is the QGIS output type id the registry reports (``outputVector``,
+    ``outputRaster`` ...), ``marker`` the ``Annotated`` extra that selects the
+    kind where a plain spelling would collide (``None`` where the stored type
+    names the kind on its own), ``stored`` the annotations the kind accepts,
+    ``processing`` the ``QgsProcessingOutput*`` class the provider adapter
+    declares, and ``accepted`` what ``invoke`` checks the handler's result
+    against. :func:`output_kinds` is the one table every describer and adapter
+    reads, so a kind missing a face is a test failure here, never a surprise
+    in a host.
+    """
+
+    name: str
+    marker: type | None
+    stored: tuple[Any, ...]
+    processing: str
+    result: str
+    accepted: tuple[type, ...]
+
+
+_OUTPUT_KINDS: tuple[OutputKind, ...] = (
+    OutputKind(
+        "outputVector",
+        None,
+        (VectorLayerInfo,),
+        "QgsProcessingOutputVectorLayer",
+        "the VectorLayerInfo of the layer it produced",
+        (VectorLayerInfo,),
+    ),
+    OutputKind(
+        "outputRaster",
+        None,
+        (RasterLayerInfo,),
+        "QgsProcessingOutputRasterLayer",
+        "the RasterLayerInfo of the raster it produced",
+        (RasterLayerInfo,),
+    ),
+    OutputKind(
+        "outputFile",
+        None,
+        (FileRef,),
+        "QgsProcessingOutputFile",
+        "the FileRef of the file it produced",
+        (FileRef,),
+    ),
+    OutputKind(
+        "outputFolder",
+        FolderOutputParameter,
+        (FileRef,),
+        "QgsProcessingOutputFolder",
+        "the FolderOutput ref of the folder it produced",
+        (FileRef,),
+    ),
+    OutputKind(
+        "outputNumber",
+        None,
+        (int, float),
+        "QgsProcessingOutputNumber",
+        "the number it produced",
+        (int, float),
+    ),
+    OutputKind(
+        "outputString",
+        None,
+        (str,),
+        "QgsProcessingOutputString",
+        "the string it produced",
+        (str,),
+    ),
+    OutputKind(
+        "outputBoolean",
+        None,
+        (bool,),
+        "QgsProcessingOutputBoolean",
+        "the boolean it produced",
+        (bool,),
+    ),
+    OutputKind(
+        "outputHtml",
+        HtmlOutputParameter,
+        (FileRef,),
+        "QgsProcessingOutputHtml",
+        "the HtmlOutput ref of the report it produced",
+        (FileRef,),
+    ),
+    OutputKind(
+        "outputMultilayer",
+        None,
+        (MultipleLayers,),
+        "QgsProcessingOutputMultipleLayers",
+        "the MultipleLayers it produced",
+        (tuple,),
+    ),
+)
+
+
+def output_kinds() -> Mapping[str, OutputKind]:
+    """Every declared result kind, by its QGIS output type id."""
+    return MappingProxyType({kind.name: kind for kind in _OUTPUT_KINDS})
+
+
+def output_kind_for(annotation: Any) -> OutputKind | None:
+    """The kind one declared result annotation names, or ``None``.
+
+    A plain stored type names its kind directly (``VectorLayerInfo``,
+    ``FileRef``, a scalar, ``MultipleLayers``); the two ``FileRef`` collisions
+    are spelled as markers (``FolderOutput``, ``HtmlOutput``).
+    """
+    base = annotation
+    markers: tuple[Any, ...] = ()
+    if get_origin(annotation) is Annotated:
+        base, *markers = get_args(annotation)
+    for kind in _OUTPUT_KINDS:
+        if kind.marker is not None and any(
+            isinstance(marker, kind.marker) for marker in markers
+        ):
+            return kind
+    for kind in _OUTPUT_KINDS:
+        if kind.marker is None and any(
+            base is stored or base == stored for stored in kind.stored
+        ):
+            return kind
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,7 +613,9 @@ class RunResult:
 
     Vector destinations come back as owned :class:`VectorLayerInfo`; rasters,
     files, folders and HTML reports as :class:`FileRef` (readable by the
-    plugin that ran the algorithm); numbers, strings and booleans as they are.
+    plugin that ran the algorithm); numbers, strings and booleans as they are;
+    a multiple-layers output as a tuple of :class:`VectorLayerInfo`, in the
+    order the registry listed them.
     """
 
     algorithm: str
@@ -459,6 +642,14 @@ class RunResult:
             raise KeyError(f"output {name!r} of {self.algorithm} is not a vector layer")
         return value
 
+    def layers(self, name: str) -> tuple[VectorLayerInfo, ...]:
+        value = self.outputs[name]
+        if not isinstance(value, tuple) or not all(
+            isinstance(item, VectorLayerInfo) for item in value
+        ):
+            raise KeyError(f"output {name!r} of {self.algorithm} is not layers")
+        return value
+
     def file(self, name: str) -> FileRef:
         value = self.outputs[name]
         if not isinstance(value, FileRef):
@@ -478,6 +669,15 @@ class RunResult:
                 layer = asdict(value)
                 layer["field_names"] = list(value.field_names)
                 outputs.append({"name": name, "kind": "vector", "layer": layer})
+            elif isinstance(value, tuple) and all(
+                isinstance(item, VectorLayerInfo) for item in value
+            ):
+                layers = []
+                for item in value:
+                    layer = asdict(item)
+                    layer["field_names"] = list(item.field_names)
+                    layers.append(layer)
+                outputs.append({"name": name, "kind": "layers", "layers": layers})
             elif isinstance(value, FileRef):
                 outputs.append({"name": name, "kind": "file", "file": value.to_wire()})
             else:
@@ -493,8 +693,32 @@ class RunResult:
                 layer = dict(entry["layer"])
                 layer["field_names"] = tuple(layer.get("field_names", ()))
                 outputs[name] = VectorLayerInfo(**layer)
+            elif kind == "layers":
+                rebuilt = []
+                for layer in entry.get("layers", ()):
+                    layer = dict(layer)
+                    layer["field_names"] = tuple(layer.get("field_names", ()))
+                    rebuilt.append(VectorLayerInfo(**layer))
+                outputs[name] = tuple(rebuilt)
             elif kind == "file":
                 outputs[name] = FileRef.from_wire(entry["file"])
             else:
                 outputs[name] = entry.get("value")
         return cls(algorithm=data["algorithm"], outputs=outputs)
+
+
+#: How a :class:`RunResult` reads as a job *result* (a batch settles to a
+#: tuple of them): the tagged-outputs shape :meth:`RunResult.to_wire` writes,
+#: said once here so the declaration subset can describe a value whose
+#: ``outputs`` map is deliberately free-form. A plain dict because ``models``
+#: imports nothing outside itself; :class:`qgis_sdk.jobs.JobHandle` is the
+#: method-decorated counterpart of the same rule.
+RunResult.__qgis_sdk_schema__ = {  # type: ignore[attr-defined]
+    "type": "object",
+    "properties": {
+        "algorithm": {"type": "string"},
+        "outputs": {"type": "array", "items": {"type": "object"}},
+    },
+    "required": ["algorithm", "outputs"],
+    "additionalProperties": False,
+}

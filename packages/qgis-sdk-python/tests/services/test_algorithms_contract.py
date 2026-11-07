@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from qgis_sdk.jobs import JobStatus
 from qgis_sdk.models import (
     AlgorithmRun,
     BufferRequest,
@@ -19,6 +20,7 @@ from qgis_sdk.models import (
     FileRef,
     QgisSdkAlgorithmNotFoundError,
     QgisSdkAlgorithmRejectedError,
+    QgisSdkJobCancelledError,
     QgisSdkLayerNotFoundError,
     VectorLayerInfo,
 )
@@ -307,3 +309,115 @@ def test_an_unknown_layer_input_is_refused_by_the_generic_run(
 ) -> None:
     with pytest.raises(QgisSdkLayerNotFoundError):
         services.algorithms.run("native:buffer", {"INPUT": "no-such-layer"})
+
+
+# -- model files and batches (TASK-94) ---------------------------------------
+
+
+def _model(services: Services) -> FileRef:
+    """The backend's model file, a ref the host minted."""
+    assert services.model_file is not None, (
+        "this backend has not joined the model contract"
+    )
+    return services.model_file()
+
+
+def _drive(services: Services) -> None:
+    """Submit, run the body, deliver: one round trip of the batch job service."""
+    assert services.drive_algorithms is not None
+    services.drive_algorithms()
+
+
+def _batch(services: Services):
+    source = services.layers.open_vector(services.dataset).id
+    return [
+        AlgorithmRun("native:buffer", {"INPUT": source, "DISTANCE": 0.01})
+        for _ in range(3)
+    ]
+
+
+def test_a_model_file_runs_and_its_outputs_come_back_by_kind(
+    services: Services,
+) -> None:
+    source = services.layers.open_vector(services.dataset)
+    model = _model(services)
+
+    result = services.algorithms.run_model(model, {"FEATS": source.id})
+
+    # The result names the model ref the caller passed, on both backends: the
+    # handle the caller knows, not a designer's title only one backend can read.
+    assert result.algorithm == model.name
+    centroids = result.vector("centroids")
+    assert isinstance(centroids, VectorLayerInfo)
+    assert centroids.id != source.id
+    assert centroids.geometry_type == "point"
+    report = result.file("report")
+    assert isinstance(report, FileRef)
+    assert report.operations == ("read",)
+    assert services.files is not None
+    assert services.files.resolve(report).is_file()
+    assert {"centroids", "report"} <= set(result)
+
+
+def test_a_model_is_a_ref_not_a_path(services: Services) -> None:
+    model = _model(services)
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
+        services.algorithms.run_model(str(services.dataset), {})
+
+    assert "FileRef" in str(refused.value)
+    assert model.operations  # the fixture ref itself was valid above
+
+
+def test_a_batch_runs_every_request_and_answers_in_order(services: Services) -> None:
+    handle = services.algorithms.batch(_batch(services))
+
+    assert handle.status is JobStatus.QUEUED
+    _drive(services)
+    results = handle.result
+
+    assert len(results) == 3
+    assert [result.algorithm for result in results] == ["native:buffer"] * 3
+    assert all(result.vector("OUTPUT").geometry_type == "polygon" for result in results)
+
+
+def test_a_batch_reports_one_fraction_per_request(services: Services) -> None:
+    """The batch reports per request; delivery coalesces, so read the work item."""
+    handle = services.algorithms.batch(_batch(services))
+    assert services.algorithms.jobs is not None
+    services.algorithms.jobs.tick()
+    assert services.algorithm_work_items is not None
+    items = services.algorithm_work_items()
+    assert items, "the batch job never reached the worker backend"
+    assert items[-1].title == "Run algorithm batch"
+
+    reported: list[float] = []
+    assert items[-1].progress is not None
+    items[-1].progress.observe(reported.append)
+
+    _drive(services)
+
+    total = 3
+    assert handle.status is JobStatus.SUCCEEDED
+    assert reported == pytest.approx([step / total for step in range(1, total + 1)])
+
+
+def test_a_cancelled_batch_stops_between_requests(services: Services) -> None:
+    handle = services.algorithms.batch(_batch(services))
+
+    assert handle.cancel() is True
+    _drive(services)
+
+    assert handle.status is JobStatus.CANCELLED
+    # Cancellation is not a failure: the job has no error, and reading its
+    # result is what raises the cancellation.
+    assert handle.error is None
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = handle.result
+
+
+def test_an_empty_batch_is_refused(services: Services) -> None:
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
+        services.algorithms.batch([])
+
+    assert "at least one" in "; ".join(refused.value.reasons)

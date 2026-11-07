@@ -97,12 +97,17 @@ def native_plugin_context(
     # ``ctx.algorithms.run`` all resolve through it.
     authority = HostAuthority()
     files = FilesService(authority, scope, owner=f"plugin:{settings_prefix}")
-    algorithms = NativeAlgorithms(
-        layers, scope, working_directory=working_directory, files=files
-    )
-    # One worker backend for the context: the layouts service renders through it
-    # exactly as ``ctx.jobs`` does, so an export is one task in the task bar.
+    # One worker backend for the context: the layouts service renders through
+    # it exactly as ``ctx.jobs`` does, so an export or a batch is one task in
+    # the task bar.
     workers = QgsTaskWorkers(scope)
+    algorithms = NativeAlgorithms(
+        layers,
+        scope,
+        working_directory=working_directory,
+        files=files,
+        workers=workers,
+    )
     layouts = NativeLayouts(scope, workers=workers, files=files)
     return PluginContext(
         notifications=(

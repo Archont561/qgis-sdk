@@ -1,0 +1,96 @@
+<!DOCTYPE model>
+<Option type="Map">
+  <Option name="children" type="Map">
+    <Option name="native:centroids_1" type="Map">
+      <Option name="active" type="bool" value="true"/>
+      <Option name="alg_config" type="Map"/>
+      <Option name="alg_id" type="QString" value="native:centroids"/>
+      <Option name="algorithm_name" type="QString" value="centroids"/>
+      <Option name="dependencies" type="List"/>
+      <Option name="description" type="QString" value="Centroid of every feature"/>
+      <Option name="id" type="QString" value="native:centroids_1"/>
+      <Option name="outputs" type="Map">
+        <Option name="CENTROIDS" type="Map">
+          <Option name="child_id" type="QString" value="native:centroids_1"/>
+          <Option name="description" type="QString" value="Centroids"/>
+          <Option name="name" type="QString" value="CENTROIDS"/>
+          <Option name="output_name" type="QString" value="OUTPUT"/>
+        </Option>
+      </Option>
+      <Option name="params" type="Map">
+        <Option name="INPUT" type="List">
+          <Option type="Map">
+            <Option name="parameter_name" type="QString" value="FEATS"/>
+            <Option name="source" type="int" value="0"/>
+          </Option>
+        </Option>
+      </Option>
+    </Option>
+    <Option name="native:basicstatisticsforfields_1" type="Map">
+      <Option name="active" type="bool" value="true"/>
+      <Option name="alg_config" type="Map"/>
+      <Option name="alg_id" type="QString" value="native:basicstatisticsforfields"/>
+      <Option name="algorithm_name" type="QString" value="basicstatisticsforfields"/>
+      <Option name="dependencies" type="List"/>
+      <Option name="description" type="QString" value="Statistics of the value field"/>
+      <Option name="id" type="QString" value="native:basicstatisticsforfields_1"/>
+      <Option name="outputs" type="Map">
+        <Option name="OUTPUT_HTML_FILE" type="Map">
+          <Option name="child_id" type="QString" value="native:basicstatisticsforfields_1"/>
+          <Option name="description" type="QString" value="Report"/>
+          <Option name="name" type="QString" value="OUTPUT_HTML_FILE"/>
+          <Option name="output_name" type="QString" value="OUTPUT_HTML_FILE"/>
+        </Option>
+      </Option>
+      <Option name="params" type="Map">
+        <Option name="FIELD_NAME" type="List">
+          <Option type="Map">
+            <Option name="source" type="int" value="2"/>
+            <Option name="static_value" type="QString" value="value"/>
+          </Option>
+        </Option>
+        <Option name="INPUT_LAYER" type="List">
+          <Option type="Map">
+            <Option name="parameter_name" type="QString" value="FEATS"/>
+            <Option name="source" type="int" value="0"/>
+          </Option>
+        </Option>
+      </Option>
+    </Option>
+  </Option>
+  <Option name="designerParameterValues" type="Map"/>
+  <Option name="groupBoxes" type="List"/>
+  <Option name="help" type="Map">
+    <Option name="FEATS" type="QString" value="The features whose centroids and value statistics this model reports."/>
+  </Option>
+  <Option name="internal_version" type="QString" value="Version2"/>
+  <Option name="modelVariables" type="Map"/>
+  <Option name="model_group" type="QString" value=""/>
+  <Option name="model_name" type="QString" value="Report model"/>
+  <Option name="outputGroup" type="QString" value=""/>
+  <Option name="outputOrder" type="List">
+    <Option type="QString" value="CENTROIDS"/>
+    <Option type="QString" value="OUTPUT_HTML_FILE"/>
+  </Option>
+  <Option name="parameterDefinitions" type="Map">
+    <Option name="FEATS" type="Map">
+      <Option name="description" type="QString" value="Features"/>
+      <Option name="metadata" type="Map"/>
+      <Option name="name" type="QString" value="FEATS"/>
+      <Option name="optional" type="bool" value="false"/>
+      <Option name="parameter_type" type="QString" value="source"/>
+    </Option>
+  </Option>
+  <Option name="parameterOrder" type="List">
+    <Option type="QString" value="FEATS"/>
+  </Option>
+  <Option name="parameters" type="Map">
+    <Option name="FEATS" type="Map">
+      <Option name="description" type="QString" value="Features"/>
+      <Option name="metadata" type="Map"/>
+      <Option name="name" type="QString" value="FEATS"/>
+      <Option name="optional" type="bool" value="false"/>
+      <Option name="parameter_type" type="QString" value="source"/>
+    </Option>
+  </Option>
+</Option>

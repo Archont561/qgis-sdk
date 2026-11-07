@@ -25,6 +25,7 @@ from qgis_sdk.models import (
 __all__ = [
     "DEFAULT_EXTENSIONS",
     "FILE_OUTPUT_KINDS",
+    "MULTI_OUTPUT_KINDS",
     "VECTOR_OUTPUT_KINDS",
     "coerce_run",
     "destination_path",
@@ -33,6 +34,8 @@ __all__ = [
 
 #: Output kinds that come back as an owned vector layer.
 VECTOR_OUTPUT_KINDS: frozenset[str] = frozenset({"outputVector"})
+#: Output kinds that come back as several owned vector layers, in order.
+MULTI_OUTPUT_KINDS: frozenset[str] = frozenset({"outputMultilayer"})
 #: Output kinds that come back as a file ref (a directory ref for folders).
 FILE_OUTPUT_KINDS: frozenset[str] = frozenset(
     {
@@ -178,11 +181,14 @@ def destination_path(run_directory: Path, parameter: ParameterInfo) -> Path:
 
 
 def output_class(info: AlgorithmInfo, name: str) -> str:
-    """``vector``, ``file``, ``directory`` or ``value`` for one output name."""
+    """``vector``, ``layers``, ``file``, ``directory`` or ``value`` for one
+    output name."""
     for output in info.outputs:
         if output.name == name:
             if output.kind in VECTOR_OUTPUT_KINDS:
                 return "vector"
+            if output.kind in MULTI_OUTPUT_KINDS:
+                return "layers"
             if output.kind == "outputFolder":
                 return "directory"
             if output.kind in FILE_OUTPUT_KINDS:

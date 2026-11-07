@@ -5,15 +5,17 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:f5656e0c4505b51beb3c8b637baebaaaa2cba24b01c0eea894c6a9cfe7a75786";
+export const HOST_FINGERPRINT = "sha256:2c686bb06a3cf63aca219e2a1751a4f00d574472e20ea9cfb52c318bfeed7ec3";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
 export const HOST_OPERATIONS = [
+	"algorithms.batch",
 	"algorithms.describe",
 	"algorithms.list",
 	"algorithms.providers",
 	"algorithms.run",
+	"algorithms.run_model",
 	"auth.attach",
 	"auth.configurations",
 	"blob.get",
@@ -256,6 +258,19 @@ export interface AuthConfigurationPage {
 export interface BandRequest {
 	readonly band: number;
 	readonly layer_id: string;
+}
+
+export interface BatchRequest {
+	readonly runs: readonly BatchRequestRunsItem[];
+}
+
+export interface BatchRequestRunsItem {
+	readonly algorithm_id: string;
+	readonly params: Record<string, unknown>;
+}
+
+export interface BatchResult {
+	readonly results: readonly RunResult[];
 }
 
 export interface BlobChunk {
@@ -905,15 +920,16 @@ export interface RuleBasedRenderer {
 	readonly rules: readonly Rule[];
 }
 
-export interface RunAlgorithmRequest {
-	readonly algorithm_id: string;
+export interface RunModelRequest {
+	readonly model: FileRef;
 	readonly params: Record<string, unknown>;
 }
 
 export interface RunOutput {
 	readonly file?: FileRef;
-	readonly kind: "vector" | "file" | "value";
+	readonly kind: "vector" | "layers" | "file" | "value";
 	readonly layer?: VectorLayerInfo;
+	readonly layers?: readonly VectorLayerInfo[];
 	readonly name: string;
 	readonly value?: string | number | boolean | null;
 }
@@ -1307,6 +1323,40 @@ export function BandRequest(value: unknown, strict = false): value is BandReques
 		return false;
 	}
 	if (strict && !hasOnly(value, ["band", "layer_id"])) return false;
+	return true;
+}
+
+export function BatchRequest(value: unknown, strict = false): value is BatchRequest {
+	if (!isRecord(value)) return false;
+	if (!("runs" in value)) return false;
+	if (value["runs"] !== undefined && !((Array.isArray(value["runs"]) && value["runs"].every((item) => BatchRequestRunsItem(item, strict))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["runs"])) return false;
+	return true;
+}
+
+export function BatchRequestRunsItem(value: unknown, strict = false): value is BatchRequestRunsItem {
+	if (!isRecord(value)) return false;
+	if (!("algorithm_id" in value)) return false;
+	if (!("params" in value)) return false;
+	if (value["algorithm_id"] !== undefined && !(typeof value["algorithm_id"] === "string")) {
+		return false;
+	}
+	if (value["params"] !== undefined && !(isRecord(value["params"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["algorithm_id", "params"])) return false;
+	return true;
+}
+
+export function BatchResult(value: unknown, strict = false): value is BatchResult {
+	if (!isRecord(value)) return false;
+	if (!("results" in value)) return false;
+	if (value["results"] !== undefined && !((Array.isArray(value["results"]) && value["results"].every((item) => RunResult(item, strict))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["results"])) return false;
 	return true;
 }
 
@@ -3113,17 +3163,17 @@ export function RuleBasedRenderer(value: unknown, strict = false): value is Rule
 	return true;
 }
 
-export function RunAlgorithmRequest(value: unknown, strict = false): value is RunAlgorithmRequest {
+export function RunModelRequest(value: unknown, strict = false): value is RunModelRequest {
 	if (!isRecord(value)) return false;
-	if (!("algorithm_id" in value)) return false;
+	if (!("model" in value)) return false;
 	if (!("params" in value)) return false;
-	if (value["algorithm_id"] !== undefined && !(typeof value["algorithm_id"] === "string")) {
+	if (value["model"] !== undefined && !(FileRef(value["model"], strict))) {
 		return false;
 	}
 	if (value["params"] !== undefined && !(isRecord(value["params"]))) {
 		return false;
 	}
-	if (strict && !hasOnly(value, ["algorithm_id", "params"])) return false;
+	if (strict && !hasOnly(value, ["model", "params"])) return false;
 	return true;
 }
 
@@ -3134,10 +3184,13 @@ export function RunOutput(value: unknown, strict = false): value is RunOutput {
 	if (value["file"] !== undefined && !(FileRef(value["file"], strict))) {
 		return false;
 	}
-	if (value["kind"] !== undefined && !((value["kind"] === "vector" || value["kind"] === "file" || value["kind"] === "value"))) {
+	if (value["kind"] !== undefined && !((value["kind"] === "vector" || value["kind"] === "layers" || value["kind"] === "file" || value["kind"] === "value"))) {
 		return false;
 	}
 	if (value["layer"] !== undefined && !(VectorLayerInfo(value["layer"], strict))) {
+		return false;
+	}
+	if (value["layers"] !== undefined && !((Array.isArray(value["layers"]) && value["layers"].every((item) => VectorLayerInfo(item, strict))))) {
 		return false;
 	}
 	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
@@ -3146,7 +3199,7 @@ export function RunOutput(value: unknown, strict = false): value is RunOutput {
 	if (value["value"] !== undefined && !((typeof value["value"] === "string" || typeof value["value"] === "number" && Number.isFinite(value["value"]) || typeof value["value"] === "boolean" || value["value"] === null))) {
 		return false;
 	}
-	if (strict && !hasOnly(value, ["file", "kind", "layer", "name", "value"])) return false;
+	if (strict && !hasOnly(value, ["file", "kind", "layer", "layers", "name", "value"])) return false;
 	return true;
 }
 
@@ -3499,10 +3552,12 @@ export function ProjectChangedEvent(value: unknown, strict = false): value is Pr
 /** Every operation this surface declares, as callable methods. */
 export interface HostOperations {
 	readonly algorithms: {
+		readonly batch: (input: BatchRequest, options?: HostInvokeOptions) => Promise<BatchResult>;
 		readonly describe: (input: AlgorithmRequest, options?: HostInvokeOptions) => Promise<AlgorithmInfo>;
 		readonly list: (input?: AlgorithmListRequest, options?: HostInvokeOptions) => Promise<AlgorithmPage>;
 		readonly providers: (input?: PageRequest, options?: HostInvokeOptions) => Promise<ProviderPage>;
-		readonly run: (input: RunAlgorithmRequest, options?: HostInvokeOptions) => Promise<RunResult>;
+		readonly run: (input: BatchRequestRunsItem, options?: HostInvokeOptions) => Promise<RunResult>;
+		readonly run_model: (input: RunModelRequest, options?: HostInvokeOptions) => Promise<RunResult>;
 	};
 	readonly auth: {
 		readonly attach: (input: AuthAttachRequest, options?: HostInvokeOptions) => Promise<null>;
@@ -3623,6 +3678,12 @@ export interface HostOperations {
 export function createHost(client: HostClientLike): HostOperations {
 	return {
 		algorithms: {
+			batch: (input: BatchRequest, options?: HostInvokeOptions) =>
+				call<BatchResult>(
+					client, "algorithms.batch", input, options,
+					BatchRequest,
+					BatchResult,
+				),
 			describe: (input: AlgorithmRequest, options?: HostInvokeOptions) =>
 				call<AlgorithmInfo>(
 					client, "algorithms.describe", input, options,
@@ -3641,10 +3702,16 @@ export function createHost(client: HostClientLike): HostOperations {
 					PageRequest,
 					ProviderPage,
 				),
-			run: (input: RunAlgorithmRequest, options?: HostInvokeOptions) =>
+			run: (input: BatchRequestRunsItem, options?: HostInvokeOptions) =>
 				call<RunResult>(
 					client, "algorithms.run", input, options,
-					RunAlgorithmRequest,
+					BatchRequestRunsItem,
+					RunResult,
+				),
+			run_model: (input: RunModelRequest, options?: HostInvokeOptions) =>
+				call<RunResult>(
+					client, "algorithms.run_model", input, options,
+					RunModelRequest,
 					RunResult,
 				),
 		},

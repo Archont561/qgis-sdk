@@ -27,13 +27,15 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem, QgsVectorLayer
 
+from qgis_sdk.batch import batch_body, batch_items
 from qgis_sdk.core import ResourceScope
+from qgis_sdk.jobs import JobHandle, JobService
 from qgis_sdk.models import (
     LAYER_KINDS,
     AlgorithmInfo,
@@ -115,6 +117,7 @@ class NativeAlgorithms:
         *,
         working_directory: Path | None = None,
         files: FilesService | None = None,
+        workers: Any | None = None,
     ) -> None:
         self._layers = layers
         self._scope = scope
@@ -128,6 +131,7 @@ class NativeAlgorithms:
         root.mkdir(parents=True, exist_ok=True)
         self._root = root
         self._runs = 0
+        self._jobs = JobService(scope, workers=workers)
         scope.on_close(self._release)
 
     # -- the registry -------------------------------------------------------
@@ -172,10 +176,72 @@ class NativeAlgorithms:
         """Run any registered algorithm into new outputs under a run directory."""
         self._scope.ensure_open()
         run = coerce_run(request, params)
-        info = self.describe(run.algorithm)
-        validate_parameters(info, run.params)
+        return self._run_described(
+            self.describe(run.algorithm), run.params, run.algorithm, label=run.algorithm
+        )
+
+    def run_model(
+        self, model: FileRef, params: Mapping[str, object] | None = None
+    ) -> RunResult:
+        """Load one ``.model3`` model file and run it like a registered one.
+
+        The model describes itself (its parameters and the destination-backed
+        outputs ``updateDestinationParameters`` derives), so the run follows
+        the same staging, validation and output conversion path as
+        :meth:`run` and the outputs come back as the kinds the registry
+        describes for that model.
+        """
+        self._scope.ensure_open()
+        if not isinstance(model, FileRef):
+            raise QgisSdkAlgorithmRejectedError(
+                "run_model",
+                ["a model is a FileRef the host minted, not a path (decision-20)"],
+            )
+        _processing()
+        from qgis.core import QgsProcessingModelAlgorithm
+
+        from .catalogue import algorithm_info
+
+        loaded = QgsProcessingModelAlgorithm()
+        try:
+            loaded_from_file = loaded.fromFile(str(self._resolve(model, "read")))
+        except Exception as error:
+            raise QgisSdkAlgorithmFailedError(model.name, str(error)) from error
+        if not loaded_from_file:
+            raise QgisSdkAlgorithmFailedError(
+                model.name, f"{model.name} is not a model file this QGIS can load"
+            )
+        info = algorithm_info(loaded, "model")
+        return self._run_described(info, dict(params or {}), loaded, label=model.name)
+
+    def batch(self, runs: Sequence[AlgorithmRun | TypedRun | str]) -> JobHandle:
+        """Submit the batch as one job through this backend's job service."""
+        self._scope.ensure_open()
+        return self._jobs.bind(batch_body(self)).delay(runs=batch_items(runs))
+
+    @property
+    def jobs(self) -> JobService:
+        """The job service ``batch`` submits through."""
+        return self._jobs
+
+    def _run_described(
+        self,
+        info: AlgorithmInfo,
+        params: Mapping[str, object],
+        target: Any,
+        *,
+        label: str,
+    ) -> RunResult:
+        """One run against a description, into new outputs under the run root.
+
+        ``target`` is what ``processing.run`` accepts: a registry id, or the
+        loaded model instance a ``.model3`` file became. ``label`` names the
+        run in every error and in the result - the registry id, or the model
+        file's name for a model run.
+        """
+        validate_parameters(info, params)
         explicit = plan_destinations(
-            info, run.params, lambda ref: self._resolve(ref, "write")
+            info, params, lambda ref: self._resolve(ref, "write")
         )
         processing = _processing()
         self._runs += 1
@@ -184,7 +250,7 @@ class NativeAlgorithms:
             run_directory.mkdir()
         except OSError as error:
             raise QgisSdkAlgorithmFailedError(
-                run.algorithm, "cannot create a new run directory"
+                label, "cannot create a new run directory"
             ) from error
         stage: Path | None = None
         try:
@@ -199,19 +265,17 @@ class NativeAlgorithms:
                     )
                 except OSError as error:
                     raise QgisSdkAlgorithmFailedError(
-                        run.algorithm, "cannot create the output staging directory"
+                        label, "cannot create the output staging directory"
                     ) from error
                 staged[name] = stage / destination.name
-            native_params = self._native_parameters(
-                info, run.params, run_directory, staged
-            )
+            native_params = self._native_parameters(info, params, run_directory, staged)
             try:
-                raw = processing.run(run.algorithm, native_params)
+                raw = processing.run(target, native_params)
             except Exception as error:  # QgsProcessingException and friends
-                raise QgisSdkAlgorithmFailedError(run.algorithm, str(error)) from error
+                raise QgisSdkAlgorithmFailedError(label, str(error)) from error
             if explicit:
                 raw = self._publish_explicit(
-                    run.algorithm, raw, run.params, explicit, staged, stage
+                    label, raw, params, explicit, staged, stage
                 )
             outputs = self._convert_outputs(info, raw)
         except BaseException:
@@ -220,7 +284,7 @@ class NativeAlgorithms:
         finally:
             if stage is not None:
                 shutil.rmtree(stage, ignore_errors=True)
-        return RunResult(algorithm=run.algorithm, outputs=outputs)
+        return RunResult(algorithm=label, outputs=outputs)
 
     def _publish_explicit(
         self,
@@ -367,6 +431,14 @@ class NativeAlgorithms:
             kind = output_class(info, name)
             if kind == "vector" and isinstance(value, str) and value:
                 outputs[name] = self._layers.open_vector(Path(value))
+            elif kind == "layers" and isinstance(value, (list, tuple)):
+                if not all(isinstance(item, str) and item for item in value):
+                    raise QgisSdkAlgorithmFailedError(
+                        info.id, ["the provider returned invalid outputs"]
+                    )
+                outputs[name] = tuple(
+                    self._layers.open_vector(Path(item)) for item in value
+                )
             elif kind in ("file", "directory") and isinstance(value, str) and value:
                 outputs[name] = self._file_output(Path(value), kind)
             else:

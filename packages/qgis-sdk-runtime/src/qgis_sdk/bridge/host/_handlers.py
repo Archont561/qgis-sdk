@@ -273,6 +273,29 @@ def _handlers(
         result = _algorithms(services).run(payload["algorithm_id"], params)
         return _result_for_view(services, binding, result)
 
+    def algorithms_run_model(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        model = _plugin_file(
+            services,
+            authority.resolve_file(binding, payload["model"], FileOperation.READ),
+        )
+        params = {
+            str(name): _resolve_input(authority, binding, value)
+            for name, value in payload.get("params", {}).items()
+        }
+        result = _algorithms(services).run_model(model, params)
+        return _result_for_view(services, binding, result)
+
+    def algorithms_batch(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        results = []
+        for item in payload["runs"]:
+            params = {
+                str(name): _resolve_input(authority, binding, value)
+                for name, value in item.get("params", {}).items()
+            }
+            result = _algorithms(services).run(item["algorithm_id"], params)
+            results.append(_result_for_view(services, binding, result))
+        return {"results": results}
+
     def layouts_list(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
         return _page_of(_layouts(services).list(), payload)
 
@@ -672,6 +695,8 @@ def _handlers(
         "layouts.export": layouts_export,
         "layouts.atlas": layouts_atlas,
         "algorithms.run": algorithms_run,
+        "algorithms.run_model": algorithms_run_model,
+        "algorithms.batch": algorithms_batch,
         "network.fetch": network_fetch,
     }
 

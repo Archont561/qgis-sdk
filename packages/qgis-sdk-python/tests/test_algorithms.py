@@ -11,16 +11,22 @@ from qgis_sdk.core import AlgorithmContext, JobContext, PluginContext, ResourceS
 from qgis_sdk.declarations import QgisSdkDeclarationError, describe
 from qgis_sdk.models import (
     BufferRequest,
+    CanvasExtent,
     CentroidRequest,
     CrsInput,
+    FileRef,
+    FolderOutput,
+    HtmlOutput,
     LayerInput,
     LayerParameter,
     Metres,
     MetresParameter,
+    MultipleLayers,
     QgisSdkAlgorithmCancelledError,
     QgisSdkAlgorithmRejectedError,
     QgisSdkScopeClosedError,
     QgisSdkUnsupportedCapabilityError,
+    RasterLayerInfo,
     VectorLayerInfo,
 )
 from qgis_sdk.providers import Provider
@@ -28,6 +34,7 @@ from qgis_sdk.testing import (
     FakeAlgorithms,
     FakeLayers,
     FakeProject,
+    FakeRasters,
     RecordingNotifications,
 )
 from sample_algorithms import buffer_layer, centroid_layer, sample_provider
@@ -600,3 +607,169 @@ def test_the_fake_refuses_after_its_scope_closed() -> None:
 
     with pytest.raises(QgisSdkScopeClosedError):
         algorithms.execute(CentroidRequest(layer_id="layer-1"))
+
+
+# -- every output kind (TASK-94) ----------------------------------------------
+
+
+def _raster_rig() -> tuple[FakeRasters, FakeLayers, FakeProject, ResourceScope]:
+    """A layers fake that knows one raster, beside the vector fixtures."""
+    scope = ResourceScope()
+    rasters = FakeRasters(scope)
+    rasters.register(
+        Path("dem.tif"),
+        name="dem",
+        extent=CanvasExtent(0.0, 0.0, 10.0, 10.0),
+        crs="EPSG:4326",
+    )
+    layers = FakeLayers(scope, rasters=rasters)
+    return rasters, layers, FakeProject(layers, scope), scope
+
+
+def test_every_output_kind_describes_its_result_kind() -> None:
+    provider = _provider()
+
+    @provider.algorithm
+    def produced(ctx: AlgorithmContext) -> VectorLayerInfo: ...
+
+    @provider.algorithm
+    def rendered(ctx: AlgorithmContext) -> RasterLayerInfo: ...
+
+    @provider.algorithm
+    def written(ctx: AlgorithmContext) -> FileRef: ...
+
+    @provider.algorithm
+    def foldered(ctx: AlgorithmContext) -> FolderOutput: ...
+
+    @provider.algorithm
+    def reported(ctx: AlgorithmContext) -> HtmlOutput: ...
+
+    @provider.algorithm
+    def counted(ctx: AlgorithmContext) -> float: ...
+
+    @provider.algorithm
+    def titled(ctx: AlgorithmContext) -> str: ...
+
+    @provider.algorithm
+    def flagged(ctx: AlgorithmContext) -> bool: ...
+
+    @provider.algorithm
+    def split(ctx: AlgorithmContext) -> MultipleLayers: ...
+
+    kinds = {
+        description.id: description.result_kind
+        for description in provider.describe().algorithms
+    }
+    assert kinds == {
+        "produced": "outputVector",
+        "rendered": "outputRaster",
+        "written": "outputFile",
+        "foldered": "outputFolder",
+        "reported": "outputHtml",
+        "counted": "outputNumber",
+        "titled": "outputString",
+        "flagged": "outputBoolean",
+        "split": "outputMultilayer",
+    }
+
+
+def test_a_value_result_comes_back_as_the_value_and_leaves_the_project() -> None:
+    algorithms, _, project, scope = _declared()
+    provider = _provider()
+
+    @provider.algorithm
+    def counted(ctx: AlgorithmContext) -> float:
+        return 4.5
+
+    @provider.algorithm
+    def titled(ctx: AlgorithmContext) -> str:
+        return "report title"
+
+    @provider.algorithm
+    def flagged(ctx: AlgorithmContext) -> bool:
+        return True
+
+    context = _plugin_context(algorithms, project, scope)
+    assert invoke(counted, context) == 4.5
+    assert invoke(titled, context) == "report title"
+    assert invoke(flagged, context) is True
+    assert project.layer_ids() == ()
+
+
+def test_a_file_result_comes_back_as_the_ref_the_handler_made() -> None:
+    algorithms, _, project, scope = _declared()
+    provider = _provider()
+    ref = FileRef(id="file-1", name="out.csv", operations=("read",))
+    folder = FileRef(id="dir-1", name="export", operations=("read",), kind="directory")
+    report = FileRef(id="html-1", name="report.html", operations=("read",))
+
+    @provider.algorithm
+    def written(ctx: AlgorithmContext) -> FileRef:
+        return ref
+
+    @provider.algorithm
+    def foldered(ctx: AlgorithmContext) -> FolderOutput:
+        return folder
+
+    @provider.algorithm
+    def reported(ctx: AlgorithmContext) -> HtmlOutput:
+        return report
+
+    context = _plugin_context(algorithms, project, scope)
+    assert invoke(written, context) is ref
+    assert invoke(foldered, context) is folder
+    assert invoke(reported, context) is report
+    assert project.layer_ids() == ()
+
+
+def test_a_raster_or_layers_result_adds_every_produced_layer() -> None:
+    rasters, layers, project, scope = _raster_rig()
+    layers.register(
+        Path("source.gpkg"),
+        name="points",
+        geometry_type="point",
+        field_names=("id",),
+        crs="EPSG:4326",
+    )
+    algorithms = FakeAlgorithms(layers, scope)
+    provider = _provider()
+
+    @provider.algorithm
+    def rendered(ctx: AlgorithmContext) -> RasterLayerInfo:
+        return rasters.open_raster(Path("dem.tif"))
+
+    @provider.algorithm
+    def split(ctx: AlgorithmContext) -> MultipleLayers:
+        return (
+            layers.open_vector(Path("source.gpkg")),
+            layers.open_vector(Path("source.gpkg")),
+        )
+
+    context = _plugin_context(algorithms, project, scope)
+    produced = invoke(rendered, context)
+    parts = invoke(split, context)
+
+    assert produced.kind == "raster"
+    assert len(parts) == 2
+    assert project.layer_ids() == (produced.id, parts[0].id, parts[1].id)
+
+
+def test_a_result_of_the_wrong_kind_is_refused_by_name() -> None:
+    algorithms, _, project, scope = _declared()
+    provider = _provider()
+
+    @provider.algorithm
+    def counted(ctx: AlgorithmContext) -> float:
+        return "not a number"  # type: ignore[return-value]
+
+    with pytest.raises(QgisSdkDeclarationError, match="the number it produced"):
+        invoke(counted, _plugin_context(algorithms, project, scope))
+
+    @provider.algorithm
+    def split(ctx: AlgorithmContext) -> MultipleLayers:
+        return ("not a layer",)  # type: ignore[return-value]
+
+    with pytest.raises(QgisSdkDeclarationError, match="the MultipleLayers it produced"):
+        invoke(split, _plugin_context(algorithms, project, scope))
+
+    assert project.layer_ids() == ()

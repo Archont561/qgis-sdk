@@ -266,13 +266,15 @@ RUN_REQUEST = _object(
     required=("algorithm_id", "params"),
 )
 
-#: One output of a run, tagged by what it is: an owned vector layer, a file or
-#: directory ref minted for the calling view, or a scalar.
+#: One output of a run, tagged by what it is: an owned vector layer, several
+#: owned vector layers in order, a file or directory ref minted for the
+#: calling view, or a scalar.
 RUN_OUTPUT = _object(
     {
         "name": {"type": "string"},
-        "kind": {"enum": ["vector", "file", "value"]},
+        "kind": {"enum": ["vector", "layers", "file", "value"]},
         "layer": VECTOR_LAYER_INFO,
+        "layers": _array(VECTOR_LAYER_INFO),
         "file": FILE_REF,
         "value": _SCALAR,
     },
@@ -285,6 +287,23 @@ RUN_RESULT = _object(
     required=("algorithm", "outputs"),
 )
 RUN_RESULT["title"] = "RunResult"
+
+#: What a page sends to run a ``.model3`` model file it holds a read ref for.
+#: ``params`` fills the model's own parameters by name, the ``RunRequest``
+#: shape with the model's id replaced by the ref.
+RUN_MODEL_REQUEST = _object(
+    {"model": FILE_REF, "params": {"type": "object"}},
+    required=("model", "params"),
+)
+RUN_MODEL_REQUEST["title"] = "RunModelRequest"
+
+#: What a page sends to run several requests in order, and what comes back:
+#: one :data:`RUN_RESULT` per item, oldest first.
+BATCH_REQUEST = _object({"runs": _array(RUN_REQUEST)}, required=("runs",))
+BATCH_REQUEST["title"] = "BatchRequest"
+
+BATCH_RESULT = _object({"results": _array(RUN_RESULT)}, required=("results",))
+BATCH_RESULT["title"] = "BatchResult"
 
 
 def _page(items: Sequence[Any], cursor: str | None, truncated: bool) -> dict:

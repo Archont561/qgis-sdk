@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from qgis_sdk.bindings import BindingsDescription
 
 __all__ = [
+    "ALGORITHMS_PUMP_LOOP",
     "JOB_PUMP_LOOP",
     "LAYOUT_PUMP_LOOP",
     "AppNotifications",
@@ -57,6 +58,11 @@ JOB_PUMP_LOOP: Final = "job-pump"
 #: its own, so that a plugin which declares no jobs still gets a progress bar
 #: (TASK-89).
 LAYOUT_PUMP_LOOP: Final = "layouts-job-pump"
+
+#: The third pump: a batch submits to the algorithms service's own job service,
+#: so that a plugin which declares no jobs still gets one task per batch
+#: (TASK-94).
+ALGORITHMS_PUMP_LOOP: Final = "algorithms-job-pump"
 
 #: ``@menu("Vector/...")`` -> the menu this window opens for that family. An app
 #: has one menu bar, so every family is a menu in it, created on first use.
@@ -359,7 +365,10 @@ class QtAppSurface:
         loops: list[NamedLoop] = []
         service = runtime.jobs
         layouts = self._context.layouts if self._context.has("layouts") else None
-        if service is None and layouts is None:
+        algorithms = (
+            self._context.algorithms if self._context.has("algorithms") else None
+        )
+        if service is None and layouts is None and algorithms is None:
             return tuple(loops)
         from qgis_sdk.adapters.qgis.jobs import QgsJobPump
 
@@ -376,6 +385,14 @@ class QtAppSurface:
             )
             layout_pump.start()
             loops.append(layout_pump)
+        # A batch submits to the algorithms service's own job service, for the
+        # same reason (TASK-94).
+        if algorithms is not None:
+            algorithms_pump = QgsJobPump(
+                algorithms.jobs, name=ALGORITHMS_PUMP_LOOP, parent=self._window
+            )
+            algorithms_pump.start()
+            loops.append(algorithms_pump)
         if self._surfaces is not None and self._bindings is not None:
             self._surfaces.attach(runtime, self._context)
             self._bindings.install(runtime)

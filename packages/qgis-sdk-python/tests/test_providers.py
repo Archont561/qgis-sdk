@@ -196,13 +196,38 @@ def test_an_unannotated_input_or_result_is_refused() -> None:
         def silent(ctx: AlgorithmContext, value: str): ...
 
 
-def test_a_result_that_is_not_the_produced_layer_is_refused() -> None:
+def test_a_result_outside_the_declared_output_kinds_is_refused() -> None:
     provider = _provider()
 
-    with pytest.raises(QgisSdkDeclarationError, match="returns the VectorLayerInfo"):
+    with pytest.raises(QgisSdkDeclarationError, match="returns one declared output"):
 
         @provider.algorithm
-        def count(ctx: AlgorithmContext) -> int: ...
+        def table(ctx: AlgorithmContext) -> dict[str, str]: ...
+
+
+def test_each_output_kind_registers_and_describes_its_result() -> None:
+    provider = _provider()
+
+    @provider.algorithm
+    def counted(ctx: AlgorithmContext) -> int: ...
+
+    @provider.algorithm
+    def measured(ctx: AlgorithmContext) -> float: ...
+
+    @provider.algorithm
+    def titled(ctx: AlgorithmContext) -> str: ...
+
+    @provider.algorithm
+    def flagged(ctx: AlgorithmContext) -> bool: ...
+
+    described = provider.describe().algorithms
+    kinds = {description.id: description.result_kind for description in described}
+    assert kinds == {
+        "counted": "outputNumber",
+        "measured": "outputNumber",
+        "titled": "outputString",
+        "flagged": "outputBoolean",
+    }
 
 
 def test_an_input_outside_the_parameter_kinds_is_refused_naming_it() -> None:

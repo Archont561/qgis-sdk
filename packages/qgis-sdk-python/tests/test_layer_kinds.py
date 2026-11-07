@@ -471,10 +471,12 @@ def test_the_catalogue_gains_five_opens_and_no_new_grant() -> None:
         assert operation.grant == "layers.open", kind
 
     # The surface grew by seven operations and four grants for symbology
-    # (TASK-93) and seven more operations and three grants for connections and
-    # auth (TASK-92); the counts are reviewed here rather than inferred, so a
-    # batch that adds an operation without deciding its grant fails this test.
-    assert len(HOST_OPERATIONS) == 82
+    # (TASK-93), seven more operations and three grants for connections and
+    # auth (TASK-92), and two more operations for model files and batch runs
+    # (TASK-94) that reuse the ``algorithms.run`` grant; the counts are
+    # reviewed here rather than inferred, so a change that adds an operation
+    # without deciding its grant fails this test.
+    assert len(HOST_OPERATIONS) == 84
     assert len({operation.grant for operation in HOST_OPERATIONS}) == 29
 
 

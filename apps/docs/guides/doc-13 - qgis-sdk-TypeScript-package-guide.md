@@ -246,8 +246,9 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   the `canvas` namespace with its `canvas.extent_changed` and `canvas.capture`
   streams, the `rasters` namespace, the `project` namespace down to the
   layer tree, the CRS, the entries, the bookmarks, the file and the
-  `project.changed` stream, and the `symbology`, `labelling` and `styles`
-  namespaces.
+  `project.changed` stream, the `symbology`, `labelling` and `styles`
+  namespaces, and since 0.11.0 `algorithms.run_model` and `algorithms.batch`
+  (below).
   Anything else of the QGIS API is not reachable from a page; the operations it
   would need wait for their owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
@@ -339,7 +340,7 @@ const subscription = await client.subscribe(
 
 ### Processing from a page: `algorithms.*` and `runAlgorithm`
 
-The four `algorithms` operations
+The four `algorithms` operations of 0.7.0
 ([decision-64](../../../backlog/decisions/decision-64%20-%20Generate-the-Processing-catalogue-from-the-host-registry-and-run-any-registered-algorithm-through-one-typed-surface.md))
 expose the host's Processing registry behind two grants: `algorithms.read`
 for `providers`, `list({provider?, limit?, cursor?})` and
@@ -355,6 +356,18 @@ value}`. A layer input is an owned layer id; a file input is a `FileRef`
 this view holds, resolved against the view before the algorithm sees it;
 a file the run produced comes back as a read-only `FileRef` minted for the
 view. `HOST_FINGERPRINT` moved once for the four operations.
+
+Since 0.11.0 the same grant carries two more operations.
+`run_model({model, params})` runs a Processing **model** the view holds as a
+`FileRef` - a `.model3` file the user saved from the QGIS modeler - and
+answers the same tagged `RunResult`: the model's exposed outputs, each in
+the kind its own description declares, and `algorithm` naming the model ref.
+`batch({runs})` runs several `{algorithm_id, params}` requests in order and
+answers `{results: RunResult[]}` oldest first. On the wire a batch is one
+call that answers when every request finished - the job form lives on the
+service side, where a page's host shows one progress bar per request and a
+user can cancel the rest between them (the `layouts.export` precedent: the
+wire answers the finished thing, the service owns the job).
 
 The typing lives next to the page, not in this package. `qgis-sdk
 processing generate --web-out web/src/processing.schema.ts` (the scaffold's

@@ -14,8 +14,10 @@ def buffer(
 
 Registration is validated when it happens, not when the algorithm first runs:
 the function has to take the ``AlgorithmContext`` first, every input has to map
-to a host parameter kind, the result has to be the produced layer, and the id
-has to be unique inside the provider. A mistake therefore fails at import time,
+to a host parameter kind, the result has to be one declared output kind - the
+produced layer or raster, a ``FileRef``, a ``FolderOutput`` or ``HtmlOutput``
+ref, a number, a string, a boolean or ``MultipleLayers`` - and the id has to
+be unique inside the provider. A mistake therefore fails at import time,
 which is where a plugin author can still see it.
 
 An application owns a provider through ``app.add_provider(tools)``.
@@ -126,7 +128,8 @@ class Provider:
 
         The function is described immediately, so a missing context
         parameter, an input no host could render or a result that is not a
-        layer all fail here rather than during the first execution. Nothing is
+        declared output kind all fail here rather than during the first
+        execution. Nothing is
         wrapped: it gains ``describe()`` and a test calls the original function
         with a fake context.
 

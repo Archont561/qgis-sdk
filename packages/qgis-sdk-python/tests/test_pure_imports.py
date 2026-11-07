@@ -30,6 +30,7 @@ LAYER_ORDER = {
     "bindings": 2,
     "core": 2,
     "algorithms": 2,
+    "batch": 2,
     "jobs": 2,
     "providers": 2,
     "network": 2,
@@ -43,6 +44,7 @@ LAYER_ORDER = {
 LAYER_PATHS = {
     "http": SOURCE_ROOT / "http",
     "algorithms": SOURCE_ROOT / "algorithms.py",
+    "batch": SOURCE_ROOT / "batch.py",
     "bindings": SOURCE_ROOT / "bindings.py",
     "bridge": SOURCE_ROOT / "bridge",
     "core": SOURCE_ROOT / "core",

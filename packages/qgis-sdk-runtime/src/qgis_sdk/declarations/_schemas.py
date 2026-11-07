@@ -93,6 +93,12 @@ def _schema(
     if origin is Literal:
         return _literal_schema(args, path)
     if inspect.isclass(annotation) and is_dataclass(annotation):
+        declared = getattr(annotation, WIRE_SCHEMA_ATTRIBUTE, None)
+        if result and isinstance(declared, dict):
+            # A declared shape wins over the generic walk: an SDK value type
+            # that says how it crosses the wire (``RunResult``) describes
+            # itself better than its fields can.
+            return _json_copy(declared)
         return _dataclass_schema(annotation, path, result=result, stack=stack)
     declared = getattr(annotation, WIRE_SCHEMA_ATTRIBUTE, None)
     if result and inspect.isclass(annotation) and isinstance(declared, dict):
