@@ -185,3 +185,79 @@ def test_an_output_with_no_description_keeps_its_own_name() -> None:
     _, names = model_output_names(info)
 
     assert names == {"OUTPUT": "output"}
+
+
+def test_a_model_that_exposes_destinations_names_them_by_description() -> None:
+    from qgis_sdk.processing.runs import model_output_names
+
+    # The shape a loaded model answers with: no declared outputs, and one
+    # destination parameter per child output, named after the child.
+    info = AlgorithmInfo(
+        id="model:report",
+        provider="model",
+        name="report",
+        label="Report model",
+        group="",
+        group_id="",
+        help="",
+        parameters=(
+            ParameterInfo(name="FEATS", kind="source", label="Features"),
+            ParameterInfo(
+                name="native:centroids_1:CENTROIDS",
+                kind="sink",
+                label="Centroids",
+                destination=True,
+                extension="gpkg",
+            ),
+            ParameterInfo(
+                name="native:basicstatisticsforfields_1:OUTPUT_HTML_FILE",
+                kind="fileDestination",
+                label="Report",
+                destination=True,
+                extension="html",
+            ),
+        ),
+        outputs=(),
+    )
+
+    renamed, names = model_output_names(info)
+
+    assert names == {
+        "native:centroids_1:CENTROIDS": "centroids",
+        "native:basicstatisticsforfields_1:OUTPUT_HTML_FILE": "report",
+    }
+    kinds = {output.name: output.kind for output in renamed.outputs}
+    assert kinds["centroids"] == "outputVector"
+    # A file destination is a file, whatever it writes.
+    assert kinds["report"] == "outputFile"
+
+
+def test_the_answer_is_matched_whatever_case_the_file_declares() -> None:
+    from qgis_sdk.processing.runs import model_output_names
+
+    info = AlgorithmInfo(
+        id="model:report",
+        provider="model",
+        name="report",
+        label="Report model",
+        group="",
+        group_id="",
+        help="",
+        parameters=(
+            ParameterInfo(
+                name="native:centroids_1:CENTROIDS",
+                kind="sink",
+                label="Centroids",
+                destination=True,
+                extension="gpkg",
+            ),
+        ),
+        outputs=(),
+    )
+
+    _, names = model_output_names(info)
+
+    answered = "native:centroids_1:centroids"
+    assert {key.lower(): value for key, value in names.items()}[answered] == (
+        "centroids"
+    )

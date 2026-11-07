@@ -290,9 +290,12 @@ class NativeAlgorithms:
                     label, raw, params, explicit, staged, stage
                 )
             if rename:
-                # A model answers under the child output's name; the caller
-                # reads the model's.
-                raw = {rename.get(key, key): value for key, value in raw.items()}
+                # A model answers under the child destination's name, in the
+                # case its file declares; the caller reads the model's.
+                lowered = {key.lower(): value for key, value in rename.items()}
+                raw = {
+                    lowered.get(key.lower(), key): value for key, value in raw.items()
+                }
             outputs = self._convert_outputs(info, raw)
         except BaseException:
             shutil.rmtree(run_directory, ignore_errors=True)

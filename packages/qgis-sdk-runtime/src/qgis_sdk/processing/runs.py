@@ -18,6 +18,7 @@ from qgis_sdk.models import (
     AlgorithmInfo,
     AlgorithmRun,
     FileRef,
+    OutputInfo,
     ParameterInfo,
     QgisSdkAlgorithmRejectedError,
     TypedRun,
@@ -49,6 +50,15 @@ FILE_OUTPUT_KINDS: frozenset[str] = frozenset(
         "outputVectorTile",
     }
 )
+#: The output kind a model's destination parameter exposes, for the run's
+#: conversion: a sink is a vector file, a folder is a directory, and every
+#: other destination is a file.
+DESTINATION_OUTPUT_KINDS: dict[str, str] = {
+    "sink": "outputVector",
+    "vectorDestination": "outputVector",
+    "folderDestination": "outputFolder",
+}
+
 #: Extension per destination kind when the registry names none.
 DEFAULT_EXTENSIONS: dict[str, str] = {
     "sink": "gpkg",
@@ -72,24 +82,50 @@ def model_output_names(info: AlgorithmInfo) -> tuple[AlgorithmInfo, dict[str, st
     (an ``AlgorithmInfo`` whose outputs carry the derived names) and the
     mapping that re-keys the run's raw outputs onto them.
     """
+
+    def derived(label: str, fallback: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or fallback
+
     names: dict[str, str] = {}
     taken: set[str] = set()
     for output in info.outputs:
-        derived = re.sub(r"[^a-z0-9]+", "_", output.label.lower()).strip("_")
-        derived = derived or output.name.lower()
-        candidate = derived
+        candidate = derived(output.label, output.name.lower())
         suffix = 2
+        base = candidate
         while candidate in taken:
-            candidate = f"{derived}_{suffix}"
+            candidate = f"{base}_{suffix}"
             suffix += 1
         taken.add(candidate)
         names[output.name] = candidate
+    # A loaded model answers under the destinations the format derives for
+    # its children - ``native:centroids_1:CENTROIDS``, which this Processing
+    # lower-cases - and those are parameters, not outputs, so they are named
+    # by their description too. Matching is by lower-cased name at the call
+    # site: the file's case is not the case the run answers with.
+    extra: list[OutputInfo] = []
+    declared = {output.name for output in info.outputs}
+    for parameter in info.parameters:
+        if not parameter.destination or parameter.name in names:
+            continue
+        tail = parameter.name.rsplit(":", 1)[-1].lower()
+        candidate = derived(parameter.label, tail)
+        names[parameter.name] = candidate
+        if candidate not in declared:
+            extra.append(
+                OutputInfo(
+                    name=candidate,
+                    kind=DESTINATION_OUTPUT_KINDS.get(parameter.kind, "outputFile"),
+                    label=parameter.label,
+                )
+            )
+            declared.add(candidate)
     return (
         replace(
             info,
             outputs=tuple(
                 replace(output, name=names[output.name]) for output in info.outputs
-            ),
+            )
+            + tuple(extra),
         ),
         names,
     )
