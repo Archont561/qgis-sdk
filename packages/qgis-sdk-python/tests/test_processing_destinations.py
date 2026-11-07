@@ -1,0 +1,117 @@
+"""Where a run allocates its outputs: the provider's name, made safe.
+
+Nothing here imports QGIS. A backend that allocates the destinations a caller
+left out writes into the run directory under a name the *provider* chose -
+``OUTPUT`` for a registered algorithm, ``native:centroids_1:CENTROIDS`` for
+the destination Processing derives for a model's child - so the translation
+of that name into a file name is a pure rule, and the rule that keeps it
+inside the run directory is proven here rather than in a native lane.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from qgis_sdk.models import (
+    AlgorithmInfo,
+    OutputInfo,
+    ParameterInfo,
+    QgisSdkAlgorithmRejectedError,
+)
+from qgis_sdk.processing.runs import destination_path, plan_destinations
+
+RUN = Path("/run/run-1")
+
+
+def _destination(name: str, **changes: object) -> ParameterInfo:
+    return ParameterInfo(name=name, kind="sink", destination=True, **changes)
+
+
+def test_a_registered_algorithms_uppercase_name_is_lowered_and_suffixed() -> None:
+    path = destination_path(RUN, _destination("OUTPUT", extension="gpkg"))
+
+    assert path == RUN / "output.gpkg"
+
+
+def test_a_models_child_destination_translates_instead_of_being_refused() -> None:
+    # Processing names a model's derived destinations after the child and the
+    # output it writes; a colon cannot reach a file name, so it is a
+    # separator here, not a refusal.
+    path = destination_path(
+        RUN, _destination("native:centroids_1:CENTROIDS", extension="gpkg")
+    )
+
+    assert path == RUN / "native_centroids_1_centroids.gpkg"
+    assert path.parent == RUN
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["../../etc/passwd", "C:\\Windows\\evil", "/absolute/path", "..", "...", "_"],
+)
+def test_no_provider_name_escapes_the_run_directory(name: str) -> None:
+    with pytest.raises(ValueError, match="unsafe provider-defined name"):
+        destination_path(RUN, _destination(name, extension="gpkg"))
+
+
+@pytest.mark.parametrize("name", ["con", "PRN", "aux", "NUL", "com1", "lpt9"])
+def test_a_windows_device_name_is_refused(name: str) -> None:
+    with pytest.raises(ValueError, match="unsafe provider-defined name"):
+        destination_path(RUN, _destination(name, extension="gpkg"))
+
+
+@pytest.mark.parametrize("extension", ["a/b", "gp kg", "../x", "g" * 17])
+def test_an_extension_outside_the_alphabet_is_refused(extension: str) -> None:
+    with pytest.raises(ValueError, match="unsafe provider-defined name"):
+        destination_path(RUN, _destination("OUTPUT", extension=extension))
+
+
+def test_a_missing_extension_falls_back_to_the_kind() -> None:
+    assert destination_path(RUN, _destination("OUTPUT")) == RUN / "output.gpkg"
+    folder = ParameterInfo(name="Reports", kind="folderDestination", destination=True)
+    assert destination_path(RUN, folder) == RUN / "reports"
+
+
+def test_two_provider_names_that_translate_alike_are_refused_not_overwritten() -> None:
+    info = AlgorithmInfo(
+        id="model:report",
+        provider="model",
+        name="report",
+        label="Report model",
+        group="",
+        group_id="",
+        help="",
+        parameters=(
+            _destination("native:centroids_1:CENTROIDS"),
+            _destination("native_centroids_1_centroids"),
+        ),
+        outputs=(OutputInfo(name="CENTROIDS", kind="outputVector", label="Centroids"),),
+    )
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
+        plan_destinations(info, {}, lambda ref: Path("/unreachable"))
+
+    assert "collide" in str(refused.value)
+
+
+def test_planning_allocates_one_name_per_omitted_destination() -> None:
+    info = AlgorithmInfo(
+        id="model:report",
+        provider="model",
+        name="report",
+        label="Report model",
+        group="",
+        group_id="",
+        help="",
+        parameters=(
+            _destination("native:centroids_1:CENTROIDS"),
+            _destination("native:basicstatisticsforfields_1:OUTPUT_HTML_FILE"),
+        ),
+        outputs=(
+            OutputInfo(name="CENTROIDS", kind="outputVector", label="Centroids"),
+            OutputInfo(name="OUTPUT_HTML_FILE", kind="outputHtml", label="Report"),
+        ),
+    )
+
+    assert plan_destinations(info, {}, lambda ref: Path("/unreachable")) == {}

@@ -27,7 +27,17 @@ function run(args: readonly string[]): string {
 	return result.stdout.toString();
 }
 
-if (!existsSync(join(PACKAGE, "dist", "index.js"))) {
+// `dist` is restored by caches and consumed by other lanes, and a partial
+// one is worse than an absent one: `bunup` writes the modules, the CSS step
+// writes the two stylesheets, and a `dist` from which either is missing
+// packs an incomplete tarball. Build unless every artifact the assertions
+// below name is there.
+const REQUIRED = [
+	"dist/index.js",
+	"dist/style.css",
+	"dist/tokens.css",
+] as const;
+if (REQUIRED.some((path) => !existsSync(join(PACKAGE, path)))) {
 	run(["run", "build"]);
 }
 

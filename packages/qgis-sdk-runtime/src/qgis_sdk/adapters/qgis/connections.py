@@ -201,13 +201,9 @@ class NativeConnections:
     def test(self, provider: str, name: str) -> ConnectionTest:
         connection = self._require(provider, name)
         try:
-            schemas = tuple(connection.schemas())
-            if not schemas:
-                # A schema-less backend proves itself by listing its tables;
-                # schemas() is a no-op there and would pass a missing file.
-                connection.tables()
-        except QgsProviderConnectionException as error:
-            return ConnectionTest(valid=False, message=_redact(str(error)))
+            self._catalog(connection, provider, name)
+        except QgisSdkConnectionUnavailableError as error:
+            return ConnectionTest(valid=False, message=str(error))
         return ConnectionTest(valid=True)
 
     def auth_configurations(self) -> tuple[AuthConfiguration, ...]:
@@ -259,16 +255,34 @@ class NativeConnections:
         return connection
 
     def _catalog(self, connection: Any, provider: str, name: str) -> tuple[str, ...]:
-        """Answer the connection's schemas, proving the database answers."""
+        """Answer the connection's schemas, proving the database answers.
+
+        A schema-less backend - the ``ogr`` connection that answers a
+        GeoPackage file, whose provider refuses ``Schemas`` outright - is not
+        an unavailable one: the refusal is answered by listing its tables, and
+        only a table listing that also refuses makes the connection
+        unavailable. An empty answer stays empty either way, so ``browse``
+        lists those tables directly.
+        """
         try:
             schemas = tuple(connection.schemas())
-            if not schemas:
-                connection.tables()
-            return schemas
         except QgsProviderConnectionException as error:
-            raise QgisSdkConnectionUnavailableError(
-                provider, name, _redact(str(error))
-            ) from error
+            try:
+                connection.tables()
+            except QgsProviderConnectionException:
+                raise QgisSdkConnectionUnavailableError(
+                    provider, name, _redact(str(error))
+                ) from error
+            return ()
+        if not schemas:
+            # `schemas()` is a no-op there and would pass a missing file.
+            try:
+                connection.tables()
+            except QgsProviderConnectionException as error:
+                raise QgisSdkConnectionUnavailableError(
+                    provider, name, _redact(str(error))
+                ) from error
+        return schemas
 
     def _tables(
         self, connection: Any, provider: str, name: str, schema: str
