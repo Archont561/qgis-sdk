@@ -36,8 +36,8 @@ Explicit release gate for the layer-kinds, connections, symbology and Processing
 
 <!-- SECTION:NOTES:BEGIN -->
 Gate run on this branch, built on `main` `e5e24c8` (the PR #176 merge), opened
-as the stamp pull request, and recorded in doc-14 under "0.11.0 release gate
-(2026-11-07)". The stamp is in this pull request; the gate itself spends
+as PR #177, and recorded in doc-14 under "0.11.0 release gate (2026-11-07)".
+The stamp is in this pull request; the gate itself spends
 nothing.
 
 AC 1 (evidence, migration notes). Pure Python suite 2820 passed / 28 skipped
