@@ -2468,12 +2468,44 @@ stamped with it.
   are not part of a default run. The Windows and macOS QGIS rows remain
   *unqualified* per TASK-33: `cross-platform` proves the Python and Bun
   suites there, not a QGIS host.
-- **Approval (AC 4).** This record is a gate, not a release: nothing is
-  tagged, nothing is uploaded, and no date is promised for 1.0.0. The two
-  tags this minor would spend - `python-v0.11.0` and `ts-v0.8.0`, or their
-  `-rc.1` rehearsals first - are spent on explicit authorization, on the
-  merge commit of the stamp pull request and on one authorization for the
-  pair, because the bridge is released with the Python minor here. Nothing
-  has been asked for and nothing spent: "publish" is the word that spends
-  them, and the rehearsal half of it is a rehearsal guarantee, not a
-  release.
+- **Approval (AC 4).** This record is a gate, not a release: no stable tag
+  is cut, nothing reaches a registry, and no date is promised for 1.0.0. The
+  gate merged as `0737994` (PR #177), and the owner asked for the rehearsal
+  half of the authorization - "merge and rehearse" - so
+  `python-v0.11.0-rc.1` and `ts-v0.8.0-rc.1` were cut on that merge commit
+  in one act, because the bridge is released with the Python minor. Both
+  ran green and consumed nothing; see the rehearsal record below. The
+  stable pair still waits for "publish".
+
+## 0.11.0 rc rehearsal (2026-11-07)
+
+The gate merged as `0737994` (PR #177) and both scopes were rehearsed on that
+commit with a prerelease tag each, in one authorization, because this minor
+releases the bridge with the Python kit. Prerelease tags dry-run the
+registries, so the rehearsal spends no version space.
+
+| Tag | `release.yml` run | Outcome |
+| --- | --- | --- |
+| `python-v0.11.0-rc.1` | [42408336282](https://github.com/Archont561/qgis-sdk/actions/runs/42408336282) | every job green: `build` stamped `0.11.0-rc.1` for scope `python`, passed "Verify the stamped manifests and the shared contract", recorded the support matrix, and built and twine-checked the three wheels and the three Conda outputs; `pypi` ran "Verify the wheel without uploading" with "Publish qgis-sdk-runtime / qgis-sdk-tools / qgis-sdk to PyPI" all skipped; `conda` ran "Skip prefix.dev upload for prereleases" and skipped the three prefix.dev uploads; `github-release` published the prerelease. `ui`, `github-packages`, `npm` and `github-packages-ui` skipped, as a Python-only scope must |
+| `ts-v0.8.0-rc.1` | [42408336411](https://github.com/Archont561/qgis-sdk/actions/runs/42408336411) | every job green: `build` stamped `0.8.0-rc.1` for scope `typescript`, passed the same stamped-manifest and contract verification and built the bridge; `npm` packed the bridge and alias tarballs, smoke-tested the alias against the bridge tarball, uploaded the artifact and ran "Dry-run the publish", with "Publish to npm" and "Publish the alias to npm" skipped; `github-packages` ran "Dry-run GitHub Packages publish" with the real publish skipped; `github-release` published the prerelease. `pypi`, `conda`, `ui` and `github-packages-ui` skipped |
+
+Nothing was consumed: PyPI still serves `qgis-sdk` 0.10.0 as `latest` with no
+`0.11.0rc1` release, and npm still lists `@archont561/qgis-sdk` `latest` at
+0.7.0 with no `0.8.0-rc.1` version. Both GitHub releases are prereleases:
+`python-v0.11.0-rc.1` carries
+`qgis_sdk-0.11.0rc1-py3-none-any.whl`,
+`qgis_sdk_runtime-0.11.0rc1-py3-none-any.whl`,
+`qgis_sdk_tools-0.11.0rc1-py3-none-any.whl`,
+`qgis-sdk-0.11.0rc1-pyhc454e9f_0.conda`,
+`qgis-sdk-runtime-0.11.0rc1-pyh4616a5c_0.conda`,
+`qgis-sdk-tools-0.11.0rc1-pyh4616a5c_0.conda` and `SHA256SUMS` (seven
+assets); `ts-v0.8.0-rc.1` carries `archont561-qgis-sdk-0.8.0-rc.1.tgz`,
+`qgis-sdk-0.8.0-rc.1.tgz` and `SHA256SUMS` (three). The prefix.dev and
+GitHub Packages paths are attested by their run logs rather than a registry
+query: Conda is unreachable from this sandbox and GitHub Packages needs
+credentials it does not hold.
+
+The rehearsal is what the last train did at the same point, and it is the
+reason the stable pair can be cut in one step: the build chain, the stamping
+of a prerelease, the registry dry-runs and the release packaging have all
+now run against this source.
