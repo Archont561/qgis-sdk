@@ -52,7 +52,9 @@ newest last.
 ## Host operations
 
 Every operation the host answers, as of the 0.11.0 development line: the 0.10.0
-surface plus the layer kinds of [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) ([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
+surface plus the layer kinds of [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md)
+and the symbology of [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md)
+([decision-54](../../decisions/decision-54%20-%20Cover-every-QGIS-service-and-layer-kind-through-the-contract-fake-native-host-grant-pattern-under-one-grant-vocabulary.md)
 point 5). The five `layers.open_*` rows of the other kinds reuse `layers.open`,
 so the grant vocabulary does not grow with a kind: a project grants "open a
 layer", not "open a mesh". The id is `<service>.<operation>`; the grant is the name that selects it
@@ -103,7 +105,14 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `project.save` | `project.write` | Project (the file) | `Project.save` |
 | `project.changed` | `project.read` | Project (a push stream) | `Project.watch_changes` |
 | `settings.get` | `settings.read` | Settings | `Settings.get` |
-| `styles.apply` | `styles.apply` | Styles | `Styles.apply_style` |
+| `styles.apply` | `styles.apply` | Styles (a packaged QML, destructive) | `Styles.apply_style` |
+| `symbology.get` | `symbology.read` | Symbology | `Styles.symbology` |
+| `symbology.set` | `symbology.write` | Symbology (destructive) | `Styles.set_symbology` |
+| `labelling.get` | `symbology.read` | Symbology (labelling) | `Styles.labelling` |
+| `labelling.set` | `symbology.write` | Symbology (labelling, destructive) | `Styles.set_labelling` |
+| `styles.list` | `styles.read` | Styles (the style manager) | `Styles.list_styles` |
+| `styles.export` | `styles.read` | Styles (QML or SLD text) | `Styles.export_style` |
+| `styles.import` | `styles.write` | Styles (QML or SLD text, destructive) | `Styles.import_style` |
 | `files.export` | `files.export` | Files (authority) | `HostAuthority.export_file` |
 | `blob.get` | `blob.read` | Payloads above the inline ceiling | `HostAuthority.read_blob` |
 | `features.page` | `features.read` | Features (a bounded page stream) | `Features.page` |
@@ -137,11 +146,15 @@ names **plugin actions and streams**, not host operations, so it has no row here
 | `canvas.apply_theme` | `canvas.control` | Canvas (map themes) | `Canvas.apply_theme` |
 | `canvas.capture` | `canvas.control` | Canvas (a capture stream) | `Canvas.capture` |
 
-Nine operations carry the `destructive` annotation, and nothing infers it from
+Thirteen operations carry the `destructive` annotation, and nothing infers it from
 a name: `project.read` (it replaces the open project), `project.write`,
 `project.save`, `project.remove_layer`, `project.remove_bookmark`,
 `project.unset_variable`, `project.unset_property`, `layouts.export` and
-`layouts.atlas` (both replace a file the page's own write ref already names). The annotation is
+`layouts.atlas` (both replace a file the page's own write ref already names), and
+`styles.apply`, `symbology.set`, `labelling.set` and `styles.import` (each
+replaces how a layer is drawn, labelled or both - a packaged style is applied
+*over* whatever the layer had, and a style document replaces the renderer and the
+labelling together). The annotation is
 declared beside the operation (`HostOperation.destructive`), crosses in the
 manifest, and is the flag the agent consent list reads so a destructive tool can
 be set to "ask each time" ([decision-49](../../decisions/decision-49%20-%20Expose-the-runtime-to-agents-over-a-loopback-transport-with-the-MCP-server-in-the-tools-for-developers-and-users-alike.md)
@@ -170,7 +183,7 @@ column says what did land.
 | Canvas | `canvas.extent_changed` and `canvas.capture` are the two streams; a server refuses every operation by name | [TASK-85](../../tasks/task-85%20-%20Add-the-canvas-service-extent-scale-CRS-zoom-refresh-map-themes-extent-stream-and-capture-tools.md) | 0.10.0 | complete (the extent, zoom, themes, refresh and capture calls plus the two streams; a server refuses each by name, and doc-12, doc-13 and the example use `zoom_to`) |
 | Layer kinds | mesh, point cloud, vector tile, annotation, tiled scene | [TASK-91](../../tasks/task-91%20-%20Add-mesh-point-cloud-vector-tile-annotation-and-tiled-scene-layer-kinds-with-per-kind-info-models-and-open-operations.md) | 0.11.0 | complete (the five kinds, their models, layer inputs and pickers, the Processing source-type narrowing and the five host operations); all five open natively - mesh over the checked-in `lagoon.2dm`, annotation by creation, and point cloud, vector tile and tiled scene over files `tests/layer_kind_fixtures.py` builds (a LAS 1.2 point cloud, an MBTiles source, a 3D Tiles `tileset.json`) rather than committing binaries the review cannot read; the release waits for the 0.11.0 gate |
 | Connections / auth | `connections.list/describe/browse/open_layer/test`, `auth.configurations` (ids only) | [TASK-92](../../tasks/task-92%20-%20Add-connections-and-authentication-configuration-registered-data-source-connections-browsing-opening-from-a-connection-auth-configuration-ids.md) | 0.11.0 | planned |
-| Symbology | renderers, symbols, labelling, style manager, QML/SLD both ways | [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md) | 0.11.0 | planned |
+| Symbology | `styles.symbology/set_symbology/labelling/set_labelling/list_styles/export_style/import_style`, renderers, symbols and labelling | [TASK-93](../../tasks/task-93%20-%20Add-symbology-labelling-and-the-style-manager-renderer-and-symbol-models-labelling-settings-style-manager-read-QML-and-SLD-import-and-export.md) | 0.11.0 | complete (four renderers - single symbol, categorized, graduated, rule-based - three symbols, one simple labelling, the style manager's three name lists and QML/SLD text both ways); the renderer union is curated on purpose (decision-16), QML reproduces the renderer and SLD reproduces the drawing, and `custom` is a *readable* graduated mode because QGIS reports it for a hand-banded layer; the release waits for the 0.11.0 gate |
 | Processing breadth | multi-layer outputs, `run_model`, `batch`, help text rendering | [TASK-94](../../tasks/task-94%20-%20Widen-Processing-discovery-and-help-every-output-kind-model-files-and-batch-runs.md) | 0.11.0 | planned |
 | Large payloads | `BlobRef`, `qgis.host.blob`, bounded pages, stream `ack` (decision-59) | [TASK-102](../../tasks/task-102%20-%20Carry-large-and-binary-payloads-by-reference-BlobRef-qgis.host.blob-bounded-pages-stream-backpressure-measured-defaults.md) | 0.10.0 | landed in 0.10.0 (the ref, the blob fetch, bounded pages and `ack`); the task stays open only for the cap and page-size measurement in a real `QWebEngineView` and decision-59's status review |
 | Log | `ctx.log` debug/info/warning/error, correlation ids, agent log stream (decision-63) | [TASK-106](../../tasks/task-106%20-%20Add-ctx.log-crash-capture-into-it-the-Report-a-problem-surface-and-qgis-sdk-diagnose-with-no-telemetry.md) (minimum in [TASK-96](../../tasks/task-96%20-%20Add-surface-wiring-and-the-rest-of-the-native-catalogue-on-subscribe-ui-loading-behaviour-mixins-containers-feedback-Custom-and-the-fake-rendering.md)) | 1.0.0 | planned |

@@ -5,7 +5,7 @@
 import { QgisSdkError } from "../errors";
 
 export const HOST_ID = "qgis.host";
-export const HOST_FINGERPRINT = "sha256:5c1a612b602ea52856c43c6a7a7c342b0e73ba63b80b264263bd11e67d341a4e";
+export const HOST_FINGERPRINT = "sha256:82e60b50db30877cf9f73755b90f452df7709d01fd5ea0f3639da8a658d12546";
 export const HOST_SCHEMA_VERSION = 1;
 
 /** Every declared operation id, so a name can be checked, not guessed. */
@@ -36,6 +36,8 @@ export const HOST_OPERATIONS = [
 	"features.get",
 	"features.page",
 	"files.export",
+	"labelling.get",
+	"labelling.set",
 	"layers.get",
 	"layers.list",
 	"layers.open_annotation",
@@ -78,6 +80,11 @@ export const HOST_OPERATIONS = [
 	"rasters.statistics",
 	"settings.get",
 	"styles.apply",
+	"styles.export",
+	"styles.import",
+	"styles.list",
+	"symbology.get",
+	"symbology.set",
 ] as const;
 
 export type HostOperationId = (typeof HOST_OPERATIONS)[number];
@@ -303,6 +310,18 @@ export interface CaptureRequest {
 	readonly shape: "point" | "line" | "polygon";
 }
 
+export interface CategorizedRenderer {
+	readonly categories: readonly Category[];
+	readonly field: string;
+	readonly kind: "categorized";
+}
+
+export interface Category {
+	readonly label: string;
+	readonly symbol: MarkerSymbol | LineSymbol | FillSymbol;
+	readonly value: string;
+}
+
 export interface EditAddRequest {
 	readonly attributes: Record<string, unknown>;
 	readonly geometry?: Geometry | null;
@@ -370,6 +389,11 @@ export interface ExportResult {
 	readonly name: string;
 }
 
+export interface ExportStyleRequest {
+	readonly format: "qml" | "sld";
+	readonly layer_id: string;
+}
+
 export interface ExpressionCheck {
 	readonly message: string | null;
 	readonly referenced_columns: readonly string[];
@@ -434,6 +458,13 @@ export interface FileRef {
 	readonly operations?: readonly ("read" | "write")[];
 }
 
+export interface FillSymbol {
+	readonly color: string;
+	readonly kind: "fill";
+	readonly outline_color: string;
+	readonly outline_width: number;
+}
+
 export interface Geometry {
 	readonly crs?: string | null;
 	readonly encoding: "wkb" | "wkt" | "geojson";
@@ -442,6 +473,20 @@ export interface Geometry {
 	readonly part_count?: number;
 	readonly value: string;
 	readonly vertex_count?: number;
+}
+
+export interface GraduatedClass {
+	readonly label: string;
+	readonly lower: number;
+	readonly symbol: MarkerSymbol | LineSymbol | FillSymbol;
+	readonly upper: number;
+}
+
+export interface GraduatedRenderer {
+	readonly classes: readonly GraduatedClass[];
+	readonly field: string;
+	readonly kind: "graduated";
+	readonly mode: "equal_interval" | "quantile" | "jenks" | "std_dev" | "pretty" | "custom";
 }
 
 export interface HttpHeader {
@@ -453,6 +498,23 @@ export interface IdPage {
 	readonly items: readonly string[];
 	readonly next_cursor?: string;
 	readonly truncated: boolean;
+}
+
+export interface ImportStyleRequest {
+	readonly format: "qml" | "sld";
+	readonly layer_id: string;
+	readonly text: string;
+}
+
+export interface Labelling {
+	readonly color: string;
+	readonly enabled: boolean;
+	readonly field: string | null;
+	readonly size: number;
+}
+
+export interface LabellingRequest {
+	readonly layer_id: string;
 }
 
 export interface LayerNode {
@@ -501,6 +563,12 @@ export interface LayoutsListRequest {
 	readonly [key: string]: never;
 }
 
+export interface LineSymbol {
+	readonly color: string;
+	readonly kind: "line";
+	readonly width: number;
+}
+
 export interface LoadLayoutTemplateRequest {
 	readonly file: FileRef;
 }
@@ -508,6 +576,15 @@ export interface LoadLayoutTemplateRequest {
 export interface MapThemes {
 	readonly active?: string | null;
 	readonly names: readonly string[];
+}
+
+export interface MarkerSymbol {
+	readonly color: string;
+	readonly kind: "marker";
+	readonly outline_color: string;
+	readonly outline_width: number;
+	readonly shape: "circle" | "square" | "diamond" | "triangle" | "star";
+	readonly size: number;
 }
 
 export interface MeshLayerInfo {
@@ -744,6 +821,18 @@ export interface ReadProjectRequest {
 	readonly file: FileRef;
 }
 
+export interface Rule {
+	readonly enabled: boolean;
+	readonly filter: string;
+	readonly label: string;
+	readonly symbol: MarkerSymbol | LineSymbol | FillSymbol;
+}
+
+export interface RuleBasedRenderer {
+	readonly kind: "rule_based";
+	readonly rules: readonly Rule[];
+}
+
 export interface RunAlgorithmRequest {
 	readonly algorithm_id: string;
 	readonly params: Record<string, unknown>;
@@ -768,14 +857,53 @@ export interface SampleRequest {
 	readonly point: CanvasPoint;
 }
 
+export interface SetLabellingRequest {
+	readonly labelling: Labelling;
+	readonly layer_id: string;
+}
+
+export interface SetSymbologyRequest {
+	readonly layer_id: string;
+	readonly renderer: SingleSymbolRenderer | CategorizedRenderer | GraduatedRenderer | RuleBasedRenderer;
+}
+
 export interface SettingsGetRequest {
 	readonly default?: string | null;
 	readonly key: string;
 }
 
+export interface SingleSymbolRenderer {
+	readonly kind: "single_symbol";
+	readonly symbol: MarkerSymbol | LineSymbol | FillSymbol;
+}
+
+export interface StyleEntries {
+	readonly items: readonly StyleEntry[];
+	readonly next_cursor?: string;
+	readonly truncated: boolean;
+}
+
+export interface StyleEntry {
+	readonly kind: "symbol" | "color_ramp" | "label_settings";
+	readonly name: string;
+}
+
+export interface StyleListRequest {
+	readonly kind?: "symbol" | "color_ramp" | "label_settings";
+}
+
+export interface StyleText {
+	readonly format: "qml" | "sld";
+	readonly text: string;
+}
+
 export interface StylesApplyRequest {
 	readonly layer_id: string;
 	readonly style: string;
+}
+
+export interface SymbologyRequest {
+	readonly layer_id: string;
 }
 
 export interface ThemeRequest {
@@ -1248,6 +1376,42 @@ export function CaptureRequest(value: unknown, strict = false): value is Capture
 	return true;
 }
 
+export function CategorizedRenderer(value: unknown, strict = false): value is CategorizedRenderer {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("field" in value)) return false;
+	if (!("categories" in value)) return false;
+	if (value["categories"] !== undefined && !((Array.isArray(value["categories"]) && value["categories"].every((item) => Category(item, strict))))) {
+		return false;
+	}
+	if (value["field"] !== undefined && !(typeof value["field"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "categorized"))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["categories", "field", "kind"])) return false;
+	return true;
+}
+
+export function Category(value: unknown, strict = false): value is Category {
+	if (!isRecord(value)) return false;
+	if (!("value" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("symbol" in value)) return false;
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["symbol"] !== undefined && !((MarkerSymbol(value["symbol"], strict) || LineSymbol(value["symbol"], strict) || FillSymbol(value["symbol"], strict)))) {
+		return false;
+	}
+	if (value["value"] !== undefined && !(typeof value["value"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["label", "symbol", "value"])) return false;
+	return true;
+}
+
 export function EditAddRequest(value: unknown, strict = false): value is EditAddRequest {
 	if (!isRecord(value)) return false;
 	if (!("session_id" in value)) return false;
@@ -1435,6 +1599,20 @@ export function ExportResult(value: unknown, strict = false): value is ExportRes
 	return true;
 }
 
+export function ExportStyleRequest(value: unknown, strict = false): value is ExportStyleRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("format" in value)) return false;
+	if (value["format"] !== undefined && !((value["format"] === "qml" || value["format"] === "sld"))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["format", "layer_id"])) return false;
+	return true;
+}
+
 export function ExpressionCheck(value: unknown, strict = false): value is ExpressionCheck {
 	if (!isRecord(value)) return false;
 	if (!("valid" in value)) return false;
@@ -1616,6 +1794,28 @@ export function FileRef(value: unknown, strict = false): value is FileRef {
 	return true;
 }
 
+export function FillSymbol(value: unknown, strict = false): value is FillSymbol {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("color" in value)) return false;
+	if (!("outline_color" in value)) return false;
+	if (!("outline_width" in value)) return false;
+	if (value["color"] !== undefined && !(typeof value["color"] === "string" && new RegExp("^(?:#[0-9a-f]{6})$").test(value["color"]))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "fill"))) {
+		return false;
+	}
+	if (value["outline_color"] !== undefined && !(typeof value["outline_color"] === "string" && new RegExp("^(?:#[0-9a-f]{6})$").test(value["outline_color"]))) {
+		return false;
+	}
+	if (value["outline_width"] !== undefined && !(typeof value["outline_width"] === "number" && Number.isFinite(value["outline_width"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["color", "kind", "outline_color", "outline_width"])) return false;
+	return true;
+}
+
 export function Geometry(value: unknown, strict = false): value is Geometry {
 	if (!isRecord(value)) return false;
 	if (!("encoding" in value)) return false;
@@ -1643,6 +1843,50 @@ export function Geometry(value: unknown, strict = false): value is Geometry {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["crs", "encoding", "geometry_type", "is_empty", "part_count", "value", "vertex_count"])) return false;
+	return true;
+}
+
+export function GraduatedClass(value: unknown, strict = false): value is GraduatedClass {
+	if (!isRecord(value)) return false;
+	if (!("lower" in value)) return false;
+	if (!("upper" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("symbol" in value)) return false;
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["lower"] !== undefined && !(typeof value["lower"] === "number" && Number.isFinite(value["lower"]))) {
+		return false;
+	}
+	if (value["symbol"] !== undefined && !((MarkerSymbol(value["symbol"], strict) || LineSymbol(value["symbol"], strict) || FillSymbol(value["symbol"], strict)))) {
+		return false;
+	}
+	if (value["upper"] !== undefined && !(typeof value["upper"] === "number" && Number.isFinite(value["upper"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["label", "lower", "symbol", "upper"])) return false;
+	return true;
+}
+
+export function GraduatedRenderer(value: unknown, strict = false): value is GraduatedRenderer {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("field" in value)) return false;
+	if (!("mode" in value)) return false;
+	if (!("classes" in value)) return false;
+	if (value["classes"] !== undefined && !((Array.isArray(value["classes"]) && value["classes"].every((item) => GraduatedClass(item, strict))))) {
+		return false;
+	}
+	if (value["field"] !== undefined && !(typeof value["field"] === "string")) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "graduated"))) {
+		return false;
+	}
+	if (value["mode"] !== undefined && !((value["mode"] === "equal_interval" || value["mode"] === "quantile" || value["mode"] === "jenks" || value["mode"] === "std_dev" || value["mode"] === "pretty" || value["mode"] === "custom"))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["classes", "field", "kind", "mode"])) return false;
 	return true;
 }
 
@@ -1674,6 +1918,56 @@ export function IdPage(value: unknown, strict = false): value is IdPage {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function ImportStyleRequest(value: unknown, strict = false): value is ImportStyleRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("format" in value)) return false;
+	if (!("text" in value)) return false;
+	if (value["format"] !== undefined && !((value["format"] === "qml" || value["format"] === "sld"))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (value["text"] !== undefined && !(typeof value["text"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["format", "layer_id", "text"])) return false;
+	return true;
+}
+
+export function Labelling(value: unknown, strict = false): value is Labelling {
+	if (!isRecord(value)) return false;
+	if (!("enabled" in value)) return false;
+	if (!("field" in value)) return false;
+	if (!("size" in value)) return false;
+	if (!("color" in value)) return false;
+	if (value["color"] !== undefined && !(typeof value["color"] === "string" && new RegExp("^(?:#[0-9a-f]{6})$").test(value["color"]))) {
+		return false;
+	}
+	if (value["enabled"] !== undefined && !(typeof value["enabled"] === "boolean")) {
+		return false;
+	}
+	if (value["field"] !== undefined && !((typeof value["field"] === "string" || value["field"] === null))) {
+		return false;
+	}
+	if (value["size"] !== undefined && !(typeof value["size"] === "number" && Number.isFinite(value["size"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["color", "enabled", "field", "size"])) return false;
+	return true;
+}
+
+export function LabellingRequest(value: unknown, strict = false): value is LabellingRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id"])) return false;
 	return true;
 }
 
@@ -1807,6 +2101,24 @@ export function LayoutsListRequest(value: unknown, strict = false): value is Lay
 	return true;
 }
 
+export function LineSymbol(value: unknown, strict = false): value is LineSymbol {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("color" in value)) return false;
+	if (!("width" in value)) return false;
+	if (value["color"] !== undefined && !(typeof value["color"] === "string" && new RegExp("^(?:#[0-9a-f]{6})$").test(value["color"]))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "line"))) {
+		return false;
+	}
+	if (value["width"] !== undefined && !(typeof value["width"] === "number" && Number.isFinite(value["width"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["color", "kind", "width"])) return false;
+	return true;
+}
+
 export function LoadLayoutTemplateRequest(value: unknown, strict = false): value is LoadLayoutTemplateRequest {
 	if (!isRecord(value)) return false;
 	if (!("file" in value)) return false;
@@ -1827,6 +2139,36 @@ export function MapThemes(value: unknown, strict = false): value is MapThemes {
 		return false;
 	}
 	if (strict && !hasOnly(value, ["active", "names"])) return false;
+	return true;
+}
+
+export function MarkerSymbol(value: unknown, strict = false): value is MarkerSymbol {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("color" in value)) return false;
+	if (!("size" in value)) return false;
+	if (!("shape" in value)) return false;
+	if (!("outline_color" in value)) return false;
+	if (!("outline_width" in value)) return false;
+	if (value["color"] !== undefined && !(typeof value["color"] === "string" && new RegExp("^(?:#[0-9a-f]{6})$").test(value["color"]))) {
+		return false;
+	}
+	if (value["kind"] !== undefined && !((value["kind"] === "marker"))) {
+		return false;
+	}
+	if (value["outline_color"] !== undefined && !(typeof value["outline_color"] === "string" && new RegExp("^(?:#[0-9a-f]{6})$").test(value["outline_color"]))) {
+		return false;
+	}
+	if (value["outline_width"] !== undefined && !(typeof value["outline_width"] === "number" && Number.isFinite(value["outline_width"]))) {
+		return false;
+	}
+	if (value["shape"] !== undefined && !((value["shape"] === "circle" || value["shape"] === "square" || value["shape"] === "diamond" || value["shape"] === "triangle" || value["shape"] === "star"))) {
+		return false;
+	}
+	if (value["size"] !== undefined && !(typeof value["size"] === "number" && Number.isFinite(value["size"]))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["color", "kind", "outline_color", "outline_width", "shape", "size"])) return false;
 	return true;
 }
 
@@ -2473,6 +2815,42 @@ export function ReadProjectRequest(value: unknown, strict = false): value is Rea
 	return true;
 }
 
+export function Rule(value: unknown, strict = false): value is Rule {
+	if (!isRecord(value)) return false;
+	if (!("filter" in value)) return false;
+	if (!("label" in value)) return false;
+	if (!("enabled" in value)) return false;
+	if (!("symbol" in value)) return false;
+	if (value["enabled"] !== undefined && !(typeof value["enabled"] === "boolean")) {
+		return false;
+	}
+	if (value["filter"] !== undefined && !(typeof value["filter"] === "string")) {
+		return false;
+	}
+	if (value["label"] !== undefined && !(typeof value["label"] === "string")) {
+		return false;
+	}
+	if (value["symbol"] !== undefined && !((MarkerSymbol(value["symbol"], strict) || LineSymbol(value["symbol"], strict) || FillSymbol(value["symbol"], strict)))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["enabled", "filter", "label", "symbol"])) return false;
+	return true;
+}
+
+export function RuleBasedRenderer(value: unknown, strict = false): value is RuleBasedRenderer {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("rules" in value)) return false;
+	if (value["kind"] !== undefined && !((value["kind"] === "rule_based"))) {
+		return false;
+	}
+	if (value["rules"] !== undefined && !((Array.isArray(value["rules"]) && value["rules"].every((item) => Rule(item, strict))))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["kind", "rules"])) return false;
+	return true;
+}
+
 export function RunAlgorithmRequest(value: unknown, strict = false): value is RunAlgorithmRequest {
 	if (!isRecord(value)) return false;
 	if (!("algorithm_id" in value)) return false;
@@ -2541,6 +2919,34 @@ export function SampleRequest(value: unknown, strict = false): value is SampleRe
 	return true;
 }
 
+export function SetLabellingRequest(value: unknown, strict = false): value is SetLabellingRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("labelling" in value)) return false;
+	if (value["labelling"] !== undefined && !(Labelling(value["labelling"], strict))) {
+		return false;
+	}
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["labelling", "layer_id"])) return false;
+	return true;
+}
+
+export function SetSymbologyRequest(value: unknown, strict = false): value is SetSymbologyRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (!("renderer" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (value["renderer"] !== undefined && !((SingleSymbolRenderer(value["renderer"], strict) || CategorizedRenderer(value["renderer"], strict) || GraduatedRenderer(value["renderer"], strict) || RuleBasedRenderer(value["renderer"], strict)))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id", "renderer"])) return false;
+	return true;
+}
+
 export function SettingsGetRequest(value: unknown, strict = false): value is SettingsGetRequest {
 	if (!isRecord(value)) return false;
 	if (!("key" in value)) return false;
@@ -2551,6 +2957,74 @@ export function SettingsGetRequest(value: unknown, strict = false): value is Set
 		return false;
 	}
 	if (strict && !hasOnly(value, ["default", "key"])) return false;
+	return true;
+}
+
+export function SingleSymbolRenderer(value: unknown, strict = false): value is SingleSymbolRenderer {
+	if (!isRecord(value)) return false;
+	if (!("kind" in value)) return false;
+	if (!("symbol" in value)) return false;
+	if (value["kind"] !== undefined && !((value["kind"] === "single_symbol"))) {
+		return false;
+	}
+	if (value["symbol"] !== undefined && !((MarkerSymbol(value["symbol"], strict) || LineSymbol(value["symbol"], strict) || FillSymbol(value["symbol"], strict)))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["kind", "symbol"])) return false;
+	return true;
+}
+
+export function StyleEntries(value: unknown, strict = false): value is StyleEntries {
+	if (!isRecord(value)) return false;
+	if (!("items" in value)) return false;
+	if (!("truncated" in value)) return false;
+	if (value["items"] !== undefined && !((Array.isArray(value["items"]) && value["items"].every((item) => StyleEntry(item, strict))))) {
+		return false;
+	}
+	if (value["next_cursor"] !== undefined && !(typeof value["next_cursor"] === "string")) {
+		return false;
+	}
+	if (value["truncated"] !== undefined && !(typeof value["truncated"] === "boolean")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["items", "next_cursor", "truncated"])) return false;
+	return true;
+}
+
+export function StyleEntry(value: unknown, strict = false): value is StyleEntry {
+	if (!isRecord(value)) return false;
+	if (!("name" in value)) return false;
+	if (!("kind" in value)) return false;
+	if (value["kind"] !== undefined && !((value["kind"] === "symbol" || value["kind"] === "color_ramp" || value["kind"] === "label_settings"))) {
+		return false;
+	}
+	if (value["name"] !== undefined && !(typeof value["name"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["kind", "name"])) return false;
+	return true;
+}
+
+export function StyleListRequest(value: unknown, strict = false): value is StyleListRequest {
+	if (!isRecord(value)) return false;
+	if (value["kind"] !== undefined && !((value["kind"] === "symbol" || value["kind"] === "color_ramp" || value["kind"] === "label_settings"))) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["kind"])) return false;
+	return true;
+}
+
+export function StyleText(value: unknown, strict = false): value is StyleText {
+	if (!isRecord(value)) return false;
+	if (!("format" in value)) return false;
+	if (!("text" in value)) return false;
+	if (value["format"] !== undefined && !((value["format"] === "qml" || value["format"] === "sld"))) {
+		return false;
+	}
+	if (value["text"] !== undefined && !(typeof value["text"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["format", "text"])) return false;
 	return true;
 }
 
@@ -2565,6 +3039,16 @@ export function StylesApplyRequest(value: unknown, strict = false): value is Sty
 		return false;
 	}
 	if (strict && !hasOnly(value, ["layer_id", "style"])) return false;
+	return true;
+}
+
+export function SymbologyRequest(value: unknown, strict = false): value is SymbologyRequest {
+	if (!isRecord(value)) return false;
+	if (!("layer_id" in value)) return false;
+	if (value["layer_id"] !== undefined && !(typeof value["layer_id"] === "string")) {
+		return false;
+	}
+	if (strict && !hasOnly(value, ["layer_id"])) return false;
 	return true;
 }
 
@@ -2792,6 +3276,10 @@ export interface HostOperations {
 	readonly files: {
 		readonly export: (input: ExportRequest, options?: HostInvokeOptions) => Promise<ExportResult>;
 	};
+	readonly labelling: {
+		readonly get: (input: LabellingRequest, options?: HostInvokeOptions) => Promise<Labelling>;
+		readonly set: (input: SetLabellingRequest, options?: HostInvokeOptions) => Promise<null>;
+	};
 	readonly layers: {
 		readonly get: (input: LayerRequest, options?: HostInvokeOptions) => Promise<VectorLayerInfo | RasterLayerInfo | MeshLayerInfo | PointCloudLayerInfo | VectorTileLayerInfo | AnnotationLayerInfo | TiledSceneLayerInfo>;
 		readonly list: (input?: PageRequest, options?: HostInvokeOptions) => Promise<LayerPage>;
@@ -2849,6 +3337,13 @@ export interface HostOperations {
 	};
 	readonly styles: {
 		readonly apply: (input: StylesApplyRequest, options?: HostInvokeOptions) => Promise<null>;
+		readonly export: (input: ExportStyleRequest, options?: HostInvokeOptions) => Promise<StyleText>;
+		readonly import: (input: ImportStyleRequest, options?: HostInvokeOptions) => Promise<null>;
+		readonly list: (input?: StyleListRequest, options?: HostInvokeOptions) => Promise<StyleEntries>;
+	};
+	readonly symbology: {
+		readonly get: (input: SymbologyRequest, options?: HostInvokeOptions) => Promise<SingleSymbolRenderer | CategorizedRenderer | GraduatedRenderer | RuleBasedRenderer>;
+		readonly set: (input: SetSymbologyRequest, options?: HostInvokeOptions) => Promise<null>;
 	};
 }
 
@@ -3022,6 +3517,20 @@ export function createHost(client: HostClientLike): HostOperations {
 					client, "files.export", input, options,
 					ExportRequest,
 					ExportResult,
+				),
+		},
+		labelling: {
+			get: (input: LabellingRequest, options?: HostInvokeOptions) =>
+				call<Labelling>(
+					client, "labelling.get", input, options,
+					LabellingRequest,
+					Labelling,
+				),
+			set: (input: SetLabellingRequest, options?: HostInvokeOptions) =>
+				call<null>(
+					client, "labelling.set", input, options,
+					SetLabellingRequest,
+					(candidate: unknown, strict = false) => candidate === null,
 				),
 		},
 		layers: {
@@ -3289,6 +3798,38 @@ export function createHost(client: HostClientLike): HostOperations {
 				call<null>(
 					client, "styles.apply", input, options,
 					StylesApplyRequest,
+					(candidate: unknown, strict = false) => candidate === null,
+				),
+			export: (input: ExportStyleRequest, options?: HostInvokeOptions) =>
+				call<StyleText>(
+					client, "styles.export", input, options,
+					ExportStyleRequest,
+					StyleText,
+				),
+			import: (input: ImportStyleRequest, options?: HostInvokeOptions) =>
+				call<null>(
+					client, "styles.import", input, options,
+					ImportStyleRequest,
+					(candidate: unknown, strict = false) => candidate === null,
+				),
+			list: (input?: StyleListRequest, options?: HostInvokeOptions) =>
+				call<StyleEntries>(
+					client, "styles.list", input, options,
+					StyleListRequest,
+					StyleEntries,
+				),
+		},
+		symbology: {
+			get: (input: SymbologyRequest, options?: HostInvokeOptions) =>
+				call<SingleSymbolRenderer | CategorizedRenderer | GraduatedRenderer | RuleBasedRenderer>(
+					client, "symbology.get", input, options,
+					SymbologyRequest,
+					(candidate: unknown, strict = false) => (SingleSymbolRenderer(candidate, strict) || CategorizedRenderer(candidate, strict) || GraduatedRenderer(candidate, strict) || RuleBasedRenderer(candidate, strict)),
+				),
+			set: (input: SetSymbologyRequest, options?: HostInvokeOptions) =>
+				call<null>(
+					client, "symbology.set", input, options,
+					SetSymbologyRequest,
 					(candidate: unknown, strict = false) => candidate === null,
 				),
 		},

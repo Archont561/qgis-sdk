@@ -74,6 +74,14 @@ from qgis_sdk.models.project import (
     PROJECT_ENTRY,
     PROJECT_FILE,
 )
+from qgis_sdk.models.symbology import (
+    LABELLING,
+    RENDERER,
+    STYLE_ENTRY,
+    STYLE_FORMATS,
+    STYLE_MANAGER_KINDS,
+    STYLE_TEXT,
+)
 
 #: Project variables and custom properties: one small, project-owned list,
 #: answered whole rather than paged, because a project file bounds it.
@@ -85,6 +93,10 @@ _BOOKMARKS = _array(BOOKMARK)
 #: The project's print layouts, paged like every other list: a project file
 #: bounds how many it can hold, but "bounded" is not "small enough to inline".
 _LAYOUTS = _page_result(LAYOUT_INFO)
+
+#: The style manager's entries, paged for the same reason: a style database is a
+#: user's library, and a page cannot carry an unbounded one.
+_STYLE_ENTRIES = _page_result(STYLE_ENTRY)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +215,105 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
             required=("layer_id", "style"),
         ),
         result=_NOTHING,
+        # Applying a style replaces the layer's whole symbology: an agent that
+        # could do it silently would change how a map is drawn without consent.
+        destructive=True,
+    ),
+    HostOperation(
+        id="symbology.get",
+        title="Describe the renderer drawing a layer",
+        source="Styles.symbology",
+        grant="symbology.read",
+        affinity=GUI,
+        request=_object({"layer_id": {"type": "string"}}, required=("layer_id",)),
+        result=RENDERER,
+        request_name="SymbologyRequest",
+        result_name="Renderer",
+    ),
+    HostOperation(
+        id="symbology.set",
+        title="Draw a layer with a described renderer",
+        source="Styles.set_symbology",
+        grant="symbology.write",
+        affinity=GUI,
+        request=_object(
+            {"layer_id": {"type": "string"}, "renderer": RENDERER},
+            required=("layer_id", "renderer"),
+        ),
+        result=_NOTHING,
+        request_name="SetSymbologyRequest",
+        destructive=True,
+    ),
+    HostOperation(
+        id="labelling.get",
+        title="Describe how a layer's features are labelled",
+        source="Styles.labelling",
+        grant="symbology.read",
+        affinity=GUI,
+        request=_object({"layer_id": {"type": "string"}}, required=("layer_id",)),
+        result=LABELLING,
+        request_name="LabellingRequest",
+        result_name="Labelling",
+    ),
+    HostOperation(
+        id="labelling.set",
+        title="Label a layer's features, or switch labelling off",
+        source="Styles.set_labelling",
+        grant="symbology.write",
+        affinity=GUI,
+        request=_object(
+            {"layer_id": {"type": "string"}, "labelling": LABELLING},
+            required=("layer_id", "labelling"),
+        ),
+        result=_NOTHING,
+        request_name="SetLabellingRequest",
+        destructive=True,
+    ),
+    HostOperation(
+        id="styles.list",
+        title="List what the QGIS style manager offers",
+        source="Styles.list_styles",
+        grant="styles.read",
+        affinity=GUI,
+        request=_object({"kind": {"enum": list(STYLE_MANAGER_KINDS)}}),
+        result=_STYLE_ENTRIES,
+        request_name="StyleListRequest",
+        result_name="StyleEntries",
+    ),
+    HostOperation(
+        id="styles.export",
+        title="Export a layer's style as QML or SLD text",
+        source="Styles.export_style",
+        grant="styles.read",
+        affinity=GUI,
+        request=_object(
+            {
+                "layer_id": {"type": "string"},
+                "format": {"enum": list(STYLE_FORMATS)},
+            },
+            required=("layer_id", "format"),
+        ),
+        result=STYLE_TEXT,
+        request_name="ExportStyleRequest",
+        result_name="StyleText",
+    ),
+    HostOperation(
+        id="styles.import",
+        title="Apply QML or SLD text to a layer",
+        source="Styles.import_style",
+        grant="styles.write",
+        affinity=GUI,
+        request=_object(
+            {
+                "layer_id": {"type": "string"},
+                "format": {"enum": list(STYLE_FORMATS)},
+                "text": {"type": "string"},
+            },
+            required=("layer_id", "format", "text"),
+        ),
+        result=_NOTHING,
+        request_name="ImportStyleRequest",
+        destructive=True,
     ),
     HostOperation(
         id="layers.open_vector",

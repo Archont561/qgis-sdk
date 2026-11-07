@@ -244,9 +244,10 @@ const theme = await host.settings.get({ key: "theme", default: "light" });
   `features.page`, `features.get`, `expressions.evaluate`,
   `expressions.validate`, `editing.begin/add/update/delete/commit/rollback`,
   the `canvas` namespace with its `canvas.extent_changed` and `canvas.capture`
-  streams, the `rasters` namespace, and the `project` namespace down to the
+  streams, the `rasters` namespace, the `project` namespace down to the
   layer tree, the CRS, the entries, the bookmarks, the file and the
-  `project.changed` stream.
+  `project.changed` stream, and the `symbology`, `labelling` and `styles`
+  namespaces.
   Anything else of the QGIS API is not reachable from a page; the operations it
   would need wait for their owning task, and the Python manifest records which.
 - **Paged, never unbounded.** Every list takes `{limit?, cursor?}` and returns
@@ -514,6 +515,62 @@ host-query stores need; a page that wants the other kinds switches on `kind`
 directly. Nothing about the fingerprint's *meaning* changed: it moved because the
 surface grew, and a `0.7.0` client is refused by a host that gained these five
 operations until it is regenerated against it.
+
+### Symbology from a page
+
+`host.symbology` reads and writes how a layer is drawn, `host.labelling` what it
+is labelled with, and `host.styles` the style manager and QML/SLD text. The
+renderer is a closed union of four interfaces, so `kind` is what reaches a field:
+
+```ts
+const renderer = await qgis.host.symbology.get({ layer_id });
+switch (renderer.kind) {
+  case "single_symbol":
+    renderer.symbol.color; // "#ff0000"
+    break;
+  case "categorized":
+    renderer.field;                              // "kind"
+    renderer.categories[0]?.label;                // "Park"
+    break;
+  case "graduated":
+    renderer.mode;                               // "quantile" | "jenks" | ...
+    renderer.classes[0]?.upper;                   // 1.5
+    break;
+  case "rule_based":
+    renderer.rules[0]?.filter;                    // "value > 2"
+    break;
+}
+
+await qgis.host.symbology.set({ layer_id, renderer });
+await qgis.host.labelling.set({ layer_id, labelling: { enabled: false } });
+
+const symbols = await qgis.host.styles.list({ kind: "symbol" });
+const qml = await qgis.host.styles.export({ layer_id, format: "qml" });
+await qgis.host.styles.import({ layer_id, format: "qml", text: qml.text });
+```
+
+- **Four renderers, three symbols.** `Renderer` is
+  `SingleSymbolRenderer | CategorizedRenderer | GraduatedRenderer |
+  RuleBasedRenderer`, and `Symbol` is `MarkerSymbol | LineSymbol | FillSymbol`.
+  A heatmap is not in the union because the host refuses it by name
+  (`unsupported_capability`) rather than describing it as a single symbol.
+- **`kind` narrows; nothing is cast.** `renderer.categories` exists only after
+  `renderer.kind === "categorized"`, and `symbol.shape` is one of five literals.
+- **A symbol its geometry cannot draw is refused.** Setting a marker on a line
+  layer answers `style_incompatible` naming both, instead of a layer that
+  reports success and paints nothing.
+- **Reads and writes are different grants.** `symbology.read` covers
+  `symbology.get` and `labelling.get`; `symbology.write` covers the two `set`
+  calls; `styles.read` covers `styles.list` and `styles.export`, and
+  `styles.write` covers `styles.import`. A page that only displays the current
+  renderer needs no write grant at all.
+- **The four that replace a drawing are `destructive`.** `symbology.set`,
+  `labelling.set`, `styles.import` and `styles.apply` carry the annotation, so a
+  tool set to "ask each time" asks before them.
+- **QML keeps the renderer; SLD keeps the drawing.** `styles.export` answers
+  `StyleText` with a `format` of `"qml"` or `"sld"`, and the caller says which
+  dialect it holds. QGIS reads a categorized renderer back out of SLD as
+  rule-based, so a page that needs the renderer kind back round-trips QML.
 
 ### Print layouts from a page
 

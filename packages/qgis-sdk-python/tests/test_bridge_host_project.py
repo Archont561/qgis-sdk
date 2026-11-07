@@ -47,6 +47,12 @@ DESTRUCTIVE = {
     # TASK-89: an export replaces a file the page's own write ref names.
     "layouts.export",
     "layouts.atlas",
+    # TASK-93: each of these replaces how a layer is drawn or labelled, and a
+    # packaged style is applied over whatever the layer had.
+    "styles.apply",
+    "symbology.set",
+    "labelling.set",
+    "styles.import",
 }
 
 

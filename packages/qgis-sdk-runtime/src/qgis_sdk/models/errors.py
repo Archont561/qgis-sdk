@@ -106,6 +106,25 @@ class QgisSdkLayoutNotFoundError(QgisSdkError):
         super().__init__(f"No print layout {name!r} is available in this project")
 
 
+class QgisSdkStyleTextError(QgisSdkError):
+    """A style document could not be read in the dialect the caller named.
+
+    QML and SLD are two different documents, and a host that guessed which one it
+    was handed would fail somewhere inside QGIS with a message about an XML node
+    nobody asked for. The caller says which dialect its text is; a document that
+    is not one raises this, with the format and the reason the reader gave.
+    """
+
+    code = "style_text_rejected"
+
+    def __init__(self, format: str, detail: str) -> None:
+        self.format = format
+        self.detail = detail
+        super().__init__(
+            f"The style text is not a readable {format} document: {detail}"
+        )
+
+
 class QgisSdkStyleNotFoundError(QgisSdkError):
     """No reviewed style with this identifier is packaged with the SDK."""
 

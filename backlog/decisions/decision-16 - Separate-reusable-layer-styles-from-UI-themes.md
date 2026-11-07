@@ -101,3 +101,56 @@ The Consequences hold as written: separate contracts, models, adapters and
 tests for the two halves. The second consequence is now settled rather than
 open - the token names above are the committed surface, and renaming one is a
 breaking change of `qgis-sdk-ui`.
+
+## Status review (2026-11-07): symbology lands inside the same boundary, stays `accepted`
+
+TASK-93 added the half of this decision the first review left open in practice:
+"introduce models/styles, a dedicated style service and native adapter only as
+real workflows justify it". A real workflow asked for it (decision-54 point 4:
+symbology, labelling and the style manager behind the curated surface), so the
+`Styles` protocol grew from one method to eight - `apply_style`, `symbology`,
+`set_symbology`, `labelling`, `set_labelling`, `list_styles`, `export_style`,
+`import_style` - with one fake, one PyQGIS adapter and seven host operations. The
+boundary this decision drew is unchanged:
+
+- **Layer styles and UI themes still do not meet.** No call here reads the
+  application palette or its stylesheet, and `test_native_styles_theme.py` still
+  proves the theme is byte-identical across an application.
+- **Nothing mirrors the renderer API.** Four renderers of QGIS's sixteen
+  (single symbol, categorized, graduated, rule-based), three symbols rather than a
+  symbol-layer tree, and one simple labelling. The curated set is named once
+  (`RENDERER_KIND_NAMES`, `SYMBOL_KINDS`, `GRADUATED_MODES`, `MARKER_SHAPES`) and
+  the wire carries `kind` as the discriminator, so a page narrows rather than
+  guesses.
+- **What is not modelled is refused by name, not approximated.** A heatmap, a
+  nested rule group, an else rule, a rule with no symbol, a rule-based labelling,
+  a symbol its geometry cannot draw, and a style-manager kind outside the three
+  all raise rather than being described as the nearest thing they resemble. That
+  is the same rule `StyleSpec.incompatibilities` follows for a packaged QML, and
+  the geometry check is one shared helper (`symbol_fits_geometry`) so the fake and
+  the native adapter cannot disagree.
+- **Compatibility is still decided before anything is applied.** A packaged QML
+  is validated against the layer before it is loaded, and a symbol is checked
+  against the layer's geometry before a renderer is built.
+- **Explicit formats, no sniffing.** QML and SLD cross as `StyleText` with a
+  `format` the caller states; the host does not guess from the first character.
+
+Two readings are recorded here because they are the ones a later change could
+get wrong:
+
+1. **QML reproduces the renderer; SLD reproduces the drawing.** QGIS's SLD export
+   writes one rule per category and its importer reads that back as a rule-based
+   renderer, so a categorized renderer cannot survive SLD as itself. The contract
+   therefore asserts exact equality for QML and the painted colours for SLD, and
+   the guides say so rather than promising a round trip SLD cannot keep.
+2. **`custom` is a readable graduated mode.** QGIS reports
+   `QgsClassificationCustom` for a renderer whose ranges were edited by hand -
+   an ordinary layer, not an error - so refusing it would make `symbology()` fail
+   on any hand-banded layer. It is last in `GRADUATED_MODES` because it is an
+   answer the adapter reads, not a classification a caller asks QGIS to compute.
+
+The Consequences still hold and are now broader rather than looser: separate
+contracts, models, adapters and tests for the layer-style and UI-theme halves;
+rich declarative styles, token names, theme synchronization and a `ctx.ui.theme`
+API remain out of scope. The status stays `accepted` - this review extends the
+decision to symbology, it does not reopen it.

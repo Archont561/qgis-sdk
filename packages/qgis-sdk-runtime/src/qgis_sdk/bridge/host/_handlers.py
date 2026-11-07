@@ -35,7 +35,9 @@ from qgis_sdk.models import (
     Response,
     RunResult,
     ZoomTarget,
+    labelling_from_wire,
     layer_info,
+    renderer_from_wire,
 )
 from qgis_sdk.models.errors import (
     QgisSdkBridgeError,
@@ -60,6 +62,17 @@ def _plain(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
     return value
+
+
+def _wire(value: Any) -> Any:
+    """Return a model's declared wire shape, falling back to a plain DTO.
+
+    A renderer or a labelling has a ``to_wire`` for the same reason a layer
+    description has one: what crosses the wire is a decision the model makes,
+    not whatever ``asdict`` happens to flatten.
+    """
+    writer = getattr(value, "to_wire", None)
+    return writer() if callable(writer) else _plain(value)
 
 
 def _offset(cursor: Any) -> int:
@@ -170,6 +183,35 @@ def _handlers(
 
     def styles_apply(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
         services.styles.apply_style(payload["layer_id"], payload["style"])
+
+    def symbology_get(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        return _wire(services.styles.symbology(payload["layer_id"]))
+
+    def symbology_set(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
+        services.styles.set_symbology(
+            payload["layer_id"], renderer_from_wire(payload["renderer"])
+        )
+
+    def labelling_get(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        return _wire(services.styles.labelling(payload["layer_id"]))
+
+    def labelling_set(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
+        services.styles.set_labelling(
+            payload["layer_id"], labelling_from_wire(payload["labelling"])
+        )
+
+    def styles_list(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+        return _page_of(services.styles.list_styles(payload.get("kind")), payload)
+
+    def styles_export(binding: ViewBinding, payload: Mapping[str, Any]) -> Any:
+        return _wire(
+            services.styles.export_style(payload["layer_id"], payload["format"])
+        )
+
+    def styles_import(binding: ViewBinding, payload: Mapping[str, Any]) -> None:
+        services.styles.import_style(
+            payload["layer_id"], payload["text"], payload["format"]
+        )
 
     def algorithms_providers(binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
         return _page_of(_algorithms(services).providers(), payload)
@@ -555,6 +597,13 @@ def _handlers(
         "settings.get": settings_get,
         "notifications.info": notifications_info,
         "styles.apply": styles_apply,
+        "symbology.get": symbology_get,
+        "symbology.set": symbology_set,
+        "labelling.get": labelling_get,
+        "labelling.set": labelling_set,
+        "styles.list": styles_list,
+        "styles.export": styles_export,
+        "styles.import": styles_import,
         "blob.get": blob_get,
         "features.page": features_page,
         "features.get": features_get,
