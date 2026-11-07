@@ -12,11 +12,13 @@ import json
 import shutil
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import qgis_sdk.exports as export_policy
+from qgis_sdk.batch import batch_body, batch_items
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.declarations import QgisSdkDeclarationError
+from qgis_sdk.jobs import JobHandle, JobService
 from qgis_sdk.models import (
     LAYER_KINDS,
     STYLE_MANAGER_KINDS,
@@ -31,6 +33,7 @@ from qgis_sdk.models import (
     ConnectionInfo,
     ConnectionItem,
     ConnectionTest,
+    FileRef,
     FillSymbol,
     GeometryType,
     Labelling,
@@ -93,6 +96,12 @@ __all__ = [
 
 #: What ``script_run`` accepts: the outputs, or a function of the run.
 ScriptedOutputs = Mapping[str, object] | Callable[[AlgorithmRun], Mapping[str, object]]
+#: A model's scripted answer: final values, or a callable from the ref and the
+#: params it was run with - a model has no registry entry to script against.
+ScriptedModelOutputs = (
+    Mapping[str, object]
+    | Callable[[FileRef, Mapping[str, object]], Mapping[str, object]]
+)
 
 
 class FakeAlgorithms:
@@ -117,6 +126,7 @@ class FakeAlgorithms:
         *,
         catalogue: Catalogue | None = None,
         files: FilesService | None = None,
+        workers: Any | None = None,
     ) -> None:
         self._layers = layers
         self._scope = scope
@@ -124,8 +134,15 @@ class FakeAlgorithms:
         self._files = files
         self.requests: list[AlgorithmRequest] = []
         self.runs: list[AlgorithmRun] = []
+        #: What ``run_model`` was asked: the model ref and its params
+        #: (observation, like :attr:`runs`), so a test proves the params a
+        #: caller sent. A pair rather than an :class:`AlgorithmRun` because a
+        #: model file's name is not a registry id.
+        self.model_runs: list[tuple[FileRef, dict[str, object]]] = []
         self._outputs: dict[type, Path] = {}
         self._scripted: dict[str, list[tuple[ScriptedOutputs, bool]]] = {}
+        self._scripted_models: dict[str, list[tuple[ScriptedModelOutputs, bool]]] = {}
+        self._jobs = JobService(scope, workers=workers)
 
     # -- setup, not part of the contract ----------------------------------
 
@@ -166,6 +183,24 @@ class FakeAlgorithms:
         ``repeat=False`` the answer is consumed by one run.
         """
         self._scripted.setdefault(algorithm_id, []).append((outputs, repeat))
+
+    def script_run_model(
+        self,
+        model: FileRef,
+        outputs: ScriptedModelOutputs,
+        *,
+        repeat: bool = True,
+    ) -> None:
+        """Declare what the next ``run_model`` of ``model`` produces.
+
+        A model has no registry entry to script against, so the answer is
+        keyed by the ref's id and the values are the final ones - owned
+        :class:`VectorLayerInfo`, :class:`FileRef` objects or scalars, exactly
+        the shapes :class:`RunResult` describes. A callable takes the ref and
+        the params of the run. With ``repeat=False`` the answer is consumed by
+        one run.
+        """
+        self._scripted_models.setdefault(model.id, []).append((outputs, repeat))
 
     # -- the contract ------------------------------------------------------
 
@@ -226,8 +261,48 @@ class FakeAlgorithms:
                     value = self._file_service().grant_directory(value)
                 elif kind == "file":
                     value = self._file_service().grant_file(value)
+            elif kind == "layers" and isinstance(value, (list, tuple)):
+                value = tuple(
+                    self._layers.open_vector(item) if isinstance(item, Path) else item
+                    for item in value
+                )
             outputs[name] = value
         return RunResult(algorithm=run.algorithm, outputs=outputs)
+
+    def run_model(
+        self, model: FileRef, params: Mapping[str, object] | None = None
+    ) -> RunResult:
+        """Record the run and answer from the script, keyed by the ref's id."""
+        self._scope.ensure_open()
+        if not isinstance(model, FileRef):
+            raise QgisSdkAlgorithmRejectedError(
+                "run_model",
+                ["a model is a FileRef the host minted, not a path (decision-20)"],
+            )
+        recorded = dict(params or {})
+        self.model_runs.append((model, recorded))
+        queue = self._scripted_models.get(model.id) or []
+        if not queue:
+            raise QgisSdkAlgorithmFailedError(
+                model.name,
+                "no scripted outputs; call FakeAlgorithms.script_run_model() "
+                "in the test",
+            )
+        outputs, repeat = queue[0]
+        if not repeat:
+            queue.pop(0)
+        answer = outputs(model, recorded) if callable(outputs) else outputs
+        return RunResult(algorithm=model.name, outputs=dict(answer))
+
+    def batch(self, runs: Sequence[AlgorithmRun | TypedRun | str]) -> JobHandle:
+        """Submit the batch as one job through this backend's job service."""
+        self._scope.ensure_open()
+        return self._jobs.bind(batch_body(self)).delay(runs=batch_items(runs))
+
+    @property
+    def jobs(self) -> JobService:
+        """The job service ``batch`` submits through."""
+        return self._jobs
 
     def _next_answer(self, run: AlgorithmRun) -> Mapping[str, object]:
         queue = self._scripted.get(run.algorithm) or []

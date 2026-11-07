@@ -2,18 +2,48 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Protocol
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
 
 from qgis_sdk.models import (
     AlgorithmInfo,
     AlgorithmRequest,
     AlgorithmRun,
+    FileRef,
     ProviderInfo,
     RunResult,
     TypedRun,
     VectorLayerInfo,
 )
+
+
+class JobHandle(Protocol):
+    """What the batch job form answers, as far as this layer may know it.
+
+    The same surface :class:`qgis_sdk.services.layouts.JobHandle` declares -
+    the id, the status, the settled result and the cancel request - and the
+    concrete ``qgis_sdk.jobs.JobHandle`` satisfies it structurally. Nothing
+    here constructs one; only the backend's job service submits work.
+    """
+
+    @property
+    def id(self) -> str:
+        """The attempt's id, ``algorithms.batch#1`` and so on."""
+        ...
+
+    @property
+    def status(self) -> Any:
+        """The attempt's state: queued, running, succeeded, failed or cancelled."""
+        ...
+
+    @property
+    def result(self) -> Any:
+        """The settled job's typed result; raises for a failed or cancelled one."""
+        ...
+
+    def cancel(self) -> bool:
+        """Ask the job to stop; answer whether it was still active."""
+        ...
 
 
 class Algorithms(Protocol):
@@ -47,7 +77,8 @@ class Algorithms(Protocol):
     stays until a documented minor retires it.
 
     The in-memory double answers ``list``/``describe`` from the shipped
-    snapshot and ``run`` from outputs the test scripted; whether a working
+    snapshot, ``run`` and ``run_model`` from outputs the test scripted and
+    ``batch`` as a real job over the same scripted runs; whether a working
     CRS is projected is still the native backend's own check.
     """
 
@@ -73,6 +104,44 @@ class Algorithms(Protocol):
         ``request`` is a generated request class instance, an
         :class:`~qgis_sdk.models.AlgorithmRun`, or an algorithm id with
         ``params`` (the ``processing.run`` shape).
+        """
+        ...
+
+    def run_model(
+        self, model: FileRef, params: Mapping[str, object] | None = None
+    ) -> RunResult:
+        """Run one ``.model3`` model file into new outputs.
+
+        ``model`` is a ref the host minted for the model file (decision-20);
+        ``params`` fills the model's own parameters by name. The outputs come
+        back tagged with the kinds the registry describes: an owned
+        :class:`~qgis_sdk.models.VectorLayerInfo` per vector output, a
+        :class:`~qgis_sdk.models.FileRef` per file, folder or report, a
+        scalar per number, string or boolean, and a tuple of layers per
+        multiple-layers output - exactly what :meth:`run` answers for a
+        registered algorithm.
+        """
+        ...
+
+    def batch(self, runs: Sequence[AlgorithmRun | TypedRun | str]) -> JobHandle:
+        """Run requests in order as one job, and answer its handle.
+
+        The job form of :meth:`run`: one task with a progress fraction per
+        item and a cancellation check between items, so a batch of three
+        reports shows ``1/3``, ``2/3``, ``3/3`` and stops before the next
+        request when cancelled. The settled handle's ``result`` is the tuple
+        of :class:`~qgis_sdk.models.RunResult`, oldest first.
+        """
+        ...
+
+    @property
+    def jobs(self) -> Any:
+        """The job service ``batch`` submits through.
+
+        A host pumps it beside the plugin's own ``ctx.jobs`` and the layouts
+        service's: the batch jobs are declared here rather than in the
+        plugin's registry, so a plugin that declares no jobs of its own still
+        gets one task per batch.
         """
         ...
 

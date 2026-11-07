@@ -1696,6 +1696,57 @@ requests but does not run Processing or prove filesystem behavior. `run` is
 synchronous on the GUI thread, like `processing.run`; a long algorithm belongs
 in a `@job`.
 
+#### Model files: `run_model`, and batches as a job (0.11.0)
+
+A Processing **model** a user saved from the QGIS modeler is a `.model3` file,
+and `run_model` runs one the plugin holds a ref to - never a path, like every
+other file a plugin touches (decision-20):
+
+```python
+model = ctx.files.grant_file(project_dir / "report.model3")   # a read grant
+result = ctx.algorithms.run_model(model, {"FEATS": layer.id})
+
+centroids = result.vector("centroids")   # the model's exposed outputs, by kind
+report = result.file("report")           # each named the way the model names it
+```
+
+The model describes itself: its parameters are the ones the modeler named
+(`FEATS` above), and its outputs are the exposed child outputs, whose names
+version 2 of the format derives from each output's description. The run
+follows the same validation, destination allocation and output conversion
+path as `run`, so `RunResult` answers in the kinds the model's own registry
+describes - an exposed sink is an owned vector, an exposed report is a
+read-only `FileRef`, and a destination left out is allocated like any other.
+The result's `algorithm` is the model ref's name, the handle the caller gave.
+
+`batch` runs several requests as **one job** - the job form of `run`, the way
+`Layouts.render` is the job form of a render:
+
+```python
+handle = ctx.algorithms.batch([
+    AlgorithmRun("native:buffer", {"INPUT": layer.id, "DISTANCE": 10.0}),
+    AlgorithmRun("native:centroids", {"INPUT": layer.id}),
+])
+handle.on_progress(print)          # 1/2, then 2/2 - one fraction per request
+# ... later ...
+results = handle.result            # (RunResult, ...) oldest first
+```
+
+One task bar for ten runs instead of ten: the body reports one progress
+fraction per request and reads cancellation between requests, so a user can
+stop the rest after the third report. A cancelled batch stops **before** the
+next request; the requests already run stay run, each a finished result.
+Reading `.result` of a cancelled batch raises `QgisSdkJobCancelledError`.
+An empty batch is refused (`QgisSdkAlgorithmRejectedError`) rather than
+tolerated. The job id is `algorithms.batch`, submitted through the algorithms
+service's own job service - a plugin that declares no jobs of its own still
+gets the bar and the cancel button.
+
+Over the fakes, `script_run_model(model, outputs)` scripts a model run's
+answers keyed by the ref (final values - an owned `VectorLayerInfo`, a
+`FileRef`, or a scalar - or a callable of the ref and its params), and
+`FakeWorkers` drives the batch body when the test says so.
+
 #### The generated modules
 
 `qgis_sdk.processing.native`, `.qgis`, `.gdal`, `.p3d` and `.pdal` are

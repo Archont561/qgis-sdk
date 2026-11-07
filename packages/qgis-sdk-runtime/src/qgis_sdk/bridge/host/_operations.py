@@ -14,6 +14,8 @@ from qgis_sdk.bridge.host._schemas import (
     ANNOTATION_LAYER_INFO,
     ATLAS_EXPORT_RESULT,
     ATLAS_LAYOUT_REQUEST,
+    BATCH_REQUEST,
+    BATCH_RESULT,
     BLOB_CHUNK,
     BLOB_REQUEST,
     EDIT_ADD_REQUEST,
@@ -40,6 +42,7 @@ from qgis_sdk.bridge.host._schemas import (
     POINT_CLOUD_LAYER_INFO,
     PROVIDER_INFO,
     RASTER_LAYER_INFO,
+    RUN_MODEL_REQUEST,
     RUN_REQUEST,
     RUN_RESULT,
     TILED_SCENE_LAYER_INFO,
@@ -646,6 +649,32 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         result=RUN_RESULT,
         request_name="RunAlgorithmRequest",
         result_name="RunResult",
+    ),
+    HostOperation(
+        id="algorithms.run_model",
+        title="Run one model file and return its outputs",
+        source="Algorithms.run_model",
+        grant="algorithms.run",
+        affinity=GUI,
+        request=RUN_MODEL_REQUEST,
+        result=RUN_RESULT,
+        request_name="RunModelRequest",
+        result_name="RunResult",
+    ),
+    HostOperation(
+        id="algorithms.batch",
+        title="Run several requests in order and return every result",
+        source="Algorithms.batch",
+        grant="algorithms.run",
+        affinity=GUI,
+        request=BATCH_REQUEST,
+        result=BATCH_RESULT,
+        request_name="BatchRequest",
+        result_name="BatchResult",
+        # The service's batch is the job form, with per-item progress and a
+        # cancel button; a page has no job-status operation to follow one
+        # with, so `algorithms.batch` runs the same requests in the request
+        # that asked for them (the `layouts.export` precedent).
     ),
     HostOperation(
         id="blob.get",

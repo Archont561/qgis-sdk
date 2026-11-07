@@ -34,7 +34,7 @@ import layers as test_layers
 import pytest
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.files import FilesService
-from qgis_sdk.models import BufferRequest, CentroidRequest
+from qgis_sdk.models import BufferRequest, CentroidRequest, FileRef
 from qgis_sdk.models.canvas import CanvasExtent, CanvasPoint
 from qgis_sdk.services import (
     Algorithms,
@@ -156,6 +156,27 @@ ATLAS_PATTERN = "sheet-{index:02d}-{feature_id}"
 #: name as the template.
 TEMPLATE_LAYOUT = "templated"
 
+# -- the model file and batch fixture (TASK-94) ------------------------------
+#: The model both backends run through ``run_model``: the centroid of every
+#: input feature beside a statistics report, the smallest model whose outputs
+#: span a layer and a file. The file is QGIS's own ``.model3`` XML in internal
+#: version 2 (the format the designer has saved since 3.26), checked in so a
+#: reviewer can read what the model declares - a model file is text, like the
+#: mesh, and a fixture a reviewer cannot read is a fixture that rots.
+REPORT_MODEL = FIXTURE_ROOT / "report.model3"
+#: The name the ref answers results under on both backends: ``run_model``
+#: reports the ref's name, because that is the handle the caller gave it - a
+#: fake has no designer's title to answer instead.
+REPORT_MODEL_NAME = REPORT_MODEL.name
+#: The two outputs the model exposes, keyed by the destination names version 2
+#: gives them (the description of each output, made safe): a vector of
+#: centroids and the statistics report beside it.
+MODEL_CENTROIDS_OUTPUT = "centroids"
+MODEL_REPORT_OUTPUT = "report"
+#: The model's own input parameter and the field the statistics child reports.
+MODEL_INPUT = "FEATS"
+MODEL_FIELD = "value"
+
 
 @dataclass(frozen=True, slots=True)
 class Services:
@@ -219,6 +240,18 @@ class Services:
     #: The ``.qpt`` template ``load_template`` loads, named after the layout it
     #: carries so both backends add the same name to the project.
     layout_template: Callable[[], Path] | None = None
+    #: The ``.model3`` model file ``run_model`` runs (TASK-94). ``None`` while a
+    #: backend has not joined the model contract, so one slice failing is one
+    #: test failing.
+    model_file: Callable[[], FileRef] | None = None
+    #: Drives the algorithms service's own job service one round trip - submit,
+    #: run the worker body, deliver - because a batch is a job even for a
+    #: plugin that declares no jobs of its own.
+    drive_algorithms: Callable[[], None] | None = None
+    #: The work items the batch asked the worker backend to show, oldest first:
+    #: a test reads their ``progress`` to see the fractions a batch reported one
+    #: per request, which delivery coalesces per tick.
+    algorithm_work_items: Callable[[], tuple] | None = None
     #: The id of the layer holding the reference points (ids 1-3, values a-c).
     #: The fakes key layers by name; a native layer's id is the one QGIS gave it
     #: when it opened the file, so a contract test names the layer the backend
@@ -491,6 +524,7 @@ def _fake_services() -> Services:
         crs=FIXTURE_CRS,
     )
     files = FakeFiles(scope, owner="plugin:contract")
+    algo_workers = FakeWorkers()
     layout_workers = FakeWorkers()
     layout_directory = _layout_work_directory()
     layouts = FakeLayouts(
@@ -521,7 +555,7 @@ def _fake_services() -> Services:
         layout_workers.run_all()
         service.tick()
 
-    algorithms = FakeAlgorithms(layers, scope, files=files)
+    algorithms = FakeAlgorithms(layers, scope, files=files, workers=algo_workers)
     algorithms.declare_output(
         BufferRequest,
         FIXTURE_ROOT / "buffer-output.gpkg",
@@ -552,6 +586,35 @@ def _fake_services() -> Services:
         "native:basicstatisticsforfields",
         {"COUNT": 3, "OUTPUT_HTML_FILE": MINIMAL_DATASET},
     )
+    # The model file (TASK-94), granted once so the scripted answers key the
+    # same ref the tests run. The fake never parses the XML - a model run's
+    # shape is the contract here, and the native lane reads the real file -
+    # but the answers are the kinds the file declares: an owned layer beside
+    # a readable report.
+    from qgis_sdk.models import VectorLayerInfo
+
+    model_ref = files.grant_file(REPORT_MODEL)
+    algorithms.script_run_model(
+        model_ref,
+        {
+            MODEL_CENTROIDS_OUTPUT: VectorLayerInfo(
+                id="model:centroids",
+                name=MODEL_CENTROIDS_OUTPUT,
+                geometry_type="point",
+                field_names=FIXTURE_FIELDS,
+                crs=FIXTURE_CRS,
+            ),
+            MODEL_REPORT_OUTPUT: files.grant_file(MINIMAL_DATASET),
+        },
+    )
+
+    def drive_algorithms() -> None:
+        """One round trip through the algorithms service's own job service."""
+        service = algorithms.jobs
+        service.tick()
+        algo_workers.run_all()
+        service.tick()
+
     from qgis_sdk.testing import FakeFeatures
 
     features = FakeFeatures(scope)
@@ -735,6 +798,9 @@ def _fake_services() -> Services:
         layout_work_items=lambda: tuple(layout_workers.items),
         layout_directory=lambda: layout_directory,
         layout_template=template,
+        model_file=lambda: model_ref,
+        drive_algorithms=drive_algorithms,
+        algorithm_work_items=lambda: tuple(algo_workers.items),
         open_raster=lambda: rasters.open_raster(RASTER_DATASET).id,
         raster_dataset=RASTER_DATASET,
         open_mesh=lambda: layers.open_mesh(MESH_DATASET).id,
@@ -924,6 +990,26 @@ def _native_services() -> Services:
     from qgis_sdk.adapters.qgis import NativeLayouts
     from qgis_sdk.testing import FakeWorkers
 
+    algo_workers = FakeWorkers()
+    algorithms = NativeAlgorithms(
+        layers,
+        scope,
+        working_directory=work_directory,
+        files=files,
+        workers=algo_workers,
+    )
+
+    def model_file():
+        """Grant the checked-in model file, one fresh ref per run."""
+        return files.grant_file(REPORT_MODEL)
+
+    def drive_algorithms() -> None:
+        """One round trip through the algorithms service's own job service."""
+        service = algorithms.jobs
+        service.tick()
+        algo_workers.run_all()
+        service.tick()
+
     layout_workers = FakeWorkers()
     layout_directory = _layout_work_directory()
     # A fake worker backend on purpose: the contract is about the *render*, and
@@ -1029,9 +1115,10 @@ def _native_services() -> Services:
         editable_layer=editable_layer,
         editable_dataset=editable_copy,
         fixture_layer=fixture_layer,
-        algorithms=NativeAlgorithms(
-            layers, scope, working_directory=work_directory, files=files
-        ),
+        algorithms=algorithms,
+        model_file=model_file,
+        drive_algorithms=drive_algorithms,
+        algorithm_work_items=lambda: tuple(algo_workers.items),
         layers=layers,
         rasters=rasters,
         layouts=layouts,

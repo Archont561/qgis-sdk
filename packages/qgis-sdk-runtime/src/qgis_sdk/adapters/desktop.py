@@ -82,6 +82,7 @@ class DesktopLifecycleAdapter:
         self._sessions: list[Any] = []
         self._job_pump: Any = None
         self._layout_pump: Any = None
+        self._algorithms_pump: Any = None
 
     @property
     def iface(self) -> object | None:
@@ -140,7 +141,8 @@ class DesktopLifecycleAdapter:
         service = self._runtime.jobs
         context = self._context
         layouts = context.layouts if context.has("layouts") else None
-        if service is None and layouts is None:
+        algorithms = context.algorithms if context.has("algorithms") else None
+        if service is None and layouts is None and algorithms is None:
             return
         if not _qt_running():
             # A host without the Qt bindings - the reference workflow's own pure
@@ -156,6 +158,14 @@ class DesktopLifecycleAdapter:
         if layouts is not None:
             self._layout_pump = QgsJobPump(layouts.jobs, name="layouts-job-pump")
             self._layout_pump.start()
+        if algorithms is not None:
+            # A batch submits to the algorithms service's own job service,
+            # which needs its own tick whether or not the plugin declares jobs
+            # of its own (TASK-94).
+            self._algorithms_pump = QgsJobPump(
+                algorithms.jobs, name="algorithms-job-pump"
+            )
+            self._algorithms_pump.start()
 
     def unload(self) -> None:
         """Dispose owned resources; repeated calls are safe."""
@@ -166,6 +176,9 @@ class DesktopLifecycleAdapter:
         if self._layout_pump is not None:
             self._layout_pump.stop()
             self._layout_pump = None
+        if self._algorithms_pump is not None:
+            self._algorithms_pump.stop()
+            self._algorithms_pump = None
         sessions, self._sessions = self._sessions, []
         for session in sessions:
             session.close()

@@ -17,10 +17,15 @@ this module only has to translate a kind into a ``QgsProcessingParameter`` and
 the widget value back into the keyword. An input that could not be mapped never
 reached here, which is why there is no fallback widget below.
 
-**The output is copied into a sink.** The operation writes a new layer through the
-SDK; the bridge then copies its features into whatever destination the user chose
-in the Processing dialog. That keeps decision-19's "explicit destination" and
-leaves the produced temporary file untouched for the caller's own cleanup.
+**Each output kind is published its own way.** The function's result kind
+(the ``qgis_sdk.models`` output kind table) decides what the dialog offers
+and where the result lands: a produced vector layer is copied feature by
+feature into whatever sink the user chose, a produced raster or file is
+copied into the chosen destination, a produced folder or several layers are
+written into the chosen folder, a report is saved as its ``.html``, and a
+number, string or boolean is handed back as the value itself. That keeps
+decision-19's "explicit destination" and leaves the produced temporary
+artifacts untouched for the caller's own cleanup.
 
 ``FlagNoThreading`` is deliberate: this library has not qualified running these
 adapters on a Processing worker thread, so the bridge tells QGIS to execute on the
@@ -29,6 +34,7 @@ thread it was qualified on instead of claiming a safety it cannot show.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Annotated, Any, get_args, get_origin
 
@@ -41,6 +47,15 @@ from qgis.core import (
     QgsProcessingContext,
     QgsProcessingException,
     QgsProcessingFeedback,
+    QgsProcessingOutputBoolean,
+    QgsProcessingOutputFile,
+    QgsProcessingOutputFolder,
+    QgsProcessingOutputHtml,
+    QgsProcessingOutputMultipleLayers,
+    QgsProcessingOutputNumber,
+    QgsProcessingOutputRasterLayer,
+    QgsProcessingOutputString,
+    QgsProcessingOutputVectorLayer,
     QgsProcessingParameterBoolean,
     QgsProcessingParameterColor,
     QgsProcessingParameterCrs,
@@ -48,12 +63,16 @@ from qgis.core import (
     QgsProcessingParameterFeatureSink,
     QgsProcessingParameterField,
     QgsProcessingParameterFile,
+    QgsProcessingParameterFileDestination,
+    QgsProcessingParameterFolderDestination,
     QgsProcessingParameterMapLayer,
     QgsProcessingParameterNumber,
+    QgsProcessingParameterRasterDestination,
     QgsProcessingParameterRasterLayer,
     QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
     QgsProcessingProvider,
+    QgsVectorFileWriter,
 )
 from qgis.PyQt.QtGui import QColor
 
@@ -75,6 +94,7 @@ from qgis_sdk.models import (
     LayerParameter,
     MetresParameter,
     RangeParameter,
+    output_kinds,
     parameter_kinds,
 )
 from qgis_sdk.providers import Provider
@@ -128,6 +148,42 @@ _PARAMETER_CLASSES: dict[str, type] = {
     )
 }
 
+#: The Processing output classes the result kind table names, by class name.
+#: A kind naming a class absent here fails the registry test, not a toolbox.
+_OUTPUT_CLASSES: dict[str, type] = {
+    cls.__name__: cls
+    for cls in (
+        QgsProcessingOutputBoolean,
+        QgsProcessingOutputFile,
+        QgsProcessingOutputFolder,
+        QgsProcessingOutputHtml,
+        QgsProcessingOutputMultipleLayers,
+        QgsProcessingOutputNumber,
+        QgsProcessingOutputRasterLayer,
+        QgsProcessingOutputString,
+        QgsProcessingOutputVectorLayer,
+    )
+}
+
+#: Where a run of each result kind writes: the destination parameter class the
+#: dialog offers and its options. A kind absent here (number, string, boolean)
+#: hands its result back as a value with no destination to choose.
+_DESTINATION_CLASSES: dict[str, tuple[type, dict[str, Any]]] = {
+    "outputVector": (QgsProcessingParameterFeatureSink, {}),
+    "outputRaster": (QgsProcessingParameterRasterDestination, {}),
+    "outputFile": (QgsProcessingParameterFileDestination, {}),
+    "outputFolder": (QgsProcessingParameterFolderDestination, {}),
+    "outputHtml": (
+        QgsProcessingParameterFileDestination,
+        {"fileFilter": "HTML files (*.html)"},
+    ),
+    "outputMultilayer": (QgsProcessingParameterFolderDestination, {}),
+}
+
+#: The result name of a multiple-layers output; every other kind shares the
+#: one output and destination name.
+MULTI_OUTPUT_NAME = "OUTPUTS"
+
 
 def _rasters_of(bridge: Any) -> Any:
     """Return the provider's raster service, or refuse a raster input by name."""
@@ -137,6 +193,16 @@ def _rasters_of(bridge: Any) -> Any:
             "this host has no raster service, so a raster input cannot be read"
         )
     return rasters
+
+
+def _files_of(bridge: Any) -> Any:
+    """Return the files service that resolves a produced ref, or ``None``.
+
+    The bridge resolves a handler's ``FileRef`` result through the same files
+    service the run machinery owns, so a file output is published from the
+    exact path the ref names and nothing else.
+    """
+    return getattr(bridge.algorithm_service, "_files", None)
 
 
 #: The ``Qgis::ProcessingSourceType`` a map-layer parameter is narrowed to, per
@@ -287,7 +353,21 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
             self.addParameter(
                 _parameter(kind, name, self._description.annotations[name])
             )
-        self.addParameter(QgsProcessingParameterFeatureSink(OUTPUT_PARAMETER, "Output"))
+        kind = output_kinds()[self._description.result_kind]
+        destination = _DESTINATION_CLASSES.get(kind.name)
+        if destination is not None:
+            destination_class, options = destination
+            # ``createOutput=False``: the automatic output a destination
+            # parameter would add has the parameter's own type, which is wrong
+            # where the result kind is an HTML report or several layers - the
+            # declared output below is the one true face.
+            self.addParameter(
+                destination_class(OUTPUT_PARAMETER, "Output", **options), False
+            )
+        output_name = (
+            MULTI_OUTPUT_NAME if kind.name == "outputMultilayer" else OUTPUT_PARAMETER
+        )
+        self.addOutput(_OUTPUT_CLASSES[kind.processing](output_name, "Output"))
 
     def flags(self) -> QgsProcessingAlgorithm.Flag:
         return QgsProcessingAlgorithm.FlagNoThreading
@@ -334,7 +414,99 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
             # they expire with the run, like a view's refs with the view.
             for ref_id in minted:
                 self._bridge.authority.revoke(ref_id)
-        return {OUTPUT_PARAMETER: self._copy_to_sink(result.id, parameters, context)}
+        return self._publish(result, parameters, context)
+
+    def _publish(
+        self, result: Any, parameters: dict, context: QgsProcessingContext
+    ) -> dict:
+        """Hand the produced output to the destination its kind publishes to."""
+        kind = output_kinds()[self._description.result_kind]
+        if kind.name == "outputVector":
+            return {
+                OUTPUT_PARAMETER: self._copy_to_sink(result.id, parameters, context)
+            }
+        if kind.name == "outputRaster":
+            source = Path(_rasters_of(self._bridge)._qgs_raster(result.id).source())
+            return {OUTPUT_PARAMETER: self._copy_file(source, parameters, context)}
+        if kind.name in ("outputFile", "outputHtml"):
+            return {
+                OUTPUT_PARAMETER: self._publish_ref(
+                    result, parameters, context, folder=False
+                )
+            }
+        if kind.name == "outputFolder":
+            return {
+                OUTPUT_PARAMETER: self._publish_ref(
+                    result, parameters, context, folder=True
+                )
+            }
+        if kind.name == "outputMultilayer":
+            return {
+                MULTI_OUTPUT_NAME: self._publish_layers(result, parameters, context)
+            }
+        return {OUTPUT_PARAMETER: result}
+
+    def _destination_path(
+        self, parameters: dict, context: QgsProcessingContext
+    ) -> Path:
+        destination = self.parameterAsFileOutput(parameters, OUTPUT_PARAMETER, context)
+        if not destination:
+            raise QgsProcessingException(f"{OUTPUT_PARAMETER} requires a destination")
+        return Path(destination)
+
+    def _copy_file(
+        self, source: Path, parameters: dict, context: QgsProcessingContext
+    ) -> str:
+        """Copy one produced file to the destination the dialog chose."""
+        destination = self._destination_path(parameters, context)
+        shutil.copyfile(source, destination)
+        return str(destination)
+
+    def _publish_ref(
+        self, ref: Any, parameters: dict, context: QgsProcessingContext, *, folder: bool
+    ) -> str:
+        """Publish the file or folder a produced ref names, never the ref's
+        own borrowed path (decision-19: the destination is explicit)."""
+        files = _files_of(self._bridge)
+        if files is None:
+            raise QgsProcessingException(
+                "this host has no files service, so a produced ref cannot be published"
+            )
+        source = Path(files.resolve(ref, operation="read"))
+        destination = self._destination_path(parameters, context)
+        if folder:
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+        else:
+            shutil.copyfile(source, destination)
+        return str(destination)
+
+    def _publish_layers(
+        self, layers: Any, parameters: dict, context: QgsProcessingContext
+    ) -> list[str]:
+        """Write every produced layer into the chosen folder, one file each."""
+        folder = self._destination_path(parameters, context)
+        folder.mkdir(parents=True, exist_ok=True)
+        published: list[str] = []
+        for layer in layers:
+            produced = self._bridge.layers._qgs_layer(layer.id)
+            name = layer.name or produced.name() or "layer"
+            target = folder / f"{name}.gpkg"
+            number = 2
+            while target.exists():
+                target = folder / f"{name}-{number}.gpkg"
+                number += 1
+            options = QgsVectorFileWriter.SaveVectorOptions()
+            options.driverName = "GPKG"
+            options.layerName = target.stem
+            error, _new_name, message = QgsVectorFileWriter.writeAsVectorFormatV3(
+                produced, str(target), context.transformContext(), options
+            )
+            if error:
+                raise QgsProcessingException(
+                    f"cannot write {target.name}: {message or 'the writer refused'}"
+                )
+            published.append(str(target))
+        return published
 
     def _value(
         self,

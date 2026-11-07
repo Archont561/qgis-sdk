@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from qgis_sdk.core import ResourceScope
+from qgis_sdk.jobs import JobStatus
 from qgis_sdk.models import (
     AlgorithmInfo,
     AlgorithmRun,
@@ -22,6 +23,7 @@ from qgis_sdk.models import (
     QgisSdkAlgorithmFailedError,
     QgisSdkAlgorithmNotFoundError,
     QgisSdkAlgorithmRejectedError,
+    QgisSdkJobCancelledError,
     QgisSdkScopeClosedError,
 )
 from qgis_sdk.processing import native
@@ -227,3 +229,121 @@ def test_a_closed_scope_refuses_everything(world) -> None:
     ):
         with pytest.raises(QgisSdkScopeClosedError):
             call()
+
+
+# -- model runs and batches (TASK-94) ----------------------------------------
+
+MODEL = FIXTURES / "report.model3"
+
+
+def test_a_model_run_is_recorded_and_answered_from_the_script(world) -> None:
+    _, layers, files, algorithms = world
+    points = layers.open_vector(POINTS)
+    model = files.grant_file(MODEL)
+    algorithms.script_run_model(model, {"OUT": files.grant_file(LINES)})
+
+    result = algorithms.run_model(model, {"FEATS": points.id})
+
+    assert result.algorithm == model.name
+    assert result.file("OUT").name == LINES.name
+    assert [(ref.name, params) for ref, params in algorithms.model_runs] == [
+        (model.name, {"FEATS": points.id})
+    ]
+
+
+def test_a_model_script_can_answer_per_run(world) -> None:
+    _, _, files, algorithms = world
+    model = files.grant_file(MODEL)
+    algorithms.script_run_model(model, {"OUT": 1}, repeat=False)
+    algorithms.script_run_model(model, {"OUT": 2}, repeat=False)
+
+    first = algorithms.run_model(model, {})
+    second = algorithms.run_model(model, {})
+
+    assert (first.value("OUT"), second.value("OUT")) == (1, 2)
+    with pytest.raises(QgisSdkAlgorithmFailedError):
+        algorithms.run_model(model, {})
+
+
+def test_an_unscripted_model_fails_honestly(world) -> None:
+    _, _, files, algorithms = world
+    model = files.grant_file(MODEL)
+
+    with pytest.raises(QgisSdkAlgorithmFailedError) as failed:
+        algorithms.run_model(model, {})
+
+    assert "script_run_model" in failed.value.detail
+
+
+def test_a_model_run_refuses_a_path(world) -> None:
+    *_, algorithms = world
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
+        algorithms.run_model(str(MODEL), {})
+
+    assert "FileRef" in str(refused.value)
+
+
+def _drive(algorithms, workers) -> None:
+    service = algorithms.jobs
+    service.tick()
+    workers.run_all()
+    service.tick()
+
+
+def test_a_batch_runs_every_item_through_the_jobs_service(world) -> None:
+    from qgis_sdk.testing import FakeWorkers
+
+    scope, layers, files, _ = world
+    points = layers.open_vector(POINTS)
+    workers = FakeWorkers()
+    algorithms = FakeAlgorithms(layers, scope, files=files, workers=workers)
+    algorithms.script_run("native:buffer", {"OUTPUT": POINTS})
+
+    handle = algorithms.batch([native.Buffer(input=points.id) for _ in range(3)])
+    assert handle.description.title == "Run algorithm batch"
+
+    _drive(algorithms, workers)
+    results = handle.result
+
+    assert len(results) == 3
+    assert [run.algorithm for run in algorithms.runs] == ["native:buffer"] * 3
+
+
+def test_a_cancelled_batch_stops_between_items(world) -> None:
+    from qgis_sdk.testing import FakeWorkers
+
+    scope, layers, files, _ = world
+    points = layers.open_vector(POINTS)
+    workers = FakeWorkers()
+    algorithms = FakeAlgorithms(layers, scope, files=files, workers=workers)
+    algorithms.script_run("native:buffer", {"OUTPUT": POINTS})
+    handle = algorithms.batch([native.Buffer(input=points.id) for _ in range(3)])
+
+    assert handle.cancel() is True
+    _drive(algorithms, workers)
+
+    assert handle.status is JobStatus.CANCELLED
+    assert list(algorithms.runs) == []
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = handle.result
+
+
+def test_an_empty_batch_is_refused(world) -> None:
+    *_, algorithms = world
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
+        algorithms.batch([])
+
+    assert "at least one" in "; ".join(refused.value.reasons)
+
+
+def test_a_closed_scope_refuses_models_and_batches(world) -> None:
+    scope, _, files, algorithms = world
+    model = files.grant_file(MODEL)
+    scope.close()
+
+    with pytest.raises(QgisSdkScopeClosedError):
+        algorithms.run_model(model, {})
+    with pytest.raises(QgisSdkScopeClosedError):
+        algorithms.batch([native.Buffer(input="any-layer")])

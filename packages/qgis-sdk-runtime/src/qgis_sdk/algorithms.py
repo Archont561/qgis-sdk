@@ -49,10 +49,14 @@ from qgis_sdk.declarations import (
 )
 from qgis_sdk.models import (
     COLOUR_PATTERN,
+    AlgorithmResult,
     QgisSdkAlgorithmCancelledError,
     QgisSdkAlgorithmRejectedError,
     RangeParameter,
+    RasterLayerInfo,
     VectorLayerInfo,
+    output_kind_for,
+    output_kinds,
     parameter_kinds,
 )
 from qgis_sdk.services import Cancellation, Progress
@@ -126,6 +130,7 @@ class AlgorithmDescription:
     kinds: dict[str, str]
     annotations: dict[str, Any]
     result_type: Any
+    result_kind: str
     inputs_schema: dict[str, Any]
     result_schema: dict[str, Any]
     schema_version: int = 1
@@ -148,6 +153,7 @@ class AlgorithmDescription:
             "inputs": self.inputs_schema,
             "result": {
                 "type": type_name(self.result_type),
+                "kind": self.result_kind,
                 "schema": self.result_schema,
             },
         }
@@ -226,10 +232,13 @@ def describe_declared_algorithm(
     result_type = hints.get("return", inspect.Signature.empty)
     if result_type is inspect.Signature.empty:
         raise QgisSdkDeclarationError(f"{path}: an algorithm must declare its result")
-    if result_type is not VectorLayerInfo:
+    result_kind = output_kind_for(result_type)
+    if result_kind is None:
         raise QgisSdkDeclarationError(
-            f"{path}: an algorithm returns the VectorLayerInfo of the layer it "
-            f"produced, not {type_name(result_type)}"
+            f"{path}: an algorithm returns one declared output - the "
+            f"VectorLayerInfo or RasterLayerInfo it produced, a FileRef, "
+            f"FolderOutput or HtmlOutput ref, a number, a string, a boolean or "
+            f"MultipleLayers - not {type_name(result_type)}"
         )
     return AlgorithmDescription(
         id=declared.id,
@@ -241,6 +250,7 @@ def describe_declared_algorithm(
         kinds=kinds,
         annotations={parameter.name: hints[parameter.name] for parameter in inputs},
         result_type=result_type,
+        result_kind=result_kind.name,
         inputs_schema=object_schema(properties, required),
         result_schema=schema_for(result_type, f"{path}.result", result=True),
     )
@@ -333,7 +343,7 @@ def invoke(
     cancellation: Cancellation | None = None,
     add_to_project: bool = True,
     **inputs: Any,
-) -> VectorLayerInfo:
+) -> AlgorithmResult:
     """Run one declared algorithm once from the context the caller already holds.
 
     ``ctx`` is the ``PluginContext`` of an action, the ``JobContext`` of a job
@@ -392,16 +402,43 @@ def invoke(
     )
     try:
         result = function(context, **inputs)
-        if not isinstance(result, VectorLayerInfo):
-            raise QgisSdkDeclarationError(
-                f"{description.id}: returned {type_name(type(result))}, not the "
-                "declared VectorLayerInfo"
-            )
+        _check_result(description, result)
         if cancellation.is_cancelled():
             raise QgisSdkAlgorithmCancelledError(description.id)
         if add_to_project:
             assert project is not None
-            project.add_layer(result.id)
+            for layer_id in _produced_layers(result):
+                project.add_layer(layer_id)
     finally:
         invocation_scope.close()
     return result
+
+
+def _check_result(description: AlgorithmDescription, result: Any) -> None:
+    """Check the handler's result against the declared output kind."""
+    kind = output_kinds()[description.result_kind]
+    if kind.name == "outputMultilayer":
+        accepted = isinstance(result, tuple) and all(
+            isinstance(item, VectorLayerInfo) for item in result
+        )
+    else:
+        accepted = isinstance(result, kind.accepted)
+    if not accepted:
+        raise QgisSdkDeclarationError(
+            f"{description.id}: returned {type_name(type(result))}, not the "
+            f"declared {kind.result}"
+        )
+
+
+def _produced_layers(result: Any) -> tuple[str, ...]:
+    """The layer ids one produced result carries, for ``add_to_project``.
+
+    Layer kinds are added to the project; files, folders, reports and values
+    are the caller's to place (decision-19: the project changes last, and a
+    file is not a layer).
+    """
+    if isinstance(result, (VectorLayerInfo, RasterLayerInfo)):
+        return (result.id,)
+    if isinstance(result, tuple):
+        return tuple(item.id for item in result if isinstance(item, VectorLayerInfo))
+    return ()
