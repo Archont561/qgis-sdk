@@ -243,8 +243,15 @@ class NativeAlgorithms:
         # The model names its exposed outputs, not the children that write
         # them; the run is described by those names and its raw outputs are
         # re-keyed onto them.
+        declared = _declared_outputs(loaded)
         info, output_names = model_output_names(
-            algorithm_info(loaded, "model"), _declared_outputs(loaded)
+            algorithm_info(loaded, "model"), declared
+        )
+        raise QgisSdkAlgorithmFailedError(
+            model.name,
+            f"PROBE declared={sorted(declared.items())} "
+            f"mapped={sorted(output_names.items())} "
+            f"outputs={[(each.name, each.label) for each in info.outputs]}",
         )
         return self._run_described(
             info,
