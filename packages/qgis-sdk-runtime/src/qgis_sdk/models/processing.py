@@ -625,7 +625,16 @@ class RunResult:
         object.__setattr__(self, "outputs", dict(self.outputs))
 
     def __getitem__(self, name: str) -> object:
-        return self.outputs[name]
+        try:
+            return self.outputs[name]
+        except KeyError:
+            # A run's outputs are named by the algorithm that produced them,
+            # and a caller guessing a name learns what the run did answer
+            # rather than only what it did not.
+            raise KeyError(
+                f"{name!r} is not an output of {self.algorithm}; it answered "
+                f"{sorted(self.outputs)}"
+            ) from None
 
     def __iter__(self) -> Iterator[str]:
         return iter(self.outputs)
@@ -634,16 +643,16 @@ class RunResult:
         return len(self.outputs)
 
     def value(self, name: str) -> object:
-        return self.outputs[name]
+        return self[name]
 
     def vector(self, name: str) -> VectorLayerInfo:
-        value = self.outputs[name]
+        value = self[name]
         if not isinstance(value, VectorLayerInfo):
             raise KeyError(f"output {name!r} of {self.algorithm} is not a vector layer")
         return value
 
     def layers(self, name: str) -> tuple[VectorLayerInfo, ...]:
-        value = self.outputs[name]
+        value = self[name]
         if not isinstance(value, tuple) or not all(
             isinstance(item, VectorLayerInfo) for item in value
         ):
@@ -651,7 +660,7 @@ class RunResult:
         return value
 
     def file(self, name: str) -> FileRef:
-        value = self.outputs[name]
+        value = self[name]
         if not isinstance(value, FileRef):
             raise KeyError(f"output {name!r} of {self.algorithm} is not a file")
         return value

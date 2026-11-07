@@ -274,3 +274,21 @@ def test_run_result_discriminates_outputs_on_the_wire() -> None:
     assert outputs["COUNT"] == {"name": "COUNT", "kind": "value", "value": 3}
     assert outputs["EMPTY"] == {"name": "EMPTY", "kind": "value", "value": None}
     assert RunResult.from_wire(wire) == result
+
+
+def test_a_missing_output_names_what_the_run_answered() -> None:
+    result = RunResult(
+        algorithm="report.model3",
+        outputs={
+            "CENTROIDS": VectorLayerInfo(
+                id="l",
+                name="centroids",
+                geometry_type="point",
+                field_names=(),
+                crs=None,
+            )
+        },
+    )
+
+    with pytest.raises(KeyError, match="CENTROIDS"):
+        result.vector("centroids")
