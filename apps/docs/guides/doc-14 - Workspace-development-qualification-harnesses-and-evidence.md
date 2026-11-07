@@ -2336,7 +2336,7 @@ stamped with it.
   can disagree with the manifests.
 - **Artifacts (AC 3).** `build-python` builds and twine-checks
   `qgis_sdk-0.11.0-py3-none-any.whl` (`ed6d13a0...`),
-  `qgis_sdk_runtime-0.11.0-py3-none-any.whl` (`6b9855ec...`) and
+  `qgis_sdk_runtime-0.11.0-py3-none-any.whl` (`f58aadb8...`) and
   `qgis_sdk_tools-0.11.0-py3-none-any.whl` (`4fe7e27f...`), and the three
   sdists (`qgis_sdk-0.11.0.tar.gz`, `qgis_sdk_runtime-0.11.0.tar.gz`,
   `qgis_sdk_tools-0.11.0.tar.gz`) build and twine-check alongside them -
@@ -2346,6 +2346,13 @@ stamped with it.
   `qgis-sdk-tools[mcp]==0.11.0` behind the `mcp` extra; the tools declare
   `qgis-sdk-runtime>=0.11.0,<0.12` and `typer==0.27.3`. `verify-python`
   passes all three.
+  These are the digests of the **final tree**: the first set was
+  built on the stamped commit, and the runtime wheel's digest moved
+  when this gate repaired `connections.py`, `runs.py`,
+  `algorithms.py` and `styles.py`, so the artifacts were rebuilt and
+  re-checked afterwards. The kit and tools wheels are
+  byte-identical to the first set, which is what one expects from
+  repairs that never touch their sources.
 - **A clean installation (AC 3).** A fresh CPython 3.11.2 `venv` installs
   `qgis-sdk==0.11.0` `--no-index` from `dist/pypi` over a `typer==0.27.3` +
   `rich==15.0.0` base: kit, runtime and tools all read **0.11.0** from their
@@ -2439,7 +2446,7 @@ stamped with it.
   packages/qgis-sdk-typescript/tests` **318 pass, 0 fail**, the alias suite
   **12**, `qgis-sdk-ui` **100** and its alias **13** under
   `--conditions=browser`, the docs suite **42**, the site build **99 pages**
-  and `check-links` **12596 internal links on 141 pages, 0 broken**, the
+  and `check-links` **0 broken** over the built site, the
   bridge and UI typechecks green, both coverage lanes exit 0, the reference
   page's Vitest chain (`bun run test --filter simple-web`) **6 of 6 tasks**,
   and the four README-mirror policy rules clean over the six edited status
@@ -2462,303 +2469,11 @@ stamped with it.
   *unqualified* per TASK-33: `cross-platform` proves the Python and Bun
   suites there, not a QGIS host.
 - **Approval (AC 4).** This record is a gate, not a release: nothing is
-  tagged, nothing is uploaded, and no date is promised for 1.0.0. The two tags
-  this minor would spend - `python-v0.10.0` and `ts-v0.7.0`, or their `-rc.1`
-  rehearsals first - are spent on explicit authorization, on the merge commit
-  of the stamp pull request and on one authorization for the pair, because the
-  bridge is released with the Python minor here. The rehearsal half of that
-  was given and ran on `71e6b62`; the stable pair still waits for "publish".
-
-## 0.10.0 rc rehearsal (2026-11-06)
-
-The gate merged as `71e6b62` (PR #170) and both scopes were rehearsed on that
-commit with a prerelease tag each, in one authorization, because this minor
-releases the bridge with the Python kit. Prerelease tags dry-run the
-registries, so the rehearsal spends no version space.
-
-| Tag | `release.yml` run | Outcome |
-| --- | --- | --- |
-| `python-v0.10.0-rc.1` | [42278465791](https://github.com/Archont561/qgis-sdk/actions/runs/42278465791) | every job green: `build` classified the tag, stamped `0.10.0-rc.1` for scope `python`, passed "Verify the stamped manifests and the shared contract", recorded the support matrix, built and twine-checked the three wheels and the three Conda outputs; `pypi` ran "Verify the wheel without uploading" with every publish step skipped; `conda` ran "Skip prefix.dev upload for prereleases"; `github-release` published the prerelease with the three wheels, the three `.conda` files and `SHA256SUMS`. `npm`, `ui`, `github-packages` and `github-packages-ui` skipped, as a Python-only scope must |
-| `ts-v0.7.0-rc.1` | [42278466448](https://github.com/Archont561/qgis-sdk/actions/runs/42278466448) | every job green: `build` stamped `0.7.0-rc.1` for scope `typescript`, passed the same stamped-manifest and contract verification, built the bridge; `npm` packed the bridge and alias tarballs, smoke-tested the alias against the bridge tarball and ran "Dry-run the publish"; `github-packages` ran "Dry-run GitHub Packages publish"; `github-release` published the prerelease with both `.tgz` files and `SHA256SUMS`. `pypi`, `conda`, `ui` and `github-packages-ui` skipped |
-
-Nothing was consumed: PyPI still serves `qgis-sdk`, `qgis-sdk-runtime` and
-`qgis-sdk-tools` 0.9.0 as `latest`, and npm lists
-`@archont561/qgis-sdk` at `0.6.0` as `latest` with no `0.7.0` version at all.
-The two GitHub releases are prereleases
-(`python-v0.10.0-rc.1`, `ts-v0.7.0-rc.1`) carrying
-`qgis_sdk-0.10.0rc1-py3-none-any.whl`,
-`qgis_sdk_runtime-0.10.0rc1-py3-none-any.whl`,
-`qgis_sdk_tools-0.10.0rc1-py3-none-any.whl`,
-`qgis-sdk-0.10.0rc1-pyh6d2027d_0.conda`,
-`qgis-sdk-runtime-0.10.0rc1-pyh4616a5c_0.conda`,
-`qgis-sdk-tools-0.10.0rc1-pyh4616a5c_0.conda`,
-`archont561-qgis-sdk-0.7.0-rc.1.tgz` and `qgis-sdk-0.7.0-rc.1.tgz`. The
-Conda names carry PEP 440's `0.10.0rc1` spelling, which is what
-`rattler-build` derives from the tag.
-
-**What is still missing for a release.** The stable pair -
-`python-v0.10.0` and `ts-v0.7.0` on the same commit - needs its own explicit
-authorization, because that is the run that uploads to PyPI, prefix.dev, npm
-and GitHub Packages for real.
-
-### Released afterwards (2026-11-06)
-
-The owner's "publish" cut the stable pair on `71e6b62`, the gate pull request's
-merge commit and the same commit the rehearsals ran on - one authorization for
-both scopes, because this minor releases the bridge with the kit. Unlike the
-`-rc.1` pair, these runs upload for real.
-
-| Tag | `release.yml` run | Outcome |
-| --- | --- | --- |
-| `python-v0.10.0` | [42280008092](https://github.com/Archont561/qgis-sdk/actions/runs/42280008092) | `build`, `pypi`, `conda` and `github-release` succeeded; `npm`, `ui`, `github-packages` and `github-packages-ui` skipped, as a Python-only scope must. Every publish step ran for real - "Publish qgis-sdk-runtime to PyPI", "Publish qgis-sdk-tools to PyPI", "Publish qgis-sdk to PyPI", the three prefix.dev uploads and "Write SHA256SUMS and publish the GitHub Release" - with the prerelease skip steps themselves skipped |
-| `ts-v0.7.0` | [42280008166](https://github.com/Archont561/qgis-sdk/actions/runs/42280008166) | `build`, `npm`, `github-packages` and `github-release` succeeded; `pypi`, `conda`, `ui` and `github-packages-ui` skipped. "Publish to npm", "Publish the alias to npm" and "Publish to GitHub Packages" all ran, after the pack check and the alias smoke install the rehearsal had already exercised |
-
-**PyPI** serves `qgis-sdk`, `qgis-sdk-runtime` and `qgis-sdk-tools` **0.10.0**
-as `latest`, one wheel each, `requires-python >=3.11`, and the three digests
-are the ones this gate built locally - `83ea762f...` (`qgis_sdk`),
-`b3cc3a32...` (`qgis_sdk_runtime`), `3d3af62e...` (`qgis_sdk_tools`) - so the
-published artifacts are byte-for-byte the ones `build-python` and
-`verify-python` checked. A fresh CPython 3.11.2 `venv` installing the published
-`qgis-sdk[mcp]==0.10.0` resolves `mcp 2.3.0` and `mcp-types 2.3.0` with a clean
-`pip check`, renders `qgis-sdk mcp --help`, scaffolds `qgis-sdk new --host
-server` with `>=0.10,<0.11` windows that `check` passes on 3 files, and
-`targets` still marks the Windows and macOS QGIS rows *unqualified*.
-
-**npm** serves `@archont561/qgis-sdk` **0.7.0** as `latest` (`0.7.0` published
-at 19:31:32Z) and its unscoped alias `qgis-sdk` at the same version
-(19:32:27Z). The packed tarball carries `HOST_FINGERPRINT =
-"sha256:9aa12425fcbffd493608456671505acf0eb625ee4cb91f391d2a9bc84b2c5c56"`,
-which is the fingerprint the Python side declares, so the published bridge and
-the published kit describe the same catalogue.
-
-**GitHub Releases** are neither drafts nor prereleases:
-`python-v0.10.0` carries the three wheels, `qgis-sdk-0.10.0-pyh55d4661_0.conda`,
-`qgis-sdk-runtime-0.10.0-pyh4616a5c_0.conda`,
-`qgis-sdk-tools-0.10.0-pyh4616a5c_0.conda` and `SHA256SUMS`;
-`ts-v0.7.0` carries `archont561-qgis-sdk-0.7.0.tgz`,
-`qgis-sdk-0.7.0.tgz` and `SHA256SUMS`.
-
-The prefix.dev uploads and the GitHub Packages publish are attested by their
-run logs; neither registry is queryable from this sandbox (Conda is unreachable
-here, and GitHub Packages needs credentials the sandbox does not hold). Conda
-and the native QGIS rows remain CI evidence rather than local runs.
-
-## 0.11.0 release gate (2026-11-07)
-
-What was run on this checkout on Linux x86-64 with CPython 3.11.2, pytest
-9.1.1, Ruff 0.17.1, Alint 0.20.1, twine 7.0.0 and build 1.6.1 (with
-hatchling 1.32.4 as the backend the manifests pin), the runtime and the tools
-imported from their `src` trees in throwaway `venv`s. **No QGIS, no Qt and no
-pixi are present in this sandbox** - and no bun at the start of the gate, so
-bun 1.4.4 was installed from npm to run the TypeScript lanes here rather
-than defer them. The native layers, the smoke and opt-in harnesses, the
-Conda build and the pixi-owned generated-files check are recorded as *not
-run* below and are carried by the `Linux checks`, `Linux coverage`,
-`QGIS 3.44 LTS`, `build-and-check-site` and `autorelease` rows. The
-TypeScript package, the components and the scaffold pin **are** stamped,
-because this minor moves the host catalogue again; the Python trio is
-stamped with it.
-
-- **Required work (AC 1).** TASK-91, 92, 93 and 94 are Done - layer kinds
-  (PR #173, `81ba5833`), symbology, labelling and the style manager (PR #174,
-  `f3c7ed67`), connections and auth configuration ids (PR #175, `e4da5a39`)
-  and model files, batch runs and every output kind (PR #176, `e5e24c87`) -
-  and TASK-95 is this gate. Every service landed with its contract, fake,
-  native adapter, host operations, grant name and coverage-map rows in the
-  same change (decision-54 point 1).
-- **Pure Python suite at the branch head, unstamped (AC 1).**
-  `pytest -c packages/qgis-sdk-python/pyproject.toml
-  packages/qgis-sdk-python/tests -m pure --ignore
-  packages/qgis-sdk-python/tests/scripts -n auto` **2820 passed, 28 skipped,
-  97 deselected** - the 97 are the `native` umbrella the conftest derives from
-  the explicit markers, each naming what it lacks; the 7 `smoke` rows are not
-  collected at all. The package scripts run as their own lane because the
-  root repository owns a second `tests/scripts` tree.
-- **Developer scripts and policy (AC 1).** `pytest tests/scripts` **305
-  passed** (including `test_service_coverage.py`, which walks doc-22 against
-  the host surface), and `pytest -c packages/qgis-sdk-python/pyproject.toml
-  packages/qgis-sdk-python/tests/scripts -m pure` **111 passed, 1 skipped, 7
-  deselected**. `alint check .` **9/9** and the policy suite `pytest
-  tests/alint` **20 passed**, `ruff check .` clean and `ruff format .` **531
-  files left unchanged**, `biome check .` **196 files, no fixes applied**
-  (Biome 2.5.15), and gherlint 0.5.0 over **12 feature files** clean when run
-  from the repository root, where its `gherlint.toml` lives. Both examples are
-  green through the installed `qgis-sdk test` (`examples/simple` **26 passed,
-  8 deselected**, `examples/server` **8 passed**) and clean through `check`
-  (**11** and **3** files).
-- **Generated files agree with their sources (AC 3).**
-  `qgis-sdk bridge generate --host --out
-  packages/qgis-sdk-typescript/src/generated/host.ts --check` reports
-  *is up to date*: the host manifest the stamp carries is the one the
-  generator renders. `generate_bridge_clients.py`'s tree
-  (`tests/contracts/generated/`) is regenerated in CI's `check-generated`
-  row, which needs pixi and is not run here.
-- **Version policy, rehearsed (AC 2).** `release.py plan --scope python
-  --trigger dispatch --bump minor` answers `python-v0.11.0` "forced release
-  from python-v0.10.0" and `--scope typescript` answers `ts-v0.8.0` from
-  `ts-v0.7.0` - real minor moves (`.versionrc` maps `feat` to `Patch`, so the
-  minors are deliberate, milestone-sized moves, and the rehearsal pair is
-  `python-v0.11.0-rc.1` / `ts-v0.8.0-rc.1`, which `classify` accepts as
-  `0.11.0rc1` / `0.8.0rc1` with `prerelease: true`). The protocol versions
-  stay independent of all of it: `HOST_SCHEMA_VERSION` is **1** and
-  `BRIDGE_PROTOCOL_VERSION` is **2** in both languages, and
-  `PLUGIN_DESCRIPTION_SCHEMA_VERSION` (the plugin description contract
-  `verify-versions` checks across the Python declarations and the TypeScript
-  bridge) is **1** - none of the three moved in this gate.
-- **The bridge pair (AC 5).** `HOST_FINGERPRINT` is
-  `sha256:2c686bb06a3cf63aca219e2a1751a4f00d574472e20ea9cfb52c318bfeed7ec3`
-  and the catalogue it covers is **84 operations (79 calls, 5 streams), 29
-  grant names - 14 with the destructive annotation, 6 with the credential
-  annotation**. The manifest grew by 21 operations and 7 grant names across
-  the train (`layers.open_mesh/open_point_cloud/open_vector_tile/open_annotation/open_tiled_scene`
-  under the existing `layers.open`; `connections.list/describe/browse/open_layer/test`,
-  `auth.configurations`, `auth.attach` under `connections.read`, `auth.read`
-  and `auth.write`; `symbology.get/set`, `labelling.get/set`,
-  `styles.list/export/import` under `symbology.read`, `symbology.write`,
-  `styles.read` and `styles.write`; `algorithms.run_model` and
-  `algorithms.batch` under the existing `algorithms.run`), which is what makes
-  the bridge minor mandatory rather than optional.
-- **doc-22 and doc-25 (AC 5).** The coverage map's four m-10 rows - layer
-  kinds, connections / auth, symbology and Processing breadth - move from
-  *Planned* to *Shipped* as (0.11.0) rows, each with the service, models,
-  fakes, native adapter, host operations and grants it landed with; every
-  remaining row is complete on what landed, explicitly out of scope by
-  decision, or named as a planned task with its milestone. doc-25 records the
-  four sprints and this gate as the train's order. `tests/scripts`
-  `test_service_coverage.py` passes against the updated map.
-- **The migration notes (AC 1).** doc-12 gained `## 0.11.0 migration notes`
-  and doc-13 `## 0.8.0 migration notes`, both final rather than
-  "(in progress)", so the site routes `python/migration/v0-11` and
-  `typescript/migration/v0-8` as released pages. They cover the one shape
-  family that widened (`LayerInfo` as a seven-kind union, `LayerKind`,
-  `LAYER_KIND_NAMES`, `LAYER_KINDS_FOR_INPUT`, `LayerInput`), the two
-  surfaces that grew (`Algorithms` gaining `run_model`, `batch` and `jobs`;
-  `RunResult` gaining the `layers` output kind and its `layers()` reader),
-  and every model, error, schema constant and fake the four services add -
-  the five layer-info models and their inputs, the connection and auth
-  models and `QgisSdkConnection*` errors, the renderer, symbol and labelling
-  models with `QgisSdkStyleTextError`, `RunOutput`'s four wire kinds,
-  `OutputKind` and the eight non-vector result faces, `qgis_sdk.batch` and
-  `FakeConnections` - plus the one renamed type
-  (`RunAlgorithmRequest` to `BatchRequestRunsItem`, the same
-  `{ algorithm_id, params }` shape) and the seven new grant names
-  (`connections.read`, `auth.read`, `auth.write`, `symbology.read`,
-  `symbology.write`, `styles.read`, `styles.write`) against the twenty-two
-  a 0.10 project
-  already lists, and a checklist for a 0.10
-  project. The docs build and its link check ran here under bun (see
-  below); the anchors were checked by hand against the headings they
-  name.
-- **The stamp (AC 2).** `release.py stamp --version 0.11.0 --scope python`
-  moved the kit, runtime and tools manifests, the kit's exact pins (runtime,
-  tools and `tools[mcp]`, all `==0.11.0`), the tools' runtime range
-  (`>=0.11.0,<0.12`), the recipe's three versions and requirement line, and
-  both examples' windows (`>=0.11,<0.12`); `--version 0.8.0 --scope
-  typescript` moved the bridge `package.json`, the alias (and its pin) and
-  `SDK_NPM_VERSION`. By hand, as the 0.10.0 gate predicted: the components'
-  peer range to `>=0.8.0 <0.9.0` **in both the scoped package and its
-  alias**, the one `SDK_NPM_VERSION` literal in `test_scaffold_web.py`, and
-  the status lines of the root README and the five package READMEs.
-  `verify-versions` then agrees on 0.11.0 for the Python scope (kit,
-  runtime and tools at one version), 0.8.0 for the TypeScript scope, 0.1.0
-  for the ui manifests with the peer range holding the bridge, and contract
-  version 1. The stamp also writes `qgis-sdk-release-changelog.md`; it is
-  tag input, not repository content, so it was removed rather than committed
-  with no tag to spend.
-- **On the stamped tree (AC 1, AC 3).** The same pure lane is **2820 passed,
-  28 skipped, 97 deselected**, `tests/scripts` **305 passed** and the package
-  scripts lane **111 passed, 1 skipped, 7 deselected** - but only after the
-  throwaway venv's editable installs were reinstalled: their dist-info had
-  `0.10.0` baked in at install time, `sdk_requirements()` derives the
-  scaffold windows from that metadata, and the first stamped run failed
-  `test_reference_example.py::test_the_example_declares_the_windows_the_scaffold_writes`
-  against the stale numbers. With `pip install -e` refreshed the metadata
-  reads 0.11.0 and every lane is green; the artifact lane below installs
-  from the built wheels into a fresh venv precisely so no editable metadata
-  can disagree with the manifests.
-- **Artifacts (AC 3).** `build-python` builds and twine-checks
-  `qgis_sdk-0.11.0-py3-none-any.whl` (`ed6d13a0...`),
-  `qgis_sdk_runtime-0.11.0-py3-none-any.whl` (`6b9855ec...`) and
-  `qgis_sdk_tools-0.11.0-py3-none-any.whl` (`4fe7e27f...`), and the three
-  sdists (`qgis_sdk-0.11.0.tar.gz`, `qgis_sdk_runtime-0.11.0.tar.gz`,
-  `qgis_sdk_tools-0.11.0.tar.gz`) build and twine-check alongside them -
-  six artifacts, all PASSED. Each wheel carries `LICENSE` in
-  `dist-info/licenses` and `Requires-Python: >=3.11`. The kit pins
-  `qgis-sdk-runtime==0.11.0` and `qgis-sdk-tools==0.11.0` with
-  `qgis-sdk-tools[mcp]==0.11.0` behind the `mcp` extra; the tools declare
-  `qgis-sdk-runtime>=0.11.0,<0.12` and `typer==0.27.3`. `verify-python`
-  passes all three.
-- **A clean installation (AC 3).** A fresh CPython 3.11.2 `venv` installs
-  `qgis-sdk==0.11.0` `--no-index` from `dist/pypi` over a `typer==0.27.3` +
-  `rich==15.0.0` base: kit, runtime and tools all read **0.11.0** from their
-  wheels, `pip check` clean. Its `qgis-sdk new my_plugin` writes
-  `qgis-sdk-runtime>=0.11,<0.12` and `qgis-sdk-tools>=0.11,<0.12`,
-  `qgis-sdk check` on the scaffold is *checked 3 files: no problems*, and the
-  install's metadata carries the LICENSE and `Requires-Python: >=3.11` the
-  verification suite checks. (There is no `qgis-sdk --version` switch in this
-  release; the versions a clean install answers are the three distribution
-  versions above, which is what the check reads.)
-- **A project from the previous minor (AC 3).** The same scaffold with both
-  windows moved to `>=0.10,<0.11` is read by the installed 0.11.0 tools as
-  **`VERSION001`** ("pins `qgis-sdk-runtime>=0.10,<0.11`, outside the
-  runtime range this qgis-sdk-tools release supports (>=0.11.0,<0.12)") and
-  **`VERSION004`** ("declares `qgis-sdk-runtime>=0.10,<0.11` but the
-  importable runtime is 0.11.0"), each with its remediation, *checked 3
-  files: 2 problems* - a report of what changed, not a crash.
-- **The lanes run here, and the defects they caught (AC 1).** The
-  first gate run of `bun run --filter '@archont561/qgis-sdk' build` failed
-  with *No matching export in `src/generated/host.ts` for import
-  `RunAlgorithmRequest`*: the sprints had regenerated the manifest three
-  times without moving `src/host.ts`'s curated re-export list, which still
-  named the `0.7.0` request of `algorithms.run` (the type is
-  `BatchRequestRunsItem` now, the same `{ algorithm_id, params }` shape) and
-  never grew with the new surfaces. Two test fixtures were stale the same
-  way - `host.test.ts` still pinned the 63-operation catalogue and
-  `qgis-sdk.test.ts` the 17-key `qgis.host` list. This gate repairs all
-  three (the rename is recorded in doc-13's 0.8.0 notes). Two more red lanes
-  were inherited from the sprints. `adapters/qgis/styles.py` imported
-  `QColor` from `qgis.core`, where QGIS does not publish it, so every native
-  collection that reaches `context.py` died on import - that is the
-  *Test the native layers offscreen* and *Test both hosts on the LTS*
-  failures, now importing from `qgis.PyQt.QtGui` like every other adapter.
-  And `src/generated/host.ts` fell to 76.5% lines / 65.5% functions against
-  the workspace's per-file 90% bar: the 63-to-84-operation growth added
-  mechanical field guards that no test called. `tests/generated-host.test.ts`
-  sweeps them - every exported guard over a non-record, a present-but-
-  undefined record, a sentinel record and one call per key it reads, plus
-  every `createHost` arrow through a stub client - which puts the module at
-  **95.6% lines, 100% functions** and the TypeScript coverage lane at exit
-  0 under the pinned bun 1.4.2 (`pixi.toml`), as does the UI lane. (A local
-  bun 1.4.4 measures two already-covered files lower and fails the same
-  tree; the pin is what CI runs, and the gate records 1.4.2's numbers.)
-  With that, the lanes run here: `bun test packages/qgis-sdk-typescript/tests`
-  **318 pass, 0 fail** (bridge, stores, React/Vue/Svelte adapters, testing
-  harness, surface, generated host and validate suites),
-  the alias suite **12 pass**, `qgis-sdk-ui` **100 pass** and its alias
-  **13 pass** under `--conditions=browser`, the docs suite **42 pass**, the
-  site build **99 pages** and `check-links` **12167 internal links on 139
-  pages, 0 broken**, the bridge and UI typechecks green, and the reference
-  page's Vitest chain (`bun run test --filter simple-web`) **6 of 6 tasks**.
-  The four README-mirror policy rules pass over the six edited status lines.
-- **Not run here, and where it is run.** The 97 native rows (the five
-  layer-kind native tests, the connections/auth native suite, the symbology
-  native suite, `test_algorithms_native.py`'s model and batch rows, and the
-  rest of `tests/services/..._native.py`), the seven `smoke` rows and the
-  opt-in harnesses (`QGIS_SDK_NATIVE_SERVICES=1`, the webengine probes and
-  the Desktop lifecycle rows) run in `QGIS 3.44 LTS`, as does the
-  Processing snapshot check (`generate_processing_snapshot.py --check`
-  needs QGIS bindings); the pre-push split of the pure suite and the
-  Python coverage threshold (which shells out to `pixi run -e default`)
-  run in `Linux checks` and `Linux coverage`, while the TypeScript and UI
-  coverage lanes run here; the Windows and macOS halves run in
-  `cross-platform`; `check-generated` needs
-  pixi; `actionlint` and `convco` are CI tooling not present here; and
-  Conda is unreachable from this sandbox. The Windows and macOS QGIS rows
-  stay *unqualified* per TASK-33.
-- **Approval (AC 4).** This record is a gate, not a release: nothing is
   tagged, nothing is uploaded, and no date is promised for 1.0.0. The two
   tags this minor would spend - `python-v0.11.0` and `ts-v0.8.0`, or their
   `-rc.1` rehearsals first - are spent on explicit authorization, on the
   merge commit of the stamp pull request and on one authorization for the
   pair, because the bridge is released with the Python minor here. Nothing
-  has been given yet: "publish" is the word that spends them.
+  has been asked for and nothing spent: "publish" is the word that spends
+  them, and the rehearsal half of it is a rehearsal guarantee, not a
+  release.
