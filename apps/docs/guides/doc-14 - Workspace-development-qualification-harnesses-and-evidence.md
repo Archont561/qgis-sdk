@@ -2363,7 +2363,7 @@ stamped with it.
   **`VERSION004`** ("declares `qgis-sdk-runtime>=0.10,<0.11` but the
   importable runtime is 0.11.0"), each with its remediation, *checked 3
   files: 2 problems* - a report of what changed, not a crash.
-- **The TypeScript lanes run here, and the defects they caught (AC 1).** The
+- **The lanes run here, and the defects they caught (AC 1).** The
   first gate run of `bun run --filter '@archont561/qgis-sdk' build` failed
   with *No matching export in `src/generated/host.ts` for import
   `RunAlgorithmRequest`*: the sprints had regenerated the manifest three
@@ -2373,10 +2373,25 @@ stamped with it.
   never grew with the new surfaces. Two test fixtures were stale the same
   way - `host.test.ts` still pinned the 63-operation catalogue and
   `qgis-sdk.test.ts` the 17-key `qgis.host` list. This gate repairs all
-  three (the rename is recorded in doc-13's 0.8.0 notes), and with bun
-  1.4.4 installed the TypeScript lanes run here: `bun test
-  packages/qgis-sdk-typescript/tests` **315 pass, 0 fail** (bridge, stores,
-  React/Vue/Svelte adapters, testing harness, surface and validate suites),
+  three (the rename is recorded in doc-13's 0.8.0 notes). Two more red lanes
+  were inherited from the sprints. `adapters/qgis/styles.py` imported
+  `QColor` from `qgis.core`, where QGIS does not publish it, so every native
+  collection that reaches `context.py` died on import - that is the
+  *Test the native layers offscreen* and *Test both hosts on the LTS*
+  failures, now importing from `qgis.PyQt.QtGui` like every other adapter.
+  And `src/generated/host.ts` fell to 76.5% lines / 65.5% functions against
+  the workspace's per-file 90% bar: the 63-to-84-operation growth added
+  mechanical field guards that no test called. `tests/generated-host.test.ts`
+  sweeps them - every exported guard over a non-record, a present-but-
+  undefined record, a sentinel record and one call per key it reads, plus
+  every `createHost` arrow through a stub client - which puts the module at
+  **95.6% lines, 100% functions** and the TypeScript coverage lane at exit
+  0 under the pinned bun 1.4.2 (`pixi.toml`), as does the UI lane. (A local
+  bun 1.4.4 measures two already-covered files lower and fails the same
+  tree; the pin is what CI runs, and the gate records 1.4.2's numbers.)
+  With that, the lanes run here: `bun test packages/qgis-sdk-typescript/tests`
+  **318 pass, 0 fail** (bridge, stores, React/Vue/Svelte adapters, testing
+  harness, surface, generated host and validate suites),
   the alias suite **12 pass**, `qgis-sdk-ui` **100 pass** and its alias
   **13 pass** under `--conditions=browser`, the docs suite **42 pass**, the
   site build **99 pages** and `check-links` **12167 internal links on 139
@@ -2390,9 +2405,11 @@ stamped with it.
   opt-in harnesses (`QGIS_SDK_NATIVE_SERVICES=1`, the webengine probes and
   the Desktop lifecycle rows) run in `QGIS 3.44 LTS`, as does the
   Processing snapshot check (`generate_processing_snapshot.py --check`
-  needs QGIS bindings); the pre-push splits of the pure suite and the
-  coverage thresholds run in `Linux checks` and `Linux coverage`; the
-  Windows and macOS halves run in `cross-platform`; `check-generated` needs
+  needs QGIS bindings); the pre-push split of the pure suite and the
+  Python coverage threshold (which shells out to `pixi run -e default`)
+  run in `Linux checks` and `Linux coverage`, while the TypeScript and UI
+  coverage lanes run here; the Windows and macOS halves run in
+  `cross-platform`; `check-generated` needs
   pixi; `actionlint` and `convco` are CI tooling not present here; and
   Conda is unreachable from this sandbox. The Windows and macOS QGIS rows
   stay *unqualified* per TASK-33.

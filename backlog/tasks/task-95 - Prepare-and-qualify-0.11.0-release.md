@@ -97,15 +97,22 @@ importable runtime is 0.11.0), each with its remediation - *checked 3
 files: 2 problems*, a report of what changed, not a crash. The native
 rows, the smoke and opt-in harnesses, the Processing snapshot check, the
 `check-generated` (pixi) lane and Conda are not runnable in this sandbox
-and are CI-carried. The TypeScript lanes *were* run here (bun 1.4.4
-installed from npm for the gate): 315 bridge tests, 12 alias, 100 ui and
-13 ui-alias, 42 docs tests, the site build and `check-links` (12167
-links, 0 broken), both typechecks and the reference page's Vitest chain -
-green after this gate repaired what the sprint merges left red: the
+and are CI-carried. The Bun lanes *were* run here (bun installed from
+npm for the gate, pinned to the 1.4.2 `pixi.toml` names for the coverage
+numbers): 318 bridge tests, 12 alias, 100 ui and 13 ui-alias, 42 docs
+tests, the site build and `check-links` (12167 links, 0 broken), both
+typechecks, both coverage lanes and the reference page's Vitest chain -
+green after this gate repaired what handed over red: the
 `RunAlgorithmRequest` re-export in `src/host.ts` (now
 `BatchRequestRunsItem`, renamed in the manifest by the batch vocabulary),
-`host.test.ts`'s 63-operation catalogue and `qgis-sdk.test.ts`'s 17-key
-`qgis.host` list. The rename is recorded in doc-13's 0.8.0 notes.
+`host.test.ts`'s 63-operation catalogue, `qgis-sdk.test.ts`'s 17-key
+`qgis.host` list, `adapters/qgis/styles.py` importing `QColor` from
+`qgis.core` (the native import failure behind the `Linux checks` and
+`QGIS 3.44 LTS` rows; it comes from `qgis.PyQt.QtGui`), and
+`src/generated/host.ts` sitting at 76.5%/65.5% against the per-file 90%
+bar - `tests/generated-host.test.ts` sweeps every generated guard and
+`createHost` arrow, taking it to 95.6%/100%. The rename is recorded in
+doc-13's 0.8.0 notes.
 
 AC 4 (approval). doc-14's "0.11.0 release gate (2026-11-07)" records every
 lane, command and artifact above, including what was not run and where it
