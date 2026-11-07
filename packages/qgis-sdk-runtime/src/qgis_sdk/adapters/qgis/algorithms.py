@@ -296,7 +296,7 @@ class NativeAlgorithms:
                 if True:
                     raise QgisSdkAlgorithmFailedError(
                         label,
-                        f"PROBE answered={sorted(raw)} named={sorted(rename)}",
+                        f"PROBE answered={sorted(raw)} named={sorted(rename.items())}",
                     )
                 raw = {
                     lowered.get(key.lower(), key): value for key, value in raw.items()
