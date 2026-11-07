@@ -69,8 +69,20 @@
   <Option name="model_name" type="QString" value="Report model"/>
   <Option name="outputGroup" type="QString" value=""/>
   <Option name="outputOrder" type="List">
-    <Option type="QString" value="CENTROIDS"/>
-    <Option type="QString" value="OUTPUT_HTML_FILE"/>
+    <Option type="QString" value="centroids"/>
+    <Option type="QString" value="report"/>
+  </Option>
+  <Option name="outputs" type="Map">
+    <Option name="centroids" type="Map">
+      <Option name="child_id" type="QString" value="native:centroids_1"/>
+      <Option name="description" type="QString" value="Centroids"/>
+      <Option name="output_name" type="QString" value="CENTROIDS"/>
+    </Option>
+    <Option name="report" type="Map">
+      <Option name="child_id" type="QString" value="native:basicstatisticsforfields_1"/>
+      <Option name="description" type="QString" value="Report"/>
+      <Option name="output_name" type="QString" value="OUTPUT_HTML_FILE"/>
+    </Option>
   </Option>
   <Option name="parameterDefinitions" type="Map">
     <Option name="FEATS" type="Map">

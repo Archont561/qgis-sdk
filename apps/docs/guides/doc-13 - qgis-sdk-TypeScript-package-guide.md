@@ -1295,6 +1295,86 @@ harness.assertSatisfied(); // unmet expectations, unexpected calls, open subscri
   of [doc-14](doc-14%20-%20Workspace-development-qualification-harnesses-and-evidence.md). Keep
   the two apart in reports and never cite a mocked run as native behaviour.
 
+## 0.8.0 migration notes
+
+`0.8.0` is the bridge minor that pairs with the Python `0.11.0` release: the
+host catalogue grew the four m-10 areas - the five remaining layer kinds,
+registered connections with auth configuration ids, symbology, labelling and
+the style manager, and the Processing breadth (model files, batches, every
+output kind) - so the manifest, the generated host module and the fingerprint
+moved with it
+([decision-25](../../../backlog/decisions/decision-25%20-%20Version-each-package-independently-behind-a-shared-contract-version.md)).
+A page built against `0.7.0` keeps speaking the same protocol to a `0.11.0`
+plugin - nothing in this minor breaks an existing call - but it compiles
+against a catalogue without the twenty-one new operations, and the moves a
+page makes to use them are listed at the end of this section.
+
+**What moved, and what deliberately did not.** `HOST_FINGERPRINT` is
+`sha256:2c686bb06a3cf63aca219e2a1751a4f00d574472e20ea9cfb52c318bfeed7ec3`
+where `0.7.0` carried `sha256:9aa12425...`, so a client that pins the
+fingerprint must take the new value. One type name moved with the manifest:
+the request of `algorithms.run`, `RunAlgorithmRequest` in `0.7.0`, is now
+**`BatchRequestRunsItem`** - the same `{ algorithm_id, params }` shape,
+renamed because a batch request item *is* the run request and the two now
+share one schema. A page that imported `RunAlgorithmRequest` renames the
+import; nothing else about the call changes. `HOST_SCHEMA_VERSION` stays
+`1` and so does `PLUGIN_DESCRIPTION_SCHEMA_VERSION`: the envelope and the
+plugin description keep their shape and only the operation catalogue grew,
+from 63 operations and 22 grant names to **84 operations (79 calls, 5
+streams) and 29 grants**. `BRIDGE_PROTOCOL_VERSION` is still `2` - it
+moved to `2` for the stream `ack` in the `0.7.0` train, and nothing here
+changes the protocol, the frame kinds or the `gap` semantics again.
+
+### The typed surface grows
+
+The generated host module and the typed client carry the twenty-one new
+operations under the same call shape as every old one:
+
+- `layers.open_mesh`, `layers.open_point_cloud`, `layers.open_vector_tile`,
+  `layers.open_annotation` and `layers.open_tiled_scene` - five opens under
+  the existing `layers.open` grant, answering the five layer-info models
+  (`MeshLayerInfo`, `PointCloudLayerInfo`, `VectorTileLayerInfo`,
+  `AnnotationLayerInfo`, `TiledSceneLayerInfo`) that widen the `LayerInfo`
+  union to seven kinds.
+- `connections.list`, `connections.describe`, `connections.browse`,
+  `connections.open_layer` and `connections.test`, plus
+  `auth.configurations` (ids and names only) and `auth.attach` - the
+  credential-annotated pair under the new `connections.read`, `auth.read`
+  and `auth.write` grants.
+- `symbology.get`, `symbology.set`, `labelling.get`, `labelling.set`,
+  `styles.list`, `styles.export` and `styles.import` under the new
+  `symbology.read`, `symbology.write`, `styles.read` and `styles.write`
+  grants, carrying the curated renderer, symbol and labelling models.
+- `algorithms.run_model` and `algorithms.batch` under the existing
+  `algorithms.run` grant.
+
+One result shape grew with them: the tagged run-output entries
+(`{ name, kind, ... }`) gained the `"layers"` kind beside `"vector"`,
+`"file"` and `"value"`, so a multiple-layers result crosses as a list of
+layer records. A client that reads the entries by `kind` keeps working; one
+that assumed every entry is one of the three old kinds should read the
+`"layers"` case like the vector one.
+
+### The manifest and the components
+
+`@archont561/qgis-sdk` is `0.8.0` and the unscoped `qgis-sdk` alias carries
+the same version and pin. `@archont561/qgis-sdk-ui` (and its alias) stay at
+`0.1.0` - a package's number moves only when its own content does - but
+their peer range on the bridge moves to `>=0.8.0 <0.9.0`. The scaffold pin
+`qgis-sdk new` writes is `0.8.0`. `./host`, `./react`, `./vue`, `./svelte`
+and `./testing` remain the opt-in entry points.
+
+### The checklist for a 0.7 page
+
+1. Move `@archont561/qgis-sdk` (or `qgis-sdk`) to `0.8.0`; reinstall the
+   components at `0.1.0` so their peer range resolves.
+2. If you pin `HOST_FINGERPRINT`, take the `0.8.0` value.
+3. If you imported `RunAlgorithmRequest`, rename it to
+   `BatchRequestRunsItem`. Nothing else to rename and nothing to
+   re-envelope: `protocol` is `2` as before. The typed catalogue simply has
+   twenty-one more calls.
+4. Read the `"layers"` case if you consume `RunResult`-style tagged outputs.
+
 ## 0.7.0 migration notes
 
 `0.7.0` is the bridge minor that pairs with the Python `0.10.0` release: the

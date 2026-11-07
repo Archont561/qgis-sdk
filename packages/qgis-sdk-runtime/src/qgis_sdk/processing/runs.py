@@ -11,12 +11,14 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from qgis_sdk.models import (
     AlgorithmInfo,
     AlgorithmRun,
     FileRef,
+    OutputInfo,
     ParameterInfo,
     QgisSdkAlgorithmRejectedError,
     TypedRun,
@@ -29,6 +31,7 @@ __all__ = [
     "VECTOR_OUTPUT_KINDS",
     "coerce_run",
     "destination_path",
+    "model_output_names",
     "output_class",
 ]
 
@@ -47,6 +50,15 @@ FILE_OUTPUT_KINDS: frozenset[str] = frozenset(
         "outputVectorTile",
     }
 )
+#: The output kind a model's destination parameter exposes, for the run's
+#: conversion: a sink is a vector file, a folder is a directory, and every
+#: other destination is a file.
+DESTINATION_OUTPUT_KINDS: dict[str, str] = {
+    "sink": "outputVector",
+    "vectorDestination": "outputVector",
+    "folderDestination": "outputFolder",
+}
+
 #: Extension per destination kind when the registry names none.
 DEFAULT_EXTENSIONS: dict[str, str] = {
     "sink": "gpkg",
@@ -56,6 +68,78 @@ DEFAULT_EXTENSIONS: dict[str, str] = {
     "vectorTileDestination": "mbtiles",
     "fileDestination": "out",
 }
+
+
+def model_output_names(
+    info: AlgorithmInfo,
+    descriptions: Mapping[str, str] | None = None,
+) -> tuple[AlgorithmInfo, dict[str, str]]:
+    """A model's outputs, named the way version 2 of the format derives them.
+
+    A model exposes a *child* output, and the child names it after itself
+    (``CENTROIDS``); version 2 of the format names the exposed output after
+    its description instead - ``Centroids`` becomes ``centroids`` and
+    ``Report`` becomes ``report`` - because the child's name belongs to the
+    child that writes it. A loaded model describes those outputs twice: as
+    output definitions, whose description is often empty and whose name is
+    the destination's, and as the destination parameters the format derives,
+    whose description is the designer's. The description decides, the tail of
+    the child output's name is the fallback, and the mapping answers both the
+    description the caller reads (an ``AlgorithmInfo`` whose outputs carry
+    the derived names) and the names a run answers under.
+
+    ``descriptions`` is what the loaded model itself declares - keyed by an
+    output's own name or by the ``child:output`` destination it exposes - and
+    it is the source that survives a QGIS which drops descriptions from the
+    parameter definitions. It wins over both.
+    """
+    declared_text = dict(descriptions or {})
+
+    def derived(label: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+
+    def tail(name: str) -> str:
+        return name.rsplit(":", 1)[-1].lower()
+
+    names: dict[str, str] = {}
+    for output in info.outputs:
+        text = declared_text.get(output.name, output.label)
+        names[output.name] = derived(text) or tail(output.name)
+    # The destination parameter is the same output seen from the run's side,
+    # and its description is the one the designer wrote, so it wins.
+    for parameter in info.parameters:
+        if not parameter.destination:
+            continue
+        text = declared_text.get(parameter.name, parameter.label)
+        names[parameter.name] = (
+            derived(text) or names.get(parameter.name) or tail(parameter.name)
+        )
+    taken: set[str] = set()
+    for key, candidate in list(names.items()):
+        base = candidate
+        suffix = 2
+        while candidate in taken:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        taken.add(candidate)
+        names[key] = candidate
+    declared = {output.name for output in info.outputs}
+    described = [replace(output, name=names[output.name]) for output in info.outputs]
+    for parameter in info.parameters:
+        if not parameter.destination:
+            continue
+        candidate = names[parameter.name]
+        if candidate in {output.name for output in described}:
+            continue
+        described.append(
+            OutputInfo(
+                name=candidate,
+                kind=DESTINATION_OUTPUT_KINDS.get(parameter.kind, "outputFile"),
+                label=parameter.label,
+            )
+        )
+        declared.add(candidate)
+    return replace(info, outputs=tuple(described)), names
 
 
 def coerce_run(
@@ -155,13 +239,47 @@ def plan_destinations(
     return result
 
 
+#: Every character a provider may name a parameter with that no file name may
+#: carry. A model names the destinations Processing derives for its children
+#: after the child and its output - ``native:centroids_1:CENTROIDS`` - so the
+#: colon and the upper case are the normal case, not the hostile one.
+_UNSAFE_IN_NAME = re.compile(r"[^a-z0-9_]+")
+
+#: Device names a file may not be called on Windows, whatever the extension.
+_RESERVED_NAMES: frozenset[str] = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{index}" for index in range(1, 10)}
+    | {f"lpt{index}" for index in range(1, 10)}
+)
+
+
 def _destination_name(parameter: ParameterInfo) -> str:
-    """Keep provider-supplied names and extensions within the run directory."""
-    name = parameter.name.lower()
+    """Keep provider-supplied names and extensions within the run directory.
+
+    The provider's name is *translated*, not refused: a registered algorithm
+    names a destination ``OUTPUT`` and a model names it after the child that
+    writes it (``native:centroids_1:CENTROIDS``), and neither is a file name
+    this SDK writes untouched. Every run of characters outside
+    ``[a-z0-9_]`` becomes one ``_``, which leaves no separator, no leading
+    dot and no name that escapes the run directory. What is still refused is
+    what translation cannot make safe: a name that translates to nothing, a
+    Windows device name, and an extension outside ``[A-Za-z0-9]``.
+
+    Two provider names can translate alike; ``plan_destinations`` refuses that
+    collision rather than letting one output overwrite another. A name that
+    carries a path separator is not translated but refused: no provider
+    composes one, so it is a caller reaching out of the run directory, and
+    answering it with a benign name would hide that.
+    """
+    if "/" in parameter.name or "\\" in parameter.name:
+        raise ValueError(
+            "an allocated destination has an unsafe provider-defined name or extension"
+        )
+    name = _UNSAFE_IN_NAME.sub("_", parameter.name.lower()).strip("_")[:128]
     extension = parameter.extension or DEFAULT_EXTENSIONS.get(parameter.kind, "out")
     if (
-        not re.fullmatch(r"[a-z0-9_]{1,128}", name)
-        or re.fullmatch(r"(?:con|prn|aux|nul|com[1-9]|lpt[1-9])", name)
+        not name
+        or name in _RESERVED_NAMES
         or (
             parameter.kind != "folderDestination"
             and not re.fullmatch(r"[a-zA-Z0-9]{1,16}", extension)

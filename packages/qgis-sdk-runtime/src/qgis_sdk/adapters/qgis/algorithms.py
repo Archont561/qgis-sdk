@@ -58,6 +58,7 @@ from qgis_sdk.models import (
 from qgis_sdk.processing.runs import (
     coerce_run,
     destination_path,
+    model_output_names,
     output_class,
     plan_destinations,
 )
@@ -100,6 +101,34 @@ def _processing():
     from qgis import processing
 
     return processing
+
+
+def _declared_outputs(model: Any) -> dict[str, str]:
+    """What a loaded model declares about its exposed outputs, by description.
+
+    ``modelOutputDefinitions`` is the designer's own map, so it survives a
+    Processing that answers the derived destination parameters without
+    carrying their descriptions. Each entry is keyed twice - by the model
+    output's name and by the ``child:output`` destination the run answers
+    under - because either can be the name a run produces.
+    """
+    declared: dict[str, str] = {}
+    definitions = getattr(model, "modelOutputDefinitions", None)
+    if definitions is None:
+        return declared
+    for name, output in dict(definitions() or {}).items():
+        text = output.description() if hasattr(output, "description") else ""
+        if not text:
+            continue
+        declared[str(name)] = text
+        child = output.childId() if hasattr(output, "childId") else ""
+        child_output = (
+            output.childOutputName() if hasattr(output, "childOutputName") else ""
+        )
+        if child:
+            declared[f"{child}:{child_output or name}"] = text
+            declared[f"{child}:{name}"] = text
+    return declared
 
 
 class NativeAlgorithms:
@@ -211,8 +240,26 @@ class NativeAlgorithms:
             raise QgisSdkAlgorithmFailedError(
                 model.name, f"{model.name} is not a model file this QGIS can load"
             )
-        info = algorithm_info(loaded, "model")
-        return self._run_described(info, dict(params or {}), loaded, label=model.name)
+        # The model names its exposed outputs, not the children that write
+        # them; the run is described by those names and its raw outputs are
+        # re-keyed onto them.
+        declared = _declared_outputs(loaded)
+        info, output_names = model_output_names(
+            algorithm_info(loaded, "model"), declared
+        )
+        raise QgisSdkAlgorithmFailedError(
+            model.name,
+            f"PROBE declared={sorted(declared.items())} "
+            f"mapped={sorted(output_names.items())} "
+            f"outputs={[(each.name, each.label) for each in info.outputs]}",
+        )
+        return self._run_described(
+            info,
+            dict(params or {}),
+            loaded,
+            label=model.name,
+            rename=output_names,
+        )
 
     def batch(self, runs: Sequence[AlgorithmRun | TypedRun | str]) -> JobHandle:
         """Submit the batch as one job through this backend's job service."""
@@ -231,13 +278,15 @@ class NativeAlgorithms:
         target: Any,
         *,
         label: str,
+        rename: Mapping[str, str] | None = None,
     ) -> RunResult:
         """One run against a description, into new outputs under the run root.
 
         ``target`` is what ``processing.run`` accepts: a registry id, or the
         loaded model instance a ``.model3`` file became. ``label`` names the
         run in every error and in the result - the registry id, or the model
-        file's name for a model run.
+        file's name for a model run. ``rename`` re-keys the outputs a model
+        answered under its children's names onto the names the model exposes.
         """
         validate_parameters(info, params)
         explicit = plan_destinations(
@@ -277,6 +326,13 @@ class NativeAlgorithms:
                 raw = self._publish_explicit(
                     label, raw, params, explicit, staged, stage
                 )
+            if rename:
+                # A model answers under the child destination's name, in the
+                # case its file declares; the caller reads the model's.
+                lowered = {key.lower(): value for key, value in rename.items()}
+                raw = {
+                    lowered.get(key.lower(), key): value for key, value in raw.items()
+                }
             outputs = self._convert_outputs(info, raw)
         except BaseException:
             shutil.rmtree(run_directory, ignore_errors=True)

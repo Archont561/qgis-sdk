@@ -45,9 +45,13 @@ def test_a_registered_password_reaches_no_description(native_services):
     assert connection_files.BROKEN_PASSWORD not in encoded
     assert described.auth_config is None
     # The secret does exist: it is in the settings this fixture registered.
-    assert connection_files.BROKEN_PASSWORD in _stored_uri(
-        "postgres", connection_files.BROKEN_CONNECTION
-    )
+    # A QGIS whose provider drops credentials on save (no authentication
+    # database to keep them in) leaves nothing to prove the claim against,
+    # and the row is recorded as blocked by environment rather than passed.
+    stored = _stored_uri("postgres", connection_files.BROKEN_CONNECTION)
+    if connection_files.BROKEN_PASSWORD not in stored:
+        pytest.skip("this QGIS does not keep the password of a registered connection")
+    assert connection_files.BROKEN_PASSWORD in stored
 
 
 def test_the_fixture_geopackage_is_listed_under_the_ogr_registry_key(native_services):

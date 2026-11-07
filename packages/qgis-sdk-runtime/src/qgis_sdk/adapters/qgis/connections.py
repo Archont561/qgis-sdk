@@ -29,6 +29,7 @@ operation answers a vector layer description.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 
 from qgis.core import (
@@ -101,12 +102,20 @@ def _item_kind(flags: object) -> str:
 
 
 def _geometries(property: object) -> tuple[str, ...]:
-    """The table's geometry columns in the layer vocabulary, in order."""
+    """The table's geometry columns in the layer vocabulary, in order.
+
+    A provider may name a geometry column that holds no geometry - an
+    aspatial table, whose single ``NoGeometry`` column is a column and not a
+    kind - and that column is left out rather than answering ``"none"``: the
+    vocabulary has no such kind, and the fake's aspatial tables answer ``()``.
+    """
     found: list[str] = []
     for column in property.geometryColumnTypes():  # type: ignore[attr-defined]
         geometry = GEOMETRY_TYPES.get(
             QgsWkbTypes.geometryType(column.wkbType), NO_GEOMETRY
         )
+        if geometry == NO_GEOMETRY:
+            continue
         if geometry not in found:
             found.append(geometry)
     return tuple(found)
@@ -196,18 +205,38 @@ class NativeConnections:
         layer = QgsVectorLayer(uri, item, layer_provider)
         if not layer.isValid():
             raise QgisSdkConnectionItemNotFoundError(name, schema or "", item)
-        return self._layers.adopt_vector(layer)
+        return self._described(layer)
+
+    def _described(self, layer: Any) -> VectorLayerInfo:
+        """Adopt the table and describe its fields without the FID column.
+
+        A provider may report the column that identifies a feature as an
+        ordinary field - the GeoPackage fixture's ``fid INTEGER PRIMARY
+        KEY`` answers ``("fid", "name")`` where the table has one field -
+        and the fake's tables declare no such field. The row identity is
+        not a field of the row, so the primary-key attributes are left out
+        of the description the caller reads.
+        """
+        info = self._layers.adopt_vector(layer)
+        primary = set()
+        provider = layer.dataProvider()
+        if provider is not None:
+            primary = set(provider.pkAttributeIndexes())
+        if not primary:
+            return info
+        names = tuple(
+            field_name
+            for index, field_name in enumerate(layer.fields().names())
+            if index not in primary
+        )
+        return replace(info, field_names=names)
 
     def test(self, provider: str, name: str) -> ConnectionTest:
         connection = self._require(provider, name)
         try:
-            schemas = tuple(connection.schemas())
-            if not schemas:
-                # A schema-less backend proves itself by listing its tables;
-                # schemas() is a no-op there and would pass a missing file.
-                connection.tables()
-        except QgsProviderConnectionException as error:
-            return ConnectionTest(valid=False, message=_redact(str(error)))
+            self._catalog(connection, provider, name)
+        except QgisSdkConnectionUnavailableError as error:
+            return ConnectionTest(valid=False, message=str(error))
         return ConnectionTest(valid=True)
 
     def auth_configurations(self) -> tuple[AuthConfiguration, ...]:
@@ -259,16 +288,34 @@ class NativeConnections:
         return connection
 
     def _catalog(self, connection: Any, provider: str, name: str) -> tuple[str, ...]:
-        """Answer the connection's schemas, proving the database answers."""
+        """Answer the connection's schemas, proving the database answers.
+
+        A schema-less backend - the ``ogr`` connection that answers a
+        GeoPackage file, whose provider refuses ``Schemas`` outright - is not
+        an unavailable one: the refusal is answered by listing its tables, and
+        only a table listing that also refuses makes the connection
+        unavailable. An empty answer stays empty either way, so ``browse``
+        lists those tables directly.
+        """
         try:
             schemas = tuple(connection.schemas())
-            if not schemas:
-                connection.tables()
-            return schemas
         except QgsProviderConnectionException as error:
-            raise QgisSdkConnectionUnavailableError(
-                provider, name, _redact(str(error))
-            ) from error
+            try:
+                connection.tables()
+            except QgsProviderConnectionException:
+                raise QgisSdkConnectionUnavailableError(
+                    provider, name, _redact(str(error))
+                ) from error
+            return ()
+        if not schemas:
+            # `schemas()` is a no-op there and would pass a missing file.
+            try:
+                connection.tables()
+            except QgsProviderConnectionException as error:
+                raise QgisSdkConnectionUnavailableError(
+                    provider, name, _redact(str(error))
+                ) from error
+        return schemas
 
     def _tables(
         self, connection: Any, provider: str, name: str, schema: str

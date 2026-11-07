@@ -257,17 +257,27 @@ def test_the_app_runs_headless_on_a_real_qgis(tmp_path: Path) -> None:
     assert found["ping"] == 3
     assert found["project"] is True
     assert found["layers"] == []
-    # One pump for the plugin's own jobs and one for the layouts service's, which
+    # One pump for the plugin's own jobs, one for the layouts service's - which
     # submits an export as a task in the task bar whether or not the plugin
-    # declares jobs of its own (TASK-89).
-    assert found["loops"] == ["job-pump", "layouts-job-pump"]
+    # declares jobs of its own (TASK-89) - and one for the algorithms service's,
+    # which runs a batch as a job (TASK-94). The order is the order the session
+    # builds them.
+    assert found["loops"] == [
+        "job-pump",
+        "layouts-job-pump",
+        "algorithms-job-pump",
+    ]
     assert found["desktop_refused"]
     assert found["ui_refused"]
     # A headless app has no view, so the capability is absent rather than a
     # service that refuses every call.
     assert found["has_canvas"] is False
     assert found["report"]["exited"] is True
-    assert found["report"]["stopped_loops"] == ["job-pump", "layouts-job-pump"]
+    assert found["report"]["stopped_loops"] == [
+        "job-pump",
+        "layouts-job-pump",
+        "algorithms-job-pump",
+    ]
 
 
 def test_the_window_carries_the_canvas_and_the_declared_bindings(
