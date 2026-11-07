@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 
 from qgis_sdk.models import (
@@ -29,6 +30,7 @@ __all__ = [
     "VECTOR_OUTPUT_KINDS",
     "coerce_run",
     "destination_path",
+    "model_output_names",
     "output_class",
 ]
 
@@ -56,6 +58,41 @@ DEFAULT_EXTENSIONS: dict[str, str] = {
     "vectorTileDestination": "mbtiles",
     "fileDestination": "out",
 }
+
+
+def model_output_names(info: AlgorithmInfo) -> tuple[AlgorithmInfo, dict[str, str]]:
+    """A model's outputs, named the way version 2 of the format derives them.
+
+    A model exposes a *child* output, and the child names it after itself
+    (``CENTROIDS``); version 2 of the format names the exposed output after
+    its description instead - ``Centroids`` becomes ``centroids`` and
+    ``Report`` becomes ``report`` - because the child's name belongs to the
+    child that writes it. The loaded file may hand the results back under
+    either name, so the rule answers both the description the caller reads
+    (an ``AlgorithmInfo`` whose outputs carry the derived names) and the
+    mapping that re-keys the run's raw outputs onto them.
+    """
+    names: dict[str, str] = {}
+    taken: set[str] = set()
+    for output in info.outputs:
+        derived = re.sub(r"[^a-z0-9]+", "_", output.label.lower()).strip("_")
+        derived = derived or output.name.lower()
+        candidate = derived
+        suffix = 2
+        while candidate in taken:
+            candidate = f"{derived}_{suffix}"
+            suffix += 1
+        taken.add(candidate)
+        names[output.name] = candidate
+    return (
+        replace(
+            info,
+            outputs=tuple(
+                replace(output, name=names[output.name]) for output in info.outputs
+            ),
+        ),
+        names,
+    )
 
 
 def coerce_run(

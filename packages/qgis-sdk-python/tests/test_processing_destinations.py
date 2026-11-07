@@ -115,3 +115,73 @@ def test_planning_allocates_one_name_per_omitted_destination() -> None:
     )
 
     assert plan_destinations(info, {}, lambda ref: Path("/unreachable")) == {}
+
+
+def test_a_models_outputs_are_named_after_their_descriptions() -> None:
+    from qgis_sdk.processing.runs import model_output_names
+
+    info = AlgorithmInfo(
+        id="model:report",
+        provider="model",
+        name="report",
+        label="Report model",
+        group="",
+        group_id="",
+        help="",
+        parameters=(),
+        outputs=(
+            OutputInfo(name="CENTROIDS", kind="outputVector", label="Centroids"),
+            OutputInfo(name="OUTPUT_HTML_FILE", kind="outputHtml", label="Report"),
+        ),
+    )
+
+    renamed, names = model_output_names(info)
+
+    assert [output.name for output in renamed.outputs] == ["centroids", "report"]
+    assert names == {"CENTROIDS": "centroids", "OUTPUT_HTML_FILE": "report"}
+    # The child's name is the key the run answers under; the model's is the
+    # name the caller reads.
+    assert renamed.outputs[0].kind == "outputVector"
+
+
+def test_two_outputs_described_alike_keep_distinct_names() -> None:
+    from qgis_sdk.processing.runs import model_output_names
+
+    info = AlgorithmInfo(
+        id="model:twins",
+        provider="model",
+        name="twins",
+        label="Twins",
+        group="",
+        group_id="",
+        help="",
+        parameters=(),
+        outputs=(
+            OutputInfo(name="FIRST", kind="outputVector", label="Layer"),
+            OutputInfo(name="SECOND", kind="outputVector", label="Layer"),
+        ),
+    )
+
+    _, names = model_output_names(info)
+
+    assert names == {"FIRST": "layer", "SECOND": "layer_2"}
+
+
+def test_an_output_with_no_description_keeps_its_own_name() -> None:
+    from qgis_sdk.processing.runs import model_output_names
+
+    info = AlgorithmInfo(
+        id="model:plain",
+        provider="model",
+        name="plain",
+        label="Plain",
+        group="",
+        group_id="",
+        help="",
+        parameters=(),
+        outputs=(OutputInfo(name="OUTPUT", kind="outputVector", label=""),),
+    )
+
+    _, names = model_output_names(info)
+
+    assert names == {"OUTPUT": "output"}

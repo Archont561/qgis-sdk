@@ -58,6 +58,7 @@ from qgis_sdk.models import (
 from qgis_sdk.processing.runs import (
     coerce_run,
     destination_path,
+    model_output_names,
     output_class,
     plan_destinations,
 )
@@ -211,8 +212,17 @@ class NativeAlgorithms:
             raise QgisSdkAlgorithmFailedError(
                 model.name, f"{model.name} is not a model file this QGIS can load"
             )
-        info = algorithm_info(loaded, "model")
-        return self._run_described(info, dict(params or {}), loaded, label=model.name)
+        # The model names its exposed outputs, not the children that write
+        # them; the run is described by those names and its raw outputs are
+        # re-keyed onto them.
+        info, output_names = model_output_names(algorithm_info(loaded, "model"))
+        return self._run_described(
+            info,
+            dict(params or {}),
+            loaded,
+            label=model.name,
+            rename=output_names,
+        )
 
     def batch(self, runs: Sequence[AlgorithmRun | TypedRun | str]) -> JobHandle:
         """Submit the batch as one job through this backend's job service."""
@@ -231,13 +241,15 @@ class NativeAlgorithms:
         target: Any,
         *,
         label: str,
+        rename: Mapping[str, str] | None = None,
     ) -> RunResult:
         """One run against a description, into new outputs under the run root.
 
         ``target`` is what ``processing.run`` accepts: a registry id, or the
         loaded model instance a ``.model3`` file became. ``label`` names the
         run in every error and in the result - the registry id, or the model
-        file's name for a model run.
+        file's name for a model run. ``rename`` re-keys the outputs a model
+        answered under its children's names onto the names the model exposes.
         """
         validate_parameters(info, params)
         explicit = plan_destinations(
@@ -277,6 +289,10 @@ class NativeAlgorithms:
                 raw = self._publish_explicit(
                     label, raw, params, explicit, staged, stage
                 )
+            if rename:
+                # A model answers under the child output's name; the caller
+                # reads the model's.
+                raw = {rename.get(key, key): value for key, value in raw.items()}
             outputs = self._convert_outputs(info, raw)
         except BaseException:
             shutil.rmtree(run_directory, ignore_errors=True)

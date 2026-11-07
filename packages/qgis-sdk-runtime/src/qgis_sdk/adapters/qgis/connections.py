@@ -29,6 +29,7 @@ operation answers a vector layer description.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 
 from qgis.core import (
@@ -204,7 +205,31 @@ class NativeConnections:
         layer = QgsVectorLayer(uri, item, layer_provider)
         if not layer.isValid():
             raise QgisSdkConnectionItemNotFoundError(name, schema or "", item)
-        return self._layers.adopt_vector(layer)
+        return self._described(layer)
+
+    def _described(self, layer: Any) -> VectorLayerInfo:
+        """Adopt the table and describe its fields without the FID column.
+
+        A provider may report the column that identifies a feature as an
+        ordinary field - the GeoPackage fixture's ``fid INTEGER PRIMARY
+        KEY`` answers ``("fid", "name")`` where the table has one field -
+        and the fake's tables declare no such field. The row identity is
+        not a field of the row, so the primary-key attributes are left out
+        of the description the caller reads.
+        """
+        info = self._layers.adopt_vector(layer)
+        primary = set()
+        provider = layer.dataProvider()
+        if provider is not None:
+            primary = set(provider.pkAttributeIndexes())
+        if not primary:
+            return info
+        names = tuple(
+            field_name
+            for index, field_name in enumerate(layer.fields().names())
+            if index not in primary
+        )
+        return replace(info, field_names=names)
 
     def test(self, provider: str, name: str) -> ConnectionTest:
         connection = self._require(provider, name)
