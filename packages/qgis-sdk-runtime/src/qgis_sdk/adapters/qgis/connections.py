@@ -101,12 +101,20 @@ def _item_kind(flags: object) -> str:
 
 
 def _geometries(property: object) -> tuple[str, ...]:
-    """The table's geometry columns in the layer vocabulary, in order."""
+    """The table's geometry columns in the layer vocabulary, in order.
+
+    A provider may name a geometry column that holds no geometry - an
+    aspatial table, whose single ``NoGeometry`` column is a column and not a
+    kind - and that column is left out rather than answering ``"none"``: the
+    vocabulary has no such kind, and the fake's aspatial tables answer ``()``.
+    """
     found: list[str] = []
     for column in property.geometryColumnTypes():  # type: ignore[attr-defined]
         geometry = GEOMETRY_TYPES.get(
             QgsWkbTypes.geometryType(column.wkbType), NO_GEOMETRY
         )
+        if geometry == NO_GEOMETRY:
+            continue
         if geometry not in found:
             found.append(geometry)
     return tuple(found)
