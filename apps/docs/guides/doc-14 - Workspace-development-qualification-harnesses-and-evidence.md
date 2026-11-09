@@ -2509,15 +2509,14 @@ stamped with it.
   are not part of a default run. The Windows and macOS QGIS rows remain
   *unqualified* per TASK-33: `cross-platform` proves the Python and Bun
   suites there, not a QGIS host.
-- **Approval (AC 4).** This record is a gate, not a release: nothing is
-  tagged, nothing is uploaded, and no date is promised for 1.0.0. The two
-  tags this minor would spend - `python-v0.11.0` and `ts-v0.8.0`, or their
-  `-rc.1` rehearsals first - are spent on explicit authorization, on the
-  merge commit of the stamp pull request and on one authorization for the
-  pair, because the bridge is released with the Python minor here. Nothing
-  has been asked for and nothing spent: "publish" is the word that spends
-  them, and the rehearsal half of it is a rehearsal guarantee, not a
-  release.
+- **Approval (AC 4).** This record is a gate, not a release: no stable tag
+  is cut, nothing reaches a registry, and no date is promised for 1.0.0. The
+  gate merged as `0737994` (PR #177), and the owner asked for the rehearsal
+  half of the authorization - "merge and rehearse" - so
+  `python-v0.11.0-rc.1` and `ts-v0.8.0-rc.1` were cut on that merge commit
+  in one act, because the bridge is released with the Python minor. Both
+  ran green and consumed nothing; see the rehearsal record below. The
+  stable pair still waits for "publish".
 
 ## 0.11.0 rc rehearsal (2026-11-07)
 

@@ -135,10 +135,16 @@ row, not left unqualified.
 
 AC 4 (approval). doc-14's "0.11.0 release gate (2026-11-07)" records every
 lane, command and artifact above, including what was not run and where it
-is run. Nothing is tagged, nothing is uploaded, and no date is promised for
-1.0.0; the pair (`python-v0.11.0` / `ts-v0.8.0`, or their `-rc.1`
-rehearsals first) is spent only on explicit authorization - the word
-"publish" - on the merge commit of this pull request.
+is run. The gate merged as `0737994` (PR #177). The owner authorized the
+rehearsal half - "merge and rehearse" - so `python-v0.11.0-rc.1` and
+`ts-v0.8.0-rc.1` were cut on that merge commit in one act: both runs green
+(42408336282 and 42408336411), wheels and Conda outputs built and
+twine-checked, every registry publish step skipped, both GitHub releases
+prereleases. Nothing was consumed - PyPI still serves 0.10.0 as `latest`,
+npm 0.7.0 - and no date is promised for 1.0.0. The stable pair
+(`python-v0.11.0` / `ts-v0.8.0`) is spent only on the word "publish", on
+the same commit; doc-14's "0.11.0 rc rehearsal (2026-11-07)" holds the
+table.
 
 AC 5 (bridge pair, doc-22). `HOST_FINGERPRINT`
 `sha256:2c686bb06a3cf63aca219e2a1751a4f00d574472e20ea9cfb52c318bfeed7ec3`
