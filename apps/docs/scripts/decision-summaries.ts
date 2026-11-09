@@ -77,4 +77,5 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	67: "The optional Pydantic controlled-deployment adapter and extras are retired in a future Python minor release; third-party integrations remain plugin-owned.",
 	68: "Proposed: explore additive plugin application objects and explicit action groups while preserving class-based plugins and the bridge contract.",
 	72: "Editing stays an explicit session and features stay bounded pages; no context manager and no feature or vertex iterator in 0.10.0.",
+	73: "The documentation site renders with Fumadocs on Next and exports to static files, with the llms index, the markdown twins and the sitemap written and checked by the build rather than by a plugin.",
 };

@@ -1,8 +1,6 @@
 ---
 title: Install the QGIS SDK
 description: Install the qgis-sdk developer kit from PyPI or prefix.dev, the TypeScript SDK from npm, and check what the command finds on this machine - two minutes.
-sidebar:
-  order: 1
 ---
 
 The Python developer kit `qgis-sdk` installs two packages at matching
@@ -66,7 +64,7 @@ native test layers and `dev` will run here or only the QGIS-free ones.
 
 ## Where next
 
-- [Your first plugin](/qgis-sdk/start/first-plugin/) - scaffold, check, test,
+- [Your first plugin](/start/first-plugin/) - scaffold, check, test,
   run inside QGIS, build the ZIP.
-- [Supported targets](/qgis-sdk/python/supported-targets/) - the full matrix
+- [Supported targets](/python/supported-targets/) - the full matrix
   and the qualification behind it.

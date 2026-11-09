@@ -5,17 +5,26 @@
 	"type": "module",
 	"scripts": {
 		"generate": "bun run scripts/generate.ts",
-		"dev": "bun run generate && bun --bun astro dev --host 0.0.0.0",
-		"build": "bun run generate && bun --bun astro build && bun run scripts/redirects.ts",
+		"dev": "bun run generate && next dev --hostname 0.0.0.0 --port 4321",
+		"build": "bun run generate && next build && bun run scripts/postbuild.ts",
+		"postbuild": "bun run scripts/postbuild.ts",
 		"check-links": "bun run scripts/check-links.ts",
-		"preview": "bun --bun astro preview",
 		"test": "bun test",
 		"coverage": "bun --cwd=../.. --config=apps/docs/bunfig.toml test --coverage apps/docs/tests"
 	},
 	"dependencies": {
-		"@astrojs/starlight": "0.42.7",
-		"astro": "7.4.2",
-		"sharp": "0.35.5",
-		"starlight-llms-markdown": "0.1.0"
+		"fumadocs-core": "16.18.4",
+		"fumadocs-mdx": "15.5.3",
+		"fumadocs-ui": "16.18.4",
+		"next": "16.4.5",
+		"react": "19.3.1",
+		"react-dom": "19.3.1"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "4.3.5",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"tailwindcss": "4.3.5",
+		"@types/bun": "1.4.3"
 	}
 }

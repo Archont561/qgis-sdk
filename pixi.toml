@@ -156,8 +156,11 @@ cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archo
 cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk-ui' storybook:build"
 
 # The documentation site (TASK-43): the Storybook of qgis-sdk-ui is built
-# first so `apps/docs` can copy it under /storybook/, then the Astro build
-# renders the backlog guides and the hand-written pages into apps/docs/dist.
+# first so `apps/docs` can copy it under /storybook/, then the Next build
+# renders the backlog guides and the hand-written pages into apps/docs/out.
+# `bun run build` also runs `scripts/generate.ts` before it and
+# `scripts/postbuild.ts` after it: the guides, sitemap, llms exports and the
+# compatibility pages are all part of one command.
 [feature.bun.tasks.docs-build]
 cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archont561/qgis-sdk-ui' storybook:build && bun run --filter '@workspace/docs' build"
 
@@ -166,7 +169,8 @@ cmd = "bun run --filter '@archont561/qgis-sdk' build && bun run --filter '@archo
 cmd = "bun run --filter '@workspace/docs' check-links"
 depends-on = ["docs-build"]
 
-# The site from source with reload, on 0.0.0.0:4321.
+# The site from source with reload, on 0.0.0.0:4321 (needs a Node runtime on
+# PATH: Next builds and serves with it, the Pixi env only pins Bun).
 [feature.bun.tasks.docs-dev]
 cmd = "bun run --filter '@workspace/docs' dev"
 

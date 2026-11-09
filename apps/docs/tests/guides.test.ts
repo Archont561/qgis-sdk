@@ -164,13 +164,13 @@ describe("renderGuides", () => {
 			"python/index.md",
 			"python/installation.md",
 			"python/scoped-jobs.md",
-			"typescript-migration/v0-4.md",
 			"typescript/index.md",
+			"typescript/migration/v0-4.md",
 			"typescript/transport-client.md",
 		]);
 	});
 
-	test("carries Starlight frontmatter: a plain-text title, a description and the order", () => {
+	test("carries the frontmatter Fumadocs reads, and nothing else", () => {
 		const page =
 			byPath.get("python/desktop-host-host-and-the-project-manifest.md") ?? "";
 		expect(page.startsWith("---\n")).toBe(true);
@@ -178,20 +178,14 @@ describe("renderGuides", () => {
 			'title: "Desktop host: host() and the project manifest"',
 		);
 		expect(page).toContain("description: ");
-		expect(page).toContain("sidebar:\n  order: 2\n");
+		// Ordering moved to the generated `meta.json`; the edit link and the
+		// last commit date moved to `lib/generated/pages.json`.
+		expect(page).not.toContain("sidebar:");
+		expect(page).not.toContain("editUrl:");
+		expect(page).not.toContain("lastUpdated:");
 		const index = byPath.get("python/index.md") ?? "";
 		expect(index).toContain('title: "qgis-sdk Python package guide"');
-		expect(index).toContain('sidebar:\n  label: "Overview"\n  order: 0\n');
-		expect(index).toContain("\nlastUpdated: 2026-10-27\n"); // a YAML date, unquoted
-		expect(byPath.get("typescript/index.md")).not.toContain("lastUpdated");
-	});
-
-	test("every page edits the guide it came from, not the generated file", () => {
-		for (const [path, content] of byPath) {
-			expect(content, path).toContain(
-				'editUrl: "https://github.com/Archont561/qgis-sdk/edit/main/apps/docs/guides/doc-1',
-			);
-		}
+		expect(index).not.toContain("lastUpdated");
 	});
 
 	test("reports a link whose anchor no guide has instead of inventing a route", () => {
@@ -303,7 +297,7 @@ describe("renderGuides", () => {
 		);
 	});
 
-	test("gates notes on an unreleased line behind a Draft badge and aside", () => {
+	test("gates notes on an unreleased line behind a draft callout", () => {
 		const drafts = renderGuides(
 			[
 				{
@@ -320,24 +314,19 @@ describe("renderGuides", () => {
 			{ base: "", repository: "https://github.com/o/r" },
 		);
 		const draft =
-			drafts.find((p) => p.path === "python-migration/v0-7.md")?.content ?? "";
+			drafts.find((p) => p.path === "python/migration/v0-7.md")?.content ?? "";
 		expect(draft).toContain(
-			'sidebar:\n  order: 993\n  badge: {"text":"Draft","variant":"caution"}\n',
-		);
-		expect(draft).toContain(
-			"---\n:::caution[Draft]\nThese notes describe the unreleased 0.7.0 line. Content changes as the release is cut.\n:::\n\nBody.\n",
+			"---\n:::warn\n\n**Draft.** These notes describe the unreleased 0.7.0 line. Content changes as the release is cut.\n\n:::\n\nBody.\n",
 		);
 		const next =
-			drafts.find((p) => p.path === "typescript-migration/next-minor.md")
+			drafts.find((p) => p.path === "typescript/migration/next-minor.md")
 				?.content ?? "";
-		expect(next).toContain('badge: {"text":"Draft","variant":"caution"}');
 		expect(next).toContain(
 			"These notes describe the unreleased next minor. Content changes as the release is cut.",
 		);
 		const released =
-			drafts.find((p) => p.path === "python-migration/v0-6.md")?.content ?? "";
-		expect(released).not.toContain("badge");
-		expect(released).not.toContain(":::caution");
+			drafts.find((p) => p.path === "python/migration/v0-6.md")?.content ?? "";
+		expect(released).not.toContain(":::warn");
 	});
 
 	test("the index lists the guide's sections", () => {
@@ -389,39 +378,35 @@ describe("migration notes", () => {
 	);
 	const byPath = new Map(pages.map((p) => [p.path, p.content]));
 
-	test("live in a sibling directory with a slug under the guide's route", () => {
+	test("live in the guide's own migration folder", () => {
 		expect([...byPath.keys()].sort()).toEqual([
-			"python-migration/v0-1-experimental-policy.md",
-			"python-migration/v0-4.md",
-			"python-migration/v0-7.md",
 			"python/index.md",
 			"python/installation.md",
-			"typescript-migration/v0-3.md",
+			"python/migration/v0-1-experimental-policy.md",
+			"python/migration/v0-4.md",
+			"python/migration/v0-7.md",
 			"typescript/exports.md",
 			"typescript/index.md",
+			"typescript/migration/v0-3.md",
 		]);
-		expect(byPath.get("python-migration/v0-4.md")).toContain(
-			'slug: "python/migration/v0-4"',
-		);
-		expect(byPath.get("typescript-migration/v0-3.md")).toContain(
-			'slug: "typescript/migration/v0-3"',
-		);
+		// The route follows the path: /python/migration/v0-4/.
+		expect(byPath.get("python/migration/v0-4.md")).not.toContain("slug:");
 	});
 
 	test("carry a human title and sort newest first", () => {
-		expect(byPath.get("python-migration/v0-7.md")).toContain(
+		expect(byPath.get("python/migration/v0-7.md")).toContain(
 			'title: "0.7.0 migration notes"',
 		);
 		expect(
-			byPath.get("python-migration/v0-1-experimental-policy.md"),
+			byPath.get("python/migration/v0-1-experimental-policy.md"),
 		).toContain('title: "0.1.0 experimental release and migration policy"');
 		const order = (path: string): number =>
-			Number(/order: (\d+)/.exec(byPath.get(path) ?? "")?.[1]);
-		expect(order("python-migration/v0-7.md")).toBeLessThan(
-			order("python-migration/v0-4.md"),
+			pages.find((page) => page.path === path)?.order ?? Number.NaN;
+		expect(order("python/migration/v0-7.md")).toBeLessThan(
+			order("python/migration/v0-4.md"),
 		);
-		expect(order("python-migration/v0-4.md")).toBeLessThan(
-			order("python-migration/v0-1-experimental-policy.md"),
+		expect(order("python/migration/v0-4.md")).toBeLessThan(
+			order("python/migration/v0-1-experimental-policy.md"),
 		);
 	});
 
@@ -433,7 +418,7 @@ describe("migration notes", () => {
 		expect(installation).toContain(
 			"[the policy](/qgis-sdk/python/migration/v0-1-experimental-policy/)",
 		);
-		expect(byPath.get("python-migration/v0-4.md")).toContain(
+		expect(byPath.get("python/migration/v0-4.md")).toContain(
 			"[kinds](/qgis-sdk/python/migration/v0-7/#parameter-kinds)",
 		);
 		expect(byPath.get("typescript/exports.md")).toContain(

@@ -1,0 +1,9 @@
+{
+	"title": "Guides",
+	"pages": [
+		"test-a-plugin",
+		"web-plugin",
+		"cli-mcp",
+		"experimental-plugin-http"
+	]
+}

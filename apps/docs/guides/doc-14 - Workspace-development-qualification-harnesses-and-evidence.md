@@ -74,7 +74,7 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 | Gherkin lint | `pixi run lint-features` | gherlint over every `*.feature` file; a scenario outside `FEATURE_DIRECTORIES` fails |
 | Repository policy | `pixi run lint-repository` | Alint rules in `.alint.yml` |
 | Test repository policy | `pixi run test-alint-policy` | Exercise the actual Alint rules against isolated passing and failing trees |
-| Docs site | `pixi run -e bun docs-build` | The bridge, the Storybook and the Astro site into `apps/docs/dist` |
+| Docs site | `pixi run -e bun docs-build` | The bridge, the Storybook and the Next site into `apps/docs/out` |
 | Docs links | `pixi run -e bun docs-link-check` | Builds, then checks every internal link and fragment of the site |
 | Docs dev | `pixi run -e bun docs-dev` | The site from source with reload on `0.0.0.0:4321` |
 
@@ -101,62 +101,81 @@ Keep Python development tools in `packages/qgis-sdk-python/pyproject.toml`'s `de
 | `packages/qgis-sdk-ui` | The `@archont561/qgis-sdk-ui` web components (Lit, light DOM), their wrappers, stories and Bun tests |
 | `packages/qgis-sdk-ui-alias` | Unscoped npm alias `qgis-sdk-ui`: re-export files, `@import` stylesheets, manifest and Bun tests that pin it to the components |
 | `packages/config` | Shared TypeScript configuration and Bunup preset (private) |
-| `apps/docs` | The documentation site (Astro Starlight): generator, hand-written start pages, link check and Bun tests; deployed to GitHub Pages |
+| `apps/docs` | The documentation site (Fumadocs on Next, statically exported): generator, hand-written start pages, llms exports, link check and Bun tests; deployed to GitHub Pages |
 | `.agents/skills` | Agent skills: session, backlog, tdd, refactor, clean-code-principles, skill-creator |
 | `scripts` | Repository-root developer scripts, including restore, release and the stdlib-only `ci.py` workflow helpers |
 
 ## Documentation site
 
 [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/) is
-`apps/docs`, an Astro Starlight site. Its reference pages are generated
-from `apps/docs/guides/`, never edited directly, and the site cites what ships (releases, registries, versions),
-never how the work was tracked:
+`apps/docs`, a Fumadocs site on Next, exported to static files. Its reference
+pages are generated from `apps/docs/guides/`, never edited directly, and the
+site cites what ships (releases, registries, versions), never how the work was
+tracked:
 
 - `apps/docs/scripts/generate.ts` renders doc-12, doc-13 and this guide into
-  `src/content/docs/{python,typescript,contributing/workspace}/` - one page
+  `content/docs/{python,typescript,contributing/workspace}/` - one page
   per `##` section, the preamble as the directory's index, sub-headings
   moved up one level, the migration notes filed under `<guide>/migration/`
   newest first; this guide is contributor material and sits outside the
-  consumer reference. Same-guide and cross-guide anchors become site routes; a link to a
-  decision record lands on its row of the design-decisions page, which the
+  consumer reference. The script also writes each folder's `meta.json`, so
+  the sidebar's titles and order are data rather than a list in the layout.
+  Same-guide and cross-guide anchors become site routes; a link to a
+  decision record lands on its anchor on the design-decisions page, which the
   same script renders from `backlog/decisions/` and the one-line summaries
   in `scripts/decision-summaries.ts`; a link to a task, a milestone, a plan
   or the agent rules is dropped (its text stays) and reported, so those
-  records never surface on the site. Each page's "Edit page" opens
-  its source in `apps/docs/guides/`, and its `lastUpdated` is the guide's last commit. A section
-  whose heading says *(in progress)* or *(unreleased)* is published with a
-  Draft badge and opens with a caution, so notes on a line still being cut
-  never read as finished guidance. The generated directories are ignored by
-  git. A link whose anchor no guide has is reported by the generator and
-  fails the link check.
+  records never surface on the site. Each generated page's "Edit page" opens
+  its source in `apps/docs/guides/` and shows that guide's last commit:
+  `generate.ts` writes both into `lib/generated/pages.json`, because a page
+  is rendered from a file the reader never sees. A section whose heading says
+  *(in progress)* or *(unreleased)* opens with a draft callout, so notes on a
+  line still being cut never read as finished guidance. The generated
+  directories and `lib/generated/` are ignored by git. A link whose anchor no
+  guide has is reported by the generator and fails the link check.
 - The same script copies `packages/qgis-sdk-ui/storybook-static` to
   `public/storybook/` when it exists, so the site serves the Storybook at
   `/storybook/`; `docs-build` builds it first.
-- `src/content/docs/start/` (installation, first plugin, concepts) and the
-  landing page are the hand-written part, kept short and pointing into the
-  generated pages. `site.ts` holds the URL, base and repository; the
-  versions on the landing page are read from the workspace manifests when
-  the Astro config loads.
-- After Astro builds, `scripts/redirects.ts` writes static compatibility pages
-  for the former workspace and migration URLs from `scripts/lib/redirects.ts`.
-  They preserve query strings and fragments when JavaScript is available and
-  offer a refresh and a link without it. They are outside Starlight content,
-  the sitemap and the llms pages. The build checks destination pages, sitemap
-  and Markdown twins and refuses collisions; add an explicit mapping when
-  moving a public page.
-- `scripts/check-links.ts` walks `dist/` and resolves every internal `href`,
-  `src` and fragment against the built files, with no network. `bun test` in
-  `apps/docs` covers the renderer and the checker; `bun run coverage` holds
-  them to the workspace's 90%.
-- `starlight-llms-markdown` emits `/llms.txt`, `/llms-full.txt` and a `.md`
-  twin of every page; `site` and `base` give Starlight's bundled sitemap and
-  canonical URLs; `public/robots.txt` names the sitemap.
+- Content links are root-relative (`/python/installation/`), because Next adds
+  the deployment's `basePath` (`/qgis-sdk`) when it renders a link; a link
+  written with the base already in it doubles. The handful of plain `<a>`
+  elements on the landing page are the exception and carry `BASE`
+  themselves.
+- `content/docs/start/` (installation, first plugin, concepts), the four
+  guides and the landing page (`app/page.tsx`) are the hand-written part,
+  kept short and pointing into the generated pages. `site.ts` holds the URL,
+  base and repository; the versions on the landing page are read from the
+  workspace manifests at generate time and written to
+  `lib/generated/versions.json`.
+- `next build` writes `out/`; `scripts/postbuild.ts` then writes what Next
+  does not: `llms.txt`, `llms-full.txt` and one `.md` per page (the AI-facing
+  surface, files rather than routes because GitHub Pages serves files), the
+  sitemap (`sitemap-index.xml` and `sitemap-0.xml`, which
+  `public/robots.txt` names) and the static compatibility pages for the
+  former workspace and migration URLs from `scripts/lib/redirects.ts`. The
+  compatibility pages preserve query strings and fragments when JavaScript
+  is available and offer a refresh and a link without it; they are outside
+  the sitemap and the llms files. The same pass is the gate: it checks
+  destination pages, refuses collisions, and fails when a rendered page has
+  no `.md` export or is missing from the index, so a page cannot quietly drop
+  out of the AI-facing surface. Add an explicit mapping when moving a public
+  page.
+- Search is static too: `app/api/search/route.ts` exports the index at build
+  time (`staticGET`), and the dialog downloads it and searches in the
+  browser. `output: "export"` means nothing is served by a server - no API
+  routes at runtime, no rewrites, no server-side search.
+- `scripts/check-links.ts` walks `out/` and resolves every internal `href`,
+  `src` and fragment against the exported files, with no network. `bun test`
+  in `apps/docs` covers the renderer, the llms surface, the sitemap, the
+  redirects and the checker; `bun run coverage` holds them to the
+  workspace's 90%.
 - `.github/workflows/docs.yml` builds and link-checks the site on pull
   requests that touch it, the guides or the UI package, and deploys it from
-  `main` with `actions/deploy-pages`. Astro runs under Bun (`bun --bun astro`)
-  so the build needs no Node beyond the Pixi `bun` environment; Starlight's
-  `<Tabs>` component is avoided because it parses its own output through a
-  native binding Bun's isolated `node_modules` cannot resolve from a chunk.
+  `main` with `actions/deploy-pages`. The Pixi `bun` environment pins Bun
+  alone, so the job also runs `actions/setup-node`: Next builds and renders
+  with Node, Bun installs and drives the workspace, and both end up on
+  `PATH`. Locally the same split holds - a Node runtime has to be on `PATH`
+  for `bun run build` and `bun run dev`.
 
 ## Contributing
 

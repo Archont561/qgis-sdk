@@ -1,13 +1,11 @@
 ---
 title: Your first plugin
 description: Scaffold a plugin, then follow one typed action from a pure test to native and web interfaces.
-sidebar:
-  order: 2
 ---
 
 QGIS SDK targets **QGIS 4** and is experimental. You can write and test a
 plugin without QGIS; running it in Desktop requires a supported QGIS
-installation and display. See [supported targets](/qgis-sdk/python/supported-targets/).
+installation and display. See [supported targets](/python/supported-targets/).
 
 ## Scaffold a project
 
@@ -41,7 +39,7 @@ qgis-sdk new my_tools --title "My Tools" --web vanilla --no-input --no-install
 
 `--web vanilla` and `--web react` scaffold pages. Vue and Svelte have SDK
 adapters, but are not scaffold choices. See the
-[scaffold reference](/qgis-sdk/python/project-scaffold/) for the options.
+[scaffold reference](/python/project-scaffold/) for the options.
 
 ## One action, three paths
 
@@ -77,7 +75,7 @@ supplies the source fixture and `WORKING_CRS`:
 def test_buffer_creates_a_styled_new_layer_and_keeps_the_source(
     fake_host: FakeHost,
 ) -> None:
-    source = fake_host.runtime.actions["open_fixture"]()
+    source = fake_host.runtime.actions["open_fixture"](/)
 
     output = fake_host.runtime.actions["buffer"](source.id, 500.0, WORKING_CRS)
 
@@ -155,6 +153,6 @@ manager. A web project also needs its JavaScript dependencies installed.
 
 ## Where next
 
-- [Declarations](/qgis-sdk/python/declarations/) and [native surfaces](/qgis-sdk/python/desktop-bindings-and-native-surfaces/).
-- [The schema module and `QgisSdk`](/qgis-sdk/typescript/the-schema-module-and-qgissdk/).
-- [Testing a plugin](/qgis-sdk/guides/test-a-plugin/) and the [reference plugin](https://github.com/Archont561/qgis-sdk/tree/main/examples/simple).
+- [Declarations](/python/declarations/) and [native surfaces](/python/desktop-bindings-and-native-surfaces/).
+- [The schema module and `QgisSdk`](/typescript/the-schema-module-and-qgissdk/).
+- [Testing a plugin](/guides/test-a-plugin/) and the [reference plugin](https://github.com/Archont561/qgis-sdk/tree/main/examples/simple).

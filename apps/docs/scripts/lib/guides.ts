@@ -135,12 +135,16 @@ export interface SplitGuide {
 export interface GuideInput {
 	readonly guide: Guide;
 	readonly markdown: string;
-	/** An ISO date for Starlight's `lastUpdated`, when the caller knows it. */
+	/** The guide's last commit date, when the caller knows it (`YYYY-MM-DD`). */
 	readonly lastUpdated?: string;
 }
 
 export interface RenderOptions {
-	/** Astro's `base`, with a leading and no trailing slash (`/qgis-sdk`), or `""`. */
+	/**
+	 * A base to prefix every route with, leading slash and no trailing one
+	 * (`/qgis-sdk`), or `""` to leave routes root-relative - which is what the
+	 * site itself does, because Next adds the deployment's basePath.
+	 */
 	readonly base: string;
 	/** The repository URL backlog records link to. */
 	readonly repository: string;
@@ -152,6 +156,8 @@ export interface Page {
 	/** Relative to the content directory, e.g. `python/installation.md`. */
 	readonly path: string;
 	readonly content: string;
+	/** For a migration note, its place in the sidebar: newest first. */
+	readonly order?: number;
 }
 
 export interface RenderWarning {
@@ -347,8 +353,6 @@ function describe(body: string, fallback: string): string {
 	return fallback;
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 /** A section the guide itself marks as not released yet. */
 const DRAFT_HEADING = /\((?:in progress|unreleased)\)/i;
 
@@ -365,26 +369,19 @@ function draftNotice(heading: string): string | null {
 	const line = version
 		? `the unreleased ${version} line`
 		: "the unreleased next minor";
-	return `:::caution[Draft]\nThese notes describe ${line}. Content changes as the release is cut.\n:::\n`;
+	// The admonition is read as three paragraphs: the opening directive, the
+	// notice and the closing directive. `remark-admonition` only converts a
+	// block whose markers stand alone.
+	return `:::warn\n\n**Draft.** These notes describe ${line}. Content changes as the release is cut.\n\n:::\n`;
 }
 
-function frontmatter(fields: Record<string, unknown>): string {
+function frontmatter(fields: Record<string, string | undefined>): string {
 	const lines: string[] = ["---"];
 	for (const [key, value] of Object.entries(fields)) {
 		if (value === undefined) {
 			continue;
 		}
-		if (typeof value === "object" && value !== null) {
-			lines.push(`${key}:`);
-			for (const [inner, innerValue] of Object.entries(value)) {
-				lines.push(`  ${inner}: ${JSON.stringify(innerValue)}`);
-			}
-		} else if (typeof value === "string" && ISO_DATE.test(value)) {
-			// Unquoted, so YAML reads a date: Starlight's `lastUpdated` wants one.
-			lines.push(`${key}: ${value}`);
-		} else {
-			lines.push(`${key}: ${JSON.stringify(value)}`);
-		}
+		lines.push(`${key}: ${JSON.stringify(value)}`);
 	}
 	lines.push("---", "");
 	return lines.join("\n");
@@ -503,18 +500,9 @@ class Renderer {
 			.join("\n");
 	}
 
-	private editUrl(guide: Guide): string {
-		const ref = this.options.ref ?? "main";
-		const path = `${GUIDES_DIR}/${guide.file}`
-			.split("/")
-			.map(encodeURIComponent)
-			.join("/");
-		return `${this.options.repository}/edit/${ref}/${path}`;
-	}
-
 	render(): Page[] {
 		const pages: Page[] = [];
-		for (const { guide, lastUpdated } of this.inputs) {
+		for (const { guide } of this.inputs) {
 			const split = this.split.get(guide.id);
 			if (split === undefined) {
 				continue;
@@ -537,36 +525,25 @@ class Renderer {
 					frontmatter({
 						title,
 						description: describe(split.intro, title),
-						editUrl: this.editUrl(guide),
-						lastUpdated,
-						sidebar: { label: "Overview", order: 0 },
 					}) + index,
 			});
-			split.sections.forEach((section, position) => {
+			split.sections.forEach((section) => {
 				const draft = draftNotice(section.heading);
 				const { migration } = section;
 				const pageTitle = migration?.title ?? plainText(section.heading);
 				const head = frontmatter({
 					title: pageTitle,
 					description: describe(section.body, `${title}: ${pageTitle}`),
-					// A migration note is written to a sibling directory so the
-					// sidebar can group the notes under one label, and routed under
-					// the guide with `slug`.
-					slug: migration ? `${guide.section}/${section.slug}` : undefined,
-					editUrl: this.editUrl(guide),
-					lastUpdated,
-					sidebar: {
-						order: migration?.order ?? position + 1,
-						...(draft ? { badge: { text: "Draft", variant: "caution" } } : {}),
-					},
 				});
 				const body = this.prose(guide, section.slug, section.body, true);
-				const path = migration
-					? `${guide.section}-migration/${migration.name}.md`
-					: `${guide.section}/${section.slug}.md`;
+				// A migration note lives in a `migration/` folder of its guide, so
+				// the sidebar groups the notes under one label; `order` decides
+				// where inside that folder the note sits (newest first).
+				const path = `${guide.section}/${section.slug}.md`;
 				pages.push({
 					path,
 					content: `${head}${draft ? `${draft}\n` : ""}${body}\n`,
+					...(migration ? { order: migration.order } : {}),
 				});
 			});
 		}

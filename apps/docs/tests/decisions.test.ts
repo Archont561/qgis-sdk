@@ -82,11 +82,17 @@ describe("renderDecisionsPage", () => {
 		);
 	});
 
-	test("links the record from the number alone and anchors the row", () => {
+	test("links the record from its number and anchors the page for #decision-N", () => {
 		expect(page.content).toContain(
-			`| <a id="decision-25" href="https://github.com/o/r/blob/main/backlog/decisions/${encodeURIComponent(FILE)}">decision-25</a> | Version each package independently behind a shared contract version | Each package versions on its own behind a shared contract. | Accepted | 2026-10-24 |`,
+			`| [decision-25](https://github.com/o/r/blob/main/backlog/decisions/${encodeURIComponent(FILE)}) | Version each package independently behind a shared contract version | Each package versions on its own behind a shared contract. | Accepted | 2026-10-24 |`,
 		);
 		expect(page.content).not.toContain("[Version each package");
+		// A table cell cannot carry an id: markdown parses cell content as
+		// prose. The fragments sit in one block above the table instead.
+		expect(page.content).toContain('<a id="decision-25"></a>');
+		expect(page.content.indexOf('<a id="decision-25"></a>')).toBeLessThan(
+			page.content.indexOf("| Number | Title |"),
+		);
 	});
 
 	test("falls back to the title and reports a decision without a summary", () => {

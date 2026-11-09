@@ -1,6 +1,6 @@
 /**
- * The site's identity, shared by `astro.config.ts` and the generator so the
- * routes the generated pages link to are the routes Astro serves.
+ * The site's identity, shared by `next.config.ts`, the layouts and the
+ * generator, so the route a page links to is the route the export writes.
  *
  * GitHub Pages serves a project site under the repository name, hence `base`.
  */

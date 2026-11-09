@@ -1,4 +1,4 @@
-/** Static compatibility pages written after Astro, outside the sitemap and llms output. */
+/** Static compatibility pages written after the export, outside the sitemap and llms output. */
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BASE, SITE } from "../../site";
@@ -81,7 +81,17 @@ export async function writeRedirects(
 <noscript><meta http-equiv="refresh" content="0; url=${target}"></noscript>
 <script>location.replace(${JSON.stringify(target)} + location.search + location.hash);</script>
 </head><body><p>This page has moved. <a href="${target}">Continue to the new page</a>.</p></body></html>\n`;
-		await writeFile(join(dir, "index.html"), html, { flag: "wx" });
+		const file = join(dir, "index.html");
+		// Writing twice in a row is a re-run of the same build, not a page
+		// collision; anything else at a legacy route is a real page and must
+		// not be replaced.
+		const existing = await Bun.file(file)
+			.text()
+			.catch(() => null);
+		if (existing === html) {
+			continue;
+		}
+		await writeFile(file, html, { flag: "wx" });
 	}
 }
 
