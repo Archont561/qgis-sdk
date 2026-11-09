@@ -173,6 +173,12 @@ tracked:
   in `apps/docs` covers the renderer, the llms surface, the sitemap, the
   redirects and the checker; `bun run coverage` holds them to the
   workspace's 90%.
+- The layer above the site is `docs/`: the documentation policy - what has to
+  be true before a change counts as documented - with one index per directory
+  that routes to the canonical page rather than restating it. That layer is
+  checked by `.github/workflows/docs-check.yml` (markdownlint-cli2, Vale,
+  lychee) and keeps the landing page generated: `bun run readme` renders
+  `README.md` from `scripts/readme/template.ejs`.
 - `.github/workflows/docs.yml` builds and link-checks the site on pull
   requests that touch it, the guides or the UI package, and deploys it from
   `main` with `actions/deploy-pages`. The Pixi `bun` environment pins Bun
