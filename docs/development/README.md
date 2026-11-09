@@ -16,6 +16,23 @@ pixi run -e bun bun run coverage   # the 90% gates CI uses
 - [Test, build and the Pixi tasks](https://archont561.github.io/qgis-sdk/contributing/workspace/test-build-and-the-pixi-tasks/)
 - [Repository layout](https://archont561.github.io/qgis-sdk/contributing/workspace/repository-layout/)
 
+## Python versions
+
+The three distributions promise `requires-python = ">=3.11"`, and the Pixi
+environments only ever run the newest interpreter, so the floor is checked
+separately:
+
+```sh
+pip install tox==4.67.13      # tox is not a Pixi dependency
+tox -e py311                  # one version, in its own venv
+tox                           # every version installed here
+```
+
+`tox.ini` names one environment per version from the floor to the pinned
+interpreter and installs the runtime and the tools from their source trees. CI
+runs one job per version in `.github/workflows/compat.yml`; `tests/scripts/test_python_versions.py`
+keeps the manifests, the envlist and the matrix from drifting apart.
+
 ## Change a package
 
 - [Test layers](https://archont561.github.io/qgis-sdk/contributing/workspace/test-layers/) - which layer a test belongs to, and the marker that selects it.
@@ -28,6 +45,7 @@ pixi run -e bun bun run coverage   # the 90% gates CI uses
 - [Documentation site](https://archont561.github.io/qgis-sdk/contributing/workspace/documentation-site/) - the Fumadocs site, its generator, the exports and the link check.
 - [The documentation policy](../README.md) - what has to be true before a change is considered documented, and the checks that enforce it.
 - `bun run readme` - regenerate the root landing page from `scripts/readme/template.ejs`.
+- `bun run agents` - regenerate the marked regions of `AGENTS.md` with `@eugeniughelbur/agents-md`; `bun run agents:check` is what CI runs.
 
 ## Release
 

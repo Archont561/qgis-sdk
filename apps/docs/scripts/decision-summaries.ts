@@ -79,4 +79,6 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	72: "Editing stays an explicit session and features stay bounded pages; no context manager and no feature or vertex iterator in 0.10.0.",
 	73: "The documentation site renders with Fumadocs on Next and exports to static files, with the llms index, the markdown twins and the sitemap written and checked by the build rather than by a plugin.",
 	74: "The documentation layer is checked by four tools with one concern each - alint, markdownlint-cli2, Vale and lychee - and the landing page is generated from a template that keeps its shape.",
+	75: "tox runs the QGIS-free suite on every Python version the manifests promise, one CI job per version, and a guard test keeps the manifests, the envlist and the matrix in step.",
+	76: "AGENTS.md is part generated: three fact regions come from agents-md through a wrapper that corrects its npm-and-node reading of this tree, and the rules stay handwritten outside the markers.",
 };
