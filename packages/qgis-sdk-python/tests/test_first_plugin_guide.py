@@ -7,7 +7,7 @@ import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-GUIDE = ROOT / "apps/docs/src/content/docs/start/first-plugin.md"
+GUIDE = ROOT / "apps/docs/content/docs/start/first-plugin.md"
 
 
 def test_reference_walkthrough_uses_verbatim_executable_project_sources() -> None:

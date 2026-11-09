@@ -75,7 +75,7 @@ supplies the source fixture and `WORKING_CRS`:
 def test_buffer_creates_a_styled_new_layer_and_keeps_the_source(
     fake_host: FakeHost,
 ) -> None:
-    source = fake_host.runtime.actions["open_fixture"](/)
+    source = fake_host.runtime.actions["open_fixture"]()
 
     output = fake_host.runtime.actions["buffer"](source.id, 500.0, WORKING_CRS)
 
