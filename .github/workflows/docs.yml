@@ -83,19 +83,19 @@ jobs:
       # nothing.
       - name: Build the site
         id: s05
-        run: python scripts/ci.py run-log docs-build.log -- pixi run -e bun docs-build
+        run: python -m automation.ci run-log docs-build.log -- pixi run -e bun docs-build
 
       - name: Check internal links
         id: s06
-        run: python scripts/ci.py run-log docs-links.log -- pixi run -e bun bun run --filter '@workspace/docs' check-links
+        run: python -m automation.ci run-log docs-links.log -- pixi run -e bun bun run --filter '@workspace/docs' check-links
 
       # One step for whichever log the run actually got to.
       - name: Annotate the failure
         id: s07
         if: failure()
         run: |
-          python scripts/ci.py annotate-log docs-build.log --title "docs build" --skip-missing
-          python scripts/ci.py annotate-log docs-links.log --title "docs links" --skip-missing
+          python -m automation.ci annotate-log docs-build.log --title "docs build" --skip-missing
+          python -m automation.ci annotate-log docs-links.log --title "docs links" --skip-missing
 
       - name: Upload the site
         id: s08

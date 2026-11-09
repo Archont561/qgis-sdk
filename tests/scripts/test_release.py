@@ -12,12 +12,13 @@ import re
 from pathlib import Path
 
 import pytest
-import release as release_module
 from conftest import SAMPLE_VERSIONRC
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from packaging.version import Version as PackagingVersion
-from release import (
+
+from automation import release as release_module
+from automation.release import (
     Commit,
     QgisSdkReleaseError,
     QgisSdkReleaseVersionError,
@@ -89,7 +90,7 @@ TOOLS_PYPROJECT = (
 @pytest.fixture(autouse=True)
 def _the_real_manifests_stay_untouched():
     """A stamp test that forgot to redirect a manifest must not edit the repo."""
-    import release
+    from automation import release
 
     paths = (
         release._PYPROJECT,
@@ -158,7 +159,7 @@ def _python_manifests(
         PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
         encoding="utf-8",
     )
-    import release
+    from automation import release
 
     monkeypatch.setattr(release, "_PYPROJECT", pyproject)
     monkeypatch.setattr(release, "_RUNTIME_PYPROJECT", runtime)
@@ -437,7 +438,7 @@ def _one(subject, body=""):
 
 
 def test_log_format_uses_separators():
-    from release import LOG_FORMAT
+    from automation.release import LOG_FORMAT
 
     assert LOG_FORMAT == "%H%x1f%s%x1f%b%x1e"
 
@@ -849,7 +850,7 @@ def test_a_branch_push_plans_the_candidate_without_tagging(tmp_path, monkeypatch
         tags=("v0.1.1",),
         log="a" * 40 + "\x1f" + "feat(sdk): x" + "\x1f" + "\x1e\n",
     )
-    from release import main
+    from automation.release import main
 
     assert main(["plan", "--trigger", "push", "--config", str(config)]) == 0
     outputs = dict(
@@ -873,7 +874,7 @@ def test_a_dispatch_is_not_forced_into_a_dry_run(tmp_path, monkeypatch):
         tags=("v0.1.1",),
         log="a" * 40 + "\x1f" + "feat(sdk): x" + "\x1f" + "\x1e\n",
     )
-    from release import main
+    from automation.release import main
 
     assert main(["plan", "--trigger", "dispatch", "--config", str(config)]) == 0
     outputs = dict(
@@ -1090,7 +1091,7 @@ def test_stamp_recipe_replaces_context_version_with_pep440():
 
 
 def test_create_tag_sets_git_identity_and_pushes():
-    from release import create_tag
+    from automation.release import create_tag
 
     commands = []
     create_tag(
@@ -1256,10 +1257,13 @@ def _with_files(raw):
 
 
 def _fake_git(monkeypatch, tags=(), log=""):
-    monkeypatch.setattr("release.list_tags", lambda runner=None: tuple(tags))
-    monkeypatch.setattr("release.log_commits", lambda rng=None, runner=None: log)
+    monkeypatch.setattr("automation.release.list_tags", lambda runner=None: tuple(tags))
     monkeypatch.setattr(
-        "release.log_commits_with_files", lambda rng=None, runner=None: _with_files(log)
+        "automation.release.log_commits", lambda rng=None, runner=None: log
+    )
+    monkeypatch.setattr(
+        "automation.release.log_commits_with_files",
+        lambda rng=None, runner=None: _with_files(log),
     )
 
 
@@ -1274,7 +1278,7 @@ def test_plan_dispatch_writes_outputs_and_changelog(tmp_path, monkeypatch):
         monkeypatch,
         log="a" * 40 + "\x1f" + "feat: x" + "\x1f" + "\x1e\n",
     )
-    from release import main
+    from automation.release import main
 
     assert (
         main(
@@ -1309,14 +1313,14 @@ def test_plan_cli_logs_commits_since_the_last_stable_for_a_stable_release(
     ranges: list[str | None] = []
     log = "a" * 40 + "\x1f" + "feat(python): x" + "\x1f" + "\x1e\n"
     monkeypatch.setattr(
-        "release.list_tags",
+        "automation.release.list_tags",
         lambda runner=None: ("python-v0.4.0", "python-v0.5.0-rc.1"),
     )
     monkeypatch.setattr(
-        "release.log_commits_with_files",
+        "automation.release.log_commits_with_files",
         lambda rng=None, runner=None: (ranges.append(rng), _with_files(log))[1],
     )
-    from release import main
+    from automation.release import main
 
     assert (
         main(
@@ -1357,7 +1361,7 @@ def test_plan_push_without_tags_skips(tmp_path, monkeypatch):
     config = _versionrc(tmp_path)
     _fake_git(monkeypatch)
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-    from release import main
+    from automation.release import main
 
     assert main(["plan", "--config", str(config)]) == 0
 
@@ -1374,7 +1378,7 @@ def test_plan_cli_supports_milestone_scope_bump_and_dry_run(tmp_path, monkeypatc
         tags=("v0.1.0", "milestone-v0.2.0"),
         log="a" * 40 + "\x1f" + "feat: milestone work" + "\x1f" + "\x1e\n",
     )
-    from release import main
+    from automation.release import main
 
     assert (
         main(
@@ -1408,7 +1412,7 @@ def test_classify_reports_prerelease(tmp_path, monkeypatch):
     out_file = tmp_path / "gh_output"
     out_file.touch()
     monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
-    from release import main
+    from automation.release import main
 
     assert main(["classify", "--tag", "v0.1.0-rc.1"]) == 0
     outputs = dict(
@@ -1422,7 +1426,7 @@ def test_classify_reports_prerelease(tmp_path, monkeypatch):
 
 
 def test_classify_rejects_bad_tag():
-    from release import main
+    from automation.release import main
 
     assert main(["classify", "--tag", "0.1.0"]) == 1
 
@@ -1431,7 +1435,7 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
     out_file = tmp_path / "gh_output"
     out_file.touch()
     monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
-    from release import main
+    from automation.release import main
 
     assert main(["classify", "--tag", "python-v0.2.0", "--scoped"]) == 0
     outputs = dict(
@@ -1490,8 +1494,10 @@ def test_tag_creates_and_pushes_with_message_file(tmp_path, monkeypatch):
     message = tmp_path / "changelog.md"
     message.write_text("# Changelog\n", encoding="utf-8")
     calls = []
-    monkeypatch.setattr("release.create_tag", lambda *a, **k: calls.append((a, k)))
-    from release import main
+    monkeypatch.setattr(
+        "automation.release.create_tag", lambda *a, **k: calls.append((a, k))
+    )
+    from automation.release import main
 
     assert (
         main(
@@ -1512,14 +1518,14 @@ def test_tag_creates_and_pushes_with_message_file(tmp_path, monkeypatch):
 
 
 def test_tag_needs_a_message():
-    from release import main
+    from automation.release import main
 
     assert main(["tag", "--tag", "v0.1.0"]) == 1
 
 
 def test_stamp_rewrites_every_manifest(tmp_path, monkeypatch):
     files = _python_manifests(tmp_path, monkeypatch)
-    from release import main
+    from automation.release import main
 
     assert main(["stamp", "--version", "0.2.0-rc.1"]) == 0
     assert 'version = "0.2.0rc1"' in files["pyproject"].read_text()
@@ -1770,7 +1776,7 @@ def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
     created = []
     uploaded = []
-    import release
+    from automation import release
 
     monkeypatch.setattr(
         release,
@@ -1785,7 +1791,7 @@ def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
         "upload_asset",
         lambda url, token, path, opener=None: uploaded.append(path),
     )
-    from release import main
+    from automation.release import main
 
     assert (
         main(
@@ -1820,7 +1826,7 @@ def test_github_release_updates_existing_release_when_already_exists(
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     deleted = []
     uploaded = []
-    import release
+    from automation import release
 
     def raise_exists(*args, **kwargs):
         raise QgisSdkReleaseError(
@@ -1847,7 +1853,7 @@ def test_github_release_updates_existing_release_when_already_exists(
         "upload_asset",
         lambda url, token, path, opener=None: uploaded.append(path),
     )
-    from release import main
+    from automation.release import main
 
     assert (
         main(
@@ -1871,7 +1877,7 @@ def test_github_release_updates_existing_release_when_already_exists(
 def test_github_release_needs_repo_and_token(tmp_path, monkeypatch):
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    from release import main
+    from automation.release import main
 
     assert main(["github-release", "--tag", "v0.1.0"]) == 1
 
@@ -1931,7 +1937,7 @@ def test_ci_verifies_the_scoped_versions_and_the_contract_on_every_push():
     repo_root = Path(__file__).resolve().parents[2]
     text = (repo_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
-    assert "release-verify-versions" in text
+    assert "release_verify_versions" in text
 
 
 def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
@@ -2395,7 +2401,7 @@ def _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", alias_text=N
     files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
     alias = tmp_path / "alias.json"
     alias.write_text(alias_text or ALIAS_PACKAGE_JSON, encoding="utf-8")
-    import release
+    from automation import release
 
     monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
     return files["package"], alias
@@ -2481,7 +2487,7 @@ def _scaffold_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", web_text=
     files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
     web = tmp_path / "web.py"
     web.write_text(web_text or SCAFFOLD_WEB_PY, encoding="utf-8")
-    import release
+    from automation import release
 
     monkeypatch.setattr(release, "_SCAFFOLD_WEB", web)
     return files["package"], web
@@ -2526,7 +2532,7 @@ def test_verify_versions_for_python_ignores_the_scaffold_pin(tmp_path, monkeypat
 
 def test_the_repository_scaffold_pins_the_bridge_at_head(monkeypatch):
     """The committed pin, not a fixture: `qgis-sdk new` offers the latest release."""
-    import release
+    from automation import release
 
     root = Path(release.__file__).resolve().parent.parent
     bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
@@ -2563,7 +2569,7 @@ def test_alias_changes_count_as_typescript():
 
 def test_the_repository_alias_agrees_with_the_bridge(monkeypatch):
     """The committed manifests, not fixtures: the alias must track the bridge."""
-    import release
+    from automation import release
 
     root = Path(release.__file__).resolve().parent.parent
     bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
@@ -2626,7 +2632,7 @@ def _example_manifests(tmp_path, monkeypatch, text=None, **kwargs):
     files = _python_manifests(tmp_path, monkeypatch, **kwargs)
     example = tmp_path / "example-pyproject.toml"
     example.write_text(text or EXAMPLE_PYPROJECT, encoding="utf-8")
-    import release
+    from automation import release
 
     monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (example,))
     files["example"] = example
@@ -2668,7 +2674,7 @@ def test_every_reference_example_follows_the_kit_stamp(tmp_path, monkeypatch):
     files = _example_manifests(tmp_path, monkeypatch)
     second = tmp_path / "server-example-pyproject.toml"
     second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")
-    import release
+    from automation import release
 
     monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (files["example"], second))
 
@@ -2688,7 +2694,7 @@ def test_verify_versions_refuses_a_second_example_left_on_the_old_window(
     files = _example_manifests(tmp_path, monkeypatch)
     second = tmp_path / "server-example-pyproject.toml"
     second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")
-    import release
+    from automation import release
 
     monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (files["example"], second))
     assert main(["stamp", "--version", "0.6.0", "--scope", "python"]) == 0

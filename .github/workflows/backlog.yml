@@ -60,7 +60,7 @@ jobs:
           python-version: "3.14"
 
       # Pinned to the pytest the locked environment carries, so this job and the
-      # `test-release-tool` step it stands in for cannot disagree about what a
+      # `test_scripts` task it stands in for cannot disagree about what a
       # passing test is.
       - name: Install pytest
         run: python -m pip install --disable-pip-version-check "pytest==9.1.1"

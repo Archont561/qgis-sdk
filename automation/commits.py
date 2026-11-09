@@ -4,7 +4,7 @@
 Extracted from ci.yml's checks job so the same range selection runs in CI
 and can be validated locally:
 
-    python scripts/compute_commit_base.py
+    python -m automation.commits
 
 Reads BASE_SHA, DEFAULT_BRANCH, and GITHUB_SHA from the environment (all
 set by the workflow step) and writes CONVCO_REV or CONVCO_MAX_COUNT to

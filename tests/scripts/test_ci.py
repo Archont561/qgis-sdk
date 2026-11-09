@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ci.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "automation" / "ci.py"
 
 
 def run_ci(*args: str, cwd: Path, env: dict[str, str] | None = None):
@@ -212,7 +212,7 @@ def test_bun_summary_first_match_or_missing_log(tmp_path: Path):
 
 def test_generated_gate_runs_generator_git_sweep_and_reference_check(tmp_path: Path):
     # Copy the entrypoint into a throwaway tree so its own repo root is isolated.
-    script = tmp_path / "scripts/ci.py"
+    script = tmp_path / "automation/ci.py"
     script.parent.mkdir()
     script.write_bytes(SCRIPT.read_bytes())
     generator = tmp_path / "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
@@ -282,7 +282,7 @@ def generated_repo(tmp_path: Path) -> Path:
             ignore=shutil.ignore_patterns("__pycache__"),
         )
     for filename in (
-        "scripts/ci.py",
+        "automation/ci.py",
         "packages/qgis-sdk-python/scripts/generate_bridge_clients.py",
         "packages/qgis-sdk-typescript/src/generated/host.ts",
         "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts",
@@ -337,7 +337,7 @@ def generated_repo(tmp_path: Path) -> Path:
 def run_real_generated_gate(root: Path) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"}
     return subprocess.run(
-        [sys.executable, str(root / "scripts/ci.py"), "check-generated"],
+        [sys.executable, str(root / "automation/ci.py"), "check-generated"],
         cwd=root,
         env=env,
         capture_output=True,
@@ -582,26 +582,26 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         assert steps["Set up Pixi"]["with"]["cache"] is True
         assert (
             steps["Install JavaScript dependencies"]["run"]
-            == "pixi run -e bun install-js"
+            == "pixi run -e default automation -- install_js"
         )
         assert steps["Report the failed step"]["if"] == "failure()"
         assert steps["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
     expected_checks = {
-        "Check commit messages": "pixi run -e default check-commits",
-        "Lint Python": "pixi run -e default lint-python",
-        "Check Python formatting": "pixi run -e default format-python-check",
-        "Test release tooling": "pixi run -e default test-release-tool",
-        "Verify the scoped versions and the shared contract": "pixi run -e default release-verify-versions",
-        "Check the generated bridge clients are current": "python scripts/ci.py check-generated",
+        "Check commit messages": "pixi run -e default automation -- check_commits",
+        "Lint Python": "pixi run -e default automation -- lint_python",
+        "Check Python formatting": "pixi run -e default automation -- format_check",
+        "Test release tooling": "pixi run -e default automation -- test_scripts",
+        "Verify the scoped versions and the shared contract": "pixi run -e default automation -- release_verify_versions",
+        "Check the generated bridge clients are current": "pixi run -e default automation -- check_generated",
         "Check the Processing snapshot is current": "pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check",
-        "Test the reference plugin through qgis-sdk test": "pixi run -e default test-reference-example",
-        "Test the reference page on the workspace bridge": "pixi run -e bun test-reference-web",
-        "Lint and format TypeScript": "pixi run -e bun biome-check",
-        "Lint GitHub Actions": "pixi run -e default lint-github-actions",
-        "Check repository policy": "pixi run -e default lint-repository",
-        "Test repository policy": "pixi run -e default test-alint-policy",
-        "Typecheck TypeScript": "pixi run -e bun typecheck",
-        "Build the qgis-sdk-ui Storybook": "pixi run -e bun storybook-build",
+        "Test the reference plugin through qgis-sdk test": "pixi run -e default automation -- reference_example",
+        "Test the reference page on the workspace bridge": "pixi run -e default automation -- test_reference_web",
+        "Lint and format TypeScript": "pixi run -e default automation -- biome",
+        "Lint GitHub Actions": "pixi run -e default automation -- lint_actions",
+        "Check repository policy": "pixi run -e default automation -- lint_repository",
+        "Test repository policy": "pixi run -e default automation -- test_alint_policy",
+        "Typecheck TypeScript": "pixi run -e default automation -- typecheck",
+        "Build the qgis-sdk-ui Storybook": "pixi run -e default automation -- storybook",
     }
     for name, command in expected_checks.items():
         assert checks[name]["run"] == command
@@ -612,7 +612,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     )
     assert (
         checks["Test the native layers offscreen"]["run"]
-        == "pixi run -e default python scripts/ci.py native"
+        == "pixi run -e default automation -- native"
     )
     assert checks["Test the native layers offscreen"]["env"] == {
         "QT_QPA_PLATFORM": "offscreen",
@@ -631,7 +631,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     )
     assert (
         lts["Test both hosts on the LTS"]["run"]
-        == ".venv-lts/bin/python scripts/ci.py lts"
+        == ".venv-lts/bin/python -m automation.ci lts"
     )
     assert lts["Test both hosts on the LTS"]["env"] == {
         "QT_QPA_PLATFORM": "offscreen",
@@ -641,7 +641,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     assert coverage["Check coverage for all packages"]["id"] == "coverage"
     assert (
         coverage["Check coverage for all packages"]["run"]
-        == "python scripts/ci.py run-log coverage-output.log -- pixi run -e bun bun run coverage"
+        == "pixi run -e default automation -- coverage"
     )
     assert (
         coverage["Annotate the coverage failure"]["if"]
@@ -672,7 +672,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     assert checks["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
     cross = {step.get("name"): step for step in jobs["cross-platform"]["steps"]}
     assert "run-log bun-tests.log" in cross["Test TypeScript bridge"]["run"]
-    assert cross["Test qgis-sdk-ui"]["run"] == "python scripts/ci.py bun-ui"
+    assert cross["Test qgis-sdk-ui"]["run"] == "python -m automation.ci bun-ui"
     assert "report-bun bun-tests.log" in cross["Report TypeScript test results"]["run"]
     assert (
         "report-bun bun-ui-tests.log" in cross["Report qgis-sdk-ui test results"]["run"]
@@ -830,7 +830,7 @@ def test_check_gherkin_fails_when_the_linter_itself_fails(tmp_path: Path):
 
 def test_every_feature_file_in_the_checkout_is_linted():
     """The invariant behind the checks: no scenario escapes the linted tree."""
-    import ci
+    from automation import ci
 
     root = SCRIPT.parents[1]
     files = ci.feature_files(root)

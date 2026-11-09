@@ -12,6 +12,8 @@ typer = "==0.27.3"
 python-build = "==1.6.1"
 twine = "==7.0.0"
 hatchling = "==1.32.4"
+# Runs the repository's task graph (`dodo.py`); see `[feature.python.tasks.automation]`.
+doit = "==0.37.0"
 
 # Wheels only: pixi-pack refuses path/sdist PyPI locations, so the workspace package
 # stays on PYTHONPATH rather than an editable extra.
@@ -31,46 +33,12 @@ pyyaml = "==6.0.3"
 # working directory (the reference example) still imports the source tree.
 PYTHONPATH = "$PIXI_PROJECT_ROOT/packages/qgis-sdk-runtime/src:$PIXI_PROJECT_ROOT/packages/qgis-sdk-tools/src"
 
-# Release train entrypoints (TASK-35): the stdlib-only release tool now lives
-# as scripts/release.py, resolved from __file__ so every pixi run task and
-# workflow step invokes identical, locally-testable commands with no
-# PYTHONPATH or locked dependency beyond the build environment.
-[feature.python.tasks.test-release-tool]
-# The README mirror checks also belong to this QGIS-free suite; their policy
-# lives in Alint rather than a duplicate pytest implementation.
-cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/scripts -q && alint check --only bridge-readme-mirror --only ui-readme-mirror --only bridge-readme-alias-name --only ui-readme-alias-name ."
-
-# The reference projects through their own `qgis-sdk test`: `examples/simple`
-# on the pure target and against the headless QGIS this environment carries, and
-# `examples/server` - the server variant - on the pure target, because a QGIS
-# built without WITH_SERVER has no `qgis.server` for `--target server` (the
-# `QGIS 3.44 LTS` row runs that half). `scripts/ci.py` runs the three in turn,
-# names the tests of each failing run in an annotation and keeps going, so a red
-# pure target no longer hides the native result the way a `&&` chain did.
-[feature.python.tasks.test-reference-example]
-cmd = "python scripts/ci.py reference-example"
-env = { QT_QPA_PLATFORM = "offscreen" }
-
-[feature.python.tasks.release-plan]
-cmd = "python scripts/release.py plan"
-
-[feature.python.tasks.release-classify]
-cmd = "python scripts/release.py classify"
-
-[feature.python.tasks.release-tag]
-cmd = "python scripts/release.py tag"
-
-[feature.python.tasks.release-stamp]
-cmd = "python scripts/release.py stamp"
-
-[feature.python.tasks.release-verify-versions]
-cmd = "python scripts/release.py verify-versions"
-
-[feature.python.tasks.release-build-python]
-cmd = "python scripts/release.py build-python"
-
-[feature.python.tasks.release-verify-python]
-cmd = "python scripts/release.py verify-python"
+# The one entry point for repository automation: `pixi run automation <task>`,
+# where the tasks are declared in dodo.py and implemented in automation/. The
+# Pixi tasks that remain below are single-command primitives - a compiler, a
+# linter, `bun`, `pixi upload` - that a task calls, not automation of their own.
+[feature.python.tasks.automation]
+cmd = "doit"
 
 [feature.python.tasks.package]
 cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build build --recipe packages/qgis-sdk-python/recipe.yaml --output-dir dist/conda -c conda-forge"
@@ -81,12 +49,6 @@ cmd = "pixi exec -c conda-forge --spec 'rattler-build>=0.77,<0.78' rattler-build
 [feature.python.tasks.publish-conda]
 args = [{ arg = "files", default = "dist/conda/*.conda" }]
 cmd = "pixi upload prefix --channel 'archont561/archont561' --generate-attestation --skip-existing {{ files }}"
-
-[feature.python.tasks.release-checksums]
-cmd = "python scripts/release.py checksums"
-
-[feature.python.tasks.release-github]
-cmd = "python scripts/release.py github-release"
 
 [feature.utils.dependencies]
 ruff = "==0.17.1"
@@ -103,34 +65,6 @@ cmd = "ruff format"
 [feature.utils.tasks.convco-check-message]
 args = ["message_file"]
 cmd = "convco check --from-stdin --strip < '{{ message_file }}'"
-
-[feature.utils.tasks.check-commits]
-cmd = "convco check"
-
-[feature.utils.tasks.lint-python]
-# Whole-checkout scope: a new Python directory is linted without editing this task.
-# Skipped trees are declared once in the root ruff.toml.
-cmd = "ruff check ."
-
-[feature.utils.tasks.format-python-check]
-cmd = "ruff format --check ."
-
-# Gherkin linting (gherlint) pins pydantic 1, which cannot share the default
-# environment with the runtime's mcp/pydantic 2. The task therefore builds a
-# throwaway venv beside the pixi environments - gitignored, reused across runs -
-# and lints from there. scripts/ci.py owns the scope: it fails on a *.feature
-# file outside FEATURE_DIRECTORIES as well as on a finding.
-[feature.utils.tasks.lint-features]
-cmd = "python -m venv .pixi/gherkin && .pixi/gherkin/bin/python -m pip install --quiet --disable-pip-version-check 'gherlint==0.5.0' && python scripts/ci.py check-gherkin --gherlint .pixi/gherkin/bin/gherlint"
-
-[feature.utils.tasks.lint-github-actions]
-cmd = "actionlint .github/workflows/*.yml"
-
-[feature.utils.tasks.lint-repository]
-cmd = "alint check ."
-
-[feature.utils.tasks.test-alint-policy]
-cmd = "python -m pytest -c tests/scripts/pyproject.toml tests/alint -q"
 
 [feature.qgis.dependencies]
 qgis = "==4.2.3"

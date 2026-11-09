@@ -2,7 +2,7 @@ name: autorelease
 
 # Conventional-commit and milestone release train (TASK-35, TASK-37). On every
 # landed push to main or milestone tag push (milestone-v*, milestone/*, m-v*),
-# the stdlib-only scripts/release.py tool decides whether a release is due; when
+# the stdlib-only automation/release.py tool decides whether a release is due; when
 # one is, it runs pre-release quality gates and pushes an annotated release tag
 # that release.yml turns into artifacts.
 #
@@ -105,7 +105,7 @@ jobs:
           # python-v* release instead of an alignment one.
           RELEASE_SCOPE: ${{ github.ref_type == 'tag' && '' || inputs.scope || 'auto' }}
         run: >-
-          python3 scripts/release.py plan
+          python3 -m automation.release plan
           --trigger "${{ github.event_name == 'workflow_dispatch' && 'dispatch' || (github.ref_type == 'tag' && 'milestone' || 'push') }}"
           --milestone-tag "${{ github.ref_type == 'tag' && github.ref_name || '' }}"
           --scope "$RELEASE_SCOPE"
@@ -138,7 +138,7 @@ jobs:
 
       - name: Install JavaScript dependencies
         if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.typescript == 'true'
-        run: pixi run -e bun install-js
+        run: pixi run -e default automation -- install_js
 
       - name: Run quality gate
         if: steps.plan.outputs.action == 'tag'
@@ -146,20 +146,20 @@ jobs:
           SCOPE="${{ steps.plan.outputs.scope }}"
           echo "Executing pre-release quality gates for scope: $SCOPE"
           if [ "$SCOPE" = "all" ]; then
-            pixi run -e default lint-python
-            pixi run -e default format-python-check
-            pixi run -e default test-release-tool
-            pixi run -e bun biome-check
-            pixi run -e bun typecheck
-            pixi run -e bun bun run test
+            pixi run -e default automation -- lint_python
+            pixi run -e default automation -- format_check
+            pixi run -e default automation -- test_scripts
+            pixi run -e default automation -- biome
+            pixi run -e default automation -- typecheck
+            pixi run -e default automation -- test_js
           elif [ "$SCOPE" = "python" ] || [ "$SCOPE" = "runtime" ] || [ "$SCOPE" = "tools" ]; then
-            pixi run -e default lint-python
-            pixi run -e default format-python-check
-            pixi run -e default test-release-tool
-            pixi run -e default python -m pytest -c packages/qgis-sdk-python/pyproject.toml packages/qgis-sdk-python/tests -q
+            pixi run -e default automation -- lint_python
+            pixi run -e default automation -- format_check
+            pixi run -e default automation -- test_scripts
+            pixi run -e default automation -- test_python
           elif [ "$SCOPE" = "typescript" ]; then
-            pixi run -e bun biome-check
-            pixi run -e bun typecheck
+            pixi run -e default automation -- biome
+            pixi run -e default automation -- typecheck
             pixi run -e bun bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests
           fi
 
@@ -167,7 +167,7 @@ jobs:
         if: steps.plan.outputs.action == 'tag'
         run: |
           if [ "${{ steps.plan.outputs.python }}" = "true" ]; then
-            pixi run -e build release-build-python
+            pixi run -e build automation -- release_build_python
             pixi run -e build release-build-conda
           fi
           if [ "${{ steps.plan.outputs.typescript }}" = "true" ]; then
@@ -177,7 +177,7 @@ jobs:
       - name: Push the release tag
         if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.dry_run != 'true'
         run: >-
-          python3 scripts/release.py tag
+          python3 -m automation.release tag
           --tag "${{ steps.plan.outputs.tag }}"
           --message-file "${{ steps.plan.outputs.changelog_file }}"
           --push
