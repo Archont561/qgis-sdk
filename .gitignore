@@ -25,6 +25,8 @@ coverage/
 .turbo/
 .ruff_cache/
 .pytest_cache/
+# tox's virtual environments (tox.ini): the compatibility matrix's own scratch
+.tox/
 __pycache__/
 .config/turborepo/
 # Storybook static build of packages/qgis-sdk-ui

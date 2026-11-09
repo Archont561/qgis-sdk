@@ -1,11 +1,38 @@
 # Agent instructions
 
+> This file is two documents in one. The regions between `agents-md` markers are
+> generated from the repository by `bun run agents` (`@eugeniughelbur/agents-md`
+> plus the corrections this tree needs) and are checked by CI; everything outside
+> them is written by hand and is never touched by a refresh.
+
+<!-- agents-md:begin id=overview -->
+## Overview
+
+A Python-first foundation for QGIS plugins: plain classes in, a loadable plugin out - with a typed TypeScript SDK and web components for interfaces hosted in QWebEngineView.
+
+Stack: Python 3.11-3.14 for the SDK (Pixi pins the environments), TypeScript for the bridge and the web components, Bun for the JavaScript workspace.
+<!-- agents-md:end id=overview -->
+
+<!-- agents-md:begin id=structure -->
+## Project structure
+
+Top-level: `apps/`, `backlog/`, `docs/`, `examples/`, `packages/`, `scripts/`, `tests/`.
+
+The SDK's suite is `packages/qgis-sdk-python/tests`; `apps/docs` is the documentation site; `backlog/` holds the task and decision records.
+<!-- agents-md:end id=structure -->
+
+<!-- agents-md:begin id=git -->
+## Git & PR workflow
+
+Default branch `main`. Remote: <https://github.com/Archont561/qgis-sdk.>
+<!-- agents-md:end id=git -->
+
 ## Session and merge workflow
 
 - For normal repository work, read and follow [the session skill](.agents/skills/session/SKILL.md) at session start or resumption, when selecting backlog work, and when preparing a merge or post-merge handoff.
 - For explicit, scoped requests, proceed directly; do not add a proposal-and-wait step unless a material ambiguity needs clarification.
 - Before merge or push, verify the final diff and relevant checks. Do not merge, push, or rewrite shared history without the user's explicit authorization.
-- PRs must not be squash-merged. Prefer a merge commit, merged **locally** with a conventional-commit message so lefthook's Convco gate passes — `git merge --no-ff -m "chore(scope): <description>"`. Do not use `gh pr merge --merge`: GitHub's auto-generated "Merge pull request #N from ..." message is not conventional and fails Convco. Rebase-and-merge (`--rebase`) is allowed only if the user explicitly asks for it.
+- PRs must not be squash-merged. Prefer a merge commit, merged **locally** with a conventional-commit message so lefthook's Convco gate passes - `git merge --no-ff -m "chore(scope): <description>"`. Do not use `gh pr merge --merge`: GitHub's auto-generated "Merge pull request #N from ..." message is not conventional and fails Convco. Rebase-and-merge (`--rebase`) is allowed only if the user explicitly asks for it.
 - After a PR or authorized direct push lands, use the session skill's post-merge closeout: verify the landed commit and CI where accessible, update backlog only for proven work, and report remaining items plus a next-session prompt. Never claim unavailable checks passed.
 
 ## Development guidance

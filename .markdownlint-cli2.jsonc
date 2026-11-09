@@ -7,7 +7,7 @@
 // the other two layers of the same check (docs/README.md, Validation).
 {
 	"$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
-	"globs": ["docs/**/*.md", "README.md"],
+	"globs": ["docs/**/*.md", "README.md", "AGENTS.md"],
 	"ignores": [".next/**", "node_modules/**"],
 	"config": {
 		"default": true,

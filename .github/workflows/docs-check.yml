@@ -12,6 +12,7 @@ on:
     paths:
       - "docs/**"
       - "README.md"
+      - "AGENTS.md"
       - "package.json"
       - "scripts/readme/**"
       - ".markdownlint-cli2.jsonc"
@@ -24,6 +25,7 @@ on:
     paths:
       - "docs/**"
       - "README.md"
+      - "AGENTS.md"
       - "package.json"
       - "scripts/readme/**"
       - ".markdownlint-cli2.jsonc"
@@ -79,7 +81,7 @@ jobs:
         uses: errata-ai/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # v3.0.0
         with:
           version: 3.26.0
-          files: '["docs", "README.md"]'
+          files: '["docs", "README.md", "AGENTS.md"]'
           sync: "false"
           reporter: github-pr-check
           fail_level: warning
@@ -92,6 +94,6 @@ jobs:
         id: s06
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: --config .lychee.toml --offline --no-progress --verbose 'docs/**/*.md' 'README.md'
+          args: --config .lychee.toml --offline --no-progress --verbose 'docs/**/*.md' 'README.md' 'AGENTS.md'
           lycheeVersion: v0.24.2
           fail: true

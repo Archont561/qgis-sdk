@@ -1,0 +1,87 @@
+name: Python compatibility
+
+# `requires-python = ">=3.11"` in the three distributions is a promise that the
+# Pixi environments cannot keep on their own: they pin one interpreter, the
+# newest. This matrix keeps the other half - the QGIS-free suite on every
+# version the manifests claim - so a floor that stops working is a red check
+# rather than a release note.
+#
+# One tox environment per job: each runner installs exactly one interpreter,
+# and tox is told not to skip a missing one (tox.ini,
+# `skip_missing_interpreters`), so an env that cannot run fails here instead of
+# passing quietly.
+
+on:
+  pull_request:
+    paths:
+      - "packages/qgis-sdk-python/**"
+      - "packages/qgis-sdk-runtime/**"
+      - "packages/qgis-sdk-tools/**"
+      - "tox.ini"
+      - "scripts/ci.py"
+      - ".github/workflows/compat.yml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/qgis-sdk-python/**"
+      - "packages/qgis-sdk-runtime/**"
+      - "packages/qgis-sdk-tools/**"
+      - "tox.ini"
+      - "scripts/ci.py"
+      - ".github/workflows/compat.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  compat:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One version failing is the answer; the others are the comparison that
+      # says whether it is the version or the change.
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.11"
+            toxenv: py311
+          - python: "3.12"
+            toxenv: py312
+          - python: "3.13"
+            toxenv: py313
+          - python: "3.14"
+            toxenv: py314
+    steps:
+      - name: Checkout
+        id: s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python ${{ matrix.python }}
+        id: s02
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      # tox is deliberately outside Pixi: this job exists to test the
+      # interpreter GitHub provides, not the one the lock pins. The version is
+      # exact so the run is reproducible.
+      - name: Install tox
+        id: s03
+        run: python -m pip install --disable-pip-version-check tox==4.67.13
+
+      # The log is captured so a failure can name its cause: a job log is not
+      # always reachable, and "exit code 1" names nothing.
+      - name: Run the suite on Python ${{ matrix.python }}
+        id: s04
+        run: python scripts/ci.py run-log "compat-${{ matrix.toxenv }}.log" -- tox -e "${{ matrix.toxenv }}"
+
+      - name: Annotate the failure
+        id: s05
+        if: failure()
+        run: python scripts/ci.py annotate-log "compat-${{ matrix.toxenv }}.log" --title "python ${{ matrix.python }}" --skip-missing

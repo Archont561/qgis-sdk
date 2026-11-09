@@ -162,6 +162,15 @@ jobs:
         id: s26
         run: pixi run -e default test-alint-policy
 
+      # AGENTS.md is two documents in one: three regions are generated from the
+      # repository (`agents-md` plus `scripts/agents/refresh.mjs`), and a stale
+      # one sends an agent to a directory that no longer exists or a branch that
+      # was renamed. The refresh is deterministic, so a difference is the whole
+      # check.
+      - name: Check AGENTS.md is current
+        id: s28
+        run: pixi run -e bun bun run agents:check
+
       - name: Typecheck TypeScript
         id: s14
         run: pixi run -e bun typecheck
