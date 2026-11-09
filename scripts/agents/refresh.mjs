@@ -33,6 +33,18 @@ const check = process.argv.includes("--check");
 const STACK =
 	"Stack: Python 3.11-3.14 for the SDK (Pixi pins the environments), TypeScript for the bridge and the web components, Bun for the JavaScript workspace.";
 
+/** Directories that are not part of the tree: the generator skips these too. */
+const NOISE = new Set([
+	"build",
+	"coverage",
+	"dist",
+	"node_modules",
+	"out",
+	"target",
+	"vendor",
+	"venv",
+]);
+
 /** Where the important code is; the generator leaves this as a TBD stub. */
 const LAYOUT =
 	"The SDK's suite is `packages/qgis-sdk-python/tests`; `apps/docs` is the documentation site; `backlog/` holds the task and decision records.";
@@ -81,6 +93,19 @@ function defaultBranch() {
 	);
 }
 
+/**
+ * The top-level directories the repository has, in one order, taken from the
+ * commit rather than the working tree. The generator lists whatever `readdir`
+ * returns: unsorted, so the line moves between machines, and including a
+ * scratch directory a previous CI step happened to leave behind.
+ */
+function trackedDirs() {
+	const names = git(["ls-tree", "-d", "-z", "--name-only", "HEAD"]).split("\0");
+	return names
+		.filter((name) => name !== "" && !name.startsWith(".") && !NOISE.has(name))
+		.sort();
+}
+
 /** The body of a marked region, without its markers and its heading. */
 function region(text, id) {
 	const match = text.match(
@@ -120,19 +145,14 @@ function tidy(body) {
 function normalize(text) {
 	// The generator's overview is the `package.json` description followed by the
 	// stack it guessed from the manifests. Keep the one, replace the other.
-	const overview = region(text, "overview")
-		.split(" Stack: ")[0]
-		.trim()
-		.replace(/_TBD:[^_]*_/g, "")
-		.trim();
+	const overview = withoutStub(region(text, "overview").split(" Stack: ")[0]);
 	const body = (text, id, content) =>
 		replaceRegion(text, id, `\n${tidy(content)}`);
 	let out = body(text, "overview", `${overview}\n\n${STACK}`);
-	out = body(
-		out,
-		"structure",
-		`${withoutStub(region(out, "structure"))}\n\n${LAYOUT}`,
-	);
+	const dirs = trackedDirs()
+		.map((name) => `\`${name}/\``)
+		.join(", ");
+	out = body(out, "structure", `Top-level: ${dirs}.\n\n${LAYOUT}`);
 	const remote = git(["remote", "get-url", "origin"]).replace(/\.git$/, "");
 	out = body(
 		out,
