@@ -16,7 +16,7 @@ Stack: Python 3.11-3.14 for the SDK (Pixi pins the environments), TypeScript for
 <!-- agents-md:begin id=structure -->
 ## Project structure
 
-Top-level: `apps/`, `backlog/`, `docs/`, `examples/`, `packages/`, `scripts/`, `tests/`.
+Top-level: `apps/`, `automation/`, `backlog/`, `docs/`, `examples/`, `packages/`, `scripts/`, `tests/`.
 
 The SDK's suite is `packages/qgis-sdk-python/tests`; `apps/docs` is the documentation site; `backlog/` holds the task and decision records.
 <!-- agents-md:end id=structure -->
