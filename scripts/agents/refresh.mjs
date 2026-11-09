@@ -153,14 +153,44 @@ try {
 	// The generator writes the file itself, so a refresh that fails after it ran
 	// would leave the raw, uncorrected sections behind.
 	writeFileSync(target, current);
+	annotate("agents-md failed", error.message);
 	throw error;
+}
+
+/** A workflow annotation, so a failure says what it wants without the log. */
+function annotate(title, message) {
+	if (process.env.GITHUB_ACTIONS === "true") {
+		console.error(`::error title=${title}::${message.replace(/\n/g, "%0A")}`);
+	}
+}
+
+/** The first few lines that disagree, for a failure nobody can read the log of. */
+function differences(expected, actual) {
+	const want = expected.split("\n");
+	const have = actual.split("\n");
+	const lines = [];
+	for (let i = 0; i < Math.max(want.length, have.length); i += 1) {
+		if (want[i] !== have[i]) {
+			lines.push(
+				`line ${i + 1}: expected ${JSON.stringify(want[i])}, found ${JSON.stringify(have[i])}`,
+			);
+		}
+		if (lines.length === 6) {
+			break;
+		}
+	}
+	return lines.join("\n");
 }
 
 if (check) {
 	writeFileSync(target, current);
 	if (refreshed !== current) {
-		console.error(
-			"agents-md: AGENTS.md is stale; run `bun run agents` and commit the result",
+		const message =
+			"AGENTS.md is stale; run `bun run agents` and commit the result";
+		console.error(`agents-md: ${message}`);
+		annotate(
+			"AGENTS.md is stale",
+			`${message}\n${differences(refreshed, current)}`,
 		);
 		process.exit(1);
 	}
