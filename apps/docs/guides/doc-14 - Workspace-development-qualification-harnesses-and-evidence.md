@@ -2477,3 +2477,33 @@ stamped with it.
   has been asked for and nothing spent: "publish" is the word that spends
   them, and the rehearsal half of it is a rehearsal guarantee, not a
   release.
+
+## 0.11.0 rc rehearsal (2026-11-07)
+
+The gate merged as `0737994` (PR #177) and both scopes were rehearsed on that
+commit with a prerelease tag each, in one authorization, because this minor
+releases the bridge with the Python kit. Prerelease tags dry-run the
+registries, so the rehearsal spends no version space.
+
+| Tag | `release.yml` run | Outcome |
+| --- | --- | --- |
+| `python-v0.11.0-rc.1` | [42408336282](https://github.com/Archont561/qgis-sdk/actions/runs/42408336282) | every job green: `build` stamped `0.11.0-rc.1` for scope `python`, passed "Verify the stamped manifests and the shared contract", built the Conda package, built and twine-checked the three wheels; `pypi` ran "Verify the wheel without uploading" with all three publish steps skipped; `conda` ran "Skip prefix.dev upload for prereleases" with the three upload steps and the OIDC check skipped; `github-release` published the prerelease with the three wheels, the three `.conda` files and `SHA256SUMS`. `npm`, `ui`, `github-packages` and `github-packages-ui` skipped, as a Python-only scope must |
+| `ts-v0.8.0-rc.1` | [42408336411](https://github.com/Archont561/qgis-sdk/actions/runs/42408336411) | every job green: `build` stamped `0.8.0-rc.1` for scope `typescript`, passed the same stamped-manifest and contract verification, built the bridge and the alias; `npm` packed both tarballs and ran "Dry-run the publish" with both publish steps skipped; `github-packages` ran "Dry-run GitHub Packages publish" with the publish step skipped; `github-release` published the prerelease with both `.tgz` files and `SHA256SUMS`. `pypi`, `conda`, `ui` and `github-packages-ui` skipped |
+
+Nothing was consumed: PyPI still serves `qgis-sdk` and `qgis-sdk-runtime` as
+`latest` at **0.10.0**, and npm lists `@archont561/qgis-sdk` at **0.7.0** as
+`latest` with no `0.8.0` version at all. The two GitHub releases are
+prereleases (`python-v0.11.0-rc.1`, `ts-v0.8.0-rc.1`) carrying
+`qgis_sdk-0.11.0rc1-py3-none-any.whl`,
+`qgis_sdk_runtime-0.11.0rc1-py3-none-any.whl`,
+`qgis_sdk_tools-0.11.0rc1-py3-none-any.whl`,
+`qgis-sdk-0.11.0rc1-pyhc454e9f_0.conda`,
+`qgis-sdk-runtime-0.11.0rc1-pyh4616a5c_0.conda`,
+`qgis-sdk-tools-0.11.0rc1-pyh4616a5c_0.conda` and `SHA256SUMS` on the Python
+side, and `archont561-qgis-sdk-0.8.0-rc.1.tgz`, `qgis-sdk-0.8.0-rc.1.tgz` and
+`SHA256SUMS` on the bridge side.
+
+The rehearsal is the whole publish chain minus the uploads: the same stamp, the
+same verification and the same artifact set the stable tags will produce. The
+stable pair - `python-v0.11.0` and `ts-v0.8.0` - is still uncut and waits for
+"publish"; both tags land on `0737994`, the merge commit, on that one word.
