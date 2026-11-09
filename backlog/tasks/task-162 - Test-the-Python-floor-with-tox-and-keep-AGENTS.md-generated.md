@@ -1,10 +1,10 @@
 ---
 id: TASK-162
 title: Test the Python floor with tox and keep AGENTS.md generated
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-11-09 20:16'
-updated_date: '2026-11-09 20:38'
+updated_date: '2026-11-09 22:30'
 labels: []
 dependencies: []
 priority: medium
