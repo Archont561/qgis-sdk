@@ -11,7 +11,7 @@
  * The tool detects a JavaScript repository here, because the workspace root is a
  * `package.json`, and reports `npm` commands and a `node` stack. Neither is true:
  * the SDK is Python, the environments are Pixi, the JavaScript workspace is Bun.
- * So this wrapper runs the generator and then corrects the two places where its
+ * So this wrapper runs the generator and then corrects the three places where its
  * detection is wrong for this tree, rather than leaving a tool's guess in a file
  * agents are told to trust.
  *
@@ -47,6 +47,38 @@ function generate() {
 		stdio: ["ignore", "ignore", "inherit"],
 	});
 	return readFileSync(target, "utf8");
+}
+
+/** `git`, trimmed, in the checkout the wrapper was started from. */
+function git(args) {
+	return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+}
+
+/**
+ * The default branch the repository declares, not the branch this checkout
+ * happens to be on. A pull request is checked out detached, where
+ * `git branch --show-current` says nothing; `origin/HEAD` is a clone's local
+ * convenience that a CI checkout does not set. The answer has to be the same on
+ * a runner and on a laptop, so it is read from the remote-tracking refs.
+ */
+function defaultBranch() {
+	try {
+		const head = git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+		return head.replace(/^origin\//, "");
+	} catch {
+		// No `origin/HEAD` here; ask the remote-tracking refs instead.
+	}
+	for (const name of ["main", "master", "trunk"]) {
+		try {
+			git(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${name}`]);
+			return name;
+		} catch {
+			// Not this one.
+		}
+	}
+	throw new Error(
+		"cannot tell which branch is the default; set refs/remotes/origin/HEAD",
+	);
 }
 
 /** The body of a marked region, without its markers and its heading. */
@@ -101,7 +133,12 @@ function normalize(text) {
 		"structure",
 		`${withoutStub(region(out, "structure"))}\n\n${LAYOUT}`,
 	);
-	out = body(out, "git", withoutStub(region(out, "git")));
+	const remote = git(["remote", "get-url", "origin"]).replace(/\.git$/, "");
+	out = body(
+		out,
+		"git",
+		`Default branch \`${defaultBranch()}\`. Remote: ${remote}`,
+	);
 	return out;
 }
 

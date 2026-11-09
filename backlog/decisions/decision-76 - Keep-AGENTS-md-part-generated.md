@@ -57,5 +57,9 @@ whose environments are Pixi and whose JavaScript runs on Bun.
   a dependency whose output becomes instructions.
 - `AGENTS.md` now opens by saying which of its parts are generated, so a reader
   (or an agent) knows which lines to fix and which to regenerate.
+- The default branch is read from the remote-tracking refs, not from the current
+  checkout: a pull request is checked out detached, and `origin/HEAD` is a
+  convenience a clone sets and a CI checkout does not, so asking the checkout
+  gives a different answer on a runner than on a laptop.
 - The generated regions are five lines of facts; the file's value is still the
   rules, and those are still reviewed by hand.

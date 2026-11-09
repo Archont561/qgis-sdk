@@ -24,7 +24,7 @@ The SDK's suite is `packages/qgis-sdk-python/tests`; `apps/docs` is the document
 <!-- agents-md:begin id=git -->
 ## Git & PR workflow
 
-Default branch `main`. Remote: <https://github.com/Archont561/qgis-sdk.>
+Default branch `main`. Remote: <https://github.com/Archont561/qgis-sdk>
 <!-- agents-md:end id=git -->
 
 ## Session and merge workflow

@@ -81,7 +81,7 @@ jobs:
         uses: errata-ai/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # v3.0.0
         with:
           version: 3.26.0
-          files: '["docs", "README.md", "AGENTS.md"]'
+          files: '["docs", "README.md"]'
           sync: "false"
           reporter: github-pr-check
           fail_level: warning

@@ -71,8 +71,12 @@ request that touches documentation and are required before merging.
 | :-- | :-- | :-- | :-- | :-- |
 | Repository conventions | [alint](https://alint.org) | the whole repository | `.alint.yml` | `Linux checks` |
 | Markdown structure | markdownlint-cli2 | `docs/`, `README.md`, `AGENTS.md` | `.markdownlint-cli2.jsonc` | `Documentation` |
-| Writing style | [Vale](https://vale.sh) | `docs/`, `README.md`, `AGENTS.md` | `.vale.ini`, `docs/vale/styles` | `Documentation` |
+| Writing style | [Vale](https://vale.sh) | `docs/`, `README.md` | `.vale.ini`, `docs/vale/styles` | `Documentation` |
 | Links and references | [lychee](https://github.com/lycheeverse/lychee) | `docs/`, `README.md`, `AGENTS.md` | `.lychee.toml` | `Documentation` |
+
+Vale keeps to the prose written for people. `AGENTS.md` is instructions to
+agents - terse imperatives, paths and commands - and it is held to the Markdown
+structure and link rules only.
 
 ```sh
 pixi run -e bun lint-docs     # Markdown structure, as CI runs it
