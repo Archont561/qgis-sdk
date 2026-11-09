@@ -5,12 +5,12 @@ Standalone, stdlib-only script replacing the ``packages/qgis-sdk-release``
 package.  Repository paths are resolved from ``__file__`` so the script runs
 from any working directory without a Pixi environment or ``PYTHONPATH``:
 
-    python scripts/release.py plan --trigger dispatch --suffix rc.1 --json
-    python scripts/release.py tag --tag v0.1.0 --message-file changelog.md --push
-    python scripts/release.py stamp --version 0.1.0
-    python scripts/release.py build-python
-    python scripts/release.py checksums --out SHA256SUMS dist/pypi/*.whl npm/*.tgz
-    python scripts/release.py github-release --tag v0.1.0 --body-file notes.md --asset dist/pypi/*.whl
+    python -m automation.release plan --trigger dispatch --suffix rc.1 --json
+    python -m automation.release tag --tag v0.1.0 --message-file changelog.md --push
+    python -m automation.release stamp --version 0.1.0
+    python -m automation.release build-python
+    python -m automation.release checksums --out SHA256SUMS dist/pypi/*.whl npm/*.tgz
+    python -m automation.release github-release --tag v0.1.0 --body-file notes.md --asset dist/pypi/*.whl
 
 Subcommands mirror the pixi ``release-*`` tasks: plan, classify, tag, stamp,
 build-python, verify-python, checksums, github-release.
@@ -154,7 +154,7 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
     Only shipped package paths count. Tooling, CI, backlog and root files are
     not artifacts of either package, so changing them must not manufacture a
     release. Before 2026-10-24 any other path forced ``all``, which meant a
-    commit to ``scripts/release.py`` and the workflows planned an *alignment*
+    commit to ``automation/release.py`` and the workflows planned an *alignment*
     release of both packages at a package minor - an act decision-25 reserves
     for a deliberate dispatch or milestone tag.
     """

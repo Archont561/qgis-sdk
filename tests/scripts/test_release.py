@@ -1,4 +1,4 @@
-"""Tests for the standalone scripts/release.py CLI.
+"""Tests for the standalone automation/release.py CLI.
 
 Migrated from packages/qgis-sdk-release/tests. All functions are imported
 directly from the ``release`` module (scripts/ is on the pytest pythonpath).
@@ -801,7 +801,7 @@ def test_version_override_wins(sample_config):
         ),
         (
             [
-                "scripts/release.py",
+                "automation/release.py",
                 ".github/workflows/autorelease.yml",
                 "pixi.toml",
                 "bun.lock",
@@ -824,7 +824,7 @@ def test_tooling_changes_alone_plan_no_release():
     workflows made detect_scope_from_files return "all", and the push planned an
     alignment release of both packages.
     """
-    assert detect_scope_from_files(["scripts/release.py", "pixi.toml"]) == "none"
+    assert detect_scope_from_files(["automation/release.py", "pixi.toml"]) == "none"
 
 
 @pytest.mark.parametrize(
@@ -2220,7 +2220,9 @@ def test_commits_are_kept_for_the_packages_they_touch():
 def test_a_repository_wide_change_cannot_trigger_a_package_release():
     """CI, pixi.toml and the release tool do not change package contents."""
     commits = (
-        _commit("feat!: rewrite the release tool", "scripts/release.py", "pixi.toml"),
+        _commit(
+            "feat!: rewrite the release tool", "automation/release.py", "pixi.toml"
+        ),
     )
 
     assert commits_for_scope(commits, "python") == ()

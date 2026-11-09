@@ -402,7 +402,7 @@ def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
             print(f"{path.relative_to(root)} is outside the linted directories")
         print(
             "::error title=feature file outside the lint::Add its directory to "
-            "FEATURE_DIRECTORIES in scripts/ci.py so every scenario is linted."
+            "FEATURE_DIRECTORIES in automation/ci.py so every scenario is linted."
         )
         return 1
     files = feature_files(root)

@@ -223,12 +223,16 @@ jobs:
 
       - name: Check coverage for all packages
         id: coverage
-        run: pixi run -e default automation -- coverage
+        # The coverage run drives the whole workspace from the Bun environment,
+        # so it goes through the harness rather than a task: `run_logged` keeps
+        # the output for the annotation step, and nesting it inside the Python
+        # environment would change which `python` the packages' suites find.
+        run: python -m automation.ci run-log coverage-output.log -- pixi run -e bun bun run coverage
 
       - name: Annotate the coverage failure
         id: s15
         if: failure() && steps.coverage.outcome == 'failure'
-        run: pixi run -e default automation -- annotate_coverage
+        run: python -m automation.ci annotate-coverage coverage-output.log
 
       - name: Upload Python coverage
         id: s16

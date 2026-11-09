@@ -140,7 +140,7 @@ def test_python() -> int:
 
 def native() -> int:
     """Run the native suite and annotate the tests a failure names."""
-    return ci.native([])
+    return ci.native(list(ci.NATIVE_COMMAND))
 
 
 def check_generated() -> int:

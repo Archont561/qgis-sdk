@@ -639,13 +639,19 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         "QGIS_SDK_SERVER_DEV": "1",
     }
     assert coverage["Check coverage for all packages"]["id"] == "coverage"
-    assert (
-        coverage["Check coverage for all packages"]["run"]
-        == "pixi run -e default automation -- coverage"
+    # The coverage run drives the workspace from the Bun environment, so it is a
+    # harness call rather than a task: `run_logged` keeps the output that the
+    # annotation step reads, and the Bun environment is the one it belongs to.
+    assert coverage["Check coverage for all packages"]["run"] == (
+        "python -m automation.ci run-log coverage-output.log -- "
+        "pixi run -e bun bun run coverage"
     )
     assert (
         coverage["Annotate the coverage failure"]["if"]
         == "failure() && steps.coverage.outcome == 'failure'"
+    )
+    assert coverage["Annotate the coverage failure"]["run"] == (
+        "python -m automation.ci annotate-coverage coverage-output.log"
     )
     for name, path, flag in (
         (

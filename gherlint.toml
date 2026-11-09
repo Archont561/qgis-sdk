@@ -1,6 +1,6 @@
 # gherlint policy for the workspace's Gherkin feature files.
 #
-# `python scripts/ci.py check-gherkin` runs the linter over every `*.feature`
+# `pixi run automation check_gherkin` runs the linter over every `*.feature`
 # in the checkout, fails on any finding and fails again if a scenario lands
 # outside the directories it looks at. This file is what the linter reads from
 # the checkout root, so it applies to the local run exactly as it does to CI.
