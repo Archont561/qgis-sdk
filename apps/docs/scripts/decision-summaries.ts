@@ -78,4 +78,5 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	68: "Proposed: explore additive plugin application objects and explicit action groups while preserving class-based plugins and the bridge contract.",
 	72: "Editing stays an explicit session and features stay bounded pages; no context manager and no feature or vertex iterator in 0.10.0.",
 	73: "The documentation site renders with Fumadocs on Next and exports to static files, with the llms index, the markdown twins and the sitemap written and checked by the build rather than by a plugin.",
+	74: "The documentation layer is checked by four tools with one concern each - alint, markdownlint-cli2, Vale and lychee - and the landing page is generated from a template that keeps its shape.",
 };

@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/Archont561/qgis-sdk/actions/workflows/ci.yml"><img src="https://github.com/Archont561/qgis-sdk/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://archont561.github.io/qgis-sdk/"><img src="https://img.shields.io/badge/docs-Starlight-6e56cf" alt="Documentation"></a>
+  <a href="https://archont561.github.io/qgis-sdk/"><img src="https://img.shields.io/badge/docs-Fumadocs-6e56cf" alt="Documentation"></a>
   <a href="https://pypi.org/project/qgis-sdk/"><img src="https://img.shields.io/pypi/v/qgis-sdk?label=qgis-sdk" alt="qgis-sdk on PyPI"></a>
   <a href="https://www.npmjs.com/package/@archont561/qgis-sdk"><img src="https://img.shields.io/npm/v/%40archont561%2Fqgis-sdk?label=%40archont561%2Fqgis-sdk" alt="@archont561/qgis-sdk on npm"></a>
   <a href="https://github.com/Archont561/qgis-sdk/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
@@ -60,6 +60,7 @@ pixi run -e bun bun run coverage   # the 90% gates CI uses
 - [Python package guide](https://archont561.github.io/qgis-sdk/python/) - declarations, the UI catalogue, services, Processing, the scaffold, the command, migration notes
 - [TypeScript package guide](https://archont561.github.io/qgis-sdk/typescript/) - `QgisSdk`, host namespaces, stores, bindings, the components, testing
 - [Workspace, harnesses and qualification evidence](https://archont561.github.io/qgis-sdk/contributing/workspace/) - environments, release scopes, harnesses, release gates
+- [Documentation policy](docs/README.md) - where each kind of knowledge lives, and the checks that keep it true
 - [Decisions](backlog/decisions) and the [roadmap](backlog/docs/plans/doc-4%20-%20SemVer-delivery-roadmap-and-task-dependencies.md); the [reference plugin](examples/simple) is the smallest complete project
 
 Contributors start with [AGENTS.md](AGENTS.md).

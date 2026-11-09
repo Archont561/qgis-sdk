@@ -1,0 +1,10 @@
+extends: existence
+message: "'%s' claims nothing a reader can check; say what happens instead."
+level: warning
+ignorecase: true
+tokens:
+  - simply
+  - obviously
+  - of course
+  - naturally
+  - needless to say

@@ -1,0 +1,28 @@
+// Markdown structure for the documentation layer: docs/ and the root
+// landing page. The generated pages under apps/docs/content/docs/ are written
+// by scripts/generate.ts and rendered by Next, so they are not linted here;
+// the backlog is a record store with its own tooling.
+//
+// `pixi run -e bun lint-docs` runs this; `.vale.ini` and `.lychee.toml` are
+// the other two layers of the same check (docs/README.md, Validation).
+{
+	"$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+	"globs": ["docs/**/*.md", "README.md"],
+	"ignores": [".next/**", "node_modules/**"],
+	"config": {
+		"default": true,
+		// Prose is wrapped by hand and tables are as wide as their columns need;
+		// a hard 80-column rule would fight both.
+		"MD013": false,
+		// The landing page is a centred HTML badge block; nothing else may be
+		// inline HTML.
+		"MD033": { "allowed_elements": ["p", "a", "img"] },
+		// Repeated table headers ("Where it is explained") are siblings, not
+		// duplicates within one section.
+		"MD024": { "siblings_only": true },
+		// Ordered lists that continue a sentence use the author's numbering.
+		"MD029": { "style": "one_or_ordered" },
+		"MD046": { "style": "fenced" },
+		"MD048": { "style": "backtick" }
+	}
+}
