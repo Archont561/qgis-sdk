@@ -24,3 +24,15 @@ scripts/*.py are four standalone scripts invoked by 35 one-line Pixi tasks, and 
 - [x] #5 A guard test fails when a workflow names an undeclared task, a task lacks a docstring, dodo.py calls a missing function, or an automation module imports doit.
 - [x] #6 doc-14, docs/development, AGENTS.md and the skills show the new commands; no document keeps a command that no longer exists outside a historical record.
 <!-- AC:END -->
+
+## Evidence
+
+- `tests/scripts`: 321 passed (310 before, 11 new in `test_automation_cli.py`).
+- `doit list` lists 41 tasks with their docstrings; `doit release_verify_versions`
+  and `doit release_plan --dry-run true` ran green through the registry.
+- ruff check and format clean over 539 files, markdownlint 0 issues, biome 214
+  files, Alint 9/9 rules.
+- The site rebuilds with 77 decision records and 9308 internal links, 0 broken.
+- `pixi.lock` gains `doit-0.37.0` for `default` and `build` in the relock commit
+  the `relock` job pushed (`b798c4b`); the first pull-request run failed on
+  `locked: true` before that.
