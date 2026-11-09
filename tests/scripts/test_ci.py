@@ -25,6 +25,43 @@ def run_ci(*args: str, cwd: Path, env: dict[str, str] | None = None):
     )
 
 
+def test_run_log_tees_through_a_stdout_without_a_buffer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """doit hands an action a stdout wrapper that has no ``buffer``.
+
+    ``run_logged`` tees a command's bytes to the job log and to this process's
+    stdout. Under `pixi run automation` that stdout is doit's capture wrapper, a
+    text stream, so writing to ``sys.stdout.buffer`` raises `AttributeError`
+    inside the action and doit reports the exit code of the traceback instead of
+    the one the command had. The native suite and the coverage run are both
+    invoked this way.
+    """
+    from automation import ci
+
+    class Writer:
+        """The part of doit's writer ``emit`` is allowed to rely on."""
+
+        def __init__(self) -> None:
+            self.text = ""
+            self.flushes = 0
+
+        def write(self, text: str) -> None:
+            self.text += text
+
+        def flush(self) -> None:
+            self.flushes += 1
+
+    writer = Writer()
+    monkeypatch.setattr(sys, "stdout", writer)
+    log = tmp_path / "run.log"
+    status = ci.run_logged([sys.executable, "-c", "print('hello')"], log)
+    assert status == 0
+    assert log.read_text() == "hello\n"
+    assert "hello" in writer.text
+    assert writer.flushes >= 1
+
+
 def test_run_log_tees_both_streams_and_returns_the_command_status(tmp_path: Path):
     result = run_ci(
         "run-log",
