@@ -32,7 +32,7 @@ beforeAll(async () => {
 			<a href="#top">self</a>
 			<a href="?view=docs#top">self with query</a>
 			<a id="top"></a>
-			<img src="/qgis-sdk/_astro/logo.svg">
+			<img src="/qgis-sdk/_next/logo.svg">
 		</body></html>`,
 	);
 	await page(
@@ -46,8 +46,8 @@ beforeAll(async () => {
 	await page("start/index.html", "<html><body><p id='yes'></p></body></html>");
 	await writeFile(join(dist, "llms.txt"), "# x");
 	await writeFile(join(dist, "favicon.svg"), "<svg/>");
-	await mkdir(join(dist, "_astro"), { recursive: true });
-	await writeFile(join(dist, "_astro", "logo.svg"), "<svg/>");
+	await mkdir(join(dist, "_next"), { recursive: true });
+	await writeFile(join(dist, "_next", "logo.svg"), "<svg/>");
 });
 
 afterAll(async () => {

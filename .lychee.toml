@@ -1,0 +1,20 @@
+# Link checking for the documentation layer: docs/ and the root landing page.
+#
+# Offline by design. What this guards is the links a reader follows inside the
+# repository - `../README.md`, `guides/README.md`, the records under
+# `backlog/` - and those resolve or they do not, on any machine, without a
+# network and without a flaky third party failing the build. The published
+# site's own links are checked by `docs-link-check`, over the exported tree.
+offline = true
+no_progress = true
+max_concurrency = 8
+
+# The landing page's package table links each package by directory, because
+# GitHub renders a package's tree and its README from that path. A directory
+# is a link a browser follows and a file checker does not, so these forms are
+# named here rather than dropped from the README.
+exclude = [
+  "^packages/[a-z0-9-]+$",
+  "^examples/simple$",
+  "^backlog/decisions$",
+]

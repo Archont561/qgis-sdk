@@ -1,8 +1,8 @@
 /**
- * The versions the site describes, read from the workspace when the Astro
- * config loads, so a release stamp moves the landing page with it. The
- * config passes them to pages through `vite.define` (`src/versions.ts`):
- * a bundled chunk cannot resolve the workspace from its own location.
+ * The versions the site describes, read from the workspace by
+ * `scripts/generate.ts` and written to `lib/generated/versions.json`, which
+ * the landing page imports. A bundled chunk cannot read the workspace from
+ * its own location, so the read happens at generate time.
  */
 import { readFileSync } from "node:fs";
 

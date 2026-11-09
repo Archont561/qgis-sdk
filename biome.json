@@ -7,7 +7,14 @@
 			"!!**/dist",
 			"!!**/storybook-static",
 			"!!apps/docs/public/storybook",
-			"!!apps/docs/.astro",
+			"!!apps/docs/.next",
+			"!!apps/docs/.source",
+			"!!apps/docs/out",
+			"!!apps/docs/lib/generated",
+			"!!apps/docs/content/docs/python",
+			"!!apps/docs/content/docs/typescript",
+			"!!apps/docs/content/docs/contributing",
+			"!!apps/docs/content/docs/reference",
 			"!!**/coverage",
 			"!!**/build",
 			"!!**/tests/contracts/generated",
@@ -28,15 +35,19 @@
 	},
 	"overrides": [
 		{
-			"includes": ["**/*.astro"],
+			"includes": ["apps/docs/**/*.tsx"],
 			"linter": {
 				"rules": {
 					"correctness": {
-						"noUnusedVariables": "off",
-						"noUnusedImports": "off"
+						"useJsxKeyInIterable": "error"
 					}
 				}
 			}
 		}
-	]
+	],
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	}
 }

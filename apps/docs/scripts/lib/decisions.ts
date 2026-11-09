@@ -124,16 +124,22 @@ export function renderDecisionsPage(
 		}
 		const href = `${options.repository}/blob/main/${DECISIONS_DIR}/${encodeURIComponent(decision.file)}`;
 		const id = `decision-${decision.number}`;
-		return `| <a id="${id}" href="${href}">${id}</a> | ${cell(decision.title)} | ${cell(summary ?? `${decision.title}.`)} | ${capitalise(decision.status)} | ${decision.date} |`;
+		return `| [${id}](${href}) | ${cell(decision.title)} | ${cell(summary ?? `${decision.title}.`)} | ${capitalise(decision.status)} | ${decision.date} |`;
 	});
+	// A guide links a decision as `#decision-N`, and a table cell cannot carry
+	// an id: markdown parses cell content as prose, so raw HTML there is text.
+	// One block of anchors above the table holds the fragments instead.
+	const anchors = ordered
+		.map((decision) => `<a id="decision-${decision.number}"></a>`)
+		.join("");
 	const content = [
 		"---",
 		'title: "Design decisions"',
 		'description: "Every architecture decision behind the QGIS SDK in one table: what was decided, its status, and a link to the full record."',
-		"sidebar:",
-		"  order: 1",
 		"---",
 		INTRO,
+		"",
+		anchors,
 		"",
 		"| Number | Title | Decision | Status | Date |",
 		"| :-- | :-- | :-- | :-- | :-- |",

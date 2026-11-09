@@ -1,0 +1,97 @@
+name: Documentation
+
+# The documentation layer (docs/ and the root landing page) is checked on every
+# pull request that can change it. Repository conventions travel with alint in
+# `Linux checks`, which runs on every pull request; this job carries the three
+# checks that only apply to prose - structure, style and links.
+#
+# The site's own build, its link check and its deploy are `docs.yml`.
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "package.json"
+      - "scripts/readme/**"
+      - ".markdownlint-cli2.jsonc"
+      - ".vale.ini"
+      - ".lychee.toml"
+      - ".alint.yml"
+      - ".github/workflows/docs-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "package.json"
+      - "scripts/readme/**"
+      - ".markdownlint-cli2.jsonc"
+      - ".vale.ini"
+      - ".lychee.toml"
+      - ".alint.yml"
+      - ".github/workflows/docs-check.yml"
+  workflow_dispatch:
+
+# `checks: write` is what lets Vale's findings land as annotations on the pull
+# request; a run that fails says which line and which rule rather than only
+# that the step went red.
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  documentation:
+    name: documentation checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        id: s01
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Pixi
+        id: s02
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          environments: bun
+          cache: true
+          locked: true
+
+      - name: Install JavaScript dependencies
+        id: s03
+        run: pixi run -e bun install-js
+
+      # Structure: one H1, a section per idea, fenced code with a language.
+      - name: Check Markdown structure
+        id: s04
+        run: pixi run -e bun lint-docs
+
+      # Style: the repository's own rules in docs/vale/styles/Qgis. `sync` is
+      # off because no style package is downloaded; `fail_level` is what makes
+      # the step red, since reviewdog's default is to report and pass.
+      - name: Check writing style
+        id: s05
+        uses: errata-ai/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # v3.0.0
+        with:
+          version: 3.26.0
+          files: '["docs", "README.md"]'
+          sync: "false"
+          reporter: github-pr-check
+          fail_level: warning
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Links: offline, so what fails is a path that does not resolve rather
+      # than a website that is briefly down.
+      - name: Check links
+        id: s06
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config .lychee.toml --offline --no-progress --verbose 'docs/**/*.md' 'README.md'
+          lycheeVersion: v0.24.2
+          fail: true

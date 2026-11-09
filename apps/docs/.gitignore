@@ -1,13 +1,13 @@
 # Rendered from apps/docs/guides by scripts/generate.ts
-/src/content/docs/python/
-/src/content/docs/python-migration/
-/src/content/docs/typescript/
-/src/content/docs/typescript-migration/
-/src/content/docs/contributing/workspace/
-# Rendered from backlog/decisions by scripts/generate.ts
-/src/content/docs/reference/
+/content/docs/python/
+/content/docs/typescript/
+/content/docs/contributing/
+/content/docs/reference/
+# Rendered from the workspace manifests by scripts/generate.ts
+/lib/generated/
 # Copied from packages/qgis-sdk-ui/storybook-static by scripts/generate.ts
 /public/storybook/
-# Astro
-/.astro/
-/dist/
+# Next
+/.next/
+/out/
+/.source/

@@ -1,0 +1,11 @@
+{
+	"title": "Documentation",
+	"pages": [
+		"start",
+		"guides",
+		"python",
+		"typescript",
+		"reference",
+		"contributing"
+	]
+}

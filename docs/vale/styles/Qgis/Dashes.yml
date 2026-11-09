@@ -1,0 +1,6 @@
+extends: existence
+message: "Use ' - ' rather than an em dash; the rest of the tree is written that way."
+level: error
+nonword: true
+tokens:
+  - '—'

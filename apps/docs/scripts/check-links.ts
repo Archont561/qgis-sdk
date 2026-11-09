@@ -1,13 +1,13 @@
 /**
- * Fail when the built site under `dist/` (or the directory given) has an
+ * Fail when the exported site under `out/` (or the directory given) has an
  * internal link to a missing page, file or fragment.
  *
- *     bun run scripts/check-links.ts [dist]
+ *     bun run scripts/check-links.ts [out]
  */
 import { BASE } from "../site";
 import { checkLinks } from "./lib/links";
 
-const dist = process.argv[2] ?? new URL("../dist/", import.meta.url).pathname;
+const dist = process.argv[2] ?? new URL("../out/", import.meta.url).pathname;
 const report = await checkLinks(dist, { base: BASE });
 for (const link of report.broken) {
 	console.error(`check-links: ${link.page}: ${link.href}: ${link.reason}`);
