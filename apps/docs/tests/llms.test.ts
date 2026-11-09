@@ -11,6 +11,7 @@ import { join } from "node:path";
 import type { ContentPage, ContentSection } from "../scripts/lib/content";
 import {
 	type LlmsOptions,
+	publishedRoutes,
 	renderFull,
 	renderIndex,
 	renderPage,
@@ -130,6 +131,33 @@ describe("the write and the gate", () => {
 		expect(report.broken).toContain("no markdown export for /gone");
 		expect(report.broken).toContain("/gone is missing from llms.txt");
 		expect(report.broken).toContain("/python has content but no page");
+	});
+});
+
+describe("publishedRoutes", () => {
+	test("lists every rendered page and skips what the export must not index", async () => {
+		const out = await mkdtemp(join(tmpdir(), "qgis-sdk-docs-routes-"));
+		for (const dir of [
+			"_next/static",
+			"storybook",
+			"404",
+			"_not-found",
+			"python/installation",
+			"contributing/workspace",
+		]) {
+			await mkdir(join(out, dir), { recursive: true });
+			await writeFile(join(out, dir, "index.html"), "<html></html>");
+		}
+		await writeFile(join(out, "index.html"), "<html></html>");
+		// A route handler's output and the site's own files are not pages.
+		await mkdir(join(out, "api"), { recursive: true });
+		await writeFile(join(out, "api", "search"), "{}");
+
+		expect(await publishedRoutes(out)).toEqual([
+			"/",
+			"/contributing/workspace",
+			"/python/installation",
+		]);
 	});
 });
 

@@ -175,7 +175,13 @@ tracked:
   alone, so the job also runs `actions/setup-node`: Next builds and renders
   with Node, Bun installs and drives the workspace, and both end up on
   `PATH`. Locally the same split holds - a Node runtime has to be on `PATH`
-  for `bun run build` and `bun run dev`.
+  for `bun run build` and `bun run dev`. The site's `tsconfig.json` asks for
+  `node` types, so `@types/node` is a dev dependency of `apps/docs`; Next runs
+  its TypeScript check as a separate step of `build` and, finding the package
+  missing, tries to install it with whichever package manager it detects -
+  which fails the job behind a message about Corepack rather than about types.
+  A failed `build` now also annotates the tail of `docs-build.log`, because a
+  job log is not always reachable and "exit code 1" names nothing.
 
 ## Contributing
 

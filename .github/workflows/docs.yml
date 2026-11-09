@@ -78,16 +78,23 @@ jobs:
       # `generate` writes the guides into the content collection, `next build`
       # renders them, `postbuild` writes the llms exports, the sitemap and the
       # compatibility pages - and fails the job if a page has no markdown.
+      # The log is captured so a failure can name its own cause: a job log is
+      # not always reachable from a client, and "exit code 1" names nothing.
       - name: Build the site
         id: s05
-        run: pixi run -e bun docs-build
+        run: python scripts/ci.py run-log docs-build.log -- pixi run -e bun docs-build
+
+      - name: Annotate the build failure
+        id: s06
+        if: failure() && steps.s05.outcome == 'failure'
+        run: python scripts/ci.py annotate-log docs-build.log --title "docs build"
 
       - name: Check internal links
-        id: s06
+        id: s07
         run: pixi run -e bun bun run --filter '@workspace/docs' check-links
 
       - name: Upload the site
-        id: s07
+        id: s08
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: apps/docs/out

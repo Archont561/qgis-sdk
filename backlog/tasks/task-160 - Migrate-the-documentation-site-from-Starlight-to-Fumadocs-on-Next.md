@@ -26,9 +26,9 @@ Replace the Astro Starlight renderer of apps/docs with a Fumadocs site on Next, 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 apps/docs builds with Next output: export into out/ and publishes every URL the Starlight site published, with the legacy and migration redirects and every internal link resolving.
-- [ ] #2 llms.txt, llms-full.txt and a .md export per page are written by the build, and the build fails when a rendered page has no markdown twin or is missing from the index.
-- [ ] #3 Search works with no server: the index is exported at build time and the dialog searches it in the browser.
-- [ ] #4 The link check and the Bun suites pass over the exported tree, and their coverage stays above the workspace's 90%.
+- [x] #1 apps/docs builds with Next output: export into out/ and publishes every URL the Starlight site published, with the legacy and migration redirects and every internal link resolving.
+- [x] #2 llms.txt, llms-full.txt and a .md export per page are written by the build, and the build fails when a rendered page has no markdown twin or is missing from the index.
+- [x] #3 Search works with no server: the index is exported at build time and the dialog searches it in the browser.
+- [x] #4 The link check and the Bun suites pass over the exported tree, and their coverage stays above the workspace's 90%.
 - [ ] #5 The docs workflow deploys apps/docs/out and the contributor guide in doc-14 describes the Fumadocs pipeline, the static export and the Node prerequisite.
 <!-- AC:END -->
