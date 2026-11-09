@@ -53,8 +53,11 @@ project service, canvas, features and layouts. Remaining rows of
   fraction per request and a cancellation check between them, and discovery
   and help narrowed to TASK-109 (decision-54 point 4).
 - **Gate: TASK-95.** `python-v0.11.0` paired with the `ts-v0.8.0` bridge
-  minor; doc-22 complete or out of scope by decision for every row. In
-  review as #177.
+  minor; doc-22 complete or out of scope by decision for every row. Merged
+  as `0737994` (PR #177) after the gate repaired eleven inherited defects,
+  and rehearsed on that commit with `python-v0.11.0-rc.1` and
+  `ts-v0.8.0-rc.1`: every job green, no registry touched. The stable pair
+  is uncut and waits for "publish".
 
 ## 4. Hygiene at sprint start
 

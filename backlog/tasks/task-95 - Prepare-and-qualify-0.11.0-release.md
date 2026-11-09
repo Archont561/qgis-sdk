@@ -151,4 +151,21 @@ manifest up to date. doc-22's four m-10 rows move to *Shipped* as (0.11.0)
 rows and every listed area is complete on what landed, out of scope by
 decision, or named with its task and milestone; doc-25 records the train
 and this gate.
+The gate merged as `0737994` (PR #177) and was rehearsed on that commit with
+a prerelease tag per scope, in one authorization, because this minor releases
+the bridge with the Python kit. `python-v0.11.0-rc.1` (run 42408336282) ran
+every job: the stamp to `0.11.0-rc.1`, the stamped-manifest and contract
+verification, three twine-checked wheels and the Conda package, a PyPI job
+that verified the wheel without uploading with all three publish steps
+skipped, a Conda job that skipped the prefix.dev uploads, and a GitHub
+prerelease carrying the three wheels, the three `.conda` files and
+`SHA256SUMS`. `ts-v0.8.0-rc.1` (run 42408336411) did the same for the bridge:
+stamp to `0.8.0-rc.1`, both tarballs packed, npm and GitHub Packages dry-ran
+their publishes with every publish step skipped, and the prerelease carried
+both `.tgz` files and `SHA256SUMS`. Nothing was consumed - PyPI's `latest`
+for `qgis-sdk` and `qgis-sdk-runtime` is still 0.10.0 and npm's is still
+0.7.0 with no `0.8.0` - so the rehearsal spent no version space. The stable
+pair, `python-v0.11.0` and `ts-v0.8.0`, is uncut on `0737994` and waits for
+"publish"; the acceptance criteria stay unticked until it is spent.
+
 <!-- SECTION:NOTES:END -->
