@@ -78,20 +78,24 @@ jobs:
       # `generate` writes the guides into the content collection, `next build`
       # renders them, `postbuild` writes the llms exports, the sitemap and the
       # compatibility pages - and fails the job if a page has no markdown.
-      # The log is captured so a failure can name its own cause: a job log is
-      # not always reachable from a client, and "exit code 1" names nothing.
+      # Both checks capture their log so a failure can name its own cause: a job
+      # log is not always reachable from a client, and "exit code 1" names
+      # nothing.
       - name: Build the site
         id: s05
         run: python scripts/ci.py run-log docs-build.log -- pixi run -e bun docs-build
 
-      - name: Annotate the build failure
-        id: s06
-        if: failure() && steps.s05.outcome == 'failure'
-        run: python scripts/ci.py annotate-log docs-build.log --title "docs build"
-
       - name: Check internal links
+        id: s06
+        run: python scripts/ci.py run-log docs-links.log -- pixi run -e bun bun run --filter '@workspace/docs' check-links
+
+      # One step for whichever log the run actually got to.
+      - name: Annotate the failure
         id: s07
-        run: pixi run -e bun bun run --filter '@workspace/docs' check-links
+        if: failure()
+        run: |
+          python scripts/ci.py annotate-log docs-build.log --title "docs build" --skip-missing
+          python scripts/ci.py annotate-log docs-links.log --title "docs links" --skip-missing
 
       - name: Upload the site
         id: s08

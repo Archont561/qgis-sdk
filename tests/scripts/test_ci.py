@@ -170,6 +170,34 @@ def test_a_crashed_coverage_run_annotates_the_stack_under_the_marker(
     )
 
 
+def test_a_failed_step_repeats_its_log_tail_and_skips_a_log_it_never_wrote(
+    tmp_path: Path,
+):
+    """A failed build step annotates its tail; a step never reached stays quiet."""
+    log = tmp_path / "docs-links.log"
+    log.write_text("\n".join(f"line {n}" for n in range(40)), encoding="utf-8")
+
+    report = run_ci(
+        "annotate-log", str(log), "--title", "docs links", "--tail", "3", cwd=tmp_path
+    )
+
+    assert report.stdout.splitlines() == [
+        "::error title=docs links::line 37",
+        "::error title=docs links::line 38",
+        "::error title=docs links::line 39",
+    ]
+
+    missing = str(tmp_path / "docs-build.log")
+    quiet = run_ci(
+        "annotate-log", missing, "--title", "docs build", "--skip-missing", cwd=tmp_path
+    )
+    assert quiet.returncode == 0
+    assert quiet.stdout == ""
+
+    loud = run_ci("annotate-log", missing, "--title", "docs build", cwd=tmp_path)
+    assert "no log at" in loud.stdout
+
+
 def test_bun_summary_first_match_or_missing_log(tmp_path: Path):
     log = tmp_path / "bun.log"
     log.write_text("12 pass\n42 pass\n", encoding="utf-8")

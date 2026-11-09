@@ -135,7 +135,11 @@ tracked:
   guide has is reported by the generator and fails the link check.
 - The same script copies `packages/qgis-sdk-ui/storybook-static` to
   `public/storybook/` when it exists, so the site serves the Storybook at
-  `/storybook/`; `docs-build` builds it first.
+  `/storybook/`; `docs-build` builds it first. Its nav entry is an `external`
+  link, which Fumadocs renders as a raw anchor and does not prefix, so the
+  entry carries `BASE` itself - and the link check only sees it when the
+  Storybook was built, which is why it runs against `docs-build` and not
+  against a bare `bun run build`.
 - Content links are root-relative (`/python/installation/`), because Next adds
   the deployment's `basePath` (`/qgis-sdk`) when it renders a link; a link
   written with the base already in it doubles. The handful of plain `<a>`

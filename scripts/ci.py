@@ -493,16 +493,21 @@ def annotate_coverage(log: Path) -> None:
         print(f"::error::{line[:900]}")
 
 
-def annotate_log(log: Path, title: str, tail: int = 25) -> None:
+def annotate_log(
+    log: Path, title: str, tail: int = 25, skip_missing: bool = False
+) -> None:
     """Surface the tail of a captured step log as annotations.
 
     A job's own log is not always reachable from a client, and "process
     completed with exit code 1" names nothing. The last lines of the step that
     failed usually do, so a failed build repeats them where a caller can read
-    them.
+    them. ``skip_missing`` lets one step annotate several logs, only the ones
+    that exist: a run that never reached a step has no log, and a "no log at"
+    annotation for it is noise in the report of the step that did fail.
     """
     if not log.exists():
-        annotation(title, f"no log at {log}")
+        if not skip_missing:
+            annotation(title, f"no log at {log}")
         return
     lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
     for line in [line for line in lines if line.strip()][-tail:]:
@@ -570,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
     step_log.add_argument("log", type=Path)
     step_log.add_argument("--title", default="failed step")
     step_log.add_argument("--tail", type=int, default=25)
+    step_log.add_argument("--skip-missing", action="store_true")
     bun = commands.add_parser("report-bun")
     bun.add_argument("log", type=Path)
     bun.add_argument("--title", required=True)
@@ -598,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "annotate-coverage":
         annotate_coverage(args.log)
     elif args.action == "annotate-log":
-        annotate_log(args.log, args.title, args.tail)
+        annotate_log(args.log, args.title, args.tail, args.skip_missing)
     elif args.action == "report-bun":
         report_bun(args.log, args.title)
     elif args.action == "report-steps":

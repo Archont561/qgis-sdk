@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { LinkItemType } from "fumadocs-ui/layouts/shared";
-import { REPOSITORY } from "@/site";
+import { BASE, REPOSITORY } from "@/site";
 
 /** `scripts/generate.ts` copies the Storybook here when it was built. */
 export const hasStorybook = existsSync(
@@ -27,7 +27,9 @@ export const navLinks: LinkItemType[] = [
 				{
 					type: "main" as const,
 					text: "Storybook",
-					url: "/storybook/",
+					// `external` links are rendered as raw anchors, so Fumadocs does
+					// not add the base path for them: the Storybook lives under it.
+					url: `${BASE}/storybook/`,
 					external: true,
 				},
 			]
