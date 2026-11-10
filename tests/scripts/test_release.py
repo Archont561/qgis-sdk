@@ -19,9 +19,13 @@ from packaging.version import Version as PackagingVersion
 
 from automation import release as release_module
 from automation.release import (
+    ChangelogOptions,
     Commit,
+    ManifestSources,
+    PlanOptions,
     QgisSdkReleaseError,
     QgisSdkReleaseVersionError,
+    ReleaseDraft,
     Version,
     checksums,
     classify,
@@ -413,7 +417,7 @@ def test_milestone_trigger_cuts_release_tag_and_ignores_milestone_tag_in_base(
         ("milestone-v0.1.0", "v0.1.0-rc.1"),
         _log("feat: milestone slice"),
         sample_config,
-        milestone_tag="milestone-v0.1.0",
+        PlanOptions(milestone_tag="milestone-v0.1.0"),
     )
     assert plan.action == "tag"
     assert plan.tag == "v0.1.0"
@@ -558,8 +562,7 @@ def test_compare_link_needs_base_and_slug(sample_config):
         Version.parse("0.2.0"),
         _commits(),
         sample_config,
-        base_tag="v0.1.0",
-        repo_slug="owner/repo",
+        ChangelogOptions(base_tag="v0.1.0", repo_slug="owner/repo"),
     )
     assert (
         "[v0.1.0...v0.2.0]: https://github.com/owner/repo/compare/v0.1.0...v0.2.0"
@@ -618,7 +621,7 @@ def test_dispatch_continues_the_rc_train_from_a_prerelease_base(sample_config):
         ("v0.1.0-rc.2",),
         _log("feat: next slice"),
         sample_config,
-        suffix="rc.3",
+        PlanOptions(suffix="rc.3"),
     )
     assert plan.action == "tag" and plan.tag == "v0.1.0-rc.3"
     assert plan.base_tag == "v0.1.0-rc.2"
@@ -630,7 +633,7 @@ def test_dispatch_can_bootstrap_the_deliberate_stable_release(sample_config):
         ("v0.1.0-rc.2",),
         _log("chore: anything"),
         sample_config,
-        version_override="0.1.0",
+        PlanOptions(version_override="0.1.0"),
     )
     assert plan.action == "tag" and plan.tag == "v0.1.0"
 
@@ -645,7 +648,11 @@ def test_first_release_tags_on_dispatch_with_initial_version(sample_config):
 
 def test_suffix_makes_a_prerelease_tag(sample_config):
     plan = compute_plan(
-        "dispatch", (), _log("feat: something"), sample_config, suffix="rc.1"
+        "dispatch",
+        (),
+        _log("feat: something"),
+        sample_config,
+        PlanOptions(suffix="rc.1"),
     )
     assert plan.tag == "v0.1.0-rc.1"
     assert plan.version.is_prerelease
@@ -703,12 +710,22 @@ def test_a_stable_release_after_a_candidate_starts_from_the_last_stable(
     tags = ("python-v0.4.0", "python-v0.5.0-rc.1", "ts-v0.3.0")
     commits = _log("feat(python): split", "fix(python): windows path")
 
-    inferred = compute_plan("dispatch", tags, commits, sample_config, scope="python")
+    inferred = compute_plan(
+        "dispatch", tags, commits, sample_config, PlanOptions(scope="python")
+    )
     forced = compute_plan(
-        "dispatch", tags, commits, sample_config, scope="python", bump="minor"
+        "dispatch",
+        tags,
+        commits,
+        sample_config,
+        PlanOptions(scope="python", bump="minor"),
     )
     patch_only = compute_plan(
-        "dispatch", tags, _log("fix(python): one"), sample_config, scope="python"
+        "dispatch",
+        tags,
+        _log("fix(python): one"),
+        sample_config,
+        PlanOptions(scope="python"),
     )
 
     assert (inferred.tag, inferred.base_tag) == ("python-v0.5.0", "python-v0.4.0")
@@ -721,8 +738,7 @@ def test_a_stable_release_after_a_candidate_starts_from_the_last_stable(
             tags,
             commits,
             sample_config,
-            scope="python",
-            repo_slug="o/r",
+            PlanOptions(repo_slug="o/r", scope="python"),
         ).changelog
     )
 
@@ -735,8 +751,7 @@ def test_a_second_candidate_follows_the_first_on_the_same_core(sample_config):
         tags,
         _log("fix(python): x"),
         sample_config,
-        scope="python",
-        suffix="rc.2",
+        PlanOptions(suffix="rc.2", scope="python"),
     )
 
     assert (plan.tag, plan.base_tag) == ("python-v0.5.0-rc.2", "python-v0.5.0-rc.1")
@@ -752,13 +767,19 @@ def test_plan_base_tag_prefers_the_last_stable_for_a_stable_release():
 
 def test_existing_tag_skips(sample_config):
     plan = compute_plan(
-        "dispatch", ("v0.1.0",), (), sample_config, version_override="0.1.0"
+        "dispatch",
+        ("v0.1.0",),
+        (),
+        sample_config,
+        PlanOptions(version_override="0.1.0"),
     )
     assert plan.action == "skip" and "already exists" in plan.reason
 
 
 def test_dispatch_without_release_commits_skips(sample_config):
-    plan = compute_plan("dispatch", ("v0.1.0",), (), sample_config, suffix="rc.1")
+    plan = compute_plan(
+        "dispatch", ("v0.1.0",), (), sample_config, PlanOptions(suffix="rc.1")
+    )
     assert plan.action == "skip" and "no release-worthy commits" in plan.reason
 
 
@@ -768,7 +789,7 @@ def test_version_override_wins(sample_config):
         ("v0.1.0",),
         _log("chore: nothing"),
         sample_config,
-        version_override="1.2.3",
+        PlanOptions(version_override="1.2.3"),
     )
     assert plan.action == "tag" and plan.tag == "v1.2.3"
 
@@ -889,8 +910,7 @@ def test_compute_plan_supports_scoped_tags_and_forced_bumps(sample_config):
         ("v0.1.0",),
         _log("chore: internal"),
         sample_config,
-        scope="python",
-        bump="minor",
+        PlanOptions(scope="python", bump="minor"),
     )
     assert py_plan.action == "tag"
     assert py_plan.scope == "python"
@@ -902,8 +922,7 @@ def test_compute_plan_supports_scoped_tags_and_forced_bumps(sample_config):
         ("v0.1.0",),
         _log("chore: internal"),
         sample_config,
-        scope="typescript",
-        bump="0.3.0",
+        PlanOptions(scope="typescript", bump="0.3.0"),
     )
     assert ts_plan.action == "tag"
     assert ts_plan.scope == "typescript"
@@ -916,7 +935,7 @@ def test_compute_plan_skips_when_scope_is_none(sample_config):
         ("v0.1.0",),
         _log("feat: something"),
         sample_config,
-        scope="none",
+        PlanOptions(scope="none"),
     )
     assert plan.action == "skip"
 
@@ -1156,12 +1175,14 @@ def _opener(captured, payload=None, error=None):
 def test_create_release_request_shape():
     captured = []
     result = create_release(
-        "owner/repo",
-        "tok",
-        "v0.1.0-rc.1",
-        "v0.1.0-rc.1",
-        "body text",
-        prerelease=True,
+        ReleaseDraft(
+            slug="owner/repo",
+            token="tok",
+            tag="v0.1.0-rc.1",
+            name="v0.1.0-rc.1",
+            body="body text",
+            prerelease=True,
+        ),
         opener=_opener(captured, {"upload_url": "https://x{?name}", "html_url": "h"}),
     )
     (req,) = captured
@@ -1183,12 +1204,14 @@ def test_create_release_request_shape():
 def test_create_release_stable_marks_latest():
     captured = []
     create_release(
-        "o/r",
-        "t",
-        "v1.0.0",
-        "v1.0.0",
-        "b",
-        prerelease=False,
+        ReleaseDraft(
+            slug="o/r",
+            token="t",
+            tag="v1.0.0",
+            name="v1.0.0",
+            body="b",
+            prerelease=False,
+        ),
         opener=_opener(captured, {"upload_url": "https://x"}),
     )
     payload = json.loads(captured[0].data)
@@ -1224,12 +1247,14 @@ def test_http_errors_become_release_errors():
     )
     with pytest.raises(QgisSdkReleaseError, match="already_exists"):
         create_release(
-            "o/r",
-            "t",
-            "v1.0.0",
-            "v1.0.0",
-            "b",
-            False,
+            ReleaseDraft(
+                slug="o/r",
+                token="t",
+                tag="v1.0.0",
+                name="v1.0.0",
+                body="b",
+                prerelease=False,
+            ),
             opener=_opener([], error=error),
         )
 
@@ -1781,8 +1806,8 @@ def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
     monkeypatch.setattr(
         release,
         "create_release",
-        lambda slug, token, tag, name, text, prerelease, opener=None: (
-            created.append((slug, tag, text, prerelease))
+        lambda draft, opener=None: (
+            created.append((draft.slug, draft.tag, draft.body, draft.prerelease))
             or {"upload_url": "https://u{?name}", "html_url": "https://html"}
         ),
     )
@@ -1966,7 +1991,11 @@ def test_release_and_publish_sandbox_workflows_match_task_37_contracts():
 
 
 def test_three_agreeing_manifests_report_their_shared_version():
-    versions = manifest_versions(PYPROJECT, PACKAGE_JSON, RECIPE_YAML)
+    versions = manifest_versions(
+        ManifestSources(
+            pyproject_text=PYPROJECT, package_text=PACKAGE_JSON, recipe_text=RECIPE_YAML
+        )
+    )
 
     assert str(versions.agreed()) == "0.1.0"
     assert versions.to_json() == {
@@ -1984,7 +2013,11 @@ def test_a_pep440_prerelease_and_its_semver_spelling_agree():
     package = PACKAGE_JSON.replace('"version": "0.1.0"', '"version": "0.2.0-rc.1"')
     recipe = RECIPE_YAML.replace('version: "0.1.0"', 'version: "0.2.0rc1"')
 
-    versions = manifest_versions(pyproject, package, recipe)
+    versions = manifest_versions(
+        ManifestSources(
+            pyproject_text=pyproject, package_text=package, recipe_text=recipe
+        )
+    )
 
     assert str(versions.agreed()) == "0.2.0-rc.1"
 
@@ -1993,7 +2026,11 @@ def test_a_disagreeing_manifest_is_named_with_every_value():
     package = PACKAGE_JSON.replace('"version": "0.1.0"', '"version": "0.1.1"')
 
     with pytest.raises(QgisSdkReleaseVersionError) as error:
-        manifest_versions(PYPROJECT, package, RECIPE_YAML).agreed()
+        manifest_versions(
+            ManifestSources(
+                pyproject_text=PYPROJECT, package_text=package, recipe_text=RECIPE_YAML
+            )
+        ).agreed()
 
     message = str(error.value)
     assert "disagree" in message
@@ -2021,7 +2058,9 @@ def test_a_missing_version_line_is_refused():
 
 
 def test_the_recipe_is_optional_because_a_workspace_may_not_build_conda():
-    versions = manifest_versions(PYPROJECT, PACKAGE_JSON)
+    versions = manifest_versions(
+        ManifestSources(pyproject_text=PYPROJECT, package_text=PACKAGE_JSON)
+    )
 
     assert versions.recipe is None
     assert [name for name, _ in versions.items()] == ["pyproject.toml", "package.json"]
@@ -2236,10 +2275,10 @@ def test_a_bridge_feature_does_not_move_the_python_version(sample_config):
     )
 
     python_plan = compute_plan(
-        "dispatch", ("v0.1.0",), commits, sample_config, scope="python"
+        "dispatch", ("v0.1.0",), commits, sample_config, PlanOptions(scope="python")
     )
     bridge_plan = compute_plan(
-        "dispatch", ("v0.1.0",), commits, sample_config, scope="typescript"
+        "dispatch", ("v0.1.0",), commits, sample_config, PlanOptions(scope="typescript")
     )
 
     assert python_plan.action == "skip"
@@ -2254,9 +2293,11 @@ def test_each_scope_bumps_from_its_own_last_release(sample_config):
     tags = ("v0.1.0", "python-v0.3.0")
 
     bridge_plan = compute_plan(
-        "dispatch", tags, commits, sample_config, scope="typescript"
+        "dispatch", tags, commits, sample_config, PlanOptions(scope="typescript")
     )
-    python_plan = compute_plan("dispatch", tags, commits, sample_config, scope="python")
+    python_plan = compute_plan(
+        "dispatch", tags, commits, sample_config, PlanOptions(scope="python")
+    )
 
     assert bridge_plan.tag == "ts-v0.1.1"
     assert python_plan.action == "skip"
@@ -2352,7 +2393,11 @@ def test_a_milestone_release_sets_the_minor_explicitly():
     config = _repository_config()
 
     plan = compute_plan(
-        "dispatch", ("v0.1.1",), _log("chore: milestone close"), config, bump="minor"
+        "dispatch",
+        ("v0.1.1",),
+        _log("chore: milestone close"),
+        config,
+        PlanOptions(bump="minor"),
     )
 
     assert (plan.action, str(plan.version), plan.tag) == ("tag", "0.2.0", "v0.2.0")
@@ -2817,11 +2862,11 @@ def test_plan_for_the_ui_scope_reads_only_ui_tags_and_commits(monkeypatch):
         _commit("feat(bridge): new store", "packages/qgis-sdk-typescript/src/s.ts"),
     )
     plan = compute_plan(
-        trigger="dispatch",
-        tags=("v0.6.0", "ts-v0.4.0", "ui-v0.1.0"),
-        commits=commits,
-        config=config,
-        scope="ui",
+        "dispatch",
+        ("v0.6.0", "ts-v0.4.0", "ui-v0.1.0"),
+        commits,
+        config,
+        PlanOptions(scope="ui"),
     )
     assert plan.scope == "ui"
     assert plan.base_tag == "ui-v0.1.0"
@@ -2830,11 +2875,7 @@ def test_plan_for_the_ui_scope_reads_only_ui_tags_and_commits(monkeypatch):
     assert "new store" not in plan.changelog
 
     first = compute_plan(
-        trigger="dispatch",
-        tags=("v0.6.0", "ts-v0.4.0"),
-        commits=commits,
-        config=config,
-        scope="ui",
+        "dispatch", ("v0.6.0", "ts-v0.4.0"), commits, config, PlanOptions(scope="ui")
     )
     assert first.first is True
     assert first.tag == "ui-v0.1.0"

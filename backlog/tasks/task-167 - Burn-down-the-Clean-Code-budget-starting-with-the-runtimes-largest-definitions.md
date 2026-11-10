@@ -190,6 +190,18 @@ What the saved lines exposed was the rest of the duplication, and each became a 
 
 The point of doing this file by extraction rather than by splitting the assertions is that the 21 tests still test the same thing: `test_plugin_http_limits.py` ran 21 passed before and after, the full suite 3078 passed / 130 skipped, `tests/scripts` 332.
 
-**What is left.** `automation/release.py` (26) and `tests/scripts/test_release.py` (18) are now the two worst files, then `testing/fakes.py` and `test_plugin_rest.py` (16 each). The remaining budget is 751: CC101 416, CC104 113, CC102 109, CC303 52, CC201/CC202 52.
+**What is left.** `automation/release.py` (26) and `tests/scripts/test_release.py` (18) are now the two worst files, then `testing/fakes.py` and `test_plugin_rest.py` (16 each). The remaining budget is 751: CC101 425, CC104 113, CC102 109, CC303 52, CC201 26, CC202 26.
+
+**Slice 14 (landed): the worst file after that, cleared.** 751 -> 725 findings. `automation/release.py` carried 26 (10 CC101, 4 CC102, 6 CC104, 6 CC303); it has zero now, with no threshold change, no suppression and no finding added anywhere else. Every one of its 208 release-CLI tests passes unchanged.
+
+Four long signatures became frozen slots records, which is also the answer to doc-7's audit note that a parameter object "would move the same seven fields without reducing coupling": `ChangelogOptions` (`render_changelog`), `PlanOptions` (`compute_plan`), `ManifestSources` (`manifest_versions`) and `ReleaseDraft` (`create_release`). The 51 call sites in `tests/scripts/test_release.py` moved in the same commit by folding their trailing keyword arguments into the record; the two keyword-only calls and the nine-positional call in `release.py` moved too. `ManifestSources` does more than group arguments - `_manifest_sources()` reads all nine optional files through it, and `manifest_versions` is one `ManifestVersions(**...)` over four per-train field helpers, so the 61-line constructor with 14 branches became five small functions.
+
+The rest was decomposition, not reformatting. `compute_plan` is a `_PlanFacts` record plus `_plan_milestone`, `_plan_scope`, `_plan_facts`, `_plan_version`, `_early_skip` and `_plan_reason`: the skip decisions share one `.skip()` factory instead of four repeated ten-line `Plan(...)` calls. `_cmd_plan` has one helper per step (scope from `--scope auto`, commits since the base tag, options, changelog file, output). `_cmd_stamp` has one helper per train; `_stamp_python` is a `_StampRun` with one method per manifest, so the recipe text has one owner. `_cmd_verify_versions` reads its inputs through `ManifestSources`, decides the scopes in `_wanted_scopes`, checks one scope in `_verify_one_scope` with the UI peer, runtime range and example windows as separate predicates, and prints in `_emit_verification`. `_cmd_github_release` split into `_release_or_existing` and `_upload_assets`; `_build_parser` split into five per-area builders.
+
+One correction worth keeping: two range replacements swallowed neighbouring top-level helpers (`_ship_flags`, `_cmd_classify`, `_cmd_tag`, `_read_if_file`, `_cmd_build_python`, `_cmd_verify_python`, `_cmd_checksums` and `_DISTRIBUTION_DIRS`). `ruff`'s F821 pass and the 208-test suite caught every one; all were restored from the merge commit before the slice landed. A source-preserving rewriter must replace by exact function boundaries, not by the text between two `def`s.
+
+**Tests.** 3078 passed, 130 skipped, 7 deselected; `tests/scripts` 332; ruff, alint and the clean-code gate clean.
+
+**What is left.** 725 findings in 254 files: CC101 415, CC104 107, CC102 105, CC303 46, CC201 26, CC202 26. `tests/scripts/test_release.py` (18) is now the worst file, then `testing/fakes.py` and `test_plugin_rest.py` (16 each).
 
 <!-- SECTION:NOTES:END -->

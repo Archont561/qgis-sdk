@@ -6,12 +6,6 @@
 	"automation/commits.py": {
 		"CC101": 1
 	},
-	"automation/release.py": {
-		"CC101": 10,
-		"CC102": 4,
-		"CC104": 6,
-		"CC303": 6
-	},
 	"automation/results.py": {
 		"CC101": 1,
 		"CC104": 1

@@ -77,3 +77,11 @@ Environment note for anyone repeating this: the sandbox reset between sessions d
 mismatches, so the toolchain is an unverified restore and nothing here claims otherwise.
 The Conda package build remains blocked by unreachable conda-forge repodata; the wheel and
 sdist were built and checked with Twine.
+
+## Later correction
+
+The last bullet above (`compute_plan()` and `create_release()` at 7 parameters)
+was reversed in slice 14: both now take one record, `PlanOptions` and
+`ReleaseDraft`, with every call site moved in the same commit. See
+[decision-81](../../decisions/decision-81%20-%20Pass-a-constructor-one-record-instead-of-its-fields-as-keyword-parameters.md),
+"Follow-through: plain functions, not only constructors".
