@@ -21,7 +21,7 @@ hold a path or a credential.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -266,32 +266,43 @@ def _coerce(owner: str, spec: FieldSpec, value: object) -> object:
     """Convert one submitted value, or refuse it with the expected type."""
     if value is None and spec.nullable:
         return None
-    if spec.widget in _STRING_WIDGETS:
-        if not isinstance(value, str):
-            raise _refuse(owner, spec, "a string")
-        stripped = value.strip()
-        if not stripped and spec.required:
-            raise _refuse(owner, spec, "a non-empty string")
-        return stripped
-    if spec.widget in _REF_WIDGETS:
-        return _ref(owner, spec, value)
-    if spec.widget == "colour":
-        if not isinstance(value, str) or not COLOUR_PATTERN.match(value.strip()):
-            raise _refuse(owner, spec, "a #RRGGBB or #RRGGBBAA colour")
-        return value.strip().lower()
-    if spec.widget in _NUMERIC_WIDGETS:
-        return _number(owner, spec, value)
-    if spec.widget == "boolean":
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str) and value.strip().lower() in ("true", "false"):
-            return value.strip().lower() == "true"
-        raise _refuse(owner, spec, "a boolean")
-    if spec.widget == "choice":
-        if value not in spec.choices:
-            raise _refuse(owner, spec, f"one of {list(spec.choices)!r}")
+    converter = _CONVERTERS.get(spec.widget)
+    if converter is None:
+        raise _refuse(owner, spec, "a renderable value")
+    return converter(owner, spec, value)
+
+
+def _string(owner: str, spec: FieldSpec, value: object) -> str:
+    """A text widget's value: a string, trimmed, non-empty when required."""
+    if not isinstance(value, str):
+        raise _refuse(owner, spec, "a string")
+    stripped = value.strip()
+    if not stripped and spec.required:
+        raise _refuse(owner, spec, "a non-empty string")
+    return stripped
+
+
+def _colour(owner: str, spec: FieldSpec, value: object) -> str:
+    """A colour: ``#RRGGBB`` or ``#RRGGBBAA``, folded to lower case."""
+    if not isinstance(value, str) or not COLOUR_PATTERN.match(value.strip()):
+        raise _refuse(owner, spec, "a #RRGGBB or #RRGGBBAA colour")
+    return value.strip().lower()
+
+
+def _boolean(owner: str, spec: FieldSpec, value: object) -> bool:
+    """A checkbox's value: the boolean, or the word a page sends instead."""
+    if isinstance(value, bool):
         return value
-    raise _refuse(owner, spec, "a renderable value")
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    raise _refuse(owner, spec, "a boolean")
+
+
+def _choice(owner: str, spec: FieldSpec, value: object) -> object:
+    """A choice: one of the values the field declared."""
+    if value not in spec.choices:
+        raise _refuse(owner, spec, f"one of {list(spec.choices)!r}")
+    return value
 
 
 def _ref(owner: str, spec: FieldSpec, value: object) -> FileRef:
@@ -352,3 +363,15 @@ def _as_number(spec: FieldSpec) -> FieldSpec:
 def _refuse(owner: str, spec: FieldSpec, expected: str) -> QgisSdkFormError:
     """Build the one error shape every coercion failure uses."""
     return QgisSdkFormError(f"{owner}: field {spec.name} expects {expected}")
+
+
+#: The converter per widget family. One table, so a widget added to a set above is
+#: picked up here without a new branch in the middle of the coercion.
+_CONVERTERS: dict[str, Callable[[str, FieldSpec, object], object]] = {
+    **dict.fromkeys(_STRING_WIDGETS, _string),
+    **dict.fromkeys(_REF_WIDGETS, _ref),
+    "colour": _colour,
+    **dict.fromkeys(_NUMERIC_WIDGETS, _number),
+    "boolean": _boolean,
+    "choice": _choice,
+}

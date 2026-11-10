@@ -132,6 +132,20 @@ def _declared_outputs(model: Any) -> dict[str, str]:
     return declared
 
 
+def _staged_vector_is_sound(stage: object, value: object, partial: Path) -> bool:
+    """Whether the provider's answer is the staged vector file the graph expects.
+
+    Four things have to hold: the run was staged, the provider answered a path,
+    that path is the staged one, and it is a real file rather than a link to
+    somebody else's.
+    """
+    if stage is None or not isinstance(value, str):
+        return False
+    if Path(value) != partial:
+        return False
+    return not partial.is_symlink() and partial.is_file()
+
+
 class NativeAlgorithms:
     """Run registered operations through QGIS Processing.
 
@@ -359,13 +373,7 @@ class NativeAlgorithms:
                 algorithm, "the provider returned invalid outputs"
             )
         value = raw.get(name)
-        if (
-            stage is None
-            or not isinstance(value, str)
-            or Path(value) != partial
-            or partial.is_symlink()
-            or not partial.is_file()
-        ):
+        if not _staged_vector_is_sound(stage, value, partial):
             raise QgisSdkAlgorithmFailedError(
                 algorithm, "the provider did not produce the staged vector file"
             )

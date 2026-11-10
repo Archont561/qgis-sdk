@@ -183,6 +183,20 @@ def describe_algorithm(function: Callable[..., Any]) -> AlgorithmDescription:
     return describe_declared_algorithm(function, declared)
 
 
+def _is_plain_function(function: Any) -> bool:
+    """Whether ``function`` is the plain synchronous callable an algorithm is.
+
+    A coroutine or a generator is refused because the provider calls the
+    function and reads its answer; there is nothing to await and nothing to
+    iterate there.
+    """
+    if not inspect.isfunction(function) or inspect.iscoroutinefunction(function):
+        return False
+    return not (
+        inspect.isgeneratorfunction(function) or inspect.isasyncgenfunction(function)
+    )
+
+
 def describe_declared_algorithm(
     function: Callable[..., Any], declared: AlgorithmDeclaration
 ) -> AlgorithmDescription:
@@ -193,12 +207,7 @@ def describe_declared_algorithm(
     validation refuses - a half-declared algorithm must not describe.
     """
     path = f"algorithm {declared.qualified_id}"
-    if (
-        not inspect.isfunction(function)
-        or inspect.iscoroutinefunction(function)
-        or inspect.isgeneratorfunction(function)
-        or inspect.isasyncgenfunction(function)
-    ):
+    if not _is_plain_function(function):
         raise QgisSdkDeclarationError(
             f"{path}: an algorithm is a plain synchronous function, not a "
             "coroutine or a generator"
@@ -308,6 +317,11 @@ def input_refusal(name: str, kind: Any, annotation: Any, value: Any) -> str | No
         isinstance(value, bool) and bool not in kind.accepted
     ):
         return f"{name} must be {kind.expected}, not {type_name(type(value))}"
+    return _kind_refusal(name, kind, annotation, value)
+
+
+def _kind_refusal(name: str, kind: Any, annotation: Any, value: Any) -> str | None:
+    """The refusals that depend on which kind the parameter is."""
     if kind.name in ("file", "directory") and value.kind != kind.name:
         return f"{name} must be a {kind.name} FileRef, not a {value.kind} FileRef"
     if kind.name == "range":

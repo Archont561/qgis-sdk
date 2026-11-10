@@ -72,6 +72,17 @@ DEFAULT_EXTENSIONS: dict[str, str] = {
 }
 
 
+def _is_local_destination(value: object) -> bool:
+    """Whether a destination names a path this machine writes.
+
+    A URI names somewhere else and a pipe hands the bytes to another process;
+    neither is a file the run can stage.
+    """
+    if not isinstance(value, str) or not value:
+        return False
+    return "://" not in value and "|" not in value
+
+
 def declared_model_outputs(model_file: Path) -> dict[str, str]:
     """What a ``.model3`` document says each exposed output is, by description.
 
@@ -240,9 +251,7 @@ def plan_destinations(
     for parameter, value in supplied:
         if isinstance(value, FileRef):
             path = resolve_file(value)
-        elif (
-            isinstance(value, str) and value and "://" not in value and "|" not in value
-        ):
+        elif _is_local_destination(value):
             path = Path(value)
         else:
             raise QgisSdkAlgorithmRejectedError(

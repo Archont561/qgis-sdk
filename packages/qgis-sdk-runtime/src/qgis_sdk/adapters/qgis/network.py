@@ -26,6 +26,7 @@ calling thread and refuses the GUI thread outright.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import ClassVar
 from urllib.parse import urlsplit
 
 from qgis.core import QgsApplication, QgsNetworkAccessManager
@@ -96,6 +97,17 @@ def _text(value: object) -> str:
 def _on_gui_thread() -> bool:
     application = QCoreApplication.instance()
     return application is not None and QThread.currentThread() is application.thread()
+
+
+#: The transport errors that name a failure class of their own, in the order the
+#: classification test walks them. A cancellation after the fact is the same
+#: message the reply carries, so it is listed here rather than special-cased.
+_FAILURE_CLASSES = (
+    (_AUTH_ERRORS, QgisSdkAuthenticationError),
+    (_TLS_ERRORS, QgisSdkTlsError),
+    (_REDIRECT_ERRORS, QgisSdkRedirectError),
+    ((_Error.OperationCanceledError,), QgisSdkRequestCancelledError),
+)
 
 
 class _Exchange(QObject):
@@ -193,19 +205,30 @@ class _Exchange(QObject):
         timer.start(int(self._request.timeout_seconds * 1000))
         self._timer = timer
 
+    #: The methods QNetworkAccessManager sends through an accessor of its own,
+    #: and whether that accessor takes the body. Everything else, including a
+    #: GET or a DELETE that carries one, goes through ``sendCustomRequest``.
+    _ACCESSORS: ClassVar[dict[str, tuple[str, bool]]] = {
+        "HEAD": ("head", False),
+        "POST": ("post", True),
+        "PUT": ("put", True),
+    }
+
     def _send(self, qt_request: QNetworkRequest) -> QNetworkReply:
         method = self._method
         body = QByteArray(self._body) if self._body is not None else QByteArray()
-        if method == "GET" and self._body is None:
-            return self._manager.get(qt_request)
-        if method == "HEAD":
-            return self._manager.head(qt_request)
-        if method == "POST":
-            return self._manager.post(qt_request, body)
-        if method == "PUT":
-            return self._manager.put(qt_request, body)
-        if method == "DELETE" and self._body is None:
-            return self._manager.deleteResource(qt_request)
+        if self._body is None and method in ("GET", "DELETE"):
+            accessor = (
+                self._manager.get if method == "GET" else self._manager.deleteResource
+            )
+            return accessor(qt_request)
+        name, takes_body = self._ACCESSORS.get(method, (None, False))
+        if name is not None:
+            return (
+                getattr(self._manager, name)(qt_request, body)
+                if takes_body
+                else getattr(self._manager, name)(qt_request)
+            )
         return self._manager.sendCustomRequest(qt_request, method.encode("ascii"), body)
 
     # -- signals -------------------------------------------------------------------
@@ -247,22 +270,31 @@ class _Exchange(QObject):
 
     # -- outcome -------------------------------------------------------------------
 
-    def _classify(self, reply: QNetworkReply) -> Response | QgisSdkNetworkError | None:
-        """Turn a finished reply into an outcome, or issue the next hop."""
+    def _refusal(self, reply: QNetworkReply) -> QgisSdkNetworkError | None:
+        """The refusal that ends a request before its status is even read.
+
+        The three are the local ones: the body the caller allowed itself, the
+        deadline it set, and its own cancellation. None means the reply is
+        worth classifying.
+        """
+        url = reply.url().toString()
         if self._too_large:
             return QgisSdkResponseTooLargeError(
-                self._request.max_body_bytes,
-                method=self._method,
-                url=reply.url().toString(),
+                self._request.max_body_bytes, method=self._method, url=url
             )
         if self._timed_out:
             return QgisSdkRequestTimeoutError(
-                self._request.timeout_seconds,
-                method=self._method,
-                url=reply.url().toString(),
+                self._request.timeout_seconds, method=self._method, url=url
             )
         if self._cancelled:
             return self._error(QgisSdkRequestCancelledError, "cancelled by its owner")
+        return None
+
+    def _classify(self, reply: QNetworkReply) -> Response | QgisSdkNetworkError | None:
+        """Turn a finished reply into an outcome, or issue the next hop."""
+        refusal = self._refusal(reply)
+        if refusal is not None:
+            return refusal
         status = reply.attribute(QNetworkRequest.Attribute.HttpStatusCodeAttribute)
         if status is None:
             return self._transport_failure(reply, reply.error())
@@ -301,14 +333,9 @@ class _Exchange(QObject):
             return QgisSdkRequestTimeoutError(
                 self._request.timeout_seconds, method=self._method, url=url
             )
-        if error in _AUTH_ERRORS:
-            return QgisSdkAuthenticationError(message, method=self._method, url=url)
-        if error in _TLS_ERRORS:
-            return QgisSdkTlsError(message, method=self._method, url=url)
-        if error in _REDIRECT_ERRORS:
-            return QgisSdkRedirectError(message, method=self._method, url=url)
-        if error == _Error.OperationCanceledError:
-            return QgisSdkRequestCancelledError(message, method=self._method, url=url)
+        for known, failure_class in _FAILURE_CLASSES:
+            if error in known:
+                return failure_class(message, method=self._method, url=url)
         return QgisSdkConnectionError(message, method=self._method, url=url)
 
     def _follow(

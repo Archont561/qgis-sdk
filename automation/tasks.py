@@ -313,11 +313,23 @@ def test_results(report: str, title: str = "") -> int:
 # --- release train --------------------------------------------------------
 
 
+def _omitted(value: object) -> bool:
+    """Whether an option was left at its default and is not forwarded.
+
+    A flag is only passed on when the caller gave it a value: ``None`` is an
+    absent option, ``False`` and ``""`` and ``[]`` are what argparse and the
+    release parser would have produced for a flag nobody set.
+    """
+    if value is None or value == "":
+        return True
+    return value is False or value == []
+
+
 def _release_command(command: str, **options: object) -> int:
     """Forward a set of named options to one ``release`` subcommand."""
     argv = [command]
     for name, value in options.items():
-        if value is None or value == "" or value is False or value == []:
+        if _omitted(value):
             continue
         flag = "--" + name.replace("_", "-")
         if value is True:

@@ -402,13 +402,12 @@ def _gherlint(executable: str | None) -> str | None:
     return shutil.which("gherlint")
 
 
-def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
-    """Lint every feature file with gherlint; one finding is a failure.
+def _gherkin_guard(executable: str | None, root: Path) -> tuple[str | None, int | None]:
+    """Answer whether the check can run, as ``(tool, status)``.
 
-    ``gherlint`` pins pydantic 1, which cannot share an environment with the
-    runtime's ``mcp`` extra, so CI installs it into a venv of its own and passes
-    the executable here. A missing linter is reported as a missing tool rather
-    than passing, because a check that silently runs nothing is worse than none.
+    Every way the lint cannot mean anything is a guard here: an unlinted feature
+    file, a checkout with no features, a linter that is not installed. The check
+    itself keeps a single shape for the one case it is for.
     """
     stray = unlinted_features(root)
     if stray:
@@ -418,13 +417,12 @@ def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
             "::error title=feature file outside the lint::Add its directory to "
             "FEATURE_DIRECTORIES in automation/ci.py so every scenario is linted."
         )
-        return 1
-    files = feature_files(root)
-    if not files:
+        return None, 1
+    if not feature_files(root):
         print(
             "::error title=no feature files::The checkout has no *.feature file to lint."
         )
-        return 1
+        return None, 1
     tool = _gherlint(executable)
     if tool is None:
         print(
@@ -432,41 +430,74 @@ def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
             "(`pip install gherlint==0.5.0`, or the `bdd` extra) and re-run. Its "
             "pydantic 1 dependency is why it is not part of the runtime's dev extra."
         )
-        return 127
-    findings: list[str] = []
-    for directory in FEATURE_DIRECTORIES:
-        target = root / directory
-        if not target.is_dir():
-            continue
-        result = subprocess.run(
-            [tool, "lint", str(target)],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        output = result.stdout + result.stderr
-        if result.returncode:
-            sys.stdout.write(output)
-            print(
-                f"::error title=gherlint failed::gherlint exited with "
-                f"{result.returncode} on {directory}."
-            )
-            return status_code(result.returncode)
-        findings.extend(
-            line for line in output.splitlines() if GHERLINIT_FINDING.match(line)
-        )
+        return None, 127
+    return tool, None
+
+
+def _lint_directory(tool: str, target: Path, root: Path) -> tuple[int, str]:
+    """Lint one directory and hand back the linter's status and output."""
+    result = subprocess.run(
+        [tool, "lint", str(target)],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode, result.stdout + result.stderr
+
+
+def _report_findings(findings: list[str], root: Path) -> int:
+    """Print the linter's findings as annotations and answer the check."""
     if findings:
         for line in findings:
             print(line)
         print(
             f"::error title=gherlint findings::{len(findings)} finding(s) across "
-            f"{len(files)} feature file(s); gherlint lists code and message per line."
+            f"{len(FEATURE_DIRECTORIES)} feature directorie(s); gherlint lists "
+            "code and message per line."
         )
         return 1
-    print(f"gherlint: {len(files)} feature file(s) clean")
+    print(f"gherlint: {len(feature_files(root))} feature file(s) clean")
     return 0
 
+
+def _lint_feature_directories(tool: str, root: Path) -> int:
+    """Lint each known directory and collect what the linter says."""
+    findings: list[str] = []
+    for directory in FEATURE_DIRECTORIES:
+        target = root / directory
+        if not target.is_dir():
+            continue
+        code, output = _lint_directory(tool, target, root)
+        if code:
+            sys.stdout.write(output)
+            print(
+                f"::error title=gherlint failed::gherlint exited with "
+                f"{code} on {directory}."
+            )
+            return status_code(code)
+        findings.extend(
+            line for line in output.splitlines() if GHERLINIT_FINDING.match(line)
+        )
+    return _report_findings(findings, root)
+
+
+def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
+    """Lint every feature file with gherlint; one finding is a failure.
+
+    ``gherlint`` pins pydantic 1, which cannot share an environment with the
+    runtime's ``mcp`` extra, so CI installs it into a venv of its own and passes
+    the executable here. A missing linter is reported as a missing tool rather
+    than passing, because a check that silently runs nothing is worse than none.
+    """
+    tool, status = _gherkin_guard(executable, root)
+    if tool is None:
+        return status or 1
+    return _lint_feature_directories(tool, root)
+
+
+STREAMED_ACTIONS = ("run-log", "native", "lts", "reference-example")
+"""The actions whose remaining arguments are a command to run and log."""
 
 FATAL_MARKERS = ("Fatal Python error", "Segmentation fault")
 """What an aborted pytest prints before it dies.
@@ -598,23 +629,39 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("report-steps")
     commands.add_parser("bun-ui")
     args = parser.parse_args(argv)
-    if args.action in ("run-log", "native", "lts", "reference-example"):
-        command = args.command
-        if command and command[0] == "--":
-            command = command[1:]
-        if args.action == "native":
-            return native(command or NATIVE_COMMAND)
-        if args.action == "lts":
-            return lts(command)
-        if args.action == "reference-example":
-            return reference_example(command)
-        if not command:
-            parser.error("run-log requires a command after --")
-        return run_logged(command, args.log)
+    if args.action in STREAMED_ACTIONS:
+        return _streamed(args, parser)
     if args.action == "check-generated":
         return check_generated()
     if args.action == "check-gherkin":
         return check_gherkin(args.gherlint, args.root)
+    if args.action == "bun-ui":
+        return bun_ui()
+    _report(args)
+    return 0
+
+
+def _streamed(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Run one of the actions whose command is forwarded to a subprocess."""
+    command = _after_separator(args.command)
+    if args.action == "native":
+        return native(command or NATIVE_COMMAND)
+    if args.action == "lts":
+        return lts(command)
+    if args.action == "reference-example":
+        return reference_example(command)
+    if not command:
+        parser.error("run-log requires a command after --")
+    return run_logged(command, args.log)
+
+
+def _after_separator(command: list[str]) -> list[str]:
+    """Drop the ``--`` argparse leaves in front of a forwarded command."""
+    return command[1:] if command and command[0] == "--" else command
+
+
+def _report(args: argparse.Namespace) -> None:
+    """Turn a step's log into annotations; these report, they do not gate."""
     if args.action == "annotate-coverage":
         annotate_coverage(args.log)
     elif args.action == "annotate-log":
@@ -623,9 +670,6 @@ def main(argv: list[str] | None = None) -> int:
         report_bun(args.log, args.title)
     elif args.action == "report-steps":
         report_steps()
-    elif args.action == "bun-ui":
-        return bun_ui()
-    return 0
 
 
 if __name__ == "__main__":

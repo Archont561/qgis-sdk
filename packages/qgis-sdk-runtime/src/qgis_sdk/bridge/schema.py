@@ -236,21 +236,26 @@ def _check_bounds(value: float, schema: Mapping, *, path: str) -> None:
         raise QgisSdkBridgeError(f"{path}: {value} is above the maximum {maximum}")
 
 
+#: The Python types a payload may carry, in the order they are tested: ``bool``
+#: before ``int`` because Python's ``True`` is one, and ``Mapping`` last because
+#: everything else is checked first.
+_TYPE_NAMES = (
+    (bool, "boolean"),
+    (str, "string"),
+    (int, "integer"),
+    (float, "number"),
+    ((list, tuple), "array"),
+    (Mapping, "object"),
+)
+
+
 def _name(value: Any) -> str:
+    """Name a value's type the way a validation message says it."""
     if value is None:
         return "null"
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, str):
-        return "string"
-    if isinstance(value, int):
-        return "integer"
-    if isinstance(value, float):
-        return "number"
-    if isinstance(value, (list, tuple)):
-        return "array"
-    if isinstance(value, Mapping):
-        return "object"
+    for kind, name in _TYPE_NAMES:
+        if isinstance(value, kind):
+            return name
     return type(value).__name__
 
 

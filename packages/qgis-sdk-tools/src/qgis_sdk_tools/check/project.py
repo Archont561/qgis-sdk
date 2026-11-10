@@ -79,6 +79,17 @@ REQUIRED_METADATA_KEYS = (
 _CONFIG_TABLE = ("tool", "qgis-sdk", "check")
 
 
+def _is_package(child: Path) -> bool:
+    """Whether a directory under the project root is a package the check reads.
+
+    An excluded directory is one a provider writes, ``tests`` is not shipped,
+    and a directory with no ``__init__.py`` is a fixture or a stray folder.
+    """
+    if not child.is_dir() or child.name in EXCLUDED_DIRECTORIES:
+        return False
+    return child.name != "tests" and (child / "__init__.py").is_file()
+
+
 def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckReport:
     """Check the project at ``root`` and return every finding.
 
@@ -258,14 +269,7 @@ def _python_files(root: Path) -> Iterator[Path]:
 
 
 def _check_packages(root: Path) -> Iterator[Diagnostic]:
-    packages = sorted(
-        child
-        for child in root.iterdir()
-        if child.is_dir()
-        and child.name not in EXCLUDED_DIRECTORIES
-        and child.name != "tests"
-        and (child / "__init__.py").is_file()
-    )
+    packages = sorted(child for child in root.iterdir() if _is_package(child))
     if not packages:
         yield Diagnostic(
             rule="PROJECT001",

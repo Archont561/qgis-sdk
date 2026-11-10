@@ -167,6 +167,19 @@ class FakeFeatures:
             raise QgisSdkLayerNotFoundError(f"{layer_id}#{feature_id}")
         return self._feature(layer, feature_id, encoding, True)
 
+    def _literal(self, text: str, **context: Any) -> ExpressionOutcome:
+        """A literal as an outcome; one the subset cannot carry is a refusal.
+
+        Both callers of ``_literal_value`` answer the same way - a value when it
+        is one, a message when it is not - so the answer is written once.
+        """
+        try:
+            return ExpressionOutcome(
+                valid=True, value=self._literal_value(text, **context)
+            )
+        except QgisSdkUnsupportedCapabilityError as error:
+            return ExpressionOutcome(valid=False, message=str(error))
+
     def evaluate(
         self,
         text: str,
@@ -176,10 +189,7 @@ class FakeFeatures:
     ) -> ExpressionOutcome:
         """Evaluate a comparison, a field name or a literal against one row."""
         if layer_id is None:
-            try:
-                return ExpressionOutcome(valid=True, value=self._literal_value(text))
-            except QgisSdkUnsupportedCapabilityError as error:
-                return ExpressionOutcome(valid=False, message=str(error))
+            return self._literal(text)
         layer = self.layer(layer_id)
         row: Mapping[str, Any] = {}
         if feature_id is not None:
@@ -190,13 +200,7 @@ class FakeFeatures:
             parsed = ExpressionSubset.parse(text, layer.fields)
         except QgisSdkUnsupportedCapabilityError:
             # A bare field name is a value, not a comparison.
-            try:
-                return ExpressionOutcome(
-                    valid=True,
-                    value=self._literal_value(text, row=row, fields=layer.fields),
-                )
-            except QgisSdkUnsupportedCapabilityError as error:
-                return ExpressionOutcome(valid=False, message=str(error))
+            return self._literal(text, row=row, fields=layer.fields)
         if feature_id is None:
             # Nothing to compare against: the expression parses, and its value
             # is the expression itself, which is what a "does it parse" caller

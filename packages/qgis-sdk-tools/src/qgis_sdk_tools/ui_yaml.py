@@ -114,14 +114,22 @@ def _text(value: str) -> str:
 def _scalar(value: Any) -> str:
     if value is None:
         return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, float):
-        # ``nan``/``inf`` are not YAML scalars a reader can take literally; a
-        # string keeps the payload lossless instead of inventing a number.
-        return repr(value) if math.isfinite(value) else json.dumps(value)
-    if isinstance(value, int):
-        return str(value)
+    if isinstance(value, (bool, int, float)):
+        return _number_scalar(value)
     if isinstance(value, (str, bytes)):
         return _text(value if isinstance(value, str) else value.decode("utf-8"))
     return _text(json.dumps(value, sort_keys=True))
+
+
+def _number_scalar(value: bool | float) -> str:
+    """A boolean or a number as YAML spells it.
+
+    ``nan``/``inf`` are not YAML scalars a reader can take literally, so those
+    two are quoted: a string keeps the payload lossless instead of inventing a
+    number.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return repr(value) if math.isfinite(value) else json.dumps(value)
+    return str(value)

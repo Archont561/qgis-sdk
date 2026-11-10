@@ -6,11 +6,24 @@ import http.client
 import json
 from collections.abc import Iterator
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import SplitResult, quote, urlsplit
 
 # The server never emits a larger response, so a longer body means the client
 # and the host disagree; say so instead of failing inside the JSON parser.
 _RESPONSE_LIMIT = 1024 * 1024
+
+
+def _is_loopback_target(parts: SplitResult, port: int | None) -> bool:
+    """Whether a parsed URL names the loopback listener this client talks to.
+
+    Nothing but a bare origin is accepted: a path, a query, a fragment or
+    credentials would each name something other than the listener.
+    """
+    if parts.scheme != "http" or parts.hostname != "127.0.0.1" or port is None:
+        return False
+    if parts.path not in ("", "/") or parts.query or parts.fragment:
+        return False
+    return parts.username is None and parts.password is None
 
 
 class PluginClientError(Exception):
@@ -26,16 +39,7 @@ class PluginClient:
             port = parsed.port
         except ValueError as error:
             raise PluginClientError("Invalid plugin URL") from error
-        if (
-            parsed.scheme != "http"
-            or parsed.hostname != "127.0.0.1"
-            or port is None
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.path not in ("", "/")
-            or parsed.query
-            or parsed.fragment
-        ):
+        if not _is_loopback_target(parsed, port):
             raise PluginClientError("Plugin URL must be http://127.0.0.1:<port>")
         self._port = port
         self._token_file = Path(token_file)

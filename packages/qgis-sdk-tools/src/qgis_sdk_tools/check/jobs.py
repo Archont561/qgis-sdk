@@ -97,6 +97,13 @@ _JOB_DECORATORS = frozenset(
 _DYNAMIC_IMPORTS = frozenset({"importlib.import_module", "__import__"})
 
 
+def _is_context_attribute(node: ast.AST, context: str | None) -> bool:
+    """Whether ``node`` reads an attribute of the worker's context argument."""
+    if context is None or not isinstance(node, ast.Attribute):
+        return False
+    return isinstance(node.value, ast.Name) and node.value.id == context
+
+
 def check_jobs(source: str, *, path: Path) -> Iterator[Diagnostic]:
     """Yield the worker-safety findings of every job in ``source``, in order.
 
@@ -259,12 +266,7 @@ def _diagnose(
         if isinstance(node, ast.Call) and module.dotted(node.func) in _DYNAMIC_IMPORTS:
             yield _dynamic_diagnostic(name, node, path)
             continue
-        if (
-            isinstance(node, ast.Attribute)
-            and context is not None
-            and isinstance(node.value, ast.Name)
-            and node.value.id == context
-        ):
+        if _is_context_attribute(node, context):
             if node.attr not in WORKER_SAFE_ATTRIBUTES:
                 yield _context_diagnostic(name, context, node, path)
             continue

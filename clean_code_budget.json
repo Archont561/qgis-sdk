@@ -1,9 +1,7 @@
 {
 	"automation/ci.py": {
-		"CC101": 5,
-		"CC103": 2,
-		"CC104": 1,
-		"CC303": 1
+		"CC101": 4,
+		"CC104": 1
 	},
 	"automation/commits.py": {
 		"CC101": 1
@@ -20,8 +18,7 @@
 		"CC104": 1
 	},
 	"automation/tasks.py": {
-		"CC102": 1,
-		"CC302": 1
+		"CC102": 1
 	},
 	"examples/simple/simple/workflow.py": {
 		"CC101": 1,
@@ -452,8 +449,7 @@
 		"CC104": 2,
 		"CC201": 1,
 		"CC202": 1,
-		"CC302": 1,
-		"CC303": 2
+		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/canvas.py": {
 		"CC102": 1,
@@ -468,7 +464,6 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/connections.py": {
 		"CC101": 1,
-		"CC103": 1,
 		"CC201": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/context.py": {
@@ -481,8 +476,7 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/layers.py": {
 		"CC201": 1,
-		"CC202": 1,
-		"CC302": 1
+		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/layouts.py": {
 		"CC101": 3,
@@ -490,7 +484,6 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/network.py": {
 		"CC101": 3,
-		"CC103": 3,
 		"CC201": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/processing.py": {
@@ -545,10 +538,8 @@
 	"packages/qgis-sdk-runtime/src/qgis_sdk/algorithms.py": {
 		"CC101": 2,
 		"CC102": 1,
-		"CC103": 1,
 		"CC104": 1,
-		"CC302": 1,
-		"CC303": 3
+		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/app/__init__.py": {
 		"CC101": 2,
@@ -594,12 +585,9 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/schema.py": {
 		"CC101": 1,
-		"CC103": 1,
 		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/streams.py": {
-		"CC101": 2,
-		"CC103": 2,
 		"CC201": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/transport.py": {
@@ -625,7 +613,6 @@
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/core/scheduling.py": {
-		"CC103": 1,
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_describe.py": {
@@ -637,10 +624,7 @@
 		"CC101": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_schemas.py": {
-		"CC101": 2,
-		"CC103": 1,
-		"CC302": 1,
-		"CC303": 1
+		"CC101": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/declarations/_tools.py": {
 		"CC101": 1
@@ -661,7 +645,6 @@
 		"CC201": 2,
 		"CC202": 1,
 		"CC301": 2,
-		"CC302": 4,
 		"CC303": 3
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/jobs/_attempt.py": {
@@ -717,8 +700,7 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/network/grants.py": {
 		"CC101": 1,
-		"CC102": 1,
-		"CC302": 1
+		"CC102": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/network/ogc.py": {
 		"CC101": 1
@@ -732,7 +714,6 @@
 		"CC101": 4,
 		"CC103": 1,
 		"CC104": 1,
-		"CC302": 1,
 		"CC303": 3
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/providers.py": {
@@ -777,9 +758,7 @@
 		"CC303": 2
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/testing/features.py": {
-		"CC101": 1,
 		"CC102": 1,
-		"CC103": 1,
 		"CC201": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/testing/layouts.py": {
@@ -836,8 +815,7 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/ui/form_fields.py": {
 		"CC101": 1,
-		"CC103": 1,
-		"CC303": 2
+		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/ui/snapshot.py": {
 		"CC101": 2,
@@ -847,8 +825,7 @@
 		"CC101": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/ui/wiring.py": {
-		"CC101": 2,
-		"CC103": 1
+		"CC101": 2
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/_commands/_bridge.py": {
 		"CC101": 1,
@@ -925,7 +902,6 @@
 		"CC101": 1,
 		"CC104": 1,
 		"CC301": 1,
-		"CC302": 1,
 		"CC303": 3
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/names.py": {
@@ -933,14 +909,12 @@
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/project.py": {
 		"CC101": 4,
-		"CC104": 1,
-		"CC302": 1
+		"CC104": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/ui.py": {
 		"CC101": 7,
 		"CC104": 3,
-		"CC302": 4,
-		"CC303": 6
+		"CC303": 5
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/versions.py": {
 		"CC101": 4,
@@ -1021,9 +995,6 @@
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/pytest_plugin.py": {
 		"CC101": 1
 	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/rest.py": {
-		"CC302": 1
-	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/generate.py": {
 		"CC101": 5
 	},
@@ -1048,9 +1019,6 @@
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/ui_diff.py": {
 		"CC101": 2,
 		"CC303": 1
-	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/ui_yaml.py": {
-		"CC103": 1
 	},
 	"tests/scripts/test_backlog.py": {
 		"CC101": 1

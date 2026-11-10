@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from queue import Empty, SimpleQueue
 from types import MappingProxyType
+from typing import Any
 
 from qgis_sdk.models import (
     QgisSdkJobCancelledError,
@@ -189,6 +190,18 @@ class Handoff:
             return None
 
 
+def _may_run(job: Job) -> bool:
+    """Whether author code may run again inside the current tick.
+
+    A job that has not yielded and is not waiting on a handoff is runnable; a
+    handoff that has been reported means the awaiting code may resume.
+    """
+    if job._yielded:
+        return False
+    handoff = job._awaiting
+    return handoff is None or handoff.reported
+
+
 class CancellationToken:
     """The scheduler side of the ``services.Cancellation`` contract."""
 
@@ -296,14 +309,6 @@ class Job:
             self._awaiting._request_cancel()
         return active
 
-    @property
-    def _ready(self) -> bool:
-        """Whether author code may run again inside the current tick."""
-        if self._yielded:
-            return False
-        handoff = self._awaiting
-        return handoff is None or handoff.reported
-
     def _step(self, *, cancel_requested: bool) -> _StepOutcome:
         """Advance author code once, honouring a pending cancellation first."""
         self._yielded = False
@@ -316,19 +321,23 @@ class Job:
             return self._drive(None, throw=False)
         handoff = self._awaiting
         if handoff is not None:
-            report = handoff._take()
-            if report is None:
-                return _StepOutcome.SUSPENDED
-            handoff._release()
-            self._awaiting = None
-            if cancel_requested and not self._cancel_delivered:
-                return self._deliver_cancellation()
-            if report.error is not None:
-                return self._drive(report.error, throw=True)
-            return self._drive(report.value, throw=False)
+            return self._resume(handoff, cancel_requested)
         if cancel_requested and not self._cancel_delivered:
             return self._deliver_cancellation()
         return self._drive(None, throw=False)
+
+    def _resume(self, handoff: Any, cancel_requested: bool) -> _StepOutcome:
+        """Deliver the report one suspension left, or wait for it."""
+        report = handoff._take()
+        if report is None:
+            return _StepOutcome.SUSPENDED
+        handoff._release()
+        self._awaiting = None
+        if cancel_requested and not self._cancel_delivered:
+            return self._deliver_cancellation()
+        if report.error is not None:
+            return self._drive(report.error, throw=True)
+        return self._drive(report.value, throw=False)
 
     def _deliver_cancellation(self) -> _StepOutcome:
         """Throw the cancellation in so author cleanup can run."""
@@ -576,7 +585,7 @@ class StepScheduler:
                 outcome = job._step(cancel_requested=job.cancellation.is_cancelled())
                 if outcome is _StepOutcome.SETTLED:
                     return
-                if not job._ready:
+                if not _may_run(job):
                     return
         finally:
             # A re-raised interruption unwinds before the settled branch can prune the

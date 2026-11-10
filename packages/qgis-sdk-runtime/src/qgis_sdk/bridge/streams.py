@@ -336,20 +336,43 @@ class Subscription:
         """
         if not self.open:
             return False
+        accepted, wired = self._wired(payload, kind)
+        if not accepted:
+            return False
+        return self._queue_frame(wired, kind)
+
+    def _wired(self, payload: Any, kind: StreamEventType) -> tuple[bool, Any]:
+        """The payload as the wire carries it, and whether the stream survived it.
+
+        Two refusals live here - a payload that cannot cross, and an event the
+        operation never declared - and both end the subscription rather than
+        dropping the event.
+        """
         try:
-            payload = to_wire(payload)
+            wired = to_wire(payload)
         except QgisSdkBridgeError as error:
             self.terminate(StreamTerminal.ERROR, message=str(error))
-            return False
-        refusal = self._event_refusal(kind, payload)
+            return False, None
+        refusal = self._event_refusal(kind, wired)
         if refusal is not None:
             self.terminate(StreamTerminal.ERROR, message=refusal)
-            return False
+            return False, None
+        return True, wired
+
+    def _queue_frame(self, wired: Any, kind: StreamEventType) -> bool:
+        """Queue one event, replacing a progress frame instead of growing the queue.
+
+        A progress report is a position, not a history: the last one still
+        describes the stream, so it is overwritten where it sits. Anything else
+        is appended, and a queue already at capacity ends the subscription with
+        a gap rather than dropping an event silently.
+        """
         if kind is StreamEventType.PROGRESS and self._queue:
             tail = self._queue[-1]
             if tail.get("event", {}).get("kind") == StreamEventType.PROGRESS.value:
-                frame = event_frame(self.id, tail["seq"], kind=kind, payload=payload)
-                self._queue[-1] = frame
+                self._queue[-1] = event_frame(
+                    self.id, tail["seq"], kind=kind, payload=wired
+                )
                 return True
         if len(self._queue) >= self.capacity:
             self.dropped += 1
@@ -362,7 +385,7 @@ class Subscription:
                 dropped=self.dropped,
             )
             return False
-        self._queue.append(event_frame(self.id, self.seq, kind=kind, payload=payload))
+        self._queue.append(event_frame(self.id, self.seq, kind=kind, payload=wired))
         self.seq += 1
         return True
 
@@ -450,26 +473,12 @@ class Subscription:
         is, with the SDK's own message when it has one.
         """
         source = self._source
-        if source is None or not self.open or not hasattr(source, "__next__"):
+        if not self.open or source is None or not hasattr(source, "__next__"):
             return
         produced = 0
         while produced < limit and self.open and len(self._queue) < self.capacity:
-            try:
-                item = next(source)
-            except StopIteration:
-                self.terminate(StreamTerminal.COMPLETE)
-                return
-            except QgisSdkJobCancelledError as error:
-                self.terminate(StreamTerminal.CANCELLED, message=str(error))
-                return
-            except QgisSdkError as error:
-                self.terminate(StreamTerminal.ERROR, message=str(error))
-                return
-            except Exception:  # noqa: BLE001 - a stream failure must be a frame
-                self.terminate(
-                    StreamTerminal.ERROR,
-                    message="The stream failed; the host recorded the details",
-                )
+            item = _advance(self, source)
+            if item is _EXHAUSTED:
                 return
             try:
                 kind, payload = split_event(item)
@@ -478,6 +487,36 @@ class Subscription:
                 return
             self.emit(payload, kind=kind)
             produced += 1
+
+
+_EXHAUSTED = object()
+"""The answer :func:`_advance` gives when the source stopped producing."""
+
+
+def _advance(subscription: Subscription, source: Any) -> Any:
+    """Take the source's next event, ending the subscription if it has none.
+
+    Every way a source stops - an exhausted iterator, a cancellation, a job
+    error, a surprise - is a terminal state, so it is written once here and the
+    pull loop only has to know that the answer was ``_EXHAUSTED``.
+    """
+    try:
+        return next(source)
+    except StopIteration:
+        subscription.terminate(StreamTerminal.COMPLETE)
+    except QgisSdkJobCancelledError as error:
+        subscription.terminate(StreamTerminal.CANCELLED, message=str(error))
+    except QgisSdkError as error:
+        subscription.terminate(StreamTerminal.ERROR, message=str(error))
+    except Exception:  # noqa: BLE001 - a stream failure must be a frame
+        subscription.terminate(
+            StreamTerminal.ERROR,
+            message="The stream failed; the host recorded the details",
+        )
+    return _EXHAUSTED
+
+
+"""The answer :meth:`Subscription._advance` gives when the source stopped."""
 
 
 @dataclass(slots=True)
