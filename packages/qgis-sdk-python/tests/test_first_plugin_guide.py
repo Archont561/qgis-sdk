@@ -1,34 +1,62 @@
-"""Keep the getting-started walkthrough tied to the working reference plugin."""
+"""Keep the getting-started walkthrough a single walk over working commands."""
 
 from __future__ import annotations
 
 import re
-import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-GUIDE = ROOT / "apps/docs/content/docs/start/first-plugin.md"
+GUIDE = ROOT / "apps/docs/content/docs/start/first-plugin.mdx"
+
+#: The commands the walk runs, in the order a reader meets them. Install first,
+#: then the scaffold, then the three gates, then the two host steps.
+WALK = (
+    "pip install qgis-sdk",
+    'qgis-sdk new my_tools --title "My Tools" --no-input',
+    "qgis-sdk test",
+    "qgis-sdk check",
+    "qgis-sdk dev",
+    "qgis-sdk build",
+)
 
 
-def test_reference_walkthrough_uses_verbatim_executable_project_sources() -> None:
+def commands_in_order(text: str) -> list[str]:
+    """Every command run in a fenced block, in reading order.
+
+    Prose mentions the same commands ("`qgis-sdk dev` needs a Desktop"), so only
+    the blocks a reader copies from count for the order check.
+    """
+    blocks = re.findall(r"^```sh\n(.*?)^```", text, re.DOTALL | re.MULTILINE)
+    lines = [line.strip() for block in blocks for line in block.splitlines()]
+    return [line for line in lines if line.startswith(("qgis-sdk ", "pip install qgis-sdk"))]
+
+
+def test_the_walk_runs_from_install_to_zip_in_order() -> None:
+    ran = commands_in_order(GUIDE.read_text(encoding="utf-8"))
+    remaining = list(ran)
+    for command in WALK:
+        assert command in remaining, f"{command} is missing from the walk (ran: {ran})"
+        remaining = remaining[remaining.index(command) + 1 :]
+
+
+def test_the_walk_does_not_send_the_reader_to_another_page() -> None:
+    """The point of the page is that a reader finishes it without hopping.
+
+    Links to other pages are allowed only in the closing section, which is what
+    comes after the first plugin works. A markdown link earlier in the walk is
+    the hop this page exists to remove.
+    """
     guide = GUIDE.read_text(encoding="utf-8")
-    blocks = re.findall(
-        r"<!-- source: (examples/simple/[^ ]+) -->\n```(?:python|ts)\n(.*?)\n```",
-        guide,
-        re.DOTALL,
-    )
-    assert {path for path, _ in blocks} == {
-        "examples/simple/simple/plugin.py",
-        "examples/simple/tests/test_workflow_pure.py",
-        "examples/simple/simple/surfaces.py",
-        "examples/simple/web/src/app.ts",
-    }
-    for path, snippet in blocks:
-        source = (ROOT / path).read_text(encoding="utf-8")
-        # Snippets may omit enclosing test, class or callback indentation.
-        assert textwrap.dedent(snippet).strip() in textwrap.dedent(source).strip() or (
-            snippet.strip() in source
-        ), path
+    closing = guide.find("## What is not on this page")
+    assert closing > 0
+    walk = guide[:closing]
+    hops = [
+        link
+        for link in re.findall(r"\]\((/[^)\s]+)\)", walk)
+        if not link.startswith("#")
+    ]
+    # The one exception is the version notice, which links to the matrix by design.
+    assert [link for link in hops if link != "/python/supported-targets/"] == []
 
 
 def test_documented_scaffold_commands_match_the_generated_files(tmp_path: Path) -> None:

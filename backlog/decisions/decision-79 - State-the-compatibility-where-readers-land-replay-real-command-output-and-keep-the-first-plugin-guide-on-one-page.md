@@ -37,8 +37,10 @@ pinned to `light`.
 2. **The Storybook follows the site's theme, not the OS.** `manager.ts` picks the
    manager base theme from `localStorage.theme` (falling back to
    `prefers-color-scheme`), and `preview.ts` seeds the `theme` global the same
-   way and listens for the `storage` event, so a toggle in the site reaches a
-   running preview. The toolbar still overrides per session.
+   way instead of hard-coding light. Both read the preference at load: the
+   preview API in Storybook 10.6 exports no globals setter (`updateGlobals` is
+   not a runtime export), and importing it broke every UI test, so a toggle in
+   the site applies on the next load. The toolbar still overrides per session.
 3. **The first-plugin guide is one page, start to finish.** `start/first-plugin`
    now carries install, scaffold, the declaration model in four sentences, test,
    check, `dev` and build, with the commands and their real output inline. Links
@@ -81,6 +83,13 @@ pinned to `light`.
 - The first-plugin page is longer and duplicates four facts the reference pages
   also state. That is the cost of the walk; the duplication is named in its
   opening paragraph rather than hidden.
+- `packages/qgis-sdk-python/tests/test_first_plugin_guide.py` guarded the old
+  page by running its three scaffold commands and comparing four verbatim
+  excerpts of the reference plugin. The page no longer inlines those excerpts,
+  so the test now guards what the page promises: the walk runs install, `new`,
+  `test`, `check`, `dev`, `build` in that order in the blocks a reader copies,
+  nothing outside the closing section is a link to another page, and the three
+  scaffold shapes still produce the files the page says they do.
 - The walkthrough data is a second copy of the scaffold's text. A change to the
   scaffold is a change to `walkthroughs.ts`, and the capture command is in the
   file's docstring.

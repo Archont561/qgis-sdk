@@ -40,9 +40,19 @@ qgis-sdk new my_tools --title "My Tools" --no-input
 cd my_tools
 ```
 
-`qgis-sdk new` also runs the dependency install; add `--no-install` to skip it,
-`--ui native` for a scaffold with a dialog, and `--web vanilla` for one with a
-page. The default scaffold writes three files that matter:
+`qgis-sdk new` also runs the dependency install; add `--no-install` to skip it.
+The same command has two other shapes, and the rest of this page is the default
+one:
+
+```sh
+qgis-sdk new my_tools --title "My Tools" --ui native --no-input
+qgis-sdk new my_tools --title "My Tools" --web vanilla --no-input --no-install
+```
+
+`--ui native` adds `my_tools/ui.py` with a dialog over the same actions;
+`--web vanilla` adds a `web/` directory with a page and the generated
+`bridge.schema.ts` that types it. The default scaffold writes three files that
+matter:
 
 <CliWalkthrough name="scaffold" />
 
