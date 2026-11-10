@@ -44,7 +44,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
-from qgis_sdk.core import PluginContext, ResourceScope, WorkerContext
+from qgis_sdk.core import PluginContext, PluginServices, ResourceScope, WorkerContext
 from qgis_sdk.jobs import JobHandle, JobService, job
 from qgis_sdk.testing import FakeFiles, FakeWorkers, RecordingNotifications
 
@@ -85,8 +85,7 @@ def build_context(iface: object) -> PluginContext:
     return PluginContext(
         notifications=RecordingNotifications(scope),
         scope=scope,
-        settings=SharedSettings(),
-        files=FakeFiles(scope),
+        services=PluginServices(settings=SharedSettings(), files=FakeFiles(scope)),
     )
 
 
