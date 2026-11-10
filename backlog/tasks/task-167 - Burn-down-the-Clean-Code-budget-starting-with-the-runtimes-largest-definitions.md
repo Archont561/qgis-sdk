@@ -26,5 +26,5 @@ TASK-166 makes the Clean Code metrics a gate by freezing today's 939 findings as
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Baseline from TASK-166: 939 findings in 268 files - CC101 480, CC104 125, CC102 120, CC303 77, CC103 35, CC201 33, CC202 29, CC302 26, CC301 4. CC301 (nesting) is the closest to clean with 4 findings and is worth taking first: it is the rule whose fix is most often "return early", and the smallest diff of the set.
+Baseline from TASK-166: 939 findings in 268 files - CC101 486, CC104 128, CC102 121, CC303 77, CC103 35, CC201 33, CC202 29, CC302 26, CC301 4. CC301 (nesting) is the closest to clean with 4 findings and is worth taking first: it is the rule whose fix is most often "return early", and the smallest diff of the set.
 <!-- SECTION:NOTES:END -->
