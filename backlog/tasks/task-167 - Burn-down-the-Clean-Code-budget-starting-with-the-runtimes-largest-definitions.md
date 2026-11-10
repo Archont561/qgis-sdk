@@ -17,8 +17,8 @@ TASK-166 makes the Clean Code metrics a gate by freezing today's 939 findings as
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The five largest definitions are split behind unchanged public behaviour: `bridge/dispatch.py` (756-line class), `http/_server.py` (699-line class, 379-line function), `bridge/host/_handlers.py` (602-line function), `generate/_generator.py` (588-line class) and `bridge/authority.py` (520-line class).
-- [ ] #2 Each slice lowers `clean_code_budget.json` in the same commit, and the existing suites pass without a test rewritten to fit the new shape.
+- [x] #1 The five largest definitions are split behind unchanged public behaviour: `bridge/dispatch.py` (756-line class), `http/_server.py` (699-line class, 379-line function), `bridge/host/_handlers.py` (602-line function), `generate/_generator.py` (588-line class) and `bridge/authority.py` (520-line class).
+- [x] #2 Each slice lowers `clean_code_budget.json` in the same commit, and the existing suites pass without a test rewritten to fit the new shape.
 - [ ] #3 The outstanding findings are recorded by rule and by file in this task, so the next slice does not have to re-measure the tree.
 - [ ] #4 After the five slices, the thresholds are reviewed: any metric the tree now meets everywhere is tightened in `[tool.rude]` and the budget re-baselined, so the ratchet moves rather than the number merely shrinking.
 <!-- AC:END -->
@@ -88,5 +88,25 @@ The one finding left in the file: **CC102, 14 parameters on `__init__`**. `Plugi
 
 **Tests.** The suite is unchanged: 2996 passed, 130 skipped with the two environmental `test_app_build` failures, and the 37 HTTP tests pass without a rewrite, the two that reach into the module (`_FrameBuffer`, `PluginHttpServer._error_status`, the `os.name` platform refusal) included. Runtime coverage 92% against the 90% gate; the `http` package 88%.
 
-**What is left of AC 1.** `bridge/authority.py` (520-line class), and then `http/_queue.py` as the smaller entry above. Every other finding in the tree is a size or return-count entry recorded in this task's earlier notes.
+**Slice 6 (landed): the authority, split by the three kinds of grant it keeps.** 842 -> 837 findings; `bridge/authority.py` goes from 7 findings to 2, and the 520-line, 25-method `HostAuthority` is gone: it is a 17-call façade over three collaborators in a package, and the rules every kind of grant shares are written once.
+
+The cut is by what a grant *is*, because each kind is checked for the same three things - who holds it, in which generation, until when - and differs only in what it does with the id afterwards. `_Table` (`_grants.py`) owns that shape: `add`, `get`, `drop`, `count`, `held_by`, `drop_expired`, `release_view`, `prune`. Files and blobs are two tables over it; a network grant is keyed by the view rather than by a ref, so `_NetworkGrants` has its own four methods and no table.
+
+* `_files.py` - `_FileGrants`: mint, mint_directory, resolve, export, refs, revoke, release_view, prune. The path rules left the class as module functions (`_canonical`, `_existing_file`, `_writable_target`, `_readable`, `_writable`, `_write_atomically`), and the 12-branch `_lookup` became four decisions: `_ref_id` (is this shaped like a ref), `_refuse_missing` (revoked for this view, or never held), `_refuse_foreign` (owner and kind), then the generation and the expiry.
+* `_blobs.py` - `_BlobGrants`: mint, inline_or_blob, read, size, info, release_view, prune, plus `_refuse_oversize`, `_refuse_full` (sweep what expired, then re-check) and `_wire_expiry` (the wall-clock moment the wire shows, while the refusal uses the monotonic one).
+* `_networks.py` - `_NetworkGrants`: grant, get, require, revoke, release_view, prune.
+* `__init__.py` - `HostAuthority` itself, and the module's public constants re-exported unchanged: `FILE_REF`, `FileRef`, `FileOperation`, `MAX_FILE_REFS_PER_VIEW`, `DEFAULT_EXPORT_BYTES`, `MAX_BLOB_BYTES`, `MAX_BLOBS_PER_VIEW`, `BLOB_TTL_SECONDS`, `FILE_SOURCES`. `from qgis_sdk.bridge.authority import ...` is what the tests and `qgis_sdk.bridge` were already doing, so turning the module into a package changed no import - the budget path is the only thing that moved.
+
+The three long functions were split along the arguments they were already taking. `grant_file` (56 lines, 8 parameters) hands its five policy knobs to `_FilePolicy`, which is the parameter object the rule asks for, so the collaborator's `mint` reads `(binding, path, policy)`. `grant_directory` (50 lines) is the same shape with a read-only policy, and its six-argument grant builder became `_FilePolicy.grant(binding, target)` over a `_Target` record of the settled facts - the ref, its canonical path, its identity, its expiry. `mint_blob` (53 lines) is `_refuse_oversize` + `_refuse_full` + `_wire_expiry` + `_grant_for`, and the export's temp-file dance is `_write_atomically`.
+
+Two findings are left, both on the public surface, and both the same trade `dispatch.py` already records:
+
+* **CC202, 18 methods on `HostAuthority`.** The façade is the API: 17 calls, every one of them with a caller in the runtime or the tests, and every private helper now lives in a collaborator. Getting under 15 means removing public methods, which is an API change rather than a refactor.
+* **CC102, 8 parameters on `grant_file`.** Five of them are the grant's policy, and they are exactly the five `_FilePolicy` groups - but moving them out of the signature would change how a host calls the documented method.
+
+**Dead code found while moving it.** Two private `count` helpers were written and turned out to duplicate `_Table.count`; they are gone. `HostAuthority.blob_size` has no caller anywhere in the tree and is the package's one uncovered line (98% covered); it is public API, so deleting it belongs to an API change, not to this slice, and it is recorded here rather than silently kept.
+
+**Tests.** Unchanged: 3002 passed, 129 skipped with the two environmental `test_app_build` failures, `tests/scripts` 332 passed, and no test rewritten - `test_bridge_authority.py`, `test_bridge_blobs.py` and `test_network_grants.py` are 68 tests that never referenced anything but the public surface. Runtime coverage 92% against the 90% gate; the authority package 98%.
+
+**What is left.** AC 1 is met - all five definitions are split. The next entries are `http/_queue.py` (CC201 `GuiQueue`, CC101/CC303 `_drain_one`) and the two recorded API trades in `dispatch.py` and `authority/__init__.py`. Every other finding in the tree is a size or return-count entry recorded in this task's earlier notes.
 <!-- SECTION:NOTES:END -->
