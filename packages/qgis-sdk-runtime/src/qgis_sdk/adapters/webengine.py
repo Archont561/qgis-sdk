@@ -168,26 +168,42 @@ class BrowserPolicy:
 
     def _decide(self, url: str, *, host_initiated: bool, navigation: bool) -> Decision:
         shown = _shown(url)
-        if url in _ALWAYS:
-            return Decision(True, url, "the page's own empty document")
         scheme = urlsplit(url).scheme.lower() if url else ""
         if scheme == "qrc":
-            if self.allow_qrc:
-                return Decision(True, url, "packaged content")
-            return Decision(False, url, "qrc: content is not allowed by this policy")
+            return self._qrc(url)
         if scheme == "data":
-            if navigation and not host_initiated:
-                return Decision(
-                    False, "data:...", "a data: navigation is the host's to make"
-                )
-            return Decision(True, "data:...", "inline content carries no egress")
+            return self._data(navigation, host_initiated)
         if scheme == "blob":
-            inner = _egress_origin(url[len("blob:") :])
-            if inner is not None and inner in self.origins:
-                return Decision(True, shown, f"a blob of the granted origin {inner}")
-            return Decision(False, shown, "a blob of an origin that was not granted")
+            return self._blob(url, shown)
         if scheme == "file":
             return self._file(url, shown)
+        return self._origin(url, shown, scheme)
+
+    def _qrc(self, url: str) -> Decision:
+        """``qrc:`` is packaged content, allowed only when the policy opts in."""
+        if self.allow_qrc:
+            return Decision(True, url, "packaged content")
+        return Decision(False, url, "qrc: content is not allowed by this policy")
+
+    def _data(self, navigation: bool, host_initiated: bool) -> Decision:
+        """``data:`` carries no egress, but only the host may navigate to it."""
+        if navigation and not host_initiated:
+            return Decision(
+                False, "data:...", "a data: navigation is the host's to make"
+            )
+        return Decision(True, "data:...", "inline content carries no egress")
+
+    def _blob(self, url: str, shown: str) -> Decision:
+        """A blob inherits the egress origin it was minted from."""
+        inner = _egress_origin(url[len("blob:") :])
+        if inner is not None and inner in self.origins:
+            return Decision(True, shown, f"a blob of the granted origin {inner}")
+        return Decision(False, shown, "a blob of an origin that was not granted")
+
+    def _origin(self, url: str, shown: str, scheme: str) -> Decision:
+        """Everything else is decided by comparing its origin with the grant."""
+        if url in _ALWAYS:
+            return Decision(True, url, "the page's own empty document")
         origin = _egress_origin(url)
         if origin is None:
             return Decision(

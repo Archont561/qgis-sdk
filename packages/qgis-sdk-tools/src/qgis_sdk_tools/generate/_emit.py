@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 from qgis_sdk.models.errors import QgisSdkBridgeError
@@ -273,6 +273,34 @@ def _member_validator(
     return _inline_validator(schema, expression, generator)
 
 
+def _simple_type(schema: Mapping[str, Any], generator: _Namer | None) -> str:
+    """A JSON scalar maps straight to its TypeScript keyword."""
+    return _SIMPLE_TYPES[schema["type"]]
+
+
+def _array_type(schema: Mapping[str, Any], generator: _Namer | None) -> str:
+    """An array of unspecified values is a free-form payload, not a guess."""
+    items = schema.get("items")
+    if items is None:
+        return "readonly unknown[]"
+    return f"readonly {_element(_inline_type(items, generator))}[]"
+
+
+def _object_type(schema: Mapping[str, Any], generator: _Namer | None) -> str:
+    """A titled object is its own declaration; an untitled one is an open map."""
+    if _is_open_map(schema):
+        return "Record<string, unknown>"
+    named = None if generator is None else generator.name_for(schema)
+    return named if named is not None else "Record<string, unknown>"
+
+
+_TYPE_RENDERERS: dict[Any, Callable[[Mapping[str, Any], _Namer | None], str]] = {
+    **{kind: _simple_type for kind in _SIMPLE_TYPES},
+    "array": _array_type,
+    "object": _object_type,
+}
+
+
 def _inline_type(schema: Mapping[str, Any], generator: _Namer | None = None) -> str:
     if "anyOf" in schema:
         return " | ".join(_inline_type(branch, generator) for branch in schema["anyOf"])
@@ -285,23 +313,90 @@ def _inline_type(schema: Mapping[str, Any], generator: _Namer | None = None) -> 
         return " | ".join(
             _inline_type({"type": alternative}, generator) for alternative in declared
         )
-    if declared == "array":
-        items = schema.get("items")
-        if items is None:
-            # An array of unspecified values: a free-form JSON payload, which a
-            # caller checks itself rather than this module guessing an element.
-            return "readonly unknown[]"
-        return f"readonly {_element(_inline_type(items, generator))}[]"
-    if declared in _SIMPLE_TYPES:
-        return _SIMPLE_TYPES[declared]
-    if declared == "object":
-        # A titled object inside a union is a declaration of its own, so it is
-        # rendered under its name; an untitled one is an open map.
-        if _is_open_map(schema):
-            return "Record<string, unknown>"
-        named = None if generator is None else generator.name_for(schema)
-        return named if named is not None else "Record<string, unknown>"
-    raise QgisSdkBridgeError(f"cannot render a type for {declared!r}")
+    render = _TYPE_RENDERERS.get(declared)
+    if render is None:
+        raise QgisSdkBridgeError(f"cannot render a type for {declared!r}")
+    return render(schema, generator)
+
+
+def _validate_array(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    items = schema.get("items")
+    if items is None:
+        return f"Array.isArray({expression})"
+    return (
+        f"(Array.isArray({expression}) && {expression}.every((item) => "
+        f"{_inline_validator(items, 'item', generator)}))"
+    )
+
+
+def _validate_string(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    test = f'typeof {expression} === "string"'
+    pattern = schema.get("pattern")
+    if pattern is not None:
+        test += f" && {_pattern_test(pattern, expression)}"
+    return test
+
+
+def _validate_boolean(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    return f'typeof {expression} === "boolean"'
+
+
+def _validate_number(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    checks = [f'typeof {expression} === "number" && Number.isFinite({expression})']
+    checks.extend(_bound_checks(schema, expression))
+    if len(checks) == 1:
+        return checks[0]
+    return "(" + " && ".join(checks) + ")"
+
+
+def _validate_integer(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    # The safe range is already `isSafeInteger`; a tighter bound the manifest
+    # declared (a page size, say) is worth refusing before the transport,
+    # because the host would refuse it anyway and the page could have known.
+    checks = [f"isSafeInteger({expression})"]
+    checks.extend(_bound_checks(schema, expression))
+    if len(checks) == 1:
+        return checks[0]
+    return "(" + " && ".join(checks) + ")"
+
+
+def _validate_null(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    return f"{expression} === null"
+
+
+def _validate_object(
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None
+) -> str:
+    if _is_open_map(schema):
+        return f"isRecord({expression})"
+    named = None if generator is None else generator.name_for(schema)
+    if named is not None:
+        return f"{named}({expression}, strict)"
+    return f"isRecord({expression})"
+
+
+_VALIDATORS: dict[str, Callable[[Mapping[str, Any], str, _Namer | None], str]] = {
+    "array": _validate_array,
+    "string": _validate_string,
+    "boolean": _validate_boolean,
+    "number": _validate_number,
+    "integer": _validate_integer,
+    "null": _validate_null,
+    "object": _validate_object,
+}
+"""How each declared JSON type is checked on the page."""
 
 
 def _inline_validator(
@@ -325,39 +420,6 @@ def _inline_validator(
             + ")"
         )
     declared = schema.get("type")
-    if declared == "array":
-        items = schema.get("items")
-        if items is None:
-            return f"Array.isArray({expression})"
-        return (
-            f"(Array.isArray({expression}) && {expression}.every((item) => "
-            f"{_inline_validator(items, 'item', generator)}))"
-        )
-    if declared == "string":
-        test = f'typeof {expression} === "string"'
-        pattern = schema.get("pattern")
-        if pattern is not None:
-            test += f" && {_pattern_test(pattern, expression)}"
-        return test
-    if declared == "boolean":
-        return f'typeof {expression} === "boolean"'
-    if declared == "number":
-        checks = [f'typeof {expression} === "number" && Number.isFinite({expression})']
-        checks.extend(_bound_checks(schema, expression))
-        if len(checks) == 1:
-            return checks[0]
-        return "(" + " && ".join(checks) + ")"
-    if declared == "integer":
-        # The safe range is already `isSafeInteger`; a tighter bound the manifest
-        # declared (a page size, say) is worth refusing before the transport,
-        # because the host would refuse it anyway and the page could have known.
-        checks = [f"isSafeInteger({expression})"]
-        checks.extend(_bound_checks(schema, expression))
-        if len(checks) == 1:
-            return checks[0]
-        return "(" + " && ".join(checks) + ")"
-    if declared == "null":
-        return f"{expression} === null"
     if isinstance(declared, list):
         return (
             "("
@@ -367,14 +429,10 @@ def _inline_validator(
             )
             + ")"
         )
-    if declared == "object":
-        if _is_open_map(schema):
-            return f"isRecord({expression})"
-        named = None if generator is None else generator.name_for(schema)
-        if named is not None:
-            return f"{named}({expression}, strict)"
-        return f"isRecord({expression})"
-    raise QgisSdkBridgeError(f"cannot validate {declared!r}")
+    validate = _VALIDATORS.get(declared) if isinstance(declared, str) else None
+    if validate is None:
+        raise QgisSdkBridgeError(f"cannot validate {declared!r}")
+    return validate(schema, expression, generator)
 
 
 def _bound_checks(schema: Mapping[str, Any], expression: str) -> list[str]:

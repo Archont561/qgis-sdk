@@ -225,22 +225,24 @@ def _accepts(value: object, annotation: Any) -> bool:
     """
     origin = get_origin(annotation)
     if origin is Annotated:
-        return _accepts(value, get_args(annotation)[0])
-    if annotation is Any:
-        return True
-    if annotation is None or annotation is type(None):
-        return value is None
-    if origin in (Union, UnionType):
-        return any(_accepts(value, arg) for arg in get_args(annotation))
-    if origin is Literal:
-        return value in get_args(annotation)
-    if origin is not None:
-        return isinstance(value, origin)
-    if annotation is float:
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    if annotation is int:
-        return isinstance(value, int) and not isinstance(value, bool)
-    return isinstance(value, annotation)
+        accepted = _accepts(value, get_args(annotation)[0])
+    elif annotation is Any:
+        accepted = True
+    elif annotation is None or annotation is type(None):
+        accepted = value is None
+    elif origin in (Union, UnionType):
+        accepted = any(_accepts(value, arg) for arg in get_args(annotation))
+    elif origin is Literal:
+        accepted = value in get_args(annotation)
+    elif origin is not None:
+        accepted = isinstance(value, origin)
+    elif annotation is float:
+        accepted = isinstance(value, (int, float)) and not isinstance(value, bool)
+    elif annotation is int:
+        accepted = isinstance(value, int) and not isinstance(value, bool)
+    else:
+        accepted = isinstance(value, annotation)
+    return accepted
 
 
 def _describe_annotation(annotation: Any) -> str:

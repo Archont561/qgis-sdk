@@ -64,11 +64,13 @@ def _covers(landed: CanvasExtent, target: CanvasExtent) -> bool:
     # ``slack`` absorbs the last bit of a float round trip: a real canvas hands
     # the corner back as 52.14999999999999 when it was given 52.15.
     slack = 1e-9
-    return (
-        landed.x_min <= target.x_min + slack
-        and landed.y_min <= target.y_min + slack
-        and landed.x_max >= target.x_max - slack
-        and landed.y_max >= target.y_max - slack
+    return all(
+        (
+            landed.x_min <= target.x_min + slack,
+            landed.y_min <= target.y_min + slack,
+            landed.x_max >= target.x_max - slack,
+            landed.y_max >= target.y_max - slack,
+        )
     )
 
 

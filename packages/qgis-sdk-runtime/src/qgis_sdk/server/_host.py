@@ -26,7 +26,7 @@ from qgis_sdk.jobs import Jobs, JobService
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import Layers, Log, Project
 
-from ._context import ServerContext
+from ._context import ServerContext, ServerServices
 from ._hooks import HookDeclaration, ServerHooks
 from ._request import ServerRequest
 from ._response import ServerResponse
@@ -309,16 +309,11 @@ class ServerHost:
         if self._context_factory is not None:
             return self._context_factory(scope, request, response)
         jobs = None if self._jobs is None else Jobs(self._jobs.request_scoped(scope))
-        if project is None and layers is None and log is None:
-            return ServerContext(scope, request, response, jobs=jobs)
         return ServerContext(
             scope,
             request,
             response,
-            project=project,
-            layers=layers,
-            log=log,
-            jobs=jobs,
+            ServerServices(project=project, layers=layers, log=log, jobs=jobs),
         )
 
     def __repr__(self) -> str:

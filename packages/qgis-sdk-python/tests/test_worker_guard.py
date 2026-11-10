@@ -18,6 +18,7 @@ import pytest
 from qgis_sdk.core import (
     GUI_BOUND_CAPABILITIES,
     JobContext,
+    JobServices,
     PluginContext,
     PluginServices,
     ResourceScope,
@@ -187,7 +188,7 @@ def test_the_view_and_job_contexts_record_their_thread_too() -> None:
         progress=RecordingProgress(),
         cancellation=ControlledCancellation(),
         scope=ResourceScope(),
-        project=object(),
+        services=JobServices(project=object()),
     )
 
     with warnings.catch_warnings(record=True) as caught:

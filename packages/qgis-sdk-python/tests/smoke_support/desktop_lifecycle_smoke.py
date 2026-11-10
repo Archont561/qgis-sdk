@@ -78,13 +78,15 @@ class LifecycleReport:
     @property
     def passed(self) -> bool:
         """Return whether every headless lifecycle stage succeeded."""
-        return (
-            self.qgis_initialised
-            and self.plugin_started
-            and self.action_result == PING_VALUE
-            and self.plugin_unloaded
-            and self.owned_resources_released
-            and self.qgis_exited
+        return all(
+            (
+                self.qgis_initialised,
+                self.plugin_started,
+                self.action_result == PING_VALUE,
+                self.plugin_unloaded,
+                self.owned_resources_released,
+                self.qgis_exited,
+            )
         )
 
     @classmethod

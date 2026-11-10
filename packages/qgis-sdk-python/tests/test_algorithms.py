@@ -9,7 +9,9 @@ import pytest
 from qgis_sdk.algorithms import AlgorithmDescription, describe_algorithm, invoke
 from qgis_sdk.core import (
     AlgorithmContext,
+    AlgorithmServices,
     JobContext,
+    JobServices,
     PluginContext,
     PluginServices,
     ResourceScope,
@@ -318,8 +320,7 @@ def test_invoke_runs_from_a_job_context() -> None:
         progress=progress,
         cancellation=clock,
         scope=scope,
-        algorithms=algorithms,
-        project=project,
+        services=JobServices(algorithms=algorithms, project=project),
     )
 
     output = invoke(observe, ctx, layer_id="layer-1")
@@ -533,7 +534,10 @@ def test_a_function_can_be_called_directly_with_a_fake_context() -> None:
     """Nothing is injected at decoration: a unit test needs no runner at all."""
     algorithms, _, _project, scope = _declared()
     ctx = AlgorithmContext(
-        progress=Silent(), cancellation=Clock(), scope=scope, algorithms=algorithms
+        progress=Silent(),
+        cancellation=Clock(),
+        scope=scope,
+        services=AlgorithmServices(algorithms=algorithms),
     )
 
     output = centroid_layer(ctx, layer_id="layer-1")

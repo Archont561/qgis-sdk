@@ -101,3 +101,19 @@ past 30 lines on the way, `adapters/surfaces.py`'s view assembly (extracted as
 `_view_services`) and one test that then asserted two contexts at once (split in
 two). A record is a line of its own at every call site, so the budget is what says
 whether the trade paid, not the parameter count alone.
+
+## Follow-through: the remaining contexts
+
+Slices 10 and 11 applied the rule to every context constructor. The plugin and
+view contexts got `PluginServices` and `UiServices`; `AlgorithmContext`,
+`JobContext` and `ServerContext` got `AlgorithmServices`, `JobServices` and
+`ServerServices`. The execution contexts keep `progress`, `cancellation` and
+`scope` as ordinary arguments and put everything a *host* decides into the
+record; `AlgorithmServices.algorithms` is required because the runner always
+supplies it. `ServerServices` may be omitted entirely - the nine positional call
+sites in the examples and tests construct a context with no capabilities.
+
+CC102 counts `self`, which is why five explicit parameters is the ceiling: the
+first attempt at `AlgorithmContext` kept six and therefore kept its finding even
+though it had a record. Budget 808 -> 804; no threshold changed and nothing was
+suppressed.

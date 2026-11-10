@@ -227,17 +227,29 @@ def _imports_in_body(
     for statement in function.body:
         for node in ast.walk(statement):
             if isinstance(node, ast.Import):
-                for alias in node.names:
-                    found[alias.asname or alias.name.split(".")[0]] = (
-                        alias.name if alias.asname else alias.name.split(".")[0]
-                    )
+                found.update(_import_names(node))
             elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-                for alias in node.names:
-                    if alias.name != "*":
-                        found[alias.asname or alias.name] = (
-                            f"{node.module}.{alias.name}"
-                        )
+                found.update(_import_from_names(node))
     return found
+
+
+def _import_names(node: ast.Import) -> dict[str, str]:
+    """Names an ``import x.y`` binds, with the dotted path each one denotes."""
+    return {
+        alias.asname or alias.name.split(".")[0]: (
+            alias.name if alias.asname else alias.name.split(".")[0]
+        )
+        for alias in node.names
+    }
+
+
+def _import_from_names(node: ast.ImportFrom) -> dict[str, str]:
+    """Names a ``from x import y`` binds, each with its fully qualified path."""
+    return {
+        alias.asname or alias.name: f"{node.module}.{alias.name}"
+        for alias in node.names
+        if alias.name != "*"
+    }
 
 
 def _context_parameter(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:

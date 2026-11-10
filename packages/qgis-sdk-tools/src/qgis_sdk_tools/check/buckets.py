@@ -217,23 +217,24 @@ def _finding(
 
 
 def _bucket(root: str, *, plugin: str, external: set[str], vendored: set[str]) -> str:
-    if root == TESTING_PACKAGE:
-        return RUNTIME
-    if root == TOOLS_PACKAGE:
-        return UNKNOWN
-    if root in sys.stdlib_module_names:
-        return STDLIB
-    if root in HOST_ROOTS:
-        return HOST
-    if root == "qgis_sdk":
-        return RUNTIME
-    if root in {plugin, "_vendor"}:
-        return PLUGIN
-    if root in vendored:
-        return VENDORED
-    if root in external:
-        return EXTERNAL
-    return UNKNOWN
+    """The dependency bucket one import root belongs to, most specific first."""
+    if root == TESTING_PACKAGE or root == "qgis_sdk":
+        bucket = RUNTIME
+    elif root == TOOLS_PACKAGE:
+        bucket = UNKNOWN
+    elif root in sys.stdlib_module_names:
+        bucket = STDLIB
+    elif root in HOST_ROOTS:
+        bucket = HOST
+    elif root in {plugin, "_vendor"}:
+        bucket = PLUGIN
+    elif root in vendored:
+        bucket = VENDORED
+    elif root in external:
+        bucket = EXTERNAL
+    else:
+        bucket = UNKNOWN
+    return bucket
 
 
 def _entry_root(name: str) -> str:

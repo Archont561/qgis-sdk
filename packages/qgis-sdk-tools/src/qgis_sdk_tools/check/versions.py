@@ -373,6 +373,11 @@ def requirement_admits_version(specifier: str, version: str) -> bool:
         point = _release(version)
     except ValueError:
         return True
+    return _clauses_admit(point, specifier)
+
+
+def _clauses_admit(point: tuple[int, ...], specifier: str) -> bool:
+    """Whether every clause of ``specifier`` admits the release ``point``."""
     for raw in specifier.split(","):
         clause = raw.strip()
         if not clause:

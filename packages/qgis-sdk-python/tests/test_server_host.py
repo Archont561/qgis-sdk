@@ -20,6 +20,7 @@ from qgis_sdk.server import (
     ServerHost,
     ServerRequest,
     ServerResponse,
+    ServerServices,
     access_control,
     filter,
     service,
@@ -302,6 +303,17 @@ def test_a_service_the_request_project_does_not_provide_is_refused_by_name() -> 
         ctx.has("workers")
 
 
+def test_a_server_context_hands_back_its_services_record() -> None:
+    sentinels = {name: object() for name in ("project", "layers", "log", "jobs")}
+    ctx = ServerContext(
+        ResourceScope(), capabilities(), ServerResponse(), ServerServices(**sentinels)
+    )
+
+    for name, provided in sentinels.items():
+        assert getattr(ctx, name) is provided
+    assert ctx.capabilities == frozenset(sentinels)
+
+
 def test_the_context_is_read_only() -> None:
     ctx = ServerContext(ResourceScope(), capabilities(), ServerResponse())
 
@@ -544,7 +556,7 @@ def test_a_context_factory_replaces_the_services_a_request_carries() -> None:
             scope,
             request,
             response,
-            project=object(),  # type: ignore[arg-type]
+            ServerServices(project=object()),  # type: ignore[arg-type]
         ),
     )
 

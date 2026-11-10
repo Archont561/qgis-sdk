@@ -35,7 +35,7 @@ a test drives the same functions with ``qgis_sdk.testing.FakeServerInterface``
 and no QGIS at all.
 """
 
-from ._context import ServerContext
+from ._context import ServerContext, ServerServices
 from ._hooks import (
     DEFAULT_PRIORITY,
     HOOK_SIGNATURES,
@@ -62,6 +62,7 @@ __all__ = [
     "ServerInterface",
     "ServerRequest",
     "ServerResponse",
+    "ServerServices",
     "access_control",
     "filter",
     "service",

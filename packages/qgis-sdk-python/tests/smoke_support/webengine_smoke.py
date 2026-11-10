@@ -78,11 +78,13 @@ class QualificationReport:
     @property
     def qualified(self) -> bool:
         """Return whether every stage of the headless run succeeded."""
-        return (
-            self.webengine_available
-            and self.qgis_initialised
-            and self.load_finished
-            and self.qgis_exited
+        return all(
+            (
+                self.webengine_available,
+                self.qgis_initialised,
+                self.load_finished,
+                self.qgis_exited,
+            )
         )
 
     @classmethod

@@ -255,61 +255,112 @@ class _FieldRelay:
         self.form._notify(self.field.name, value)
 
 
+def _text_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Text(spec.name, label=spec.label, required=spec.required)
+
+
+def _toggle_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Toggle(spec.name, label=spec.label, required=spec.required)
+
+
+def _integer_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Number(spec.name, integer=True, label=spec.label, required=spec.required)
+
+
+def _number_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Number(spec.name, label=spec.label, required=spec.required)
+
+
+def _range_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Number(
+        spec.name,
+        range=(spec.details["minimum"], spec.details["maximum"]),
+        step=spec.details.get("step"),
+        label=spec.label,
+        required=spec.required,
+    )
+
+
+def _distance_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Distance(spec.name, label=spec.label, required=spec.required)
+
+
+def _choice_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Choice(
+        spec.name, options=spec.choices, label=spec.label, required=spec.required
+    )
+
+
+def _colour_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return Colour(
+        spec.name,
+        alpha=spec.details.get("alpha", True),
+        label=spec.label,
+        required=spec.required,
+    )
+
+
+def _layer_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return LayerPicker(
+        spec.name,
+        kind=spec.details.get("layer_kind", "vector"),
+        label=spec.label,
+        required=spec.required,
+    )
+
+
+def _crs_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return CrsPicker(spec.name, label=spec.label, required=spec.required)
+
+
+def _file_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return FileInput(
+        spec.name,
+        filters=tuple(spec.details.get("filters", ())),
+        label=spec.label,
+        required=spec.required,
+    )
+
+
+def _directory_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    return DirectoryInput(spec.name, label=spec.label, required=spec.required)
+
+
+def _field_input(spec: FieldSpec, of: LayerPicker | None) -> Input:
+    if of is None:
+        raise QgisSdkFormError(
+            f"field {spec.name}: a field picker needs the layer picker its "
+            f"'of' names ({spec.details.get('of')!r})"
+        )
+    return FieldPicker(spec.name, of=of, label=spec.label, required=spec.required)
+
+
+_WIDGET_INPUTS: dict[str, Callable[[FieldSpec, LayerPicker | None], Input]] = {
+    "text": _text_input,
+    "boolean": _toggle_input,
+    "integer": _integer_input,
+    "number": _number_input,
+    "range": _range_input,
+    "metres": _distance_input,
+    "choice": _choice_input,
+    "colour": _colour_input,
+    "layer": _layer_input,
+    "crs": _crs_input,
+    "file": _file_input,
+    "directory": _directory_input,
+    "field": _field_input,
+}
+"""The catalogue component each declared widget maps to (decision-55 point 4)."""
+
+
 def input_for(spec: FieldSpec, *, of: LayerPicker | None = None) -> Input:
     """The catalogue input that renders ``spec``; a ``field`` spec needs its ``of``."""
-    name, label, required = spec.name, spec.label, spec.required
-    details = spec.details
-    widget = spec.widget
-    if widget == "text":
-        return Text(name, label=label, required=required)
-    if widget == "boolean":
-        return Toggle(name, label=label, required=required)
-    if widget == "integer":
-        return Number(name, integer=True, label=label, required=required)
-    if widget == "number":
-        return Number(name, label=label, required=required)
-    if widget == "range":
-        return Number(
-            name,
-            range=(details["minimum"], details["maximum"]),
-            step=details.get("step"),
-            label=label,
-            required=required,
+    factory = _WIDGET_INPUTS.get(spec.widget)
+    if factory is None:
+        raise QgisSdkFormError(
+            f"field {spec.name}: no catalogue input for widget {spec.widget!r}"
         )
-    if widget == "metres":
-        return Distance(name, label=label, required=required)
-    if widget == "choice":
-        return Choice(name, options=spec.choices, label=label, required=required)
-    if widget == "colour":
-        return Colour(
-            name, alpha=details.get("alpha", True), label=label, required=required
-        )
-    if widget == "layer":
-        return LayerPicker(
-            name,
-            kind=details.get("layer_kind", "vector"),
-            label=label,
-            required=required,
-        )
-    if widget == "crs":
-        return CrsPicker(name, label=label, required=required)
-    if widget == "file":
-        return FileInput(
-            name,
-            filters=tuple(details.get("filters", ())),
-            label=label,
-            required=required,
-        )
-    if widget == "directory":
-        return DirectoryInput(name, label=label, required=required)
-    if widget == "field":
-        if of is None:
-            raise QgisSdkFormError(
-                f"field {name}: a field picker needs the layer picker its "
-                f"'of' names ({details.get('of')!r})"
-            )
-        return FieldPicker(name, of=of, label=label, required=required)
-    raise QgisSdkFormError(f"field {name}: no catalogue input for widget {widget!r}")
+    return factory(spec, of)
 
 
 def _inputs(specs: Sequence[FieldSpec], *, owner: str) -> list[Input]:
