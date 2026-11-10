@@ -61,6 +61,22 @@ def task_format_check():
     return {"actions": [action(tasks.format_check)]}
 
 
+def task_clean_code():
+    """Gate the Clean Code metrics against the committed budget."""
+    return {
+        "actions": [action(tasks.clean_code)],
+        "params": [
+            {
+                "name": "rebaseline",
+                "long": "rebaseline",
+                "default": False,
+                "type": bool,
+                "help": "rewrite the budget from the live run",
+            }
+        ],
+    }
+
+
 def task_lint_repository():
     """Apply the repository policy rules (Alint) to the whole checkout."""
     return {"actions": [action(tasks.lint_repository)]}
@@ -82,10 +98,16 @@ def task_check_commits():
 
 
 def task_check():
-    """Run the fast local gates: Ruff, Alint, actionlint and the commit range."""
+    """Run the fast local gates: Ruff, clean code, Alint and actionlint."""
     return {
         "actions": [],
-        "task_dep": ["lint_python", "format_check", "lint_repository", "lint_actions"],
+        "task_dep": [
+            "lint_python",
+            "format_check",
+            "clean_code",
+            "lint_repository",
+            "lint_actions",
+        ],
     }
 
 

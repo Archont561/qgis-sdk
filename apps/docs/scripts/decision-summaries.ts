@@ -84,4 +84,5 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	77: "Repository automation is one task graph: dodo.py declares the tasks, automation/ implements them as ordinary Python, and pixi run automation is the only front door - with Pixi keeping just the environment primitives and no task caching anything.",
 	78: "The reference pages lead with the fact and tabulate repeated shapes, one hand-written FAQ sits beside the generated decision table, the roadmap names no dates, and the registry numbers are fetched at build time and degrade to a dash.",
 	79: "The landing and install pages state the qualified QGIS and Python versions read from the support matrix, the Storybook follows the site theme, the first-plugin guide runs start to finish on one page, and walkthroughs replay real command output.",
+	80: "Rude and its Clean Code plugin measure the shape of every Python definition, and the gate is a committed budget that fails on a violation added, on a new file that arrives with one, and on a violation fixed without the budget being lowered.",
 };

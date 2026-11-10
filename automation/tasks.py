@@ -23,6 +23,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from automation import ci, commits, release, results
+from automation import clean_code as clean_code_rules
 from automation.lib import pixi, run
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "bun_ui",
     "check_commits",
     "check_generated",
+    "clean_code",
     "coverage",
     "docs_build",
     "docs_link_check",
@@ -75,6 +77,16 @@ PYTEST = [sys.executable, "-m", "pytest"]
 def lint_python() -> int:
     """Lint every Python tree with Ruff (scope lives in ``ruff.toml``)."""
     return run(["ruff", "check", "."])
+
+
+def clean_code(*, rebaseline: bool = False) -> int:
+    """Gate the Clean Code rules against the committed budget.
+
+    Rude reports the metrics at WARNING severity and exits 0, so the gate is the
+    comparison, not the exit status: :mod:`automation.clean_code` fails on any
+    movement either way. ``rebaseline`` rewrites the budget from the live run.
+    """
+    return clean_code_rules.gate(rebaseline=rebaseline)
 
 
 def format_check() -> int:

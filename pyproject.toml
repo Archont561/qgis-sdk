@@ -1,0 +1,49 @@
+# Rude configuration: the clean-code layer only.
+#
+# This is not a package manifest. The repository has no root Python project -
+# every distribution lives under `packages/` with its own `pyproject.toml` - and
+# Ruff reads `ruff.toml` beside this file, which wins over `[tool.ruff]` here.
+# Rude looks for `[tool.rude]` in a `pyproject.toml` and has no config format of
+# its own, so this file exists for that one table.
+#
+# The rules come from `rude-clean-code` (a Rude plugin, so it is discovered
+# rather than listed). Rude's own F/E/W sets and McCabe `C901` are Ruff's job:
+# `lint_python` already runs them and `ruff.toml` is where those limits live.
+# Running them twice would report every finding twice.
+#
+# The thresholds below are the plugin's defaults, written out because the number
+# a function may reach should be readable, not a default of an installed package.
+# Changing one moves the budget: `pixi run automation clean_code` fails until
+# `clean_code_budget.json` is re-baselined in the same change.
+[tool.rude]
+select = ["CC1", "CC2", "CC3"]
+
+# Functions.
+[tool.rude.rules.CC101]
+max_lines = 30
+
+[tool.rude.rules.CC102]
+max_parameters = 5
+
+[tool.rude.rules.CC103]
+max_returns = 5
+
+[tool.rude.rules.CC104]
+max_locals = 10
+
+# Classes.
+[tool.rude.rules.CC201]
+max_lines = 200
+
+[tool.rude.rules.CC202]
+max_methods = 15
+
+# Control flow.
+[tool.rude.rules.CC301]
+max_depth = 4
+
+[tool.rude.rules.CC302]
+max_operands = 3
+
+[tool.rude.rules.CC303]
+max_branches = 10

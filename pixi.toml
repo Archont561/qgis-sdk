@@ -27,6 +27,11 @@ jsonschema = "==4.26.0"
 # Repository policy and workflow tests are also run in the build environment.
 alint = "==0.20.1"
 pyyaml = "==6.0.3"
+# The clean-code layer: Rude plus the Clean Code rules it discovers as a plugin.
+# Configured in the root `pyproject.toml`; gated by `automation clean_code`
+# against `clean_code_budget.json`.
+rude = "==0.1a4"
+rude-clean-code = "==0.1.0"
 
 [feature.python.activation.env]
 # Absolute, so a task or a `qgis-sdk test` subprocess that runs in another

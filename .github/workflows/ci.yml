@@ -79,6 +79,15 @@ jobs:
         id: s07
         run: pixi run -e default automation -- format_check
 
+      # Rude reports the Clean Code metrics (function and class size, parameter,
+      # return and local counts, nesting, boolean chains, branches) at WARNING
+      # severity and exits 0, so the exit status is not the gate - the comparison
+      # with `clean_code_budget.json` is. A finding above the budget fails, and so
+      # does a finding fixed without the budget being lowered in the same change.
+      - name: Check the Clean Code budget
+        id: s30
+        run: pixi run -e default automation -- clean_code
+
       # Every `*.feature` file is linted, and a feature file outside the
       # directories the check knows is a failure rather than a file that
       # quietly stops being linted. The task keeps gherlint's pydantic 1 in a
