@@ -63,7 +63,7 @@ documented by doit itself:
 ```sh
 pixi run automation list                          # every task, one line each
 pixi run automation lint_python                   # one gate
-pixi run automation check                         # Ruff, format, Alint and actionlint
+pixi run automation check                         # Ruff, format, clean code, Alint, actionlint
 pixi run automation -- release_plan --dry-run true # a task with parameters
 pixi run automation -n 4 lint_python lint_repository docs_lint  # independent ones in parallel
 ```
@@ -93,11 +93,27 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 
 | Task | Command | Purpose |
 | :-- | :-- | :-- |
-| All local gates | `pixi run automation check` | Ruff lint, Ruff format, Alint and actionlint in one run |
+| All local gates | `pixi run automation check` | Ruff lint, Ruff format, the clean-code budget, Alint and actionlint in one run |
+| Clean code | `pixi run automation clean_code` | The Clean Code metrics against `clean_code_budget.json`; `--rebaseline` rewrites it |
 | Test | `pixi run -e bun bun run test` | Source tests, no coverage gate |
 | Coverage | `pixi run -e bun bun run coverage` | Separate 90% Python/TypeScript coverage gates |
 | Build | `pixi run -e bun bun run build` | Build workspace packages |
 | Typecheck | `pixi run -e bun typecheck` | TypeScript bridge typecheck |
+
+**Clean code is measured, and the measurement is a budget.** Rude runs the
+`rude-clean-code` plugin's rules over `packages`, `automation`, `scripts`,
+`tests` and `examples`: function and class length, parameter, return and local
+counts, nesting depth, boolean-chain length and branch count (CC101-CC303), for
+every Python definition in the repository. Those rules report at `WARNING`
+severity and `rude check` exits 0 whatever they find, so the numbers alone are a
+report rather than a gate. `automation clean_code` compares them with
+`clean_code_budget.json` and fails on any difference: a file that grows a
+violation fails, a new file has to start clean, and a violation fixed without
+the budget being lowered in the same change fails too, because headroom is where
+the next regression hides. `pixi run automation clean_code --rebaseline`
+rewrites the budget from the live run, and that diff is the review surface. The
+thresholds are `[tool.rude]` in the root `pyproject.toml`; Ruff keeps its own
+`F`/`E`/`W` and `C901` sets in `ruff.toml`, so nothing is reported twice.
 | Lint Python | `pixi run automation lint_python` | Ruff lint across the whole checkout |
 | Format check Python | `pixi run automation format_check` | Ruff format check across the whole checkout |
 | Gherkin lint | `pixi run automation lint_features` | gherlint over every `*.feature` file; a scenario outside `FEATURE_DIRECTORIES` fails |
