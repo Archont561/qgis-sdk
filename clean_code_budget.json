@@ -570,14 +570,6 @@
 		"CC102": 1,
 		"CC202": 1
 	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/host/_handlers.py": {
-		"CC101": 3,
-		"CC104": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/host/_services.py": {
-		"CC101": 1,
-		"CC303": 1
-	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/schema.py": {
 		"CC101": 1,
 		"CC303": 1
@@ -633,14 +625,7 @@
 		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/http/_server.py": {
-		"CC101": 8,
-		"CC102": 1,
-		"CC103": 1,
-		"CC104": 1,
-		"CC201": 2,
-		"CC202": 1,
-		"CC301": 2,
-		"CC303": 3
+		"CC102": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/jobs/_attempt.py": {
 		"CC101": 1,
