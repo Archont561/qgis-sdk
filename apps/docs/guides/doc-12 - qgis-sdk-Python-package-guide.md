@@ -3199,20 +3199,32 @@ a response; only `raise_for_status()` turns it into `QgisSdkHttpStatusError`.
 
 #### Errors you can tell apart by `code`
 
-`QgisSdkRequestRejectedError` (bad URL, user-info in the URL, unsupported
-method), `QgisSdkRequestCancelledError`, `QgisSdkConnectionError`,
-`QgisSdkRequestTimeoutError`, `QgisSdkTlsError`, `QgisSdkAuthenticationError`,
-`QgisSdkRedirectError`, `QgisSdkResponseTooLargeError`,
-`QgisSdkHttpStatusError`, `QgisSdkDecodeError`, all under `QgisSdkNetworkError`
-with the method and the URL in the message.
+Every network failure is a `QgisSdkNetworkError` carrying the method and the URL.
+The subclasses name what went wrong, and `code` is the string to match on:
+
+| Error | `code` | Raised when |
+| :-- | :-- | :-- |
+| `QgisSdkRequestRejectedError` | `request_rejected` | the request is refused before it is sent - bad URL, options or body, including user-info in the URL |
+| `QgisSdkRequestCancelledError` | `request_cancelled` | the owner cancels it, or its scope closes, before it finishes |
+| `QgisSdkConnectionError` | `connection_failed` | the host cannot be reached or the connection breaks; often retryable |
+| `QgisSdkRequestTimeoutError` | `request_timeout` | no complete response within the request's timeout |
+| `QgisSdkTlsError` | `tls_failed` | the TLS handshake fails under the QGIS certificate configuration |
+| `QgisSdkAuthenticationError` | `authentication_failed` | the server or proxy demands credentials the request cannot supply |
+| `QgisSdkRedirectError` | `redirect_refused` | a redirect cannot be followed: too many hops, or a target that would leak credentials |
+| `QgisSdkResponseTooLargeError` | `response_too_large` | the body exceeds the buffered ceiling and was never read into memory |
+| `QgisSdkHttpStatusError` | `http_status` | `raise_for_status()` finds a 4xx or 5xx; the response stays attached |
+| `QgisSdkDecodeError` | `decode_failed` | the body is not the text or JSON the caller asked for |
 
 ### Which limits and configuration apply?
 
 #### Defaults from measurement
 
-30 s timeout, 20 redirects, 16 MiB buffered body; the last two were measured
-against `QgsNetworkAccessManager` on loopback servers, not chosen. A body over
-the ceiling is aborted while downloading, not buffered and then refused.
+Requests time out after **30 s**, follow at most **20 redirects** and buffer up
+to **16 MiB**. A body over the ceiling is aborted while it downloads, not
+buffered and then refused. The redirect and body numbers were measured against
+`QgsNetworkAccessManager` on loopback servers rather than chosen; the timeout is
+the SDK's own, because a host request that never answers is indistinguishable
+from a hung plugin.
 
 #### QGIS owns the configuration
 

@@ -2,7 +2,9 @@
 /content/docs/python/
 /content/docs/typescript/
 /content/docs/contributing/
-/content/docs/reference/
+/content/docs/reference/*
+# ...except the FAQ, which is written by hand and has no source outside git.
+!/content/docs/reference/faq.md
 # Rendered from the workspace manifests by scripts/generate.ts
 /lib/generated/
 # Copied from packages/qgis-sdk-ui/storybook-static by scripts/generate.ts

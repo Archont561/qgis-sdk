@@ -4,7 +4,10 @@
  * - the three reference guides, one directory each plus a `migration/` folder
  *   for the migration notes (see `lib/guides.ts`);
  * - `reference/design-decisions.md`, one curated table over the decision
- *   records (see `lib/decisions.ts` and `decision-summaries.ts`);
+ *   records (see `lib/decisions.ts` and `decision-summaries.ts`); the FAQ beside
+ *   it is hand-written and stays in git, so the folder is mixed;
+ * - `lib/generated/stats.json`, the registry download counts `components/registry-stats.tsx`
+ *   renders, fetched at build time with every failure degraded to `null`;
  * - the `meta.json` files that give every generated folder its title and page
  *   order, so the sidebar is data rather than a hand-kept list in the layout;
  * - `lib/generated/` - the versions the site describes and, per page, the
@@ -31,6 +34,7 @@ import {
 	renderGuides,
 	splitGuide,
 } from "./lib/guides";
+import { collectStats } from "./lib/stats";
 
 const DOCS_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(DOCS_DIR, "../../..");
@@ -159,10 +163,6 @@ async function main(): Promise<void> {
 			});
 		}
 	}
-	await writeJson(join(CONTENT_DIR, "reference/meta.json"), {
-		title: "Reference",
-		pages: ["design-decisions"],
-	});
 
 	const records = (await readdir(DECISIONS_DIR))
 		.filter((name) => /^decision-\d+ .*\.md$/.test(name))
@@ -180,17 +180,23 @@ async function main(): Promise<void> {
 			`generate: decision-${number} has no summary in scripts/decision-summaries.ts; its title stands in`,
 		);
 	}
-	await rm(join(CONTENT_DIR, dirname(DECISIONS_PAGE)), {
-		recursive: true,
-		force: true,
-	});
+	// `reference/` also holds the hand-written FAQ, so only the page this script
+	// owns is replaced - a `rm` of the folder would take the FAQ with it.
 	await mkdir(join(CONTENT_DIR, dirname(DECISIONS_PAGE)), { recursive: true });
 	await writeFile(join(CONTENT_DIR, DECISIONS_PAGE), table.content);
 	console.log(`generate: ${DECISIONS_PAGE} from ${decisions.length} records`);
+	await writeJson(join(CONTENT_DIR, "reference/meta.json"), {
+		title: "Reference",
+		pages: ["design-decisions", "faq"],
+	});
 
 	// What the layout needs to know about pages it did not author: the version
 	// badges, the edit link back to the guide, and the guide's last commit.
 	await writeJson(join(GENERATED_DIR, "versions.json"), versions);
+	const stats = await collectStats();
+	await writeJson(join(GENERATED_DIR, "stats.json"), stats);
+	const known = stats.rows.filter((row) => row.lastMonth !== null).length;
+	console.log(`generate: stats for ${known}/${stats.rows.length} packages`);
 	const edits: Record<string, PageSource> = Object.fromEntries(
 		[...sources.entries()].sort(([a], [b]) => a.localeCompare(b)),
 	);

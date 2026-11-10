@@ -35,7 +35,7 @@ with the implementation.
 | :-- | :-- | :-- |
 | [`guides/`](guides/README.md) | Task-oriented instructions and workflows | `apps/docs/content/docs/start`, `apps/docs/content/docs/guides` - published at [archont561.github.io/qgis-sdk](https://archont561.github.io/qgis-sdk/) |
 | [`concepts/`](concepts/README.md) | Domain concepts and explanations | `apps/docs/content/docs/start/concepts.md` and the opening sections of the reference guides |
-| [`reference/`](reference/README.md) | APIs, configuration, commands, schemas | generated pages on the site (`/python/`, `/typescript/`, `/reference/`) plus `qgis-sdk --help` |
+| [`reference/`](reference/README.md) | APIs, configuration, commands, schemas | generated pages on the site (`/python/`, `/typescript/`, `/reference/`), the site's [FAQ](https://archont561.github.io/qgis-sdk/reference/faq/) and `qgis-sdk --help` |
 | [`architecture/`](architecture/README.md) | System architecture and architectural decisions | `backlog/decisions/` (73 records, one table on the site) |
 | [`development/`](development/README.md) | Contribution, testing and development workflows | `AGENTS.md`, `apps/docs/guides/doc-14`, the site's `/contributing/workspace/` section |
 

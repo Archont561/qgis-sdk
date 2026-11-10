@@ -180,12 +180,20 @@ tracked:
   written with the base already in it doubles. The handful of plain `<a>`
   elements on the landing page are the exception and carry `BASE`
   themselves.
-- `content/docs/start/` (installation, first plugin, concepts), the four
-  guides and the landing page (`app/page.tsx`) are the hand-written part,
-  kept short and pointing into the generated pages. `site.ts` holds the URL,
-  base and repository; the versions on the landing page are read from the
+- `content/docs/start/` (installation, first plugin, concepts), the guides
+  (the four task guides, `for-agents`, and `migrating-from/`), `roadmap.mdx`,
+  one page in a generated folder (`reference/faq.md`) and the landing page
+  (`app/page.tsx`) are the hand-written part, kept short and pointing into the
+  generated pages. `reference/` is the one mixed folder: `design-decisions.mdx`
+  is written by `scripts/generate.ts` and the FAQ beside it is in git, so the
+  generator replaces that file rather than the directory. `site.ts` holds the
+  URL, base and repository; the versions on the landing page are read from the
   workspace manifests at generate time and written to
-  `lib/generated/versions.json`.
+  `lib/generated/versions.json`, and the registry download counts the install
+  page tables are fetched from PyPI and npm at the same moment into
+  `lib/generated/stats.json` - a registry that does not answer leaves `null`
+  behind and the table renders a dash, so building never depends on a third
+  party being up (`STATS_OFFLINE=1` skips the fetch).
 - `next build` writes `out/`; `scripts/postbuild.ts` then writes what Next
   does not: `llms.txt`, `llms-full.txt` and one `.md` per page (the AI-facing
   surface, files rather than routes because GitHub Pages serves files), the
