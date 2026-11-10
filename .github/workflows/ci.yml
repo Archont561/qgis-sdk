@@ -58,26 +58,26 @@ jobs:
 
       - name: Install JavaScript dependencies
         id: s03
-        run: pixi run -e bun install-js
+        run: pixi run -e default automation -- install_js
 
       - name: Compute commit range
         id: s04
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: python scripts/compute_commit_base.py
+        run: python -m automation.commits
 
       - name: Check commit messages
         id: s05
-        run: pixi run -e default check-commits
+        run: pixi run -e default automation -- check_commits
 
       - name: Lint Python
         id: s06
-        run: pixi run -e default lint-python
+        run: pixi run -e default automation -- lint_python
 
       - name: Check Python formatting
         id: s07
-        run: pixi run -e default format-python-check
+        run: pixi run -e default automation -- format_check
 
       # Every `*.feature` file is linted, and a feature file outside the
       # directories the check knows is a failure rather than a file that
@@ -85,15 +85,15 @@ jobs:
       # venv of its own, so the default environment's pydantic 2 is untouched.
       - name: Lint Gherkin feature files
         id: s27
-        run: pixi run -e default lint-features
+        run: pixi run -e default automation -- lint_features
 
       - name: Test release tooling
         id: s09
-        run: pixi run -e default test-release-tool
+        run: pixi run -e default automation -- test_scripts
 
       - name: Verify the scoped versions and the shared contract
         id: s10
-        run: pixi run -e default release-verify-versions
+        run: pixi run -e default automation -- release_verify_versions
 
       # Regenerate bridge artifacts and reject orphaned sample/host outputs with
       # their generator/source headers in the two owned directories (TASK-142).
@@ -101,7 +101,7 @@ jobs:
       # page's generated schema is checked separately. No orphan is deleted.
       - name: Check the generated bridge clients are current
         id: s19
-        run: python scripts/ci.py check-generated
+        run: pixi run -e default automation -- check_generated
 
       # The Processing snapshot the runtime ships (qgis_sdk/processing) is
       # generated from the pinned QGIS by the same reader and emitters
@@ -129,7 +129,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QGIS_SDK_NATIVE_SERVICES: "1"
-        run: pixi run -e default python scripts/ci.py native
+        run: pixi run -e default automation -- native
 
       # The reference plugin is a plugin project, not part of the SDK suite: it
       # runs through its own `qgis-sdk test`, the pure target on the SDK fakes
@@ -137,30 +137,30 @@ jobs:
       # page, `build` and `dev` halves stay in the opt-in harness (doc-14).
       - name: Test the reference plugin through qgis-sdk test
         id: s20
-        run: pixi run -e default test-reference-example
+        run: pixi run -e default automation -- reference_example
 
       # The page is a member of the Bun workspace and depends on the bridge
       # through `workspace:*`, so its Vitest suite runs against the checkout's
       # `packages/qgis-sdk-typescript`, built first by turbo (decision-41).
       - name: Test the reference page on the workspace bridge
         id: s21
-        run: pixi run -e bun test-reference-web
+        run: pixi run -e default automation -- test_reference_web
 
       - name: Lint and format TypeScript
         id: s12
-        run: pixi run -e bun biome-check
+        run: pixi run -e default automation -- biome
 
       - name: Lint GitHub Actions
         id: s13
-        run: pixi run -e default lint-github-actions
+        run: pixi run -e default automation -- lint_actions
 
       - name: Check repository policy
         id: s25
-        run: pixi run -e default lint-repository
+        run: pixi run -e default automation -- lint_repository
 
       - name: Test repository policy
         id: s26
-        run: pixi run -e default test-alint-policy
+        run: pixi run -e default automation -- test_alint_policy
 
       # AGENTS.md is two documents in one: three regions are generated from the
       # repository (`agents-md` plus `scripts/agents/refresh.mjs`), and a stale
@@ -169,11 +169,11 @@ jobs:
       # check.
       - name: Check AGENTS.md is current
         id: s28
-        run: pixi run -e bun bun run agents:check
+        run: pixi run -e default automation -- agents_check
 
       - name: Typecheck TypeScript
         id: s14
-        run: pixi run -e bun typecheck
+        run: pixi run -e default automation -- typecheck
 
       # The static Storybook is the portable-story catalogue of qgis-sdk-ui
       # (TASK-70); it is built here so a story that no longer compiles fails
@@ -181,7 +181,7 @@ jobs:
       # (`/qgis-sdk/storybook/`, TASK-43).
       - name: Build the qgis-sdk-ui Storybook
         id: s23
-        run: pixi run -e bun storybook-build
+        run: pixi run -e default automation -- storybook
 
       # A red job whose report is only "exit code 1" costs a rerun to diagnose,
       # and the log archive is not reachable from every client. Every step above
@@ -191,7 +191,7 @@ jobs:
         if: failure()
         env:
           STEPS: ${{ toJSON(steps) }}
-        run: python scripts/ci.py report-steps
+        run: pixi run -e default automation -- report_steps
 
   # Coverage is the longest Linux step. Run it in parallel with the other gates
   # on a separate runner: each job restores its own locked environments and
@@ -219,18 +219,20 @@ jobs:
 
       - name: Install JavaScript dependencies
         id: s03
-        run: pixi run -e bun install-js
+        run: pixi run -e default automation -- install_js
 
       - name: Check coverage for all packages
         id: coverage
-        run: >-
-          python scripts/ci.py run-log coverage-output.log --
-          pixi run -e bun bun run coverage
+        # The coverage run drives the whole workspace from the Bun environment,
+        # so it goes through the harness rather than a task: `run_logged` keeps
+        # the output for the annotation step, and nesting it inside the Python
+        # environment would change which `python` the packages' suites find.
+        run: python -m automation.ci run-log coverage-output.log -- pixi run -e bun bun run coverage
 
       - name: Annotate the coverage failure
         id: s15
         if: failure() && steps.coverage.outcome == 'failure'
-        run: python scripts/ci.py annotate-coverage coverage-output.log
+        run: python -m automation.ci annotate-coverage coverage-output.log
 
       - name: Upload Python coverage
         id: s16
@@ -272,7 +274,7 @@ jobs:
         if: failure()
         env:
           STEPS: ${{ toJSON(steps) }}
-        run: python scripts/ci.py report-steps
+        run: pixi run -e default automation -- report_steps
 
   # The QGIS 3.44 LTS row: the version Debian and Ubuntu install, with QGIS
   # Server in the same build. Two things no other job can make:
@@ -286,7 +288,7 @@ jobs:
   #   this is the one place the binding-agnostic adapters
   #   (qgis_sdk.adapters._qt) are proven on Qt 5 (decision-70).
   #
-  # A row that collected nothing is a failure, not a pass: scripts/ci.py lts
+  # A row that collected nothing is a failure, not a pass: automation/ci.py lts
   # probes the modules before pytest starts.
   lts:
     name: QGIS 3.44 LTS
@@ -349,7 +351,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           QGIS_SDK_SERVER_DEV: "1"
-        run: .venv-lts/bin/python scripts/ci.py lts
+        run: .venv-lts/bin/python -m automation.ci lts
 
   # Preserve the existing required `checks` status while ensuring a failed,
   # cancelled, or unexpectedly skipped Linux job cannot pass the aggregate.
@@ -445,18 +447,18 @@ jobs:
       # report the counts and every failure as annotations the API can return.
       - name: Report Python test results
         if: ${{ !cancelled() }}
-        run: python scripts/report_test_results.py python-tests.xml
+        run: python -m automation.results python-tests.xml
 
       - name: Test TypeScript bridge
         shell: bash
         run: >-
-          python scripts/ci.py run-log bun-tests.log --
+          python -m automation.ci run-log bun-tests.log --
           bun test packages/qgis-sdk-typescript/tests packages/qgis-sdk-alias/tests
 
       - name: Report TypeScript test results
         if: ${{ !cancelled() }}
         shell: bash
-        run: python scripts/ci.py report-bun bun-tests.log --title "bun test"
+        run: python -m automation.ci report-bun bun-tests.log --title "bun test"
 
       # The UI elements import the bridge's built entry, so the bridge is
       # built first; `--conditions=browser` is what `@lit/react` needs under
@@ -465,9 +467,9 @@ jobs:
       # the alias to the scoped package file for file.
       - name: Test qgis-sdk-ui
         shell: bash
-        run: python scripts/ci.py bun-ui
+        run: python -m automation.ci bun-ui
 
       - name: Report qgis-sdk-ui test results
         if: ${{ !cancelled() }}
         shell: bash
-        run: python scripts/ci.py report-bun bun-ui-tests.log --title "bun test (qgis-sdk-ui)"
+        run: python -m automation.ci report-bun bun-ui-tests.log --title "bun test (qgis-sdk-ui)"

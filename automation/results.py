@@ -4,11 +4,11 @@
 Extracted from ci.yml's cross-platform job so the same reporting logic runs
 in CI and can be validated locally:
 
-    pixi run -e default python scripts/report_test_results.py python-tests.xml
-    python scripts/report_test_results.py bun-tests.log --title "bun test"
+    pixi run -e default python -m automation.results python-tests.xml
+    python -m automation.results bun-tests.log --title "bun test"
 
 Usage:
-    report_test_results.py <junit-xml> [--title <title>] [--fail-on-error]
+    automation.results <junit-xml> [--title <title>] [--fail-on-error]
 """
 
 from __future__ import annotations

@@ -43,7 +43,7 @@ SDK_NPM_PACKAGE: Final = "@archont561/qgis-sdk"
 SDK_NPM_VERSION: Final = "0.8.0"
 """The published bridge this scaffold is written against, pinned exactly.
 
-``scripts/release.py stamp --scope typescript`` moves it with every bridge
+``automation/release.py stamp --scope typescript`` moves it with every bridge
 release, so a tools release offers the newest bridge it was qualified with;
 ``WebOptions.sdk_dependency`` replaces it for a page inside this repository
 (decision-41).
@@ -53,7 +53,7 @@ UI_NPM_VERSION: Final = "0.1.0"
 """The published web components the templates opt into, pinned exactly.
 
 One import in ``main.ts`` registers the ``<qgis-*>`` elements (decision-47);
-``scripts/release.py stamp --scope ui`` moves the pin with every UI release and
+``automation/release.py stamp --scope ui`` moves the pin with every UI release and
 ``WebOptions.ui_dependency`` replaces it inside this repository.
 """
 

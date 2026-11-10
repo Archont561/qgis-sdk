@@ -66,11 +66,11 @@ Run the scoped checks that already exist instead of inventing a gate:
 
 | Target | Command |
 | --- | --- |
-| Python lint and format | `pixi run lint-python`, `pixi run format-python-check` |
+| Python lint and format | `pixi run automation lint_python`, `pixi run automation format_check` |
 | Focused Python tests | `pixi run -e default python -m pytest packages/qgis-sdk-python/tests/<file> -q` |
-| Workspace tests | `pixi run -e bun bun run test`, or `pixi run -e bun turbo-test` |
+| Workspace tests | `pixi run automation test_js` |
 | Coverage gates | `pixi run -e bun bun run coverage` |
-| TypeScript lint and types | `pixi run -e bun biome-check`, `pixi run -e bun typecheck` |
+| TypeScript lint and types | `pixi run automation biome`, `pixi run automation typecheck` |
 | Generated client drift | `pixi run -e build python packages/qgis-sdk-python/scripts/generate_bridge_clients.py --check` |
 
 In a sandbox without Pixi or Bun, the documented fallback is a lower-fidelity check, not an

@@ -35,7 +35,7 @@ dev = [
 ]
 
 # The Gherkin linter for the BDD scenarios under tests/features (TASK-85's
-# neighbour in the sprint: `python scripts/ci.py check-gherkin`). A separate
+# neighbour in the sprint: `python -m automation.ci check-gherkin`). A separate
 # extra because gherlint pins pydantic 1 and the `mcp` extra needs pydantic 2:
 # the two cannot be installed into one environment, so CI gives the linter its
 # own venv rather than making every developer choose.

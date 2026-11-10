@@ -97,7 +97,7 @@ jobs:
       - name: Classify the tag
         id: classify
         run: >-
-          pixi run -e build release-classify
+          pixi run -e build automation -- release_classify
           --tag "${{ inputs.tag || github.ref_name }}"
           --scoped
 
@@ -112,11 +112,11 @@ jobs:
 
       - name: Install JavaScript dependencies
         if: steps.classify.outputs.typescript == 'true' || steps.classify.outputs.ui == 'true'
-        run: pixi run -e bun install-js
+        run: pixi run -e build automation -- install_js
 
       - name: Stamp the released package
         run: >-
-          pixi run -e build release-stamp
+          pixi run -e build automation -- release_stamp
           --version "${{ steps.classify.outputs.version }}"
           --scope "${{ steps.classify.outputs.scope }}"
 
@@ -133,7 +133,7 @@ jobs:
       # of this runs, and relock.yml is what moves the lock.
       - name: Verify the stamped manifests and the shared contract
         run: >-
-          pixi run -e build release-verify-versions
+          pixi run -e build automation -- release_verify_versions
           --scope "${{ steps.classify.outputs.scope }}"
           --version "${{ steps.classify.outputs.version }}"
 
@@ -148,7 +148,7 @@ jobs:
       - name: Build and check the Python wheels the scope ships
         if: steps.classify.outputs.python == 'true'
         run: >-
-          pixi run -e build release-build-python
+          pixi run -e build automation -- release_build_python
           --scope "${{ steps.classify.outputs.scope }}"
 
       - name: Build the Conda package
@@ -287,7 +287,7 @@ jobs:
       - name: Verify the wheel without uploading
         if: needs.build.outputs.prerelease == 'true'
         run: |
-          pixi run -e build release-verify-python --dist dist/pypi
+          pixi run -e build automation -- release_verify_python --dist dist/pypi
           echo "PyPI upload skipped: ${{ needs.build.outputs.version }} is a prerelease; registries only accept clean tags." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish qgis-sdk-runtime to PyPI
@@ -857,8 +857,8 @@ jobs:
           # A TypeScript-only tag downloads no wheel, so dist/ does not exist
           # yet; ts-v0.2.0 failed here after npm had already published.
           mkdir -p dist
-          pixi run -e build release-checksums --out dist/SHA256SUMS "${assets[@]}"
-          pixi run -e build release-github \
+          pixi run -e build automation -- release_checksums --out dist/SHA256SUMS --paths "${assets[@]}"
+          pixi run -e build automation -- release_github_release \
             --tag "$RELEASE_TAG" \
             --body-file notes/release-notes.md \
             --asset "${assets[@]}" dist/SHA256SUMS

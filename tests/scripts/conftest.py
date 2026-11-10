@@ -1,8 +1,8 @@
-"""Shared fixtures for the release script tests.
+"""Shared fixtures for the automation tests.
 
-Adds ``scripts/`` to ``sys.path`` so tests can import the standalone
-``release`` script as a module, matching the pattern used by
-``packages/qgis-sdk-python/tests/conftest.py``.
+Adds the repository root to ``sys.path`` so the tests import the automation
+package the way ``dodo.py`` does - ``automation.release``, not a file on a path
+that happens to shadow a module name.
 """
 
 from __future__ import annotations
@@ -10,11 +10,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import pytest
-import release
-from release import parse_versionrc
+
+from automation import release
+from automation.release import parse_versionrc
 
 
 @pytest.fixture(autouse=True)

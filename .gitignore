@@ -27,6 +27,8 @@ coverage/
 .pytest_cache/
 # tox's virtual environments (tox.ini): the compatibility matrix's own scratch
 .tox/
+# doit's task database (created beside dodo.py by any `pixi run automation`)
+.doit.db*
 __pycache__/
 .config/turborepo/
 # Storybook static build of packages/qgis-sdk-ui

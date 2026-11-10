@@ -102,7 +102,7 @@ def test_the_compatibility_workflow_runs_one_job_per_tox_environment() -> None:
     tox_calls = [
         step["run"]
         for step in steps
-        if step.get("run", "").startswith("python scripts/ci.py")
+        if step.get("run", "").startswith("python -m automation.ci")
     ]
     assert any("tox -e" in call and "matrix.toxenv" in call for call in tox_calls), (
         "the workflow never runs the tox environment it configures"

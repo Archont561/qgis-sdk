@@ -18,7 +18,7 @@ on:
       - "packages/qgis-sdk-runtime/**"
       - "packages/qgis-sdk-tools/**"
       - "tox.ini"
-      - "scripts/ci.py"
+      - "automation/**"
       - ".github/workflows/compat.yml"
   push:
     branches: [main]
@@ -27,7 +27,7 @@ on:
       - "packages/qgis-sdk-runtime/**"
       - "packages/qgis-sdk-tools/**"
       - "tox.ini"
-      - "scripts/ci.py"
+      - "automation/**"
       - ".github/workflows/compat.yml"
   workflow_dispatch:
 
@@ -79,9 +79,9 @@ jobs:
       # always reachable, and "exit code 1" names nothing.
       - name: Run the suite on Python ${{ matrix.python }}
         id: s04
-        run: python scripts/ci.py run-log "compat-${{ matrix.toxenv }}.log" -- tox -e "${{ matrix.toxenv }}"
+        run: python -m automation.ci run-log "compat-${{ matrix.toxenv }}.log" -- tox -e "${{ matrix.toxenv }}"
 
       - name: Annotate the failure
         id: s05
         if: failure()
-        run: python scripts/ci.py annotate-log "compat-${{ matrix.toxenv }}.log" --title "python ${{ matrix.python }}" --skip-missing
+        run: python -m automation.ci annotate-log "compat-${{ matrix.toxenv }}.log" --title "python ${{ matrix.python }}" --skip-missing

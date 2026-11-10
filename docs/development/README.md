@@ -7,6 +7,9 @@ Contribution, testing and release workflows. The workspace guide in
 
 ```sh
 bash scripts/restore.sh            # locked Pixi environments, offline-capable
+pixi run automation list            # every repository task and what it does
+pixi run automation check           # Ruff, format, Alint and actionlint
+pixi run automation test_python     # the QGIS-free suite of the kit
 pixi run -e bun bun run test       # Python and TypeScript tests
 pixi run -e bun bun run coverage   # the 90% gates CI uses
 ```

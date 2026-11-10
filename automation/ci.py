@@ -62,6 +62,22 @@ def status_code(code: int) -> int:
     return 128 - code if code < 0 else code
 
 
+def emit(chunk: bytes) -> None:
+    """Write ``chunk`` to this process's stdout, which may not be a file.
+
+    doit replaces ``sys.stdout`` with a wrapper that captures a task's output, and
+    that wrapper has no ``buffer``. Writing to ``sys.stdout.buffer`` works in a
+    shell and raises ``AttributeError`` under the runner, so the bytes go through
+    whichever of the two is there.
+    """
+    buffer = getattr(sys.stdout, "buffer", None)
+    if buffer is None:
+        sys.stdout.write(chunk.decode("utf-8", errors="replace"))
+    else:
+        buffer.write(chunk)
+    sys.stdout.flush()
+
+
 def run_logged(command: list[str], log: Path) -> int:
     """Stream combined stdout and stderr to the job log and a file, like tee."""
     with log.open("wb") as output:
@@ -74,15 +90,13 @@ def run_logged(command: list[str], log: Path) -> int:
                 "utf-8", errors="replace"
             )
             output.write(message)
-            sys.stdout.buffer.write(message)
-            sys.stdout.buffer.flush()
+            emit(message)
             return 127 if isinstance(exc, FileNotFoundError) else 126
         assert process.stdout is not None
         while chunk := process.stdout.read1(65536):
             output.write(chunk)
             output.flush()
-            sys.stdout.buffer.write(chunk)
-            sys.stdout.buffer.flush()
+            emit(chunk)
         return status_code(process.wait())
 
 
@@ -402,7 +416,7 @@ def check_gherkin(executable: str | None = None, root: Path = ROOT) -> int:
             print(f"{path.relative_to(root)} is outside the linted directories")
         print(
             "::error title=feature file outside the lint::Add its directory to "
-            "FEATURE_DIRECTORIES in scripts/ci.py so every scenario is linted."
+            "FEATURE_DIRECTORIES in automation/ci.py so every scenario is linted."
         )
         return 1
     files = feature_files(root)

@@ -54,6 +54,34 @@ Pushes to `main` publish the developer sandbox branch; pull requests with stale 
 
 ## Test, build and the Pixi tasks
 
+Repository automation has one entry point: `pixi run automation <task>`. The
+tasks are declared in `dodo.py` (a [doit](https://pydoit.org) registry) and
+implemented in `automation/`, which is ordinary Python. `pixi run automation
+list` is the list of tasks with their purpose, and the parameters of a task are
+documented by doit itself:
+
+```sh
+pixi run automation list                          # every task, one line each
+pixi run automation lint_python                   # one gate
+pixi run automation check                         # Ruff, format, Alint and actionlint
+pixi run automation -- release_plan --dry-run true # a task with parameters
+pixi run automation -n 4 lint_python lint_repository docs_lint  # independent ones in parallel
+```
+
+The Pixi tasks that remain are environment primitives: one tool (`ruff`, `bun`,
+`actionlint`), `pixi upload`, or a `pixi exec` build. A task that needs another
+environment asks Pixi for it, so `pixi run automation biome` runs the Bun command
+in `bun` without anyone remembering the flag.
+
+Two rules keep the CLI from becoming a second way to do things:
+
+- `automation/` never imports `doit`. Each module has a `main()` or a function
+  entry point, so `python -m automation.ci run-log …` is the same code a task
+  runs - which is how the workflows capture a step's log and annotate its tail.
+- `autorelease.yml` plans and tags before a Pixi environment exists, so it calls
+  `python3 -m automation.release` directly and the release tool stays
+  stdlib-only.
+
 ```sh
 pixi run -e bun bun run test       # source tests, without coverage gating
 pixi run -e bun bun run coverage  # Python and TypeScript coverage checks
@@ -65,26 +93,27 @@ Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from s
 
 | Task | Command | Purpose |
 | :-- | :-- | :-- |
+| All local gates | `pixi run automation check` | Ruff lint, Ruff format, Alint and actionlint in one run |
 | Test | `pixi run -e bun bun run test` | Source tests, no coverage gate |
 | Coverage | `pixi run -e bun bun run coverage` | Separate 90% Python/TypeScript coverage gates |
 | Build | `pixi run -e bun bun run build` | Build workspace packages |
 | Typecheck | `pixi run -e bun typecheck` | TypeScript bridge typecheck |
-| Lint Python | `pixi run lint-python` | Ruff lint across the whole checkout |
-| Format check Python | `pixi run format-python-check` | Ruff format check across the whole checkout |
-| Gherkin lint | `pixi run lint-features` | gherlint over every `*.feature` file; a scenario outside `FEATURE_DIRECTORIES` fails |
-| Repository policy | `pixi run lint-repository` | Alint rules in `.alint.yml` |
-| Test repository policy | `pixi run test-alint-policy` | Exercise the actual Alint rules against isolated passing and failing trees |
+| Lint Python | `pixi run automation lint_python` | Ruff lint across the whole checkout |
+| Format check Python | `pixi run automation format_check` | Ruff format check across the whole checkout |
+| Gherkin lint | `pixi run automation lint_features` | gherlint over every `*.feature` file; a scenario outside `FEATURE_DIRECTORIES` fails |
+| Repository policy | `pixi run automation lint_repository` | Alint rules in `.alint.yml` |
+| Test repository policy | `pixi run automation test_alint_policy` | Exercise the actual Alint rules against isolated passing and failing trees |
 | Docs site | `pixi run -e bun docs-build` | The bridge, the Storybook and the Next site into `apps/docs/out` |
 | Docs links | `pixi run -e bun docs-link-check` | Builds, then checks every internal link and fragment of the site |
 | Docs dev | `pixi run -e bun docs-dev` | The site from source with reload on `0.0.0.0:4321` |
 | Python compatibility | `tox -e py311` | The QGIS-free suite on one Python version, in its own venv (`tox.ini`) |
 | Agent instructions | `pixi run -e bun bun run agents` | Regenerate the marked regions of `AGENTS.md` (`agents:check` in CI) |
 
-The Alint policy requires the root README and license, byte-identical scoped and alias READMEs with the alias installation commands, immutable external GitHub Actions and container references, and no merge-conflict markers or bidirectional override controls in non-ignored files. The README mirror rules also run with `pixi run -e default test-release-tool`, alongside the remaining README-shape tests. Alint complements Ruff, Biome, actionlint, typechecking, generated-file checks and the built-site link checker; it does not replace them. CI runs the policy and its fixture tests, subject to the existing workflow path filters.
+The Alint policy requires the root README and license, byte-identical scoped and alias READMEs with the alias installation commands, immutable external GitHub Actions and container references, and no merge-conflict markers or bidirectional override controls in non-ignored files. The README mirror rules also run with `pixi run -e default automation test_scripts`, alongside the remaining README-shape tests. Alint complements Ruff, Biome, actionlint, typechecking, generated-file checks and the built-site link checker; it does not replace them. CI runs the policy and its fixture tests, subject to the existing workflow path filters.
 
 The bridge freshness gate regenerates the registered sample and host TypeScript outputs and checks Git status across the bridge package. It also reports, without deleting, `.ts` files in the sample-client and host output directories whose generator and source headers identify those outputs but whose paths are no longer registered. Files with other or missing headers and files outside those directories are not treated as orphans. To retire or rename an output, remove the old file explicitly; use `python packages/qgis-sdk-python/scripts/generate_bridge_clients.py --check` for a non-writing byte and orphan check. The reference plugin schema and QGIS Processing snapshot retain their separate checks.
 
-The Gherkin scenarios are linted as well as run. `python scripts/ci.py check-gherkin` walks the checkout, fails when a `*.feature` file sits outside `FEATURE_DIRECTORIES` in that script, runs gherlint over the directories it names, and counts findings from the report rather than from the exit status - gherlint always exits zero. The policy is [gherlint.toml](../../../gherlint.toml) at the repository root, which the linter reads from the working directory; it disables exactly one message, `missing-given-step`, because a scenario whose only `Given` is in a `Background` is the shape the mirror-image hint asks for. gherlint pins pydantic 1 and cannot share an environment with the runtime's `mcp` extra (pydantic 2), so it lives in the package's `bdd` extra (`pip install "qgis-sdk[bdd]"`) and the `lint-features` task builds a throwaway venv under the gitignored `.pixi/` directory instead of adding it to the Pixi environment.
+The Gherkin scenarios are linted as well as run. `pixi run automation check_gherkin` walks the checkout, fails when a `*.feature` file sits outside `FEATURE_DIRECTORIES` in that script, runs gherlint over the directories it names, and counts findings from the report rather than from the exit status - gherlint always exits zero. The policy is [gherlint.toml](../../../gherlint.toml) at the repository root, which the linter reads from the working directory; it disables exactly one message, `missing-given-step`, because a scenario whose only `Given` is in a `Background` is the shape the mirror-image hint asks for. gherlint pins pydantic 1 and cannot share an environment with the runtime's `mcp` extra (pydantic 2), so it lives in the package's `bdd` extra (`pip install "qgis-sdk[bdd]"`) and the `lint-features` task builds a throwaway venv under the gitignored `.pixi/` directory instead of adding it to the Pixi environment.
 
 The Pixi environments pin one interpreter, the newest, so `requires-python = ">=3.11"` would otherwise be a claim nothing tests. tox is the other half: `tox.ini` names one environment per version from the floor to that pin, installs the runtime and the tools from their source trees plus the kit's `dev` extra, and runs the same QGIS-free suite. `skip_missing_interpreters = false` makes an absent interpreter a failure rather than a quiet skip, and `.github/workflows/compat.yml` gives each version its own job with an exact `tox` from PyPI - deliberately outside Pixi, because the point is to test the interpreter GitHub provides. `tests/scripts/test_python_versions.py` holds the three copies of the range together: the manifests' floor, `tox.ini`'s envlist and the workflow matrix. tox is not a Pixi dependency, so a local run needs `pip install tox==4.67.13` first.
 
@@ -271,7 +300,7 @@ both facts (decision-70):
 * it installs `qgis`, `qgis-server` and `python3-qgis` from the qgis.org Debian
   repository on `ubuntu-24.04`, creates a virtual environment over the system
   interpreter (`--system-site-packages`, which is what makes the apt bindings
-  importable next to pytest), and calls `scripts/ci.py lts`;
+  importable next to pytest), and calls `automation/ci.py lts`;
 * that helper probes the build first and prints `::notice::LTS host: qgis
   3.44.x | qgisserver QgsServer | qt 5.15.x | binding PyQt5`, then runs
   `tests/test_server_native.py` (the server layer), `tests/test_lts_native.py`
@@ -362,12 +391,12 @@ This example is **not** a public SDK operation, a general SDK generator, or a st
 The three Python distributions use Hatchling and share one explicit Conda recipe:
 
 ```sh
-pixi run -e build release-build-python            # three wheels under dist/pypi/<runtime|tools|kit>/
-pixi run -e build release-build-python --scope tools   # one distribution
+pixi run -e build automation -- release_build_python   # three wheels under dist/pypi/<runtime|tools|kit>/
+pixi run -e build automation -- release_build_python --scope tools   # one distribution
 pixi run -e bun bun run --filter qgis-sdk-python build # wheels + the Conda outputs (needs rattler-build)
 ```
 
-`release.py build-python` writes one directory per distribution and checks every wheel with Twine; `release.yml` publishes each directory from its own step. The recipe builds `qgis-sdk-runtime`, `qgis-sdk-tools` and `qgis-sdk` under `dist/conda/`; only the outputs a tag's scope ships are uploaded.
+`automation release_build_python` writes one directory per distribution and checks every wheel with Twine; `release.yml` publishes each directory from its own step. The recipe builds `qgis-sdk-runtime`, `qgis-sdk-tools` and `qgis-sdk` under `dist/conda/`; only the outputs a tag's scope ships are uploaded.
 
 ### Release scopes, tags and the pins a release moves
 

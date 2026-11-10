@@ -1496,7 +1496,7 @@ widened range; nothing about the elements changed.
 `package.json` carries `0.7.0`, the alias package carries `0.7.0` and pins the
 scoped name to it, and `SDK_NPM_VERSION` in the Python scaffold writes `0.7.0`
 into a new project's page manifest. Verify with
-`python scripts/release.py verify-versions --scope typescript --version 0.7.0`.
+`python -m automation.release verify-versions --scope typescript --version 0.7.0`.
 
 ## 0.6.0 migration notes
 
@@ -1584,7 +1584,7 @@ own tag (`ts-v0.2.0`); the Python SDK it pairs with is `0.3.0`.
   `0.3.0` description carries. New root exports: `StreamDescription`,
   `StreamEventKind`, `isPlainRecord`.
 - **`PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`**, matching the Python
-  declarations; `scripts/release.py verify-versions` refuses a pair that
+  declarations; `automation/release.py verify-versions` refuses a pair that
   disagrees. The transport speaks `protocol: 1`.
 - **New entry points**, each an optional import: `./bridge` (the transport
   client, frames and refusal codes), `./host` (the generated host namespaces),
@@ -1592,13 +1592,13 @@ own tag (`ts-v0.2.0`); the Python SDK it pairs with is `0.3.0`.
   required only by this entry) and `./testing` (the scripted host harness).
   Consumers of `0.1.1` import nothing from them unless they choose to.
 - **Manifest:** `package.json` carries `0.2.0`. Verify with
-  `python scripts/release.py verify-versions --scope typescript --version 0.2.0`.
+  `python -m automation.release verify-versions --scope typescript --version 0.2.0`.
 
 ## 0.3.0 migration notes
 
 `0.3.0` is a rename release (`ts-v0.3.0`): the exports of `0.2.0` under the
 new name, plus the unscoped alias. Verify with
-`python scripts/release.py verify-versions --scope typescript --version 0.3.0`.
+`python -m automation.release verify-versions --scope typescript --version 0.3.0`.
 
 - **Package renamed.** `@archont561/qgis-sdk-bridge` is now
   `@archont561/qgis-sdk`, published first as `0.3.0` with the exports of
@@ -1695,4 +1695,4 @@ the plugin-description contract (`1`), `HOST_SCHEMA_VERSION` nor
   on `error.code`.
 - **Manifest:** stays `0.3.0` until the release gate stamps it. Verify a
   stamped pair with
-  `python scripts/release.py verify-versions --scope typescript --version 0.4.0`.
+  `python -m automation.release verify-versions --scope typescript --version 0.4.0`.
