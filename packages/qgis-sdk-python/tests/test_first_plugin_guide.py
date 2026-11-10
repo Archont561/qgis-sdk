@@ -28,7 +28,9 @@ def commands_in_order(text: str) -> list[str]:
     """
     blocks = re.findall(r"^```sh\n(.*?)^```", text, re.DOTALL | re.MULTILINE)
     lines = [line.strip() for block in blocks for line in block.splitlines()]
-    return [line for line in lines if line.startswith(("qgis-sdk ", "pip install qgis-sdk"))]
+    return [
+        line for line in lines if line.startswith(("qgis-sdk ", "pip install qgis-sdk"))
+    ]
 
 
 def test_the_walk_runs_from_install_to_zip_in_order() -> None:
