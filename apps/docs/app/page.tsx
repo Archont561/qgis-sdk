@@ -47,11 +47,10 @@ export default function Home() {
 					<span className="grad">QGIS plugins</span>
 				</h1>
 				<p className="mx-auto mt-5 max-w-3xl text-fd-muted-foreground text-lg leading-relaxed">
-					Declare a plugin with a Python application and ordinary functions. The
-					SDK derives the plugin description, the native windows, the Processing
-					algorithms, the bridge allowlist and the typed page-side client from
-					those same declarations - and the pure layers import without QGIS, so
-					a plugin is testable from source.
+					Declare a QGIS plugin as plain Python classes. The SDK derives the
+					metadata, the native windows, the Processing algorithms and the typed
+					web bridge from those declarations. The pure layers import without
+					QGIS, so a plugin is tested from source.
 				</p>
 				<div className="mt-8 flex flex-wrap items-center justify-center gap-3">
 					<a

@@ -1,0 +1,55 @@
+---
+title: Roadmap
+description: What is being worked on, what is next, and what has shipped - without dates and without promises.
+---
+
+import { Card, Cards } from "fumadocs-ui/components/card";
+
+This page says what the project is doing, in the order it is doing it. It carries
+no dates: a date that slips is a broken promise, and a version that slips is a
+release note. The [releases](https://github.com/Archont561/qgis-sdk/releases) are
+the record of what actually landed.
+
+<Cards>
+  <Card title="Now">
+    **QGIS 4.x on macOS and Windows.** Those rows of the
+    [support matrix](/python/supported-targets/) are `unqualified`, with the
+    blocker named: no QGIS 4 installation in CI or the sandbox. Every other claim
+    the SDK makes is qualified somewhere it can be re-run.
+
+    **The 0.11 line, in release candidate.** The stable cut is pending; the
+    candidate is what the LTS row, the native suite and the reference plugin are
+    qualified against meanwhile.
+  </Card>
+  <Card title="Next">
+    **The WebEngine layer on QGIS 3.44 LTS** - the one cell the LTS row leaves
+    empty, so no page-on-Qt5 claim is made yet.
+
+    **Publishing a plugin from the tools** - the ZIP `qgis-sdk build` writes is
+    installable through the plugin manager; uploading it to the QGIS plugin
+    repository from the same command is not there.
+  </Card>
+  <Card title="Shipped">
+    The [releases](https://github.com/Archont561/qgis-sdk/releases) are the record
+    of what is published. This tree is at <Versions />; the 0.11 and 0.8 lines are
+    release candidates until their stable cut, so they are not what to install
+    yet.
+
+    The two lines version independently: a Python release leaves the TypeScript
+    bridge where it is, and the bridge ships when its own contract changes.
+  </Card>
+  <Card title="Considering">
+    **The 1.0 API freeze** and the deprecation sweep before it, which would stop
+    the declaration surface from moving.
+
+    **A Desktop and server harness on Windows** - the QGIS-free suite runs
+    there today; the native harnesses do not.
+  </Card>
+</Cards>
+
+## How this stays honest
+
+`Now` is checked against the support matrix and the open release candidate, and
+`Next` names only work whose gap is already written down in a decision record or
+a qualification row. Anything without that evidence is `Considering`, and none
+of it is a commitment to a date.
