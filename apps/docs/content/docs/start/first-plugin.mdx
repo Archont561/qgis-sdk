@@ -1,0 +1,167 @@
+---
+title: Your first plugin
+description: Everything from an empty directory to a ZIP QGIS loads, on one page - install, scaffold, declare, test, check, run and build.
+---
+
+This page is the whole walk from nothing to an installed plugin. It does not send
+you to another page for an install step or a command signature; the two links it
+does carry are at the end, for the parts you need after the first plugin works.
+
+You need **Python 3.11 or newer**. QGIS is needed for two of the seven steps -
+`dev` and the native targets - and not for the rest.
+
+<CompatNotice />
+
+## 1. Install the kit
+
+```sh
+pip install qgis-sdk
+```
+
+That installs two packages at matching versions: `qgis-sdk-runtime`, which the
+plugin imports inside QGIS, and `qgis-sdk-tools`, which provides the `qgis-sdk`
+command. Nothing is installed into QGIS - a built plugin vendors its own runtime.
+
+Check what you got, and what this machine can do:
+
+```sh
+qgis-sdk --version
+qgis-sdk targets
+```
+
+`targets` prints the QGIS and Python combinations the kit is qualified against
+and marks which ones this interpreter can reach; `qgis-sdk test` and `qgis-sdk
+build` work regardless, `qgis-sdk dev` needs a Desktop installation.
+
+## 2. Scaffold a project
+
+```sh
+qgis-sdk new my_tools --title "My Tools" --no-input
+cd my_tools
+```
+
+`qgis-sdk new` also runs the dependency install; add `--no-install` to skip it,
+`--ui native` for a scaffold with a dialog, and `--web vanilla` for one with a
+page. The default scaffold writes three files that matter:
+
+<CliWalkthrough name="scaffold" />
+
+`qgis-sdk` never appears in the generated code: the plugin imports
+`qgis_sdk-runtime` only, and the tools are a development dependency.
+
+## 3. Read what a declaration is
+
+`my_tools/plugin.py` has one object and two functions:
+
+```python
+app = QgisSdkPlugin(id="my_tools", title="My Tools")
+
+@app.action(id="ping", title="Ping")
+def ping(ctx: PluginContext, value: int) -> int:
+    """Return the value unchanged so a caller can prove the round trip."""
+    return value
+```
+
+Four things follow from that shape, and they are the whole model:
+
+- **The first parameter is the context.** `ctx` is supplied by the host - never
+  by a caller, a form or a web page. Everything the plugin may touch is a service
+  on it: `ctx.project`, `ctx.layers`, `ctx.notifications`, `ctx.log`.
+- **The rest are the inputs.** Their annotations become the form fields, the
+  Processing parameters and the TypeScript schema. `int` is an integer input,
+  `str` a text input, a dataclass a nested group.
+- **The return annotation is the result shape**, and the same rule applies to
+  the page side.
+- **No Qt and no QGIS imports.** `from qgis_sdk import ...` and the standard
+  library only; that is what makes the next step possible.
+
+## 4. Test it without QGIS
+
+```sh
+qgis-sdk test
+```
+
+```text
+tests/test_plugin.py ...                                          [100%]
+3 passed in 0.55s
+```
+
+The generated `tests/test_plugin.py` does not mock QGIS. It takes the same
+`classFactory` that `build` and `dev` bind and runs the real lifecycle against
+the SDK's own services, so a test failure is a plugin failure and not a fake
+going out of date:
+
+```python
+classFactory = host("my_tools.plugin:app")
+plugin = classFactory(None)          # no iface: a bare context
+plugin.initGui()
+assert plugin.runtime.actions["ping"](7) == 7
+plugin.unload()
+```
+
+`qgis-sdk test --target qgis` runs the same suite with a real QGIS behind it, for
+the parts that genuinely need one (`@native` layers). It is optional.
+
+## 5. Check it
+
+```sh
+qgis-sdk check
+```
+
+```text
+checked 3 files: no problems
+```
+
+`check` is static: no QGIS, no import of your plugin's Qt-facing code. It reads
+the declarations and reports one code per problem, with the line and the fix.
+The two codes a first plugin usually meets:
+
+<CliWalkthrough name="check" />
+
+Add `--json` for a machine-readable report, which is what the MCP server and a
+CI job use.
+
+## 6. Run it inside QGIS
+
+```sh
+qgis-sdk dev
+```
+
+`dev` finds a QGIS through `--qgis-prefix`, `[tool.qgis-sdk] qgis-prefix`,
+`QGIS_PREFIX_PATH`, `qgis` on `PATH`, or the current environment - in that order.
+It loads the plugin from source into that QGIS and reloads it when a file
+changes, so the loop is: edit, save, see it in the running QGIS. `Ctrl-C` stops
+the session and unloads the plugin.
+
+If the plugin declares surfaces (`--ui native`), they appear in the QGIS window
+as declared: a `Dialog` opens from its menu entry, a `Dock` docks to the area it
+names.
+
+## 7. Build the ZIP
+
+```sh
+qgis-sdk build
+```
+
+```text
+built my_tools 0.1.0: dist/my_tools-0.1.0.zip (170 files, runtime 0.11.0, web: none)
+```
+
+The archive holds your package, the vendored runtime, the `metadata.txt`
+rendered from `[tool.qgis-sdk]`, and the QGIS entry point generated around your
+application - which is why none of those files exist in the project. Install it
+with QGIS's **Plugins → Manage and Install Plugins → Install from ZIP**, and it
+appears in the menu on the next start.
+
+## What is not on this page
+
+A plugin that also runs on QGIS Server or as a standalone app declares
+`hosts = ["desktop", "server", "app"]`; one with a web page adds `--web`. The
+reference plugin does all of it, and the pages below take one subject each:
+
+- [Declarations](/python/declarations/) - every key `[tool.qgis-sdk]` accepts,
+  and the surface model behind `--ui native`.
+- [Testing a plugin](/guides/test-a-plugin/) - fakes, native layers, and what
+  each target proves.
+- [The reference plugin](https://github.com/Archont561/qgis-sdk/tree/main/examples/simple) -
+  the same walk, with a dialog and a web page.

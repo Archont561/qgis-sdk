@@ -174,7 +174,12 @@ tracked:
   link, which Fumadocs renders as a raw anchor and does not prefix, so the
   entry carries `BASE` itself - and the link check only sees it when the
   Storybook was built, which is why it runs against `docs-build` and not
-  against a bare `bun run build`.
+  against a bare `bun run build`. The Storybook lives on the site's origin and
+  follows the site's theme: `manager.ts` picks the manager's base theme and
+  `preview.ts` seeds the `theme` global from the value Fumadocs stores, so a
+  reader who chose dark meets dark chrome and dark previews. Both read the
+  preference when they load, and the toolbar still wins once a reader picks a
+  side.
 - Content links are root-relative (`/python/installation/`), because Next adds
   the deployment's `basePath` (`/qgis-sdk`) when it renders a link; a link
   written with the base already in it doubles. The handful of plain `<a>`
@@ -193,7 +198,17 @@ tracked:
   page tables are fetched from PyPI and npm at the same moment into
   `lib/generated/stats.json` - a registry that does not answer leaves `null`
   behind and the table renders a dash, so building never depends on a third
-  party being up (`STATS_OFFLINE=1` skips the fetch).
+  party being up (`STATS_OFFLINE=1` skips the fetch). The same pass reads the
+  support matrix out of this guide into `lib/generated/compat.json`, which is
+  the version sentence on the landing page and on the install page: qualified
+  rows only, so the page cannot promise a combination no row demonstrates.
+- Two pages embed a live walkthrough rather than a screenshot: `CliWalkthrough`
+  renders a command with the files it wrote (a tree that opens a file per click)
+  or its output (a transcript that arrives a line at a time, replayed on demand
+  and printed whole under `prefers-reduced-motion`). The transcripts are in
+  `components/walkthroughs.ts` and were taken from real runs of the scaffold -
+  a walkthrough that drifts from the tool is a lie a screenshot tells more
+  quietly.
 - `next build` writes `out/`; `scripts/postbuild.ts` then writes what Next
   does not: `llms.txt`, `llms-full.txt` and one `.md` per page (the AI-facing
   surface, files rather than routes because GitHub Pages serves files), the
