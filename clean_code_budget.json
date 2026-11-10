@@ -567,13 +567,8 @@
 		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py": {
-		"CC101": 7,
 		"CC102": 1,
-		"CC103": 5,
-		"CC104": 1,
-		"CC201": 1,
-		"CC202": 1,
-		"CC303": 2
+		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/host/_handlers.py": {
 		"CC101": 3,
