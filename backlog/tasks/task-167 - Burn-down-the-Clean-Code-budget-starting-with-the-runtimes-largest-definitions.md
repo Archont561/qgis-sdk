@@ -204,4 +204,16 @@ One correction worth keeping: two range replacements swallowed neighbouring top-
 
 **What is left.** 725 findings in 254 files: CC101 415, CC104 107, CC102 105, CC303 46, CC201 26, CC202 26. `tests/scripts/test_release.py` (18) is now the worst file, then `testing/fakes.py` and `test_plugin_rest.py` (16 each).
 
+**Slice 15 (landed): the release-test fixtures, as records.** 725 -> 707 findings, 254 -> 253 files. `tests/scripts/test_release.py` carried 18 (13 CC101, 3 CC102, 2 CC104) and has zero now, with no threshold change, no suppression and no finding added anywhere else.
+
+The two worst fixtures were long parameter lists whose arguments only overrode defaults: `_python_manifests` took `python_version`, `bridge_version`, `runtime_version`, `tools_range` and `kit_pin`; `_ui_train_manifests` took `bridge_version`, `ui_text`, `web_text` and `alias_text`. They are `_PythonManifestVersions` and `_UiTrainOptions` now, frozen slots records with exactly the old defaults, and every call site that overrode one builds the record in the same commit - including `_ui_manifests`, which passes the bridge version on. `_example_manifests`' `**kwargs` forwarder was the tell: it could forward a legacy keyword to a long signature without naming it, but its one caller now states `_PythonManifestVersions(python="0.6.0")` plainly. The manifest writer is decomposed into `_write_manifest`, `_python_manifest_files`, `_write_python_version_manifests`, `_write_python_manifests` and `_patch_release_manifests`, so one function owns each substitution, each path and each monkeypatch group.
+
+The rest is extraction behind the same assertions. CLI setup has `_cli`, `_outputs`, `_read_outputs`, `_plan_for`, `_milestone_outputs`, `_plan_range_recorder` and `_classify_outputs`; the GitHub Release API has `_patch_new_release_api` and `_patch_existing_release_api` instead of a boolean flag; the workflow tests share `_job`, `_workflow_jobs`, `_steps`, `_step_names`, `_run_shell`, `_npm_stub`, `_ui_tarballs` and two assertion helpers. `_UiPackagesCase` is the parameter object for the four parametrized shell cases, so that test takes `tmp_path` and `case` instead of six arguments. Two tests that asserted three or four unrelated jobs became seven focused tests; their assertions are unchanged and the file runs 216 tests where it ran 208.
+
+**Tests.** `tests/scripts/test_release.py` 216 passed; `tests/scripts` 340; alint policy 20; package suite 3078 passed, 130 skipped, 7 deselected; combined local suite 3438 passed, 130 skipped, 7 deselected. ruff, format, alint and the clean-code gate clean.
+
+**Documentation impact.** No user-facing documentation changes: the release CLI, the workflow and the behaviour those tests describe are unchanged. This note and decision-81's follow-through record the parameter-object rule and the budget ratchet.
+
+**What is left.** 707 findings in 253 files: CC101 402, CC104 105, CC102 102, CC303 46, CC201 26, CC202 26. The next worst files are `testing/fakes.py` and `test_plugin_rest.py` (16 each), then `check/ui.py` (15). CC202 and AC 4 remain the two different cuts after the long tail.
+
 <!-- SECTION:NOTES:END -->

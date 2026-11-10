@@ -932,10 +932,5 @@
 	"tests/scripts/test_ci.py": {
 		"CC101": 6,
 		"CC104": 2
-	},
-	"tests/scripts/test_release.py": {
-		"CC101": 13,
-		"CC102": 3,
-		"CC104": 2
 	}
 }
