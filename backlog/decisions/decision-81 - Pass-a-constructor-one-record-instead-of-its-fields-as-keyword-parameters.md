@@ -117,3 +117,21 @@ CC102 counts `self`, which is why five explicit parameters is the ceiling: the
 first attempt at `AlgorithmContext` kept six and therefore kept its finding even
 though it had a record. Budget 808 -> 804; no threshold changed and nothing was
 suppressed.
+
+## Follow-through: plain functions, not only constructors
+
+Slice 14 extended the rule past `__init__` to the four long signatures in
+`automation/release.py`: `render_changelog(..., ChangelogOptions(...))`,
+`compute_plan(..., PlanOptions(...))`, `manifest_versions(ManifestSources(...))`
+and `create_release(ReleaseDraft(...), opener=...)`. CC102 counts `self` but
+applies to any function definition, so a plain function with six parameters is
+the same missing abstraction as a constructor with six.
+
+Two of them earned their keep beyond the parameter count. `ManifestSources` is
+also what `_manifest_sources()` returns after reading nine optional files, so
+the reader and the consumer share one shape; `PlanOptions` is the only place the
+plan's knobs are named, which is what let the 124-line `compute_plan` become a
+`_PlanFacts` record plus six small decision helpers. This supersedes the note in
+`backlog/docs/plans/doc-7` that a parameter object for `compute_plan` and
+`create_release` would not reduce coupling: with the call sites moved in the
+same commit, it did.

@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from urllib import request as urlrequest
 from urllib.error import HTTPError
@@ -158,9 +158,12 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
     release of both packages at a package minor - an act decision-25 reserves
     for a deliberate dispatch or milestone tag.
     """
-    py = False
-    ts = False
-    ui = False
+    return _scope_from_flags(*_changed_package_flags(files))
+
+
+def _changed_package_flags(files: Iterable[str]) -> tuple[bool, bool, bool]:
+    """Which shipped packages the changed paths belong to."""
+    py = ts = ui = False
     for raw in files:
         path = raw.strip()
         if path.startswith(_PYTHON_PREFIXES):
@@ -169,6 +172,11 @@ def detect_scope_from_files(files: Iterable[str]) -> str:
             ts = True
         elif path.startswith(_UI_PREFIXES):
             ui = True
+    return py, ts, ui
+
+
+def _scope_from_flags(py: bool, ts: bool, ui: bool) -> str:
+    """Combine the package flags into one release scope."""
     if py and ts:
         return "all"
     if py:
@@ -780,28 +788,44 @@ def _entry(commit: Commit) -> str:
     return f"- {commit.subject} ({commit.sha[:7]})"
 
 
-def render_changelog(
-    version: Version,
-    commits: tuple[Commit, ...],
-    config: VersionConfig,
-    base_tag: str | None = None,
-    repo_slug: str | None = None,
-    scope: str = "all",
-) -> str:
-    """Render the markdown changelog for one release."""
-    tag = tag_for_version(version, scope=scope)
-    lines = [config.header.rstrip("\n"), "", f"## {tag}", ""]
+@dataclass(frozen=True, slots=True)
+class ChangelogOptions:
+    """What a rendered changelog needs beyond the release it describes."""
+
+    base_tag: str | None = None
+    repo_slug: str | None = None
+    scope: str = "all"
+
+
+def _changelog_entries(
+    commits: tuple[Commit, ...], config: VersionConfig
+) -> tuple[list[Commit], dict[str, list[Commit]]]:
+    """The breaking commits and the sections every other commit belongs to."""
     breaking = [commit for commit in commits if classify(commit, config).breaking]
-    if breaking:
-        lines += ["### Breaking changes", ""]
-        lines += [_entry(commit) for commit in breaking]
-        lines.append("")
     grouped: dict[str, list[Commit]] = {section: [] for section in config.sections}
     for commit in commits:
         info = classify(commit, config)
         if info.hidden or info.section is None or info.section not in grouped:
             continue
         grouped[info.section].append(commit)
+    return breaking, grouped
+
+
+def render_changelog(
+    version: Version,
+    commits: tuple[Commit, ...],
+    config: VersionConfig,
+    options: ChangelogOptions | None = None,
+) -> str:
+    """Render the markdown changelog for one release."""
+    options = options if options is not None else ChangelogOptions()
+    tag = tag_for_version(version, scope=options.scope)
+    lines = [config.header.rstrip("\n"), "", f"## {tag}", ""]
+    breaking, grouped = _changelog_entries(commits, config)
+    if breaking:
+        lines += ["### Breaking changes", ""]
+        lines += [_entry(commit) for commit in breaking]
+        lines.append("")
     for section in config.sections:
         entries = grouped[section]
         if not entries:
@@ -809,10 +833,10 @@ def render_changelog(
         lines += [f"### {section}", ""]
         lines += [_entry(commit) for commit in entries]
         lines.append("")
-    if base_tag and repo_slug:
+    if options.base_tag and options.repo_slug:
         lines.append(
-            f"[{base_tag}...{tag}]: "
-            f"https://github.com/{repo_slug}/compare/{base_tag}...{tag}"
+            f"[{options.base_tag}...{tag}]: "
+            f"https://github.com/{options.repo_slug}/compare/{options.base_tag}...{tag}"
         )
         lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"
@@ -925,130 +949,178 @@ def _resolve_forced_bump(
     return Version.parse(bump.strip())
 
 
+@dataclass(frozen=True, slots=True)
+class PlanOptions:
+    """The knobs a release plan can be computed with."""
+
+    suffix: str = ""
+    version_override: str | None = None
+    repo_slug: str | None = None
+    milestone_tag: str | None = None
+    scope: str = "all"
+    bump: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class _PlanFacts:
+    """Everything a plan's outcomes share, whatever the decision is."""
+
+    trigger: str
+    first: bool
+    stable_exists: bool
+    base_tag: str | None
+    scope: str
+    ordered: tuple[str, ...]
+    tags: tuple[str, ...]
+
+    def skip(
+        self,
+        reason: str,
+        *,
+        scope: str | None = None,
+        version: Version | None = None,
+        tag: str | None = None,
+    ) -> Plan:
+        return Plan(
+            self.trigger,
+            self.first,
+            self.stable_exists,
+            self.base_tag,
+            version,
+            tag,
+            "skip",
+            reason,
+            "",
+            scope=scope if scope is not None else self.scope,
+        )
+
+    def tagged(self, version: Version, tag: str, reason: str, changelog: str) -> Plan:
+        return Plan(
+            self.trigger,
+            self.first,
+            self.stable_exists,
+            self.base_tag,
+            version,
+            tag,
+            "tag",
+            reason,
+            changelog,
+            scope=self.scope,
+        )
+
+
+def _plan_scope(options: PlanOptions, milestone_info) -> str:
+    """The package train this plan is about."""
+    if options.scope.strip() and options.scope.strip().lower() not in ("all", "none"):
+        return normalize_scope(options.scope)
+    if milestone_info is not None:
+        return milestone_info[0]
+    return "all"
+
+
+def _plan_facts(trigger, tags, options: PlanOptions, milestone_info) -> _PlanFacts:
+    """Sort the tags and record what is already true of this history."""
+    scope = _plan_scope(options, milestone_info)
+    ordered = tuple(sort_tags(tags, scope))
+    base_tag = plan_base_tag(ordered, options.suffix)
+    stable_exists = any(not version_from_tag(tag).is_prerelease for tag in ordered)
+    return _PlanFacts(
+        trigger,
+        base_tag is None,
+        stable_exists,
+        base_tag,
+        scope,
+        ordered,
+        tuple(tags),
+    )
+
+
+def _plan_version(options, facts, scoped_commits, config, milestone_info):
+    """The version this run would release, or ``None`` when nothing warrants it."""
+    if options.version_override:
+        return Version.parse(options.version_override)
+    if options.bump.strip():
+        return _resolve_forced_bump(options.bump, facts.first, facts.base_tag, config)
+    if milestone_info is not None:
+        return milestone_info[1]
+    if facts.first:
+        return config.initial_bump_version
+    return _bump_from(version_from_tag(facts.base_tag), scoped_commits, config)
+
+
+def _early_skip(facts, version, tag, milestone_info) -> Plan | None:
+    """The two histories that are already answered before any work is done."""
+    if tag in facts.ordered or tag in set(facts.tags):
+        return facts.skip(f"tag {tag} already exists", version=version, tag=tag)
+    if not facts.stable_exists and facts.trigger == "push" and milestone_info is None:
+        return facts.skip(
+            "no stable tag exists yet; the first stable release is deliberate - "
+            "run the autorelease workflow dispatch (a prerelease suffix "
+            "continues the rc train without arming registry publishes)",
+            version=version,
+            tag=tag,
+        )
+    return None
+
+
+def _plan_reason(options: PlanOptions, facts: _PlanFacts, milestone_info) -> str:
+    """Why this run decided to tag."""
+    if milestone_info is not None:
+        return f"milestone release from {options.milestone_tag}"
+    if facts.first:
+        return "bootstrap release"
+    if options.bump.strip() or options.version_override:
+        return f"forced release from {facts.base_tag}"
+    return f"release-worthy commits since {facts.base_tag}"
+
+
+def _plan_milestone(trigger: str, options: PlanOptions):
+    """Validate the trigger and resolve the optional milestone tag."""
+    if trigger not in ("push", "dispatch", "milestone"):
+        raise QgisSdkReleaseVersionError(f"unknown trigger: {trigger!r}")
+    if not options.milestone_tag:
+        return None
+    info = parse_milestone_tag(options.milestone_tag)
+    if info is None:
+        raise QgisSdkReleaseVersionError(
+            f"not a milestone tag: {options.milestone_tag!r}"
+        )
+    return info
+
+
+# Each package only owes a version for the commits that touch it (or the
+# repository-wide files both depend on). Decisions are per package, so a
+# bridge-only change cannot move the Python minor and vice versa.
 def compute_plan(
     trigger: str,
     tags: Iterable[str],
     commits: tuple[Commit, ...],
     config: VersionConfig,
-    suffix: str = "",
-    version_override: str | None = None,
-    repo_slug: str | None = None,
-    milestone_tag: str | None = None,
-    scope: str = "all",
-    bump: str = "",
+    options: PlanOptions | None = None,
 ) -> Plan:
     """Decide the next release action for the current history."""
-    if trigger not in ("push", "dispatch", "milestone"):
-        raise QgisSdkReleaseVersionError(f"unknown trigger: {trigger!r}")
-    milestone_info = parse_milestone_tag(milestone_tag) if milestone_tag else None
-    if milestone_tag and milestone_info is None:
-        raise QgisSdkReleaseVersionError(f"not a milestone tag: {milestone_tag!r}")
-    if scope.strip() and scope.strip().lower() not in ("all", "none"):
-        resolved_scope = normalize_scope(scope)
-    elif milestone_info is not None:
-        resolved_scope = milestone_info[0]
-    else:
-        resolved_scope = "all"
-    ordered = sort_tags(tags, resolved_scope)
-    base_tag = plan_base_tag(ordered, suffix)
-    first = base_tag is None
-    stable_exists = any(not version_from_tag(tag).is_prerelease for tag in ordered)
-    if scope.strip().lower() == "none":
-        return Plan(
-            trigger,
-            first,
-            stable_exists,
-            base_tag,
-            None,
-            None,
-            "skip",
-            "no release-worthy changes for scope",
-            "",
-            scope="none",
-        )
-    # Each package only owes a version for the commits that touch it (or the
-    # repository-wide files both depend on). Decisions are per package, so a
-    # bridge-only change cannot move the Python minor and vice versa.
-    scoped_commits = commits_for_scope(commits, resolved_scope)
-
-    if version_override:
-        version = Version.parse(version_override)
-    elif bump.strip():
-        version = _resolve_forced_bump(bump, first, base_tag, config)
-    elif milestone_info is not None:
-        _, version = milestone_info
-    elif first:
-        version = config.initial_bump_version
-    else:
-        base = version_from_tag(base_tag)
-        version = _bump_from(base, scoped_commits, config)
-        if version is None:
-            return Plan(
-                trigger,
-                first,
-                stable_exists,
-                base_tag,
-                None,
-                None,
-                "skip",
-                f"no release-worthy commits since {base_tag}",
-                "",
-                scope=resolved_scope,
-            )
-    if suffix:
-        version = version.with_prerelease(suffix)
-    tag = tag_for_version(version, scope=resolved_scope)
-    if tag in ordered or tag in set(tags):
-        return Plan(
-            trigger,
-            first,
-            stable_exists,
-            base_tag,
-            version,
-            tag,
-            "skip",
-            f"tag {tag} already exists",
-            "",
-            scope=resolved_scope,
-        )
-    if not stable_exists and trigger == "push" and milestone_info is None:
-        return Plan(
-            trigger,
-            first,
-            stable_exists,
-            base_tag,
-            version,
-            tag,
-            "skip",
-            "no stable tag exists yet; the first stable release is deliberate - "
-            "run the autorelease workflow dispatch (a prerelease suffix "
-            "continues the rc train without arming registry publishes)",
-            "",
-            scope=resolved_scope,
-        )
-    if milestone_info is not None:
-        reason = f"milestone release from {milestone_tag}"
-    elif first:
-        reason = "bootstrap release"
-    elif bump.strip() or version_override:
-        reason = f"forced release from {base_tag}"
-    else:
-        reason = f"release-worthy commits since {base_tag}"
+    options = options if options is not None else PlanOptions()
+    milestone_info = _plan_milestone(trigger, options)
+    facts = _plan_facts(trigger, tags, options, milestone_info)
+    if options.scope.strip().lower() == "none":
+        return facts.skip("no release-worthy changes for scope", scope="none")
+    scoped_commits = commits_for_scope(commits, facts.scope)
+    version = _plan_version(options, facts, scoped_commits, config, milestone_info)
+    if version is None:
+        return facts.skip(f"no release-worthy commits since {facts.base_tag}")
+    if options.suffix:
+        version = version.with_prerelease(options.suffix)
+    tag = tag_for_version(version, scope=facts.scope)
+    if (skip := _early_skip(facts, version, tag, milestone_info)) is not None:
+        return skip
+    reason = _plan_reason(options, facts, milestone_info)
     changelog = render_changelog(
-        version, scoped_commits, config, base_tag, repo_slug, scope=resolved_scope
-    )
-    return Plan(
-        trigger,
-        first,
-        stable_exists,
-        base_tag,
         version,
-        tag,
-        "tag",
-        reason,
-        changelog,
-        scope=resolved_scope,
+        scoped_commits,
+        config,
+        ChangelogOptions(facts.base_tag, options.repo_slug, facts.scope),
     )
+    return facts.tagged(version, tag, reason, changelog)
 
 
 # ---------------------------------------------------------------------------
@@ -1567,17 +1639,95 @@ class ManifestVersions:
         return {name: str(version) for name, version in self.items()}
 
 
-def manifest_versions(
-    pyproject_text: str,
-    package_text: str,
-    recipe_text: str | None = None,
-    alias_text: str | None = None,
-    runtime_text: str | None = None,
-    tools_text: str | None = None,
-    scaffold_text: str | None = None,
-    ui_text: str | None = None,
-    ui_alias_text: str | None = None,
-) -> ManifestVersions:
+@dataclass(frozen=True, slots=True)
+class ManifestSources:
+    """The manifest texts a release reads, grouped by what they version."""
+
+    pyproject_text: str
+    package_text: str
+    recipe_text: str | None = None
+    alias_text: str | None = None
+    runtime_text: str | None = None
+    tools_text: str | None = None
+    scaffold_text: str | None = None
+    ui_text: str | None = None
+    ui_alias_text: str | None = None
+
+
+def _alias_pair(text: str | None, dependency: str | None = None):
+    """The version and dependency an alias package declares, if it exists."""
+    if text is None:
+        return None, None
+    if dependency is None:
+        return read_alias_versions(text)
+    return read_alias_versions(text, dependency=dependency)
+
+
+def _kit_fields(sources: ManifestSources) -> dict:
+    """The kit, bridge, recipe and alias versions."""
+    alias, alias_dependency = _alias_pair(sources.alias_text)
+    recipe = sources.recipe_text
+    return {
+        "pyproject": read_pyproject_version(sources.pyproject_text),
+        "package_json": read_package_json_version(sources.package_text),
+        "recipe": read_recipe_version(recipe) if recipe is not None else None,
+        "alias": alias,
+        "alias_dependency": alias_dependency,
+        "recipe_runtime": (
+            read_recipe_context(recipe, "runtime_version")
+            if recipe is not None
+            else None
+        ),
+        "recipe_tools": (
+            read_recipe_context(recipe, "tools_version") if recipe is not None else None
+        ),
+    }
+
+
+def _python_fields(sources: ManifestSources) -> dict:
+    """The runtime and tools versions, and the kit's pins on them."""
+    split = bool(sources.runtime_text or sources.tools_text)
+    return {
+        "runtime": (
+            read_pyproject_version(sources.runtime_text)
+            if sources.runtime_text
+            else None
+        ),
+        "tools": (
+            read_pyproject_version(sources.tools_text) if sources.tools_text else None
+        ),
+        "kit_pins": read_kit_pins(sources.pyproject_text) if split else (),
+    }
+
+
+def _typescript_fields(sources: ManifestSources) -> dict:
+    """The bridge pin the scaffold offers to generated projects."""
+    scaffold = sources.scaffold_text
+    return {
+        "scaffold_pin": (read_scaffold_pin(scaffold) if scaffold is not None else None)
+    }
+
+
+def _ui_fields(sources: ManifestSources) -> dict:
+    """The web components' version, peer range, alias and scaffold pin."""
+    ui_alias, ui_alias_dependency = _alias_pair(
+        sources.ui_alias_text, _UI_ALIAS_DEPENDENCY
+    )
+    ui, scaffold = sources.ui_text, sources.scaffold_text
+    return {
+        "ui": read_package_json_version(ui) if ui is not None else None,
+        "ui_peer_range": read_ui_peer_range(ui) if ui is not None else None,
+        "ui_alias": ui_alias,
+        "ui_alias_dependency": ui_alias_dependency,
+        "scaffold_ui_pin": (
+            read_scaffold_ui_pin(scaffold)
+            if scaffold is not None and has_scaffold_ui_pin(scaffold)
+            else None
+        ),
+    }
+
+
+def manifest_versions(sources: ManifestSources) -> ManifestVersions:
     """Read all released manifests and return what each one carries.
 
     ``pyproject_text`` is the kit's; when the runtime's and the tools' are given
@@ -1588,45 +1738,11 @@ def manifest_versions(
     version and its peer range on the bridge form the ``ui`` scope, with
     ``ui_alias_text`` (the unscoped alias) when it is given.
     """
-    alias, alias_dependency = (
-        read_alias_versions(alias_text) if alias_text is not None else (None, None)
-    )
-    ui_alias, ui_alias_dependency = (
-        read_alias_versions(ui_alias_text, dependency=_UI_ALIAS_DEPENDENCY)
-        if ui_alias_text is not None
-        else (None, None)
-    )
     return ManifestVersions(
-        pyproject=read_pyproject_version(pyproject_text),
-        package_json=read_package_json_version(package_text),
-        recipe=read_recipe_version(recipe_text) if recipe_text is not None else None,
-        alias=alias,
-        alias_dependency=alias_dependency,
-        runtime=read_pyproject_version(runtime_text) if runtime_text else None,
-        tools=read_pyproject_version(tools_text) if tools_text else None,
-        kit_pins=read_kit_pins(pyproject_text) if runtime_text or tools_text else (),
-        recipe_runtime=(
-            read_recipe_context(recipe_text, "runtime_version")
-            if recipe_text is not None
-            else None
-        ),
-        recipe_tools=(
-            read_recipe_context(recipe_text, "tools_version")
-            if recipe_text is not None
-            else None
-        ),
-        scaffold_pin=(
-            read_scaffold_pin(scaffold_text) if scaffold_text is not None else None
-        ),
-        ui=read_package_json_version(ui_text) if ui_text is not None else None,
-        ui_peer_range=read_ui_peer_range(ui_text) if ui_text is not None else None,
-        ui_alias=ui_alias,
-        ui_alias_dependency=ui_alias_dependency,
-        scaffold_ui_pin=(
-            read_scaffold_ui_pin(scaffold_text)
-            if scaffold_text is not None and has_scaffold_ui_pin(scaffold_text)
-            else None
-        ),
+        **_kit_fields(sources),
+        **_python_fields(sources),
+        **_typescript_fields(sources),
+        **_ui_fields(sources),
     )
 
 
@@ -1808,26 +1924,32 @@ def _read_json(opener: Opener, req: urlrequest.Request, what: str) -> dict:
         raise QgisSdkReleaseError(f"{what} failed ({error.code}): {detail}") from error
 
 
-def create_release(
-    slug: str,
-    token: str,
-    tag: str,
-    name: str,
-    body: str,
-    prerelease: bool,
-    opener: Opener | None = None,
-) -> dict:
+@dataclass(frozen=True, slots=True)
+class ReleaseDraft:
+    """One GitHub Release to create."""
+
+    slug: str
+    token: str
+    tag: str
+    name: str
+    body: str
+    prerelease: bool
+
+
+def create_release(draft: ReleaseDraft, opener: Opener | None = None) -> dict:
     """Create one GitHub Release and return the API response."""
     open_it = opener or _default_opener
     payload = {
-        "tag_name": tag,
-        "name": name,
-        "body": body,
+        "tag_name": draft.tag,
+        "name": draft.name,
+        "body": draft.body,
         "draft": False,
-        "prerelease": prerelease,
-        "make_latest": "false" if prerelease else "true",
+        "prerelease": draft.prerelease,
+        "make_latest": "false" if draft.prerelease else "true",
     }
-    req = _request(f"https://api.github.com/repos/{slug}/releases", token, payload)
+    req = _request(
+        f"https://api.github.com/repos/{draft.slug}/releases", draft.token, payload
+    )
     return _read_json(open_it, req, "GitHub release creation")
 
 
@@ -1934,51 +2056,57 @@ def resolve_dry_run(trigger: str, requested: bool) -> tuple[bool, str]:
     return requested, ""
 
 
-def _cmd_plan(args: argparse.Namespace) -> int:
-    config = parse_versionrc(Path(args.config).read_text(encoding="utf-8"))
-    tags = list_tags()
-    requested_scope = (getattr(args, "scope", "") or "").strip()
-    milestone_tag = getattr(args, "milestone_tag", "") or ""
-    if requested_scope.lower() == "auto":
-        newest = sort_tags(tags)
-        auto_range = f"{newest[0]}..HEAD" if newest else None
-        requested_scope = detect_scope_from_files(list_changed_files(auto_range))
-    if requested_scope and requested_scope.lower() not in ("all", "none"):
-        plan_scope = normalize_scope(requested_scope)
-    elif milestone_tag:
-        milestone_info = parse_milestone_tag(milestone_tag)
-        plan_scope = milestone_info[0] if milestone_info is not None else "all"
-    else:
-        plan_scope = "all"
+def _requested_scope(args, tags, milestone_tag: str) -> str:
+    """Resolve ``--scope auto`` from the changed files since the newest tag."""
+    requested = (getattr(args, "scope", "") or "").strip()
+    if requested.lower() != "auto":
+        return requested
+    newest = sort_tags(tags)
+    auto_range = f"{newest[0]}..HEAD" if newest else None
+    return detect_scope_from_files(list_changed_files(auto_range))
+
+
+def _cli_plan_scope(requested: str, milestone_tag: str) -> str:
+    """Which package train the CLI's history is about."""
+    if requested and requested.lower() not in ("all", "none"):
+        return normalize_scope(requested)
+    if milestone_tag:
+        info = parse_milestone_tag(milestone_tag)
+        return info[0] if info is not None else "all"
+    return "all"
+
+
+def _commits_since(tags, plan_scope: str, suffix: str):
+    """The commits the plan's changelog and bump are computed from."""
     ordered = sort_tags(tags, plan_scope)
-    base_tag = plan_base_tag(ordered, args.suffix or "")
+    base_tag = plan_base_tag(ordered, suffix)
     revision_range = f"{base_tag}..HEAD" if base_tag else None
-    commits = parse_log_with_files(log_commits_with_files(revision_range))
-    dry_run_raw = str(getattr(args, "dry_run", "false")).strip().lower()
-    dry_run, dry_run_note = resolve_dry_run(
-        args.trigger, dry_run_raw in ("true", "1", "yes")
-    )
-    plan = compute_plan(
-        trigger=args.trigger,
-        tags=tags,
-        commits=commits,
-        config=config,
+    return parse_log_with_files(log_commits_with_files(revision_range))
+
+
+def _plan_options(args, requested: str, milestone_tag: str) -> PlanOptions:
+    """The plan knobs as the CLI spelled them."""
+    return PlanOptions(
         suffix=args.suffix,
         version_override=args.version_override or None,
         repo_slug=os.environ.get("GITHUB_REPOSITORY"),
         milestone_tag=milestone_tag or None,
-        scope=requested_scope or "all",
+        scope=requested or "all",
         bump=getattr(args, "bump", "") or "",
     )
-    if dry_run_note:
-        plan = replace(plan, reason=f"{plan.reason} ({dry_run_note})")
-    changelog_file = ""
-    if plan.changelog:
-        target = (
-            Path(os.environ.get("RUNNER_TEMP", ".")) / "qgis-sdk-release-changelog.md"
-        )
-        target.write_text(plan.changelog, encoding="utf-8")
-        changelog_file = str(target.resolve())
+
+
+def _write_plan_changelog(plan: Plan) -> str:
+    """Write the changelog where the workflow expects it, and name the file."""
+    if not plan.changelog:
+        return ""
+    target = Path(os.environ.get("RUNNER_TEMP", ".")) / "qgis-sdk-release-changelog.md"
+    target.write_text(plan.changelog, encoding="utf-8")
+    return str(target.resolve())
+
+
+def _emit_plan(plan: Plan, dry_run: bool, changelog_file: str, as_json: bool) -> None:
+    """Write the workflow outputs and print the same decision for a human."""
     _write_output(
         {
             "action": plan.action,
@@ -1994,7 +2122,7 @@ def _cmd_plan(args: argparse.Namespace) -> int:
             "changelog_file": changelog_file,
         }
     )
-    if args.json:
+    if as_json:
         payload = plan.to_json()
         payload["scope"] = plan.scope
         payload["dry_run"] = dry_run
@@ -2005,7 +2133,573 @@ def _cmd_plan(args: argparse.Namespace) -> int:
             f"action={plan.action} scope={plan.scope} "
             f"tag={plan.tag or '-'} reason={plan.reason}"
         )
+
+
+def _cmd_plan(args: argparse.Namespace) -> int:
+    config = parse_versionrc(Path(args.config).read_text(encoding="utf-8"))
+    tags = list_tags()
+    milestone_tag = getattr(args, "milestone_tag", "") or ""
+    requested = _requested_scope(args, tags, milestone_tag)
+    commits = _commits_since(
+        tags, _cli_plan_scope(requested, milestone_tag), args.suffix or ""
+    )
+    dry_run, dry_run_note = resolve_dry_run(
+        args.trigger,
+        str(getattr(args, "dry_run", "false")).strip().lower() in ("true", "1", "yes"),
+    )
+    plan = compute_plan(
+        args.trigger,
+        tags,
+        commits,
+        config,
+        _plan_options(args, requested, milestone_tag),
+    )
+    if dry_run_note:
+        plan = replace(plan, reason=f"{plan.reason} ({dry_run_note})")
+    _emit_plan(plan, dry_run, _write_plan_changelog(plan), args.json)
     return 0
+
+
+@dataclass
+class _StampRun:
+    """The files one ``stamp`` of the Python train touches.
+
+    Each manifest has its own step so the recipe text, which several of them
+    amend in sequence, has one owner and one place to be written back.
+    """
+
+    scope: str
+    version: Version
+    stamped: list[str] = field(default_factory=list)
+    recipe_text: str | None = None
+
+    @property
+    def split(self) -> bool:
+        return _RUNTIME_PYPROJECT.is_file() and _TOOLS_PYPROJECT.is_file()
+
+    @property
+    def kit(self) -> bool:
+        return self.scope in ("all", "python")
+
+    @property
+    def runtime(self) -> bool:
+        return self.kit or self.scope == "runtime"
+
+    @property
+    def tools(self) -> bool:
+        return self.kit or self.scope == "tools"
+
+    def stamp_kit(self) -> None:
+        if not self.kit:
+            return
+        text = _PYPROJECT.read_text(encoding="utf-8")
+        if self.split:
+            text = stamp_kit_pins(text, self.version)
+        _PYPROJECT.write_text(stamp_pyproject(text, self.version), encoding="utf-8")
+        self.stamped.append(f"{_PYPROJECT} (PEP 440: {self.version.to_pep440()})")
+        if self.recipe_text is not None:
+            self.recipe_text = stamp_recipe(self.recipe_text, self.version)
+
+    def stamp_runtime(self) -> None:
+        if not (self.split and self.runtime):
+            return
+        text = _RUNTIME_PYPROJECT.read_text(encoding="utf-8")
+        _RUNTIME_PYPROJECT.write_text(
+            stamp_pyproject(text, self.version), encoding="utf-8"
+        )
+        self.stamped.append(str(_RUNTIME_PYPROJECT))
+        if self.recipe_text is not None and "runtime_version:" in self.recipe_text:
+            self.recipe_text = stamp_recipe_context(
+                self.recipe_text, "runtime_version", self.version
+            )
+
+    def stamp_tools(self) -> None:
+        if not (self.split and self.tools):
+            return
+        # The range is what the tools were tested against: the runtime that is
+        # at HEAD when they release (the one being stamped on the kit train).
+        tested = (
+            self.version
+            if self.runtime
+            else read_pyproject_version(_RUNTIME_PYPROJECT.read_text(encoding="utf-8"))
+        )
+        text = _TOOLS_PYPROJECT.read_text(encoding="utf-8")
+        _TOOLS_PYPROJECT.write_text(
+            stamp_tools_runtime_range(stamp_pyproject(text, self.version), tested),
+            encoding="utf-8",
+        )
+        self.stamped.append(
+            f"{_TOOLS_PYPROJECT} (runtime range >={tested},<{next_minor(tested)})"
+        )
+        if self.recipe_text is not None and "tools_version:" in self.recipe_text:
+            self.recipe_text = stamp_recipe_context(
+                self.recipe_text, "tools_version", self.version
+            )
+            if _TOOLS_RUNTIME_RANGE.search(self.recipe_text):
+                self.recipe_text = stamp_tools_runtime_range(self.recipe_text, tested)
+
+    def stamp_recipe(self) -> None:
+        changed = self.kit or (self.split and (self.runtime or self.tools))
+        if self.recipe_text is None or not changed:
+            return
+        _RECIPE.write_text(self.recipe_text, encoding="utf-8")
+        self.stamped.append(str(_RECIPE))
+
+    def stamp_examples(self) -> None:
+        moved = " and ".join(
+            name
+            for name, on in (("runtime", self.runtime), ("tools", self.tools))
+            if on
+        )
+        for example in _EXAMPLE_PYPROJECTS:
+            if not example.is_file() or not (self.runtime or self.tools):
+                continue
+            example.write_text(
+                stamp_example_windows(
+                    example.read_text(encoding="utf-8"),
+                    runtime=self.version if self.runtime else None,
+                    tools=self.version if self.tools else None,
+                ),
+                encoding="utf-8",
+            )
+            self.stamped.append(
+                f"{example} ({moved} window {minor_window(self.version)})"
+            )
+
+    def run(self) -> list[str]:
+        self.stamp_kit()
+        self.stamp_runtime()
+        self.stamp_tools()
+        self.stamp_recipe()
+        self.stamp_examples()
+        return self.stamped
+
+
+def _stamp_python(scope: str, version: Version) -> list[str]:
+    """Stamp the Python manifests a ``scope`` release owns; return what moved.
+
+    ``python`` (and ``all``) is the kit train: kit, runtime and tools at one
+    version, the kit re-pinned and the tools' tested range moved with the
+    runtime. ``runtime`` moves the runtime manifest only; ``tools`` moves the
+    tools manifest and its range, tested against the runtime at HEAD. The
+    recipe carries one context version per distribution.
+    """
+    return _StampRun(scope, version, recipe_text=_read_if_file(_RECIPE)).run()
+
+
+def _stamp_typescript(version: Version) -> list[str]:
+    """Stamp the bridge, its alias and the scaffold pin the TypeScript train owns."""
+    stamped: list[str] = []
+    package_text = _BRIDGE_PACKAGE.read_text(encoding="utf-8")
+    _BRIDGE_PACKAGE.write_text(
+        stamp_package_json(package_text, version), encoding="utf-8"
+    )
+    stamped.append(str(_BRIDGE_PACKAGE))
+    if _ALIAS_PACKAGE.is_file():
+        alias_text = _ALIAS_PACKAGE.read_text(encoding="utf-8")
+        _ALIAS_PACKAGE.write_text(
+            stamp_alias_package_json(alias_text, version), encoding="utf-8"
+        )
+        stamped.append(f"{_ALIAS_PACKAGE} (and its pin on {_ALIAS_DEPENDENCY})")
+    if _SCAFFOLD_WEB.is_file():
+        web_text = _SCAFFOLD_WEB.read_text(encoding="utf-8")
+        _SCAFFOLD_WEB.write_text(
+            stamp_scaffold_pin(web_text, version), encoding="utf-8"
+        )
+        stamped.append(f"{_SCAFFOLD_WEB} (the pin qgis-sdk new offers)")
+    return stamped
+
+
+def _stamp_ui(version: Version) -> list[str]:
+    """Stamp the web components, their alias and the UI scaffold pin."""
+    stamped: list[str] = []
+    ui_text = _UI_PACKAGE.read_text(encoding="utf-8")
+    _UI_PACKAGE.write_text(stamp_package_json(ui_text, version), encoding="utf-8")
+    stamped.append(str(_UI_PACKAGE))
+    if _UI_ALIAS_PACKAGE.is_file():
+        ui_alias_text = _UI_ALIAS_PACKAGE.read_text(encoding="utf-8")
+        _UI_ALIAS_PACKAGE.write_text(
+            stamp_alias_package_json(
+                ui_alias_text, version, dependency=_UI_ALIAS_DEPENDENCY
+            ),
+            encoding="utf-8",
+        )
+        stamped.append(f"{_UI_ALIAS_PACKAGE} (and its pin on {_UI_ALIAS_DEPENDENCY})")
+    if _SCAFFOLD_WEB.is_file():
+        web_text = _SCAFFOLD_WEB.read_text(encoding="utf-8")
+        if has_scaffold_ui_pin(web_text):
+            _SCAFFOLD_WEB.write_text(
+                stamp_scaffold_ui_pin(web_text, version), encoding="utf-8"
+            )
+            stamped.append(
+                f"{_SCAFFOLD_WEB} (the pin qgis-sdk new --ui-dependency offers)"
+            )
+    return stamped
+
+
+def _cmd_stamp(args: argparse.Namespace) -> int:
+    version = Version.parse(args.version)
+    scope = normalize_scope(getattr(args, "scope", "all") or "all")
+    stamped: list[str] = []
+    if scope in ("all", "python", "runtime", "tools"):
+        stamped.extend(_stamp_python(scope, version))
+    if scope in ("all", "typescript"):
+        stamped.extend(_stamp_typescript(version))
+    if scope == "ui":
+        stamped.extend(_stamp_ui(version))
+    print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
+    return 0
+
+
+def _reported_example_windows(scope: str, versions: ManifestVersions) -> dict[str, str]:
+    """The compatibility windows every example project declares for a release.
+
+    The examples are what the released tools are qualified against; a window
+    that excludes the release would make the stamped tools refuse them
+    (VERSION004), so a mismatch is reported as a release error rather than a
+    warning.
+    """
+    windows_reported: dict[str, str] = {}
+    for example in _EXAMPLE_PYPROJECTS:
+        if not example.is_file():
+            continue
+        windows = read_example_windows(example.read_text(encoding="utf-8"))
+        released = {
+            "qgis-sdk-runtime": versions.runtime if scope != "tools" else None,
+            "qgis-sdk-tools": versions.tools if scope != "runtime" else None,
+        }
+        for name, (lower, upper) in windows.items():
+            windows_reported[f"{_example_label(example)}: {name}"] = (
+                f">={lower},<{upper}"
+            )
+            shipped = released[name]
+            if shipped is None or example_window_includes(lower, upper, shipped):
+                continue
+            raise QgisSdkReleaseVersionError(
+                f"{_example_label(example)} declares {name}>={lower},<{upper} "
+                f"but this release ships {name} {shipped}; run stamp --scope "
+                f"{scope} --version {shipped} so the example follows"
+            )
+    return windows_reported
+
+
+def _manifest_sources() -> ManifestSources:
+    """Read every manifest a verification needs, tolerating optional files."""
+    return ManifestSources(
+        pyproject_text=_PYPROJECT.read_text(encoding="utf-8"),
+        package_text=_BRIDGE_PACKAGE.read_text(encoding="utf-8"),
+        recipe_text=_read_if_file(_RECIPE),
+        alias_text=_read_if_file(_ALIAS_PACKAGE),
+        runtime_text=_read_if_file(_RUNTIME_PYPROJECT),
+        tools_text=_read_if_file(_TOOLS_PYPROJECT),
+        scaffold_text=_read_if_file(_SCAFFOLD_WEB),
+        ui_text=_read_if_file(_UI_PACKAGE),
+        ui_alias_text=_read_if_file(_UI_ALIAS_PACKAGE),
+    )
+
+
+def _wanted_scopes(sources: ManifestSources, scope_raw: str) -> tuple[str, ...]:
+    """The scopes one verification has to answer for."""
+    if scope_raw:
+        return (normalize_scope(scope_raw),)
+    ui_scopes: tuple[str, ...] = ("ui",) if sources.ui_text is not None else ()
+    split = sources.runtime_text is not None and sources.tools_text is not None
+    if split:
+        # Without a release in hand each distribution only has to agree with
+        # itself: the runtime or the tools may have released alone since the
+        # last kit, so the kit's pins may lag them, never lead them.
+        return ("runtime", "tools", "kit", "typescript", *ui_scopes)
+    return ("python", "typescript", *ui_scopes)
+
+
+def _check_ui_peer(scope: str, versions: ManifestVersions, entry: dict) -> None:
+    """A UI release must accept the bridge it was tested against."""
+    if scope != "ui" or versions.ui_peer_range is None:
+        return
+    lower, upper = versions.ui_peer_range
+    if not ui_peer_range_includes(versions.ui_peer_range, versions.package_json):
+        raise QgisSdkReleaseVersionError(
+            f"the ui package declares {_UI_PEER} >={lower} <{upper} as its "
+            f"peer but the bridge at HEAD is {versions.package_json}; widen "
+            "the peer range in packages/qgis-sdk-ui/package.json before a "
+            "ui release"
+        )
+    entry["bridge_peer_range"] = f">={lower} <{upper}"
+
+
+def _check_runtime_range(
+    scope: str, versions: ManifestVersions, tools_text: str | None, entry: dict
+) -> None:
+    """The tools' tested range must hold the runtime they ship next to."""
+    if scope not in ("python", "runtime", "tools"):
+        return
+    if not tools_text or versions.runtime is None:
+        return
+    lower, upper = read_tools_runtime_range(tools_text)
+    if not runtime_range_includes(lower, upper, versions.runtime):
+        raise QgisSdkReleaseVersionError(
+            f"the tools were tested against qgis-sdk-runtime>={lower},<{upper} "
+            f"but the runtime at HEAD is {versions.runtime}; a tools release "
+            "must include the runtime it ships next to (stamp --scope tools, "
+            "or release the kit with --scope python)"
+        )
+    entry["runtime_range"] = f">={lower},<{upper}"
+
+
+def _check_expected_version(scope, scoped, version, expected) -> None:
+    """A named release must already be the version every manifest carries."""
+    if expected is None or version == expected:
+        return
+    listed = ", ".join(f"{name}={value}" for name, value in scoped)
+    raise QgisSdkReleaseVersionError(
+        f"scope {scope} is releasing {expected}, but its manifests carry "
+        f"{listed}; run stamp --scope {scope} --version {expected} first"
+    )
+
+
+def _verify_one_scope(
+    scope: str,
+    versions: ManifestVersions,
+    expected: Version | None,
+    sources: ManifestSources,
+) -> dict[str, object]:
+    """Everything one scope has to agree on, as its diagnostic entry."""
+    scoped = scoped_manifest_versions(versions, scope)
+    version = require_one_version(scoped)
+    _check_expected_version(scope, scoped, version, expected)
+    entry: dict[str, object] = {
+        "version": str(version),
+        "manifests": {name: str(value) for name, value in scoped},
+    }
+    if scope == "kit":
+        kit_pins_behind_or_at(versions)
+        entry["pins"] = {
+            requirement: str(pinned) for requirement, pinned in versions.kit_pins
+        }
+    _check_ui_peer(scope, versions, entry)
+    _check_runtime_range(scope, versions, sources.tools_text, entry)
+    if scope in ("python", "runtime", "tools"):
+        windows = _reported_example_windows(scope, versions)
+        if windows:
+            entry["example_windows"] = windows
+    return entry
+
+
+def _emit_verification(
+    reported: dict, contract, shared_contract, wanted_scopes, as_json: bool
+) -> None:
+    """Print the same verdict for the workflow and for a human."""
+    if as_json:
+        print(
+            json.dumps({"scopes": reported, "contract": contract.to_json()}, indent=2)
+        )
+        return
+    for scope in wanted_scopes:
+        entry = reported[scope]
+        listed = ", ".join(entry["manifests"])
+        print(
+            f"released manifests for scope {scope} agree on {entry['version']}: {listed}"
+        )
+    print(
+        f"plugin description contract version {shared_contract} agrees across "
+        "the Python declarations and the TypeScript bridge"
+    )
+
+
+def _cmd_verify_versions(args: argparse.Namespace) -> int:
+    scope_raw = (getattr(args, "scope", "") or "").strip()
+    expected_raw = (getattr(args, "version", "") or "").strip()
+    sources = _manifest_sources()
+    versions = manifest_versions(sources)
+    contract = contract_versions(
+        _PY_DECLARATIONS.read_text(encoding="utf-8"),
+        _TS_DECLARATIONS.read_text(encoding="utf-8"),
+    )
+    wanted_scopes = _wanted_scopes(sources, scope_raw)
+    expected = Version.parse(expected_raw) if expected_raw else None
+    if expected is not None and len(wanted_scopes) > 1:
+        raise QgisSdkReleaseVersionError(
+            "--version needs --scope: one release targets one package"
+        )
+    reported = {
+        scope: _verify_one_scope(scope, versions, expected, sources)
+        for scope in wanted_scopes
+    }
+    _emit_verification(
+        reported,
+        contract,
+        contract.agreed(),
+        wanted_scopes,
+        getattr(args, "json", False),
+    )
+    return 0
+
+
+def _release_or_existing(draft: ReleaseDraft) -> dict:
+    """Create the release, or reuse one a retried run already published."""
+    try:
+        return create_release(draft)
+    except QgisSdkReleaseError as exc:
+        if "already_exists" not in str(exc):
+            raise
+    return get_release_by_tag(draft.slug, draft.token, draft.tag)
+
+
+def _upload_assets(release: dict, slug: str, token: str, assets) -> None:
+    """Replace same-named assets, then upload every asset the run produced."""
+    upload_url = release.get("upload_url")
+    if not upload_url:
+        raise QgisSdkReleaseError(f"release response lacked upload_url: {release}")
+    existing_assets = {
+        item.get("name"): item.get("id")
+        for item in release.get("assets", ())
+        if isinstance(item, dict) and item.get("name") and item.get("id")
+    }
+    for asset in assets:
+        asset_path = Path(asset)
+        existing_id = existing_assets.get(asset_path.name)
+        if existing_id is not None:
+            delete_release_asset(slug, token, int(existing_id))
+        upload_asset(upload_url, token, asset_path)
+        print(f"uploaded {asset_path.name}")
+
+
+def _cmd_github_release(args: argparse.Namespace) -> int:
+    slug = args.repo or os.environ.get("GITHUB_REPOSITORY")
+    token = args.token or os.environ.get("GITHUB_TOKEN")
+    if not slug or not token:
+        raise QgisSdkReleaseError(
+            "github-release needs --repo/GITHUB_REPOSITORY and --token/GITHUB_TOKEN"
+        )
+    version = version_from_tag(args.tag)
+    body = (
+        Path(args.body_file).read_text(encoding="utf-8")
+        if args.body_file
+        else f"Release {args.tag}"
+    )
+    draft = ReleaseDraft(slug, token, args.tag, args.tag, body, version.is_prerelease)
+    release = _release_or_existing(draft)
+    _upload_assets(release, slug, token, args.asset)
+    html_url = release.get("html_url", "")
+    print(f"release {args.tag}: {html_url}")
+    _step_summary(
+        f"- GitHub Release [{args.tag}]({html_url}) with {len(args.asset)} asset(s)"
+    )
+    return 0
+
+
+def _add_planning_parsers(sub) -> None:
+    plan = sub.add_parser("plan", help="decide the next release action")
+    plan.add_argument(
+        "--trigger", choices=("push", "dispatch", "milestone"), default="push"
+    )
+    plan.add_argument("--config", default=str(_VERSIONRC))
+    plan.add_argument("--suffix", default="")
+    plan.add_argument("--version-override", default="")
+    plan.add_argument("--scope", default="")
+    plan.add_argument("--bump", default="")
+    plan.add_argument("--milestone-tag", default="")
+    plan.add_argument("--dry-run", default="false")
+    plan.add_argument("--json", action="store_true")
+    plan.set_defaults(handler=_cmd_plan)
+
+    classify = sub.add_parser("classify", help="classify one release tag")
+    classify.add_argument("--tag", required=True)
+    classify.add_argument("--scoped", action="store_true")
+    classify.set_defaults(handler=_cmd_classify)
+
+
+def _add_stamping_parsers(sub) -> None:
+    tag = sub.add_parser("tag", help="create an annotated release tag")
+    tag.add_argument("--tag", required=True, dest="tag_name", metavar="TAG")
+    tag.add_argument("--message")
+    tag.add_argument("--message-file")
+    tag.add_argument("--push", action="store_true")
+    tag.set_defaults(handler=_cmd_tag)
+
+    stamp = sub.add_parser("stamp", help="stamp versions into manifests")
+    stamp.add_argument("--version", required=True)
+    stamp.add_argument(
+        "--scope",
+        default="all",
+        help="which package to stamp: all, python, or typescript",
+    )
+    stamp.set_defaults(handler=_cmd_stamp)
+
+
+def _add_verify_versions_parser(sub) -> None:
+    versions = sub.add_parser(
+        "verify-versions",
+        help="require one version per released scope and one shared contract version",
+    )
+    versions.add_argument(
+        "--scope",
+        default="",
+        help=(
+            "which package is being released: all, python, or typescript; "
+            "omit to check every scope on its own"
+        ),
+    )
+    versions.add_argument(
+        "--version",
+        default="",
+        help="version this scope is releasing; the scoped manifests must carry it",
+    )
+    versions.add_argument("--json", action="store_true", help="machine-readable output")
+    versions.set_defaults(handler=_cmd_verify_versions)
+
+
+def _add_build_parsers(sub) -> None:
+    build = sub.add_parser(
+        "build-python", help="build and check the wheel of every Python distribution"
+    )
+    build.add_argument(
+        "--package",
+        action="append",
+        help="a package directory to build; repeatable; default: every "
+        "distribution the scope ships",
+    )
+    build.add_argument(
+        "--scope",
+        default="all",
+        help="release scope deciding which distributions to build "
+        "(all/python: the three; runtime; tools)",
+    )
+    build.add_argument("--outdir", default="dist/pypi")
+    build.set_defaults(handler=_cmd_build_python)
+
+    verify = sub.add_parser("verify-python", help="twine check built wheels")
+    verify.add_argument("--dist", default="dist/pypi")
+    verify.set_defaults(handler=_cmd_verify_python)
+
+
+def _add_publish_parsers(sub) -> None:
+    sums = sub.add_parser("checksums", help="write a SHA256SUMS file")
+    sums.add_argument("--out", default="SHA256SUMS")
+    sums.add_argument("paths", nargs="+")
+    sums.set_defaults(handler=_cmd_checksums)
+
+    release = sub.add_parser("github-release", help="publish a GitHub Release")
+    release.add_argument("--tag", required=True)
+    release.add_argument("--body-file")
+    release.add_argument("--asset", nargs="+", default=[])
+    release.add_argument("--repo")
+    release.add_argument("--token")
+    release.set_defaults(handler=_cmd_github_release)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="release",
+        description="Release planning and publishing CLI for the QGIS SDK workspace.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    _add_planning_parsers(sub)
+    _add_stamping_parsers(sub)
+    _add_verify_versions_parser(sub)
+    _add_build_parsers(sub)
+    _add_publish_parsers(sub)
+    return parser
 
 
 def _ship_flags(scope: str) -> dict[str, str]:
@@ -2055,308 +2749,6 @@ def _read_if_file(path: Path) -> str | None:
     return path.read_text(encoding="utf-8") if path.is_file() else None
 
 
-def _stamp_python(scope: str, version: Version) -> list[str]:
-    """Stamp the Python manifests a ``scope`` release owns; return what moved.
-
-    ``python`` (and ``all``) is the kit train: kit, runtime and tools at one
-    version, the kit re-pinned and the tools' tested range moved with the
-    runtime. ``runtime`` moves the runtime manifest only; ``tools`` moves the
-    tools manifest and its range, tested against the runtime at HEAD. The
-    recipe carries one context version per distribution.
-    """
-    stamped: list[str] = []
-    split = _RUNTIME_PYPROJECT.is_file() and _TOOLS_PYPROJECT.is_file()
-    recipe_text = _read_if_file(_RECIPE)
-    kit = scope in ("all", "python")
-    runtime = kit or scope == "runtime"
-    tools = kit or scope == "tools"
-    if kit:
-        pyproject_text = _PYPROJECT.read_text(encoding="utf-8")
-        if split:
-            pyproject_text = stamp_kit_pins(pyproject_text, version)
-        _PYPROJECT.write_text(
-            stamp_pyproject(pyproject_text, version), encoding="utf-8"
-        )
-        stamped.append(f"{_PYPROJECT} (PEP 440: {version.to_pep440()})")
-        if recipe_text is not None:
-            recipe_text = stamp_recipe(recipe_text, version)
-    if split and runtime:
-        _RUNTIME_PYPROJECT.write_text(
-            stamp_pyproject(_RUNTIME_PYPROJECT.read_text(encoding="utf-8"), version),
-            encoding="utf-8",
-        )
-        stamped.append(str(_RUNTIME_PYPROJECT))
-        if recipe_text is not None and "runtime_version:" in recipe_text:
-            recipe_text = stamp_recipe_context(recipe_text, "runtime_version", version)
-    if split and tools:
-        # The range is what the tools were tested against: the runtime that is
-        # at HEAD when they release (the one being stamped on the kit train).
-        tested = (
-            version
-            if runtime
-            else read_pyproject_version(_RUNTIME_PYPROJECT.read_text(encoding="utf-8"))
-        )
-        tools_text = stamp_pyproject(
-            _TOOLS_PYPROJECT.read_text(encoding="utf-8"), version
-        )
-        _TOOLS_PYPROJECT.write_text(
-            stamp_tools_runtime_range(tools_text, tested), encoding="utf-8"
-        )
-        stamped.append(
-            f"{_TOOLS_PYPROJECT} (runtime range >={tested},<{next_minor(tested)})"
-        )
-        if recipe_text is not None and "tools_version:" in recipe_text:
-            recipe_text = stamp_recipe_context(recipe_text, "tools_version", version)
-            if _TOOLS_RUNTIME_RANGE.search(recipe_text):
-                recipe_text = stamp_tools_runtime_range(recipe_text, tested)
-    if recipe_text is not None and (kit or (split and (runtime or tools))):
-        _RECIPE.write_text(recipe_text, encoding="utf-8")
-        stamped.append(str(_RECIPE))
-    moved = " and ".join(
-        name for name, on in (("runtime", runtime), ("tools", tools)) if on
-    )
-    for example in _EXAMPLE_PYPROJECTS:
-        if not example.is_file() or not (runtime or tools):
-            continue
-        example.write_text(
-            stamp_example_windows(
-                example.read_text(encoding="utf-8"),
-                runtime=version if runtime else None,
-                tools=version if tools else None,
-            ),
-            encoding="utf-8",
-        )
-        stamped.append(f"{example} ({moved} window {minor_window(version)})")
-    return stamped
-
-
-def _cmd_stamp(args: argparse.Namespace) -> int:
-    version = Version.parse(args.version)
-    scope = normalize_scope(getattr(args, "scope", "all") or "all")
-    stamped: list[str] = []
-    if scope in ("all", "python", "runtime", "tools"):
-        stamped.extend(_stamp_python(scope, version))
-    if scope in ("all", "typescript"):
-        package_text = _BRIDGE_PACKAGE.read_text(encoding="utf-8")
-        _BRIDGE_PACKAGE.write_text(
-            stamp_package_json(package_text, version), encoding="utf-8"
-        )
-        stamped.append(str(_BRIDGE_PACKAGE))
-        if _ALIAS_PACKAGE.is_file():
-            alias_text = _ALIAS_PACKAGE.read_text(encoding="utf-8")
-            _ALIAS_PACKAGE.write_text(
-                stamp_alias_package_json(alias_text, version), encoding="utf-8"
-            )
-            stamped.append(f"{_ALIAS_PACKAGE} (and its pin on {_ALIAS_DEPENDENCY})")
-        if _SCAFFOLD_WEB.is_file():
-            web_text = _SCAFFOLD_WEB.read_text(encoding="utf-8")
-            _SCAFFOLD_WEB.write_text(
-                stamp_scaffold_pin(web_text, version), encoding="utf-8"
-            )
-            stamped.append(f"{_SCAFFOLD_WEB} (the pin qgis-sdk new offers)")
-    if scope == "ui":
-        ui_text = _UI_PACKAGE.read_text(encoding="utf-8")
-        _UI_PACKAGE.write_text(stamp_package_json(ui_text, version), encoding="utf-8")
-        stamped.append(str(_UI_PACKAGE))
-        if _UI_ALIAS_PACKAGE.is_file():
-            ui_alias_text = _UI_ALIAS_PACKAGE.read_text(encoding="utf-8")
-            _UI_ALIAS_PACKAGE.write_text(
-                stamp_alias_package_json(
-                    ui_alias_text, version, dependency=_UI_ALIAS_DEPENDENCY
-                ),
-                encoding="utf-8",
-            )
-            stamped.append(
-                f"{_UI_ALIAS_PACKAGE} (and its pin on {_UI_ALIAS_DEPENDENCY})"
-            )
-        if _SCAFFOLD_WEB.is_file():
-            web_text = _SCAFFOLD_WEB.read_text(encoding="utf-8")
-            if has_scaffold_ui_pin(web_text):
-                _SCAFFOLD_WEB.write_text(
-                    stamp_scaffold_ui_pin(web_text, version), encoding="utf-8"
-                )
-                stamped.append(
-                    f"{_SCAFFOLD_WEB} (the pin qgis-sdk new --ui-dependency offers)"
-                )
-    print(f"stamped {version} for scope {scope} into {', '.join(stamped)}")
-    return 0
-
-
-def _reported_example_windows(scope: str, versions: ManifestVersions) -> dict[str, str]:
-    """The compatibility windows every example project declares for a release.
-
-    The examples are what the released tools are qualified against; a window
-    that excludes the release would make the stamped tools refuse them
-    (VERSION004), so a mismatch is reported as a release error rather than a
-    warning.
-    """
-    windows_reported: dict[str, str] = {}
-    for example in _EXAMPLE_PYPROJECTS:
-        if not example.is_file():
-            continue
-        windows = read_example_windows(example.read_text(encoding="utf-8"))
-        released = {
-            "qgis-sdk-runtime": versions.runtime if scope != "tools" else None,
-            "qgis-sdk-tools": versions.tools if scope != "runtime" else None,
-        }
-        for name, (lower, upper) in windows.items():
-            windows_reported[f"{_example_label(example)}: {name}"] = (
-                f">={lower},<{upper}"
-            )
-            shipped = released[name]
-            if shipped is None or example_window_includes(lower, upper, shipped):
-                continue
-            raise QgisSdkReleaseVersionError(
-                f"{_example_label(example)} declares {name}>={lower},<{upper} "
-                f"but this release ships {name} {shipped}; run stamp --scope "
-                f"{scope} --version {shipped} so the example follows"
-            )
-    return windows_reported
-
-
-def _cmd_verify_versions(args: argparse.Namespace) -> int:
-    scope_raw = (getattr(args, "scope", "") or "").strip()
-    expected_raw = (getattr(args, "version", "") or "").strip()
-    recipe_text = _RECIPE.read_text(encoding="utf-8") if _RECIPE.is_file() else None
-    alias_text = (
-        _ALIAS_PACKAGE.read_text(encoding="utf-8") if _ALIAS_PACKAGE.is_file() else None
-    )
-    runtime_text = (
-        _RUNTIME_PYPROJECT.read_text(encoding="utf-8")
-        if _RUNTIME_PYPROJECT.is_file()
-        else None
-    )
-    tools_text = (
-        _TOOLS_PYPROJECT.read_text(encoding="utf-8")
-        if _TOOLS_PYPROJECT.is_file()
-        else None
-    )
-    scaffold_text = (
-        _SCAFFOLD_WEB.read_text(encoding="utf-8") if _SCAFFOLD_WEB.is_file() else None
-    )
-    ui_text = _UI_PACKAGE.read_text(encoding="utf-8") if _UI_PACKAGE.is_file() else None
-    ui_alias_text = (
-        _UI_ALIAS_PACKAGE.read_text(encoding="utf-8")
-        if _UI_ALIAS_PACKAGE.is_file()
-        else None
-    )
-    versions = manifest_versions(
-        _PYPROJECT.read_text(encoding="utf-8"),
-        _BRIDGE_PACKAGE.read_text(encoding="utf-8"),
-        recipe_text,
-        alias_text,
-        runtime_text,
-        tools_text,
-        scaffold_text,
-        ui_text,
-        ui_alias_text,
-    )
-    contract = contract_versions(
-        _PY_DECLARATIONS.read_text(encoding="utf-8"),
-        _TS_DECLARATIONS.read_text(encoding="utf-8"),
-    )
-    shared_contract = contract.agreed()
-    split = runtime_text is not None and tools_text is not None
-    ui_scopes: tuple[str, ...] = ("ui",) if ui_text is not None else ()
-    if scope_raw:
-        wanted_scopes: tuple[str, ...] = (normalize_scope(scope_raw),)
-    elif split:
-        # Without a release in hand each distribution only has to agree with
-        # itself: the runtime or the tools may have released alone since the
-        # last kit, so the kit's pins may lag them, never lead them.
-        wanted_scopes = ("runtime", "tools", "kit", "typescript", *ui_scopes)
-    else:
-        wanted_scopes = ("python", "typescript", *ui_scopes)
-    expected = Version.parse(expected_raw) if expected_raw else None
-    if expected is not None and len(wanted_scopes) > 1:
-        raise QgisSdkReleaseVersionError(
-            "--version needs --scope: one release targets one package"
-        )
-    reported: dict[str, dict[str, object]] = {}
-    for scope in wanted_scopes:
-        scoped = scoped_manifest_versions(versions, scope)
-        version = require_one_version(scoped)
-        if expected is not None and version != expected:
-            listed = ", ".join(f"{name}={value}" for name, value in scoped)
-            raise QgisSdkReleaseVersionError(
-                f"scope {scope} is releasing {expected}, but its manifests carry "
-                f"{listed}; run stamp --scope {scope} --version {expected} first"
-            )
-        reported[scope] = {
-            "version": str(version),
-            "manifests": {name: str(value) for name, value in scoped},
-        }
-        if scope == "kit":
-            kit_pins_behind_or_at(versions)
-            reported[scope]["pins"] = {
-                requirement: str(pinned) for requirement, pinned in versions.kit_pins
-            }
-        if scope == "ui" and versions.ui_peer_range is not None:
-            # The components are tested against the bridge next to them; a
-            # peer range that excludes it would install against a bridge they
-            # never saw, so the release is refused until the range follows.
-            lower, upper = versions.ui_peer_range
-            if not ui_peer_range_includes(
-                versions.ui_peer_range, versions.package_json
-            ):
-                raise QgisSdkReleaseVersionError(
-                    f"the ui package declares {_UI_PEER} >={lower} <{upper} as its "
-                    f"peer but the bridge at HEAD is {versions.package_json}; widen "
-                    "the peer range in packages/qgis-sdk-ui/package.json before a "
-                    "ui release"
-                )
-            reported[scope]["bridge_peer_range"] = f">={lower} <{upper}"
-        if (
-            scope in ("python", "runtime", "tools")
-            and tools_text
-            and versions.runtime is not None
-        ):
-            # True at HEAD or not at all: the tools import the runtime next to
-            # them, so whichever side releases, the range must hold it.
-            lower, upper = read_tools_runtime_range(tools_text)
-            if not runtime_range_includes(lower, upper, versions.runtime):
-                raise QgisSdkReleaseVersionError(
-                    f"the tools were tested against qgis-sdk-runtime>={lower},<{upper} "
-                    f"but the runtime at HEAD is {versions.runtime}; a tools release "
-                    "must include the runtime it ships next to (stamp --scope tools, "
-                    "or release the kit with --scope python)"
-                )
-            reported[scope]["runtime_range"] = f">={lower},<{upper}"
-        if scope in ("python", "runtime", "tools"):
-            windows_reported = _reported_example_windows(scope, versions)
-            if windows_reported:
-                reported[scope]["example_windows"] = windows_reported
-    if getattr(args, "json", False):
-        print(
-            json.dumps(
-                {
-                    "scopes": reported,
-                    "contract": contract.to_json(),
-                },
-                indent=2,
-            )
-        )
-        return 0
-    for scope in wanted_scopes:
-        entry = reported[scope]
-        listed = ", ".join(entry["manifests"])
-        print(
-            f"released manifests for scope {scope} agree on {entry['version']}: {listed}"
-        )
-    print(
-        f"plugin description contract version {shared_contract} agrees across "
-        "the Python declarations and the TypeScript bridge"
-    )
-    return 0
-
-
-_DISTRIBUTION_DIRS = {
-    "runtime": "packages/qgis-sdk-runtime",
-    "tools": "packages/qgis-sdk-tools",
-    "kit": "packages/qgis-sdk-python",
-}
-
-
 def _cmd_build_python(args: argparse.Namespace) -> int:
     """Build each Python distribution into its own ``<outdir>/<name>`` directory.
 
@@ -2404,148 +2796,11 @@ def _cmd_checksums(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_github_release(args: argparse.Namespace) -> int:
-    slug = args.repo or os.environ.get("GITHUB_REPOSITORY")
-    token = args.token or os.environ.get("GITHUB_TOKEN")
-    if not slug or not token:
-        raise QgisSdkReleaseError(
-            "github-release needs --repo/GITHUB_REPOSITORY and --token/GITHUB_TOKEN"
-        )
-    version = version_from_tag(args.tag)
-    body = (
-        Path(args.body_file).read_text(encoding="utf-8")
-        if args.body_file
-        else f"Release {args.tag}"
-    )
-    try:
-        release = create_release(
-            slug, token, args.tag, args.tag, body, version.is_prerelease
-        )
-    except QgisSdkReleaseError as exc:
-        if "already_exists" not in str(exc):
-            raise
-        release = get_release_by_tag(slug, token, args.tag)
-    upload_url = release.get("upload_url")
-    if not upload_url:
-        raise QgisSdkReleaseError(f"release response lacked upload_url: {release}")
-    existing_assets = {
-        item.get("name"): item.get("id")
-        for item in release.get("assets", ())
-        if isinstance(item, dict) and item.get("name") and item.get("id")
-    }
-    for asset in args.asset:
-        asset_path = Path(asset)
-        existing_id = existing_assets.get(asset_path.name)
-        if existing_id is not None:
-            delete_release_asset(slug, token, int(existing_id))
-        upload_asset(upload_url, token, asset_path)
-        print(f"uploaded {asset_path.name}")
-    html_url = release.get("html_url", "")
-    print(f"release {args.tag}: {html_url}")
-    _step_summary(
-        f"- GitHub Release [{args.tag}]({html_url}) with {len(args.asset)} asset(s)"
-    )
-    return 0
-
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="release",
-        description="Release planning and publishing CLI for the QGIS SDK workspace.",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    plan = sub.add_parser("plan", help="decide the next release action")
-    plan.add_argument(
-        "--trigger", choices=("push", "dispatch", "milestone"), default="push"
-    )
-    plan.add_argument("--config", default=str(_VERSIONRC))
-    plan.add_argument("--suffix", default="")
-    plan.add_argument("--version-override", default="")
-    plan.add_argument("--scope", default="")
-    plan.add_argument("--bump", default="")
-    plan.add_argument("--milestone-tag", default="")
-    plan.add_argument("--dry-run", default="false")
-    plan.add_argument("--json", action="store_true")
-    plan.set_defaults(handler=_cmd_plan)
-
-    classify = sub.add_parser("classify", help="classify one release tag")
-    classify.add_argument("--tag", required=True)
-    classify.add_argument("--scoped", action="store_true")
-    classify.set_defaults(handler=_cmd_classify)
-
-    tag = sub.add_parser("tag", help="create an annotated release tag")
-    tag.add_argument("--tag", required=True, dest="tag_name", metavar="TAG")
-    tag.add_argument("--message")
-    tag.add_argument("--message-file")
-    tag.add_argument("--push", action="store_true")
-    tag.set_defaults(handler=_cmd_tag)
-
-    stamp = sub.add_parser("stamp", help="stamp versions into manifests")
-    stamp.add_argument("--version", required=True)
-    stamp.add_argument(
-        "--scope",
-        default="all",
-        help="which package to stamp: all, python, or typescript",
-    )
-    stamp.set_defaults(handler=_cmd_stamp)
-
-    versions = sub.add_parser(
-        "verify-versions",
-        help="require one version per released scope and one shared contract version",
-    )
-    versions.add_argument(
-        "--scope",
-        default="",
-        help=(
-            "which package is being released: all, python, or typescript; "
-            "omit to check every scope on its own"
-        ),
-    )
-    versions.add_argument(
-        "--version",
-        default="",
-        help="version this scope is releasing; the scoped manifests must carry it",
-    )
-    versions.add_argument("--json", action="store_true", help="machine-readable output")
-    versions.set_defaults(handler=_cmd_verify_versions)
-
-    build = sub.add_parser(
-        "build-python", help="build and check the wheel of every Python distribution"
-    )
-    build.add_argument(
-        "--package",
-        action="append",
-        help="a package directory to build; repeatable; default: every "
-        "distribution the scope ships",
-    )
-    build.add_argument(
-        "--scope",
-        default="all",
-        help="release scope deciding which distributions to build "
-        "(all/python: the three; runtime; tools)",
-    )
-    build.add_argument("--outdir", default="dist/pypi")
-    build.set_defaults(handler=_cmd_build_python)
-
-    verify = sub.add_parser("verify-python", help="twine check built wheels")
-    verify.add_argument("--dist", default="dist/pypi")
-    verify.set_defaults(handler=_cmd_verify_python)
-
-    sums = sub.add_parser("checksums", help="write a SHA256SUMS file")
-    sums.add_argument("--out", default="SHA256SUMS")
-    sums.add_argument("paths", nargs="+")
-    sums.set_defaults(handler=_cmd_checksums)
-
-    release = sub.add_parser("github-release", help="publish a GitHub Release")
-    release.add_argument("--tag", required=True)
-    release.add_argument("--body-file")
-    release.add_argument("--asset", nargs="+", default=[])
-    release.add_argument("--repo")
-    release.add_argument("--token")
-    release.set_defaults(handler=_cmd_github_release)
-
-    return parser
+_DISTRIBUTION_DIRS = {
+    "runtime": "packages/qgis-sdk-runtime",
+    "tools": "packages/qgis-sdk-tools",
+    "kit": "packages/qgis-sdk-python",
+}
 
 
 def main(argv: list[str] | None = None) -> int:
