@@ -38,6 +38,7 @@ loop, not by whatever the transport happens to do with a callback.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from qgis_sdk.bridge.endpoint._calls import _Calls
@@ -87,6 +88,24 @@ __all__ = [
 ]
 
 
+@dataclass(frozen=True, slots=True)
+class DispatchSetup:
+    """Everything a dispatcher is built from, in one record.
+
+    The declaration, the handlers bound to it and the three options a host may
+    vary used to be seven parameters, which every caller had to spell out even
+    when it varied one of them. ``streams`` belongs here rather than to a second
+    constructor: a stream is a declared operation like any other (decision-28).
+    """
+
+    description: Any
+    handlers: Mapping[str, Handler]
+    streams: Mapping[str, Callable[..., Any]] | None = None
+    authorize: Authorizer | None = None
+    ledger: ReleaseLedger | None = None
+    theme: ThemeProvider | None = None
+
+
 class Dispatcher:
     """Route allowlisted operations for one host, per view generation.
 
@@ -118,29 +137,25 @@ class Dispatcher:
         }
 
     @classmethod
-    def from_description(
-        cls,
-        description: Any,
-        handlers: Mapping[str, Handler],
-        *,
-        streams: Mapping[str, Callable[..., Any]] | None = None,
-        authorize: Authorizer | None = None,
-        ledger: ReleaseLedger | None = None,
-        theme: ThemeProvider | None = None,
-    ) -> Dispatcher:
+    def from_description(cls, setup: DispatchSetup) -> Dispatcher:
         """Build a dispatcher whose allowlist *is* the plugin description.
 
         The only wiring a plugin needs (decision-26): every declared action
         becomes one allowlisted operation carrying the schemas the declaration
         already produced, bound to its handler by action id. Declared streams
-        (decision-28) are wired the same way from ``streams``, with the request
-        spelled as keyword arguments.
+        (decision-28) are wired the same way from ``setup.streams``, with the
+        request spelled as keyword arguments.
         """
-        advertised, actions, declared = _description_parts(description)
+        advertised, actions, declared = _description_parts(setup.description)
         dispatcher = cls(
-            description=advertised, authorize=authorize, ledger=ledger, theme=theme
+            description=advertised,
+            authorize=setup.authorize,
+            ledger=setup.ledger,
+            theme=setup.theme,
         )
-        _wire_declared(dispatcher, actions, declared, handlers, streams or {})
+        _wire_declared(
+            dispatcher, actions, declared, setup.handlers, setup.streams or {}
+        )
         return dispatcher
 
     @classmethod
@@ -157,12 +172,14 @@ class Dispatcher:
         ``PluginRuntime.actions`` and ``streams`` are already keyed by id.
         """
         return cls.from_description(
-            runtime.description,
-            runtime.actions,
-            streams=getattr(runtime, "streams", None),
-            authorize=authorize,
-            ledger=ledger,
-            theme=theme,
+            DispatchSetup(
+                description=runtime.description,
+                handlers=runtime.actions,
+                streams=getattr(runtime, "streams", None),
+                authorize=authorize,
+                ledger=ledger,
+                theme=theme,
+            )
         )
 
     def register(self, operation: BridgeOperation, handler: Handler) -> None:

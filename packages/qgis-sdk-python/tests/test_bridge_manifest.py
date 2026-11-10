@@ -13,7 +13,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import pytest
-from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, BridgeOperation, Dispatcher
+from qgis_sdk.bridge import (
+    BRIDGE_PROTOCOL_VERSION,
+    BridgeOperation,
+    Dispatcher,
+    DispatchSetup,
+)
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.models import FileInput, FileRef
@@ -61,9 +66,11 @@ def _host(*, allow: bool = True) -> tuple[Dispatcher, SitesPlugin]:
         for declared in description.actions
     }
     dispatcher = Dispatcher.from_description(
-        description,
-        handlers,
-        authorize=(lambda binding, operation: True) if allow else None,
+        DispatchSetup(
+            description,
+            handlers,
+            authorize=(lambda binding, operation: True) if allow else None,
+        )
     )
     return dispatcher, instance
 
@@ -101,7 +108,9 @@ def test_a_declared_action_without_a_handler_is_refused_at_wiring_time() -> None
 
     with pytest.raises(QgisSdkBridgeError, match="sites.summary"):
         Dispatcher.from_description(
-            description, {"sites.broken": lambda **kwargs: Summary(0, "")}
+            DispatchSetup(
+                description, {"sites.broken": lambda **kwargs: Summary(0, "")}
+            )
         )
 
 
@@ -358,18 +367,18 @@ def test_a_file_input_reaches_the_handler_as_the_ref_the_host_minted() -> None:
     description = describe_plugin(Files)
     instance = Files()
     dispatcher = Dispatcher.from_description(
-        description,
-        {"load": instance.load},
-        authorize=lambda binding, operation: True,
+        DispatchSetup(
+            description,
+            {"load": instance.load},
+            authorize=lambda binding, operation: True,
+        )
     )
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     ref = FileRef(id="a" * 16, name="lookup.csv", operations=("read",))
 
     reply = dispatcher.dispatch(binding, _call("load", {"source": ref.to_wire()}))
-
     assert reply["ok"] is True, reply
-    assert reply["value"] == "lookup.csv"
-    assert received == [ref]
+    assert (reply["value"], received) == ("lookup.csv", [ref])
     wrong_kind = {**ref.to_wire(), "kind": "folder"}
     refused = dispatcher.dispatch(binding, _call("load", {"source": wrong_kind}))
     assert refused["ok"] is False
@@ -393,9 +402,11 @@ def test_a_json_description_is_accepted_like_the_object() -> None:
     instance = SitesPlugin()
     description = describe_plugin(SitesPlugin).to_dict()
     dispatcher = Dispatcher.from_description(
-        description,
-        {"sites.summary": instance.summarize, "sites.broken": instance.broken},
-        authorize=lambda binding, operation: True,
+        DispatchSetup(
+            description,
+            {"sites.summary": instance.summarize, "sites.broken": instance.broken},
+            authorize=lambda binding, operation: True,
+        )
     )
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
 
@@ -494,8 +505,10 @@ def test_an_input_that_is_not_a_python_name_is_refused_at_wiring_time() -> None:
 
     with pytest.raises(QgisSdkBridgeError, match="not a Python parameter name"):
         Dispatcher.from_description(
-            mapping,
-            {declared["id"]: Handler() for declared in mapping["actions"]},
+            DispatchSetup(
+                mapping,
+                {declared["id"]: Handler() for declared in mapping["actions"]},
+            )
         )
 
 
@@ -560,10 +573,12 @@ def _watch_host(items: list[Any] | None = None) -> tuple[Dispatcher, WatchPlugin
     instance = WatchPlugin(items)
     description = describe_plugin(WatchPlugin)
     dispatcher = Dispatcher.from_description(
-        description,
-        {"sites.refresh": instance.refresh},
-        streams={"sites.watch": instance.watch},
-        authorize=lambda binding, operation: True,
+        DispatchSetup(
+            description,
+            {"sites.refresh": instance.refresh},
+            streams={"sites.watch": instance.watch},
+            authorize=lambda binding, operation: True,
+        )
     )
     return dispatcher, instance
 
@@ -596,7 +611,9 @@ def test_a_declared_stream_without_a_factory_is_refused_at_wiring_time() -> None
     instance = WatchPlugin()
     with pytest.raises(QgisSdkBridgeError, match="sites.watch.*no stream factory"):
         Dispatcher.from_description(
-            describe_plugin(WatchPlugin), {"sites.refresh": instance.refresh}
+            DispatchSetup(
+                describe_plugin(WatchPlugin), {"sites.refresh": instance.refresh}
+            )
         )
 
 

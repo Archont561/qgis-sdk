@@ -18,7 +18,7 @@ from qgis_sdk.bridge.authority import (
     FileRef,
     HostAuthority,
 )
-from qgis_sdk.bridge.dispatch import Dispatcher, ViewBinding
+from qgis_sdk.bridge.dispatch import Dispatcher, DispatchSetup, ViewBinding
 from qgis_sdk.bridge.protocol import (
     BRIDGE_PROTOCOL_VERSION,
     BridgeErrorCode,
@@ -44,6 +44,7 @@ __all__ = [
     "MAX_QUEUED_EVENTS",
     "BridgeErrorCode",
     "BridgeOperation",
+    "DispatchSetup",
     "Dispatcher",
     "FileOperation",
     "FileRef",

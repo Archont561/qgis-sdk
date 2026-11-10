@@ -555,7 +555,6 @@
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py": {
-		"CC102": 1,
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/schema.py": {
