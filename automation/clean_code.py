@@ -58,14 +58,18 @@ __all__ = [
     "gate",
     "parse",
     "render",
-    "undiscovered",
 ]
 
 Budget = Mapping[str, Mapping[str, int]]
 
 
 def command(scope: Iterable[str] = SCOPE) -> list[str]:
-    """The Rude invocation, machine-readable and limited to the plugin's rules."""
+    """The Rude invocation, machine-readable and limited to the plugin's rules.
+
+    ``--select`` repeats ``[tool.rude] select`` on purpose: the config states the
+    intent for anyone running Rude by hand, and the flag keeps this gate from
+    widening to the F/E/W sets if that table is ever dropped.
+    """
     return ["rude", "check", "--select", RULES, "--format", "json", *scope]
 
 
@@ -170,11 +174,6 @@ def compare(found: Budget, budget: Budget) -> list[str]:
 def total(budget: Budget) -> int:
     """How many violations the budget accounts for."""
     return sum(sum(codes.values()) for codes in budget.values())
-
-
-def undiscovered(found: Budget, budget: Budget) -> list[str]:
-    """Files the run reported that the budget has never seen."""
-    return sorted(path for path in found if path not in budget)
 
 
 def _rewrite(found: dict[str, dict[str, int]]) -> int:
