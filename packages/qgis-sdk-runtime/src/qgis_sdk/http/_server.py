@@ -2,210 +2,122 @@
 
 from __future__ import annotations
 
-import hmac
-import json
 import logging
-import math
 import os
 import secrets
-import socket
 import threading
 import weakref
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from queue import Empty, Full, Queue
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
-from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, Dispatcher
+from qgis_sdk.bridge import Dispatcher
 from qgis_sdk.bridge.resources import ReleaseLedger
-from qgis_sdk.bridge.transport import ChannelTransport
-from qgis_sdk.models.errors import QgisSdkError
 
-from ._queue import GuiQueue, QgisSdkHostBusyError, QgisSdkHostReloadedError
+from ._endpoint import _Endpoint
+from ._errors import QgisSdkHttpError, error_status
+from ._listener import _Listener
+from ._options import DEFAULT_CLOSE_GRACE, capacity, positive, timing
+from ._queue import GuiQueue
+from ._sessions import _FrameBuffer, _Sessions
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from ._options import _Capacity, _Timing
+
+__all__ = ["PluginHttpServer", "QgisSdkHttpError", "_FrameBuffer"]
 
 _RUNTIME_LOCK = threading.Lock()
 _ACTIVE_RUNTIMES: weakref.WeakSet[Any] = weakref.WeakSet()
 
-# One request body bound and one session budget for every REST entry point.
-_MAX_BODY_BYTES = 1024 * 1024
-_MAX_SESSIONS = 64
-# How long a close waits for replies already owed to callers it just withdrew.
-_CLOSE_GRACE = 2.0
-# Retryable server conditions answer 503; anything else is the caller's fault.
-_ERROR_STATUS = {"host_busy": 503, "host_reloaded": 503, "capacity": 503}
 
+class _Owner:
+    """The thread that owns the runtime, and the cleanup a close has to finish there."""
 
-def _is_number(value: object) -> bool:
-    """Whether ``value`` is a real, finite number.
+    def __init__(
+        self,
+        post: Callable[[Callable[[], None]], None],
+        on_cleanup_error: Callable[[Exception], None] | None,
+    ) -> None:
+        self.thread = threading.get_ident()
+        self.lock = threading.RLock()
+        self.post = post
+        self.error: Exception | None = None
+        self.reserved = False
+        self.requested = False
+        self.done = threading.Event()
+        self._on_cleanup_error = on_cleanup_error
 
-    ``bool`` is an ``int`` to Python and is not a duration to anybody, and an
-    infinity or a NaN passes every comparison without meaning anything.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return False
-    return math.isfinite(value)
+    @property
+    def here(self) -> bool:
+        """Whether the calling thread is the one the runtime is owned by."""
+        return threading.get_ident() == self.thread
 
+    def schedule(self, fn: Callable[[], None]) -> None:
+        """Run ``fn`` on the owner thread now, or post it there."""
+        if self.here:
+            fn()
+        else:
+            self.post(fn)
 
-def _is_positive_number(value: object) -> bool:
-    """Whether ``value`` is a number greater than zero."""
-    return _is_number(value) and value > 0
-
-
-def _is_non_negative_number(value: object) -> bool:
-    """Whether ``value`` is a number at least zero."""
-    return _is_number(value) and value >= 0
-
-
-def _is_positive_count(value: object) -> bool:
-    """Whether ``value`` is a whole number of at least one."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        return False
-    return value >= 1
-
-
-def _is_event_stream_cap(value: object, connections: int) -> bool:
-    """Whether ``value`` caps streams and still leaves a connection for calls."""
-    if isinstance(value, bool) or not isinstance(value, int):
-        return False
-    return 0 <= value < connections
-
-
-class _FrameBuffer:
-    """A session's outgoing frames, bounded by count and encoded byte size."""
-
-    _MAX_FRAME_BYTES = 512 * 1024
-    _MAX_TOTAL_BYTES = 2 * 1024 * 1024
-
-    def __init__(self) -> None:
-        self._queue: Queue[tuple[str, int]] = Queue(maxsize=256)
-        self._bytes = 0
-        self._lock = threading.Lock()
-
-    def put_nowait(self, text: str) -> None:
-        size = len(text.encode("utf-8"))
-        with self._lock:
-            if (
-                size > self._MAX_FRAME_BYTES
-                or self._bytes + size > self._MAX_TOTAL_BYTES
-            ):
-                raise Full
-            self._queue.put_nowait((text, size))
-            self._bytes += size
-
-    def get(self, timeout: float) -> str:
-        text, size = self._queue.get(timeout=timeout)
-        with self._lock:
-            self._bytes -= size
-        return text
-
-    def empty(self) -> bool:
-        return self._queue.empty()
-
-
-@dataclass
-class _Session:
-    channel: ChannelTransport
-    closed: bool = False
-    reader: bool = False
-    replies: list[str] = field(default_factory=list)
-    frames: _FrameBuffer = field(default_factory=_FrameBuffer)
-    on_overflow: Callable[[], None] = lambda: None
-
-    def send(self, text: str) -> None:
-        value = json.loads(text)
-        if "call_id" in value:
-            self.replies.append(text)
-        elif not self.closed:
-            try:
-                self.frames.put_nowait(text)
-            except Full:
-                # The caller must reconnect rather than receive a silently
-                # truncated stream. Cleanup is deferred to the owner queue.
-                self.closed = True
-                self.on_overflow()
-
-
-class _BoundedHTTPServer(ThreadingHTTPServer):
-    """Limit concurrently accepted HTTP handlers without blocking the accept loop."""
-
-    def __init__(self, address: tuple[str, int], handler: type, limit: int) -> None:
-        self._slots = threading.BoundedSemaphore(limit)
-        self._connections: set[socket.socket] = set()
-        self._connections_lock = threading.Lock()
-        self._idle = threading.Condition(self._connections_lock)
-        self._handlers = 0
-        self._closing = False
-        super().__init__(address, handler)
-
-    def process_request(self, request: Any, client_address: Any) -> None:
-        if not self._slots.acquire(blocking=False):
-            try:
-                request.setblocking(False)
-                request.send(
-                    b"HTTP/1.0 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                )
-            except OSError:
-                pass
-            finally:
-                self.shutdown_request(request)
+    def report(self, error: Exception) -> None:
+        """Record a deferred cleanup failure and hand it to the observer, if any."""
+        self.error = error
+        if self._on_cleanup_error is None:
             return
-        with self._connections_lock:
-            if self._closing:
-                self._slots.release()
-                self.shutdown_request(request)
-                return
-            self._connections.add(request)
         try:
-            super().process_request(request, client_address)
-        except BaseException:
-            with self._connections_lock:
-                self._connections.discard(request)
-            self._slots.release()
-            raise
-
-    def process_request_thread(self, request: Any, client_address: Any) -> None:
-        with self._connections_lock:
-            self._handlers += 1
-        try:
-            super().process_request_thread(request, client_address)
-        finally:
-            with self._connections_lock:
-                self._connections.discard(request)
-                self._handlers -= 1
-                if self._handlers == 0:
-                    self._idle.notify_all()
-            self._slots.release()
-
-    def wait_idle(self, timeout: float) -> bool:
-        """Wait for the handlers already running to finish, or ``timeout``.
-
-        A close withdraws queued work, which wakes the waiting caller so it can
-        answer ``host_reloaded``. That reply still has to leave over a socket
-        this object is about to shut down, so the caller of a close waits here
-        first. It is a grace, not a guarantee: a handler still running when the
-        time is up is cut off, exactly as before.
-        """
-        with self._connections_lock:
-            return self._idle.wait_for(lambda: self._handlers == 0, timeout)
-
-    def server_close(self) -> None:
-        with self._connections_lock:
-            self._closing = True
-            connections = tuple(self._connections)
-        for connection in connections:
-            try:
-                connection.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-        super().server_close()
+            self._on_cleanup_error(error)
+        except Exception:
+            logging.getLogger(__name__).exception("HTTP cleanup error observer failed")
 
 
-class QgisSdkHttpError(QgisSdkError):
-    """An HTTP listener could not be started safely."""
+def _sessions_of(server: PluginHttpServer) -> _Sessions:
+    """Build the session book over the dispatcher and ledger this server mints."""
+    ledger = ReleaseLedger()
+    dispatcher = Dispatcher.from_runtime(
+        server._runtime,
+        authorize=lambda binding, operation: operation in server._allowed,
+        ledger=ledger,
+    )
+    return _Sessions(
+        dispatcher, ledger, queue=server._queue, on_error=server._owner.report
+    )
 
-    code = "http_error"
+
+def _endpoint_of(
+    server: PluginHttpServer, limits: _Timing, budgets: _Capacity
+) -> _Endpoint:
+    """Assemble the frozen view one request handler works from."""
+    return _Endpoint(
+        runtime=server._runtime,
+        allowed=server._allowed,
+        queue=server._queue,
+        sessions=server._sessions,
+        token=secrets.token_urlsafe(32),
+        read_timeout=limits.request_read_timeout,
+        write_timeout=limits.stream_write_timeout,
+        grace=limits.close_grace,
+        event_slots=threading.BoundedSemaphore(budgets.max_event_streams),
+        closed=server._closed,
+    )
+
+
+def _refuse_unusable(
+    host: str, post: Callable[[Callable[[], None]], None], cleanup_error: Any
+) -> None:
+    """Refuse what cannot work before anything is created: a bind address, a callback."""
+    if host != "127.0.0.1":
+        raise QgisSdkHttpError("HTTP listeners may bind only to 127.0.0.1")
+    if not callable(post):
+        raise QgisSdkHttpError("a GUI-thread post callback is required")
+    if cleanup_error is not None and not callable(cleanup_error):
+        raise QgisSdkHttpError("on_cleanup_error must be callable")
+
+
+def _refuse_unknown(actions: Sequence[str], runtime: Any) -> None:
+    """Refuse an action the runtime does not declare, before a listener could offer it."""
+    unknown = set(actions) - (set(runtime.actions) | set(runtime.streams))
+    if unknown:
+        raise QgisSdkHttpError(f"unknown HTTP actions: {', '.join(sorted(unknown))}")
 
 
 class PluginHttpServer:
@@ -231,82 +143,29 @@ class PluginHttpServer:
         max_event_streams: int | None = None,
         request_read_timeout: float = 5,
         stream_write_timeout: float = 10,
-        close_grace: float = _CLOSE_GRACE,
+        close_grace: float = DEFAULT_CLOSE_GRACE,
         on_cleanup_error: Callable[[Exception], None] | None = None,
     ) -> None:
-        if host != "127.0.0.1":
-            raise QgisSdkHttpError("HTTP listeners may bind only to 127.0.0.1")
-        if not callable(post):
-            raise QgisSdkHttpError("a GUI-thread post callback is required")
-        if on_cleanup_error is not None and not callable(on_cleanup_error):
-            raise QgisSdkHttpError("on_cleanup_error must be callable")
-        if not _is_positive_number(deadline):
-            raise QgisSdkHttpError("deadline must be a positive finite number")
-        if not _is_non_negative_number(close_grace):
-            raise QgisSdkHttpError("close_grace must be a non-negative finite number")
-        if not _is_positive_count(max_connections):
-            raise QgisSdkHttpError("max_connections must be a positive integer")
-        if max_event_streams is None:
-            max_event_streams = min(16, max_connections - 1)
-        if not _is_event_stream_cap(max_event_streams, max_connections):
-            raise QgisSdkHttpError(
-                "max_event_streams must leave at least one connection for calls"
-            )
-        if not _is_positive_number(request_read_timeout):
-            raise QgisSdkHttpError("request_read_timeout must be positive and finite")
-        if not _is_positive_number(stream_write_timeout):
-            raise QgisSdkHttpError("stream_write_timeout must be positive and finite")
-        unknown = set(actions) - (set(runtime.actions) | set(runtime.streams))
-        if unknown:
-            raise QgisSdkHttpError(
-                f"unknown HTTP actions: {', '.join(sorted(unknown))}"
-            )
+        _refuse_unusable(host, post, on_cleanup_error)
+        limits = timing(request_read_timeout, stream_write_timeout, close_grace)
+        budgets = capacity(max_connections, max_event_streams)
+        _refuse_unknown(actions, runtime)
         self._runtime = runtime
-        # The listener must be constructed on the runtime's owning thread.
-        self._owner_thread = threading.get_ident()
-        self._post = post
-        self._lifecycle_lock = threading.RLock()
-        self._registered = False
-        self._closed = False
-        self._close_error: Exception | None = None
-        self._on_cleanup_error = on_cleanup_error
-        self._cleanup_requested = False
-        self._cleanup_failed = False
-        self._cleanup_done = threading.Event()
+        self._owner = _Owner(post, on_cleanup_error)
         self._allowed = frozenset(actions)
-        self._queue = GuiQueue(post, float(deadline))
-        self._ledger = ReleaseLedger()
-        self._dispatcher = Dispatcher.from_runtime(
-            runtime,
-            authorize=lambda binding, operation: operation in self._allowed,
-            ledger=self._ledger,
-        )
-        self._path = Path(token_file)
-        self._token = secrets.token_urlsafe(32)
-        self._sessions: dict[str, _Session] = {}
-        self._lock = threading.Lock()
-        # Dispatch is serialized by the queue: a handler that spins a nested
-        # event loop cannot let a second call or subscription dispatch inside
-        # it, mirroring ChannelTransport's receiving guard.
-        self._http: ThreadingHTTPServer | None = None
-        self._thread: threading.Thread | None = None
-        self._identity: tuple[int, int] | None = None
-        self._port = port
-        self._max_connections = max_connections
-        self._event_slots = threading.BoundedSemaphore(max_event_streams)
-        self._request_read_timeout = float(request_read_timeout)
-        self._stream_write_timeout = float(stream_write_timeout)
-        self._close_grace = float(close_grace)
-        # Closing the runtime's scope revokes the endpoint as a safety net.
-        # The host must still coordinate asynchronous cleanup before unload.
+        self._closed = threading.Event()
+        self._queue = GuiQueue(post, positive("deadline", deadline))
+        self._sessions = _sessions_of(self)
+        self._endpoint = _endpoint_of(self, limits, budgets)
+        self._listener = _Listener(self._endpoint, token_file, port, budgets)
         runtime.instance.ctx.scope.on_close(self.close)
 
     @property
     def port(self) -> int:
         """The assigned loopback port; valid while the server is running."""
-        if self._closed or self._http is None:
+        if self._closed.is_set():
             raise QgisSdkHttpError("the HTTP server is not running")
-        return self._http.server_port
+        return self._listener.port
 
     @property
     def pending_requests(self) -> int:
@@ -326,445 +185,37 @@ class PluginHttpServer:
         self.close()
 
     def start(self) -> None:
-        """Create a private token file and start the listener once."""
-        with self._lifecycle_lock:
-            self._start()
+        """Create a private token file and start the listener once.
 
-    def _start(self) -> None:
-        if self._closed:
-            raise QgisSdkHttpError("HTTP server is closed")
-        if self._http is not None or self._identity is not None:
-            raise QgisSdkHttpError("HTTP server is already started")
-        if os.name != "posix":
-            raise QgisSdkHttpError(
-                "private token permissions require POSIX; Windows ACL handling is not implemented"
-            )
-        with _RUNTIME_LOCK:
-            if self._runtime in _ACTIVE_RUNTIMES:
-                raise QgisSdkHttpError("this runtime already has an HTTP endpoint")
-            _ACTIVE_RUNTIMES.add(self._runtime)
-            self._registered = True
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-        if hasattr(os, "O_NOFOLLOW"):
-            flags |= os.O_NOFOLLOW
-        try:
-            fd = os.open(self._path, flags, 0o600)
-            with os.fdopen(fd, "w", encoding="ascii") as handle:
-                info = os.fstat(handle.fileno())
-                self._identity = (info.st_dev, info.st_ino)
-                os.fchmod(handle.fileno(), 0o600)
-                handle.write(self._token + "\n")
-            owner = self
-
-            class Handler(BaseHTTPRequestHandler):
-                def setup(self) -> None:
-                    super().setup()
-                    self._read_lock = threading.Lock()
-                    self._reading = True
-                    self._timed_out = False
-                    self._read_timer = threading.Timer(
-                        owner._request_read_timeout, self._expire_read
-                    )
-                    self._read_timer.daemon = True
-                    self._read_timer.start()
-
-                def _expire_read(self) -> None:
-                    with self._read_lock:
-                        if not self._reading:
-                            return
-                        self._reading = False
-                        self._timed_out = True
-                        try:
-                            self.connection.shutdown(socket.SHUT_RDWR)
-                        except OSError:
-                            pass
-
-                def _finish_reading(self) -> bool:
-                    with self._read_lock:
-                        was_reading = self._reading
-                        self._reading = False
-                        self._read_timer.cancel()
-                        if was_reading and not self._timed_out:
-                            # Bound ordinary response writes as well as SSE writes.
-                            self.connection.settimeout(owner._stream_write_timeout)
-                        return not self._timed_out
-
-                def _json_object_body(self) -> dict[str, Any] | None:
-                    """Read one bounded JSON-object body, or answer and return None.
-
-                    Both REST entry points accept exactly one unambiguous
-                    Content-Length framing and one JSON object, so those rules
-                    live in one place.
-                    """
-                    lengths = self.headers.get_all("Content-Length") or []
-                    if (
-                        len(lengths) != 1
-                        or not lengths[0].isdigit()
-                        or self.headers.get("Transfer-Encoding")
-                    ):
-                        self.send_error(400)
-                        return None
-                    size = int(lengths[0])
-                    if size > _MAX_BODY_BYTES:
-                        self.send_error(413)
-                        return None
-                    raw = self.rfile.read(size)
-                    if not self._finish_reading():
-                        return None
-                    try:
-                        payload = json.loads(raw)
-                    except (ValueError, UnicodeDecodeError):
-                        self.send_error(400)
-                        return None
-                    if len(raw) != size or not isinstance(payload, dict):
-                        self.send_error(400)
-                        return None
-                    return payload
-
-                def handle(self) -> None:
-                    try:
-                        super().handle()
-                    except (ConnectionError, TimeoutError):
-                        pass  # A client may disconnect or exceed the read deadline.
-
-                def finish(self) -> None:
-                    self._finish_reading()
-                    super().finish()
-
-                def log_message(self, format: str, *args: object) -> None:
-                    pass
-
-                def do_POST(self) -> None:
-                    if not self._authorized():
-                        return
-                    if self.path.startswith("/actions/"):
-                        self._rest_action()
-                        return
-                    if self.path.startswith("/streams/"):
-                        self._rest_stream()
-                        return
-                    self.send_error(404)
-
-                def _rest_action(self) -> None:
-                    parts = self.path.split("/")
-                    action = parts[2] if len(parts) == 3 else ""
-                    if (
-                        action not in owner._runtime.actions
-                        or action not in owner._allowed
-                    ):
-                        self.send_error(404)
-                        return
-                    payload = self._json_object_body()
-                    if payload is None:
-                        return
-
-                    def call() -> dict[str, Any]:
-                        session_id = secrets.token_urlsafe(24)
-                        capacity = owner._capacity_error()
-                        if capacity is not None:
-                            return capacity
-                        binding = owner._dispatcher.bind(
-                            view_id=session_id, origin="http://loopback"
-                        )
-                        channel = ChannelTransport(
-                            owner._dispatcher, binding, lambda _: None
-                        )
-                        session = _Session(channel)
-                        channel.send = session.send
-                        with owner._lock:
-                            owner._sessions[session_id] = session
-                        try:
-                            text = json.dumps(
-                                {
-                                    "protocol": BRIDGE_PROTOCOL_VERSION,
-                                    "call_id": secrets.token_hex(8),
-                                    "operation": action,
-                                    "payload": payload,
-                                }
-                            )
-                            if not channel.receive(text) or not session.replies:
-                                return {
-                                    "error": {
-                                        "code": "invalid_request",
-                                        "message": "Invalid request",
-                                    }
-                                }
-                            reply = json.loads(session.replies.pop(0))
-                            return (
-                                {"value": reply["value"]}
-                                if reply.get("ok")
-                                else {"error": reply["error"]}
-                            )
-                        finally:
-                            owner._dispose_session(session_id)
-
-                    try:
-                        result = owner._queue.call(call)
-                    except (QgisSdkHostBusyError, QgisSdkHostReloadedError) as error:
-                        self._json(
-                            503, {"error": {"code": error.code, "message": str(error)}}
-                        )
-                        return
-                    self._json(
-                        200 if "value" in result else owner._error_status(result),
-                        result,
-                    )
-
-                def _rest_stream(self) -> None:
-                    parts = self.path.split("/")
-                    stream_id = parts[2] if len(parts) == 3 else ""
-                    if (
-                        stream_id not in owner._runtime.streams
-                        or stream_id not in owner._allowed
-                    ):
-                        self.send_error(404)
-                        return
-                    payload = self._json_object_body()
-                    if payload is None:
-                        return
-                    if not owner._event_slots.acquire(blocking=False):
-                        self.send_error(503)
-                        return
-                    session_id = secrets.token_urlsafe(24)
-                    session = None
-                    try:
-
-                        def subscribe():
-                            capacity = owner._capacity_error()
-                            if capacity is not None:
-                                return None, capacity
-                            binding = owner._dispatcher.bind(
-                                view_id=session_id, origin="http://loopback"
-                            )
-                            channel = ChannelTransport(
-                                owner._dispatcher, binding, lambda _: None
-                            )
-                            session = _Session(
-                                channel,
-                                on_overflow=lambda: owner._defer_dispose(session_id),
-                            )
-                            channel.send = session.send
-                            with owner._lock:
-                                owner._sessions[session_id] = session
-                            text = json.dumps(
-                                {
-                                    "protocol": BRIDGE_PROTOCOL_VERSION,
-                                    "kind": "subscribe",
-                                    "call_id": secrets.token_hex(8),
-                                    "operation": stream_id,
-                                    "payload": payload,
-                                }
-                            )
-                            if not channel.receive(text) or not session.replies:
-                                owner._dispose_session(session_id)
-                                return None, {
-                                    "error": {
-                                        "code": "invalid_request",
-                                        "message": "Invalid request",
-                                    }
-                                }
-                            reply = json.loads(session.replies.pop(0))
-                            if not reply.get("ok"):
-                                owner._dispose_session(session_id)
-                                return None, {"error": reply["error"]}
-                            return session, None
-
-                        try:
-                            session, error = owner._queue.call(subscribe)
-                        except (
-                            QgisSdkHostBusyError,
-                            QgisSdkHostReloadedError,
-                        ) as error:
-                            self._json(
-                                503,
-                                {"error": {"code": error.code, "message": str(error)}},
-                            )
-                            return
-                        if error is not None:
-                            self._json(owner._error_status(error), error)
-                            return
-                        self.connection.settimeout(owner._stream_write_timeout)
-                        self.send_response(200)
-                        self.send_header("Content-Type", "text/event-stream")
-                        self.send_header("Cache-Control", "no-store")
-                        self.send_header("Connection", "close")
-                        self.end_headers()
-                        while not session.closed:
-                            if session.frames.empty():
-                                try:
-                                    owner._queue.call(
-                                        lambda: session.channel.flush(limit=1)
-                                    )
-                                except (QgisSdkHostBusyError, QgisSdkHostReloadedError):
-                                    break
-                            try:
-                                frame = session.frames.get(timeout=0.5)
-                                decoded = json.loads(frame)
-                                outgoing = b"data: " + frame.encode("utf-8") + b"\n\n"
-                                terminal = "terminal" in decoded
-                            except Empty:
-                                decoded = None
-                                outgoing = b": keepalive\n\n"
-                                terminal = False
-                            self.wfile.write(outgoing)
-                            self.wfile.flush()
-                            if terminal:
-                                break
-                            if decoded is not None:
-                                # Written and flushed, so the frame is
-                                # delivered: tell the host, or the in-flight
-                                # bound would stall this stream after eight
-                                # frames (decision-59).
-                                subscription = decoded.get("subscription_id")
-                                seq = decoded.get("seq")
-                                if isinstance(subscription, str) and isinstance(
-                                    seq, int
-                                ):
-                                    try:
-                                        owner._queue.call(
-                                            lambda subscription=subscription, seq=seq: (
-                                                session.channel.acknowledge(
-                                                    subscription, seq
-                                                )
-                                            )
-                                        )
-                                    except (
-                                        QgisSdkHostBusyError,
-                                        QgisSdkHostReloadedError,
-                                    ):
-                                        break
-                    except (ConnectionError, OSError):
-                        pass
-                    finally:
-                        owner._event_slots.release()
-                        if session is not None:
-                            session.closed = True
-                            owner._defer_dispose(session_id)
-
-                def do_GET(self) -> None:
-                    if not self._authorized():
-                        return
-                    if not self._finish_reading():
-                        return
-                    if self.path == "/plugin":
-                        description = owner._runtime.description.to_dict()
-                        description["actions"] = [
-                            a
-                            for a in description["actions"]
-                            if a["id"] in owner._allowed
-                        ]
-                        description["streams"] = [
-                            s
-                            for s in description["streams"]
-                            if s["id"] in owner._allowed
-                        ]
-                        self._json(200, description)
-                        return
-                    self.send_error(404)
-
-                def _authorized(self) -> bool:
-                    if owner._closed:
-                        self._json(
-                            503,
-                            {
-                                "error": {
-                                    "code": "host_reloaded",
-                                    "message": "Host closed",
-                                }
-                            },
-                        )
-                        return False
-                    hosts = self.headers.get_all("Host") or []
-                    if hosts != [f"127.0.0.1:{self.server.server_port}"]:
-                        self.send_error(403)
-                        return False
-                    if self.headers.get_all("Origin"):
-                        self.send_error(403)
-                        return False
-                    headers = self.headers.get_all("Authorization") or []
-                    expected = ("Bearer " + owner._token).encode("ascii")
-                    if len(headers) != 1 or not hmac.compare_digest(
-                        headers[0].encode("latin-1"), expected
-                    ):
-                        self.send_error(401)
-                        return False
-                    return True
-
-                def _json(self, status: int, data: dict[str, Any]) -> None:
-                    payload = json.dumps(data, separators=(",", ":")).encode("utf-8")
-                    self.send_response(status)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(payload)))
-                    self.send_header("Cache-Control", "no-store")
-                    self.end_headers()
-                    self.wfile.write(payload)
-
-            self._http = _BoundedHTTPServer(
-                ("127.0.0.1", self._port), Handler, self._max_connections
-            )
-            self._thread = threading.Thread(
-                target=self._http.serve_forever, daemon=True, name="qgis-sdk-http"
-            )
-            self._thread.start()
-        except BaseException:
-            self.close()
-            raise
-
-    @staticmethod
-    def _error_status(payload: dict[str, Any]) -> int:
-        code = payload.get("error", {}).get("code")
-        return _ERROR_STATUS.get(code, 400)
-
-    def _report_cleanup_error(self, error: Exception) -> None:
-        self._close_error = error
-        if self._on_cleanup_error is not None:
-            try:
-                self._on_cleanup_error(error)
-            except Exception:
-                logging.getLogger(__name__).exception(
-                    "HTTP cleanup error observer failed"
+        Every refusal lands before a socket exists: a closed server, a second
+        start, a platform without private file permissions, or a runtime that
+        already has an endpoint. A failure after the reservation releases it
+        again, so the same server can be started once the cause is fixed.
+        """
+        with self._owner.lock:
+            if self._closed.is_set():
+                raise QgisSdkHttpError("HTTP server is closed")
+            if self._listener.started:
+                raise QgisSdkHttpError("HTTP server is already started")
+            if os.name != "posix":
+                raise QgisSdkHttpError(
+                    "private token permissions require POSIX; "
+                    "Windows ACL handling is not implemented"
                 )
-
-    def _defer_dispose(self, session_id: str) -> None:
-        def dispose() -> None:
+            with _RUNTIME_LOCK:
+                if self._runtime in _ACTIVE_RUNTIMES:
+                    raise QgisSdkHttpError("this runtime already has an HTTP endpoint")
+                _ACTIVE_RUNTIMES.add(self._runtime)
+                self._owner.reserved = True
             try:
-                self._dispose_session(session_id)
-            except Exception as error:  # noqa: BLE001 - report deferred owner failures
-                self._report_cleanup_error(error)
-
-        self._queue.defer(session_id, dispose)
-
-    def _capacity_error(self) -> dict[str, Any] | None:
-        """Refuse a new session once the per-plugin budget is spent."""
-        with self._lock:
-            if len(self._sessions) < _MAX_SESSIONS:
-                return None
-        return {"error": {"code": "capacity", "message": "Too many sessions"}}
-
-    def _dispose_session(self, session_id: str) -> bool:
-        with self._lock:
-            session = self._sessions.pop(session_id, None)
-        if session is None:
-            return False
-        session.closed = True
-        failures: list[Exception] = []
-        try:
-            session.channel.dispose()
-        except Exception as error:  # noqa: BLE001 - release siblings even if a source fails
-            failures.append(error)
-        for handle in self._ledger.handles(session_id):
-            try:
-                self._ledger.release(session_id, handle)
-            except Exception as error:  # noqa: BLE001 - release remaining handles
-                failures.append(error)
-        if failures:
-            self._cleanup_failed = True
-            raise ExceptionGroup("HTTP session cleanup failed", failures)
-        return True
+                self._listener.start()
+            except BaseException:
+                self.close()
+                raise
 
     def close(self) -> None:
         """Stop the listener and remove its token; off-owner cleanup is posted."""
-        with self._lifecycle_lock:
+        with self._owner.lock:
             self._close()
 
     def wait_cleanup(self, timeout: float | None = None) -> bool:
@@ -773,109 +224,74 @@ class PluginHttpServer:
         Completion does not imply success: failed cleanup is reported through
         ``on_cleanup_error`` and keeps the runtime quarantined.
         """
-        if (
-            threading.get_ident() == self._owner_thread
-            and not self._cleanup_done.is_set()
-        ):
+        if self._owner.here and not self._owner.done.is_set():
             raise QgisSdkHttpError("the owner thread must not wait for queued cleanup")
-        return self._cleanup_done.wait(timeout)
+        return self._owner.done.wait(timeout)
+
+    @staticmethod
+    def _error_status(payload: dict[str, Any]) -> int:
+        """The status an error reply answers: 503 when retrying could help, else 400."""
+        return error_status(payload)
 
     def _close(self) -> None:
+        """Withdraw what the listener owes, then finish the cleanup it cannot skip."""
         failures: list[Exception] = []
-        on_owner = threading.get_ident() == self._owner_thread
-        if not self._closed:
-            self._closed = True
-            with self._lock:
-                for session in self._sessions.values():
-                    session.closed = True
+        if not self._closed.is_set():
+            self._closed.set()
+            self._sessions.mark_closed()
             self._queue.close()
-            try:
-                if on_owner:
-                    self._stop_waking()
-                else:
-                    self._post(self._stop_waking)
-            except Exception as error:  # noqa: BLE001 - keep reservation if scheduling fails
-                failures.append(error)
-
-        server = self._http
-        if server is not None:
-            try:
-                # Closing the queue wakes the callers it withdrew so each can
-                # answer host_reloaded; let those replies leave before the
-                # connections underneath them are shut down.
-                server.wait_idle(self._close_grace)
-                if self._thread is not None and self._thread.is_alive():
-                    server.shutdown()
-                server.server_close()
-                if self._thread is not None and self._thread.is_alive():
-                    self._thread.join(timeout=5)
-                    if self._thread.is_alive():
-                        raise QgisSdkHttpError("HTTP listener thread did not stop")
-                self._http = None
-                self._thread = None
-            except Exception as error:  # noqa: BLE001 - retain ownership and retry
-                failures.append(error)
-        try:
-            self._remove_token()
-        except OSError as error:
-            failures.append(error)
-        # Never release the runtime while the listener might still be alive.
-        if self._http is None and not self._cleanup_requested:
-            self._cleanup_requested = True
-            if not self._queue.defer_until_idle(self._finish_close_async):
-                try:
-                    if on_owner:
-                        try:
-                            self._finish_close()
-                        finally:
-                            self._cleanup_done.set()
-                    else:
-                        self._post(self._finish_close_async)
-                except Exception as error:  # noqa: BLE001 - retain reservation and allow retry
-                    if not on_owner:
-                        self._cleanup_requested = False
-                    failures.append(error)
+            failures += self._stop_waking()
+        failures += self._listener.stop(self._endpoint.grace)
+        failures += self._finish_later()
         if failures:
             raise ExceptionGroup("HTTP listener shutdown failed", failures)
 
-    def _stop_waking(self) -> None:
-        with self._lock:
-            for session in self._sessions.values():
-                session.channel.stop_waking()
-
-    def _remove_token(self) -> None:
-        if self._identity is None:
-            return
+    def _stop_waking(self) -> list[Exception]:
+        """Stop sessions waking an owner that has closed, keeping a scheduling failure."""
         try:
-            info = self._path.lstat()
-            if (info.st_dev, info.st_ino) == self._identity:
-                self._path.unlink()
-        except FileNotFoundError:
-            pass
-        self._identity = None
+            self._owner.schedule(self._sessions.stop_waking)
+        except Exception as error:  # noqa: BLE001 - keep the reservation if scheduling fails
+            return [error]
+        return []
+
+    def _finish_later(self) -> list[Exception]:
+        """Schedule the last cleanup once the socket is gone, and report why it could not."""
+        if self._listener.alive or self._owner.requested:
+            return []
+        self._owner.requested = True
+        if self._queue.defer_until_idle(self._finish_close_async):
+            return []
+        try:
+            if self._owner.here:
+                try:
+                    self._finish_close()
+                finally:
+                    self._owner.done.set()
+            else:
+                self._owner.post(self._finish_close_async)
+        except Exception as error:  # noqa: BLE001 - allow a retry off the owner
+            if not self._owner.here:
+                self._owner.requested = False
+            return [error]
+        return []
 
     def _finish_close_async(self) -> None:
+        """Finish the cleanup off the owner thread, reporting what it failed with."""
         try:
             self._finish_close()
-        except Exception as error:  # noqa: BLE001 - report failures after the close caller returned
-            self._report_cleanup_error(error)
+        except Exception as error:  # noqa: BLE001 - reported after the close caller returned
+            self._owner.report(error)
         finally:
-            self._cleanup_done.set()
+            self._owner.done.set()
 
     def _finish_close(self) -> None:
-        with self._lock:
-            session_ids = tuple(self._sessions)
-        failures: list[Exception] = []
-        for session_id in session_ids:
-            try:
-                self._dispose_session(session_id)
-            except Exception as error:  # noqa: BLE001 - continue disposing sibling sessions
-                failures.append(error)
-        # A source that raised during disposal may still own native resources.
-        # Keep this runtime quarantined rather than permit a second listener.
+        """Dispose every session, then let the runtime have another endpoint."""
+        failures = self._sessions.dispose_all()
+        # A source that raised during disposal may still own native resources:
+        # keep this runtime quarantined rather than permit a second listener.
         with _RUNTIME_LOCK:
-            if self._registered and not self._cleanup_failed:
+            if self._owner.reserved and not self._sessions.failed:
                 _ACTIVE_RUNTIMES.discard(self._runtime)
-                self._registered = False
+                self._owner.reserved = False
         if failures:
             raise ExceptionGroup("HTTP listener cleanup failed", failures)
