@@ -36,6 +36,7 @@ from qgis_sdk.testing import (
     FakeProject,
     FakeRasters,
     FakeWorkers,
+    VectorLayerDeclaration,
 )
 
 REFERENCE = Path(__file__).resolve().parent / "fixtures" / "reference"
@@ -78,7 +79,9 @@ class ProjectWorld:
 def _open_points(layers: FakeLayers) -> VectorLayerInfo:
     """Open the checked-in points dataset, registered on this fake."""
     layers.register(
-        POINTS, name="points", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            POINTS, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
     return layers.open_vector(POINTS)
 
@@ -87,7 +90,9 @@ def _project_world() -> ProjectWorld:
     scope = ResourceScope()
     layers = FakeLayers(scope)
     layers.register(
-        POINTS, name="points", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            POINTS, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
     return ProjectWorld(scope=scope, layers=layers, project=FakeProject(layers, scope))
 

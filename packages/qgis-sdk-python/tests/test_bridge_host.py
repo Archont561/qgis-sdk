@@ -51,7 +51,12 @@ from qgis_sdk.services.project import Project
 from qgis_sdk.services.rasters import Rasters
 from qgis_sdk.services.settings import Settings
 from qgis_sdk.services.styles import Styles
-from qgis_sdk.testing import FakeNetworkTransport, reply
+from qgis_sdk.testing import (
+    FakeAlgorithmSetup,
+    FakeNetworkTransport,
+    VectorLayerDeclaration,
+    reply,
+)
 
 ORIGIN = "qgis://desktop"
 
@@ -1077,19 +1082,23 @@ def _algorithm_services(tmp_path: Path):
     layers = FakeLayerService(scope)
     fixtures = Path(__file__).resolve().parent / "fixtures" / "reference"
     layers.register(
-        fixtures / "points.geojson",
-        name="points",
-        geometry_type="point",
-        field_names=("id",),
+        VectorLayerDeclaration(
+            fixtures / "points.geojson",
+            name="points",
+            geometry_type="point",
+            field_names=("id",),
+        )
     )
     layers.register(
-        fixtures / "lines.geojson",
-        name="lines",
-        geometry_type="line",
-        field_names=("id",),
+        VectorLayerDeclaration(
+            fixtures / "lines.geojson",
+            name="lines",
+            geometry_type="line",
+            field_names=("id",),
+        )
     )
     files = FakeFiles(scope, owner="plugin:demo")
-    algorithms = FakeAlgorithms(layers, scope, files=files)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope, files=files))
     services = HostServices(
         layers=layers,
         project=FakeProject(ids=[]),
@@ -1285,7 +1294,7 @@ def test_host_services_from_a_context_carry_algorithms_and_files() -> None:
     scope = ResourceScope()
     layers = FakeLayerService(scope)
     files = FakeFiles(scope, owner="plugin:demo")
-    algorithms = FakeAlgorithms(layers, scope, files=files)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope, files=files))
     context = PluginContext(
         FakeNotifications(),
         scope,

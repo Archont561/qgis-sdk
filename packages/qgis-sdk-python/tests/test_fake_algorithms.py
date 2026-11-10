@@ -27,7 +27,13 @@ from qgis_sdk.models import (
     QgisSdkScopeClosedError,
 )
 from qgis_sdk.processing import native
-from qgis_sdk.testing import FakeAlgorithms, FakeFiles, FakeLayers
+from qgis_sdk.testing import (
+    FakeAlgorithms,
+    FakeAlgorithmSetup,
+    FakeFiles,
+    FakeLayers,
+    VectorLayerDeclaration,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "reference"
 POINTS = FIXTURES / "points.geojson"
@@ -38,10 +44,23 @@ LINES = FIXTURES / "lines.geojson"
 def world():
     scope = ResourceScope()
     layers = FakeLayers(scope)
-    layers.register(POINTS, name="points", geometry_type="point", field_names=("id",))
-    layers.register(LINES, name="lines", geometry_type="line", field_names=("id",))
+    layers.register(
+        VectorLayerDeclaration(
+            POINTS, name="points", geometry_type="point", field_names=("id",)
+        )
+    )
+    layers.register(
+        VectorLayerDeclaration(
+            LINES, name="lines", geometry_type="line", field_names=("id",)
+        )
+    )
     files = FakeFiles(scope)
-    return scope, layers, files, FakeAlgorithms(layers, scope, files=files)
+    return (
+        scope,
+        layers,
+        files,
+        FakeAlgorithms(FakeAlgorithmSetup(layers, scope, files=files)),
+    )
 
 
 @pytest.mark.parametrize(
@@ -78,7 +97,9 @@ def test_unsafe_provider_destinations_are_refused_before_running(
         parameters=parameters,
     )
     algorithms = FakeAlgorithms(
-        layers, scope, catalogue=Catalogue(qgis_version="x", algorithms=(info,))
+        FakeAlgorithmSetup(
+            layers, scope, catalogue=Catalogue(qgis_version="x", algorithms=(info,))
+        )
     )
     called = []
     algorithms.script_run("test:unsafe", lambda run: called.append(run) or {})
@@ -125,7 +146,7 @@ def test_a_test_can_bring_its_own_catalogue(world) -> None:
             ),
         ),
     )
-    algorithms = FakeAlgorithms(layers, scope, catalogue=catalogue)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope, catalogue=catalogue))
     algorithms.script_run("saga:slope", {"SLOPE": POINTS})
 
     result = algorithms.run("saga:slope", {"ELEVATION": str(POINTS)})
@@ -297,7 +318,9 @@ def test_a_batch_runs_every_item_through_the_jobs_service(world) -> None:
     scope, layers, files, _ = world
     points = layers.open_vector(POINTS)
     workers = FakeWorkers()
-    algorithms = FakeAlgorithms(layers, scope, files=files, workers=workers)
+    algorithms = FakeAlgorithms(
+        FakeAlgorithmSetup(layers, scope, files=files, workers=workers)
+    )
     algorithms.script_run("native:buffer", {"OUTPUT": POINTS})
 
     handle = algorithms.batch([native.Buffer(input=points.id) for _ in range(3)])
@@ -316,7 +339,9 @@ def test_a_cancelled_batch_stops_between_items(world) -> None:
     scope, layers, files, _ = world
     points = layers.open_vector(POINTS)
     workers = FakeWorkers()
-    algorithms = FakeAlgorithms(layers, scope, files=files, workers=workers)
+    algorithms = FakeAlgorithms(
+        FakeAlgorithmSetup(layers, scope, files=files, workers=workers)
+    )
     algorithms.script_run("native:buffer", {"OUTPUT": POINTS})
     handle = algorithms.batch([native.Buffer(input=points.id) for _ in range(3)])
 

@@ -24,7 +24,9 @@ from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, RasterStatistics
 from qgis_sdk.models.canvas import CanvasExtent
 from qgis_sdk.testing import (
+    DeclaredOutput,
     FakeAlgorithms,
+    FakeAlgorithmSetup,
     FakeCanvas,
     FakeLayers,
     FakeLayouts,
@@ -34,6 +36,7 @@ from qgis_sdk.testing import (
     FakeStyles,
     FakeWorkers,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from simple.plugin import ELEVATION, FIXTURE, app
 
@@ -88,22 +91,31 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     )
     layers = FakeLayers(scope, rasters=rasters)
     layers.register(
-        FIXTURE, name="points", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            FIXTURE, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
-    algorithms = FakeAlgorithms(layers, scope)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
     algorithms.declare_output(
-        BufferRequest,
-        tmp_path / "buffer-output.gpkg",
-        name="buffer",
-        geometry_type="polygon",
-        field_names=("id", "value"),
-        crs=WORKING_CRS,
+        DeclaredOutput(
+            BufferRequest,
+            tmp_path / "buffer-output.gpkg",
+            name="buffer",
+            geometry_type="polygon",
+            field_names=("id", "value"),
+            crs=WORKING_CRS,
+        )
     )
     # The generic surface is scripted per algorithm id: what `native:centroids`
     # produces here is a layer the fake registered, the way a run allocates one.
     centroids = tmp_path / "centroids.gpkg"
     layers.register(
-        centroids, name="centroids", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            centroids,
+            name="centroids",
+            geometry_type="point",
+            field_names=("id", "value"),
+        )
     )
     algorithms.script_run("native:centroids", {"OUTPUT": centroids})
     project = FakeProject(layers, scope)

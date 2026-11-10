@@ -260,11 +260,6 @@
 		"CC101": 3,
 		"CC104": 3
 	},
-	"packages/qgis-sdk-python/tests/test_plugin_rest.py": {
-		"CC101": 8,
-		"CC102": 1,
-		"CC104": 7
-	},
 	"packages/qgis-sdk-python/tests/test_processing_cli.py": {
 		"CC101": 2
 	},
@@ -673,13 +668,6 @@
 		"CC101": 1,
 		"CC104": 1,
 		"CC303": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/testing/fakes.py": {
-		"CC101": 4,
-		"CC102": 6,
-		"CC201": 3,
-		"CC202": 1,
-		"CC303": 2
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/testing/features.py": {
 		"CC102": 1,

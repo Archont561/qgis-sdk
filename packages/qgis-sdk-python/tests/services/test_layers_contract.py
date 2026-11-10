@@ -15,6 +15,7 @@ from qgis_sdk.models import (
     QgisSdkUnsupportedCapabilityError,
     VectorExport,
 )
+from qgis_sdk.testing import VectorLayerDeclaration
 
 if TYPE_CHECKING:
     Services = conftest.Services
@@ -197,11 +198,13 @@ def _register_fake_source(services: Services, source: Path) -> None:
     register = getattr(services.layers, "register", None)
     if register is not None:
         register(
-            source,
-            name="source",
-            geometry_type=conftest.FIXTURE_GEOMETRY,
-            field_names=conftest.FIXTURE_FIELDS,
-            crs=conftest.FIXTURE_CRS,
+            VectorLayerDeclaration(
+                source,
+                name="source",
+                geometry_type=conftest.FIXTURE_GEOMETRY,
+                field_names=conftest.FIXTURE_FIELDS,
+                crs=conftest.FIXTURE_CRS,
+            )
         )
 
 
@@ -501,12 +504,14 @@ def test_export_refuses_to_replace_a_geopackage_container(
     uri = Path(f"{source}|layername={layer_name}")
     if register is not None:
         register(
-            uri,
-            name="source",
-            geometry_type=conftest.FIXTURE_GEOMETRY,
-            field_names=conftest.FIXTURE_FIELDS,
-            crs=conftest.FIXTURE_CRS,
-            dataset_path=source,
+            VectorLayerDeclaration(
+                uri,
+                name="source",
+                geometry_type=conftest.FIXTURE_GEOMETRY,
+                field_names=conftest.FIXTURE_FIELDS,
+                crs=conftest.FIXTURE_CRS,
+                dataset_path=source,
+            )
         )
     info = services.layers.open_vector(uri)
     before = source.read_bytes()

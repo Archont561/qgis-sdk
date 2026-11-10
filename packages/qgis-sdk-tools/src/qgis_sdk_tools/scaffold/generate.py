@@ -232,10 +232,13 @@ def test_the_buffer_algorithm_asks_processing_for_exactly_the_request(tmp_path) 
     from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
     from qgis_sdk.models import BufferRequest
     from qgis_sdk.testing import (
+        DeclaredOutput,
+        FakeAlgorithmSetup,
         FakeAlgorithms,
         FakeLayers,
         FakeProject,
         RecordingNotifications,
+        VectorLayerDeclaration,
     )
 
     from {plugin}.algorithms import buffer_layer, provider
@@ -243,16 +246,23 @@ def test_the_buffer_algorithm_asks_processing_for_exactly_the_request(tmp_path) 
     scope = ResourceScope()
     layers = FakeLayers(scope)
     layers.register(
-        tmp_path / "points.gpkg", name="points", geometry_type="point", field_names=("id",)
+        VectorLayerDeclaration(
+            tmp_path / "points.gpkg",
+            name="points",
+            geometry_type="point",
+            field_names=("id",),
+        )
     )
-    algorithms = FakeAlgorithms(layers, scope)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
     algorithms.declare_output(
-        BufferRequest,
-        tmp_path / "buffer.gpkg",
-        name="buffer",
-        geometry_type="polygon",
-        field_names=("id",),
-        crs="EPSG:3857",
+        DeclaredOutput(
+            BufferRequest,
+            tmp_path / "buffer.gpkg",
+            name="buffer",
+            geometry_type="polygon",
+            field_names=("id",),
+            crs="EPSG:3857",
+        )
     )
     project = FakeProject(layers, scope)
     ctx = PluginContext(

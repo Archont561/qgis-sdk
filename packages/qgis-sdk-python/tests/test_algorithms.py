@@ -39,11 +39,14 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.providers import Provider
 from qgis_sdk.testing import (
+    DeclaredOutput,
     FakeAlgorithms,
+    FakeAlgorithmSetup,
     FakeLayers,
     FakeProject,
     FakeRasters,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from sample_algorithms import buffer_layer, centroid_layer, sample_provider
 
@@ -72,29 +75,35 @@ def _declared(
     scope = ResourceScope()
     layers = FakeLayers(scope)
     layers.register(
-        Path("source.gpkg"),
-        name="points",
-        geometry_type="point",
-        field_names=("id", "value"),
-        crs="EPSG:4326",
+        VectorLayerDeclaration(
+            Path("source.gpkg"),
+            name="points",
+            geometry_type="point",
+            field_names=("id", "value"),
+            crs="EPSG:4326",
+        )
     )
     layers.open_vector(Path("source.gpkg"))
-    algorithms = FakeAlgorithms(layers, scope)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
     algorithms.declare_output(
-        BufferRequest,
-        source,
-        name="buffer",
-        geometry_type="polygon",
-        field_names=("id", "value"),
-        crs="EPSG:3857",
+        DeclaredOutput(
+            BufferRequest,
+            source,
+            name="buffer",
+            geometry_type="polygon",
+            field_names=("id", "value"),
+            crs="EPSG:3857",
+        )
     )
     algorithms.declare_output(
-        CentroidRequest,
-        source.with_name("centroid.gpkg"),
-        name="centroid",
-        geometry_type="point",
-        field_names=("id", "value"),
-        crs="EPSG:4326",
+        DeclaredOutput(
+            CentroidRequest,
+            source.with_name("centroid.gpkg"),
+            name="centroid",
+            geometry_type="point",
+            field_names=("id", "value"),
+            crs="EPSG:4326",
+        )
     )
     return algorithms, layers, FakeProject(layers, scope), scope
 
@@ -731,16 +740,20 @@ def test_a_file_result_comes_back_as_the_ref_the_handler_made() -> None:
     assert project.layer_ids() == ()
 
 
-def test_a_raster_or_layers_result_adds_every_produced_layer() -> None:
-    rasters, layers, project, scope = _raster_rig()
-    layers.register(
+def _source_layer_declaration() -> VectorLayerDeclaration:
+    return VectorLayerDeclaration(
         Path("source.gpkg"),
         name="points",
         geometry_type="point",
         field_names=("id",),
         crs="EPSG:4326",
     )
-    algorithms = FakeAlgorithms(layers, scope)
+
+
+def test_a_raster_or_layers_result_adds_every_produced_layer() -> None:
+    rasters, layers, project, scope = _raster_rig()
+    layers.register(_source_layer_declaration())
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
     provider = _provider()
 
     @provider.algorithm

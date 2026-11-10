@@ -26,7 +26,12 @@ from qgis_sdk.models import (
     QgisSdkError,
     VectorLayerInfo,
 )
-from qgis_sdk.testing import FakeConnections, FakeLayers
+from qgis_sdk.testing import (
+    ConnectionDeclaration,
+    FakeConnections,
+    FakeLayers,
+    TableDeclaration,
+)
 
 
 @dataclass
@@ -52,43 +57,55 @@ def _runtime() -> ConnectionsWorld:
     layers = FakeLayers(scope)
     connections = FakeConnections(layers)
     connections.declare_connection(
-        connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
+        ConnectionDeclaration(
+            connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
+        )
     )
     connections.declare_table(
-        connection_files.GPKG_CONNECTION,
-        connection_files.GPKG_ROADS,
-        kind=connection_files.GPKG_ROADS_KIND,
-        geometries=connection_files.GPKG_ROADS_GEOMETRIES,
-        fields=connection_files.GPKG_ROADS_FIELDS,
-        crs=connection_files.FIXTURE_CRS,
+        TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_ROADS,
+            kind=connection_files.GPKG_ROADS_KIND,
+            geometries=connection_files.GPKG_ROADS_GEOMETRIES,
+            fields=connection_files.GPKG_ROADS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
     )
     connections.declare_table(
-        connection_files.GPKG_CONNECTION,
-        connection_files.GPKG_NOTES,
-        kind=connection_files.GPKG_NOTES_KIND,
-        geometries=connection_files.GPKG_NOTES_GEOMETRIES,
-        fields=connection_files.GPKG_NOTES_FIELDS,
+        TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_NOTES,
+            kind=connection_files.GPKG_NOTES_KIND,
+            geometries=connection_files.GPKG_NOTES_GEOMETRIES,
+            fields=connection_files.GPKG_NOTES_FIELDS,
+        )
     )
     connections.declare_connection(
-        connection_files.POSTGIS_CONNECTION,
-        provider="postgres",
-        schemas=(connection_files.POSTGIS_SCHEMA,),
+        ConnectionDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            provider="postgres",
+            schemas=(connection_files.POSTGIS_SCHEMA,),
+        )
     )
     connections.declare_table(
-        connection_files.POSTGIS_CONNECTION,
-        connection_files.POSTGIS_POINTS,
-        provider="postgres",
-        schema=connection_files.POSTGIS_SCHEMA,
-        kind=connection_files.POSTGIS_POINTS_KIND,
-        geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
-        fields=connection_files.POSTGIS_POINTS_FIELDS,
-        crs=connection_files.FIXTURE_CRS,
+        TableDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            connection_files.POSTGIS_POINTS,
+            provider="postgres",
+            schema=connection_files.POSTGIS_SCHEMA,
+            kind=connection_files.POSTGIS_POINTS_KIND,
+            geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
+            fields=connection_files.POSTGIS_POINTS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
     )
     connections.declare_connection(
-        connection_files.BROKEN_CONNECTION,
-        provider="postgres",
-        valid=False,
-        message="connection refused",
+        ConnectionDeclaration(
+            connection_files.BROKEN_CONNECTION,
+            provider="postgres",
+            valid=False,
+            message="connection refused",
+        )
     )
     connections.declare_auth_configuration(connection_files.AUTH_CONFIG_NAME)
     world = ConnectionsWorld(scope=scope, layers=layers, connections=connections)

@@ -48,7 +48,9 @@ from qgis_sdk.testing import (
     FakeLayers,
     FakeProject,
     FakeRasters,
+    OtherLayerDeclaration,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from qgis_sdk.ui.components import LayerPicker
 
@@ -265,40 +267,47 @@ def _layers() -> tuple[ResourceScope, FakeLayers, FakeRasters]:
 
 def _declare_every_kind(layers: FakeLayers) -> None:
     layers.register(
-        POINTS, name="points", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            POINTS, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
     layers.register_layer(
-        MESH,
-        name="lagoon",
-        kind="mesh",
-        crs="EPSG:4326",
-        vertex_count=4,
-        face_count=2,
-        group_count=1,
+        OtherLayerDeclaration(
+            MESH,
+            name="lagoon",
+            kind="mesh",
+            crs="EPSG:4326",
+            detail={"vertex_count": 4, "face_count": 2, "group_count": 1},
+        )
     )
     layers.register_layer(
-        POINT_CLOUD,
-        name="survey",
-        kind="point_cloud",
-        crs="EPSG:25833",
-        point_count=12,
-        attribute_names=("X", "Y", "Z"),
+        OtherLayerDeclaration(
+            POINT_CLOUD,
+            name="survey",
+            kind="point_cloud",
+            crs="EPSG:25833",
+            detail={"point_count": 12, "attribute_names": ("X", "Y", "Z")},
+        )
     )
     layers.register_layer(
-        VECTOR_TILES,
-        name="basemap",
-        kind="vector_tile",
-        crs="EPSG:3857",
-        source_type="xyz",
-        min_zoom=0,
-        max_zoom=14,
+        OtherLayerDeclaration(
+            VECTOR_TILES,
+            name="basemap",
+            kind="vector_tile",
+            crs="EPSG:3857",
+            detail={"source_type": "xyz", "min_zoom": 0, "max_zoom": 14},
+        )
     )
     layers.register_layer(
-        TILED_SCENE,
-        name="city",
-        kind="tiled_scene",
-        crs="EPSG:4978",
-        extent={"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2},
+        OtherLayerDeclaration(
+            TILED_SCENE,
+            name="city",
+            kind="tiled_scene",
+            crs="EPSG:4978",
+            detail={
+                "extent": {"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2}
+            },
+        )
     )
 
 
@@ -535,7 +544,17 @@ def _grantable(tmp_path: Path, source: Path) -> Path:
 
 def _declare_at(layers: FakeLayers, dataset: Path, kind: str, **detail: object) -> None:
     """Declare ``dataset`` on disk as ``kind``, with the fields that kind needs."""
-    layers.register_layer(dataset, name=dataset.stem, kind=kind, **detail)  # type: ignore[arg-type]
+    options = dict(detail)
+    layers.register_layer(
+        OtherLayerDeclaration(
+            dataset,
+            name=dataset.stem,
+            kind=kind,
+            crs=options.pop("crs", None),  # type: ignore[arg-type]
+            dataset_path=options.pop("dataset_path", None),  # type: ignore[arg-type]
+            detail=options,
+        )
+    )
 
 
 def test_a_page_opens_a_mesh_with_a_granted_ref_and_reads_it_back(

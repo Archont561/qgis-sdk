@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -84,13 +85,19 @@ if TYPE_CHECKING:
     from qgis_sdk.providers import Provider
 
 __all__ = [
+    "ConnectionDeclaration",
+    "DeclaredOutput",
+    "FakeAlgorithmSetup",
     "FakeAlgorithms",
     "FakeLayers",
     "FakeProcessing",
     "FakeProject",
     "FakeSettings",
     "FakeStyles",
+    "OtherLayerDeclaration",
     "RecordingNotifications",
+    "TableDeclaration",
+    "VectorLayerDeclaration",
 ]
 
 
@@ -102,6 +109,141 @@ ScriptedModelOutputs = (
     Mapping[str, object]
     | Callable[[FileRef, Mapping[str, object]], Mapping[str, object]]
 )
+
+
+@dataclass(frozen=True, slots=True)
+class FakeAlgorithmSetup:
+    """The collaborators one ``FakeAlgorithms`` backend is built from."""
+
+    layers: FakeLayers
+    scope: ResourceScope
+    catalogue: Catalogue | None = None
+    files: FilesService | None = None
+    workers: Any | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DeclaredOutput:
+    """What one ``AlgorithmRequest`` type produces, as a vector dataset."""
+
+    request_type: type
+    source: Path
+    name: str
+    geometry_type: GeometryType
+    field_names: Sequence[str]
+    crs: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VectorLayerDeclaration:
+    """One vector dataset a ``FakeLayers`` backend can open."""
+
+    source: Path
+    name: str
+    geometry_type: GeometryType
+    field_names: Sequence[str]
+    crs: str | None = None
+    dataset_path: Path | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OtherLayerDeclaration:
+    """One mesh, point-cloud, tile or scene dataset a ``FakeLayers`` can open."""
+
+    source: Path
+    name: str
+    kind: str
+    crs: str | None = None
+    dataset_path: Path | None = None
+    detail: Mapping[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionDeclaration:
+    """One registered connection and the schemas it browses to."""
+
+    name: str
+    provider: str = "ogr"
+    auth_config: str | None = None
+    schemas: Sequence[str] = ()
+    valid: bool = True
+    message: str | None = None
+    accepts_auth: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class TableDeclaration:
+    """One table or view inside a declared connection."""
+
+    connection: str
+    name: str
+    provider: str = "ogr"
+    schema: str = ""
+    kind: str = "vector"
+    geometries: Sequence[str] = ()
+    fields: Sequence[str] = ()
+    crs: str | None = None
+
+
+def _validate_run(algorithms, info, run) -> None:
+    """Validate the params and layer inputs exactly as the host would."""
+    validate_parameters(info, run.params)
+    plan_destinations(
+        info,
+        run.params,
+        lambda ref: algorithms._file_service().resolve(ref, operation="write"),
+    )
+    for parameter in info.parameters:
+        value = run.params.get(parameter.name)
+        if value is None or parameter.kind not in LAYER_KINDS:
+            continue
+        # Same rule as the native adapter: an owned layer id, a ref, or
+        # an existing path; anything else is an unknown layer.
+        if isinstance(value, str) and not Path(value).exists():
+            algorithms._layers.layer(value)
+
+
+def _open_vector_output(algorithms, value):
+    return algorithms._layers.open_vector(value)
+
+
+def _grant_directory_output(algorithms, value):
+    return algorithms._file_service().grant_directory(value)
+
+
+def _grant_file_output(algorithms, value):
+    return algorithms._file_service().grant_file(value)
+
+
+_PATH_OUTPUTS = {
+    "vector": _open_vector_output,
+    "directory": _grant_directory_output,
+    "file": _grant_file_output,
+}
+
+
+def _path_output(algorithms, kind, value):
+    resolver = _PATH_OUTPUTS.get(kind)
+    return resolver(algorithms, value) if resolver is not None else value
+
+
+def _output_value(algorithms, info, name, value):
+    kind = output_class(info, name)
+    if isinstance(value, Path):
+        return _path_output(algorithms, kind, value)
+    if kind == "layers" and isinstance(value, (list, tuple)):
+        return tuple(
+            algorithms._layers.open_vector(item) if isinstance(item, Path) else item
+            for item in value
+        )
+    return value
+
+
+def _resolve_outputs(algorithms, info, answer):
+    return {
+        name: _output_value(algorithms, info, name, value)
+        for name, value in answer.items()
+    }
 
 
 class FakeAlgorithms:
@@ -119,19 +261,11 @@ class FakeAlgorithms:
     native adapter and its own test rather than to a guess here.
     """
 
-    def __init__(
-        self,
-        layers: FakeLayers,
-        scope: ResourceScope,
-        *,
-        catalogue: Catalogue | None = None,
-        files: FilesService | None = None,
-        workers: Any | None = None,
-    ) -> None:
-        self._layers = layers
-        self._scope = scope
-        self._catalogue = catalogue
-        self._files = files
+    def __init__(self, setup: FakeAlgorithmSetup) -> None:
+        self._layers = setup.layers
+        self._scope = setup.scope
+        self._catalogue = setup.catalogue
+        self._files = setup.files
         self.requests: list[AlgorithmRequest] = []
         self.runs: list[AlgorithmRun] = []
         #: What ``run_model`` was asked: the model ref and its params
@@ -142,29 +276,22 @@ class FakeAlgorithms:
         self._outputs: dict[type, Path] = {}
         self._scripted: dict[str, list[tuple[ScriptedOutputs, bool]]] = {}
         self._scripted_models: dict[str, list[tuple[ScriptedModelOutputs, bool]]] = {}
-        self._jobs = JobService(scope, workers=workers)
+        self._jobs = JobService(setup.scope, workers=setup.workers)
 
     # -- setup, not part of the contract ----------------------------------
 
-    def declare_output(
-        self,
-        request_type: type,
-        source: Path,
-        *,
-        name: str,
-        geometry_type: GeometryType,
-        field_names: Sequence[str],
-        crs: str | None = None,
-    ) -> None:
+    def declare_output(self, output: DeclaredOutput) -> None:
         """Declare what a request type produces; setup, not part of the contract."""
         self._layers.register(
-            source,
-            name=name,
-            geometry_type=geometry_type,
-            field_names=field_names,
-            crs=crs,
+            VectorLayerDeclaration(
+                output.source,
+                name=output.name,
+                geometry_type=output.geometry_type,
+                field_names=output.field_names,
+                crs=output.crs,
+            )
         )
-        self._outputs[request_type] = source
+        self._outputs[output.request_type] = output.source
 
     def script_run(
         self,
@@ -235,38 +362,10 @@ class FakeAlgorithms:
         self._scope.ensure_open()
         run = coerce_run(request, params)
         info = self.describe(run.algorithm)
-        validate_parameters(info, run.params)
-        plan_destinations(
-            info,
-            run.params,
-            lambda ref: self._file_service().resolve(ref, operation="write"),
-        )
-        for parameter in info.parameters:
-            value = run.params.get(parameter.name)
-            if value is None or parameter.kind not in LAYER_KINDS:
-                continue
-            # Same rule as the native adapter: an owned layer id, a ref, or
-            # an existing path; anything else is an unknown layer.
-            if isinstance(value, str) and not Path(value).exists():
-                self._layers.layer(value)
+        _validate_run(self, info, run)
         self.runs.append(run)
         answer = self._next_answer(run)
-        outputs: dict[str, object] = {}
-        for name, value in answer.items():
-            kind = output_class(info, name)
-            if isinstance(value, Path):
-                if kind == "vector":
-                    value = self._layers.open_vector(value)
-                elif kind == "directory":
-                    value = self._file_service().grant_directory(value)
-                elif kind == "file":
-                    value = self._file_service().grant_file(value)
-            elif kind == "layers" and isinstance(value, (list, tuple)):
-                value = tuple(
-                    self._layers.open_vector(item) if isinstance(item, Path) else item
-                    for item in value
-                )
-            outputs[name] = value
+        outputs = _resolve_outputs(self, info, answer)
         return RunResult(algorithm=run.algorithm, outputs=outputs)
 
     def run_model(
@@ -380,11 +479,95 @@ def _detail(kind: str, detail: Mapping[str, object]) -> dict[str, object]:
     return values
 
 
-class FakeLayers:
+def _vector_dataset(declaration: VectorLayerDeclaration) -> dict[str, object]:
+    """The stored shape of one declared vector dataset."""
+    return {
+        "kind": "vector",
+        "source": Path(declaration.dataset_path)
+        if declaration.dataset_path is not None
+        else Path(declaration.source),
+        "name": declaration.name,
+        "geometry_type": declaration.geometry_type,
+        "field_names": tuple(declaration.field_names),
+        "crs": declaration.crs,
+        "detail": {},
+    }
+
+
+def _other_dataset(declaration: OtherLayerDeclaration) -> dict[str, object]:
+    """Validate one other-kind declaration and return its stored shape."""
+    if declaration.kind not in _OTHER_KINDS:
+        raise QgisSdkDeclarationError(
+            f"{declaration.kind!r} is not a layer kind a declaration opens; "
+            f"{', '.join(_OTHER_KINDS)} are"
+        )
+    fields = _detail(declaration.kind, declaration.detail)
+    model, _names = _OTHER_KINDS[declaration.kind]
+    model(
+        id="declared",
+        name=declaration.name,
+        crs=declaration.crs,
+        **fields,  # type: ignore[arg-type]
+    )
+    return {
+        "kind": declaration.kind,
+        "source": Path(declaration.dataset_path)
+        if declaration.dataset_path is not None
+        else Path(declaration.source),
+        "name": declaration.name,
+        "crs": declaration.crs,
+        "detail": fields,
+    }
+
+
+class _OtherKindLayers:
+    """The four non-vector layer kinds, opened through one shared reader."""
+
+    def open_mesh(self, source: Path) -> MeshLayerInfo:
+        """Return a new mesh layer for a declared mesh dataset."""
+        return self._open_kind(source, "mesh")  # type: ignore[return-value]
+
+    def open_point_cloud(self, source: Path) -> PointCloudLayerInfo:
+        """Return a new point cloud layer for a declared point cloud dataset."""
+        return self._open_kind(source, "point_cloud")  # type: ignore[return-value]
+
+    def open_vector_tile(self, source: Path) -> VectorTileLayerInfo:
+        """Return a new vector tile layer for a declared tile source."""
+        return self._open_kind(source, "vector_tile")  # type: ignore[return-value]
+
+    def open_tiled_scene(self, source: Path) -> TiledSceneLayerInfo:
+        """Return a new tiled scene for a declared scene dataset."""
+        return self._open_kind(source, "tiled_scene")  # type: ignore[return-value]
+
+    def _open_kind(self, source: Path, kind: str) -> LayerInfo:
+        """Open a declared dataset as ``kind``, or refuse it as missing.
+
+        A dataset declared as another kind is *missing* rather than mistyped: on
+        a native host the provider for ``kind`` is handed the file and answers an
+        invalid layer, which is the same refusal a name nobody declared gets.
+        """
+        self._scope.ensure_open()
+        declared = self._datasets.get(str(source))
+        if declared is None or declared["kind"] != kind:
+            raise QgisSdkLayerNotFoundError(str(source))
+        model, _fields = _OTHER_KINDS[kind]
+        layer_id = f"layer-{len(self._layers) + len(self._others) + 1}"
+        info = model(
+            id=layer_id,
+            name=str(declared["name"]),
+            crs=declared["crs"],  # type: ignore[arg-type]
+            **declared["detail"],  # type: ignore[arg-type]
+        )
+        self._others[layer_id] = info
+        return info
+
+
+class FakeLayers(_OtherKindLayers):
     """A ``Layers`` backend over datasets declared in the test.
 
     The fake carries an owner scope like every real backend, so a pure test can
-    prove the same disposal rules the native adapter must honour.
+    prove the same disposal rules the native adapter must honour. The four
+    non-vector kinds are opened by the inherited ``_OtherKindLayers`` reader.
     """
 
     def __init__(
@@ -407,60 +590,13 @@ class FakeLayers:
         self._rasters = rasters
         scope.on_close(self._release)
 
-    def register(
-        self,
-        source: Path,
-        *,
-        name: str,
-        geometry_type: GeometryType,
-        field_names: Sequence[str],
-        crs: str | None = None,
-        dataset_path: Path | None = None,
-    ) -> None:
-        """Declare a dataset; ``dataset_path`` models a container URI's file."""
-        self._datasets[str(source)] = {
-            "kind": "vector",
-            "source": Path(dataset_path) if dataset_path is not None else Path(source),
-            "name": name,
-            "geometry_type": geometry_type,
-            "field_names": tuple(field_names),
-            "crs": crs,
-            "detail": {},
-        }
+    def register(self, declaration: VectorLayerDeclaration) -> None:
+        """Declare a vector dataset; ``dataset_path`` models a container URI."""
+        self._datasets[str(declaration.source)] = _vector_dataset(declaration)
 
-    def register_layer(
-        self,
-        source: Path,
-        *,
-        name: str,
-        kind: str,
-        crs: str | None = None,
-        dataset_path: Path | None = None,
-        **detail: object,
-    ) -> None:
-        """Declare a mesh, point cloud, vector tile or tiled scene dataset.
-
-        ``detail`` is exactly the fields the kind's description carries
-        (``vertex_count``, ``face_count`` and ``group_count`` for a mesh, and so
-        on), so a declaration that misspells one is refused here, where the test
-        arranged it, rather than at serialization. The description is built
-        eagerly for the same reason: a negative count is a bug in the test.
-        """
-        if kind not in _OTHER_KINDS:
-            raise QgisSdkDeclarationError(
-                f"{kind!r} is not a layer kind a declaration opens; "
-                f"{', '.join(_OTHER_KINDS)} are"
-            )
-        fields = _detail(kind, detail)
-        model, _names = _OTHER_KINDS[kind]
-        model(id="declared", name=name, crs=crs, **fields)  # type: ignore[call-arg]
-        self._datasets[str(source)] = {
-            "kind": kind,
-            "source": Path(dataset_path) if dataset_path is not None else Path(source),
-            "name": name,
-            "crs": crs,
-            "detail": fields,
-        }
+    def register_layer(self, declaration: OtherLayerDeclaration) -> None:
+        """Declare a mesh, point cloud, vector tile or tiled scene dataset."""
+        self._datasets[str(declaration.source)] = _other_dataset(declaration)
 
     def register_annotation(
         self, name: str, *, item_count: int = 0, crs: str | None = None
@@ -476,22 +612,6 @@ class FakeLayers:
             id="declared", name=name, item_count=item_count, crs=crs
         )
 
-    def open_mesh(self, source: Path) -> MeshLayerInfo:
-        """Return a new mesh layer for a declared mesh dataset."""
-        return self._open_kind(source, "mesh")  # type: ignore[return-value]
-
-    def open_point_cloud(self, source: Path) -> PointCloudLayerInfo:
-        """Return a new point cloud layer for a declared point cloud dataset."""
-        return self._open_kind(source, "point_cloud")  # type: ignore[return-value]
-
-    def open_vector_tile(self, source: Path) -> VectorTileLayerInfo:
-        """Return a new vector tile layer for a declared tile source."""
-        return self._open_kind(source, "vector_tile")  # type: ignore[return-value]
-
-    def open_tiled_scene(self, source: Path) -> TiledSceneLayerInfo:
-        """Return a new tiled scene for a declared scene dataset."""
-        return self._open_kind(source, "tiled_scene")  # type: ignore[return-value]
-
     def open_annotation(self, name: str) -> AnnotationLayerInfo:
         """Create an annotation layer, empty unless the test declared one."""
         self._scope.ensure_open()
@@ -502,28 +622,6 @@ class FakeLayers:
             name=name,
             item_count=0 if declared is None else declared.item_count,
             crs=None if declared is None else declared.crs,
-        )
-        self._others[layer_id] = info
-        return info
-
-    def _open_kind(self, source: Path, kind: str) -> LayerInfo:
-        """Open a declared dataset as ``kind``, or refuse it as missing.
-
-        A dataset declared as another kind is *missing* rather than mistyped: on
-        a native host the provider for ``kind`` is handed the file and answers an
-        invalid layer, which is the same refusal a name nobody declared gets.
-        """
-        self._scope.ensure_open()
-        declared = self._datasets.get(str(source))
-        if declared is None or declared["kind"] != kind:
-            raise QgisSdkLayerNotFoundError(str(source))
-        model, _fields = _OTHER_KINDS[kind]
-        layer_id = f"layer-{len(self._layers) + len(self._others) + 1}"
-        info = model(
-            id=layer_id,
-            name=str(declared["name"]),
-            crs=declared["crs"],  # type: ignore[arg-type]
-            **declared["detail"],  # type: ignore[arg-type]
         )
         self._others[layer_id] = info
         return info
@@ -921,6 +1019,44 @@ class FakeProcessing:
             self.events.append(("unregister", provider_id))
 
 
+def _table_entry(declaration: TableDeclaration) -> dict[str, object]:
+    """The browse item and the vector shape one declared table answers."""
+    return {
+        "item": ConnectionItem(
+            name=declaration.name,
+            schema=declaration.schema,
+            kind=declaration.kind,
+            geometries=tuple(declaration.geometries),
+        ),
+        "fields": tuple(declaration.fields),
+        "crs": declaration.crs,
+    }
+
+
+def _refuse_unopenable(kind: str) -> None:
+    if kind == "schema":
+        raise QgisSdkUnsupportedCapabilityError(
+            "connections.open_layer",
+            "a schema is browsed, not opened",
+        )
+    if kind == "raster":
+        raise QgisSdkUnsupportedCapabilityError(
+            "connections.open_layer",
+            "a raster table is opened by its raster provider, not "
+            "described as a vector layer",
+        )
+
+
+def _missing_table(connections, key, name, schema, item):
+    schemas = connections._connections[key]["schemas"]
+    if not schema and item in schemas:  # type: ignore[operator]
+        raise QgisSdkUnsupportedCapabilityError(
+            "connections.open_layer",
+            "a schema is browsed, not opened",
+        )
+    raise QgisSdkConnectionItemNotFoundError(name, schema or "", item)
+
+
 class FakeConnections:
     """A ``Connections`` backend over connections declared in the test.
 
@@ -944,67 +1080,27 @@ class FakeConnections:
         self._auth: dict[str, AuthConfiguration] = {}
         self._opened = 0
 
-    def declare_connection(
-        self,
-        name: str,
-        *,
-        provider: str = "ogr",
-        auth_config: str | None = None,
-        schemas: Sequence[str] = (),
-        valid: bool = True,
-        message: str | None = None,
-        accepts_auth: bool = True,
-    ) -> None:
+    def declare_connection(self, declaration: ConnectionDeclaration) -> None:
         """Declare one registered connection and the schemas it browses to."""
-        key = (provider, name)
+        key = (declaration.provider, declaration.name)
         self._connections[key] = {
-            "auth_config": auth_config,
-            "schemas": tuple(schemas),
-            "valid": valid,
-            "message": message,
-            "accepts_auth": accepts_auth,
+            "auth_config": declaration.auth_config,
+            "schemas": tuple(declaration.schemas),
+            "valid": declaration.valid,
+            "message": declaration.message,
+            "accepts_auth": declaration.accepts_auth,
         }
         self._tables.setdefault(key, [])
 
-    def declare_table(
-        self,
-        connection: str,
-        name: str,
-        *,
-        provider: str = "ogr",
-        schema: str = "",
-        kind: str = "vector",
-        geometries: Sequence[str] = (),
-        fields: Sequence[str] = (),
-        crs: str | None = None,
-    ) -> None:
-        """Declare one table or view inside a declared connection.
-
-        ``fields`` and ``crs`` are not browse-item fields - the wire item does
-        not carry them - they are what :meth:`open_layer` answers on the opened
-        :class:`VectorLayerInfo`, exactly as a provider would read them off the
-        table. ``kind`` is the browse kind; ``"schema"`` is refused here because
-        a schema is declared on the connection, not inside it.
-        """
-        key = (provider, connection)
+    def declare_table(self, declaration: TableDeclaration) -> None:
+        """Declare one table or view inside a declared connection."""
+        key = (declaration.provider, declaration.connection)
         if key not in self._connections:
             raise QgisSdkDeclarationError(
-                f"connection {connection!r} of provider {provider!r} is not "
-                "declared before its tables"
+                f"connection {declaration.connection!r} of provider "
+                f"{declaration.provider!r} is not declared before its tables"
             )
-        item = ConnectionItem(
-            name=name,
-            schema=schema,
-            kind=kind,
-            geometries=tuple(geometries),
-        )
-        self._tables[key].append(
-            {
-                "item": item,
-                "fields": tuple(fields),
-                "crs": crs,
-            }
-        )
+        self._tables[key].append(_table_entry(declaration))
 
     def declare_auth_configuration(self, name: str) -> str:
         """Declare one authentication configuration and answer its id.
@@ -1053,39 +1149,23 @@ class FakeConnections:
             declared: ConnectionItem = entry["item"]  # type: ignore[assignment]
             if declared.name != item or declared.schema != (schema or ""):
                 continue
-            if declared.kind == "schema":
-                raise QgisSdkUnsupportedCapabilityError(
-                    "connections.open_layer",
-                    "a schema is browsed, not opened",
-                )
-            if declared.kind == "raster":
-                raise QgisSdkUnsupportedCapabilityError(
-                    "connections.open_layer",
-                    "a raster table is opened by its raster provider, not "
-                    "described as a vector layer",
-                )
+            _refuse_unopenable(declared.kind)
             self._opened += 1
             source = Path(f"fake-connection:{provider}:{name}:{schema or '-'}:{item}")
             fields: tuple[str, ...] = entry["fields"]  # type: ignore[assignment]
             self._layers.register(
-                source,
-                name=item,
-                geometry_type=(
-                    declared.geometries[0] if declared.geometries else "none"
-                ),
-                field_names=fields,
-                crs=entry["crs"],
+                VectorLayerDeclaration(
+                    source,
+                    name=item,
+                    geometry_type=(
+                        declared.geometries[0] if declared.geometries else "none"
+                    ),
+                    field_names=fields,
+                    crs=entry["crs"],
+                )
             )
             return self._layers.open_vector(source)
-        # No table answers: a schema name passed as the item is refused as what
-        # it is, not as a typo - the same rule the native adapter applies.
-        schemas = self._connections[key]["schemas"]
-        if not schema and item in schemas:  # type: ignore[operator]
-            raise QgisSdkUnsupportedCapabilityError(
-                "connections.open_layer",
-                "a schema is browsed, not opened",
-            )
-        raise QgisSdkConnectionItemNotFoundError(name, schema or "", item)
+        return _missing_table(self, key, name, schema, item)
 
     def test(self, provider: str, name: str) -> ConnectionTest:
         key = self._require(provider, name)

@@ -18,11 +18,14 @@ from qgis_sdk.models import (
     QgisSdkUnsupportedCapabilityError,
 )
 from qgis_sdk.testing import (
+    DeclaredOutput,
     FakeAlgorithms,
+    FakeAlgorithmSetup,
     FakeLayers,
     FakeProject,
     FakeStyles,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from simple.plugin import FIXTURE
 from simple.workflow import LocalGisWorkflow
@@ -44,16 +47,20 @@ def _context(
     scope = ResourceScope()
     layers = FakeLayers(scope)
     layers.register(
-        FIXTURE, name="points", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            FIXTURE, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
-    algorithms = FakeAlgorithms(layers, scope)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
     algorithms.declare_output(
-        BufferRequest,
-        FIXTURE.parent / "buffer.gpkg",
-        name="buffer",
-        geometry_type="polygon",
-        field_names=output_fields,
-        crs=WORKING_CRS,
+        DeclaredOutput(
+            BufferRequest,
+            FIXTURE.parent / "buffer.gpkg",
+            name="buffer",
+            geometry_type="polygon",
+            field_names=output_fields,
+            crs=WORKING_CRS,
+        )
     )
     project = FakeProject(layers, scope)
     styles = FakeStyles(layers, scope)

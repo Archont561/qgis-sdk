@@ -34,7 +34,12 @@ from qgis_sdk.models.symbology import (
     RuleBasedRenderer,
     SingleSymbolRenderer,
 )
-from qgis_sdk.testing import FakeLayers, FakeStyles
+from qgis_sdk.testing import (
+    FakeLayers,
+    FakeStyles,
+    OtherLayerDeclaration,
+    VectorLayerDeclaration,
+)
 
 REFERENCE = Path(__file__).resolve().parent / "fixtures" / "reference"
 POINTS = REFERENCE / "points.geojson"
@@ -66,19 +71,21 @@ def _runtime() -> SymbologyWorld:
     scope = ResourceScope()
     layers = FakeLayers(scope)
     layers.register(
-        POINTS,
-        name="points",
-        geometry_type="point",
-        field_names=POINT_FIELDS,
-        crs="EPSG:4326",
+        VectorLayerDeclaration(
+            POINTS,
+            name="points",
+            geometry_type="point",
+            field_names=POINT_FIELDS,
+            crs="EPSG:4326",
+        )
     )
     layers.register_layer(
-        MESH,
-        name="lagoon",
-        kind="mesh",
-        vertex_count=3,
-        face_count=1,
-        group_count=1,
+        OtherLayerDeclaration(
+            MESH,
+            name="lagoon",
+            kind="mesh",
+            detail={"vertex_count": 3, "face_count": 1, "group_count": 1},
+        )
     )
     styles = FakeStyles(
         layers,

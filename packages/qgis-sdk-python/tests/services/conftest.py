@@ -483,7 +483,10 @@ def _point_wkt(x: float, y: float):
 def _fake_services() -> Services:
     from qgis_sdk.models import RasterStatistics
     from qgis_sdk.testing import (
+        ConnectionDeclaration,
+        DeclaredOutput,
         FakeAlgorithms,
+        FakeAlgorithmSetup,
         FakeCanvas,
         FakeConnections,
         FakeFiles,
@@ -494,7 +497,10 @@ def _fake_services() -> Services:
         FakeSettings,
         FakeStyles,
         FakeWorkers,
+        OtherLayerDeclaration,
         RecordingNotifications,
+        TableDeclaration,
+        VectorLayerDeclaration,
     )
 
     scope = ResourceScope()
@@ -503,25 +509,31 @@ def _fake_services() -> Services:
     rasters = FakeRasters(scope)
     layers = FakeLayers(scope, rasters=rasters)
     layers.register(
-        FIXTURE_DATASET,
-        name=FIXTURE_NAME,
-        geometry_type=FIXTURE_GEOMETRY,
-        field_names=FIXTURE_FIELDS,
-        crs=FIXTURE_CRS,
+        VectorLayerDeclaration(
+            FIXTURE_DATASET,
+            name=FIXTURE_NAME,
+            geometry_type=FIXTURE_GEOMETRY,
+            field_names=FIXTURE_FIELDS,
+            crs=FIXTURE_CRS,
+        )
     )
     layers.register(
-        LINE_DATASET,
-        name="lines",
-        geometry_type="line",
-        field_names=("id",),
-        crs=FIXTURE_CRS,
+        VectorLayerDeclaration(
+            LINE_DATASET,
+            name="lines",
+            geometry_type="line",
+            field_names=("id",),
+            crs=FIXTURE_CRS,
+        )
     )
     layers.register(
-        MINIMAL_DATASET,
-        name="points-minimal",
-        geometry_type="point",
-        field_names=("id",),
-        crs=FIXTURE_CRS,
+        VectorLayerDeclaration(
+            MINIMAL_DATASET,
+            name="points-minimal",
+            geometry_type="point",
+            field_names=("id",),
+            crs=FIXTURE_CRS,
+        )
     )
     files = FakeFiles(scope, owner="plugin:contract")
     algo_workers = FakeWorkers()
@@ -555,22 +567,28 @@ def _fake_services() -> Services:
         layout_workers.run_all()
         service.tick()
 
-    algorithms = FakeAlgorithms(layers, scope, files=files, workers=algo_workers)
-    algorithms.declare_output(
-        BufferRequest,
-        FIXTURE_ROOT / "buffer-output.gpkg",
-        name="buffer",
-        geometry_type="polygon",
-        field_names=FIXTURE_FIELDS,
-        crs=WORKING_CRS,
+    algorithms = FakeAlgorithms(
+        FakeAlgorithmSetup(layers, scope, files=files, workers=algo_workers)
     )
     algorithms.declare_output(
-        CentroidRequest,
-        FIXTURE_ROOT / "centroid-output.gpkg",
-        name="centroid",
-        geometry_type="point",
-        field_names=FIXTURE_FIELDS,
-        crs=FIXTURE_CRS,
+        DeclaredOutput(
+            BufferRequest,
+            FIXTURE_ROOT / "buffer-output.gpkg",
+            name="buffer",
+            geometry_type="polygon",
+            field_names=FIXTURE_FIELDS,
+            crs=WORKING_CRS,
+        )
+    )
+    algorithms.declare_output(
+        DeclaredOutput(
+            CentroidRequest,
+            FIXTURE_ROOT / "centroid-output.gpkg",
+            name="centroid",
+            geometry_type="point",
+            field_names=FIXTURE_FIELDS,
+            crs=FIXTURE_CRS,
+        )
     )
     # The generic run answers from scripts: the same declared datasets for
     # the vector algorithms, a real file on disk for the report, and the
@@ -641,53 +659,65 @@ def _fake_services() -> Services:
     # GeoPackage connection methods in OGR.
     connections = FakeConnections(layers)
     connections.declare_connection(
-        connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
+        ConnectionDeclaration(
+            connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
+        )
     )
     connections.declare_table(
-        connection_files.GPKG_CONNECTION,
-        connection_files.GPKG_ROADS,
-        kind=connection_files.GPKG_ROADS_KIND,
-        geometries=connection_files.GPKG_ROADS_GEOMETRIES,
-        fields=connection_files.GPKG_ROADS_FIELDS,
-        crs=connection_files.FIXTURE_CRS,
+        TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_ROADS,
+            kind=connection_files.GPKG_ROADS_KIND,
+            geometries=connection_files.GPKG_ROADS_GEOMETRIES,
+            fields=connection_files.GPKG_ROADS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
     )
     connections.declare_table(
-        connection_files.GPKG_CONNECTION,
-        connection_files.GPKG_PLACES,
-        kind=connection_files.GPKG_PLACES_KIND,
-        geometries=connection_files.GPKG_PLACES_GEOMETRIES,
-        fields=connection_files.GPKG_PLACES_FIELDS,
-        crs=connection_files.FIXTURE_CRS,
+        TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_PLACES,
+            kind=connection_files.GPKG_PLACES_KIND,
+            geometries=connection_files.GPKG_PLACES_GEOMETRIES,
+            fields=connection_files.GPKG_PLACES_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
     )
     connections.declare_table(
-        connection_files.GPKG_CONNECTION,
-        connection_files.GPKG_NOTES,
-        kind=connection_files.GPKG_NOTES_KIND,
-        geometries=connection_files.GPKG_NOTES_GEOMETRIES,
-        fields=connection_files.GPKG_NOTES_FIELDS,
+        TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_NOTES,
+            kind=connection_files.GPKG_NOTES_KIND,
+            geometries=connection_files.GPKG_NOTES_GEOMETRIES,
+            fields=connection_files.GPKG_NOTES_FIELDS,
+        )
     )
     connections.declare_connection(
-        connection_files.POSTGIS_CONNECTION,
-        provider="postgres",
-        schemas=(connection_files.POSTGIS_SCHEMA,),
+        ConnectionDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            provider="postgres",
+            schemas=(connection_files.POSTGIS_SCHEMA,),
+        )
     )
     connections.declare_table(
-        connection_files.POSTGIS_CONNECTION,
-        connection_files.POSTGIS_POINTS,
-        provider="postgres",
-        schema=connection_files.POSTGIS_SCHEMA,
-        kind=connection_files.POSTGIS_POINTS_KIND,
-        geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
-        fields=connection_files.POSTGIS_POINTS_FIELDS,
-        crs=connection_files.FIXTURE_CRS,
+        TableDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            connection_files.POSTGIS_POINTS,
+            provider="postgres",
+            schema=connection_files.POSTGIS_SCHEMA,
+            kind=connection_files.POSTGIS_POINTS_KIND,
+            geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
+            fields=connection_files.POSTGIS_POINTS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
     )
     connections.declare_connection(
-        connection_files.BROKEN_CONNECTION,
-        provider="postgres",
-        valid=False,
-        message=(
-            "connection to server at 127.0.0.1, port 1 failed: Connection refused"
-        ),
+        ConnectionDeclaration(
+            connection_files.BROKEN_CONNECTION,
+            provider="postgres",
+            valid=False,
+            message="connection to server at 127.0.0.1, port 1 failed: Connection refused",
+        )
     )
     rasters.register(
         RASTER_DATASET,
@@ -717,12 +747,16 @@ def _fake_services() -> Services:
     # declared because the file has none: MDAL reads no projection out of a
     # ``.2dm``, so the native layer answers null and the fake must agree.
     layers.register_layer(
-        MESH_DATASET,
-        name=MESH_NAME,
-        kind="mesh",
-        vertex_count=MESH_VERTICES,
-        face_count=MESH_FACES,
-        group_count=MESH_GROUPS,
+        OtherLayerDeclaration(
+            MESH_DATASET,
+            name=MESH_NAME,
+            kind="mesh",
+            detail={
+                "vertex_count": MESH_VERTICES,
+                "face_count": MESH_FACES,
+                "group_count": MESH_GROUPS,
+            },
+        )
     )
     # The three containers the native half builds are declared with the numbers
     # the built files hold. A point cloud's attributes are PDAL's dimension
@@ -730,30 +764,42 @@ def _fake_services() -> Services:
     # tile's zoom range is what its MBTiles metadata says; a tiled scene answers
     # the box its tileset's region covers.
     layers.register_layer(
-        POINT_CLOUD_DATASET,
-        name=POINT_CLOUD_NAME,
-        kind="point_cloud",
-        point_count=POINT_CLOUD_COUNT,
-        attribute_names=("X", "Y", "Z"),
+        OtherLayerDeclaration(
+            POINT_CLOUD_DATASET,
+            name=POINT_CLOUD_NAME,
+            kind="point_cloud",
+            detail={
+                "point_count": POINT_CLOUD_COUNT,
+                "attribute_names": ("X", "Y", "Z"),
+            },
+        )
     )
     layers.register_layer(
-        VECTOR_TILE_DATASET,
-        name=VECTOR_TILE_NAME,
-        kind="vector_tile",
-        source_type="mbtiles",
-        min_zoom=fixture_files.VECTOR_TILE_MIN_ZOOM,
-        max_zoom=fixture_files.VECTOR_TILE_MAX_ZOOM,
+        OtherLayerDeclaration(
+            VECTOR_TILE_DATASET,
+            name=VECTOR_TILE_NAME,
+            kind="vector_tile",
+            detail={
+                "source_type": "mbtiles",
+                "min_zoom": fixture_files.VECTOR_TILE_MIN_ZOOM,
+                "max_zoom": fixture_files.VECTOR_TILE_MAX_ZOOM,
+            },
+        )
     )
     layers.register_layer(
-        TILED_SCENE_DATASET,
-        name=TILED_SCENE_NAME,
-        kind="tiled_scene",
-        extent={
-            "x_min": fixture_files.TILED_SCENE_REGION[0],
-            "y_min": fixture_files.TILED_SCENE_REGION[1],
-            "x_max": fixture_files.TILED_SCENE_REGION[2],
-            "y_max": fixture_files.TILED_SCENE_REGION[3],
-        },
+        OtherLayerDeclaration(
+            TILED_SCENE_DATASET,
+            name=TILED_SCENE_NAME,
+            kind="tiled_scene",
+            detail={
+                "extent": {
+                    "x_min": fixture_files.TILED_SCENE_REGION[0],
+                    "y_min": fixture_files.TILED_SCENE_REGION[1],
+                    "x_max": fixture_files.TILED_SCENE_REGION[2],
+                    "y_max": fixture_files.TILED_SCENE_REGION[3],
+                }
+            },
+        )
     )
     project = FakeProject(layers, scope)
     project_directory = _project_work_directory()
