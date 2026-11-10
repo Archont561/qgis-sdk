@@ -31,6 +31,7 @@ from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
     PluginRuntimeState,
+    PluginServices,
     ResourceScope,
 )
 from qgis_sdk.environment import DEV_REQUEST_ENV
@@ -128,9 +129,9 @@ class FakeAdapter:
 def context() -> PluginContext:
     scope = ResourceScope()
     return PluginContext(
-        notifications=RecordingNotifications(scope),
-        scope=scope,
-        processing=FakeProcessing(scope),
+        RecordingNotifications(scope),
+        scope,
+        PluginServices(processing=FakeProcessing(scope)),
     )
 
 

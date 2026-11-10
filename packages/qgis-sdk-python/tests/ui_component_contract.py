@@ -17,8 +17,10 @@ import pytest
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
+    PluginServices,
     ResourceScope,
     UiContext,
+    UiServices,
     WorkerContext,
 )
 from qgis_sdk.declarations._plugin import action, plugin
@@ -181,11 +183,13 @@ def make_rendering(
         context = PluginContext(
             notifications,
             scope,
-            layers=layers,
-            rasters=rasters,
-            project=FakeProject(layers, scope),
-            files=FakeFiles(scope),
-            log=RecordingLog(scope, "catalogue"),
+            PluginServices(
+                layers=layers,
+                rasters=rasters,
+                project=FakeProject(layers, scope),
+                files=FakeFiles(scope),
+                log=RecordingLog(scope, "catalogue"),
+            ),
         )
     runtime = PluginRuntime._from_plugin_class(CataloguePlugin, context)
     runtime.start()
@@ -203,12 +207,14 @@ def make_rendering(
         notifications,
         FakeViewControl(),
         view_scope,
-        actions=ViewActions(runtime, view_id="catalogue.test#1"),
-        layers=context.layers,
-        rasters=context.rasters if context.has("rasters") else None,
-        project=context.project,
-        files=context.files,
-        log=context.log,
+        UiServices(
+            actions=ViewActions(runtime, view_id="catalogue.test#1"),
+            layers=context.layers,
+            rasters=context.rasters if context.has("rasters") else None,
+            project=context.project,
+            files=context.files,
+            log=context.log,
+        ),
     )
     yield Rendering(
         ctx,

@@ -56,9 +56,7 @@ def test_rest_lists_only_selected_actions_and_calls_them(tmp_path: Path):
         return "secret"
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     token_file = tmp_path / "token"
     try:
@@ -115,9 +113,7 @@ def test_rest_stream_sends_ordered_events_and_closes(tmp_path: Path):
         yield {"kind": "data", "payload": start + 1}
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     token_file = tmp_path / "token"
     try:
@@ -175,9 +171,7 @@ def test_python_client_and_cli_can_call_a_running_plugin(tmp_path: Path):
         yield {"kind": "data", "payload": 7}
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     token_file = tmp_path / "token"
     try:
@@ -241,9 +235,7 @@ def test_closing_the_client_stream_disposes_its_generator(tmp_path: Path):
             closed.set()
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     token_file = tmp_path / "token"
     try:
@@ -282,9 +274,7 @@ def _echo_app(name: str = "rest_security"):
 
 def _started(app):
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     return runtime
 
@@ -480,9 +470,7 @@ def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
         return value
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     queued = []
     submitted = threading.Event()
@@ -550,9 +538,7 @@ def test_pending_requests_and_busy_expose_queue_state(tmp_path: Path):
         return "after"
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     token_file = tmp_path / "token"
     responses = []

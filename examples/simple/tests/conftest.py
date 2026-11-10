@@ -19,7 +19,7 @@ from qgis_sdk.adapters.desktop import (
     host,
 )
 from qgis_sdk.bridge.authority import HostAuthority
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
 from qgis_sdk.files import FilesService
 from qgis_sdk.models import BufferRequest, RasterStatistics
 from qgis_sdk.models.canvas import CanvasExtent
@@ -131,17 +131,19 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     )
     layouts.declare_layout("report", pages=2)
     context = PluginContext(
-        notifications=notifications,
-        scope=scope,
-        layers=layers,
-        project=project,
-        settings=settings,
-        styles=styles,
-        algorithms=algorithms,
-        canvas=canvas,
-        rasters=rasters,
-        layouts=layouts,
-        files=files,
+        notifications,
+        scope,
+        PluginServices(
+            layers=layers,
+            project=project,
+            settings=settings,
+            styles=styles,
+            algorithms=algorithms,
+            canvas=canvas,
+            rasters=rasters,
+            layouts=layouts,
+            files=files,
+        ),
     )
     factory = create_class_factory(app, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)

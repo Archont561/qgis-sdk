@@ -14,7 +14,14 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope, UiContext
+from qgis_sdk.core import (
+    PluginContext,
+    PluginRuntime,
+    PluginServices,
+    ResourceScope,
+    UiContext,
+    UiServices,
+)
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import (
@@ -115,17 +122,19 @@ def ctx(tmp_path: Path) -> Iterator[UiContext]:
     project = FakeProject(layers, scope)
     project.add_layer(layers.open_vector(dataset).id)
     runtime = PluginRuntime._from_plugin_class(
-        FormDemo, PluginContext(notifications=notifications, scope=scope, layers=layers)
+        FormDemo, PluginContext(notifications, scope, PluginServices(layers=layers))
     )
     runtime.start()
     yield UiContext(
         notifications,
         FakeViewControl(),
         scope.child(),
-        actions=ViewActions(runtime, view_id="test"),
-        layers=layers,
-        project=project,
-        files=FakeFiles(scope),
+        UiServices(
+            actions=ViewActions(runtime, view_id="test"),
+            layers=layers,
+            project=project,
+            files=FakeFiles(scope),
+        ),
     )
     runtime.unload()
 

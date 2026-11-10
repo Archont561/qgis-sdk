@@ -46,9 +46,7 @@ def test_rest_action_runs_on_real_qgis_owner(qgis_app, tmp_path: Path):
         return "gui"
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     post = _Post()
     loop = qt.QEventLoop()
@@ -174,9 +172,7 @@ def test_a_nested_qdialog_defers_a_second_call_until_it_returns(
         return "ok"
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     post = _Post()
     loop = qt.QEventLoop()
@@ -244,9 +240,7 @@ def test_a_long_stream_is_pumped_on_the_real_qgis_owner(qgis_app, tmp_path: Path
             yield {"kind": "data", "payload": index}
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     post = _Post()
     loop = qt.QEventLoop()
@@ -337,9 +331,7 @@ def test_reload_during_a_dialog_fails_the_call_and_disposes_the_stream_after(
         return "done"
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     post = _Post()
     loop = qt.QEventLoop()
@@ -433,9 +425,7 @@ def test_close_during_a_dialog_keeps_the_runtime_reserved_until_it_returns(
         return "done"
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     post = _Post()
     loop = qt.QEventLoop()
@@ -510,9 +500,7 @@ def test_off_owner_close_disposes_a_live_stream_on_the_owner(qgis_app, tmp_path:
             disposed.set()
 
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     post = _Post()
     loop = qt.QEventLoop()

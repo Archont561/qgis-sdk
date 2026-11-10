@@ -73,7 +73,7 @@ def test_pressing_the_button_runs_the_plugin_action_with_its_arguments() -> None
     scope = ResourceScope()
     notifications = RecordingNotifications(scope)
     runtime = PluginRuntime._from_plugin_class(
-        Demo, PluginContext(notifications=notifications, scope=scope)
+        Demo, PluginContext(notifications, scope)
     )
     runtime.start()
     notifications.bind_actions(lambda action_id, **kw: runtime.actions[action_id](**kw))

@@ -14,7 +14,13 @@ from collections.abc import Iterator
 
 import pytest
 from qgis_sdk import QgisSdkPlugin
-from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope, WorkerContext
+from qgis_sdk.core import (
+    PluginContext,
+    PluginRuntime,
+    PluginServices,
+    ResourceScope,
+    WorkerContext,
+)
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.models import QgisSdkJobWaitRefusedError
 from qgis_sdk.testing import FakeWorkers, RecordingNotifications
@@ -50,9 +56,7 @@ def build(workers: FakeWorkers) -> tuple[PluginRuntime, PluginContext]:
 
     scope = ResourceScope()
     context = PluginContext(
-        scope=scope,
-        notifications=RecordingNotifications(scope),
-        workers=workers,
+        RecordingNotifications(scope), scope, PluginServices(workers=workers)
     )
     runtime = PluginRuntime(app=app, context=context)
     runtime.start()
@@ -180,9 +184,7 @@ def test_a_decorated_job_runs_under_the_runtime(workers: FakeWorkers) -> None:
 
     scope = ResourceScope()
     context = PluginContext(
-        scope=scope,
-        notifications=RecordingNotifications(scope),
-        workers=workers,
+        RecordingNotifications(scope), scope, PluginServices(workers=workers)
     )
     runtime = PluginRuntime(app=app, context=context)
     runtime.start()
@@ -214,7 +216,7 @@ def test_a_plugin_without_jobs_keeps_the_context_it_was_given(
 ) -> None:
     app = QgisSdkPlugin(id="plain", title="Plain")
     scope = ResourceScope()
-    context = PluginContext(scope=scope, notifications=RecordingNotifications(scope))
+    context = PluginContext(RecordingNotifications(scope), scope)
     runtime = PluginRuntime(app=app, context=context)
 
     assert runtime.context is context
@@ -234,9 +236,7 @@ def test_a_host_provided_registry_is_refused_rather_than_merged(
     scope = ResourceScope()
     host_service = JobService(scope, workers=workers)
     context = PluginContext(
-        scope=scope,
-        notifications=RecordingNotifications(scope),
-        jobs=Jobs(host_service),
+        RecordingNotifications(scope), scope, PluginServices(jobs=Jobs(host_service))
     )
 
     with pytest.raises(QgisSdkDeclarationError, match="already provides 'jobs'"):

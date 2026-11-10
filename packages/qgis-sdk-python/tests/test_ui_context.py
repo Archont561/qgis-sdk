@@ -9,8 +9,10 @@ import pytest
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
+    PluginServices,
     ResourceScope,
     UiContext,
+    UiServices,
     WorkerContext,
 )
 from qgis_sdk.declarations._describe import describe_plugin
@@ -95,9 +97,7 @@ def workers() -> FakeWorkers:
 def runtime(
     scope: ResourceScope, ui: FakeUi, workers: FakeWorkers
 ) -> Iterator[PluginRuntime]:
-    context = PluginContext(
-        notifications=RecordingNotifications(scope), scope=scope, ui=ui
-    )
+    context = PluginContext(RecordingNotifications(scope), scope, PluginServices(ui=ui))
     runtime = PluginRuntime._from_plugin_class(FieldTools, context)
     runtime.start()
     instance = runtime.instance
@@ -133,7 +133,7 @@ def test_the_fake_refuses_a_surface_the_plugin_does_not_list(
 
 
 def test_a_host_without_a_gui_refuses_ui_by_name(scope: ResourceScope) -> None:
-    context = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    context = PluginContext(RecordingNotifications(scope), scope)
     runtime = PluginRuntime._from_plugin_class(FieldTools, context)
     runtime.start()
 
@@ -334,7 +334,10 @@ def test_ui_context_carries_actions_and_settings_as_capabilities(
         _ = bare.actions
 
     full = UiContext(
-        RecordingNotifications(scope), FakeViewControl(), scope, actions=actions
+        RecordingNotifications(scope),
+        FakeViewControl(),
+        scope,
+        UiServices(actions=actions),
     )
     assert full.actions is actions
     assert full.capabilities == frozenset({"actions"})

@@ -22,7 +22,7 @@ def test_direct_desktop_adapters_accept_applications_and_reject_classes() -> Non
 
     def context_factory(iface: object) -> PluginContext:
         scope = ResourceScope()
-        return PluginContext(scope=scope, notifications=RecordingNotifications(scope))
+        return PluginContext(RecordingNotifications(scope), scope)
 
     for factory in (
         lambda: DesktopLifecycleAdapter(app, None, context_factory=context_factory),

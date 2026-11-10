@@ -38,7 +38,7 @@ class FakeIface:
 
 def context_factory(iface: object) -> PluginContext:
     del iface
-    return PluginContext(notifications=RecordingNotifications(), scope=ResourceScope())
+    return PluginContext(RecordingNotifications(), ResourceScope())
 
 
 def test_adapter_builds_the_context_from_iface_and_delegates_lifecycle() -> None:
@@ -100,9 +100,7 @@ def test_init_gui_twice_is_rejected_without_reconstructing() -> None:
 
 
 def test_unload_before_init_gui_disposes_the_owned_scope() -> None:
-    context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope()
-    )
+    context = PluginContext(RecordingNotifications(), ResourceScope())
 
     adapter = DesktopLifecycleAdapter(
         desktop_app, iface=FakeIface(), context_factory=lambda iface: context

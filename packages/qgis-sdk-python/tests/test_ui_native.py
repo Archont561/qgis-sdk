@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from qgis_sdk.core import PluginRuntime, ResourceScope, UiContext
+from qgis_sdk.core import PluginRuntime, ResourceScope, UiContext, UiServices
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import (
     Colour as ColourInput,
@@ -143,10 +143,12 @@ def ctx(qgis_app, tmp_path: Path) -> Iterator[UiContext]:
         notifications,
         FakeViewControl(),
         scope.child(),
-        actions=ViewActions(runtime, view_id="test"),
-        layers=context.layers,
-        project=context.project,
-        files=context.files,
+        UiServices(
+            actions=ViewActions(runtime, view_id="test"),
+            layers=context.layers,
+            project=context.project,
+            files=context.files,
+        ),
     )
     runtime.unload()
     QgsProject.instance().removeAllMapLayers()

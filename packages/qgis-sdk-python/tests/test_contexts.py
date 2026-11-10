@@ -8,8 +8,10 @@ from qgis_sdk.core import (
     Host,
     JobContext,
     PluginContext,
+    PluginServices,
     ResourceScope,
     UiContext,
+    UiServices,
     WorkerContext,
 )
 from qgis_sdk.models import QgisSdkScopeClosedError, QgisSdkUnsupportedCapabilityError
@@ -24,9 +26,7 @@ class RecordingNotifications:
 
 
 def test_pure_plugin_context_rejects_native_desktop_access() -> None:
-    context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope()
-    )
+    context = PluginContext(RecordingNotifications(), ResourceScope())
 
     with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
         _ = context.desktop
@@ -61,9 +61,7 @@ class FakeWorkers:
 def test_every_optional_plugin_capability_is_refused_by_name_when_absent(
     capability: str,
 ) -> None:
-    context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope()
-    )
+    context = PluginContext(RecordingNotifications(), ResourceScope())
 
     assert context.has(capability) is False
     with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
@@ -91,9 +89,7 @@ def test_a_provided_capability_is_the_very_instance_the_host_passed() -> None:
 
 def test_capabilities_lists_what_the_host_provided() -> None:
     context = PluginContext(
-        notifications=RecordingNotifications(),
-        scope=ResourceScope(),
-        workers=FakeWorkers(),
+        RecordingNotifications(), ResourceScope(), PluginServices(workers=FakeWorkers())
     )
 
     assert context.capabilities == frozenset({"workers"})
@@ -101,11 +97,7 @@ def test_capabilities_lists_what_the_host_provided() -> None:
 
 
 def test_probing_an_unknown_capability_is_a_mistake_not_a_false() -> None:
-    context = UiContext(
-        notifications=RecordingNotifications(),
-        view=RecordingView(),
-        scope=ResourceScope(),
-    )
+    context = UiContext(RecordingNotifications(), RecordingView(), ResourceScope())
 
     with pytest.raises(ValueError, match="no capability named 'styels'"):
         context.has("styels")
@@ -204,9 +196,7 @@ def test_a_worker_context_is_assembled_once() -> None:
 
 
 def test_a_context_is_immutable_once_assembled() -> None:
-    context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope()
-    )
+    context = PluginContext(RecordingNotifications(), ResourceScope())
 
     with pytest.raises(AttributeError):
         context.workers = FakeWorkers()  # type: ignore[misc]
@@ -221,8 +211,8 @@ def test_two_plugin_handlers_use_only_their_injected_services() -> None:
     def handler(context: PluginContext, message: str) -> None:
         context.notifications.info(message)
 
-    handler(PluginContext(notifications=first, scope=ResourceScope()), "first")
-    handler(PluginContext(notifications=second, scope=ResourceScope()), "second")
+    handler(PluginContext(first, ResourceScope()), "first")
+    handler(PluginContext(second, ResourceScope()), "second")
 
     assert (first.messages, second.messages) == (["first"], ["second"])
 
@@ -290,9 +280,7 @@ def test_view_can_request_close_without_disposing_its_plugin() -> None:
     view_scope = plugin_scope.child()
     view_scope.on_close(lambda: released.append("view"))
     view = RecordingView()
-    context = UiContext(
-        notifications=RecordingNotifications(), view=view, scope=view_scope
-    )
+    context = UiContext(RecordingNotifications(), view, view_scope)
 
     context.view.request_close()
 
@@ -420,7 +408,7 @@ def test_closed_scope_rejects_registration_and_native_access() -> None:
     scope = ResourceScope()
     desktop = DesktopStub(iface=object())
     context = PluginContext(
-        notifications=RecordingNotifications(), scope=scope, desktop=desktop
+        RecordingNotifications(), scope, PluginServices(desktop=desktop)
     )
     assert context.desktop is desktop
     scope.close()
@@ -440,7 +428,9 @@ def test_a_plugin_context_hands_back_the_injected_services() -> None:
         for name in ("layers", "project", "settings", "styles", "algorithms", "workers")
     }
     context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope(), **sentinels
+        notifications=RecordingNotifications(),
+        scope=ResourceScope(),
+        services=PluginServices(**sentinels),
     )
 
     for name, service in sentinels.items():
@@ -451,7 +441,7 @@ def test_a_plugin_context_hands_back_the_injected_services() -> None:
 def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:
     scope = ResourceScope()
     context = PluginContext(
-        notifications=RecordingNotifications(), scope=scope, layers=object()
+        RecordingNotifications(), scope, PluginServices(layers=object())
     )
     scope.close()
 
@@ -462,7 +452,7 @@ def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:
 def test_with_services_adds_a_capability_over_the_same_scope() -> None:
     scope = ResourceScope()
     notifications = RecordingNotifications()
-    context = PluginContext(notifications=notifications, scope=scope, settings=object())
+    context = PluginContext(notifications, scope, PluginServices(settings=object()))
     ui = object()
 
     extended = context.with_services(ui=ui)
@@ -491,9 +481,9 @@ def test_the_three_hosts_and_which_of_them_has_a_gui() -> None:
 
 def test_a_plugin_context_reports_the_host_that_built_it() -> None:
     scope = ResourceScope()
-    desktop = PluginContext(notifications=RecordingNotifications(), scope=scope)
+    desktop = PluginContext(RecordingNotifications(), scope)
     server = PluginContext(
-        notifications=RecordingNotifications(), scope=scope, host=Host.SERVER
+        RecordingNotifications(), scope, PluginServices(host=Host.SERVER)
     )
 
     assert desktop.host is Host.DESKTOP  # what a host that says nothing means
@@ -504,13 +494,10 @@ def test_a_plugin_context_reports_the_host_that_built_it() -> None:
 def test_a_view_context_inherits_the_host_and_adding_services_keeps_it() -> None:
     scope = ResourceScope()
     plugin = PluginContext(
-        notifications=RecordingNotifications(), scope=scope, host=Host.APP
+        RecordingNotifications(), scope, PluginServices(host=Host.APP)
     )
     view = UiContext(
-        plugin.notifications,
-        object(),
-        scope.child(),
-        host=plugin.host,  # type: ignore[arg-type]
+        plugin.notifications, object(), scope.child(), UiServices(host=plugin.host)
     )
 
     assert view.host is Host.APP
@@ -519,7 +506,7 @@ def test_a_view_context_inherits_the_host_and_adding_services_keeps_it() -> None
 
 def test_the_host_is_a_stated_attribute_not_a_capability() -> None:
     context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope(), host=Host.SERVER
+        RecordingNotifications(), ResourceScope(), PluginServices(host=Host.SERVER)
     )
 
     with pytest.raises(ValueError, match="has no capability named 'host'"):

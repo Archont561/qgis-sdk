@@ -25,7 +25,7 @@ class RecordingNotifications:
 
 
 def plugin_context() -> PluginContext:
-    return PluginContext(notifications=RecordingNotifications(), scope=ResourceScope())
+    return PluginContext(RecordingNotifications(), ResourceScope())
 
 
 @dataclass

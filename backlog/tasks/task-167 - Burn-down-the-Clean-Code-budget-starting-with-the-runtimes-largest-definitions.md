@@ -150,4 +150,16 @@ The Processing one is worth reading twice, because it is the finding the previou
 
 **What is left of AC 1's long tail.** `core/contexts.py` carries the two large ones - `PluginContext.__init__` at 22 parameters and 47 lines, and the view context at 21 and 45 - plus `ServerContext` at 8; these are the same record treatment over a much larger surface and want their own slice. CC202 is a different cut: `HostAuthority` has 18 methods and `Dispatcher` 21, and both need collaborators extracted rather than arguments grouped. AC 4, the threshold review, is still the next piece of work after that.
 
+**Slice 10 (landed): the contexts, as records.** 813 -> 808 findings. `PluginServices` and `UiServices` are the two records now, `PluginContext(notifications, scope, PluginServices(...))` and `UiContext(notifications, view, scope, UiServices(...))` the two constructors, and the two CC102 entries this task has been carrying since decision-81 (22 and 21 parameters) plus their 47- and 45-line `__init__`s are gone from `core/contexts.py`.
+
+The interesting part is how a record field becomes a capability. Each context already declared its capabilities twice - once as a `_capability_names` tuple and once as `__slots__` - and `__init__` is now one comprehension over the names, `{f"_{name}": getattr(services, name) for name in self._capability_names}`. Because the record is a slots dataclass, a name the context knows and the record does not is an `AttributeError` at construction, not a missing attribute discovered through `Capability.__get__` in a handler. Adding a capability stays two lines and one of them cannot silently lag. `with_services` kept its signature by rebuilding the record from the slots it had already set.
+
+**The 115 call sites, and what the gate caught.** 97 `PluginContext` and 18 `UiContext` calls in tests, examples, the runtime's own adapters (`surfaces.py`, `desktop.py`, `qgis/context.py`, `console.py`, `testing/app.py`, `testing/ui.py`) and the two scaffold templates in `qgis_sdk_tools/scaffold/generate.py`, which are string literals and had to be moved by hand - the generated starter tests would otherwise have been written against the old signature, which is exactly how `test_scaffold_ui` failed first. The two that could not be rewritten mechanically (`testing/ui.py` and `test_worker_guard.py` splat a dict of services) take `**services` into the record instead.
+
+Two CC101 findings appeared on the way, both from the extra line a record costs at a call site: `SurfaceHost._ui_context` crossed 30 lines and is now `_view_services(context, scope, actions, streams)` plus a four-line build, and `test_contexts_expose_the_injected_client` asserted two context kinds in one body and is now two tests. Budget 808 with nothing re-baselined upward.
+
+**Tests.** 3074 passed, 130 skipped; `tests/scripts` 332. ruff, alint and the clean-code gate clean.
+
+**What is left.** `core/contexts.py` still carries `AlgorithmContext` (8 parameters, 5 call sites) and `ServerContext` (`server/_context.py`, 8 parameters, 12 call sites, 9 of them positional) - the same treatment, a following slice with its own call sites to move. CC202 remains a different cut: `HostAuthority` at 18 methods and `Dispatcher` at 21 need collaborators, not records.
+
 <!-- SECTION:NOTES:END -->

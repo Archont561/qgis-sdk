@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from qgis_sdk.core._application import QgisSdkPlugin
 
-from qgis_sdk.core import ResourceScope, UiContext
+from qgis_sdk.core import ResourceScope, UiContext, UiServices
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.ui.components import Component
 from qgis_sdk.ui.declarative import materialise
@@ -142,7 +142,7 @@ def fake_ui_context(
                 # The same view-scoped facade a real host builds, so a test
                 # sees the owner rules instead of a plugin-lifetime stand-in.
                 services["jobs"] = context.jobs.scoped(scope)
-    return UiContext(notifications, view, scope, **services)
+    return UiContext(notifications, view, scope, UiServices(**services))
 
 
 @dataclass(slots=True)

@@ -42,9 +42,7 @@ class _Overlap:
 
 def _runtime(app):
     scope = ResourceScope()
-    runtime = PluginRuntime(
-        app, PluginContext(scope=scope, notifications=RecordingNotifications(scope))
-    )
+    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
     runtime.start()
     return runtime
 

@@ -19,7 +19,13 @@ pytestmark = pytest.mark.qgis
 
 try:
     from qgis_sdk.adapters.qgis import QgsJobPump, QgsTaskWorkers
-    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope, WorkerContext
+    from qgis_sdk.core import (
+        PluginContext,
+        PluginRuntime,
+        PluginServices,
+        ResourceScope,
+        WorkerContext,
+    )
     from qgis_sdk.declarations import QgisSdkDeclarationError
     from qgis_sdk.jobs import JobHandle, JobRegistry, JobService, JobStatus, job
     from qgis_sdk.testing import RecordingNotifications
@@ -140,9 +146,9 @@ def test_a_started_plugin_exposes_its_declared_jobs(app) -> None:
 
     scope = ResourceScope()
     context = PluginContext(
-        scope=scope,
-        notifications=RecordingNotifications(scope),
-        workers=QgsTaskWorkers(scope),
+        RecordingNotifications(scope),
+        scope,
+        PluginServices(workers=QgsTaskWorkers(scope)),
     )
     software = QgisSdkPlugin(id="native.hosted", title="Native hosted")
     software.jobs = (read,)
@@ -185,9 +191,9 @@ def test_the_desktop_adapter_arms_the_pump_when_it_starts_and_stops_it_on_unload
     def factory(iface: object | None) -> PluginContext:
         scope = ResourceScope()
         return PluginContext(
-            scope=scope,
-            notifications=RecordingNotifications(scope),
-            workers=QgsTaskWorkers(scope),
+            RecordingNotifications(scope),
+            scope,
+            PluginServices(workers=QgsTaskWorkers(scope)),
         )
 
     adapter = DesktopLifecycleAdapter(software, None, context_factory=factory)
@@ -216,7 +222,7 @@ def test_an_invalid_registry_is_refused_at_startup_not_at_submission(app) -> Non
 
     software._jobs = {"bad": bare}  # bypassing the setter does not bypass the runtime
     scope = ResourceScope()
-    context = PluginContext(scope=scope, notifications=RecordingNotifications(scope))
+    context = PluginContext(RecordingNotifications(scope), scope)
     with pytest.raises(QgisSdkDeclarationError, match="Plugin 'native.bad'"):
         PluginRuntime(app=software, context=context)
     scope.close()

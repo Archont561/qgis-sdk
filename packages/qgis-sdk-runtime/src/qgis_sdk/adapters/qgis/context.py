@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from qgis_sdk.bridge.authority import HostAuthority
-from qgis_sdk.core import Host, PluginContext, ResourceScope
+from qgis_sdk.core import Host, PluginContext, PluginServices, ResourceScope
 from qgis_sdk.files import FilesService
 from qgis_sdk.network import NetworkClient
 from qgis_sdk.services import Notifications
@@ -123,35 +123,37 @@ def native_plugin_context(
     )
     layouts = NativeLayouts(scope, workers=workers, files=files)
     return PluginContext(
-        notifications=(
-            options.notifications
-            if options.notifications is not None
-            else NativeNotifications(scope)
+        options.notifications
+        if options.notifications is not None
+        else NativeNotifications(scope),
+        scope,
+        PluginServices(
+            host=options.host,
+            desktop=None
+            if options.iface is None
+            else IfaceDesktopAccess(options.iface),
+            network=NetworkClient(transport, scope),
+            layers=layers,
+            rasters=rasters,
+            features=features,
+            layouts=layouts,
+            canvas=canvas_service,
+            project=project,
+            settings=NativeSettings(scope, prefix=options.settings_prefix),
+            styles=NativeStyles(layers, scope),
+            algorithms=algorithms,
+            workers=workers,
+            processing=NativeProcessing(
+                ProcessingServices(
+                    layers=layers,
+                    algorithms=algorithms,
+                    project=project,
+                    scope=scope,
+                    authority=authority,
+                    rasters=rasters,
+                )
+            ),
+            files=files,
+            log=NativeLog(scope, options.settings_prefix),
         ),
-        scope=scope,
-        host=options.host,
-        desktop=(None if options.iface is None else IfaceDesktopAccess(options.iface)),
-        network=NetworkClient(transport, scope),
-        layers=layers,
-        rasters=rasters,
-        features=features,
-        layouts=layouts,
-        canvas=canvas_service,
-        project=project,
-        settings=NativeSettings(scope, prefix=options.settings_prefix),
-        styles=NativeStyles(layers, scope),
-        algorithms=algorithms,
-        workers=workers,
-        processing=NativeProcessing(
-            ProcessingServices(
-                layers=layers,
-                algorithms=algorithms,
-                project=project,
-                scope=scope,
-                authority=authority,
-                rasters=rasters,
-            )
-        ),
-        files=files,
-        log=NativeLog(scope, options.settings_prefix),
     )

@@ -39,9 +39,7 @@ def test_repeated_unload_releases_each_owned_resource_exactly_once(
     cleanup_count: int, unload_calls: int
 ) -> None:
     released: list[int] = []
-    context = PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope()
-    )
+    context = PluginContext(RecordingNotifications(), ResourceScope())
     for index in range(cleanup_count):
         context.scope.on_close(lambda index=index: released.append(index))
     runtime = PluginRuntime._from_plugin_class(PropertyPlugin, context)

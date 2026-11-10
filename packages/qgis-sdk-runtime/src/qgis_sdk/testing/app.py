@@ -18,7 +18,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from qgis_sdk.core import Host, NamedLoop, PluginContext, PluginRuntime, ResourceScope
+from qgis_sdk.core import (
+    Host,
+    NamedLoop,
+    PluginContext,
+    PluginRuntime,
+    PluginServices,
+    ResourceScope,
+)
 from qgis_sdk.core._application import QgisSdkPlugin
 
 from .fakes import RecordingNotifications
@@ -128,10 +135,9 @@ class FakeAppBackend:
         scope = ResourceScope()
         self.notifications = RecordingNotifications(scope)
         context = PluginContext(
-            notifications=self.notifications,
-            scope=scope,
-            host=self.host,
-            workers=self.workers,
+            self.notifications,
+            scope,
+            PluginServices(host=self.host, workers=self.workers),
         )
         if gui:
             context = context.with_services(ui=FakeUi(scope, app=app))

@@ -206,14 +206,18 @@ def test_a_service_the_host_did_not_supply_is_refused_by_name() -> None:
 UI_TEST = """
 
 def test_the_bound_action_opens_the_dialog_under_the_fake_ui() -> None:
-    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
     from qgis_sdk.testing import FakeUi, RecordingNotifications
     from {plugin}.plugin import open_ping
     from {plugin}.ui import PingDialog
 
     scope = ResourceScope()
     ui = FakeUi(scope)
-    context = PluginContext(notifications=RecordingNotifications(scope), scope=scope, ui=ui)
+    context = PluginContext(
+        notifications=RecordingNotifications(scope),
+        scope=scope,
+        services=PluginServices(ui=ui),
+    )
     open_ping(context)
     assert [opened.surface for opened in ui.opened] == [PingDialog]
     assert dict(ui.opened[0].initial) == {{"value": 7}}
@@ -225,7 +229,7 @@ ALGORITHM_TEST = '''
 def test_the_buffer_algorithm_asks_processing_for_exactly_the_request(tmp_path) -> None:
     """The SDK fakes stand in for Processing: what was asked, and what came back."""
     from qgis_sdk.algorithms import invoke
-    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
     from qgis_sdk.models import BufferRequest
     from qgis_sdk.testing import (
         FakeAlgorithms,
@@ -254,9 +258,7 @@ def test_the_buffer_algorithm_asks_processing_for_exactly_the_request(tmp_path) 
     ctx = PluginContext(
         notifications=RecordingNotifications(scope),
         scope=scope,
-        layers=layers,
-        project=project,
-        algorithms=algorithms,
+        services=PluginServices(layers=layers, project=project, algorithms=algorithms),
     )
     source = layers.open_vector(tmp_path / "points.gpkg")
 
