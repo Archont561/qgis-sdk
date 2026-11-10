@@ -570,14 +570,6 @@
 		"CC102": 1,
 		"CC202": 1
 	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/host/_handlers.py": {
-		"CC101": 3,
-		"CC104": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/host/_services.py": {
-		"CC101": 1,
-		"CC303": 1
-	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/schema.py": {
 		"CC101": 1,
 		"CC303": 1

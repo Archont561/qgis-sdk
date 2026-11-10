@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import PluginContext
@@ -22,6 +22,41 @@ from qgis_sdk.services.styles import Styles
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
     from qgis_sdk.files import FilesService
+
+
+def _optional_service(context: PluginContext, name: str) -> Any:
+    """Return the service ``name`` when the context holds one, and nothing when it does not."""
+    return getattr(context, name) if context.has(name) else None
+
+
+def _authority_of(
+    context: PluginContext, authority: HostAuthority | None
+) -> HostAuthority:
+    """The authority refs are minted on: the given one, the context's, or a fresh one.
+
+    Defaulting to the one under the context's ``files`` service is what makes a
+    ref the page received the ref ``ctx.files`` resolves (``FilesService.authority``).
+    """
+    if authority is not None:
+        return authority
+    files = _optional_service(context, "files")
+    inherited = getattr(files, "authority", None) if files is not None else None
+    return inherited if inherited is not None else HostAuthority()
+
+
+def _network_of(
+    context: PluginContext, network: NetworkTransport | None
+) -> NetworkTransport | None:
+    """The transport a fetch leaves through, defaulting to the context client's own.
+
+    A page's ``network.fetch`` and a handler's ``await self.ctx.network.get(...)``
+    then leave through one door: ``NetworkClient.transport``.
+    """
+    if network is not None:
+        return network
+    if not context.has("network"):
+        return None
+    return getattr(context.network, "transport", None)
 
 
 @dataclass(frozen=True)
@@ -78,36 +113,24 @@ class HostServices:
     ) -> HostServices:
         """Wrap the services a plugin context already holds, instance for instance.
 
-        This is how a page and a Python handler end up reading one project:
-        the bridge answers ``layers.list`` from the very ``Layers`` the plugin
-        reaches as ``self.ctx.layers``. A context missing one of the four
-        required services fails here, by capability name, before anything is
-        registered. ``network`` is the transport ``network.fetch`` sends through;
-        left out, it is the transport under the context's own client when that
-        client exposes one (``NetworkClient.transport``), so a page's fetch and
-        a handler's ``await self.ctx.network.get(...)`` leave through one door.
-        ``authority`` likewise defaults to the one under the context's
-        ``files`` service when it exposes one (``FilesService.authority``):
-        a ref the page received is then the ref ``ctx.files`` resolves.
+        This is how a page and a Python handler end up reading one project, the
+        very ``Layers`` the plugin reaches as ``self.ctx.layers``. A missing
+        required service fails here, by capability name, before anything is
+        registered; the optional ones and the two defaults are the helpers below.
         """
-        if network is None and context.has("network"):
-            network = getattr(context.network, "transport", None)
-        files = context.files if context.has("files") else None
-        if authority is None and files is not None:
-            authority = getattr(files, "authority", None)
         return cls(
             layers=context.layers,
             project=context.project,
             settings=context.settings,
             styles=context.styles,
             notifications=context.notifications,
-            features=context.features if context.has("features") else None,
-            canvas=context.canvas if context.has("canvas") else None,
-            rasters=context.rasters if context.has("rasters") else None,
-            layouts=context.layouts if context.has("layouts") else None,
-            connections=context.connections if context.has("connections") else None,
-            authority=authority if authority is not None else HostAuthority(),
-            network=network,
-            algorithms=context.algorithms if context.has("algorithms") else None,
-            files=files,
+            features=_optional_service(context, "features"),
+            canvas=_optional_service(context, "canvas"),
+            rasters=_optional_service(context, "rasters"),
+            layouts=_optional_service(context, "layouts"),
+            connections=_optional_service(context, "connections"),
+            authority=_authority_of(context, authority),
+            network=_network_of(context, network),
+            algorithms=_optional_service(context, "algorithms"),
+            files=_optional_service(context, "files"),
         )
