@@ -182,4 +182,14 @@ CC101 (442), CC104 (122), CC102 (109), CC303 (52) and the class-size rules (52) 
 
 **Tests.** 3078 passed, 130 skipped, 7 deselected; `tests/scripts` 332; ruff, alint and the clean-code gate clean.
 
+**Slice 13 (landed): worst file first, cleared.** 777 -> 751 findings. `packages/qgis-sdk-python/tests/test_plugin_http_limits.py` carried 26 (17 CC101, 9 CC104); it has zero now, with no threshold change, no suppression and no finding added anywhere else.
+
+The file had one shape repeated fifteen times: build a plugin, start a runtime, construct `PluginHttpServer(runtime, post=..., token_file=..., actions=..., <limits>)`, read the token, and unload in a `finally`. That is `_serving(app, tmp_path, actions, *, post=None, **server_options)` now - one context manager with the inline queue, token file and unload as defaults. Every call site is one line; the two tests that need extra cleanup keep their `try/finally` around it.
+
+What the saved lines exposed was the rest of the duplication, and each became a named helper or harness: `_echo_app`, `_save_app`, `_watch_app`, `_close_responses`, `_run_threads`, `_stack_depth`, `_ClaimedQueue`, `_until_available`, `_open_streams`, `_reopen_stream`, `_doubled_length_request`, and the two stateful harnesses `_NestedHarness` (queue pumping and observations) and `_CloseProbe` (a held action while `close()` is exercised). The reentrant handler now reuses `_call` instead of building a second HTTP client by hand. The three 50-90 line tests are short arrange/act/assert bodies over those harnesses, and their assertions are unchanged.
+
+The point of doing this file by extraction rather than by splitting the assertions is that the 21 tests still test the same thing: `test_plugin_http_limits.py` ran 21 passed before and after, the full suite 3078 passed / 130 skipped, `tests/scripts` 332.
+
+**What is left.** `automation/release.py` (26) and `tests/scripts/test_release.py` (18) are now the two worst files, then `testing/fakes.py` and `test_plugin_rest.py` (16 each). The remaining budget is 751: CC101 416, CC104 113, CC102 109, CC303 52, CC201/CC202 52.
+
 <!-- SECTION:NOTES:END -->

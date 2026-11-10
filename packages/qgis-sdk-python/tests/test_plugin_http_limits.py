@@ -10,6 +10,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -65,104 +66,332 @@ def _call(port, token, action, payload):
         connection.close()
 
 
-def test_a_nested_event_loop_defers_the_second_call_instead_of_reentering(
-    tmp_path: Path,
-):
-    from qgis_sdk.http import PluginHttpServer
+class _NestedHarness:
+    """The two actions, the queue and the observations of a nested dispatch."""
 
-    pending: queue.Queue = queue.Queue()
-    inner_done = threading.Event()
-    modal_entered = threading.Event()
-    finished: dict[str, float] = {}
-    state = _Overlap()
-    app = QgisSdkPlugin(id="nested", title="Nested")
+    def __init__(self) -> None:
+        self.pending: queue.Queue = queue.Queue()
+        self.inner_done = threading.Event()
+        self.modal_entered = threading.Event()
+        self.finished: dict[str, float] = {}
+        self.state = _Overlap()
 
-    @app.action(id="modal", title="Modal")
-    def modal(ctx: PluginContext, value: str) -> str:
-        # A native dialog pumps the owner thread: queued work runs inside it.
-        modal_entered.set()
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline and not inner_done.is_set():
+    def app(self) -> QgisSdkPlugin:
+        app = QgisSdkPlugin(id="nested", title="Nested")
+
+        @app.action(id="modal", title="Modal")
+        def modal(ctx: PluginContext, value: str) -> str:
+            # A native dialog pumps the owner thread: queued work runs inside it.
+            self.modal_entered.set()
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline and not self.inner_done.is_set():
+                try:
+                    self.pending.get(timeout=0.02)()
+                except queue.Empty:
+                    pass
+            self.state.enter()
             try:
-                pending.get(timeout=0.02)()
+                return value
+            finally:
+                self.state.leave()
+                self.finished["modal"] = time.monotonic()
+
+        @app.action(id="echo", title="Echo")
+        def echo(ctx: PluginContext, value: str) -> str:
+            self.state.enter()
+            try:
+                return value
+            finally:
+                self.state.leave()
+                self.finished["echo"] = time.monotonic()
+
+        return app
+
+    def dispatch(self, port, token) -> tuple[dict, dict]:
+        """Run the outer call, then the inner one, both pumped by this thread."""
+        first: dict = {}
+        second: dict = {}
+        threads = [
+            threading.Thread(
+                target=lambda: first.update(
+                    r=_call(port, token, "modal", {"value": "outer"})
+                )
+            ),
+            threading.Thread(
+                target=lambda: (
+                    second.update(r=_call(port, token, "echo", {"value": "inner"})),
+                    self.inner_done.set(),
+                )
+            ),
+        ]
+        threads[0].start()
+        # Only ask for the second call once the first handler is inside its
+        # nested loop, so the ordering under test is deterministic.
+        threading.Thread(
+            target=lambda: (self.modal_entered.wait(5), threads[1].start()),
+            daemon=True,
+        ).start()
+        self.pump(threads)
+        return first, second
+
+    def pump(self, threads) -> None:
+        """Pump the modal loop until both request threads have finished."""
+        deadline = time.monotonic() + 15
+        while any(thread.is_alive() for thread in threads):
+            assert time.monotonic() < deadline, "nested dispatch did not finish"
+            try:
+                self.pending.get(timeout=0.02)()
             except queue.Empty:
                 pass
-        state.enter()
-        try:
+
+
+def _held_app(action: str, entered, release) -> QgisSdkPlugin:
+    """A plugin whose one action waits for the test to release it."""
+    app = QgisSdkPlugin(id=action, title=action)
+
+    @app.action(id=action, title=action)
+    def held(ctx: PluginContext) -> str:
+        entered.set()
+        assert release.wait(30), "the test must release the action"
+        return "held"
+
+    return app
+
+
+class _CloseProbe:
+    """A server with an action held open while its close is exercised."""
+
+    def __init__(self, tmp_path: Path, action: str, close_grace: float) -> None:
+        from qgis_sdk.http import PluginHttpServer
+
+        self.action = action
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.responses: list = []
+        self.errors: list = []
+        self.client = None
+        self.closers: list = []
+        self.token_file = tmp_path / "token"
+        self.runtime = _runtime(_held_app(action, self.entered, self.release))
+        self.server = PluginHttpServer(
+            self.runtime,
+            post=lambda callback: callback(),
+            token_file=self.token_file,
+            actions=(action,),
+            deadline=10,
+            close_grace=close_grace,
+        )
+
+    def start(self):
+        """Start the server and the client whose reply the close must deliver."""
+        self.server.start()
+        token = self.token_file.read_text().strip()
+
+        def caller():
+            try:
+                self.responses.append(_call(self.server.port, token, self.action, {}))
+            except BaseException as error:  # noqa: BLE001 - relay to the test
+                self.errors.append(error)
+
+        self.client = threading.Thread(target=caller, daemon=True)
+        self.client.start()
+        assert self.entered.wait(10), "the action never started"
+        return self
+
+    def close_in_thread(self) -> None:
+        self.closers.append(threading.Thread(target=self.server.close, daemon=True))
+        self.closers[0].start()
+
+    def finish(self) -> None:
+        self.release.set()
+        for thread in self.closers:
+            thread.join(timeout=10)
+        if self.client is not None:
+            self.client.join(timeout=5)
+        self.runtime.unload()
+
+
+def _run_threads(threads, timeout: float = 20) -> None:
+    """Start every request thread and bound how long the test waits for them."""
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=timeout)
+
+
+def _stack_depth() -> int:
+    """How many frames deep the current call stack is."""
+    import sys
+
+    frames = 0
+    frame = sys._getframe()
+    while frame is not None:
+        frames += 1
+        frame = frame.f_back
+    return frames
+
+
+class _ClaimedQueue(deque):
+    """A queue whose item the owner has taken but not yet announced."""
+
+    def __init__(self, handed_over: list[bool]) -> None:
+        super().__init__()
+        self.handed_over = handed_over
+
+    def remove(self, work):
+        def hand_over() -> None:
+            work.picked.set()
+            work.value = "late"
+            work.done.set()
+
+        threading.Timer(0.01, hand_over).start()
+        self.handed_over.append(True)
+        raise ValueError(f"{work!r} is not in deque")
+
+
+def _watch_app(plugin_id: str, title: str, *, echo: bool = False) -> QgisSdkPlugin:
+    """A plugin with one endless event stream, and optionally an echo action."""
+    app = QgisSdkPlugin(id=plugin_id, title=title)
+
+    @app.stream(id="watch", title="Watch", events={"data": int})
+    def watch(ctx: PluginContext) -> Iterator[dict]:
+        while True:
+            yield {"kind": "data", "payload": 1}
+
+    if echo:
+
+        @app.action(id="echo", title="Echo")
+        def echo_action(ctx: PluginContext, value: str) -> str:
             return value
-        finally:
-            state.leave()
-            finished["modal"] = time.monotonic()
+
+    return app
+
+
+def _close_responses(*responses) -> None:
+    """Close every stream a test opened, tolerating ones never assigned."""
+    for response in responses:
+        if response is not None:
+            response.close()
+
+
+def _echo_app(plugin_id: str, title: str) -> QgisSdkPlugin:
+    """A plugin with one echo action, the shape most limit tests need."""
+    app = QgisSdkPlugin(id=plugin_id, title=title)
 
     @app.action(id="echo", title="Echo")
     def echo(ctx: PluginContext, value: str) -> str:
-        state.enter()
-        try:
-            return value
-        finally:
-            state.leave()
-            finished["echo"] = time.monotonic()
+        return value
+
+    return app
+
+
+def _save_app(plugin_id: str, seen: list[str]) -> QgisSdkPlugin:
+    """A plugin whose save action records what reached the handler."""
+    app = QgisSdkPlugin(id=plugin_id, title=plugin_id)
+
+    @app.action(id="save", title="Save")
+    def save(ctx: PluginContext, value: str) -> str:
+        seen.append(value)
+        return value
+
+    return app
+
+
+def _until_available(port, token, action, payload, budget: float = 5) -> int:
+    """Poll until the listener answers something other than 503."""
+    deadline = time.monotonic() + budget
+    status = 503
+    while status == 503 and time.monotonic() < deadline:
+        status = _probe_status(port, token, action, payload)
+        if status == 503:
+            time.sleep(0.05)
+    return status
+
+
+def _open_streams(port, token, stream, count, draining) -> list:
+    """Open ``count`` streams and start draining each one."""
+    streams = []
+    for _ in range(count):
+        response = _open_stream(port, token, stream)
+        streams.append(response)
+        assert response.status == 200, "the budget must hold the sessions"
+        draining.append(_drain(response))
+    return streams
+
+
+def _reopen_stream(port, token, stream, previous, budget: float = 5):
+    """Retry a stream until its connection slot is free again."""
+    deadline = time.monotonic() + budget
+    while time.monotonic() < deadline:
+        previous.close()
+        reopened = _open_stream(port, token, stream)
+        if reopened.status == 200:
+            return reopened
+        time.sleep(0.05)
+    return previous
+
+
+def _doubled_length_request(port, token) -> bytes:
+    """A request with two Content-Length headers, which must be refused."""
+    return (
+        f"POST /actions/save HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        f"Authorization: Bearer {token}\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}"
+    ).encode()
+
+
+@contextmanager
+def _serving(app, tmp_path, actions, *, post=None, **server_options):
+    """Serve ``actions`` from a fresh runtime over an inline queue by default.
+
+    Every test here needs the same thing: a runtime, a private token file, a
+    server that dispatches on the calling thread, and an unload afterwards. Only
+    the actions and the occasional limit or custom ``post`` differ.
+    """
+    from qgis_sdk.http import PluginHttpServer
 
     runtime = _runtime(app)
+    options = {
+        "post": post if post is not None else (lambda callback: callback()),
+        "token_file": tmp_path / "token",
+        "actions": actions,
+        **server_options,
+    }
     try:
-        with PluginHttpServer(
-            runtime,
-            post=pending.put,
-            token_file=tmp_path / "token",
-            actions=("modal", "echo"),
-            deadline=10,
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            first: dict = {}
-            second: dict = {}
-            threads = [
-                threading.Thread(
-                    target=lambda: first.update(
-                        r=_call(server.port, token, "modal", {"value": "outer"})
-                    )
-                ),
-                threading.Thread(
-                    target=lambda: (
-                        second.update(
-                            r=_call(server.port, token, "echo", {"value": "inner"})
-                        ),
-                        inner_done.set(),
-                    )
-                ),
-            ]
-            threads[0].start()
-            # Only ask for the second call once the first handler is inside its
-            # nested loop, so the ordering under test is deterministic.
-            threading.Thread(
-                target=lambda: (
-                    modal_entered.wait(5),
-                    threads[1].start(),
-                ),
-                daemon=True,
-            ).start()
-            deadline = time.monotonic() + 15
-            while any(thread.is_alive() for thread in threads):
-                assert time.monotonic() < deadline, "nested dispatch did not finish"
-                try:
-                    pending.get(timeout=0.02)()
-                except queue.Empty:
-                    pass
-            assert first["r"][0] == 200, first
-            assert second["r"][0] == 200, second
-            assert json.loads(first["r"][1]) == {"value": "outer"}
-            assert json.loads(second["r"][1]) == {"value": "inner"}
-            assert max(state.seen) == 1, (
-                f"a nested loop dispatched a second call: {state.seen}"
-            )
-            assert finished["echo"] >= finished["modal"], (
-                "the second call ran inside the first handler"
-            )
+        with PluginHttpServer(runtime, **options) as server:
+            yield server
     finally:
         runtime.unload()
 
 
+def test_a_nested_event_loop_defers_the_second_call_instead_of_reentering(
+    tmp_path: Path,
+):
+    harness = _NestedHarness()
+    with _serving(
+        harness.app(),
+        tmp_path,
+        ("modal", "echo"),
+        post=harness.pending.put,
+        deadline=10,
+    ) as server:
+        token = (tmp_path / "token").read_text().strip()
+        first, second = harness.dispatch(server.port, token)
+
+    assert first["r"][0] == 200, first
+    assert second["r"][0] == 200, second
+    assert json.loads(first["r"][1]) == {"value": "outer"}
+    assert json.loads(second["r"][1]) == {"value": "inner"}
+    assert max(harness.state.seen) == 1, (
+        f"a nested loop dispatched a second call: {harness.state.seen}"
+    )
+    assert harness.finished["echo"] >= harness.finished["modal"], (
+        "the second call ran inside the first handler"
+    )
+
+
 def test_an_inline_post_host_still_serializes_concurrent_calls(tmp_path: Path):
-    from qgis_sdk.http import PluginHttpServer
 
     state = _Overlap()
     app = QgisSdkPlugin(id="serialized", title="Serialized")
@@ -176,85 +405,46 @@ def test_an_inline_post_host_still_serializes_concurrent_calls(tmp_path: Path):
         finally:
             state.leave()
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("slow",),
-            deadline=10,
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            results: list = []
-            threads = [
-                threading.Thread(
-                    target=lambda value=value: results.append(
-                        _call(server.port, token, "slow", {"value": value})
-                    )
+    with _serving(app, tmp_path, ("slow",), deadline=10) as server:
+        token = (tmp_path / "token").read_text().strip()
+        results: list = []
+        threads = [
+            threading.Thread(
+                target=lambda value=value: results.append(
+                    _call(server.port, token, "slow", {"value": value})
                 )
-                for value in ("one", "two")
-            ]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join(timeout=20)
-            assert sorted(status for status, _ in results) == [200, 200]
-            assert max(state.seen) == 1, f"handlers overlapped: {state.seen}"
-    finally:
-        runtime.unload()
+            )
+            for value in ("one", "two")
+        ]
+        _run_threads(threads)
+        assert sorted(status for status, _ in results) == [200, 200]
+        assert max(state.seen) == 1, f"handlers overlapped: {state.seen}"
 
 
 def test_a_handler_waiting_on_its_own_api_gets_host_busy(tmp_path: Path):
-    import http.client
-
-    from qgis_sdk.http import PluginHttpServer
-
     nested: dict = {}
     app = QgisSdkPlugin(id="reentrant", title="Reentrant")
 
     @app.action(id="outer", title="Outer")
     def outer(ctx: PluginContext, value: str) -> str:
-        connection = http.client.HTTPConnection("127.0.0.1", nested["port"], timeout=15)
-        try:
-            connection.request(
-                "POST",
-                "/actions/outer",
-                body=json.dumps({"value": "inner"}),
-                headers={
-                    "Authorization": f"Bearer {nested['token']}",
-                    "Content-Type": "application/json",
-                },
-            )
-            response = connection.getresponse()
-            nested["result"] = (response.status, response.read())
-        finally:
-            connection.close()
+        nested["result"] = _call(
+            nested["port"], nested["token"], "outer", {"value": "inner"}
+        )
         return value
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("outer",),
-            deadline=0.5,
-        ) as server:
-            nested["port"] = server.port
-            nested["token"] = (tmp_path / "token").read_text().strip()
-            started = time.monotonic()
-            status, body = _call(server.port, nested["token"], "outer", {"value": "x"})
-            elapsed = time.monotonic() - started
-            # The inner request waits for its turn, then fails rather than
-            # running inside the outer handler; the outer call still succeeds.
-            assert status == 200 and json.loads(body) == {"value": "x"}
-            inner_status, inner_body = nested["result"]
-            assert inner_status == 503
-            assert json.loads(inner_body)["error"]["code"] == "host_busy"
-            assert elapsed < 10, "the listener must not deadlock"
-    finally:
-        runtime.unload()
+    with _serving(app, tmp_path, ("outer",), deadline=0.5) as server:
+        nested["port"] = server.port
+        nested["token"] = (tmp_path / "token").read_text().strip()
+        started = time.monotonic()
+        status, body = _call(server.port, nested["token"], "outer", {"value": "x"})
+        elapsed = time.monotonic() - started
+        # The inner request waits for its turn, then fails rather than
+        # running inside the outer handler; the outer call still succeeds.
+        assert status == 200 and json.loads(body) == {"value": "x"}
+        inner_status, inner_body = nested["result"]
+        assert inner_status == 503
+        assert json.loads(inner_body)["error"]["code"] == "host_busy"
+        assert elapsed < 10, "the listener must not deadlock"
 
 
 def test_the_owner_thread_is_refused_promptly_instead_of_waiting(
@@ -293,22 +483,12 @@ def test_a_backlog_is_drained_flat_instead_of_one_frame_per_request():
     failed as a ``RecursionError`` raised inside unrelated code. The stack must
     stay the same depth no matter how long the backlog is.
     """
-    import sys
-
     from qgis_sdk.http._queue import GuiQueue, _Work
 
     depths: list[int] = []
 
-    def depth() -> int:
-        frames = 0
-        frame = sys._getframe()
-        while frame is not None:
-            frames += 1
-            frame = frame.f_back
-        return frames
-
     def measure() -> int:
-        depths.append(depth())
+        depths.append(_stack_depth())
         return 1
 
     queue = GuiQueue(post=lambda callback: callback(), deadline=10)
@@ -334,23 +514,10 @@ def test_a_request_taken_as_the_deadline_expires_is_answered_not_dropped():
 
     handed_over: list[bool] = []
 
-    class Claimed(deque):
-        """A queue whose item the owner has taken but not yet announced."""
-
-        def remove(self, work):
-            def hand_over() -> None:
-                work.picked.set()
-                work.value = "late"
-                work.done.set()
-
-            threading.Timer(0.01, hand_over).start()
-            handed_over.append(True)
-            raise ValueError(f"{work!r} is not in deque")
-
     # `post` that does nothing: this queue has no owner thread of its own, so
     # the only thing that can settle the request is the hand-over above.
     queue = GuiQueue(post=lambda callback: None, deadline=0.2)
-    queue._items = Claimed()  # type: ignore[assignment]
+    queue._items = _ClaimedQueue(handed_over)  # type: ignore[assignment]
     started = time.monotonic()
 
     assert queue.call(lambda: "already running") == "late"
@@ -378,59 +545,36 @@ def test_a_request_nobody_picks_up_is_still_reported():
 def test_connection_limit_rejects_overload_and_recovers(tmp_path: Path):
     import socket
 
-    from qgis_sdk.http import PluginHttpServer
-
-    app = QgisSdkPlugin(id="limited", title="Limited")
-
-    @app.action(id="echo", title="Echo")
-    def echo(ctx: PluginContext, value: str) -> str:
-        return value
-
-    runtime = _runtime(app)
+    app = _echo_app("limited", "Limited")
     stalled = []
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("echo",),
-            max_connections=2,
-            request_read_timeout=2,
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            try:
-                # Silent connections hold both handler slots without sending a
-                # request line, which is how a slow or hostile client behaves.
-                for _ in range(2):
-                    stalled.append(
-                        socket.create_connection(("127.0.0.1", server.port), timeout=3)
-                    )
-                # A fixed sleep would race connection acceptance under load, so
-                # wait until the slots are actually held.
-                status = _until_busy(
-                    lambda: _probe_status(server.port, token, "echo", {"value": "x"}),
-                    budget=10,
+    with _serving(
+        app, tmp_path, ("echo",), max_connections=2, request_read_timeout=2
+    ) as server:
+        token = (tmp_path / "token").read_text().strip()
+        try:
+            # Silent connections hold both handler slots without sending a
+            # request line, which is how a slow or hostile client behaves.
+            for _ in range(2):
+                stalled.append(
+                    socket.create_connection(("127.0.0.1", server.port), timeout=3)
                 )
-                assert status == 503, f"an overloaded listener answered {status}"
-            finally:
-                for sock in stalled:
-                    sock.close()
-                stalled.clear()
-            deadline = time.monotonic() + 5
-            status = 503
-            while status == 503 and time.monotonic() < deadline:
-                status = _probe_status(server.port, token, "echo", {"value": "x"})
-                if status == 503:
-                    time.sleep(0.05)
-            assert status == 200, "capacity must recover after the clients leave"
-    finally:
-        runtime.unload()
+            # A fixed sleep would race connection acceptance under load, so
+            # wait until the slots are actually held.
+            status = _until_busy(
+                lambda: _probe_status(server.port, token, "echo", {"value": "x"}),
+                budget=10,
+            )
+            assert status == 503, f"an overloaded listener answered {status}"
+        finally:
+            for sock in stalled:
+                sock.close()
+            stalled.clear()
+        status = _until_available(server.port, token, "echo", {"value": "x"})
+        assert status == 200, "capacity must recover after the clients leave"
 
 
 def test_slow_header_trickle_hits_an_absolute_deadline(tmp_path: Path):
     import socket
-
-    from qgis_sdk.http import PluginHttpServer
 
     app = QgisSdkPlugin(id="slow_header", title="Slow header")
 
@@ -438,36 +582,25 @@ def test_slow_header_trickle_hits_an_absolute_deadline(tmp_path: Path):
     def echo(ctx: PluginContext, value: str) -> str:
         return value
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("echo",),
-            max_connections=1,
-            request_read_timeout=0.4,
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            sock = socket.create_connection(("127.0.0.1", server.port), timeout=3)
-            try:
-                sock.sendall(b"POST /actions/echo HTTP/1.1\r\nHost: ")
-                closed = _trickle_until_closed(sock)
-            finally:
-                sock.close()
-            assert closed, "a client must not hold a request open by trickling bytes"
-            status = _eventually(
-                lambda: _probe_status(server.port, token, "echo", {"value": "x"})
-            )
-            assert status == 200, "the connection slot must return after the deadline"
-    finally:
-        runtime.unload()
+    with _serving(
+        app, tmp_path, ("echo",), max_connections=1, request_read_timeout=0.4
+    ) as server:
+        token = (tmp_path / "token").read_text().strip()
+        sock = socket.create_connection(("127.0.0.1", server.port), timeout=3)
+        try:
+            sock.sendall(b"POST /actions/echo HTTP/1.1\r\nHost: ")
+            closed = _trickle_until_closed(sock)
+        finally:
+            sock.close()
+        assert closed, "a client must not hold a request open by trickling bytes"
+        status = _eventually(
+            lambda: _probe_status(server.port, token, "echo", {"value": "x"})
+        )
+        assert status == 200, "the connection slot must return after the deadline"
 
 
 def test_slow_body_trickle_times_out_without_dispatch(tmp_path: Path):
     import socket
-
-    from qgis_sdk.http import PluginHttpServer
 
     seen: list[str] = []
     app = QgisSdkPlugin(id="slow_body", title="Slow body")
@@ -477,37 +610,25 @@ def test_slow_body_trickle_times_out_without_dispatch(tmp_path: Path):
         seen.append(value)
         return value
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("save",),
-            request_read_timeout=0.4,
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            header = (
-                f"POST /actions/save HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\n"
-                f"Authorization: Bearer {token}\r\n"
-                "Content-Type: application/json\r\nContent-Length: 1000\r\n\r\n"
-            ).encode()
-            sock = socket.create_connection(("127.0.0.1", server.port), timeout=3)
-            try:
-                sock.sendall(header)
-                closed = _trickle_until_closed(sock)
-            finally:
-                sock.close()
-            assert closed
-            assert seen == [], "a partial body must never reach the handler"
-    finally:
-        runtime.unload()
+    with _serving(app, tmp_path, ("save",), request_read_timeout=0.4) as server:
+        token = (tmp_path / "token").read_text().strip()
+        header = (
+            f"POST /actions/save HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\n"
+            f"Authorization: Bearer {token}\r\n"
+            "Content-Type: application/json\r\nContent-Length: 1000\r\n\r\n"
+        ).encode()
+        sock = socket.create_connection(("127.0.0.1", server.port), timeout=3)
+        try:
+            sock.sendall(header)
+            closed = _trickle_until_closed(sock)
+        finally:
+            sock.close()
+        assert closed
+        assert seen == [], "a partial body must never reach the handler"
 
 
 def test_a_truncated_body_never_dispatches(tmp_path: Path):
     import socket
-
-    from qgis_sdk.http import PluginHttpServer
 
     seen: list[str] = []
     app = QgisSdkPlugin(id="truncated", title="Truncated")
@@ -517,110 +638,61 @@ def test_a_truncated_body_never_dispatches(tmp_path: Path):
         seen.append(value)
         return value
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("save",),
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            header = (
-                f"POST /actions/save HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\n"
-                f"Authorization: Bearer {token}\r\n"
-                "Content-Type: application/json\r\nContent-Length: 200\r\n\r\n"
-            ).encode()
-            body = b'{"value": "sneaky"}'
-            with socket.create_connection(("127.0.0.1", server.port), timeout=3) as s:
-                s.sendall(header + body)
-                s.shutdown(socket.SHUT_WR)
-                assert s.recv(4096)
-            assert seen == [], "a truncated body must never reach the handler"
-            assert _call(server.port, token, "save", {"value": "ok"})[0] == 200
-            assert seen == ["ok"]
-    finally:
-        runtime.unload()
+    with _serving(app, tmp_path, ("save",)) as server:
+        token = (tmp_path / "token").read_text().strip()
+        header = (
+            f"POST /actions/save HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\n"
+            f"Authorization: Bearer {token}\r\n"
+            "Content-Type: application/json\r\nContent-Length: 200\r\n\r\n"
+        ).encode()
+        body = b'{"value": "sneaky"}'
+        with socket.create_connection(("127.0.0.1", server.port), timeout=3) as s:
+            s.sendall(header + body)
+            s.shutdown(socket.SHUT_WR)
+            assert s.recv(4096)
+        assert seen == [], "a truncated body must never reach the handler"
+        assert _call(server.port, token, "save", {"value": "ok"})[0] == 200
+        assert seen == ["ok"]
 
 
 def test_oversized_and_ambiguous_bodies_are_rejected_before_dispatch(
     tmp_path: Path,
 ):
-    from qgis_sdk.http import PluginHttpServer
 
     seen: list[str] = []
-    app = QgisSdkPlugin(id="bodies", title="Bodies")
-
-    @app.action(id="save", title="Save")
-    def save(ctx: PluginContext, value: str) -> str:
-        seen.append(value)
-        return value
-
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("save",),
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            oversized = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Content-Length": str(1024 * 1024 + 1),
-            }
-            assert _raw(server.port, "POST", "/actions/save", oversized, b"{}") == 413
-            doubled = (
-                f"POST /actions/save HTTP/1.1\r\nHost: 127.0.0.1:{server.port}\r\n"
-                f"Authorization: Bearer {token}\r\n"
-                "Content-Type: application/json\r\n"
-                "Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}"
-            ).encode()
-            with socket_connection(server.port) as sock:
-                sock.sendall(doubled)
-                assert b"400" in sock.recv(4096)
-            assert (
-                _raw(
-                    server.port,
-                    "POST",
-                    "/actions/save",
-                    {"Authorization": f"Bearer {token}", "Content-Length": "2"},
-                    b"[]",
-                )
-                == 400
-            ), "a non-object payload is refused"
-            assert seen == []
-    finally:
-        runtime.unload()
+    app = _save_app("bodies", seen)
+    with _serving(app, tmp_path, ("save",)) as server:
+        token = (tmp_path / "token").read_text().strip()
+        oversized = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Content-Length": str(1024 * 1024 + 1),
+        }
+        assert _raw(server.port, "POST", "/actions/save", oversized, b"{}") == 413
+        doubled = _doubled_length_request(server.port, token)
+        with socket_connection(server.port) as sock:
+            sock.sendall(doubled)
+            assert b"400" in sock.recv(4096)
+        assert (
+            _raw(
+                server.port,
+                "POST",
+                "/actions/save",
+                {"Authorization": f"Bearer {token}", "Content-Length": "2"},
+                b"[]",
+            )
+            == 400
+        ), "a non-object payload is refused"
+        assert seen == []
 
 
 def test_sse_capacity_reserves_a_connection_for_calls(tmp_path: Path):
 
-    from qgis_sdk.http import PluginHttpServer
-
-    app = QgisSdkPlugin(id="stream_capacity", title="Stream capacity")
-
-    @app.stream(id="watch", title="Watch", events={"data": int})
-    def watch(ctx: PluginContext) -> Iterator[dict]:
-        while True:
-            yield {"kind": "data", "payload": 1}
-
-    @app.action(id="echo", title="Echo")
-    def echo(ctx: PluginContext, value: str) -> str:
-        return value
-
-    runtime = _runtime(app)
-    first = None
-    second = None
+    app = _watch_app("stream_capacity", "Stream capacity", echo=True)
+    first = second = None
     try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("watch", "echo"),
-            max_connections=3,
-            max_event_streams=1,
+        with _serving(
+            app, tmp_path, ("watch", "echo"), max_connections=3, max_event_streams=1
         ) as server:
             token = (tmp_path / "token").read_text().strip()
             first = _open_stream(server.port, token, "watch")
@@ -630,23 +702,13 @@ def test_sse_capacity_reserves_a_connection_for_calls(tmp_path: Path):
             assert _call(server.port, token, "echo", {"value": "ok"})[0] == 200
             first.close()
             first = None
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline:
-                second.close()
-                second = _open_stream(server.port, token, "watch")
-                if second.status == 200:
-                    break
-                time.sleep(0.05)
+            second = _reopen_stream(server.port, token, "watch", second)
             assert second is not None and second.status == 200
     finally:
-        for response in (first, second):
-            if response is not None:
-                response.close()
-        runtime.unload()
+        _close_responses(first, second)
 
 
 def test_a_stalled_sse_reader_is_disposed(tmp_path: Path):
-    from qgis_sdk.http import PluginHttpServer
 
     disposed = threading.Event()
     payload = "x" * (64 * 1024)
@@ -660,30 +722,19 @@ def test_a_stalled_sse_reader_is_disposed(tmp_path: Path):
         finally:
             disposed.set()
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("watch",),
-            stream_write_timeout=0.3,
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            response = _open_stream(server.port, token, "watch")
-            try:
-                assert response.status == 200
-                assert disposed.wait(15), (
-                    "a client that never reads must not hold the subscription"
-                )
-            finally:
-                response.close()
-    finally:
-        runtime.unload()
+    with _serving(app, tmp_path, ("watch",), stream_write_timeout=0.3) as server:
+        token = (tmp_path / "token").read_text().strip()
+        response = _open_stream(server.port, token, "watch")
+        try:
+            assert response.status == 200
+            assert disposed.wait(15), (
+                "a client that never reads must not hold the subscription"
+            )
+        finally:
+            response.close()
 
 
 def test_an_oversized_sse_frame_closes_and_disposes_the_stream(tmp_path: Path):
-    from qgis_sdk.http import PluginHttpServer
 
     disposed = threading.Event()
     app = QgisSdkPlugin(id="huge_frame", title="Huge frame")
@@ -697,23 +748,14 @@ def test_an_oversized_sse_frame_closes_and_disposes_the_stream(tmp_path: Path):
         finally:
             disposed.set()
 
-    runtime = _runtime(app)
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("watch",),
-        ) as server:
-            token = (tmp_path / "token").read_text().strip()
-            response = _open_stream(server.port, token, "watch")
-            try:
-                assert response.status == 200
-                assert disposed.wait(10), "an oversized frame must end the stream"
-            finally:
-                response.close()
-    finally:
-        runtime.unload()
+    with _serving(app, tmp_path, ("watch",)) as server:
+        token = (tmp_path / "token").read_text().strip()
+        response = _open_stream(server.port, token, "watch")
+        try:
+            assert response.status == 200
+            assert disposed.wait(10), "an oversized frame must end the stream"
+        finally:
+            response.close()
 
 
 def _probe_status(port, token, action, payload) -> int:
@@ -841,12 +883,7 @@ def test_start_refuses_a_platform_without_private_token_permissions(
 
     from qgis_sdk.http import PluginHttpServer, QgisSdkHttpError, _server
 
-    app = QgisSdkPlugin(id="platform", title="Platform")
-
-    @app.action(id="echo", title="Echo")
-    def echo(ctx: PluginContext, value: str) -> str:
-        return value
-
+    app = _echo_app("platform", "Platform")
     runtime = _runtime(app)
     token_file = tmp_path / "token"
     try:
@@ -887,33 +924,16 @@ def test_error_codes_map_to_one_status_table():
 
 def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
     """An exhausted session budget is a retryable condition, not bad input."""
-    from qgis_sdk.http import PluginHttpServer
 
-    app = QgisSdkPlugin(id="session_budget", title="Session budget")
-
-    @app.stream(id="watch", title="Watch", events={"data": int})
-    def watch(ctx: PluginContext) -> Iterator[dict]:
-        while True:
-            yield {"kind": "data", "payload": 1}
-
-    runtime = _runtime(app)
+    app = _watch_app("session_budget", "Session budget")
     streams = []
     draining = []
     try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("watch",),
-            max_connections=130,
-            max_event_streams=128,
+        with _serving(
+            app, tmp_path, ("watch",), max_connections=130, max_event_streams=128
         ) as server:
             token = (tmp_path / "token").read_text().strip()
-            for _ in range(64):
-                response = _open_stream(server.port, token, "watch")
-                streams.append(response)
-                assert response.status == 200, "the budget must hold 64 sessions"
-                draining.append(_drain(response))
+            streams.extend(_open_streams(server.port, token, "watch", 64, draining))
             refused = _open_stream(server.port, token, "watch")
             streams.append(refused)
             assert refused.status == 503, "an exhausted budget must not look like 400"
@@ -923,7 +943,6 @@ def test_the_session_budget_answers_503_with_its_code(tmp_path: Path):
             response.close()
         for reader in draining:
             reader.join(timeout=5)
-        runtime.unload()
 
 
 def _port_is_open(server) -> bool:
@@ -940,129 +959,42 @@ def _port_is_open(server) -> bool:
 def test_a_close_delivers_the_reload_reply_before_severing_the_socket(tmp_path: Path):
     """A withdrawn caller must still receive its 503, not a reset connection.
 
-    The close wakes the caller out of the queue, and that reply has to travel
-    over a socket the same close is about to shut down; the handler is held in
-    the action until the close is already waiting, so only an ordered close can
-    deliver it.
+    The handler is held until the close is already waiting, so only an ordered
+    close can deliver the reply over a socket the same close is shutting down.
     """
-    from qgis_sdk.http import PluginHttpServer
-
-    app = QgisSdkPlugin(id="reload_reply", title="Reload reply")
-    entered = threading.Event()
-    release = threading.Event()
-
-    @app.action(id="hold", title="Hold")
-    def hold(ctx: PluginContext) -> str:
-        entered.set()
-        assert release.wait(10), "the test must release the action"
-        return "held"
-
-    runtime = _runtime(app)
-    responses = []
-    errors = []
-    closers = []
-    client = None
+    probe = _CloseProbe(tmp_path, "hold", close_grace=10).start()
     try:
-        server = PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("hold",),
-            deadline=10,
-            close_grace=10,
-        )
-        server.start()
-        token = (tmp_path / "token").read_text().strip()
-
-        def caller():
-            try:
-                responses.append(_call(server.port, token, "hold", {}))
-            except BaseException as error:  # noqa: BLE001 - relay to the test
-                errors.append(error)
-
-        client = threading.Thread(target=caller, daemon=True)
-        client.start()
-        assert entered.wait(10), "the action never started"
-
-        closers.append(threading.Thread(target=server.close, daemon=True))
-        closers[0].start()
+        probe.close_in_thread()
         # ``port`` refuses once the close has begun; give the close time to
-        # reach the point where it would sever the connections, so only an
-        # ordered close can still deliver the reply after the release.
+        # reach the point where an unordered close would have severed it.
         deadline = time.monotonic() + 10
-        while _port_is_open(server):
+        while _port_is_open(probe.server):
             assert time.monotonic() < deadline, "the close never started"
             time.sleep(0.01)
-        # Longer than serve_forever's poll, so an unordered close has already
-        # shut the connections down by now and an ordered one has not.
         time.sleep(1.5)
         released_at = time.monotonic()
-        release.set()
-
-        client.join(timeout=10)
-        assert not client.is_alive()
-        assert not errors, f"the client lost its reply: {errors!r}"
-        status, payload = responses[0]
+        probe.release.set()
+        probe.client.join(timeout=10)
+        assert not probe.client.is_alive()
+        assert not probe.errors, f"the client lost its reply: {probe.errors!r}"
+        status, payload = probe.responses[0]
         assert status == 503
         assert json.loads(payload)["error"]["code"] == "host_reloaded"
         assert time.monotonic() - released_at < 5, "the reply came late, not ordered"
     finally:
-        release.set()
-        for thread in closers:
-            thread.join(timeout=10)
-        if client is not None:
-            client.join(timeout=5)
-        runtime.unload()
+        probe.finish()
 
 
 def test_a_hung_handler_cannot_hold_a_close_open(tmp_path: Path):
     """The grace is bounded: a close returns even if an action never finishes."""
-    from qgis_sdk.http import PluginHttpServer
-
-    app = QgisSdkPlugin(id="hung_close", title="Hung close")
-    entered = threading.Event()
-    stuck = threading.Event()
-
-    @app.action(id="never", title="Never")
-    def never(ctx: PluginContext) -> str:
-        entered.set()
-        assert stuck.wait(30), "the test released the stuck action"
-        return "late"
-
-    runtime = _runtime(app)
-    errors = []
-    client = None
+    probe = _CloseProbe(tmp_path, "never", close_grace=0.2).start()
     try:
-        server = PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "token",
-            actions=("never",),
-            deadline=10,
-            close_grace=0.2,
-        )
-        server.start()
-        token = (tmp_path / "token").read_text().strip()
-
-        def caller():
-            try:
-                _call(server.port, token, "never", {})
-            except BaseException as error:  # noqa: BLE001 - the socket is cut
-                errors.append(error)
-
-        client = threading.Thread(target=caller, daemon=True)
-        client.start()
-        assert entered.wait(10), "the action never started"
-
         started = time.monotonic()
-        server.close()
+        probe.server.close()
         elapsed = time.monotonic() - started
         assert elapsed < 5, f"a close waited {elapsed:.1f}s for a stuck handler"
-        client.join(timeout=10)
-        assert not client.is_alive()
-        assert errors, "a severed reply must surface as a client error"
+        probe.client.join(timeout=10)
+        assert not probe.client.is_alive()
+        assert probe.errors, "a severed reply must surface as a client error"
     finally:
-        stuck.set()
-        if client is not None:
-            client.join(timeout=5)
-        runtime.unload()
+        probe.finish()

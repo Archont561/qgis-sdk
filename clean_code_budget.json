@@ -266,10 +266,6 @@
 		"CC101": 3,
 		"CC104": 3
 	},
-	"packages/qgis-sdk-python/tests/test_plugin_http_limits.py": {
-		"CC101": 17,
-		"CC104": 9
-	},
 	"packages/qgis-sdk-python/tests/test_plugin_rest.py": {
 		"CC101": 8,
 		"CC102": 1,
