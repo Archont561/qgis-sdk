@@ -468,7 +468,6 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/context.py": {
 		"CC101": 1,
-		"CC102": 1,
 		"CC104": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/features.py": {

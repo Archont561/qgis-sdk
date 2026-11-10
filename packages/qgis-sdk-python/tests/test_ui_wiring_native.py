@@ -33,7 +33,7 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native wiring needs QGIS: {error}", allow_module_level=True)
 
-from qgis_sdk.adapters.qgis import native_plugin_context
+from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 from qgis_sdk.adapters.surfaces import SurfaceHost
 from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
 from qgis_sdk.core import (
@@ -241,7 +241,9 @@ def host(qgis_app: Any, tmp_path: Path) -> Iterator[tuple[SurfaceHost, WiredPlug
     EVENTS.clear()
     FromFile.ui = str(path)  # type: ignore[misc]
     scope = ResourceScope()
-    context = native_plugin_context(scope, settings_prefix="wired")
+    context = native_plugin_context(
+        scope, NativeContextOptions(settings_prefix="wired")
+    )
     host = SurfaceHost(
         iface=None,
         plugin_id="wired",

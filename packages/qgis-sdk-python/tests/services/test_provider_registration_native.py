@@ -383,7 +383,11 @@ def test_a_plugin_over_a_context_without_processing_registers_nothing(
 def test_the_service_takes_a_record_or_the_same_keys_as_a_mapping(
     native_services: Services,
 ) -> None:
-    """A host names its services once: a ``ProcessingServices``, or the same keys."""
+    """A host names its services once: a ``ProcessingServices``, or the same keys.
+
+    A mapping is checked at construction, so a mistyped key is refused where the
+    host wrote it rather than becoming a provider registered with ``None`` inside.
+    """
     from qgis_sdk.adapters.qgis import NativeProcessing, ProcessingServices
 
     keys = {
@@ -398,10 +402,5 @@ def test_the_service_takes_a_record_or_the_same_keys_as_a_mapping(
     ):
         assert processing._scope is native_services.scope
 
-
-def test_a_mapping_must_name_only_services_that_exist() -> None:
-    """An unknown key or a missing one fails at construction, not at registration."""
-    from qgis_sdk.adapters.qgis import NativeProcessing
-
     with pytest.raises(TypeError):
-        NativeProcessing({"scope": None, "raster": None})
+        NativeProcessing({**keys, "raster": None})

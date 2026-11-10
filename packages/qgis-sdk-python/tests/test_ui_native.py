@@ -60,7 +60,7 @@ try:
         QSpinBox,
         QWidget,
     )
-    from qgis_sdk.adapters.qgis import native_plugin_context
+    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native forms need Qt and QGIS: {error}", allow_module_level=True)
 
@@ -131,7 +131,8 @@ def ctx(qgis_app, tmp_path: Path) -> Iterator[UiContext]:
     scope = ResourceScope()
     notifications = RecordingNotifications(scope)
     context = native_plugin_context(
-        scope, settings_prefix="demo.forms", notifications=notifications
+        scope,
+        NativeContextOptions(settings_prefix="demo.forms", notifications=notifications),
     )
     dataset = tmp_path / "sites.geojson"
     dataset.write_text(GEOJSON, encoding="utf-8")

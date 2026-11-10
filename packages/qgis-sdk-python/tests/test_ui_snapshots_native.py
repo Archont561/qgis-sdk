@@ -20,7 +20,7 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native snapshots need QGIS: {error}", allow_module_level=True)
 
-from qgis_sdk.adapters.qgis import native_plugin_context
+from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 from qgis_sdk.adapters.surfaces import SurfaceHost
 from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
 from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
@@ -59,7 +59,9 @@ class BetaPlugin:
 def _start(plugin_class: Any, plugin_id: str) -> SurfaceHost:
     """One plugin running on its own host, the way a scaffolded package does."""
     scope = ResourceScope()
-    context = native_plugin_context(scope, settings_prefix=plugin_id)
+    context = native_plugin_context(
+        scope, NativeContextOptions(settings_prefix=plugin_id)
+    )
     host = SurfaceHost(
         iface=None,
         plugin_id=plugin_id,

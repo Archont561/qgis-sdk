@@ -252,15 +252,16 @@ def app_context(
     difference from a Desktop plugin, and it is stated here rather than inferred
     from a missing attribute somewhere downstream (decision-52 point 4).
     """
-    from qgis_sdk.adapters.qgis import native_plugin_context
+    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 
     context = native_plugin_context(
         scope,
-        settings_prefix=plugin_id,
-        iface=None,
-        notifications=AppNotifications(window, tag=f"qgis-sdk app: {plugin_id}"),
-        host=Host.APP,
-        canvas=canvas,
+        NativeContextOptions(
+            settings_prefix=plugin_id,
+            notifications=AppNotifications(window, tag=f"qgis-sdk app: {plugin_id}"),
+            host=Host.APP,
+            canvas=canvas,
+        ),
     )
     return context if ui is None else context.with_services(ui=ui)
 

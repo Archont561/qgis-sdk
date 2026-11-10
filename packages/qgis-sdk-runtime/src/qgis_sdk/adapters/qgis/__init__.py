@@ -22,7 +22,7 @@ if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
     from .algorithms import NativeAlgorithms
     from .canvas import NativeCanvas
     from .connections import NativeConnections
-    from .context import IfaceDesktopAccess, native_plugin_context
+    from .context import IfaceDesktopAccess, NativeContextOptions, native_plugin_context
     from .features import NativeFeatureEditing, NativeFeatures
     from .jobs import DEFAULT_INTERVAL_MS, QgsJobPump
     from .layers import NativeLayers
@@ -49,6 +49,7 @@ __all__ = [
     "NativeAlgorithms",
     "NativeCanvas",
     "NativeConnections",
+    "NativeContextOptions",
     "NativeFeatureEditing",
     "NativeFeatures",
     "NativeLayers",
@@ -95,6 +96,7 @@ _EXPORTS: dict[str, str] = {
     "QgsServerHost": ".server",
     "QgsTaskWorkers": ".tasks",
     "ThreadPoolWorkers": ".workers",
+    "NativeContextOptions": ".context",
     "native_plugin_context": ".context",
 }
 

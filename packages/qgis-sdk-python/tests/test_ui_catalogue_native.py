@@ -91,7 +91,7 @@ def test_custom_accepts_a_built_widget_and_reparents_it(rendering: Rendering) ->
 
 
 def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
-    from qgis_sdk.adapters.qgis import native_plugin_context
+    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
     from qgis_sdk.adapters.surfaces import SurfaceHost
     from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
     from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
@@ -118,7 +118,9 @@ def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
         surfaces = (LegacyDialog,)
 
     scope = ResourceScope()
-    context = native_plugin_context(scope, settings_prefix="legacy_tools")
+    context = native_plugin_context(
+        scope, NativeContextOptions(settings_prefix="legacy_tools")
+    )
     host = SurfaceHost(
         iface=None,
         plugin_id="legacy_tools",

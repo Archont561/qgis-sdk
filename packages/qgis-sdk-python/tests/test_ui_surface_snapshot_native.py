@@ -18,7 +18,7 @@ try:
 except ImportError as error:  # pragma: no cover - depends on the host
     pytest.skip(f"native snapshots need QGIS: {error}", allow_module_level=True)
 
-from qgis_sdk.adapters.qgis import native_plugin_context
+from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 from qgis_sdk.adapters.snapshot import capture_surface
 from qgis_sdk.adapters.surfaces import SurfaceHost
 from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
@@ -61,7 +61,9 @@ class SnapshotPlugin:
 @pytest.fixture
 def host(qgis_app: Any) -> Iterator[SurfaceHost]:
     scope = ResourceScope()
-    context = native_plugin_context(scope, settings_prefix="snapshot_host")
+    context = native_plugin_context(
+        scope, NativeContextOptions(settings_prefix="snapshot_host")
+    )
     host = SurfaceHost(
         iface=None,
         plugin_id="snapshot_host",

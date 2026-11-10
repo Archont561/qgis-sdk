@@ -157,10 +157,13 @@ def make_rendering(
     if backend == "native":
         request.getfixturevalue("qgis_app")
         from qgis.core import QgsProject
-        from qgis_sdk.adapters.qgis import native_plugin_context
+        from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 
         context = native_plugin_context(
-            scope, settings_prefix="components", notifications=notifications
+            scope,
+            NativeContextOptions(
+                settings_prefix="components", notifications=notifications
+            ),
         )
     else:
         rasters = FakeRasters(scope)
