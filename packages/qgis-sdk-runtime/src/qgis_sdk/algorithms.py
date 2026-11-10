@@ -33,7 +33,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, get_args, get_origin
 
-from qgis_sdk.core import AlgorithmContext, JobContext, PluginContext
+from qgis_sdk.core import (
+    AlgorithmContext,
+    AlgorithmServices,
+    JobContext,
+    PluginContext,
+)
 from qgis_sdk.declarations import (
     Metadata,
     QgisSdkDeclarationError,
@@ -410,9 +415,9 @@ def invoke(
         progress=progress,
         cancellation=cancellation,
         scope=invocation_scope,
-        algorithms=algorithms,
-        project=project,
-        network=network,
+        services=AlgorithmServices(
+            algorithms=algorithms, project=project, network=network
+        ),
     )
     try:
         result = function(context, **inputs)

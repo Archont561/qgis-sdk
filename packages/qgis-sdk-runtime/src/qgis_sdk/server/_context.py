@@ -22,6 +22,7 @@ would need one can be reached from a hook. ``ctx.host`` is ``Host.SERVER``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import ClassVar
 
 from qgis_sdk.core.contexts import Capability, _Context
@@ -33,7 +34,22 @@ from qgis_sdk.services import Layers, Log, Project
 from ._request import ServerRequest
 from ._response import ServerResponse
 
-__all__ = ["ServerContext"]
+__all__ = ["ServerContext", "ServerServices"]
+
+
+@dataclass(frozen=True, slots=True)
+class ServerServices:
+    """What a hook's context may be handed for one request.
+
+    The four capabilities a request can make possible, each ``None`` when the
+    host cannot provide it: a capabilities-only deployment has no project, and a
+    host given no job service has nothing to submit through (decision-52).
+    """
+
+    project: Project | None = None
+    layers: Layers | None = None
+    log: Log | None = None
+    jobs: Jobs | None = None
 
 
 class ServerContext(_Context):
@@ -83,18 +99,13 @@ class ServerContext(_Context):
         scope: ResourceScope,
         request: ServerRequest,
         response: ServerResponse,
-        project: Project | None = None,
-        layers: Layers | None = None,
-        log: Log | None = None,
-        jobs: Jobs | None = None,
+        services: ServerServices | None = None,
     ) -> None:
+        services = services if services is not None else ServerServices()
         self._assemble(
             scope=scope,
             request=request,
             response=response,
             host=Host.SERVER,
-            _project=project,
-            _layers=layers,
-            _log=log,
-            _jobs=jobs,
+            **{f"_{name}": getattr(services, name) for name in self._capability_names},
         )

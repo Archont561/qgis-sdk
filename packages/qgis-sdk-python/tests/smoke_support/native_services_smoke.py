@@ -91,25 +91,27 @@ class NativeServicesReport:
     @property
     def passed(self) -> bool:
         """Return whether every native service stage produced its expected value."""
-        return (
-            self.qgis_initialised
-            and self.layer_opened
-            and self.layer_name == EXPECTED_NAME
-            and self.layer_geometry_type == EXPECTED_GEOMETRY
-            and self.layer_field_names == EXPECTED_FIELDS
-            and self.layer_crs == EXPECTED_CRS
-            and self.selection == SELECTED_FEATURES
-            and len(self.project_layer_ids) == 1
-            and self.scope_closed
-            and self.reads_refused_after_close
-            and self.settings_round_trip
-            and self.settings_refused_after_close
-            and self.notification_delivered
-            and self.notification_refused_after_close
-            and self.style_applied
-            and self.style_incompatible_refused
-            and self.theme_unchanged
-            and self.qgis_exited
+        return all(
+            (
+                self.qgis_initialised,
+                self.layer_opened,
+                self.layer_name == EXPECTED_NAME,
+                self.layer_geometry_type == EXPECTED_GEOMETRY,
+                self.layer_field_names == EXPECTED_FIELDS,
+                self.layer_crs == EXPECTED_CRS,
+                self.selection == SELECTED_FEATURES,
+                len(self.project_layer_ids) == 1,
+                self.scope_closed,
+                self.reads_refused_after_close,
+                self.settings_round_trip,
+                self.settings_refused_after_close,
+                self.notification_delivered,
+                self.notification_refused_after_close,
+                self.style_applied,
+                self.style_incompatible_refused,
+                self.theme_unchanged,
+                self.qgis_exited,
+            )
         )
 
     @classmethod

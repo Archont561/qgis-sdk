@@ -527,6 +527,21 @@ class UiContext(_Context):
         return self.streams.subscribe(stream, callback, owner=self.scope, **request)
 
 
+@dataclass(frozen=True, slots=True)
+class AlgorithmServices:
+    """Everything one invocation is handed that is not the runner's own state.
+
+    ``algorithms`` is always supplied; ``project`` and ``network`` are the two
+    capabilities a host may not have, so they default to ``None`` - absent, not
+    empty - and the context refuses them by name rather than handing a body a
+    service that could not work (decision-39).
+    """
+
+    algorithms: Algorithms
+    project: Project | None = None
+    network: Network | None = None
+
+
 class AlgorithmContext(_Context):
     """Execution-only capabilities for one Processing invocation.
 
@@ -563,17 +578,14 @@ class AlgorithmContext(_Context):
         progress: Progress,
         cancellation: Cancellation,
         scope: ResourceScope,
-        algorithms: Algorithms,
-        project: Project | None = None,
-        network: Network | None = None,
+        services: AlgorithmServices,
     ) -> None:
         self._assemble(
             progress=progress,
             cancellation=cancellation,
             scope=scope,
-            algorithms=algorithms,
-            _project=project,
-            _network=network,
+            algorithms=services.algorithms,
+            **{f"_{name}": getattr(services, name) for name in self._capability_names},
         )
 
 
@@ -655,6 +667,21 @@ class WorkerContext:
         return "WorkerContext(progress=..., cancellation=...)"
 
 
+@dataclass(frozen=True, slots=True)
+class JobServices:
+    """What one job attempt may be handed beyond its progress and scope.
+
+    A job can reach a worker pool, the network, Processing and its owner's
+    project; a host that has none of them leaves them ``None`` so reading the
+    capability fails by name instead of silently doing nothing (decision-39).
+    """
+
+    workers: Workers | None = None
+    network: Network | None = None
+    algorithms: Algorithms | None = None
+    project: Project | None = None
+
+
 class JobContext(_Context):
     """One job attempt, owned by a view unless plugin ownership is explicit.
 
@@ -695,17 +722,12 @@ class JobContext(_Context):
         progress: Progress,
         cancellation: Cancellation,
         scope: ResourceScope,
-        workers: Workers | None = None,
-        network: Network | None = None,
-        algorithms: Algorithms | None = None,
-        project: Project | None = None,
+        services: JobServices | None = None,
     ) -> None:
+        services = services if services is not None else JobServices()
         self._assemble(
             progress=progress,
             cancellation=cancellation,
             scope=scope,
-            _workers=workers,
-            _network=network,
-            _algorithms=algorithms,
-            _project=project,
+            **{f"_{name}": getattr(services, name) for name in self._capability_names},
         )

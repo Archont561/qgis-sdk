@@ -357,15 +357,17 @@ def test_the_description_is_the_manifest_in_the_generator_shape() -> None:
         # scalars, or a union - anything open-ended would generate a type a page
         # cannot narrow, which is the drift this assertion exists to catch.
         items = result.get("items") or {}
-        assert (
-            result.get("additionalProperties") is False
-            or result.get("type") in {"null", "number", "string", "boolean"}
-            or "anyOf" in result
-            # An array of one declared object is narrowable in exactly the way
-            # a page needs: the element has a name and a closed shape.
-            or (
-                result.get("type") == "array"
-                and items.get("additionalProperties") is False
+        # An array of one declared object is narrowable in exactly the way a
+        # page needs: the element has a name and a closed shape.
+        array_of_one_closed_object = (
+            result.get("type") == "array" and items.get("additionalProperties") is False
+        )
+        assert any(
+            (
+                result.get("additionalProperties") is False,
+                result.get("type") in {"null", "number", "string", "boolean"},
+                "anyOf" in result,
+                array_of_one_closed_object,
             )
         ), action["id"]
     for stream in described["streams"]:

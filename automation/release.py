@@ -2182,6 +2182,38 @@ def _cmd_stamp(args: argparse.Namespace) -> int:
     return 0
 
 
+def _reported_example_windows(scope: str, versions: ManifestVersions) -> dict[str, str]:
+    """The compatibility windows every example project declares for a release.
+
+    The examples are what the released tools are qualified against; a window
+    that excludes the release would make the stamped tools refuse them
+    (VERSION004), so a mismatch is reported as a release error rather than a
+    warning.
+    """
+    windows_reported: dict[str, str] = {}
+    for example in _EXAMPLE_PYPROJECTS:
+        if not example.is_file():
+            continue
+        windows = read_example_windows(example.read_text(encoding="utf-8"))
+        released = {
+            "qgis-sdk-runtime": versions.runtime if scope != "tools" else None,
+            "qgis-sdk-tools": versions.tools if scope != "runtime" else None,
+        }
+        for name, (lower, upper) in windows.items():
+            windows_reported[f"{_example_label(example)}: {name}"] = (
+                f">={lower},<{upper}"
+            )
+            shipped = released[name]
+            if shipped is None or example_window_includes(lower, upper, shipped):
+                continue
+            raise QgisSdkReleaseVersionError(
+                f"{_example_label(example)} declares {name}>={lower},<{upper} "
+                f"but this release ships {name} {shipped}; run stamp --scope "
+                f"{scope} --version {shipped} so the example follows"
+            )
+    return windows_reported
+
+
 def _cmd_verify_versions(args: argparse.Namespace) -> int:
     scope_raw = (getattr(args, "scope", "") or "").strip()
     expected_raw = (getattr(args, "version", "") or "").strip()
@@ -2291,34 +2323,7 @@ def _cmd_verify_versions(args: argparse.Namespace) -> int:
                 )
             reported[scope]["runtime_range"] = f">={lower},<{upper}"
         if scope in ("python", "runtime", "tools"):
-            # The examples are the projects the released tools are qualified
-            # against; a window that excludes the release would make the
-            # stamped tools refuse them (VERSION004).
-            windows_reported: dict[str, str] = {}
-            for example in _EXAMPLE_PYPROJECTS:
-                if not example.is_file():
-                    continue
-                windows = read_example_windows(example.read_text(encoding="utf-8"))
-                released = {
-                    "qgis-sdk-runtime": (
-                        versions.runtime if scope != "tools" else None
-                    ),
-                    "qgis-sdk-tools": versions.tools if scope != "runtime" else None,
-                }
-                for name, (lower, upper) in windows.items():
-                    windows_reported[f"{_example_label(example)}: {name}"] = (
-                        f">={lower},<{upper}"
-                    )
-                    shipped = released[name]
-                    if shipped is None or example_window_includes(
-                        lower, upper, shipped
-                    ):
-                        continue
-                    raise QgisSdkReleaseVersionError(
-                        f"{_example_label(example)} declares {name}>={lower},<{upper} "
-                        f"but this release ships {name} {shipped}; run stamp --scope "
-                        f"{scope} --version {shipped} so the example follows"
-                    )
+            windows_reported = _reported_example_windows(scope, versions)
             if windows_reported:
                 reported[scope]["example_windows"] = windows_reported
     if getattr(args, "json", False):

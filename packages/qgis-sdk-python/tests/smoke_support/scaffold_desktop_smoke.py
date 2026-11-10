@@ -197,21 +197,23 @@ class DesktopScaffoldReport:
     @property
     def passed(self) -> bool:
         """Return whether Desktop discovered, started, drove and released it."""
-        return (
-            self.discovered
-            and self.metadata_matches
-            and self.loaded
-            and self.runtime_running
-            and self.action_result == PING_VALUE
-            and self.provider_registered
-            and self.console_context_shared
-            and "ping" in self.console_actions
-            and bool(self.console_algorithms)
-            and self.console_action_result == PING_VALUE
-            and self.console_closed
-            and self.unloaded
-            and self.runtime_stopped
-            and self.provider_released
+        return all(
+            (
+                self.discovered,
+                self.metadata_matches,
+                self.loaded,
+                self.runtime_running,
+                self.action_result == PING_VALUE,
+                self.provider_registered,
+                self.console_context_shared,
+                "ping" in self.console_actions,
+                bool(self.console_algorithms),
+                self.console_action_result == PING_VALUE,
+                self.console_closed,
+                self.unloaded,
+                self.runtime_stopped,
+                self.provider_released,
+            )
         )
 
     @classmethod

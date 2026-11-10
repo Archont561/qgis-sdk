@@ -17,7 +17,7 @@ from qgis.core import (
 )
 
 from qgis_sdk.algorithms import AlgorithmDescription, invoke
-from qgis_sdk.core import AlgorithmContext, ResourceScope
+from qgis_sdk.core import AlgorithmContext, AlgorithmServices, ResourceScope
 from qgis_sdk.models import output_kinds
 
 from ._feedback import _FeedbackCancellation, _FeedbackProgress
@@ -134,8 +134,10 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
                 progress=_FeedbackProgress(feedback),
                 cancellation=_FeedbackCancellation(feedback),
                 scope=scope,
-                algorithms=self._bridge.algorithm_service,
-                project=self._bridge.project,
+                services=AlgorithmServices(
+                    algorithms=self._bridge.algorithm_service,
+                    project=self._bridge.project,
+                ),
             ),
             add_to_project=False,
             **values,

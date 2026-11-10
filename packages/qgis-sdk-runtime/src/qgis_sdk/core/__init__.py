@@ -3,7 +3,9 @@
 from .contexts import (
     GUI_BOUND_CAPABILITIES,
     AlgorithmContext,
+    AlgorithmServices,
     JobContext,
+    JobServices,
     PluginContext,
     PluginServices,
     UiContext,
@@ -30,10 +32,12 @@ from .scope import ResourceScope
 __all__ = [
     "GUI_BOUND_CAPABILITIES",
     "AlgorithmContext",
+    "AlgorithmServices",
     "Handoff",
     "Host",
     "Job",
     "JobContext",
+    "JobServices",
     "JobState",
     "LoopRegistry",
     "LoopState",

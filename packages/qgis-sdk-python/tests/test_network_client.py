@@ -13,6 +13,7 @@ from collections.abc import Coroutine
 
 import pytest
 from qgis_sdk.core import (
+    AlgorithmServices,
     JobState,
     PluginServices,
     ResourceScope,
@@ -405,7 +406,7 @@ def test_a_view_and_an_algorithm_see_the_same_client(
         progress=_Progress(),
         cancellation=_Never(),
         scope=scope,
-        algorithms=_NoAlgorithms(),
+        services=AlgorithmServices(algorithms=_NoAlgorithms()),
     )
     with pytest.raises(QgisSdkUnsupportedCapabilityError):
         _ = algorithm.network

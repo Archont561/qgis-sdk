@@ -162,4 +162,24 @@ Two CC101 findings appeared on the way, both from the extra line a record costs 
 
 **What is left.** `core/contexts.py` still carries `AlgorithmContext` (8 parameters, 5 call sites) and `ServerContext` (`server/_context.py`, 8 parameters, 12 call sites, 9 of them positional) - the same treatment, a following slice with its own call sites to move. CC202 remains a different cut: `HostAuthority` at 18 methods and `Dispatcher` at 21 need collaborators, not records.
 
+**Slice 11 (landed): the execution and request contexts, as records.** 808 -> 804 findings. `AlgorithmServices`, `JobServices` and `ServerServices` join `PluginServices` and `UiServices`, so every context with a long constructor now takes one record: `AlgorithmContext(progress, cancellation, scope, AlgorithmServices(algorithms, project=..., network=...))`, `JobContext(progress, cancellation, scope, JobServices(...))` and `ServerContext(scope, request, response, ServerServices(...))`.
+
+`AlgorithmContext` was the awkward one: CC102 counts `self`, so the five-argument form that replaced its eight-parameter constructor still read as six and kept the finding. Moving `algorithms` - the one service the runner always supplies - into the record brings the constructor to four arguments and removes the entry for real. `JobContext` had the same shape (eight parameters) and was in the same file, so it moved in the same commit; `ServerContext`'s nine positional call sites needed no edits at all, because they never passed a capability. The three `__init__`s are now the same comprehension over `_capability_names` as the plugin and view contexts, and the two files that carried CC102 are clean.
+
+The nine `ServerContext` positional calls and the seven `JobContext` calls are the difference from slice 10: the rewriter had to fold an existing `services=` record, capability keywords and positional arguments into one record each, and the string templates in `scaffold/generate.py` were checked for the same keywords (they build a context with no capabilities, so they stayed as they were). `server/_host.py` lost a CC101 too: its two constructor branches collapsed into one call over the record.
+
+**Tests.** Local suite and `tests/scripts` green; ruff, alint and the clean-code gate clean.
+
+**What is left.** The parameter-object work in this task is done: no context constructor carries a long parameter list. CC202 remains a different cut (`HostAuthority` at 18 methods, `Dispatcher` at 21 need collaborators, not records), and AC 4 is still the threshold review. The rest of the budget is the long tail of CC101/CC104 across tests, tools and `automation/`.
+
+**Slice 12 (landed): the small rules, refactored rather than suppressed.** 804 -> 777 findings. Every CC301, CC302 and CC103 entry is gone, and 27 findings in total: the two excessive-nesting functions, the eight long boolean chains and the ten return ladders, plus the CC101/CC303 entries that shared those functions.
+
+- CC302: the smoke reports' `passed`/`qualified` predicates are `all((...))` over a tuple of named stages, and the schema-shape assertion is `any((...))` with its array case named. No threshold changed; the chain simply has a name now.
+- CC301: `automation/release.py`'s example-window loop is `_reported_example_windows(scope, versions)`; `check/jobs.py`'s import walk is `_import_names` / `_import_from_names`.
+- CC103: every ladder became a decision, not a `return` count. `ui/form.py` and `generate/_emit.py` now dispatch widget and JSON type through `_WIDGET_INPUTS`, `_TYPE_RENDERERS` and `_VALIDATORS`; `testing/expressions.py` uses a `_COMPARISONS` table; `adapters/webengine.py` decides one scheme per method; the rest are single-exit decisions or small helpers.
+
+CC101 (442), CC104 (122), CC102 (109), CC303 (52) and the class-size rules (52) are the remaining bulk. They are per-function, per-class edits across 259 files, not one mechanical trade: a generated helper for every long test function would pass the metric and make the tree worse, which is not what AC 1 asks for.
+
+**Tests.** 3078 passed, 130 skipped, 7 deselected; `tests/scripts` 332; ruff, alint and the clean-code gate clean.
+
 <!-- SECTION:NOTES:END -->

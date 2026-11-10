@@ -155,12 +155,14 @@ class SchedulerReport:
     @property
     def passed(self) -> bool:
         """Return whether the harness ran and every deciding criterion held."""
-        return (
-            self.qgis_initialised
-            and self.event_loop_polled
-            and self.author_cleanup_ran
-            and self.verdict == VERDICT_ADOPT
-            and self.scope_review_criteria == ()
+        return all(
+            (
+                self.qgis_initialised,
+                self.event_loop_polled,
+                self.author_cleanup_ran,
+                self.verdict == VERDICT_ADOPT,
+                self.scope_review_criteria == (),
+            )
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -487,10 +489,14 @@ def _run_phases(application: object) -> SchedulerReport:
     harness.pool.waitForDone(POOL_DRAIN_MS)
 
     criteria = {
-        "gui_responsive_for_scheduled_work": scheduled.polled
-        and control_polled
-        and scheduled.summary.responsive(GUI_GAP_BUDGET_MS)
-        and blocking_phase.stalled(GUI_GAP_BUDGET_MS),
+        "gui_responsive_for_scheduled_work": all(
+            (
+                scheduled.polled,
+                control_polled,
+                scheduled.summary.responsive(GUI_GAP_BUDGET_MS),
+                blocking_phase.stalled(GUI_GAP_BUDGET_MS),
+            )
+        ),
         "handoff_delivered_on_gui_thread": delivered_only_on(
             harness.gui_thread, list(scheduled.delivery_thread_ids)
         )

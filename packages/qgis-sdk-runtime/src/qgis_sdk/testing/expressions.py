@@ -18,8 +18,9 @@ that needs it is a test that needs QGIS.
 
 from __future__ import annotations
 
+import operator as _operator
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -134,33 +135,37 @@ class ParsedExpression:
         return result
 
 
-def _compare(row: Mapping[str, Any], field: str, operator: str, value: Any) -> bool:
+_COMPARISONS: dict[str, Callable[[Any, Any], bool]] = {
+    "=": _operator.eq,
+    "==": _operator.eq,
+    "!=": _operator.ne,
+    "<>": _operator.ne,
+    "<": _operator.lt,
+    "<=": _operator.le,
+    ">": _operator.gt,
+    ">=": _operator.ge,
+}
+"""The binary operators the expression subset admits, by their QGIS spelling."""
+
+
+def _compare(row: Mapping[str, Any], field: str, op: str, value: Any) -> bool:
     current = row.get(field)
-    if operator == "IS NULL":
+    if op == "IS NULL":
         return current is None
-    if operator == "IS NOT NULL":
+    if op == "IS NOT NULL":
         return current is not None
     if current is None:
         # A null compares false with everything but its own null test, which is
         # what SQL and QgsExpression both do; returning False here keeps the
         # fake and the native adapter agreeing on the common case.
         return False
+    compare = _COMPARISONS.get(op)
+    if compare is None:
+        raise QgisSdkUnsupportedCapabilityError(op)
     try:
-        if operator in ("=", "=="):
-            return current == value
-        if operator in ("!=", "<>"):
-            return current != value
-        if operator == "<":
-            return current < value
-        if operator == "<=":
-            return current <= value
-        if operator == ">":
-            return current > value
-        if operator == ">=":
-            return current >= value
+        return compare(current, value)
     except TypeError:
         return False
-    raise QgisSdkUnsupportedCapabilityError(operator)
 
 
 class ExpressionSubset:

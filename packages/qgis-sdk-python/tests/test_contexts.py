@@ -5,8 +5,10 @@ from dataclasses import dataclass, field
 import pytest
 from qgis_sdk.core import (
     AlgorithmContext,
+    AlgorithmServices,
     Host,
     JobContext,
+    JobServices,
     PluginContext,
     PluginServices,
     ResourceScope,
@@ -75,7 +77,7 @@ def test_a_provided_capability_is_the_very_instance_the_host_passed() -> None:
         progress=RecordingProgress(),
         cancellation=ControlledCancellation(),
         scope=ResourceScope(),
-        workers=workers,
+        services=JobServices(workers=workers),
     )
 
     assert context.workers is workers
@@ -109,7 +111,7 @@ def test_a_capability_read_on_a_closed_scope_is_refused_as_closed() -> None:
         progress=RecordingProgress(),
         cancellation=ControlledCancellation(),
         scope=scope,
-        workers=FakeWorkers(),
+        services=JobServices(workers=FakeWorkers()),
     )
     scope.close()
 
@@ -320,7 +322,7 @@ def test_algorithm_receives_execution_capabilities_not_plugin_state() -> None:
         progress=progress,
         cancellation=cancellation,
         scope=owner.child(),
-        algorithms=NoAlgorithms(),
+        services=AlgorithmServices(algorithms=NoAlgorithms()),
     )
 
     context.progress.report(0.5)
@@ -436,6 +438,35 @@ def test_a_plugin_context_hands_back_the_injected_services() -> None:
     for name, service in sentinels.items():
         assert getattr(context, name) is service
     assert context.capabilities == frozenset(sentinels)
+
+
+def test_an_algorithm_context_hands_back_its_services_record() -> None:
+    project, network = object(), object()
+    context = AlgorithmContext(
+        progress=RecordingProgress(),
+        cancellation=ControlledCancellation(),
+        scope=ResourceScope(),
+        services=AlgorithmServices(
+            algorithms=NoAlgorithms(), project=project, network=network
+        ),
+    )
+
+    assert context.project is project
+    assert context.network is network
+    assert context.capabilities == frozenset({"project", "network"})
+
+
+def test_an_algorithm_context_without_a_record_refuses_its_capabilities() -> None:
+    context = AlgorithmContext(
+        progress=RecordingProgress(),
+        cancellation=ControlledCancellation(),
+        scope=ResourceScope(),
+        services=AlgorithmServices(algorithms=NoAlgorithms()),
+    )
+
+    assert context.capabilities == frozenset()
+    with pytest.raises(QgisSdkUnsupportedCapabilityError, match="project"):
+        _ = context.project
 
 
 def test_requiring_a_service_on_a_closed_scope_fails_closed() -> None:

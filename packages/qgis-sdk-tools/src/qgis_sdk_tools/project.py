@@ -233,9 +233,7 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
                 (),
             )  # CONFIG001 from check_project already names the parse error
         return None, (_missing_plugin(f"{root} has no {PYPROJECT}"),)
-    tool = table(data, "tool", "qgis-sdk")
-    if tool is None:
-        return None, (_missing_plugin("[tool.qgis-sdk] plugin is not set"),)
+    tool = table(data, "tool", "qgis-sdk") or {}
     findings: list[Diagnostic] = []
     spec = tool.get("plugin")
     if spec is None:

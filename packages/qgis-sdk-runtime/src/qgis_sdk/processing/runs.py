@@ -349,25 +349,35 @@ def destination_path(run_directory: Path, parameter: ParameterInfo) -> Path:
     return run_directory / _destination_name(parameter)
 
 
+def _output_kind_class(kind: str) -> str:
+    """The result class a declared output kind produces."""
+    if kind in VECTOR_OUTPUT_KINDS:
+        return "vector"
+    if kind in MULTI_OUTPUT_KINDS:
+        return "layers"
+    if kind == "outputFolder":
+        return "directory"
+    if kind in FILE_OUTPUT_KINDS:
+        return "file"
+    return "value"
+
+
+def _destination_class(kind: str) -> str:
+    """The result class a declared destination parameter produces."""
+    if kind in ("sink", "vectorDestination"):
+        return "vector"
+    if kind == "folderDestination":
+        return "directory"
+    return "file"
+
+
 def output_class(info: AlgorithmInfo, name: str) -> str:
     """``vector``, ``layers``, ``file``, ``directory`` or ``value`` for one
     output name."""
     for output in info.outputs:
         if output.name == name:
-            if output.kind in VECTOR_OUTPUT_KINDS:
-                return "vector"
-            if output.kind in MULTI_OUTPUT_KINDS:
-                return "layers"
-            if output.kind == "outputFolder":
-                return "directory"
-            if output.kind in FILE_OUTPUT_KINDS:
-                return "file"
-            return "value"
+            return _output_kind_class(output.kind)
     parameter = info.parameter(name)
     if parameter is not None and parameter.destination:
-        if parameter.kind in ("sink", "vectorDestination"):
-            return "vector"
-        if parameter.kind == "folderDestination":
-            return "directory"
-        return "file"
+        return _destination_class(parameter.kind)
     return "value"
