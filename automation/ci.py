@@ -36,9 +36,6 @@ NATIVE_COMMAND = [
     # and errored test ids in the log, which is what `native()` annotates and
     # what a rerun otherwise has to rediscover.
     "-rfEs",
-    # TEMPORARY diagnostic: name the test a Qt abort kills, since an abort
-    # leaves no summary for `failures()` to read.
-    "-v",
 ]
 LTS_PROBE = (
     "import qgis.core, qgis.server; "
@@ -125,7 +122,26 @@ def failures(text: str, limit: int = 60) -> list[str]:
     return named[:limit]
 
 
+def abort_at(text: str) -> int:
+    """Where a Qt abort starts its own faulthandler dump, or the end of the log."""
+    found = text.find("Fatal Python error")
+    return len(text) if found == -1 else found
+
+
+def before_abort(text: str, lines: int = 120) -> str:
+    """The log up to a Qt abort, which ends the process with a long dump of its own.
+
+    Taken from the tail, the window would show only C frames: the test that was
+    running appears just before the dump, not inside it.
+    """
+    return text[: abort_at(text)]
+
+
 def native(command: list[str]) -> int:
+    # Unbuffered, because a Qt abort ends the process wherever it is: behind a
+    # block buffer the log stops thousands of bytes short of the test that was
+    # running, and the annotation below then names the wrong one.
+    os.environ["PYTHONUNBUFFERED"] = "1"
     log = Path("native-layers.log")
     status = run_logged(command, log)
     if status == 0:
@@ -139,6 +155,21 @@ def native(command: list[str]) -> int:
     if status == 5 and reason:
         print(f"::warning::native layers did not run: {reason.group()}")
         return 0
+    diagnose(text)
+    return status
+
+
+def diagnose(text: str) -> None:
+    """Annotate a failed native run: what failed, where, and on what host.
+
+    The four windows answer different questions and a Qt abort needs all of
+    them: ``failures()`` reads the short summary, :func:`before_abort` the
+    progress line before the dump, :func:`abort_at` the frames inside it, and the
+    probe what QGIS and Qt the runner actually had.
+    """
+    named = failures(text)
+    if named:
+        annotation(f"native layers: {len(named)} failed", "\n".join(named))
     probe = subprocess.run(
         [sys.executable, "-c", ENVIRONMENT_PROBE],
         stdout=subprocess.PIPE,
@@ -147,18 +178,15 @@ def native(command: list[str]) -> int:
         errors="replace",
         check=False,
     )
-    named = failures(text)
-    if named:
-        annotation(f"native layers: {len(named)} failed", "\n".join(named))
     annotation("native layers: environment", "\n".join(probe.stdout.splitlines()[-20:]))
-    # A Qt abort ends the process with a faulthandler dump of its own, and that
-    # dump is longer than the window below: taken from the tail, the annotation
-    # would show only C frames. Cut it off first, so what is annotated is the
-    # last test that started and the Python frames leading into the abort.
-    abort = text.find("Fatal Python error")
-    before = text if abort == -1 else text[:abort]
-    annotation("native layers: pytest", "\n".join(before.splitlines()[-120:]))
-    return status
+    annotation(
+        "native layers: pytest", "\n".join(before_abort(text).splitlines()[-120:])
+    )
+    at = abort_at(text)
+    if at < len(text):
+        # The frame that aborted is in the first lines of the dump; its tail is
+        # only C addresses.
+        annotation("native layers: abort", "\n".join(text[at:].splitlines()[:60]))
 
 
 #: The reference projects' own suites, one run each: the pure target of
