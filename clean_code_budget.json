@@ -964,13 +964,6 @@
 		"CC103": 2,
 		"CC303": 1
 	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/generate/_generator.py": {
-		"CC101": 6,
-		"CC104": 1,
-		"CC201": 1,
-		"CC202": 1,
-		"CC303": 2
-	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/generate/_names.py": {
 		"CC101": 1
 	},
