@@ -1,0 +1,69 @@
+---
+id: decision-81
+title: Pass a constructor one record instead of its fields as keyword parameters
+date: '2026-11-10'
+status: accepted
+---
+## Context
+
+The clean-code budget counts parameter lists over five as CC102, and after the
+Processing slice the runtime's were all the same shape: a constructor or factory
+whose caller names five to eight facts that travel together anyway.
+
+`NativeProcessing(layers=..., algorithms=..., project=..., scope=...,
+authority=..., rasters=...)` was built by the runtime context and two test
+harnesses, and the service immediately folded its arguments back into a record
+of its own. `Dispatcher.from_description(description, handlers, *, streams,
+authorize, ledger, theme)` did the same thing with three options every caller
+spelled out to vary one. `HostAuthority.grant_file` unpacked five keyword
+arguments into the `_FilePolicy` the grant machinery already read. And
+`native_plugin_context(scope, *, ...)` - seven parameters, eleven locals - was
+the adapter's own entry point, called from `host()`, the app host and nine test
+harnesses.
+
+## Decision
+
+**A constructor that needs more than five facts takes them as one record, and the
+record is a frozen dataclass defined next to what consumes it.**
+
+- `ProcessingServices` for `NativeProcessing`, exported from
+  `qgis_sdk.adapters.qgis.processing` and `qgis_sdk.adapters.qgis`;
+- `DispatchSetup` for `Dispatcher.from_description`, exported from
+  `qgis_sdk.bridge`;
+- `FilePolicy` for `HostAuthority.grant_file`, exported from
+  `qgis_sdk.bridge.authority` and `qgis_sdk.bridge`;
+- `NativeContextOptions` for `native_plugin_context`, exported from
+  `qgis_sdk.adapters.qgis`.
+
+Three properties belong to the record rather than to the call site:
+
+1. **It is immutable** (`frozen=True`), so the ordinary value can be a shared
+   default (`_DEFAULT_FILE_POLICY`) and a caller cannot be handed a record that
+   another caller then edits.
+2. **It validates nothing it does not own.** `ProcessingServices` accepts a plain
+   mapping as well, because a host that already holds the services in a dict has
+   the keys, not the type; the mapping is expanded at construction, so a typo is
+   a `TypeError` there rather than a provider registered with `None` inside it.
+3. **It is the thing the implementation already reads.** `FilePolicy` *was*
+   `_FilePolicy`; the split was the visibility, not a new layer. A record that
+   duplicates an internal structure is two records.
+
+A single-parameter or two-parameter call does not get a record. `ctx.files.grant_file(
+path, operations=..., overwrite=...)` is the plugin's own door, it never exposed a
+grant's lifetime or ceiling, and three parameters are not the shape the rule is
+about.
+
+## Consequences
+
+- Budget 817 -> 813 findings, four CC102 entries, with no behaviour change: each
+  record is constructed at the call site from the same values, and every call
+  site was rewritten in the commit that introduced it.
+- `ProcessingServices` is now the public way to build the Processing service.
+  `NativeProcessing` keeps no keyword surface at all - a caller that wants one
+  writes the record - which is what finally removed the finding the Processing
+  slice left behind.
+- The two remaining CC102 entries in `core/contexts.py` (`PluginContext` at 22
+  parameters, `ViewContext`/`UiContext` at 21) are the same trade applied to a
+  much larger surface, and they are recorded in TASK-167 rather than folded in
+  here. CC202 (class size: `HostAuthority` at 18 methods, `Dispatcher` at 21) is a
+  different cut - collaborators, not records - and is recorded there too.
