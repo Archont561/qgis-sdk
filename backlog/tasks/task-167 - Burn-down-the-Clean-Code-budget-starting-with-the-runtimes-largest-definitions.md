@@ -216,4 +216,16 @@ The rest is extraction behind the same assertions. CLI setup has `_cli`, `_outpu
 
 **What is left.** 707 findings in 253 files: CC101 402, CC104 105, CC102 102, CC303 46, CC201 26, CC202 26. The next worst files are `testing/fakes.py` and `test_plugin_rest.py` (16 each), then `check/ui.py` (15). CC202 and AC 4 remain the two different cuts after the long tail.
 
+**Slice 16 (landed): the two 16-finding files, as records.** 707 -> 675 findings, 253 -> 251 files. `tests/scripts/test_release.py`'s successor on the worst-files list was a tie: `packages/qgis-sdk-python/tests/test_plugin_rest.py` (8 CC101, 7 CC104, 1 CC102) and `packages/qgis-sdk-runtime/src/qgis_sdk/testing/fakes.py` (4 CC101, 6 CC102, 3 CC201, 1 CC202, 2 CC303). Both have zero now, with no threshold change, no suppression and no finding added anywhere else.
+
+In `test_plugin_rest.py`, `_Request` is the one record the seven-parameter `request()` used to spell out, and `_ServerOptions` is the record the loopback server setup takes. `_serving`, `_PostProbe`, `_QueueProbe` and the named app/assertion helpers replace eight long arrangement blocks; the offline npm, the stream frames, the Python client and the CLI call each have one owner. The 16 tests still test the same thing (208 -> 216 in the release file, 16 unchanged here).
+
+In `fakes.py`, six long setup signatures became records: `FakeAlgorithmSetup`, `DeclaredOutput`, `VectorLayerDeclaration`, `OtherLayerDeclaration`, `ConnectionDeclaration` and `TableDeclaration`. All 82 direct call sites moved in the same change, including the four `getattr(..., "register")` calls in the service contracts and the `ALGORITHM_TEST` string template in `scaffold/generate.py`; the generated starter test parses and imports the records. `FakeAlgorithms.run` is a six-line body over `_validate_run`, `_resolve_outputs` and a `_PATH_OUTPUTS` table, which removed its 13-branch ladder. `FakeLayers` inherits the four other-kind openers from `_OtherKindLayers` and delegates dataset construction to `_vector_dataset` / `_other_dataset`, so it has 13 methods and is under 200 lines. `FakeConnections.open_layer` is one loop over `_table_entry`, `_refuse_unopenable` and `_missing_table`. Three call sites that grew past 30 lines on the way got named declaration helpers instead of a rebaseline upward.
+
+**Tests.** `test_plugin_rest.py` 16 passed; package suite 3078 passed, 130 skipped, 7 deselected; examples 26 passed / 8 skipped; `tests/scripts` 340; alint policy 20; backlog guards 21; ruff, format, alint and the clean-code gate clean. The gate's eight downward diffs are the two files leaving the budget.
+
+**Documentation impact.** No user-facing documentation changes: the service contracts, the generated starter test and every assertion are unchanged. This note and decision-81's follow-through record the records and the ratchet.
+
+**What is left.** 675 findings in 251 files: CC101 390, CC104 98, CC102 95, CC303 44, CC201 23, CC202 25. `check/ui.py` (15) is the next worst file. CC202 and AC 4 remain the two different cuts after the long tail. PR #197 merged first, so this slice ships on its own PR.
+
 <!-- SECTION:NOTES:END -->

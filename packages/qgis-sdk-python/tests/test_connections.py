@@ -32,7 +32,12 @@ from qgis_sdk.models import (
     connection_item_from_wire,
     connection_test_from_wire,
 )
-from qgis_sdk.testing import FakeConnections, FakeLayers
+from qgis_sdk.testing import (
+    ConnectionDeclaration,
+    FakeConnections,
+    FakeLayers,
+    TableDeclaration,
+)
 
 # -- the models --------------------------------------------------------------
 
@@ -173,24 +178,32 @@ def registry():
 
 
 def _declared(connections: FakeConnections) -> None:
-    connections.declare_connection("survey", schemas=(), accepts_auth=False)
-    connections.declare_table(
-        "survey",
-        "roads",
-        kind="vector",
-        geometries=("line",),
-        fields=("name",),
-        crs="EPSG:4326",
+    connections.declare_connection(
+        ConnectionDeclaration("survey", schemas=(), accepts_auth=False)
     )
-    connections.declare_connection("lagoon", provider="postgres", schemas=("public",))
     connections.declare_table(
-        "lagoon",
-        "points",
-        provider="postgres",
-        schema="public",
-        kind="vector",
-        geometries=("point",),
-        fields=("kind",),
+        TableDeclaration(
+            "survey",
+            "roads",
+            kind="vector",
+            geometries=("line",),
+            fields=("name",),
+            crs="EPSG:4326",
+        )
+    )
+    connections.declare_connection(
+        ConnectionDeclaration("lagoon", provider="postgres", schemas=("public",))
+    )
+    connections.declare_table(
+        TableDeclaration(
+            "lagoon",
+            "points",
+            provider="postgres",
+            schema="public",
+            kind="vector",
+            geometries=("point",),
+            fields=("kind",),
+        )
     )
 
 
@@ -303,12 +316,11 @@ def test_opening_a_schema_is_refused_as_what_it_is(registry):
 
 def test_opening_a_raster_table_is_refused_by_name(registry):
     connections, _, _ = registry
-    connections.declare_connection("warehouse", provider="postgres", schemas=())
+    connections.declare_connection(
+        ConnectionDeclaration("warehouse", provider="postgres", schemas=())
+    )
     connections.declare_table(
-        "warehouse",
-        "dem",
-        provider="postgres",
-        kind="raster",
+        TableDeclaration("warehouse", "dem", provider="postgres", kind="raster")
     )
 
     with pytest.raises(QgisSdkUnsupportedCapabilityError) as refused:
@@ -331,10 +343,9 @@ def test_test_answers_a_verdict_not_an_exception(registry):
     connections, _, _ = registry
     _declared(connections)
     connections.declare_connection(
-        "warehouse",
-        provider="postgres",
-        valid=False,
-        message="connection refused",
+        ConnectionDeclaration(
+            "warehouse", provider="postgres", valid=False, message="connection refused"
+        )
     )
 
     assert connections.test("ogr", "survey").valid is True
@@ -391,4 +402,4 @@ def test_a_table_is_declared_under_its_connection_not_before_it(registry):
     connections, _, _ = registry
 
     with pytest.raises(QgisSdkDeclarationError):
-        connections.declare_table("survey", "roads")
+        connections.declare_table(TableDeclaration("survey", "roads"))

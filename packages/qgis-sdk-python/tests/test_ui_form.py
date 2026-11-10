@@ -43,6 +43,7 @@ from qgis_sdk.testing import (
     FakeProject,
     FakeViewControl,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from qgis_sdk.ui import (
     Button,
@@ -117,7 +118,9 @@ def ctx(tmp_path: Path) -> Iterator[UiContext]:
     dataset = tmp_path / "sites.geojson"
     dataset.write_text(GEOJSON, encoding="utf-8")
     layers.register(
-        dataset, name="sites", geometry_type="point", field_names=("name", "kind")
+        VectorLayerDeclaration(
+            dataset, name="sites", geometry_type="point", field_names=("name", "kind")
+        )
     )
     project = FakeProject(layers, scope)
     project.add_layer(layers.open_vector(dataset).id)

@@ -24,6 +24,7 @@ from qgis_sdk.models import (
     QgisSdkLayerNotFoundError,
     VectorLayerInfo,
 )
+from qgis_sdk.testing import VectorLayerDeclaration
 
 if TYPE_CHECKING:
     from .conftest import Services
@@ -203,7 +204,12 @@ def test_an_explicit_output_cannot_replace_the_input_dataset(
     register = getattr(services.layers, "register", None)
     if register is not None:
         register(
-            source, name="input", geometry_type="point", field_names=("id", "value")
+            VectorLayerDeclaration(
+                source,
+                name="input",
+                geometry_type="point",
+                field_names=("id", "value"),
+            )
         )
     info = services.layers.open_vector(source)
     before = source.read_bytes()
@@ -227,7 +233,12 @@ def test_an_explicit_existing_destination_is_preserved(
     register = getattr(services.layers, "register", None)
     if register is not None:
         register(
-            source, name="input", geometry_type="point", field_names=("id", "value")
+            VectorLayerDeclaration(
+                source,
+                name="input",
+                geometry_type="point",
+                field_names=("id", "value"),
+            )
         )
     info = services.layers.open_vector(source)
     destination = tmp_path / "existing.geojson"

@@ -11,14 +11,20 @@ because they implement its service protocols and must version with them
 from .app import FakeAppBackend, FakeAppSurface, FakeLoop
 from .canvas import DEFAULT_EXTENT, FakeCanvas
 from .fakes import (
+    ConnectionDeclaration,
+    DeclaredOutput,
     FakeAlgorithms,
+    FakeAlgorithmSetup,
     FakeConnections,
     FakeLayers,
     FakeProcessing,
     FakeSettings,
     FakeStyles,
+    OtherLayerDeclaration,
     RecordingLog,
     RecordingNotifications,
+    TableDeclaration,
+    VectorLayerDeclaration,
 )
 from .features import FakeEditingSession, FakeFeatures, FakeLayer
 from .files import FakeFiles
@@ -45,6 +51,9 @@ from .ui import (
 __all__ = [
     "DEFAULT_EXTENT",
     "BuiltSurface",
+    "ConnectionDeclaration",
+    "DeclaredOutput",
+    "FakeAlgorithmSetup",
     "FakeAlgorithms",
     "FakeAppBackend",
     "FakeAppSurface",
@@ -68,12 +77,15 @@ __all__ = [
     "FakeViewControl",
     "FakeWorkers",
     "OpenedSurface",
+    "OtherLayerDeclaration",
     "PendingRequest",
     "QgisSdkNetworkFakeError",
     "RecordingLog",
     "RecordingNotifications",
     "RegisteredFilter",
+    "TableDeclaration",
     "ThreadWorkers",
+    "VectorLayerDeclaration",
     "build_surface",
     "fake_ui_context",
     "reply",

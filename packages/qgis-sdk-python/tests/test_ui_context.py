@@ -20,10 +20,12 @@ from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.jobs import JobHandle, JobService, JobStatus, job
 from qgis_sdk.models import QgisSdkUiError, QgisSdkUnsupportedCapabilityError
 from qgis_sdk.testing import (
+    FakeAlgorithmSetup,
     FakeUi,
     FakeViewControl,
     FakeWorkers,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from qgis_sdk.ui import Dialog
 from qgis_sdk.ui.actions import ActionCall, ViewActions
@@ -304,7 +306,9 @@ def test_surface_can_apply_styles_directly_without_an_action(
     layers = FakeLayers(scope)
     source = Path("fixtures/reference/points.geojson")
     layers.register(
-        source, name="points", geometry_type="point", field_names=("id", "value")
+        VectorLayerDeclaration(
+            source, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
     layer = layers.open_vector(source)
     styles = FakeStyles(layers, scope)
@@ -319,7 +323,7 @@ def test_surface_can_use_algorithms_directly_without_an_action(
 ) -> None:
     from qgis_sdk.testing import FakeAlgorithms, FakeLayers, fake_ui_context
 
-    algorithms = FakeAlgorithms(FakeLayers(scope), scope)
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(FakeLayers(scope), scope))
     context = fake_ui_context(scope, algorithms=algorithms)
 
     assert context.algorithms.describe("native:buffer").id == "native:buffer"

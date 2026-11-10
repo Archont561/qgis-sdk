@@ -9,7 +9,8 @@ import os
 import stat
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -22,29 +23,79 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def request(port, method, path, *, token=None, origin=None, body=None, host=None):
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+@dataclass(frozen=True, slots=True)
+class _Request:
+    """One loopback HTTP request, including its optional headers and JSON body."""
+
+    port: int
+    method: str
+    path: str
+    token: str | None = None
+    origin: str | None = None
+    body: object | None = None
+    host: str | None = None
+
+
+def request(req: _Request):
+    connection = http.client.HTTPConnection("127.0.0.1", req.port, timeout=3)
     headers = {}
-    if token is not None:
-        headers["Authorization"] = "Bearer " + token
-    if origin is not None:
-        headers["Origin"] = origin
-    if host is not None:
-        headers["Host"] = host
-    data = None if body is None else json.dumps(body)
+    if req.token is not None:
+        headers["Authorization"] = "Bearer " + req.token
+    if req.origin is not None:
+        headers["Origin"] = req.origin
+    if req.host is not None:
+        headers["Host"] = req.host
+    data = None if req.body is None else json.dumps(req.body)
     if data is not None:
         headers["Content-Type"] = "application/json"
     try:
-        connection.request(method, path, body=data, headers=headers)
+        connection.request(req.method, req.path, body=data, headers=headers)
         response = connection.getresponse()
         return response.status, response.read()
     finally:
         connection.close()
 
 
-def test_rest_lists_only_selected_actions_and_calls_them(tmp_path: Path):
+@dataclass(frozen=True, slots=True)
+class _ServerOptions:
+    """How one loopback plugin server is wired for a test."""
+
+    actions: tuple[str, ...] = ()
+    post: Callable[[Callable[[], None]], None] | None = None
+    token_name: str = "token"
+    deadline: float = 10
+    host: str = "127.0.0.1"
+
+
+def _server(runtime, tmp_path, options=None):
+    """One server over an already started runtime, with the test defaults."""
     from qgis_sdk.http import PluginHttpServer
 
+    options = options or _ServerOptions()
+    return PluginHttpServer(
+        runtime,
+        post=options.post or (lambda callback: callback()),
+        token_file=tmp_path / options.token_name,
+        actions=options.actions,
+        host=options.host,
+        deadline=options.deadline,
+    )
+
+
+@contextlib.contextmanager
+def _serving(app, tmp_path, options=None):
+    """Start a plugin, serve it over loopback, then close and unload it."""
+    options = options or _ServerOptions()
+    runtime = _started(app)
+    token_file = tmp_path / options.token_name
+    try:
+        with _server(runtime, tmp_path, options) as server:
+            yield server, token_file
+    finally:
+        runtime.unload()
+
+
+def _selected_actions_app():
     app = QgisSdkPlugin(id="rest_test", title="REST test")
 
     @app.action(id="echo", title="Echo")
@@ -55,56 +106,54 @@ def test_rest_lists_only_selected_actions_and_calls_them(tmp_path: Path):
     def private(ctx: PluginContext) -> str:
         return "secret"
 
-    scope = ResourceScope()
-    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
-    runtime.start()
-    token_file = tmp_path / "token"
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=token_file,
-            actions=("echo",),
-        ) as server:
-            token = token_file.read_text().strip()
-            assert request(server.port, "GET", "/plugin")[0] == 401
-            assert request(server.port, "GET", "/plugin", token="wrong")[0] == 401
-            assert (
-                request(
-                    server.port,
-                    "GET",
-                    "/plugin",
-                    token=token,
-                    origin="https://evil.example",
-                )[0]
-                == 403
-            )
-            assert request(server.port, "POST", "/sessions", token=token)[0] == 404
-            status, body = request(server.port, "GET", "/plugin", token=token)
-            assert status == 200
-            assert [entry["id"] for entry in json.loads(body)["actions"]] == ["echo"]
-            status, body = request(
+    return app
+
+
+def _assert_selected_description(server, token):
+    assert request(_Request(server.port, "GET", "/plugin"))[0] == 401
+    assert request(_Request(server.port, "GET", "/plugin", token="wrong"))[0] == 401
+    assert (
+        request(
+            _Request(
                 server.port,
-                "POST",
-                "/actions/echo",
+                "GET",
+                "/plugin",
                 token=token,
-                body={"value": "hello"},
+                origin="https://evil.example",
             )
-            assert status == 200
-            assert json.loads(body) == {"value": "hello"}
-            status, _ = request(
-                server.port, "POST", "/actions/private", token=token, body={}
-            )
-            assert status == 404
-    finally:
-        runtime.unload()
+        )[0]
+        == 403
+    )
+    assert request(_Request(server.port, "POST", "/sessions", token=token))[0] == 404
+    status, body = request(_Request(server.port, "GET", "/plugin", token=token))
+    assert status == 200
+    assert [entry["id"] for entry in json.loads(body)["actions"]] == ["echo"]
 
 
-def test_rest_stream_sends_ordered_events_and_closes(tmp_path: Path):
-    import http.client
+def _assert_selected_calls(server, token):
+    status, body = request(
+        _Request(
+            server.port,
+            "POST",
+            "/actions/echo",
+            token=token,
+            body={"value": "hello"},
+        )
+    )
+    assert status == 200
+    assert json.loads(body) == {"value": "hello"}
+    status, _ = request(
+        _Request(server.port, "POST", "/actions/private", token=token, body={})
+    )
+    assert status == 404
 
-    from qgis_sdk.http import PluginHttpServer
 
+def _assert_selected_actions(server, token):
+    _assert_selected_description(server, token)
+    _assert_selected_calls(server, token)
+
+
+def _finite_stream_app():
     app = QgisSdkPlugin(id="rest_stream", title="REST stream")
 
     @app.stream(id="ticks", title="Ticks", events={"data": int})
@@ -112,54 +161,43 @@ def test_rest_stream_sends_ordered_events_and_closes(tmp_path: Path):
         yield {"kind": "data", "payload": start}
         yield {"kind": "data", "payload": start + 1}
 
-    scope = ResourceScope()
-    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
-    runtime.start()
-    token_file = tmp_path / "token"
+    return app
+
+
+def _read_frames(response, count=3):
+    frames = []
+    for _ in range(count):
+        line = response.readline().decode().strip()
+        assert line.startswith("data: ")
+        frames.append(json.loads(line.removeprefix("data: ")))
+        assert response.readline() == b"\n"
+    return frames
+
+
+def _assert_ordered_stream(port, token):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
     try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=token_file,
-            actions=("ticks",),
-        ) as server:
-            token = token_file.read_text().strip()
-            conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=3)
-            try:
-                conn.request(
-                    "POST",
-                    "/streams/ticks",
-                    body='{"start": 3}',
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                    },
-                )
-                response = conn.getresponse()
-                assert response.status == 200
-                assert response.getheader("Content-Type") == "text/event-stream"
-                frames = []
-                for _ in range(3):
-                    line = response.readline().decode().strip()
-                    assert line.startswith("data: ")
-                    frames.append(json.loads(line.removeprefix("data: ")))
-                    assert response.readline() == b"\n"
-                assert [f["seq"] for f in frames] == [0, 1, 2]
-                assert [f["event"]["payload"] for f in frames[:2]] == [3, 4]
-                assert frames[-1]["terminal"]["kind"] == "complete"
-            finally:
-                conn.close()
+        conn.request(
+            "POST",
+            "/streams/ticks",
+            body='{"start": 3}',
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response = conn.getresponse()
+        assert response.status == 200
+        assert response.getheader("Content-Type") == "text/event-stream"
+        frames = _read_frames(response)
     finally:
-        runtime.unload()
+        conn.close()
+    assert [frame["seq"] for frame in frames] == [0, 1, 2]
+    assert [frame["event"]["payload"] for frame in frames[:2]] == [3, 4]
+    assert frames[-1]["terminal"]["kind"] == "complete"
 
 
-def test_python_client_and_cli_can_call_a_running_plugin(tmp_path: Path):
-    import subprocess
-    import sys
-
-    from qgis_sdk.http import PluginHttpServer
-    from qgis_sdk_tools.rest import PluginClient, PluginClientError
-
+def _client_app():
     app = QgisSdkPlugin(id="client_test", title="Client test")
 
     @app.action(id="echo", title="Echo")
@@ -170,60 +208,50 @@ def test_python_client_and_cli_can_call_a_running_plugin(tmp_path: Path):
     def ticks(ctx: PluginContext) -> Iterator[dict]:
         yield {"kind": "data", "payload": 7}
 
-    scope = ResourceScope()
-    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
-    runtime.start()
-    token_file = tmp_path / "token"
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=token_file,
-            actions=("echo", "ticks"),
-        ) as server:
-            url = f"http://127.0.0.1:{server.port}"
-            client = PluginClient(url, token_file=token_file)
-            assert client.describe()["actions"][0]["id"] == "echo"
-            assert client.call("echo", {"value": "python"}) == "python"
-            frames = list(client.stream("ticks", {}))
-            assert frames[0]["event"]["payload"] == 7
-            assert frames[-1]["terminal"]["kind"] == "complete"
-            with pytest.raises(PluginClientError):
-                PluginClient("http://example.com:1234", token_file=token_file)
-            with pytest.raises(PluginClientError):
-                client.call("echo", {})
-            command = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "qgis_sdk_tools",
-                    "plugin",
-                    "call",
-                    "echo",
-                    "--url",
-                    url,
-                    "--token-file",
-                    str(token_file),
-                    "--args",
-                    '{"value":"cli"}',
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            assert command.returncode == 0, command.stderr
-            assert json.loads(command.stdout) == "cli"
-    finally:
-        runtime.unload()
+    return app
 
 
-def test_closing_the_client_stream_disposes_its_generator(tmp_path: Path):
-    import threading
+def _assert_python_client(url, token_file):
+    from qgis_sdk_tools.rest import PluginClient, PluginClientError
 
-    from qgis_sdk.http import PluginHttpServer
-    from qgis_sdk_tools.rest import PluginClient
+    client = PluginClient(url, token_file=token_file)
+    assert client.describe()["actions"][0]["id"] == "echo"
+    assert client.call("echo", {"value": "python"}) == "python"
+    frames = list(client.stream("ticks", {}))
+    assert frames[0]["event"]["payload"] == 7
+    assert frames[-1]["terminal"]["kind"] == "complete"
+    with pytest.raises(PluginClientError):
+        PluginClient("http://example.com:1234", token_file=token_file)
+    with pytest.raises(PluginClientError):
+        client.call("echo", {})
 
-    closed = threading.Event()
+
+def _call_cli(url, token_file, args):
+    import subprocess
+    import sys
+
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "qgis_sdk_tools",
+            "plugin",
+            "call",
+            "echo",
+            "--url",
+            url,
+            "--token-file",
+            str(token_file),
+            "--args",
+            args,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _closing_stream_app(closed):
     app = QgisSdkPlugin(id="rest_close", title="REST close")
 
     @app.stream(id="watch", title="Watch", events={"data": int})
@@ -234,26 +262,186 @@ def test_closing_the_client_stream_disposes_its_generator(tmp_path: Path):
         finally:
             closed.set()
 
-    scope = ResourceScope()
-    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
-    runtime.start()
-    token_file = tmp_path / "token"
-    try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=token_file,
-            actions=("watch",),
-        ) as server:
-            client = PluginClient(
-                f"http://127.0.0.1:{server.port}", token_file=token_file
-            )
-            stream = client.stream("watch", {})
-            assert next(stream)["event"]["payload"] == 1
-            stream.close()
-            assert closed.wait(5), "server did not dispose disconnected stream"
-    finally:
-        runtime.unload()
+    return app
+
+
+def _recording_app(seen, name):
+    app = QgisSdkPlugin(id=name, title=name)
+
+    @app.action(id="echo", title="Echo")
+    def echo(ctx: PluginContext, value: str) -> str:
+        seen.append(value)
+        return value
+
+    return app
+
+
+class _PostProbe:
+    """An owner-thread post that can hold callbacks instead of running them."""
+
+    def __init__(self, *, stall=False):
+        self.callbacks = []
+        self.submitted = threading.Event()
+        self.stall = stall
+
+    def __call__(self, callback):
+        if self.stall:
+            self.callbacks.append(callback)
+            self.submitted.set()
+        else:
+            callback()
+
+
+def _assert_single_endpoint(runtime, tmp_path):
+    from qgis_sdk.http import QgisSdkHttpError
+
+    first = _server(
+        runtime, tmp_path, _ServerOptions(actions=("echo",), token_name="one")
+    )
+    first.start()
+    with (
+        pytest.raises(QgisSdkHttpError, match="already"),
+        _server(runtime, tmp_path, _ServerOptions(actions=("echo",), token_name="two")),
+    ):
+        pass
+    assert not (tmp_path / "two").exists()
+    first.close()
+    with pytest.raises(QgisSdkHttpError):
+        first.start()
+    assert not (tmp_path / "one").exists()
+    with _server(
+        runtime, tmp_path, _ServerOptions(actions=("echo",), token_name="again")
+    ):
+        pass
+
+
+def _request_in_thread(req, *, daemon=False):
+    responses = []
+    thread = threading.Thread(
+        target=lambda req=req: responses.append(request(req)), daemon=daemon
+    )
+    thread.start()
+    return thread, responses
+
+
+class _QueueProbe:
+    """Hold one action, queue another, then release both in order."""
+
+    def __init__(self, tmp_path):
+        self.entered = threading.Event()
+        self.released = threading.Event()
+        self.responses = []
+        self.holders = []
+        self.runtime = _started(self._app())
+        self.server = _server(
+            self.runtime,
+            tmp_path,
+            _ServerOptions(actions=("hold", "after"), deadline=10),
+        )
+        self.server.start()
+        self.token = (tmp_path / "token").read_text().strip()
+
+    def _app(self):
+        app = QgisSdkPlugin(id="rest_pending", title="REST pending")
+
+        @app.action(id="hold", title="Hold")
+        def hold(ctx: PluginContext) -> str:
+            self.entered.set()
+            assert self.released.wait(10)
+            return "released"
+
+        @app.action(id="after", title="After")
+        def after(ctx: PluginContext) -> str:
+            return "after"
+
+        return app
+
+    def start(self, action):
+        req = _Request(
+            self.server.port,
+            "POST",
+            f"/actions/{action}",
+            token=self.token,
+            body={},
+        )
+        holder = threading.Thread(
+            target=lambda req=req: self.responses.append(request(req)), daemon=True
+        )
+        self.holders.append(holder)
+        holder.start()
+
+    def assert_transitions(self):
+        assert self.server.pending_requests == 0
+        assert self.server.busy is False
+        self.start("hold")
+        assert self.entered.wait(10)
+        assert self.server.busy is True
+        self.start("after")
+        self._wait_for_pending()
+        assert self.server.pending_requests == 1, "the second call never queued"
+        assert self.responses == [], "queued work must not run inside the first call"
+        self.released.set()
+        self._join_holders()
+        assert [status for status, _ in self.responses] == [200, 200]
+        assert self.server.pending_requests == 0
+        assert self.server.busy is False
+
+    def _wait_for_pending(self):
+        deadline = time.monotonic() + 10
+        while self.server.pending_requests == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+    def _join_holders(self):
+        for thread in self.holders:
+            thread.join(timeout=10)
+        assert not any(thread.is_alive() for thread in self.holders)
+
+    def close(self):
+        try:
+            self.server.close()
+        finally:
+            for thread in self.holders:
+                thread.join(timeout=1)
+            self.runtime.unload()
+
+
+def test_rest_lists_only_selected_actions_and_calls_them(tmp_path: Path):
+    with _serving(
+        _selected_actions_app(), tmp_path, _ServerOptions(actions=("echo",))
+    ) as (server, token_file):
+        _assert_selected_actions(server, token_file.read_text().strip())
+
+
+def test_rest_stream_sends_ordered_events_and_closes(tmp_path: Path):
+    with _serving(
+        _finite_stream_app(), tmp_path, _ServerOptions(actions=("ticks",))
+    ) as (server, token_file):
+        _assert_ordered_stream(server.port, token_file.read_text().strip())
+
+
+def test_python_client_and_cli_can_call_a_running_plugin(tmp_path: Path):
+    with _serving(
+        _client_app(), tmp_path, _ServerOptions(actions=("echo", "ticks"))
+    ) as (server, token_file):
+        url = f"http://127.0.0.1:{server.port}"
+        _assert_python_client(url, token_file)
+        command = _call_cli(url, token_file, '{"value":"cli"}')
+        assert command.returncode == 0, command.stderr
+        assert json.loads(command.stdout) == "cli"
+
+
+def test_closing_the_client_stream_disposes_its_generator(tmp_path: Path):
+    from qgis_sdk_tools.rest import PluginClient
+
+    closed = threading.Event()
+    with _serving(
+        _closing_stream_app(closed), tmp_path, _ServerOptions(actions=("watch",))
+    ) as (server, token_file):
+        client = PluginClient(f"http://127.0.0.1:{server.port}", token_file=token_file)
+        stream = client.stream("watch", {})
+        assert next(stream)["event"]["payload"] == 1
+        stream.close()
+        assert closed.wait(5), "server did not dispose disconnected stream"
 
 
 def test_runtime_has_no_agent_module():
@@ -293,7 +481,10 @@ def test_token_is_private_and_removed_when_the_server_closes(tmp_path: Path):
         ) as server:
             assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
             assert len(token_file.read_text().strip()) >= 32
-            assert request(server.port, "POST", "/actions/echo", body={})[0] == 401
+            assert (
+                request(_Request(server.port, "POST", "/actions/echo", body={}))[0]
+                == 401
+            )
     finally:
         runtime.unload()
     assert not token_file.exists()
@@ -319,11 +510,9 @@ def test_rejects_untrusted_host_header_and_non_loopback_bind(tmp_path: Path):
         ) as server:
             token = (tmp_path / "token").read_text().strip()
             status, _ = request(
-                server.port,
-                "GET",
-                "/plugin",
-                token=token,
-                host="evil.example",
+                _Request(
+                    server.port, "GET", "/plugin", token=token, host="evil.example"
+                )
             )
             assert status == 403
     finally:
@@ -333,39 +522,9 @@ def test_rejects_untrusted_host_header_and_non_loopback_bind(tmp_path: Path):
 def test_only_one_endpoint_per_runtime_and_a_closed_one_cannot_restart(
     tmp_path: Path,
 ):
-    from qgis_sdk.http import PluginHttpServer, QgisSdkHttpError
-
     runtime = _started(_echo_app())
     try:
-        first = PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "one",
-            actions=("echo",),
-        )
-        first.start()
-        with (
-            pytest.raises(QgisSdkHttpError, match="already"),
-            PluginHttpServer(
-                runtime,
-                post=lambda callback: callback(),
-                token_file=tmp_path / "two",
-                actions=("echo",),
-            ),
-        ):
-            pass
-        assert not (tmp_path / "two").exists()
-        first.close()
-        with pytest.raises(QgisSdkHttpError):
-            first.start()
-        assert not (tmp_path / "one").exists()
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=tmp_path / "again",
-            actions=("echo",),
-        ):
-            pass
+        _assert_single_endpoint(runtime, tmp_path)
     finally:
         runtime.unload()
 
@@ -417,94 +576,47 @@ def test_constructing_the_server_neither_listens_nor_creates_a_token(tmp_path: P
 
 
 def test_busy_deadline_withdraws_a_queued_call_before_it_runs(tmp_path: Path):
-    from qgis_sdk.http import PluginHttpServer
-
     seen = []
-    app = QgisSdkPlugin(id="rest_deadline", title="Deadline")
-
-    @app.action(id="echo", title="Echo")
-    def echo(ctx: PluginContext, value: str) -> str:
-        seen.append(value)
-        return value
-
-    runtime = _started(app)
-    queued = []
-    submitted = threading.Event()
-
-    def post(callback):
-        queued.append(callback)
-        submitted.set()
-
-    server = PluginHttpServer(
-        runtime,
-        post=post,
-        token_file=tmp_path / "token",
-        actions=("echo",),
-        deadline=0.2,
-    )
-    server.start()
-    try:
-        token = (tmp_path / "token").read_text().strip()
+    post = _PostProbe(stall=True)
+    with _serving(
+        _recording_app(seen, "rest_deadline"),
+        tmp_path,
+        _ServerOptions(actions=("echo",), post=post, deadline=0.2),
+    ) as (server, token_file):
+        token = token_file.read_text().strip()
         status, body = request(
-            server.port, "POST", "/actions/echo", token=token, body={"value": "late"}
+            _Request(
+                server.port,
+                "POST",
+                "/actions/echo",
+                token=token,
+                body={"value": "late"},
+            )
         )
         assert status == 503
         assert json.loads(body)["error"]["code"] == "host_busy"
-        assert submitted.is_set()
-        queued.pop()()
+        assert post.submitted.is_set()
+        post.callbacks.pop()()
         assert seen == []
-    finally:
-        runtime.unload()
-        server.close()
 
 
 def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
-    from qgis_sdk.http import PluginHttpServer
-
     seen = []
-    app = QgisSdkPlugin(id="rest_reload", title="Reload")
-
-    @app.action(id="echo", title="Echo")
-    def echo(ctx: PluginContext, value: str) -> str:
-        seen.append(value)
-        return value
-
-    scope = ResourceScope()
-    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
-    runtime.start()
-    queued = []
-    submitted = threading.Event()
-    stall = False
-
-    def post(callback):
-        if stall:
-            queued.append(callback)
-            submitted.set()
-        else:
-            callback()
-
-    server = PluginHttpServer(
+    runtime = _started(_recording_app(seen, "rest_reload"))
+    post = _PostProbe()
+    server = _server(
         runtime,
-        post=post,
-        token_file=tmp_path / "token",
-        actions=("echo",),
-        # Long enough that only the reload, never the deadline, can end this call.
-        deadline=60,
+        tmp_path,
+        _ServerOptions(actions=("echo",), post=post, deadline=60),
     )
     server.start()
     token = (tmp_path / "token").read_text().strip()
     port = server.port
-    stall = True
-    responses = []
-    thread = threading.Thread(
-        target=lambda: responses.append(
-            request(
-                port, "POST", "/actions/echo", token=token, body={"value": "unsafe"}
-            )
-        )
+    post.stall = True
+    thread, responses = _request_in_thread(
+        _Request(port, "POST", "/actions/echo", token=token, body={"value": "unsafe"})
     )
-    thread.start()
-    assert submitted.wait(2)
+    assert post.submitted.wait(2)
     runtime.unload()
     thread.join(timeout=3)
     assert not thread.is_alive()
@@ -513,7 +625,7 @@ def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
     assert not (tmp_path / "token").exists()
     # Every callback the stalled host was holding: a withdrawn request must
     # never reach the action once the runtime is gone.
-    for callback in queued:
+    for callback in post.callbacks:
         callback()
     assert seen == []
     server.close()
@@ -521,79 +633,11 @@ def test_unload_withdraws_a_queued_request_and_reports_reload(tmp_path: Path):
 
 def test_pending_requests_and_busy_expose_queue_state(tmp_path: Path):
     """The dispatch state is readable without touching private queue internals."""
-    from qgis_sdk.http import PluginHttpServer
-
-    app = QgisSdkPlugin(id="rest_pending", title="REST pending")
-    entered = threading.Event()
-    released = threading.Event()
-
-    @app.action(id="hold", title="Hold")
-    def hold(ctx: PluginContext) -> str:
-        entered.set()
-        assert released.wait(10)
-        return "released"
-
-    @app.action(id="after", title="After")
-    def after(ctx: PluginContext) -> str:
-        return "after"
-
-    scope = ResourceScope()
-    runtime = PluginRuntime(app, PluginContext(RecordingNotifications(scope), scope))
-    runtime.start()
-    token_file = tmp_path / "token"
-    responses = []
-    holders = []
+    probe = _QueueProbe(tmp_path)
     try:
-        with PluginHttpServer(
-            runtime,
-            post=lambda callback: callback(),
-            token_file=token_file,
-            actions=("hold", "after"),
-            deadline=10,
-        ) as server:
-            token = token_file.read_text().strip()
-            assert server.pending_requests == 0
-            assert server.busy is False
-            holders.append(
-                threading.Thread(
-                    target=lambda: responses.append(
-                        request(
-                            server.port, "POST", "/actions/hold", token=token, body={}
-                        )
-                    ),
-                    daemon=True,
-                )
-            )
-            holders[0].start()
-            assert entered.wait(10)
-            assert server.busy is True
-            holders.append(
-                threading.Thread(
-                    target=lambda: responses.append(
-                        request(
-                            server.port, "POST", "/actions/after", token=token, body={}
-                        )
-                    ),
-                    daemon=True,
-                )
-            )
-            holders[1].start()
-            deadline = time.monotonic() + 10
-            while server.pending_requests == 0 and time.monotonic() < deadline:
-                time.sleep(0.01)
-            assert server.pending_requests == 1, "the second call never queued"
-            assert responses == [], "queued work must not run inside the first call"
-            released.set()
-            for thread in holders:
-                thread.join(timeout=10)
-            assert not any(thread.is_alive() for thread in holders)
-            assert [status for status, _ in responses] == [200, 200]
-            assert server.pending_requests == 0
-            assert server.busy is False
+        probe.assert_transitions()
     finally:
-        for thread in holders:
-            thread.join(timeout=1)
-        runtime.unload()
+        probe.close()
 
 
 @contextlib.contextmanager

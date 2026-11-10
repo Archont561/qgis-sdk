@@ -40,6 +40,7 @@ from qgis_sdk.testing import (
     FakeWorkers,
     RecordingLog,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 from qgis_sdk.ui import (
     Choice,
@@ -178,7 +179,12 @@ def make_rendering(
         )
         layers = FakeLayers(scope, rasters=rasters)
         layers.register(
-            dataset, name="sites", geometry_type="point", field_names=("name", "kind")
+            VectorLayerDeclaration(
+                dataset,
+                name="sites",
+                geometry_type="point",
+                field_names=("name", "kind"),
+            )
         )
         context = PluginContext(
             notifications,

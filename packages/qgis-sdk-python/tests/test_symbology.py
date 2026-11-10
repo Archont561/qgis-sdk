@@ -59,7 +59,14 @@ from qgis_sdk.models import (
     style_entry_from_wire,
 )
 from qgis_sdk.models import symbology as models
-from qgis_sdk.testing import FakeLayers, FakeProject, FakeStyles, RecordingNotifications
+from qgis_sdk.testing import (
+    FakeLayers,
+    FakeProject,
+    FakeStyles,
+    OtherLayerDeclaration,
+    RecordingNotifications,
+    VectorLayerDeclaration,
+)
 
 ORIGIN = "qgis://desktop"
 POINTS = Path("fixtures/points.geojson")
@@ -377,30 +384,33 @@ class _Styles:
 
     def __post_init__(self) -> None:
         self.layers.register(
-            POINTS,
-            name="points",
-            geometry_type="point",
-            field_names=("id", "value"),
+            VectorLayerDeclaration(
+                POINTS,
+                name="points",
+                geometry_type="point",
+                field_names=("id", "value"),
+            )
         )
         self.layers.register(
-            LINES,
-            name="lines",
-            geometry_type="line",
-            field_names=("id", "value"),
+            VectorLayerDeclaration(
+                LINES, name="lines", geometry_type="line", field_names=("id", "value")
+            )
         )
         self.layers.register(
-            POLYGONS,
-            name="areas",
-            geometry_type="polygon",
-            field_names=("id", "value"),
+            VectorLayerDeclaration(
+                POLYGONS,
+                name="areas",
+                geometry_type="polygon",
+                field_names=("id", "value"),
+            )
         )
         self.layers.register_layer(
-            MESH,
-            name="lagoon",
-            kind="mesh",
-            vertex_count=3,
-            face_count=1,
-            group_count=1,
+            OtherLayerDeclaration(
+                MESH,
+                name="lagoon",
+                kind="mesh",
+                detail={"vertex_count": 3, "face_count": 1, "group_count": 1},
+            )
         )
 
 
@@ -734,13 +744,20 @@ def test_a_page_round_trips_a_renderer_across_the_wire() -> None:
         scope.close()
 
 
+def _points_declaration() -> VectorLayerDeclaration:
+    return VectorLayerDeclaration(
+        POINTS,
+        name="points",
+        geometry_type="point",
+        field_names=("id", "value"),
+    )
+
+
 def test_a_page_reads_a_labelling_and_the_style_list() -> None:
     scope = ResourceScope()
     try:
         layers = FakeLayers(scope)
-        layers.register(
-            POINTS, name="points", geometry_type="point", field_names=("id", "value")
-        )
+        layers.register(_points_declaration())
         styles = FakeStyles(layers, scope, styles=(StyleEntry("circle", "symbol"),))
         info = layers.open_vector(POINTS)
         styles.set_labelling(info.id, Labelling(enabled=True, field="value"))

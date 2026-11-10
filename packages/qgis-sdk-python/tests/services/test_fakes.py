@@ -21,16 +21,16 @@ from qgis_sdk.testing import (
     FakeSettings,
     FakeStyles,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 
 
 def _opened_layer(layers: FakeLayers) -> str:
     source = Path("fixtures/reference/points.geojson")
     layers.register(
-        source,
-        name="points",
-        geometry_type="point",
-        field_names=("id", "value"),
+        VectorLayerDeclaration(
+            source, name="points", geometry_type="point", field_names=("id", "value")
+        )
     )
     return layers.open_vector(source).id
 
@@ -41,7 +41,11 @@ def test_export_refuses_when_a_virtual_source_becomes_a_real_file(
     source = tmp_path / "source.geojson"
     alias = tmp_path / "alias.geojson"
     layers = FakeLayers(ResourceScope())
-    layers.register(source, name="source", geometry_type="point", field_names=())
+    layers.register(
+        VectorLayerDeclaration(
+            source, name="source", geometry_type="point", field_names=()
+        )
+    )
     info = layers.open_vector(source)
     source.write_text("original", encoding="utf-8")
     alias.hardlink_to(source)

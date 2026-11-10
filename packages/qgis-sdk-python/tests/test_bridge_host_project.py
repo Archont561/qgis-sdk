@@ -30,6 +30,7 @@ from qgis_sdk.testing import (
     FakeProject,
     FakeRasters,
     RecordingNotifications,
+    VectorLayerDeclaration,
 )
 
 ORIGIN = "qgis://desktop"
@@ -103,6 +104,12 @@ class _Settings:
         return default
 
 
+def _sites_declaration(dataset: Path) -> VectorLayerDeclaration:
+    return VectorLayerDeclaration(
+        dataset, name="sites", geometry_type="point", field_names=("id",)
+    )
+
+
 @pytest.fixture
 def doubles(tmp_path: Path) -> _Doubles:
     scope = ResourceScope()
@@ -110,7 +117,7 @@ def doubles(tmp_path: Path) -> _Doubles:
     layers = FakeLayers(scope, rasters=rasters)
     dataset = tmp_path / "sites.geojson"
     dataset.write_text("{}", encoding="utf-8")
-    layers.register(dataset, name="sites", geometry_type="point", field_names=("id",))
+    layers.register(_sites_declaration(dataset))
     rasters.register(
         tmp_path / "elevation.tif",
         name="elevation",
