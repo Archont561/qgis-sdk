@@ -81,7 +81,7 @@ from qgis_sdk.ui.custom import Custom
 from qgis_sdk.ui.feedback import JobProgress, LogView, ResultTable
 from qgis_sdk.ui.form import Form
 
-from .processing import _qt_filter
+from .processing._parameters import _qt_filter
 
 __all__ = ["Rendering", "load_ui", "mount"]
 
