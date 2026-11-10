@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -115,73 +116,383 @@ def _the_real_manifests_stay_untouched():
     assert after == before, "a test rewrote a real manifest"
 
 
-def _python_manifests(
-    tmp_path,
-    monkeypatch,
-    python_version="0.1.0",
-    bridge_version="0.1.0",
-    runtime_version=None,
-    tools_range=None,
-    kit_pin=None,
-):
-    """Write every released manifest under ``tmp_path`` and point release.py at it."""
-    runtime_version = runtime_version or python_version
-    pyproject = tmp_path / "pyproject.toml"
-    runtime = tmp_path / "runtime-pyproject.toml"
-    tools = tmp_path / "tools-pyproject.toml"
-    recipe = tmp_path / "recipe.yaml"
-    package = tmp_path / "package.json"
-    pyproject.write_text(
-        KIT_PYPROJECT.replace(
-            'version = "0.1.0"', f'version = "{python_version}"'
-        ).replace("==0.1.0", f"=={kit_pin or python_version}"),
-        encoding="utf-8",
+def _cli(*args: str) -> int:
+    """Run one release subcommand with a compact argument list."""
+    return main(list(args))
+
+
+def _outputs(tmp_path, monkeypatch) -> Path:
+    """Create and register the GITHUB_OUTPUT file a command writes to."""
+    out_file = tmp_path / "gh_output"
+    out_file.touch()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    return out_file
+
+
+def _read_outputs(path: Path) -> dict[str, str]:
+    """Parse the ``key=value`` lines a command wrote."""
+    return dict(line.split("=", 1) for line in path.read_text().splitlines() if line)
+
+
+def _plan_for(tags, commits, config, **options):
+    """A dispatch plan for the Python train, with optional overrides."""
+    return compute_plan(
+        "dispatch", tags, commits, config, PlanOptions(scope="python", **options)
     )
-    runtime.write_text(
-        RUNTIME_PYPROJECT.replace(
-            'version = "0.1.0"', f'version = "{runtime_version}"'
-        ),
-        encoding="utf-8",
+
+
+def _fake_build_runner(calls):
+    """An artifact runner that records commands and writes a wheel for each build."""
+
+    def fake_runner(command):
+        calls.append(list(command))
+        if command[1:3] == ["-m", "build"]:
+            package = Path(command[-1]).name.replace("-", "_")
+            target = Path(command[command.index("--outdir") + 1])
+            target.mkdir(parents=True, exist_ok=True)
+            (target / f"{package}-0.1.0-py3-none-any.whl").write_bytes(b"w")
+
+    return fake_runner
+
+
+def _plan_range_recorder(tmp_path, monkeypatch):
+    """Record the commit ranges a plan asks for against one stable/candidate history."""
+    config = _versionrc(tmp_path)
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    ranges: list[str | None] = []
+    log = "a" * 40 + "\x1f" + "feat(python): x" + "\x1f" + "\x1e\n"
+    monkeypatch.setattr(
+        "automation.release.list_tags",
+        lambda runner=None: ("python-v0.4.0", "python-v0.5.0-rc.1"),
     )
-    runtime_range = tools_range or (
-        f">={runtime_version},<{release_module.next_minor(Version.parse(runtime_version))}"
+    monkeypatch.setattr(
+        "automation.release.log_commits_with_files",
+        lambda rng=None, runner=None: (ranges.append(rng), _with_files(log))[1],
     )
-    tools.write_text(
-        TOOLS_PYPROJECT.replace(
-            'version = "0.1.0"', f'version = "{python_version}"'
-        ).replace(">=0.1.0,<0.2", runtime_range),
-        encoding="utf-8",
-    )
-    recipe.write_text(
-        RECIPE_YAML.replace('  version: "0.1.0"', f'  version: "{python_version}"')
-        .replace('runtime_version: "0.1.0"', f'runtime_version: "{runtime_version}"')
-        .replace('tools_version: "0.1.0"', f'tools_version: "{python_version}"')
-        .replace(">=0.1.0,<0.2", runtime_range),
-        encoding="utf-8",
-    )
-    package.write_text(
-        PACKAGE_JSON.replace('"version": "0.1.0"', f'"version": "{bridge_version}"'),
-        encoding="utf-8",
-    )
+    return config, ranges
+
+
+def _classify_outputs(tmp_path, monkeypatch, tag: str) -> dict[str, str]:
+    """The scoped flags one ``classify`` run writes for ``tag``."""
+    out_file = _outputs(tmp_path, monkeypatch)
+    assert _cli("classify", "--tag", tag, "--scoped") == 0
+    return _read_outputs(out_file)
+
+
+def _release_assets(tmp_path, monkeypatch, wheel_name: str):
+    """The notes, wheel, checksums and summary a github-release test needs."""
+    body = tmp_path / "notes.md"
+    body.write_text("# Changelog\n", encoding="utf-8")
+    wheel = tmp_path / wheel_name
+    wheel.write_bytes(b"w")
+    sums = tmp_path / "SHA256SUMS"
+    sums.write_text("00  wheel\n", encoding="utf-8")
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    return body, wheel, sums, summary
+
+
+def _raise_already_exists(*args, **kwargs):
+    raise QgisSdkReleaseError("GitHub release creation failed (422): already_exists")
+
+
+def _patch_upload_asset(monkeypatch, uploaded):
     from automation import release
 
-    monkeypatch.setattr(release, "_PYPROJECT", pyproject)
-    monkeypatch.setattr(release, "_RUNTIME_PYPROJECT", runtime)
-    monkeypatch.setattr(release, "_TOOLS_PYPROJECT", tools)
-    monkeypatch.setattr(release, "_RECIPE", recipe)
-    monkeypatch.setattr(release, "_BRIDGE_PACKAGE", package)
-    monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "no-alias.json")
-    monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "no-web.py")
-    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (tmp_path / "no-example.toml",))
-    monkeypatch.setattr(release, "_UI_PACKAGE", tmp_path / "no-ui.json")
-    monkeypatch.setattr(release, "_UI_ALIAS_PACKAGE", tmp_path / "no-ui-alias.json")
-    return {
-        "pyproject": pyproject,
-        "runtime": runtime,
-        "tools": tools,
-        "recipe": recipe,
-        "package": package,
+    monkeypatch.setattr(
+        release,
+        "upload_asset",
+        lambda url, token, path, opener=None: uploaded.append(path),
+    )
+
+
+def _patch_new_release_api(monkeypatch, created, uploaded):
+    """A release that does not exist yet: one create call, then uploads."""
+    from automation import release
+
+    monkeypatch.setattr(
+        release,
+        "create_release",
+        lambda draft, opener=None: (
+            created.append((draft.slug, draft.tag, draft.body, draft.prerelease))
+            or {"upload_url": "https://u{?name}", "html_url": "https://html"}
+        ),
+    )
+    _patch_upload_asset(monkeypatch, uploaded)
+
+
+def _patch_existing_release_api(monkeypatch, deleted, uploaded):
+    """A release that already exists: replace its assets instead of creating it."""
+    from automation import release
+
+    monkeypatch.setattr(release, "create_release", _raise_already_exists)
+    monkeypatch.setattr(
+        release,
+        "get_release_by_tag",
+        lambda slug, token, tag, opener=None: {
+            "upload_url": "https://u{?name}",
+            "html_url": "https://html/v0.1.0",
+            "assets": [{"name": "SHA256SUMS", "id": 99}],
+        },
+    )
+    monkeypatch.setattr(
+        release,
+        "delete_release_asset",
+        lambda slug, token, asset_id, opener=None: deleted.append(asset_id),
+    )
+    _patch_upload_asset(monkeypatch, uploaded)
+
+
+def _assert_python_scopes(scopes) -> None:
+    """Every Python manifest of a scope carries that scope's one version."""
+    assert set(scopes["runtime"]["manifests"]) == {
+        "runtime pyproject.toml",
+        "recipe runtime_version",
     }
+    assert set(scopes["tools"]["manifests"]) == {
+        "tools pyproject.toml",
+        "recipe tools_version",
+    }
+    assert set(scopes["kit"]["manifests"]) == {"pyproject.toml", "recipe.yaml"}
+    assert set(scopes["kit"]["pins"]) >= {"qgis-sdk-runtime", "qgis-sdk-tools"}
+    for entry in (scopes["runtime"], scopes["tools"], scopes["kit"]):
+        assert set(entry["manifests"].values()) == {entry["version"]}
+    assert scopes["tools"]["runtime_range"].startswith(
+        f">={scopes['runtime']['version']},<"
+    )
+
+
+def _job(name: str) -> dict:
+    """One job of the release workflow, read once per test."""
+    return _workflow_jobs()[name]
+
+
+def _workflow_jobs() -> dict:
+    """The jobs of the release workflow, read once per test."""
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    text = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    return yaml.safe_load(text)["jobs"]
+
+
+def _steps(job: str) -> dict:
+    """The named steps of one workflow job."""
+    return {step.get("name"): step for step in _job(job)["steps"]}
+
+
+def _step_names(job: str) -> list[str]:
+    """The step names of one workflow job, in execution order."""
+    return [step.get("name") for step in _job(job)["steps"]]
+
+
+def _run_shell(script: str, cwd, env):
+    """Run one workflow shell step with the bash flags CI uses."""
+    import subprocess
+
+    return subprocess.run(
+        ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _npm_stub(tmp_path):
+    """An offline npm that logs its arguments and answers ``view`` from the env."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    npm = stub_dir / "npm"
+    npm.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$NPM_CALLS"\n'
+        'if [ "$1" = view ]; then\n'
+        '  if [ -n "$EXISTING_VERSION" ]; then printf "%s\\n" "$EXISTING_VERSION"; exit 0; fi\n'
+        '  exit 1\nfi\nexit "$PUBLISH_STATUS"\n',
+        encoding="utf-8",
+    )
+    npm.chmod(0o755)
+    return stub_dir
+
+
+def _ui_tarballs(tmp_path, version):
+    """The scoped tarball a UI publish must use and the alias it must not."""
+    tarball = tmp_path / "ui-packages" / "ui" / f"archont561-qgis-sdk-ui-{version}.tgz"
+    tarball.parent.mkdir(parents=True)
+    tarball.write_bytes(b"test only")
+    alias = tmp_path / "ui-packages" / "ui-alias" / f"qgis-sdk-ui-{version}.tgz"
+    alias.parent.mkdir()
+    alias.write_bytes(b"not for GitHub Packages")
+    return tarball, alias
+
+
+def _ui_publish_env(tmp_path, case, stub_dir, calls):
+    """The environment the workflow shell step sees, with npm replaced."""
+    import os
+
+    return {
+        **os.environ,
+        "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
+        "NPM_CALLS": str(calls),
+        "EXISTING_VERSION": case.existing,
+        "PUBLISH_STATUS": str(case.publish_status),
+        "RELEASE_VERSION": case.version,
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+    }
+
+
+def _ui_publish_run(tmp_path, case):
+    """Run one real GitHub Packages shell step against the offline npm stub."""
+    steps = _steps("github-packages-ui")
+    tarball, _ = _ui_tarballs(tmp_path, case.version)
+    stub_dir = _npm_stub(tmp_path)
+    calls = tmp_path / "npm-calls"
+    env = _ui_publish_env(tmp_path, case, stub_dir, calls)
+    result = _run_shell(steps[case.step_name]["run"], tmp_path, env)
+    return result, calls.read_text().splitlines(), tarball
+
+
+def _assert_ui_publish_calls(case, commands, tarball, tmp_path):
+    """Only the scoped tarball is published, with the right command sequence."""
+    assert [command.split()[0] for command in commands] == list(case.expected_commands)
+    assert all("https://npm.pkg.github.com" in command for command in commands)
+    if "publish" in case.expected_commands:
+        publish = next(
+            command for command in commands if command.startswith("publish ")
+        )
+        assert str(tarball.relative_to(tmp_path)) in publish
+        assert "ui-alias/" not in publish
+        assert ("--dry-run" in publish) == ("-rc." in case.version)
+        assert ("--tag next" in publish) == ("-rc." in case.version)
+
+
+def _assert_ui_packages_step_uses_scoped_tarball(step) -> None:
+    """Both dry-run and publish must name the qualified tarball, never the alias."""
+    assert "ui-packages/ui/archont561-qgis-sdk-ui-${RELEASE_VERSION}.tgz" in step["run"]
+    assert "ui-alias/" not in step["run"]
+
+
+@dataclass(frozen=True, slots=True)
+class _PythonManifestVersions:
+    """The versions and pins one set of Python test manifests carries."""
+
+    python: str = "0.1.0"
+    bridge: str = "0.1.0"
+    runtime: str | None = None
+    tools_range: str | None = None
+    kit_pin: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _UiTrainOptions:
+    """The optional texts one UI-train fixture writes instead of its defaults."""
+
+    bridge_version: str = "0.1.0"
+    ui_text: str | None = None
+    web_text: str | None = None
+    alias_text: str | None = None
+
+
+def _write_manifest(path: Path, template: str, *replacements) -> None:
+    """Write one manifest, applying each ``(old, new)`` substitution in order."""
+    text = template
+    for old, replacement in replacements:
+        text = text.replace(old, replacement)
+    path.write_text(text, encoding="utf-8")
+
+
+def _python_manifest_files(tmp_path) -> dict[str, Path]:
+    """The five manifest paths a Python release test uses."""
+    return {
+        "pyproject": tmp_path / "pyproject.toml",
+        "runtime": tmp_path / "runtime-pyproject.toml",
+        "tools": tmp_path / "tools-pyproject.toml",
+        "recipe": tmp_path / "recipe.yaml",
+        "package": tmp_path / "package.json",
+    }
+
+
+def _write_python_version_manifests(files, versions, runtime_version, runtime_range):
+    """The kit, runtime and tools pyprojects all move with the Python version."""
+    _write_manifest(
+        files["pyproject"],
+        KIT_PYPROJECT,
+        ('version = "0.1.0"', f'version = "{versions.python}"'),
+        ("==0.1.0", f"=={versions.kit_pin or versions.python}"),
+    )
+    _write_manifest(
+        files["runtime"],
+        RUNTIME_PYPROJECT,
+        ('version = "0.1.0"', f'version = "{runtime_version}"'),
+    )
+    _write_manifest(
+        files["tools"],
+        TOOLS_PYPROJECT,
+        ('version = "0.1.0"', f'version = "{versions.python}"'),
+        (">=0.1.0,<0.2", runtime_range),
+    )
+
+
+def _write_python_manifests(files, versions: _PythonManifestVersions) -> None:
+    """Render the five manifests at the versions the test asked for."""
+    runtime_version = versions.runtime or versions.python
+    runtime_range = versions.tools_range or (
+        f">={runtime_version},<{release_module.next_minor(Version.parse(runtime_version))}"
+    )
+    _write_python_version_manifests(files, versions, runtime_version, runtime_range)
+    _write_manifest(
+        files["recipe"],
+        RECIPE_YAML,
+        ('  version: "0.1.0"', f'  version: "{versions.python}"'),
+        ('runtime_version: "0.1.0"', f'runtime_version: "{runtime_version}"'),
+        ('tools_version: "0.1.0"', f'tools_version: "{versions.python}"'),
+        (">=0.1.0,<0.2", runtime_range),
+    )
+    _write_manifest(
+        files["package"],
+        PACKAGE_JSON,
+        ('"version": "0.1.0"', f'"version": "{versions.bridge}"'),
+    )
+
+
+def _patch_release_manifests(tmp_path, monkeypatch, files) -> None:
+    """Point release.py at the temporary manifests, with every optional file absent."""
+    from automation import release
+
+    for attribute, key in (
+        ("_PYPROJECT", "pyproject"),
+        ("_RUNTIME_PYPROJECT", "runtime"),
+        ("_TOOLS_PYPROJECT", "tools"),
+        ("_RECIPE", "recipe"),
+        ("_BRIDGE_PACKAGE", "package"),
+    ):
+        monkeypatch.setattr(release, attribute, files[key])
+    for attribute, name in (
+        ("_ALIAS_PACKAGE", "no-alias.json"),
+        ("_SCAFFOLD_WEB", "no-web.py"),
+        ("_EXAMPLE_PYPROJECTS", "no-example.toml"),
+        ("_UI_PACKAGE", "no-ui.json"),
+        ("_UI_ALIAS_PACKAGE", "no-ui-alias.json"),
+    ):
+        value = (
+            (tmp_path / "no-example.toml",)
+            if attribute == "_EXAMPLE_PYPROJECTS"
+            else tmp_path / name
+        )
+        monkeypatch.setattr(release, attribute, value)
+
+
+def _python_manifests(tmp_path, monkeypatch, versions=None) -> dict[str, Path]:
+    """Write every released manifest under ``tmp_path`` and point release.py at it."""
+    versions = versions or _PythonManifestVersions()
+    files = _python_manifest_files(tmp_path)
+    _write_python_manifests(files, versions)
+    _patch_release_manifests(tmp_path, monkeypatch, files)
+    return files
 
 
 # ---------------------------------------------------------------------------
@@ -709,38 +1020,15 @@ def test_a_stable_release_after_a_candidate_starts_from_the_last_stable(
     """
     tags = ("python-v0.4.0", "python-v0.5.0-rc.1", "ts-v0.3.0")
     commits = _log("feat(python): split", "fix(python): windows path")
-
-    inferred = compute_plan(
-        "dispatch", tags, commits, sample_config, PlanOptions(scope="python")
-    )
-    forced = compute_plan(
-        "dispatch",
-        tags,
-        commits,
-        sample_config,
-        PlanOptions(scope="python", bump="minor"),
-    )
-    patch_only = compute_plan(
-        "dispatch",
-        tags,
-        _log("fix(python): one"),
-        sample_config,
-        PlanOptions(scope="python"),
-    )
+    inferred = _plan_for(tags, commits, sample_config)
+    forced = _plan_for(tags, commits, sample_config, bump="minor")
+    patch_only = _plan_for(tags, _log("fix(python): one"), sample_config)
+    linked = _plan_for(tags, commits, sample_config, repo_slug="o/r")
 
     assert (inferred.tag, inferred.base_tag) == ("python-v0.5.0", "python-v0.4.0")
     assert (forced.tag, forced.base_tag) == ("python-v0.5.0", "python-v0.4.0")
     assert patch_only.tag == "python-v0.4.1"
-    assert (
-        "[python-v0.4.0...python-v0.5.0]"
-        in compute_plan(
-            "dispatch",
-            tags,
-            commits,
-            sample_config,
-            PlanOptions(repo_slug="o/r", scope="python"),
-        ).changelog
-    )
+    assert "[python-v0.4.0...python-v0.5.0]" in linked.changelog
 
 
 def test_a_second_candidate_follows_the_first_on_the_same_core(sample_config):
@@ -1008,18 +1296,11 @@ def test_build_python_builds_every_distribution_by_default(tmp_path, monkeypatch
     """One `python-v*` release ships the runtime, the tools and the kit together."""
     outdir = tmp_path / "pypi"
     calls = []
+    monkeypatch.setattr(
+        release_module, "_default_artifact_runner", _fake_build_runner(calls)
+    )
 
-    def fake_runner(command):
-        calls.append(list(command))
-        if command[1:3] == ["-m", "build"]:
-            package = Path(command[-1]).name.replace("-", "_")
-            target = Path(command[command.index("--outdir") + 1])
-            target.mkdir(parents=True, exist_ok=True)
-            (target / f"{package}-0.1.0-py3-none-any.whl").write_bytes(b"w")
-
-    monkeypatch.setattr(release_module, "_default_artifact_runner", fake_runner)
-
-    assert main(["build-python", "--outdir", str(outdir)]) == 0
+    assert _cli("build-python", "--outdir", str(outdir)) == 0
 
     built = [
         Path(call[-1]).as_posix() for call in calls if call[1:3] == ["-m", "build"]
@@ -1294,33 +1575,17 @@ def _fake_git(monkeypatch, tags=(), log=""):
 
 def test_plan_dispatch_writes_outputs_and_changelog(tmp_path, monkeypatch):
     config = _versionrc(tmp_path)
-    out_file = tmp_path / "gh_output"
-    out_file.touch()
-    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    out_file = _outputs(tmp_path, monkeypatch)
     monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     _fake_git(
         monkeypatch,
         log="a" * 40 + "\x1f" + "feat: x" + "\x1f" + "\x1e\n",
     )
-    from automation.release import main
 
-    assert (
-        main(
-            [
-                "plan",
-                "--trigger",
-                "dispatch",
-                "--config",
-                str(config),
-                "--json",
-            ]
-        )
-        == 0
-    )
-    outputs = dict(
-        line.split("=", 1) for line in out_file.read_text().splitlines() if line
-    )
+    assert _cli("plan", "--trigger", "dispatch", "--config", str(config), "--json") == 0
+
+    outputs = _read_outputs(out_file)
     assert outputs["action"] == "tag"
     assert outputs["tag"] == "v0.1.0"
     assert outputs["prerelease"] == "false"
@@ -1332,50 +1597,39 @@ def test_plan_dispatch_writes_outputs_and_changelog(tmp_path, monkeypatch):
 def test_plan_cli_logs_commits_since_the_last_stable_for_a_stable_release(
     tmp_path, monkeypatch
 ):
-    config = _versionrc(tmp_path)
-    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
-    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
-    ranges: list[str | None] = []
-    log = "a" * 40 + "\x1f" + "feat(python): x" + "\x1f" + "\x1e\n"
-    monkeypatch.setattr(
-        "automation.release.list_tags",
-        lambda runner=None: ("python-v0.4.0", "python-v0.5.0-rc.1"),
-    )
-    monkeypatch.setattr(
-        "automation.release.log_commits_with_files",
-        lambda rng=None, runner=None: (ranges.append(rng), _with_files(log))[1],
-    )
-    from automation.release import main
+    config, ranges = _plan_range_recorder(tmp_path, monkeypatch)
 
     assert (
-        main(
-            [
-                "plan",
-                "--trigger",
-                "dispatch",
-                "--scope",
-                "python",
-                "--config",
-                str(config),
-            ]
+        _cli(
+            "plan",
+            "--trigger",
+            "dispatch",
+            "--scope",
+            "python",
+            "--config",
+            str(config),
         )
         == 0
     )
     assert ranges == ["python-v0.4.0..HEAD"]
-    ranges.clear()
+
+
+def test_plan_cli_logs_commits_since_the_candidate_for_a_prerelease(
+    tmp_path, monkeypatch
+):
+    config, ranges = _plan_range_recorder(tmp_path, monkeypatch)
+
     assert (
-        main(
-            [
-                "plan",
-                "--trigger",
-                "dispatch",
-                "--scope",
-                "python",
-                "--suffix",
-                "rc.2",
-                "--config",
-                str(config),
-            ]
+        _cli(
+            "plan",
+            "--trigger",
+            "dispatch",
+            "--scope",
+            "python",
+            "--suffix",
+            "rc.2",
+            "--config",
+            str(config),
         )
         == 0
     )
@@ -1391,11 +1645,10 @@ def test_plan_push_without_tags_skips(tmp_path, monkeypatch):
     assert main(["plan", "--config", str(config)]) == 0
 
 
-def test_plan_cli_supports_milestone_scope_bump_and_dry_run(tmp_path, monkeypatch):
+def _milestone_outputs(tmp_path, monkeypatch):
+    """The outputs of one milestone plan with a dry-run and an explicit tag."""
     config = _versionrc(tmp_path)
-    out_file = tmp_path / "gh_output"
-    out_file.touch()
-    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
+    out_file = _outputs(tmp_path, monkeypatch)
     monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     _fake_git(
@@ -1403,28 +1656,26 @@ def test_plan_cli_supports_milestone_scope_bump_and_dry_run(tmp_path, monkeypatc
         tags=("v0.1.0", "milestone-v0.2.0"),
         log="a" * 40 + "\x1f" + "feat: milestone work" + "\x1f" + "\x1e\n",
     )
-    from automation.release import main
-
     assert (
-        main(
-            [
-                "plan",
-                "--trigger",
-                "milestone",
-                "--milestone-tag",
-                "milestone-v0.2.0",
-                "--config",
-                str(config),
-                "--dry-run",
-                "true",
-                "--json",
-            ]
+        _cli(
+            "plan",
+            "--trigger",
+            "milestone",
+            "--milestone-tag",
+            "milestone-v0.2.0",
+            "--config",
+            str(config),
+            "--dry-run",
+            "true",
+            "--json",
         )
         == 0
     )
-    outputs = dict(
-        line.split("=", 1) for line in out_file.read_text().splitlines() if line
-    )
+    return _read_outputs(out_file)
+
+
+def test_plan_cli_supports_milestone_scope_bump_and_dry_run(tmp_path, monkeypatch):
+    outputs = _milestone_outputs(tmp_path, monkeypatch)
     assert outputs["action"] == "tag"
     assert outputs["tag"] == "v0.2.0"
     assert outputs["scope"] == "all"
@@ -1456,16 +1707,8 @@ def test_classify_rejects_bad_tag():
     assert main(["classify", "--tag", "0.1.0"]) == 1
 
 
-def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
-    out_file = tmp_path / "gh_output"
-    out_file.touch()
-    monkeypatch.setenv("GITHUB_OUTPUT", str(out_file))
-    from automation.release import main
-
-    assert main(["classify", "--tag", "python-v0.2.0", "--scoped"]) == 0
-    outputs = dict(
-        line.split("=", 1) for line in out_file.read_text().splitlines() if line
-    )
+def test_classify_scoped_reports_python_and_typescript_flags(tmp_path, monkeypatch):
+    outputs = _classify_outputs(tmp_path, monkeypatch, "python-v0.2.0")
     assert outputs == {
         "version": "0.2.0",
         "pep440": "0.2.0",
@@ -1480,12 +1723,10 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
         "tag_name": "python-v0.2.0",
     }
 
-    out_file.write_text("", encoding="utf-8")
-    assert main(["classify", "--tag", "ts/v0.2.0-rc.1", "--scoped"]) == 0
-    ts_outputs = dict(
-        line.split("=", 1) for line in out_file.read_text().splitlines() if line
-    )
-    assert ts_outputs == {
+
+def test_classify_scoped_reports_prerelease_typescript_flags(tmp_path, monkeypatch):
+    outputs = _classify_outputs(tmp_path, monkeypatch, "ts/v0.2.0-rc.1")
+    assert outputs == {
         "version": "0.2.0-rc.1",
         "pep440": "0.2.0rc1",
         "prerelease": "true",
@@ -1499,15 +1740,11 @@ def test_classify_scoped_reports_target_flags(tmp_path, monkeypatch):
         "tag_name": "ts/v0.2.0-rc.1",
     }
 
-    out_file.write_text("", encoding="utf-8")
-    assert main(["classify", "--tag", "tools-v0.5.1", "--scoped"]) == 0
-    tools_outputs = dict(
-        line.split("=", 1) for line in out_file.read_text().splitlines() if line
-    )
-    assert tools_outputs["scope"] == "tools"
-    assert {
-        key: tools_outputs[key] for key in ("python", "kit", "runtime", "tools")
-    } == {
+
+def test_classify_scoped_reports_only_the_tools_distribution(tmp_path, monkeypatch):
+    outputs = _classify_outputs(tmp_path, monkeypatch, "tools-v0.5.1")
+    assert outputs["scope"] == "tools"
+    assert {key: outputs[key] for key in ("python", "kit", "runtime", "tools")} == {
         "python": "true",
         "kit": "false",
         "runtime": "false",
@@ -1633,7 +1870,9 @@ def test_read_kit_pins_and_tools_range_round_trip():
 def test_verify_versions_names_a_kit_pin_that_lags_the_release(
     tmp_path, monkeypatch, capsys
 ):
-    _python_manifests(tmp_path, monkeypatch, python_version="0.2.0", kit_pin="0.1.0")
+    _python_manifests(
+        tmp_path, monkeypatch, _PythonManifestVersions(python="0.2.0", kit_pin="0.1.0")
+    )
 
     assert main(["verify-versions", "--scope", "python"]) == 1
 
@@ -1646,7 +1885,9 @@ def test_verify_versions_refuses_tools_whose_range_excludes_the_runtime(
 ):
     """A tools release must include the runtime it ships next to (TASK-57 AC 2)."""
     _python_manifests(
-        tmp_path, monkeypatch, python_version="0.5.0", tools_range=">=0.4.0,<0.5"
+        tmp_path,
+        monkeypatch,
+        _PythonManifestVersions(python="0.5.0", tools_range=">=0.4.0,<0.5"),
     )
 
     assert main(["verify-versions", "--scope", "python"]) == 1
@@ -1720,7 +1961,9 @@ def test_stamp_scope_runtime_moves_the_runtime_alone(tmp_path, monkeypatch):
 
 
 def test_stamp_scope_tools_tests_against_the_runtime_at_head(tmp_path, monkeypatch):
-    files = _python_manifests(tmp_path, monkeypatch, runtime_version="0.1.3")
+    files = _python_manifests(
+        tmp_path, monkeypatch, _PythonManifestVersions(runtime="0.1.3")
+    )
 
     assert main(["stamp", "--version", "0.2.0", "--scope", "tools"]) == 0
 
@@ -1752,7 +1995,7 @@ def test_a_runtime_release_the_tools_cannot_use_is_refused(
 def test_a_kit_pin_that_leads_the_manifest_it_names_is_refused(
     tmp_path, monkeypatch, capsys
 ):
-    _python_manifests(tmp_path, monkeypatch, kit_pin="0.3.0")
+    _python_manifests(tmp_path, monkeypatch, _PythonManifestVersions(kit_pin="0.3.0"))
 
     assert main(["verify-versions"]) == 1
 
@@ -1770,7 +2013,7 @@ def test_stamp_recipe_context_names_a_missing_key():
 
 
 def test_verify_versions_reports_the_tools_runtime_range(tmp_path, monkeypatch, capsys):
-    _python_manifests(tmp_path, monkeypatch, python_version="0.5.0")
+    _python_manifests(tmp_path, monkeypatch, _PythonManifestVersions(python="0.5.0"))
 
     assert main(["verify-versions", "--scope", "python", "--json"]) == 0
 
@@ -1789,47 +2032,22 @@ def test_verify_versions_reports_the_tools_runtime_range(tmp_path, monkeypatch, 
 
 
 def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
-    body = tmp_path / "notes.md"
-    body.write_text("# Changelog\n", encoding="utf-8")
-    wheel = tmp_path / "qgis_sdk-0.1.0rc1-py3-none-any.whl"
-    wheel.write_bytes(b"w")
-    sums = tmp_path / "SHA256SUMS"
-    sums.write_text("00  wheel\n", encoding="utf-8")
-    summary = tmp_path / "summary.md"
-    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    created = []
-    uploaded = []
-    from automation import release
-
-    monkeypatch.setattr(
-        release,
-        "create_release",
-        lambda draft, opener=None: (
-            created.append((draft.slug, draft.tag, draft.body, draft.prerelease))
-            or {"upload_url": "https://u{?name}", "html_url": "https://html"}
-        ),
+    body, wheel, sums, summary = _release_assets(
+        tmp_path, monkeypatch, "qgis_sdk-0.1.0rc1-py3-none-any.whl"
     )
-    monkeypatch.setattr(
-        release,
-        "upload_asset",
-        lambda url, token, path, opener=None: uploaded.append(path),
-    )
-    from automation.release import main
+    created, uploaded = [], []
+    _patch_new_release_api(monkeypatch, created, uploaded)
 
     assert (
-        main(
-            [
-                "github-release",
-                "--tag",
-                "v0.1.0-rc.1",
-                "--body-file",
-                str(body),
-                "--asset",
-                str(wheel),
-                str(sums),
-            ]
+        _cli(
+            "github-release",
+            "--tag",
+            "v0.1.0-rc.1",
+            "--body-file",
+            str(body),
+            "--asset",
+            str(wheel),
+            str(sums),
         )
         == 0
     )
@@ -1841,57 +2059,22 @@ def test_github_release_publishes_prerelease_with_assets(tmp_path, monkeypatch):
 def test_github_release_updates_existing_release_when_already_exists(
     tmp_path, monkeypatch
 ):
-    body = tmp_path / "notes.md"
-    body.write_text("# Changelog\n", encoding="utf-8")
-    wheel = tmp_path / "qgis_sdk-0.1.0-py3-none-any.whl"
-    wheel.write_bytes(b"w")
-    sums = tmp_path / "SHA256SUMS"
-    sums.write_text("00  wheel\n", encoding="utf-8")
-    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
-    monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    deleted = []
-    uploaded = []
-    from automation import release
-
-    def raise_exists(*args, **kwargs):
-        raise QgisSdkReleaseError(
-            "GitHub release creation failed (422): already_exists"
-        )
-
-    monkeypatch.setattr(release, "create_release", raise_exists)
-    monkeypatch.setattr(
-        release,
-        "get_release_by_tag",
-        lambda slug, token, tag, opener=None: {
-            "upload_url": "https://u{?name}",
-            "html_url": "https://html/v0.1.0",
-            "assets": [{"name": "SHA256SUMS", "id": 99}],
-        },
+    body, wheel, sums, _ = _release_assets(
+        tmp_path, monkeypatch, "qgis_sdk-0.1.0-py3-none-any.whl"
     )
-    monkeypatch.setattr(
-        release,
-        "delete_release_asset",
-        lambda slug, token, asset_id, opener=None: deleted.append(asset_id),
-    )
-    monkeypatch.setattr(
-        release,
-        "upload_asset",
-        lambda url, token, path, opener=None: uploaded.append(path),
-    )
-    from automation.release import main
+    deleted, uploaded = [], []
+    _patch_existing_release_api(monkeypatch, deleted, uploaded)
 
     assert (
-        main(
-            [
-                "github-release",
-                "--tag",
-                "v0.1.0",
-                "--body-file",
-                str(body),
-                "--asset",
-                str(wheel),
-                str(sums),
-            ]
+        _cli(
+            "github-release",
+            "--tag",
+            "v0.1.0",
+            "--body-file",
+            str(body),
+            "--asset",
+            str(wheel),
+            str(sums),
         )
         == 0
     )
@@ -2080,7 +2263,7 @@ def test_the_verify_versions_command_checks_every_scope_on_its_own(capsys):
 
 
 def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
-    assert main(["verify-versions", "--json"]) == 0
+    assert _cli("verify-versions", "--json") == 0
 
     payload = json.loads(capsys.readouterr().out)
     scopes = payload["scopes"]
@@ -2090,21 +2273,7 @@ def test_the_verify_versions_command_serializes_for_diagnostics(capsys):
     # agreement - every manifest of a scope carrying the scope's one version -
     # rather than about the number the workspace happens to carry today.
     assert set(scopes) == {"runtime", "tools", "kit", "typescript", "ui"}
-    assert set(scopes["runtime"]["manifests"]) == {
-        "runtime pyproject.toml",
-        "recipe runtime_version",
-    }
-    assert set(scopes["tools"]["manifests"]) == {
-        "tools pyproject.toml",
-        "recipe tools_version",
-    }
-    assert set(scopes["kit"]["manifests"]) == {"pyproject.toml", "recipe.yaml"}
-    assert set(scopes["kit"]["pins"]) >= {"qgis-sdk-runtime", "qgis-sdk-tools"}
-    for entry in (scopes["runtime"], scopes["tools"], scopes["kit"]):
-        assert set(entry["manifests"].values()) == {entry["version"]}
-    assert scopes["tools"]["runtime_range"].startswith(
-        f">={scopes['runtime']['version']},<"
-    )
+    _assert_python_scopes(scopes)
     assert typescript_scope["manifests"] == {
         "package.json": typescript_scope["version"]
     }
@@ -2331,8 +2500,7 @@ def _diverged_manifests(tmp_path, monkeypatch, python_version, bridge_version):
     _python_manifests(
         tmp_path,
         monkeypatch,
-        python_version=python_version,
-        bridge_version=bridge_version,
+        _PythonManifestVersions(python=python_version, bridge=bridge_version),
     )
 
 
@@ -2445,7 +2613,9 @@ def test_read_alias_versions_refuses_a_range_pin():
 
 
 def _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", alias_text=None):
-    files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
+    files = _python_manifests(
+        tmp_path, monkeypatch, _PythonManifestVersions(bridge=bridge_version)
+    )
     alias = tmp_path / "alias.json"
     alias.write_text(alias_text or ALIAS_PACKAGE_JSON, encoding="utf-8")
     from automation import release
@@ -2531,7 +2701,9 @@ def test_stamp_scaffold_pin_rewrites_only_the_constant():
 
 
 def _scaffold_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", web_text=None):
-    files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
+    files = _python_manifests(
+        tmp_path, monkeypatch, _PythonManifestVersions(bridge=bridge_version)
+    )
     web = tmp_path / "web.py"
     web.write_text(web_text or SCAFFOLD_WEB_PY, encoding="utf-8")
     from automation import release
@@ -2675,8 +2847,8 @@ def test_stamp_example_windows_moves_each_line_to_the_minor_window():
     assert '"qgis-sdk-tools>=0.7,<0.8"' in pre
 
 
-def _example_manifests(tmp_path, monkeypatch, text=None, **kwargs):
-    files = _python_manifests(tmp_path, monkeypatch, **kwargs)
+def _example_manifests(tmp_path, monkeypatch, text=None, versions=None):
+    files = _python_manifests(tmp_path, monkeypatch, versions)
     example = tmp_path / "example-pyproject.toml"
     example.write_text(text or EXAMPLE_PYPROJECT, encoding="utf-8")
     from automation import release
@@ -2758,7 +2930,9 @@ def test_verify_versions_names_an_example_window_that_excludes_the_release(
     tmp_path, monkeypatch, capsys
 ):
     """A stamped release whose example still declares the old window is refused."""
-    _example_manifests(tmp_path, monkeypatch, python_version="0.6.0")
+    _example_manifests(
+        tmp_path, monkeypatch, versions=_PythonManifestVersions(python="0.6.0")
+    )
 
     assert main(["verify-versions", "--scope", "python", "--version", "0.6.0"]) == 1
 
@@ -2803,7 +2977,9 @@ UI_PACKAGE_JSON = (
 
 
 def _ui_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", ui_text=None):
-    files = _python_manifests(tmp_path, monkeypatch, bridge_version=bridge_version)
+    files = _python_manifests(
+        tmp_path, monkeypatch, _PythonManifestVersions(bridge=bridge_version)
+    )
     ui = tmp_path / "ui.json"
     ui.write_text(ui_text or UI_PACKAGE_JSON, encoding="utf-8")
     monkeypatch.setattr(release_module, "_UI_PACKAGE", ui)
@@ -3003,22 +3179,19 @@ def test_stamp_scaffold_ui_pin_rewrites_only_the_ui_constant():
         release_module.stamp_scaffold_ui_pin(SCAFFOLD_WEB_PY, Version.parse("0.2.0"))
 
 
-def _ui_train_manifests(
-    tmp_path,
-    monkeypatch,
-    bridge_version="0.1.0",
-    ui_text=None,
-    web_text=None,
-    alias_text=None,
-):
+def _ui_train_manifests(tmp_path, monkeypatch, options=None):
+    options = options or _UiTrainOptions()
     package, ui = _ui_manifests(
-        tmp_path, monkeypatch, bridge_version=bridge_version, ui_text=ui_text
+        tmp_path,
+        monkeypatch,
+        bridge_version=options.bridge_version,
+        ui_text=options.ui_text,
     )
     web = tmp_path / "web.py"
-    web.write_text(web_text or SCAFFOLD_WEB_PY_WITH_UI, encoding="utf-8")
+    web.write_text(options.web_text or SCAFFOLD_WEB_PY_WITH_UI, encoding="utf-8")
     monkeypatch.setattr(release_module, "_SCAFFOLD_WEB", web)
     alias = tmp_path / "ui-alias.json"
-    alias.write_text(alias_text or UI_ALIAS_PACKAGE_JSON, encoding="utf-8")
+    alias.write_text(options.alias_text or UI_ALIAS_PACKAGE_JSON, encoding="utf-8")
     monkeypatch.setattr(release_module, "_UI_ALIAS_PACKAGE", alias)
     return package, ui, web, alias
 
@@ -3060,8 +3233,10 @@ def test_verify_versions_names_a_scaffold_ui_pin_that_lags(
     _ui_train_manifests(
         tmp_path,
         monkeypatch,
-        ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.1.1", 1),
-        alias_text=UI_ALIAS_PACKAGE_JSON.replace("0.1.0", "0.1.1"),
+        _UiTrainOptions(
+            ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.1.1", 1),
+            alias_text=UI_ALIAS_PACKAGE_JSON.replace("0.1.0", "0.1.1"),
+        ),
     )
 
     assert main(["verify-versions", "--scope", "ui"]) == 1
@@ -3077,9 +3252,11 @@ def test_verify_versions_names_a_ui_alias_that_lags(tmp_path, monkeypatch, capsy
     _ui_train_manifests(
         tmp_path,
         monkeypatch,
-        ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.1.1", 1),
-        web_text=SCAFFOLD_WEB_PY_WITH_UI.replace(
-            'UI_NPM_VERSION: Final = "0.1.0"', 'UI_NPM_VERSION: Final = "0.1.1"'
+        _UiTrainOptions(
+            ui_text=UI_PACKAGE_JSON.replace("0.1.0", "0.1.1", 1),
+            web_text=SCAFFOLD_WEB_PY_WITH_UI.replace(
+                'UI_NPM_VERSION: Final = "0.1.0"', 'UI_NPM_VERSION: Final = "0.1.1"'
+            ),
         ),
     )
 
@@ -3106,7 +3283,9 @@ def test_verify_versions_reports_the_whole_ui_train(tmp_path, monkeypatch, capsy
 
 def test_a_scaffold_without_a_ui_pin_is_a_bridge_pin_only(tmp_path, monkeypatch):
     """The fixture of the bridge tests predates the UI pin; it still verifies."""
-    _ui_train_manifests(tmp_path, monkeypatch, web_text=SCAFFOLD_WEB_PY)
+    _ui_train_manifests(
+        tmp_path, monkeypatch, _UiTrainOptions(web_text=SCAFFOLD_WEB_PY)
+    )
 
     assert main(["verify-versions", "--scope", "ui", "--version", "0.1.0"]) == 0
     assert main(["stamp", "--version", "0.2.0", "--scope", "ui"]) == 0
@@ -3139,7 +3318,7 @@ def test_the_repository_ui_train_agrees_at_head(monkeypatch):
     assert main(["verify-versions", "--scope", "ui"]) == 0
 
 
-def test_release_workflow_publishes_the_ui_train(monkeypatch):
+def test_release_workflow_builds_the_ui_train():
     """A ``ui-v*`` tag reaches npm the way ``ts-v*`` tags do (TASK-110 AC #1, #4).
 
     The ``ui`` job is gated on the classify flag, runs under the ``npm``
@@ -3147,15 +3326,9 @@ def test_release_workflow_publishes_the_ui_train(monkeypatch):
     alias, dry-runs a prerelease under ``next`` and publishes the alias only
     after the scoped package it pins.
     """
-    import yaml
-
-    repo_root = Path(__file__).resolve().parents[2]
-    workflow = yaml.safe_load(
-        (repo_root / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    )
-    jobs = workflow["jobs"]
+    jobs = _workflow_jobs()
     assert jobs["build"]["outputs"]["ui"] == "${{ steps.classify.outputs.ui }}"
-    build_steps = {step.get("name"): step for step in jobs["build"]["steps"]}
+    build_steps = _steps("build")
     assert build_steps["Install JavaScript dependencies"]["if"] == (
         "steps.classify.outputs.typescript == 'true' || "
         "steps.classify.outputs.ui == 'true'"
@@ -3170,12 +3343,14 @@ def test_release_workflow_publishes_the_ui_train(monkeypatch):
         == "ui-alias-package"
     )
 
-    ui = jobs["ui"]
+
+def test_release_workflow_packs_and_smoke_tests_the_ui_train():
+    ui = _job("ui")
     assert ui["needs"] == "build"
     assert ui["if"] == "needs.build.outputs.ui == 'true'"
     assert ui["environment"] == "npm"
     assert ui["permissions"] == {"id-token": "write", "contents": "read"}
-    steps = {step.get("name"): step for step in ui["steps"]}
+    steps = _steps("ui")
     pack = steps["Pack the UI tarball and check what it holds"]["run"]
     assert "npm pack --dry-run" in pack
     for allowed in ("dist/", "README.md", "LICENSE", "package.json"):
@@ -3183,6 +3358,10 @@ def test_release_workflow_publishes_the_ui_train(monkeypatch):
     assert "npm pkg delete devDependencies" in pack
     smoke = steps["Smoke-test the alias against the UI tarball"]["run"]
     assert "qgis-sdk-ui" in smoke and "@archont561/qgis-sdk-ui" in smoke
+
+
+def test_release_workflow_dry_runs_and_publishes_the_ui_train():
+    steps = _steps("ui")
     dry = steps["Dry-run the publish"]
     assert dry["if"] == "needs.build.outputs.prerelease == 'true'"
     assert dry["run"].count("npm publish --dry-run --access public --tag next") == 2
@@ -3193,15 +3372,17 @@ def test_release_workflow_publishes_the_ui_train(monkeypatch):
     alias = steps["Publish the alias to npm"]
     assert alias["if"] == "needs.build.outputs.prerelease == 'false'"
     assert '"qgis-sdk-ui@' in alias["run"]
-    names = [step.get("name") for step in ui["steps"]]
+    names = _step_names("ui")
     assert names.index("Publish to npm") < names.index("Publish the alias to npm")
     assert steps["Upload tarball artifact"]["with"]["name"] == "ui-npm-tgz"
 
-    release = jobs["github-release"]
+
+def test_release_workflow_attaches_the_ui_tarball_to_the_github_release():
+    release = _job("github-release")
     assert "ui" in release["needs"]
     ui_gate = "needs.ui.result == 'success' || needs.ui.result == 'skipped'"
     assert ui_gate in release["if"]
-    release_steps = {step.get("name"): step for step in release["steps"]}
+    release_steps = _steps("github-release")
     assert release_steps["Download UI tarball artifact"]["if"] == (
         "needs.build.outputs.ui == 'true'"
     )
@@ -3212,119 +3393,73 @@ def test_release_workflow_publishes_the_ui_train(monkeypatch):
 
 def test_ui_github_packages_release_uses_the_qualified_scoped_tarball():
     """A UI tag publishes the tested scoped tarball, never the npm-only alias."""
-    import yaml
-
-    root = Path(__file__).resolve().parents[2]
-    workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
-    jobs = workflow["jobs"]
-    job = jobs["github-packages-ui"]
+    job = _job("github-packages-ui")
     assert set(job["needs"]) == {"build", "ui"}
     assert "needs.build.outputs.ui == 'true'" in job["if"]
     assert "needs.ui.result == 'success'" in job["if"]
     assert job["permissions"] == {"contents": "read", "packages": "write"}
     assert job["env"]["NODE_AUTH_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
-    steps = {step.get("name"): step for step in job["steps"]}
+    steps = _steps("github-packages-ui")
     assert steps["Download qualified UI tarballs"]["with"]["name"] == "ui-npm-tgz"
     assert steps["Set up Node for GitHub Packages"]["with"]["registry-url"] == (
         "https://npm.pkg.github.com"
     )
-    assert steps["Dry-run UI GitHub Packages publish"]["if"] == (
-        "needs.build.outputs.prerelease == 'true'"
-    )
-    assert "--dry-run" in steps["Dry-run UI GitHub Packages publish"]["run"]
-    assert "--tag next" in steps["Dry-run UI GitHub Packages publish"]["run"]
+
+
+def test_ui_github_packages_release_publishes_only_the_scoped_tarball():
+    steps = _steps("github-packages-ui")
+    dry = steps["Dry-run UI GitHub Packages publish"]
+    assert dry["if"] == "needs.build.outputs.prerelease == 'true'"
+    assert "--dry-run" in dry["run"]
+    assert "--tag next" in dry["run"]
     publish = steps["Publish UI to GitHub Packages"]
     assert publish["if"] == "needs.build.outputs.prerelease == 'false'"
     assert "@archont561/qgis-sdk-ui@" in publish["run"]
-    for step in (steps["Dry-run UI GitHub Packages publish"], publish):
-        assert (
-            "ui-packages/ui/archont561-qgis-sdk-ui-${RELEASE_VERSION}.tgz"
-            in step["run"]
-        )
-        assert "ui-alias/" not in step["run"]
-    release = jobs["github-release"]
+    _assert_ui_packages_step_uses_scoped_tarball(dry)
+    _assert_ui_packages_step_uses_scoped_tarball(publish)
+
+
+def test_ui_github_packages_release_gates_the_github_release():
+    release = _job("github-release")
     assert "github-packages-ui" in release["needs"]
     assert "needs.github-packages-ui.result == 'success'" in release["if"]
     assert "needs.github-packages-ui.result == 'skipped'" in release["if"]
 
 
+@dataclass(frozen=True, slots=True)
+class _UiPackagesCase:
+    """One GitHub Packages shell case: its step, inputs and expected commands."""
+
+    step_name: str
+    version: str
+    existing: str
+    expected_commands: tuple[str, ...]
+    publish_status: int
+
+
 @pytest.mark.parametrize(
-    ("step_name", "version", "existing", "expected_commands", "publish_status"),
+    "case",
     [
-        ("Dry-run UI GitHub Packages publish", "0.2.0-rc.1", "", ["publish"], 0),
-        ("Publish UI to GitHub Packages", "0.2.0", "0.2.0", ["view"], 0),
-        ("Publish UI to GitHub Packages", "0.2.0", "", ["view", "publish"], 0),
-        ("Publish UI to GitHub Packages", "0.2.0", "", ["view", "publish"], 42),
+        _UiPackagesCase(
+            "Dry-run UI GitHub Packages publish", "0.2.0-rc.1", "", ("publish",), 0
+        ),
+        _UiPackagesCase(
+            "Publish UI to GitHub Packages", "0.2.0", "0.2.0", ("view",), 0
+        ),
+        _UiPackagesCase(
+            "Publish UI to GitHub Packages", "0.2.0", "", ("view", "publish"), 0
+        ),
+        _UiPackagesCase(
+            "Publish UI to GitHub Packages", "0.2.0", "", ("view", "publish"), 42
+        ),
     ],
+    ids=["dry-run", "already-published", "publish", "publish-fails"],
 )
-def test_ui_github_packages_shell_uses_only_scoped_tarball(
-    tmp_path, step_name, version, existing, expected_commands, publish_status
-):
+def test_ui_github_packages_shell_uses_only_scoped_tarball(tmp_path, case):
     """Exercise the real workflow shell with an offline npm stub, not a registry."""
-    import os
-    import subprocess
-
-    import yaml
-
-    root = Path(__file__).resolve().parents[2]
-    workflow = yaml.safe_load((root / ".github/workflows/release.yml").read_text())
-    steps = {s.get("name"): s for s in workflow["jobs"]["github-packages-ui"]["steps"]}
-    tarball = tmp_path / "ui-packages" / "ui" / f"archont561-qgis-sdk-ui-{version}.tgz"
-    tarball.parent.mkdir(parents=True)
-    tarball.write_bytes(b"test only")
-    alias = tmp_path / "ui-packages" / "ui-alias" / f"qgis-sdk-ui-{version}.tgz"
-    alias.parent.mkdir()
-    alias.write_bytes(b"not for GitHub Packages")
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
-    npm = stub_dir / "npm"
-    npm.write_text(
-        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$NPM_CALLS"\n'
-        'if [ "$1" = view ]; then\n'
-        '  if [ -n "$EXISTING_VERSION" ]; then printf "%s\\n" "$EXISTING_VERSION"; exit 0; fi\n'
-        '  exit 1\nfi\nexit "$PUBLISH_STATUS"\n',
-        encoding="utf-8",
-    )
-    npm.chmod(0o755)
-    calls = tmp_path / "npm-calls"
-    env = {
-        **os.environ,
-        "PATH": f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
-        "NPM_CALLS": str(calls),
-        "EXISTING_VERSION": existing,
-        "PUBLISH_STATUS": str(publish_status),
-        "RELEASE_VERSION": version,
-        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
-    }
-    result = subprocess.run(
-        [
-            "bash",
-            "--noprofile",
-            "--norc",
-            "-e",
-            "-o",
-            "pipefail",
-            "-c",
-            steps[step_name]["run"],
-        ],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == publish_status, result.stderr
-    commands = calls.read_text().splitlines()
-    assert [command.split()[0] for command in commands] == expected_commands
-    assert all("https://npm.pkg.github.com" in command for command in commands)
-    if "publish" in expected_commands:
-        publish = next(
-            command for command in commands if command.startswith("publish ")
-        )
-        assert str(tarball.relative_to(tmp_path)) in publish
-        assert "ui-alias/" not in publish
-        assert ("--dry-run" in publish) == ("-rc." in version)
-        assert ("--tag next" in publish) == ("-rc." in version)
+    result, commands, tarball = _ui_publish_run(tmp_path, case)
+    assert result.returncode == case.publish_status, result.stderr
+    _assert_ui_publish_calls(case, commands, tarball, tmp_path)
 
 
 def test_ui_github_packages_refuses_a_missing_scoped_tarball(tmp_path):

@@ -135,3 +135,9 @@ plan's knobs are named, which is what let the 124-line `compute_plan` become a
 `backlog/docs/plans/doc-7` that a parameter object for `compute_plan` and
 `create_release` would not reduce coupling: with the call sites moved in the
 same commit, it did.
+
+## Follow-through: test fixtures and parametrized cases
+
+Slice 15 applied the rule to the release-test fixtures, not only product code. `_python_manifests` and `_ui_train_manifests` had long lists of arguments whose only job was to override a default; they now take `_PythonManifestVersions` and `_UiTrainOptions`. The four parametrized GitHub Packages shell cases became one `_UiPackagesCase` record, so the test takes `tmp_path` and `case`. Every record kept the old defaults and every call site moved in the same commit.
+
+The `**kwargs` forwarder is worth reading twice: `_example_manifests` used to pass `python_version=` to `_python_manifests` without either function naming the shape they shared. A record makes the one call site say `_PythonManifestVersions(python="0.6.0")`, and makes a second vocabulary impossible. Budget 725 -> 707; no threshold changed and nothing was suppressed.
