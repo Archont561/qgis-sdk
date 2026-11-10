@@ -7,6 +7,8 @@ import {
 } from "fumadocs-ui/page";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CliWalkthrough } from "@/components/cli-walkthrough";
+import { CompatNotice } from "@/components/compat-notice";
 import { RegistryStats } from "@/components/registry-stats";
 import { Versions } from "@/components/versions";
 import edits from "@/lib/generated/pages.json";
@@ -46,7 +48,13 @@ export default async function Page({ params }: Props) {
 			<DocsDescription>{page.data.description}</DocsDescription>
 			<DocsBody>
 				<MDX
-					components={{ ...defaultMdxComponents, RegistryStats, Versions }}
+					components={{
+						...defaultMdxComponents,
+						CliWalkthrough,
+						CompatNotice,
+						RegistryStats,
+						Versions,
+					}}
 				/>
 			</DocsBody>
 		</DocsPage>

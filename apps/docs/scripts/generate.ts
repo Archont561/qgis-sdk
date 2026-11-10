@@ -8,6 +8,9 @@
  *   it is hand-written and stays in git, so the folder is mixed;
  * - `lib/generated/stats.json`, the registry download counts `components/registry-stats.tsx`
  *   renders, fetched at build time with every failure degraded to `null`;
+ * - `lib/generated/compat.json`, the QGIS and Python series read from the
+ *   support matrix in the Python guide, which `components/compat-notice.tsx`
+ *   states on the landing page;
  * - the `meta.json` files that give every generated folder its title and page
  *   order, so the sidebar is data rather than a hand-kept list in the layout;
  * - `lib/generated/` - the versions the site describes and, per page, the
@@ -26,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { REPOSITORY } from "../site";
 import { versions } from "../versions";
 import { DECISION_SUMMARIES } from "./decision-summaries";
+import { collectCompat } from "./lib/compat";
 import { parseDecision, renderDecisionsPage } from "./lib/decisions";
 import {
 	GUIDES,
@@ -193,6 +197,13 @@ async function main(): Promise<void> {
 	// What the layout needs to know about pages it did not author: the version
 	// badges, the edit link back to the guide, and the guide's last commit.
 	await writeJson(join(GENERATED_DIR, "versions.json"), versions);
+	const compat = collectCompat(
+		await Bun.file(join(GUIDES_DIR, GUIDES[0]?.file ?? "")).text(),
+	);
+	await writeJson(join(GENERATED_DIR, "compat.json"), compat);
+	console.log(
+		`generate: compat from ${compat.qualified} qualified rows - QGIS ${compat.qgis.map((row) => row.series).join(", ")}, Python ${compat.python.min}-${compat.python.max}`,
+	);
 	const stats = await collectStats();
 	await writeJson(join(GENERATED_DIR, "stats.json"), stats);
 	const known = stats.rows.filter((row) => row.lastMonth !== null).length;

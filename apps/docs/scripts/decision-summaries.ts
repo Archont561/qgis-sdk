@@ -83,4 +83,5 @@ export const DECISION_SUMMARIES: Readonly<Record<number, string>> = {
 	76: "AGENTS.md is part generated: three fact regions come from agents-md through a wrapper that corrects its npm-and-node reading of this tree, and the rules stay handwritten outside the markers.",
 	77: "Repository automation is one task graph: dodo.py declares the tasks, automation/ implements them as ordinary Python, and pixi run automation is the only front door - with Pixi keeping just the environment primitives and no task caching anything.",
 	78: "The reference pages lead with the fact and tabulate repeated shapes, one hand-written FAQ sits beside the generated decision table, the roadmap names no dates, and the registry numbers are fetched at build time and degrade to a dash.",
+	79: "The landing and install pages state the qualified QGIS and Python versions read from the support matrix, the Storybook follows the site theme, the first-plugin guide runs start to finish on one page, and walkthroughs replay real command output.",
 };

@@ -2,6 +2,7 @@ import { Card, Cards } from "fumadocs-ui/components/card";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { HomeLayout } from "fumadocs-ui/layouts/home";
 import type { Metadata } from "next";
+import { CompatNotice } from "@/components/compat-notice";
 import versions from "@/lib/generated/versions.json";
 import { hasStorybook, navLinks } from "@/lib/nav";
 import { BASE, DESCRIPTION, REPOSITORY, SITE, TITLE } from "@/site";
@@ -74,6 +75,10 @@ export default function Home() {
 				</div>
 
 				<code className="install-chip">pip install qgis-sdk</code>
+
+				<div className="mt-6">
+					<CompatNotice />
+				</div>
 
 				<ul className="versions">
 					<li>
