@@ -486,14 +486,8 @@
 		"CC101": 3,
 		"CC201": 1
 	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/processing.py": {
-		"CC101": 5,
-		"CC102": 4,
-		"CC103": 3,
-		"CC104": 2,
-		"CC201": 1,
-		"CC202": 1,
-		"CC303": 2
+	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/processing/_service.py": {
+		"CC102": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/project.py": {
 		"CC101": 2,
