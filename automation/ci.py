@@ -151,7 +151,13 @@ def native(command: list[str]) -> int:
     if named:
         annotation(f"native layers: {len(named)} failed", "\n".join(named))
     annotation("native layers: environment", "\n".join(probe.stdout.splitlines()[-20:]))
-    annotation("native layers: pytest", "\n".join(text.splitlines()[-60:]))
+    # A Qt abort ends the process with a faulthandler dump of its own, and that
+    # dump is longer than the window below: taken from the tail, the annotation
+    # would show only C frames. Cut it off first, so what is annotated is the
+    # last test that started and the Python frames leading into the abort.
+    abort = text.find("Fatal Python error")
+    before = text if abort == -1 else text[:abort]
+    annotation("native layers: pytest", "\n".join(before.splitlines()[-120:]))
     return status
 
 
