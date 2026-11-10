@@ -15,6 +15,7 @@ from qgis_sdk.bridge.authority import (
     DEFAULT_EXPORT_BYTES,
     MAX_FILE_REFS_PER_VIEW,
     FileOperation,
+    FilePolicy,
     FileRef,
     HostAuthority,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "DispatchSetup",
     "Dispatcher",
     "FileOperation",
+    "FilePolicy",
     "FileRef",
     "HostAuthority",
     "InvokeEnvelope",

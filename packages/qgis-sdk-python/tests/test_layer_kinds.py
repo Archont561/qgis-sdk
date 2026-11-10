@@ -23,7 +23,7 @@ from typing import Any
 import layer_kind_fixtures as fixture_files
 import pytest
 from qgis_sdk.bridge import Dispatcher
-from qgis_sdk.bridge.authority import HostAuthority
+from qgis_sdk.bridge.authority import FilePolicy, HostAuthority
 from qgis_sdk.bridge.host import HOST_OPERATIONS, HostServices, register_host_operations
 from qgis_sdk.bridge.protocol import BRIDGE_PROTOCOL_VERSION
 from qgis_sdk.core import ResourceScope
@@ -554,7 +554,7 @@ def test_a_page_opens_a_mesh_with_a_granted_ref_and_reads_it_back(
     )
     dispatcher, authority = _bridge(layers, scope)
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
-    ref = authority.grant_file(binding, dataset, source="picker")
+    ref = authority.grant_file(binding, dataset, FilePolicy(source="picker"))
 
     opened = dispatcher.dispatch(
         binding,
@@ -623,7 +623,7 @@ def test_every_open_is_typed_and_answered_by_a_handler(tmp_path: Path) -> None:
     ):
         dataset = _grantable(tmp_path, source)
         _declare_at(layers, dataset, kind, **detail[kind])
-        ref = authority.grant_file(binding, dataset, source="picker")
+        ref = authority.grant_file(binding, dataset, FilePolicy(source="picker"))
         answered = dispatcher.dispatch(
             binding,
             {

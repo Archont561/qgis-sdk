@@ -551,7 +551,6 @@
 		"CC104": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/authority/__init__.py": {
-		"CC102": 1,
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py": {

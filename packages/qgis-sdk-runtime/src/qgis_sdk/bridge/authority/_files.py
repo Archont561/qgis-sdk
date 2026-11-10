@@ -41,12 +41,14 @@ class _Target:
 
 
 @dataclass(frozen=True)
-class _FilePolicy:
+class FilePolicy:
     """What one grant allows: its operations, origin, lifetime and ceiling.
 
     The five knobs travel together because they are read together - a grant is
-    checked for what it allows and when it stops allowing it - and a policy is
-    what a caller builds instead of threading five arguments through.
+    checked for what it allows and when it stops allowing it - so this is both
+    what ``HostAuthority.grant_file`` takes and what the grant machinery reads.
+    The default is the ordinary one: read one existing file, no expiry, the
+    export ceiling.
     """
 
     operations: Iterable[str | FileOperation] = (FileOperation.READ,)
@@ -79,6 +81,11 @@ class _FilePolicy:
         )
 
 
+#: The ordinary grant, shared because a policy is immutable: one existing file,
+#: read, no expiry, the export ceiling. ``grant_file`` takes it as its default.
+_DEFAULT_FILE_POLICY = FilePolicy()
+
+
 @dataclass
 class _FileGrants:
     """Mint, resolve and revoke the file refs of every view of one host."""
@@ -92,7 +99,7 @@ class _FileGrants:
         self.table = _Table(self.clock)
 
     def mint(
-        self, binding: ViewBinding, path: str | os.PathLike[str], policy: _FilePolicy
+        self, binding: ViewBinding, path: str | os.PathLike[str], policy: FilePolicy
     ) -> FileRef:
         """Mint a ref for ``path`` that only ``binding``'s view can use.
 
@@ -131,7 +138,7 @@ class _FileGrants:
         directory is replaced or removed. A directory ref reads; writing into
         one is a separate file grant inside it.
         """
-        policy = _FilePolicy(source=source, ttl_seconds=ttl_seconds, max_bytes=0)
+        policy = FilePolicy(source=source, ttl_seconds=ttl_seconds, max_bytes=0)
         _refuse_source(policy.source)
         _refuse_too_many(binding, self.table.count(binding.view_id))
         canonical = _existing_directory(path)
