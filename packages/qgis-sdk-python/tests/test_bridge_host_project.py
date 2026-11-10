@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 from qgis_sdk.bridge import BridgeErrorCode, Dispatcher
-from qgis_sdk.bridge.authority import FileOperation, HostAuthority
+from qgis_sdk.bridge.authority import FileOperation, FilePolicy, HostAuthority
 from qgis_sdk.bridge.host import (
     HOST_OPERATIONS,
     HostServices,
@@ -307,7 +307,9 @@ def test_an_unknown_bookmark_is_refused_with_its_own_code(doubles: _Doubles) -> 
 
 def _write_ref(doubles: _Doubles, binding: Any, path: Path):
     return doubles.authority.grant_file(
-        binding, path, operations=(FileOperation.WRITE,), source="picker"
+        binding,
+        path,
+        FilePolicy(operations=(FileOperation.WRITE,), source="picker"),
     )
 
 

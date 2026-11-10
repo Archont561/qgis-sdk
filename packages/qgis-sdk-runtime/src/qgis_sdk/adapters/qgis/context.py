@@ -30,7 +30,7 @@ from .layouts import NativeLayouts
 from .log import NativeLog
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
-from .processing import NativeProcessing
+from .processing import NativeProcessing, ProcessingServices
 from .project import NativeProject
 from .rasters import NativeRasters
 from .settings import NativeSettings
@@ -45,15 +45,26 @@ class IfaceDesktopAccess:
     iface: object
 
 
+@dataclass(frozen=True, slots=True)
+class NativeContextOptions:
+    """What a Desktop host may vary when it assembles the plugin context.
+
+    ``settings_prefix`` scopes the settings service to this plugin's keys; the
+    rest are the host's own objects - the ``QgisInterface`` it was created with,
+    the desktop access, the working directory temporary outputs land in, and the
+    ``Host`` the context states it belongs to (decision-52).
+    """
+
+    settings_prefix: str
+    iface: object | None = None
+    notifications: Notifications | None = None
+    working_directory: Path | None = None
+    host: Host = Host.DESKTOP
+    canvas: object | None = None
+
+
 def native_plugin_context(
-    scope: ResourceScope,
-    *,
-    settings_prefix: str,
-    iface: object | None = None,
-    notifications: Notifications | None = None,
-    working_directory: Path | None = None,
-    host: Host = Host.DESKTOP,
-    canvas: object | None = None,
+    scope: ResourceScope, options: NativeContextOptions
 ) -> PluginContext:
     """Build the plugin context a QGIS Desktop host offers.
 
@@ -87,16 +98,18 @@ def native_plugin_context(
     # somebody pans. A bare QgsApplication has no view, and `ctx.has("canvas")`
     # says so instead of handing back a service that refuses every call.
     canvas_service: NativeCanvas | None = None
-    if host is Host.SERVER:
-        canvas_service = NativeCanvas(scope, layers=layers, host=host)
-    elif iface is not None or canvas is not None:
-        canvas_service = NativeCanvas(scope, layers=layers, iface=iface, canvas=canvas)
+    if options.host is Host.SERVER:
+        canvas_service = NativeCanvas(scope, layers=layers, host=options.host)
+    elif options.iface is not None or options.canvas is not None:
+        canvas_service = NativeCanvas(
+            scope, layers=layers, iface=options.iface, canvas=options.canvas
+        )
     # One authority per runtime (decision-20): the refs Processing mints for
     # a toolbox run, the ones a page receives through ``HostServices``, the
     # ones the form components hand a handler and the file outputs of
     # ``ctx.algorithms.run`` all resolve through it.
     authority = HostAuthority()
-    files = FilesService(authority, scope, owner=f"plugin:{settings_prefix}")
+    files = FilesService(authority, scope, owner=f"plugin:{options.settings_prefix}")
     # One worker backend for the context: the layouts service renders through
     # it exactly as ``ctx.jobs`` does, so an export or a batch is one task in
     # the task bar.
@@ -104,18 +117,20 @@ def native_plugin_context(
     algorithms = NativeAlgorithms(
         layers,
         scope,
-        working_directory=working_directory,
+        working_directory=options.working_directory,
         files=files,
         workers=workers,
     )
     layouts = NativeLayouts(scope, workers=workers, files=files)
     return PluginContext(
         notifications=(
-            notifications if notifications is not None else NativeNotifications(scope)
+            options.notifications
+            if options.notifications is not None
+            else NativeNotifications(scope)
         ),
         scope=scope,
-        host=host,
-        desktop=None if iface is None else IfaceDesktopAccess(iface),
+        host=options.host,
+        desktop=(None if options.iface is None else IfaceDesktopAccess(options.iface)),
         network=NetworkClient(transport, scope),
         layers=layers,
         rasters=rasters,
@@ -123,18 +138,20 @@ def native_plugin_context(
         layouts=layouts,
         canvas=canvas_service,
         project=project,
-        settings=NativeSettings(scope, prefix=settings_prefix),
+        settings=NativeSettings(scope, prefix=options.settings_prefix),
         styles=NativeStyles(layers, scope),
         algorithms=algorithms,
         workers=workers,
         processing=NativeProcessing(
-            layers=layers,
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
-            authority=authority,
-            rasters=rasters,
+            ProcessingServices(
+                layers=layers,
+                algorithms=algorithms,
+                project=project,
+                scope=scope,
+                authority=authority,
+                rasters=rasters,
+            )
         ),
         files=files,
-        log=NativeLog(scope, settings_prefix),
+        log=NativeLog(scope, options.settings_prefix),
     )

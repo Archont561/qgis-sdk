@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 from qgis_sdk.bridge import BridgeErrorCode, Dispatcher
-from qgis_sdk.bridge.authority import FileOperation, HostAuthority
+from qgis_sdk.bridge.authority import FileOperation, FilePolicy, HostAuthority
 from qgis_sdk.bridge.host import HostServices, register_host_operations
 from qgis_sdk.bridge.protocol import BRIDGE_PROTOCOL_VERSION
 from qgis_sdk.core import ResourceScope
@@ -206,7 +206,9 @@ def test_an_export_writes_where_the_pages_write_ref_names(
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     destination = tmp_path / "chosen.pdf"
     ref = doubles.authority.grant_file(
-        binding, destination, operations=(FileOperation.WRITE,), overwrite=True
+        binding,
+        destination,
+        FilePolicy(operations=(FileOperation.WRITE,), overwrite=True),
     )
 
     answered = _call(
@@ -227,7 +229,9 @@ def test_replacing_a_file_the_page_named_needs_the_flag(
     destination = tmp_path / "chosen.pdf"
     destination.write_text("an earlier export", encoding="utf-8")
     ref = doubles.authority.grant_file(
-        binding, destination, operations=(FileOperation.WRITE,), overwrite=True
+        binding,
+        destination,
+        FilePolicy(operations=(FileOperation.WRITE,), overwrite=True),
     )
     payload = {"layout": LAYOUT, "format": "pdf", "destination": ref.to_wire()}
 

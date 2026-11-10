@@ -276,10 +276,13 @@ def default_context(
     scope = ResourceScope()
     notifications = MessageBarNotifications(iface, title)
     if qgis_is_running():
-        from qgis_sdk.adapters.qgis import native_plugin_context
+        from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 
         return native_plugin_context(
-            scope, settings_prefix=plugin_id, iface=iface, notifications=notifications
+            scope,
+            NativeContextOptions(
+                settings_prefix=plugin_id, iface=iface, notifications=notifications
+            ),
         )
     return PluginContext(notifications=notifications, scope=scope, host=Host.DESKTOP)
 

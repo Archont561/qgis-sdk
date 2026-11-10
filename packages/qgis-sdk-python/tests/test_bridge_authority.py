@@ -17,6 +17,7 @@ from qgis_sdk.bridge.authority import (
     FILE_REF,
     MAX_FILE_REFS_PER_VIEW,
     FileOperation,
+    FilePolicy,
     FileRef,
     HostAuthority,
 )
@@ -73,7 +74,7 @@ def test_a_picker_result_becomes_an_opaque_ref_the_view_can_show(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
 
-    ref = authority.grant_file(binding, dataset, source="picker")
+    ref = authority.grant_file(binding, dataset, FilePolicy(source="picker"))
 
     assert isinstance(ref, FileRef)
     assert ref.kind == "file"
@@ -154,15 +155,19 @@ def test_a_write_grant_needs_an_existing_parent_directory(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     ref = authority.grant_file(
-        binding, tmp_path / "export.csv", operations=("write",), source="picker"
+        binding,
+        tmp_path / "export.csv",
+        FilePolicy(operations=("write",), source="picker"),
     )
     assert ref.operations == ("write",)
     with pytest.raises(QgisSdkBridgeError, match="directory"):
         authority.grant_file(
-            binding, tmp_path / "nowhere" / "export.csv", operations=("write",)
+            binding,
+            tmp_path / "nowhere" / "export.csv",
+            FilePolicy(operations=("write",)),
         )
     with pytest.raises(QgisSdkBridgeError, match="not a file"):
-        authority.grant_file(binding, tmp_path, operations=("write",))
+        authority.grant_file(binding, tmp_path, FilePolicy(operations=("write",)))
 
 
 def test_a_grant_refuses_unknown_operations_and_sources(
@@ -170,11 +175,11 @@ def test_a_grant_refuses_unknown_operations_and_sources(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     with pytest.raises(QgisSdkBridgeError, match="read and/or write"):
-        authority.grant_file(binding, dataset, operations=("execute",))
+        authority.grant_file(binding, dataset, FilePolicy(operations=("execute",)))
     with pytest.raises(QgisSdkBridgeError, match="at least one"):
-        authority.grant_file(binding, dataset, operations=())
+        authority.grant_file(binding, dataset, FilePolicy(operations=()))
     with pytest.raises(QgisSdkBridgeError, match="source"):
-        authority.grant_file(binding, dataset, source="page")
+        authority.grant_file(binding, dataset, FilePolicy(source="page"))
 
 
 def test_a_view_holds_a_bounded_number_of_refs(
@@ -269,7 +274,7 @@ def test_an_expired_ref_is_stale_and_forgotten(
     authority: HostAuthority, dispatcher: Dispatcher, dataset: Path, clock: _Clock
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
-    ref = authority.grant_file(binding, dataset, ttl_seconds=60)
+    ref = authority.grant_file(binding, dataset, FilePolicy(ttl_seconds=60))
     authority.resolve_file(binding, ref.to_wire(), FileOperation.READ)
     clock.now += 61
 
@@ -338,7 +343,7 @@ def test_a_write_destination_whose_parent_was_replaced_is_stale(
     folder = tmp_path / "out"
     folder.mkdir()
     ref = authority.grant_file(
-        binding, folder / "export.geojson", operations=("write",)
+        binding, folder / "export.geojson", FilePolicy(operations=("write",))
     )
 
     folder.rename(tmp_path / "elsewhere")
@@ -400,7 +405,7 @@ def test_a_write_ref_refuses_to_overwrite_unless_the_grant_said_so(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     target = tmp_path / "export.csv"
-    fresh = authority.grant_file(binding, target, operations=("write",))
+    fresh = authority.grant_file(binding, target, FilePolicy(operations=("write",)))
     assert authority.resolve_file(binding, fresh.to_wire(), FileOperation.WRITE) == (
         target.resolve()
     )
@@ -410,7 +415,9 @@ def test_a_write_ref_refuses_to_overwrite_unless_the_grant_said_so(
         authority.resolve_file(binding, fresh.to_wire(), FileOperation.WRITE)
 
     replace = authority.grant_file(
-        binding, target, operations=("write",), overwrite=True, source="picker"
+        binding,
+        target,
+        FilePolicy(operations=("write",), overwrite=True, source="picker"),
     )
     assert authority.resolve_file(binding, replace.to_wire(), FileOperation.WRITE) == (
         target.resolve()
@@ -427,7 +434,7 @@ def test_an_export_writes_atomically_and_leaves_nothing_behind_on_failure(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     target = tmp_path / "export.csv"
-    ref = authority.grant_file(binding, target, operations=("write",))
+    ref = authority.grant_file(binding, target, FilePolicy(operations=("write",)))
 
     written = authority.export_file(binding, ref.to_wire(), "a,b\n1,2\n")
 
@@ -447,7 +454,7 @@ def test_an_export_that_fails_midway_cleans_its_partial_file(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     target = tmp_path / "export.csv"
-    ref = authority.grant_file(binding, target, operations=("write",))
+    ref = authority.grant_file(binding, target, FilePolicy(operations=("write",)))
 
     def explode(*args, **kwargs):
         raise OSError("disk full")
@@ -464,7 +471,9 @@ def test_an_export_is_bounded(
 ) -> None:
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     ref = authority.grant_file(
-        binding, tmp_path / "export.csv", operations=("write",), max_bytes=4
+        binding,
+        tmp_path / "export.csv",
+        FilePolicy(operations=("write",), max_bytes=4),
     )
     with pytest.raises(QgisSdkGrantRefusedError, match="4 bytes"):
         authority.export_file(binding, ref.to_wire(), "12345")

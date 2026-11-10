@@ -42,7 +42,7 @@ from qgis_sdk.bridge import (
     Dispatcher,
     ViewBinding,
 )
-from qgis_sdk.bridge.authority import HostAuthority
+from qgis_sdk.bridge.authority import FilePolicy, HostAuthority
 from qgis_sdk.bridge.host import HostServices, register_host_operations
 from qgis_sdk.bridge.resources import HandleKind
 from qgis_sdk.bridge.streams import (
@@ -268,7 +268,7 @@ def build_cases() -> dict[str, Any]:
         clock = _Clock()
         file_host, authority = _file_host(clock)
         binding = file_host.bind(view_id="view-1", origin="qgis://desktop")
-        ref = authority.grant_file(binding, dataset, ttl_seconds=60)
+        ref = authority.grant_file(binding, dataset, FilePolicy(ttl_seconds=60))
         clock.now += 61
         request = _request(
             "layers.open_vector", {"file": ref.to_wire()}, "case-expired"

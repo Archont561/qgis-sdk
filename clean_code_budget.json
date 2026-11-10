@@ -468,7 +468,6 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/context.py": {
 		"CC101": 1,
-		"CC102": 1,
 		"CC104": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/features.py": {
@@ -485,9 +484,6 @@
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/network.py": {
 		"CC101": 3,
 		"CC201": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/processing/_service.py": {
-		"CC102": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/project.py": {
 		"CC101": 2,
@@ -554,11 +550,9 @@
 		"CC104": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/authority/__init__.py": {
-		"CC102": 1,
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py": {
-		"CC102": 1,
 		"CC202": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/bridge/schema.py": {

@@ -18,7 +18,7 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from qgis_sdk.bridge import BridgeErrorCode, Dispatcher
-from qgis_sdk.bridge.authority import FileOperation, HostAuthority
+from qgis_sdk.bridge.authority import FileOperation, FilePolicy, HostAuthority
 from qgis_sdk.bridge.host import (
     DEFAULT_PAGE,
     DEFERRED_HOST_METHODS,
@@ -646,7 +646,7 @@ def _granted(tmp_path: Path):
     services = _services(1)
     dispatcher = _dispatcher(services)
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
-    ref = services.authority.grant_file(binding, dataset, source="picker")
+    ref = services.authority.grant_file(binding, dataset, FilePolicy(source="picker"))
     return dispatcher, services, binding, ref, dataset
 
 
@@ -698,7 +698,7 @@ def test_a_write_only_ref_cannot_be_opened(tmp_path: Path) -> None:
     dispatcher = _dispatcher(services)
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
     ref = services.authority.grant_file(
-        binding, tmp_path / "out.csv", operations=("write",)
+        binding, tmp_path / "out.csv", FilePolicy(operations=("write",))
     )
     refused = _call(
         dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=binding
@@ -712,8 +712,9 @@ def test_files_export_writes_through_a_write_ref_and_reports_the_size(
     services = _services(1)
     dispatcher = _dispatcher(services)
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    out = tmp_path / "out.csv"
     ref = services.authority.grant_file(
-        binding, tmp_path / "out.csv", operations=("write",), source="picker"
+        binding, out, FilePolicy(operations=("write",), source="picker")
     )
 
     written = _call(
@@ -725,7 +726,7 @@ def test_files_export_writes_through_a_write_ref_and_reports_the_size(
 
     assert written["ok"] is True
     assert written["value"] == {"bytes_written": 4, "name": "out.csv"}
-    assert (tmp_path / "out.csv").read_text(encoding="utf-8") == "a,b\n"
+    assert out.read_text(encoding="utf-8") == "a,b\n"
 
     again = _call(
         dispatcher,
@@ -734,7 +735,7 @@ def test_files_export_writes_through_a_write_ref_and_reports_the_size(
         binding=binding,
     )
     assert again["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
-    assert (tmp_path / "out.csv").read_text(encoding="utf-8") == "a,b\n"
+    assert out.read_text(encoding="utf-8") == "a,b\n"
 
 
 def test_files_export_through_a_read_ref_is_refused(tmp_path: Path) -> None:
@@ -1156,7 +1157,9 @@ def test_algorithms_run_takes_view_refs_and_hands_outputs_back_as_view_refs(
     report = tmp_path / "report.html"
     report.write_text("<p>ok</p>")
     (tmp_path / "out.tif").write_bytes(b"translated")
-    view_ref = services.authority.grant_file(binding, raster, source="picker")
+    view_ref = services.authority.grant_file(
+        binding, raster, FilePolicy(source="picker")
+    )
     algorithms.script_run(
         "gdal:translate",
         lambda run: {"OUTPUT": tmp_path / "out.tif", "SEEN": run.params["INPUT"]},
@@ -1219,7 +1222,7 @@ def test_algorithms_run_refuses_a_ref_of_another_view_before_running(
     other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
     raster = tmp_path / "dem.tif"
     raster.write_bytes(b"x")
-    foreign = services.authority.grant_file(other, raster, source="picker")
+    foreign = services.authority.grant_file(other, raster, FilePolicy(source="picker"))
 
     refused = _call(
         dispatcher,

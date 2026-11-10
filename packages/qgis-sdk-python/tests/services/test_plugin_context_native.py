@@ -27,6 +27,7 @@ def test_native_plugin_context_wires_every_curated_service(
     from qgis.core import QgsApplication
     from qgis_sdk.adapters.qgis import (
         NativeAlgorithms,
+        NativeContextOptions,
         NativeLayers,
         NativeNetworkTransport,
         NativeNotifications,
@@ -42,7 +43,9 @@ def test_native_plugin_context_wires_every_curated_service(
     iface = object()
     scope = ResourceScope()
 
-    context = native_plugin_context(scope, settings_prefix="qgis-sdk-test", iface=iface)
+    context = native_plugin_context(
+        scope, NativeContextOptions(settings_prefix="qgis-sdk-test", iface=iface)
+    )
 
     assert isinstance(context, PluginContext)
     assert context.scope is scope
@@ -80,7 +83,7 @@ def test_native_plugin_context_wires_every_curated_service(
 def test_native_plugin_context_without_an_iface_has_no_desktop_access(
     native_services: Services,
 ) -> None:
-    from qgis_sdk.adapters.qgis import native_plugin_context
+    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
     from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 
     messages: list[str] = []
@@ -90,7 +93,8 @@ def test_native_plugin_context_without_an_iface_has_no_desktop_access(
             messages.append(message)
 
     context = native_plugin_context(
-        ResourceScope(), settings_prefix="qgis-sdk-test", notifications=Bar()
+        ResourceScope(),
+        NativeContextOptions(settings_prefix="qgis-sdk-test", notifications=Bar()),
     )
 
     assert context.has("desktop") is False

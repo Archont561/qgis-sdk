@@ -17,7 +17,11 @@ from qgis_sdk.core import ResourceScope
 
 
 def test_records_reach_the_message_log_under_the_plugin_tag(qgis_app: Any) -> None:
-    from qgis_sdk.adapters.qgis import NativeLog, native_plugin_context
+    from qgis_sdk.adapters.qgis import (
+        NativeContextOptions,
+        NativeLog,
+        native_plugin_context,
+    )
 
     received: list[tuple[str, str, Any]] = []
     message_log = QgsApplication.messageLog()
@@ -36,7 +40,9 @@ def test_records_reach_the_message_log_under_the_plugin_tag(qgis_app: Any) -> No
     signal.connect(slot)
     scope = ResourceScope()
     try:
-        context = native_plugin_context(scope, settings_prefix="field_tools")
+        context = native_plugin_context(
+            scope, NativeContextOptions(settings_prefix="field_tools")
+        )
         assert isinstance(context.log, NativeLog)
         heard: list[str] = []
         context.log.subscribe(lambda record: heard.append(record.level))

@@ -23,6 +23,7 @@ from qgis_sdk.algorithms import (
     METRES_PARAMETER,
     AlgorithmDescription,
 )
+from qgis_sdk.bridge.authority import FilePolicy
 from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import ColourParameter, LayerParameter, RangeParameter
 
@@ -123,7 +124,7 @@ def _picked_path(picked: _Picked) -> str:
 def _read_file(picked: _Picked) -> Any:
     """Grant the picked file, so the handler receives the ref and not the path."""
     ref = picked.bridge.authority.grant_file(
-        picked.bridge.binding, _picked_path(picked), source="picker"
+        picked.bridge.binding, _picked_path(picked), FilePolicy(source="picker")
     )
     picked.minted.append(ref.id)
     return ref

@@ -131,13 +131,15 @@ def _context(
     from qgis_sdk.adapters.desktop import MessageBarNotifications, qgis_is_running
 
     if qgis_is_running():
-        from qgis_sdk.adapters.qgis import native_plugin_context
+        from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 
         return native_plugin_context(
             scope,
-            settings_prefix=settings_prefix,
-            iface=iface,
-            notifications=notifications,
+            NativeContextOptions(
+                settings_prefix=settings_prefix,
+                iface=iface,
+                notifications=notifications,
+            ),
         )
     return PluginContext(
         notifications=(

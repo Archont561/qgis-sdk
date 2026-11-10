@@ -25,7 +25,7 @@ from qgis_sdk.bridge import (
     Dispatcher,
     ViewBinding,
 )
-from qgis_sdk.bridge.authority import HostAuthority
+from qgis_sdk.bridge.authority import FilePolicy, HostAuthority
 from qgis_sdk.bridge.host import HostServices, register_host_operations
 from qgis_sdk.bridge.resources import HandleKind
 from qgis_sdk.core import ResourceScope
@@ -151,7 +151,7 @@ class ContractHost:
         self._directory = tempfile.TemporaryDirectory(prefix="qgis-sdk-contract-")
         dataset = Path(self._directory.name) / name
         dataset.write_text('{"type": "FeatureCollection", "features": []}')
-        self.authority.grant_file(self.binding, dataset, ttl_seconds=60)
+        self.authority.grant_file(self.binding, dataset, FilePolicy(ttl_seconds=60))
         self.clock.now += 61
 
     def prepare(self, case: str) -> ContractHost:

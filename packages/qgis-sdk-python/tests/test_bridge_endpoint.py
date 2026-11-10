@@ -14,7 +14,12 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 import pytest
-from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, BridgeOperation, Dispatcher
+from qgis_sdk.bridge import (
+    BRIDGE_PROTOCOL_VERSION,
+    BridgeOperation,
+    Dispatcher,
+    DispatchSetup,
+)
 from qgis_sdk.bridge.dispatch import _ref_inputs as ref_inputs
 from qgis_sdk.bridge.endpoint._wire import wire_size
 from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkLayerNotFoundError
@@ -95,7 +100,7 @@ def test_a_description_the_wiring_cannot_read_is_refused(
     description: Any, expected: str
 ) -> None:
     with pytest.raises(QgisSdkBridgeError, match=expected):
-        Dispatcher.from_description(description, {})
+        Dispatcher.from_description(DispatchSetup(description, {}))
 
 
 @pytest.mark.parametrize(
@@ -111,7 +116,7 @@ def test_a_declared_action_needs_a_callable_handler(
     described = {"id": "edge", "actions": [{"id": "edge.echo", "title": "Echo"}]}
 
     with pytest.raises(QgisSdkBridgeError, match=expected):
-        Dispatcher.from_description(described, handlers)
+        Dispatcher.from_description(DispatchSetup(described, handlers))
 
 
 def test_a_declared_stream_needs_a_callable_factory() -> None:
@@ -124,7 +129,9 @@ def test_a_declared_stream_needs_a_callable_factory() -> None:
     }
 
     with pytest.raises(QgisSdkBridgeError, match="factory must be callable"):
-        Dispatcher.from_description(described, {}, streams={"edge.stream": 42})
+        Dispatcher.from_description(
+            DispatchSetup(described, {}, streams={"edge.stream": 42})
+        )
 
 
 def test_a_stream_a_host_pushes_into_answers_a_subscription() -> None:
@@ -244,7 +251,9 @@ def test_a_handler_may_answer_with_a_list() -> None:
 def test_a_declared_handler_may_answer_with_a_list() -> None:
     described = {"id": "edge", "actions": [{"id": "edge.list", "title": "List"}]}
     dispatcher = Dispatcher.from_description(
-        described, {"edge.list": lambda: [1, "two", None]}, authorize=_allow
+        DispatchSetup(
+            described, {"edge.list": lambda: [1, "two", None]}, authorize=_allow
+        )
     )
     binding = dispatcher.bind(view_id=VIEW, origin=ORIGIN)
 
@@ -267,7 +276,9 @@ def test_a_declared_stream_may_push_into_the_host() -> None:
         ],
     }
     dispatcher = Dispatcher.from_description(
-        described, {}, streams={"edge.stream": lambda: None}, authorize=_allow
+        DispatchSetup(
+            described, {}, streams={"edge.stream": lambda: None}, authorize=_allow
+        )
     )
     binding = dispatcher.bind(view_id=VIEW, origin=ORIGIN)
 

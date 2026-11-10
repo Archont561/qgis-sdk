@@ -34,7 +34,7 @@ from __future__ import annotations
 import os
 import secrets
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -51,11 +51,12 @@ from ._blobs import (
     _BlobGrants,
 )
 from ._files import (
+    _DEFAULT_FILE_POLICY,
     DEFAULT_EXPORT_BYTES,
     FILE_SOURCES,
     MAX_FILE_REFS_PER_VIEW,
+    FilePolicy,
     _FileGrants,
-    _FilePolicy,
 )
 from ._grants import FileOperation
 from ._networks import _NetworkGrants
@@ -69,6 +70,7 @@ __all__ = [
     "MAX_BLOB_BYTES",
     "MAX_FILE_REFS_PER_VIEW",
     "FileOperation",
+    "FilePolicy",
     "FileRef",
     "HostAuthority",
 ]
@@ -99,29 +101,18 @@ class HostAuthority:
         self,
         binding: ViewBinding,
         path: str | os.PathLike[str],
-        *,
-        operations: Iterable[str | FileOperation] = (FileOperation.READ,),
-        overwrite: bool = False,
-        source: str = "plugin",
-        ttl_seconds: float | None = None,
-        max_bytes: int = DEFAULT_EXPORT_BYTES,
+        policy: FilePolicy = _DEFAULT_FILE_POLICY,
     ) -> FileRef:
         """Mint a ref for ``path`` that only ``binding``'s view can use.
 
-        ``source`` records where the authority came from (``picker`` or
-        ``plugin``). A read grant needs an existing regular file; a write grant
-        needs an existing parent directory and, to replace an existing file,
-        ``overwrite=True`` - a save dialog that confirmed the overwrite is the
-        usual reason to pass it. The path is canonicalised once, and the ref
-        names that canonical file from now on.
+        ``policy`` is what the grant allows and for how long: ``source`` records
+        where the authority came from (``picker`` or ``plugin``), a read grant
+        needs an existing regular file, and a write grant needs an existing
+        parent directory and, to replace an existing file, ``overwrite=True`` -
+        a save dialog that confirmed the overwrite is the usual reason to pass
+        it. The path is canonicalised once, and the ref names that canonical
+        file from now on.
         """
-        policy = _FilePolicy(
-            operations=operations,
-            overwrite=overwrite,
-            source=source,
-            ttl_seconds=ttl_seconds,
-            max_bytes=max_bytes,
-        )
         return self._files.mint(binding, path, policy)
 
     def grant_directory(

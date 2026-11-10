@@ -378,6 +378,27 @@ jobs:
         if: ${{ needs.linux.result != 'success' || needs.coverage.result != 'success' || needs.lts.result != 'success' }}
         run: exit 1
 
+  # GitHub cancels matrix siblings only through `strategy.fail-fast`; there is no
+  # setting that cancels unrelated jobs of one run. This job is the API route, and
+  # it waits for `checks` on purpose so the aggregate verdict is already recorded
+  # when the run stops: a red `checks` is what a reviewer and the release path read,
+  # and cancelling before it reports would replace that verdict with "cancelled".
+  # What it actually saves is `cross-platform`, which keeps running on macOS (10x)
+  # and Windows (2x) after a Linux gate has already failed.
+  abort:
+    name: Abort the rest of the run
+    needs: [checks]
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel the jobs that are still running
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }} || echo "::warning::could not cancel the run"
+
   # Portable Python/TypeScript suites on the other supported host platforms.
   # This is compatibility evidence only: it is not QGIS Desktop, WebEngine or
   # plugin-coexistence qualification (see TASK-33), and it does not repeat the
@@ -386,7 +407,10 @@ jobs:
     name: cross-platform (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      # One host failing is enough: the other one is re-tested by the next push, and
+      # a macOS minute bills 10x. This matrix is the only place `fail-fast` reaches -
+      # unrelated jobs are cancelled by the `abort` job above.
+      fail-fast: true
       matrix:
         os: [macos-latest, windows-latest]
     # A push to the default branch is the merge of a head that already passed this

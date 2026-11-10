@@ -19,7 +19,7 @@ from os import PathLike
 from pathlib import Path
 from typing import Any
 
-from qgis_sdk.bridge.authority import FileOperation, HostAuthority
+from qgis_sdk.bridge.authority import FileOperation, FilePolicy, HostAuthority
 from qgis_sdk.bridge.dispatch import ViewBinding
 from qgis_sdk.core.scope import ResourceScope
 from qgis_sdk.models.files import FileRef
@@ -66,9 +66,7 @@ class FilesService:
         return self._authority.grant_file(
             self.binding,
             path,
-            operations=operations,
-            overwrite=overwrite,
-            source="plugin",
+            FilePolicy(operations=operations, overwrite=overwrite, source="plugin"),
         )
 
     def grant_directory(self, path: str | PathLike[str]) -> FileRef:
