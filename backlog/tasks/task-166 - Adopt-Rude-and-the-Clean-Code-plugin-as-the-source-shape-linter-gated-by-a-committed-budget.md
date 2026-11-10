@@ -28,7 +28,7 @@ Ruff and Biome decide what is wrong with an expression; neither sees that a func
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Baseline at adoption: **939 findings in 268 files** (CC101 480, CC202 29, CC104 125, CC102 120, CC303 77, CC103 35, CC201 33, CC302 26, CC301 4), the worst being `packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py` (756-line class), `http/_server.py` (699-line class, 379-line function), `bridge/host/_handlers.py` (602-line function) and `packages/qgis-sdk-tools/src/qgis_sdk_tools/generate/_generator.py` (588-line class).
+Baseline at adoption: **939 findings in 268 files** (CC101 486, CC104 128, CC102 121, CC303 77, CC103 35, CC201 33, CC202 29, CC302 26, CC301 4), the worst being `packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py` (756-line class), `http/_server.py` (699-line class, 379-line function), `bridge/host/_handlers.py` (602-line function) and `packages/qgis-sdk-tools/src/qgis_sdk_tools/generate/_generator.py` (588-line class).
 
 Scope: `packages automation scripts tests examples`, stated in `automation/clean_code.py` because Rude has no exclude setting. `pixi.lock` is refreshed by the `relock` workflow after the manifest edit.
 
