@@ -1,7 +1,7 @@
 ---
 id: TASK-167
 title: Burn down the Clean Code budget, starting with the runtime's largest definitions
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-10 11:50'
 labels: []
@@ -26,5 +26,37 @@ TASK-166 makes the Clean Code metrics a gate by freezing today's 939 findings as
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
+**Slice 1 (landed): the branch rules, not the size rules.** 939 -> 893 findings, no file left with more of anything than it had. CC103 35 -> 19, CC302 26 -> 8, CC303 77 -> 70, CC101 486 -> 481; two files left the budget entirely (`qgis_sdk_tools/rest.py`, `qgis_sdk_tools/ui_yaml.py`).
+
+What the slice changed: guard clauses and lookups instead of return chains (`_item_kind`, `_transport_failure`, `_send`, `_name`, `_scalar`, `_coerce`, `_schema`, `emit`, `pull`, `_step`); named predicates instead of long boolean chains (`_is_number`, `_is_bare_origin`, `_is_local_path`, `_is_module_member`, the `_server` parameter validators); and one table where a chain of `if` was a mapping (`_ACCESSORS`, `_FAILURE_CLASSES`, `_TYPE_NAMES`, `_CONVERTERS`, `_ITEM_KINDS`). Two extras were needed to keep the ratchet honest rather than to shrink anything: `Job._ready` moved to a module function so the step machine's helpers did not push the class past 200 lines, and `Subscription`'s frame handling folded into `_queue_frame` so it stayed at 15 methods.
+
+**What is left.** The size rules are the budget now: CC101 481, CC104 128, CC102 121, CC303 70, CC202 29 / CC201 33, plus 19 CC103 in functions that are themselves too long (`dispatch.dispatch` 19 returns, `processing._value` 16, `_parameter` 15, `form.input_for` 13, `_emit._inline_validator` 15, `webengine._decide` 11, `expressions._compare` 10), 8 CC302 in `tests/smoke_support`, and 4 CC301 (`release._cmd_verify_versions`, `_server._rest_stream`, `_server._close`, `check/jobs._imports_in_body`).
+
+The next slice pays twice if it starts where the returns are: `dispatch.dispatch` is inside the 756-line class, so splitting the endpoint's decisions is the same work as splitting the class. That is why AC 1's five largest definitions are the entry point.
+
+<!-- SECTION:NOTES:BEGIN -->
 Baseline from TASK-166: 939 findings in 268 files - CC101 486, CC104 128, CC102 121, CC303 77, CC103 35, CC201 33, CC202 29, CC302 26, CC301 4. CC301 (nesting) is the closest to clean with 4 findings and is worth taking first: it is the rule whose fix is most often "return early", and the smallest diff of the set.
+**Slice 2 (landed): the generator, split by when the work may happen.** 893 -> 882 findings, 266 -> 265 files; `generate/_generator.py` leaves the budget entirely (CC101 6, CC104 1, CC201 1, CC202 1, CC303 2 -> 0), so the 588-line class with ~35 methods is gone rather than smaller.
+
+The cut is the order, not the line count. `_Naming` (`_naming.py`) decides every exported type name first, because a parent's field type is the child's name and rendering while descending would point the parent at a name not yet chosen. `_Collector` (`_collect.py`) reads the description into `_Action`/`_Stream` and asks naming for those names on the way down. `_Rendering` (`_context.py`) is the frozen dataclass of what rendering needs - surface, operations, names - so no renderer takes four arguments. `_Frames` (`_frames.py`) renders what surrounds the operations (error class, stream support types, the `Operations`/`Streams` map, the event unions) and `_Members` (`_members.py`) renders the members themselves. `_Generator` stays the façade `_api.py` already constructed, so no caller changed. `_emit.py` now asks a `_Namer` Protocol for `name_for` instead of importing `_Generator` under `TYPE_CHECKING`, which takes the dependency direction out of the emission helpers.
+
+Renderings are byte-identical before and after for all five entry points (host module, host schema, the host description as a plugin, a plugin module and its schema): the refactor was verified by output, not by the suite alone. Runtime suite unchanged at 2957 passed, 129 skipped with the two environmental `test_app_build` failures; `tests/scripts` 332 passed.
+
+The honest cost: moving the long methods into new files unchanged would have booked 8 findings against paths the budget had never seen, which the gate refuses. The same slice therefore split them too - `_action`/`_stream` with `_action_schemas`/`_stream_schemas`, `_operations_map`/`_streams_map`, `register` into `_name_object`/`_twin_of`/`_name_branch`, and `render`/`render_schema` into one method per piece of a rendering. Without that, the total would have fallen by one and the budget would have grown three files.
+
+**The generator's whole-description properties (same slice).** The generator had 87 example-based tests and no property test at all, so a slice that changes how it renders had only examples to lean on. `tests/test_bridge_generate_properties.py` now pins what has to hold for descriptions nobody wrote down: declaration order never reaches either module, each module lists every declared id once, both modules carry the same fingerprint and plugin id, and an action declaring events, a stream declaring a result, a stream with no event kind, an event kind the frame does not carry, a duplicate id or one title declared in two shapes are each refused. Ten tests, and the one refusal the suite had never reached - two shapes under one title - now executes: `generate/_naming.py` is at 100%, the package at 98%.
+
+**Slice 3 (landed): the dispatcher, split into the four things a call can be.** 882 -> 866 findings; `bridge/dispatch.py` goes from 17 findings to 2, and the 756-line, 35-method `Dispatcher` is now a 197-line, 21-method façade over a new `bridge/endpoint/` package (5 modules, 1045 lines, all clean on their first commit).
+
+The cut is the order the endpoint decides in, one role per module: `_registry` holds what may be called, `_views` who may call it (bindings, generations, the handshake and its contract), `_streams` what is already running (a `_Book` of subscriptions and the calls that drive it), `_calls` the invocation itself plus the release call beside it. `_wire` owns what crosses the wire and the checks a value passes first; `_refusals` owns the one way a call stops.
+
+That last module is the idea the six long methods needed. Each of them was a chain of `if <bad>: return failure(...)` - `dispatch` alone had 19 returns and 15 branches - so the happy path was unreadable. A refusal is not an error, it is the reply the caller gets, so a check now raises `QgisSdkRefusal` carrying that reply and `Dispatcher.dispatch` is the single place that catches it: `_invoke_reply` and `_subscribe_reply` read as the list of steps they are, with one return and no branches. The exception carries the `QgisSdk` prefix for the reason `test_error_names.py` gives - nothing in the runtime may define an unprefixed exception class, because one day one of them reaches user code.
+
+Two findings are left in `dispatch.py` and both are deliberate, not leftover:
+
+* **CC202, 21 methods.** The endpoint's contract *is* 21 calls - register four kinds of operation, read two collections, mint a binding, handshake, dispatch, pump, emit, dispose, advance, track, watch, unwatch. Every one of them is a one-line forward to a role, and each has call sites outside this module (91 for `pump`/`emit`/`subscriptions`/`dispose` alone). Narrowing it is an API decision - the roles are already behind it as `dispatcher.registry` and friends would need to be - and hiding it behind a `# noqa` would make the budget record a shape the class does not have.
+* **CC102, 7 parameters on `from_description`.** `description`, `handlers`, `streams`, and the three knobs the host supplies (`authorize`, `ledger`, `theme`). Grouping them into a parameter object changes a public factory signature for a metric; the rule's own advice is right, and it belongs to the same API decision as CC202.
+
+**Tests.** The refactor is verified by the existing suite (which is the whole point of AC 2) and by two new modules: `test_bridge_dispatch_properties.py` pins the six promises that hold for *any* message - every call is answered with its own call id, every reply is JSON-safe, an invocation runs its handler exactly once and only when it succeeds, a stale binding is refused for every kind, a view without a grant runs nothing, an operation outside the allowlist is refused by name - and `test_bridge_endpoint.py` pins the edges the roles own (a description the wiring cannot read, a non-callable handler or factory, a factory that raises, a source that raises in `start`, a stream that is neither iterator nor push, malformed calls of each streaming kind, a binding with an empty view or origin, a release payload that is not an object). `bridge/dispatch.py` and the whole `bridge/endpoint/` package are at 100% line coverage; the runtime suite is 2999 passed / 129 skipped with the two environmental `test_app_build` failures.
+
 <!-- SECTION:NOTES:END -->

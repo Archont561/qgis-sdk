@@ -357,24 +357,38 @@ def _node(root: Any, wire: Wire, surface: Any) -> Any:
 
 
 def _find(root: Any, name: str) -> Any:
-    if isinstance(root, Component):
-        if root.name == name:
-            return root
-        if isinstance(root, Container):
-            try:
-                return root.find(name)
-            except QgisSdkUiError:
-                pass
-        finder = getattr(root, "field", None)  # a Form
-        if callable(finder):
-            try:
-                return finder(name)
-            except QgisSdkUiError:
-                pass
-        if root.mounted:
-            return _find_widget(root.widget, name)
+    """Find the widget a surface published under ``name``, or ``None``."""
+    if not isinstance(root, Component):
+        return _find_widget(root, name)
+    if root.name == name:
+        return root
+    found = _find_in_component(root, name)
+    if found is not None:
+        return found
+    return _find_widget(root.widget, name) if root.mounted else None
+
+
+def _find_in_component(component: Component, name: str) -> Any:
+    """The searches a component defers to its own children.
+
+    A container owns a lookup of its own and a form owns one per field; both
+    raise when the name is not theirs, which is not an error here - the caller
+    is walking candidates until one answers.
+    """
+    if isinstance(component, Container):
+        found = _lookup(component.find, name)
+        if found is not None:
+            return found
+    finder = getattr(component, "field", None)  # a Form
+    return _lookup(finder, name) if callable(finder) else None
+
+
+def _lookup(searcher: Callable[[str], Any], name: str) -> Any:
+    """Run one deferred search, answering ``None`` when it does not know ``name``."""
+    try:
+        return searcher(name)
+    except QgisSdkUiError:
         return None
-    return _find_widget(root, name)
 
 
 def _find_widget(widget: Any, name: str) -> Any:

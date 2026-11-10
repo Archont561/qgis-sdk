@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from math import isfinite
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 from qgis_sdk.models import (
     DEFAULT_MAX_BODY_BYTES,
@@ -73,17 +73,21 @@ def origin_of(url: str) -> str | None:
     return f"{scheme}://{host}:{port}"
 
 
+def _is_bare_origin(parts: SplitResult) -> bool:
+    """Whether a URL's parts stop at the origin.
+
+    A grant names ``scheme://host[:port]`` and nothing else, so a path beyond
+    ``/``, a query, a fragment or credentials are all a different thing.
+    """
+    if parts.path not in ("", "/") or parts.query or parts.fragment:
+        return False
+    return parts.username is None and parts.password is None
+
+
 def _check_origin(origin: str) -> str:
     parts = urlsplit(origin)
     normalised = origin_of(origin)
-    if (
-        normalised is None
-        or parts.path not in ("", "/")
-        or parts.query
-        or parts.fragment
-        or parts.username is not None
-        or parts.password is not None
-    ):
+    if normalised is None or not _is_bare_origin(parts):
         raise QgisSdkGrantError(
             f"{origin!r} is not an origin; a grant lists scheme://host[:port] only"
         )

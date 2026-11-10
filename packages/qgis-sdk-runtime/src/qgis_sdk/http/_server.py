@@ -37,6 +37,41 @@ _CLOSE_GRACE = 2.0
 _ERROR_STATUS = {"host_busy": 503, "host_reloaded": 503, "capacity": 503}
 
 
+def _is_number(value: object) -> bool:
+    """Whether ``value`` is a real, finite number.
+
+    ``bool`` is an ``int`` to Python and is not a duration to anybody, and an
+    infinity or a NaN passes every comparison without meaning anything.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
+
+
+def _is_positive_number(value: object) -> bool:
+    """Whether ``value`` is a number greater than zero."""
+    return _is_number(value) and value > 0
+
+
+def _is_non_negative_number(value: object) -> bool:
+    """Whether ``value`` is a number at least zero."""
+    return _is_number(value) and value >= 0
+
+
+def _is_positive_count(value: object) -> bool:
+    """Whether ``value`` is a whole number of at least one."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return value >= 1
+
+
+def _is_event_stream_cap(value: object, connections: int) -> bool:
+    """Whether ``value`` caps streams and still leaves a connection for calls."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return False
+    return 0 <= value < connections
+
+
 class _FrameBuffer:
     """A session's outgoing frames, bounded by count and encoded byte size."""
 
@@ -205,49 +240,21 @@ class PluginHttpServer:
             raise QgisSdkHttpError("a GUI-thread post callback is required")
         if on_cleanup_error is not None and not callable(on_cleanup_error):
             raise QgisSdkHttpError("on_cleanup_error must be callable")
-        if (
-            isinstance(deadline, bool)
-            or not isinstance(deadline, (int, float))
-            or not math.isfinite(deadline)
-            or deadline <= 0
-        ):
+        if not _is_positive_number(deadline):
             raise QgisSdkHttpError("deadline must be a positive finite number")
-        if (
-            isinstance(close_grace, bool)
-            or not isinstance(close_grace, (int, float))
-            or not math.isfinite(close_grace)
-            or close_grace < 0
-        ):
+        if not _is_non_negative_number(close_grace):
             raise QgisSdkHttpError("close_grace must be a non-negative finite number")
-        if (
-            isinstance(max_connections, bool)
-            or not isinstance(max_connections, int)
-            or max_connections < 1
-        ):
+        if not _is_positive_count(max_connections):
             raise QgisSdkHttpError("max_connections must be a positive integer")
         if max_event_streams is None:
             max_event_streams = min(16, max_connections - 1)
-        if (
-            isinstance(max_event_streams, bool)
-            or not isinstance(max_event_streams, int)
-            or not 0 <= max_event_streams < max_connections
-        ):
+        if not _is_event_stream_cap(max_event_streams, max_connections):
             raise QgisSdkHttpError(
                 "max_event_streams must leave at least one connection for calls"
             )
-        if (
-            isinstance(request_read_timeout, bool)
-            or not isinstance(request_read_timeout, (int, float))
-            or not math.isfinite(request_read_timeout)
-            or request_read_timeout <= 0
-        ):
+        if not _is_positive_number(request_read_timeout):
             raise QgisSdkHttpError("request_read_timeout must be positive and finite")
-        if (
-            isinstance(stream_write_timeout, bool)
-            or not isinstance(stream_write_timeout, (int, float))
-            or not math.isfinite(stream_write_timeout)
-            or stream_write_timeout <= 0
-        ):
+        if not _is_positive_number(stream_write_timeout):
             raise QgisSdkHttpError("stream_write_timeout must be positive and finite")
         unknown = set(actions) - (set(runtime.actions) | set(runtime.streams))
         if unknown:

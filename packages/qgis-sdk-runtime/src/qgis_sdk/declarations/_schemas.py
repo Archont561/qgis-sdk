@@ -60,21 +60,55 @@ def _schema(
 ) -> dict[str, Any]:
     """Describe one annotation using the JSON Schema subset the contract allows."""
     if get_origin(annotation) is Annotated:
-        if result:
-            # A result carries no intent for a host; describe what it stores.
-            return _schema(get_args(annotation)[0], path, result=True, stack=stack)
-        return _input_schema(annotation, path, stack=stack)
+        return _annotated_schema(annotation, path, result=result, stack=stack)
+    primitive = _primitive_name(annotation)
+    if primitive is not None:
+        return _primitive_schema(annotation, primitive)
+    return _composed_schema(annotation, path, result=result, stack=stack)
+
+
+def _primitive_name(annotation: Any) -> str | None:
+    """The JSON type a primitive annotation maps to, or ``None`` for the rest."""
+    return next(
+        (name for cls, name in _PRIMITIVE_JSON_TYPES.items() if annotation is cls),
+        None,
+    )
+
+
+def _annotated_schema(
+    annotation: Any, path: str, *, result: bool, stack: tuple
+) -> dict[str, Any]:
+    """Describe an ``Annotated``: an input carries intent, a result stores a value."""
+    if result:
+        return _schema(get_args(annotation)[0], path, result=True, stack=stack)
+    return _input_schema(annotation, path, stack=stack)
+
+
+def _composed_schema(
+    annotation: Any, path: str, *, result: bool, stack: tuple
+) -> dict[str, Any]:
+    """Describe the composites, then what a value type declares, then refuse."""
     if annotation is FileRef and not result:
         raise QgisSdkDeclarationError(
             f"{path}: a FileRef input needs FileInput(filters=...) or "
             "DirectoryInput() to say which picker fills it"
         )
-    primitive = next(
-        (name for cls, name in _PRIMITIVE_JSON_TYPES.items() if annotation is cls),
-        None,
+    generic = _generic_schema(annotation, path, result=result, stack=stack)
+    if generic is not None:
+        return generic
+    declared = _declared_schema(annotation, path, result=result, stack=stack)
+    if declared is not None:
+        return declared
+    raise QgisSdkDeclarationError(
+        f"{path}: unsupported annotation {annotation!r}; use JSON primitives, "
+        "list, tuple[X, ...], union, Literal or a dataclass"
     )
-    if primitive is not None:
-        return _primitive_schema(annotation, primitive)
+
+
+def _generic_schema(
+    annotation: Any, path: str, *, result: bool, stack: tuple
+) -> dict[str, Any] | None:
+    """The parameterised annotations: unions, one-length lists, tuples, literals."""
     origin, args = get_origin(annotation), get_args(annotation)
     if origin in (Union, UnionType):
         return {
@@ -92,23 +126,24 @@ def _schema(
         return _tuple_schema(args, path, result=result, stack=stack)
     if origin is Literal:
         return _literal_schema(args, path)
-    if inspect.isclass(annotation) and is_dataclass(annotation):
-        declared = getattr(annotation, WIRE_SCHEMA_ATTRIBUTE, None)
-        if result and isinstance(declared, dict):
-            # A declared shape wins over the generic walk: an SDK value type
-            # that says how it crosses the wire (``RunResult``) describes
-            # itself better than its fields can.
-            return _json_copy(declared)
-        return _dataclass_schema(annotation, path, result=result, stack=stack)
+    return None
+
+
+def _declared_schema(
+    annotation: Any, path: str, *, result: bool, stack: tuple
+) -> dict[str, Any] | None:
+    """The shape a value type declares for itself, or the one its fields imply.
+
+    A declared shape wins over the generic walk: an SDK value type that says how
+    it crosses the wire (``RunResult``, ``JobHandle``) describes itself better
+    than its fields can.
+    """
     declared = getattr(annotation, WIRE_SCHEMA_ATTRIBUTE, None)
-    if result and inspect.isclass(annotation) and isinstance(declared, dict):
-        # An SDK value type that says how it crosses the wire (``JobHandle``):
-        # a result only - a caller cannot send one in.
+    if result and isinstance(declared, dict):
         return _json_copy(declared)
-    raise QgisSdkDeclarationError(
-        f"{path}: unsupported annotation {annotation!r}; use JSON primitives, "
-        "list, tuple[X, ...], union, Literal or a dataclass"
-    )
+    if inspect.isclass(annotation) and is_dataclass(annotation):
+        return _dataclass_schema(annotation, path, result=result, stack=stack)
+    return None
 
 
 WIRE_KIND_KEYWORD = "x-qgis-sdk"
@@ -300,15 +335,24 @@ def _require_plain_method(method: Any, path: str, *, generator: bool = False) ->
     events the dispatcher pulls - but neither kind of operation may be a
     coroutine or an async generator.
     """
-    if (
-        not inspect.isfunction(method)
-        or inspect.iscoroutinefunction(method)
-        or (inspect.isgeneratorfunction(method) and not generator)
-        or inspect.isasyncgenfunction(method)
-    ):
+    if not _is_ordinary_method(method, generator):
         raise QgisSdkDeclarationError(
             f"{path}: requires an ordinary synchronous instance method"
         )
+
+
+def _is_ordinary_method(method: object, generator: bool) -> bool:
+    """Whether a declared method is the plain synchronous one the dispatcher calls.
+
+    A coroutine or an async generator is never one. A plain generator is one
+    only where the declaration promises a stream, which is what ``generator``
+    records.
+    """
+    if not inspect.isfunction(method) or inspect.iscoroutinefunction(method):
+        return False
+    if inspect.isasyncgenfunction(method):
+        return False
+    return generator or not inspect.isgeneratorfunction(method)
 
 
 def _require_self_first(parameters: list[Any], path: str) -> None:

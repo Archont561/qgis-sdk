@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.models.limits import MAX_SAFE_INTEGER
@@ -20,8 +20,13 @@ from qgis_sdk_tools.generate._contract import (
 )
 from qgis_sdk_tools.generate._names import _Action, _Stream
 
-if TYPE_CHECKING:
-    from qgis_sdk_tools.generate._generator import _Generator
+
+class _Namer(Protocol):
+    """What emission asks of the generator: the name of a schema, if it has one."""
+
+    def name_for(self, schema: Mapping[str, Any]) -> str | None:
+        """Return the exported type name registered for ``schema``."""
+        ...
 
 
 _CALL_HELPER = """async function call<T>(
@@ -193,7 +198,7 @@ def _emit_tree_body(tree: dict[str, Any], render: Any, *, depth: int) -> list[st
 
 
 def _interface_lines(
-    schema: Mapping[str, Any], name: str, generator: _Generator
+    schema: Mapping[str, Any], name: str, generator: _Namer
 ) -> list[str]:
     required = set(schema.get("required", []) or [])
     properties: Mapping[str, Any] = schema.get("properties") or {}
@@ -214,7 +219,7 @@ def _interface_lines(
 
 
 def _validator_lines(
-    schema: Mapping[str, Any], name: str, generator: _Generator
+    schema: Mapping[str, Any], name: str, generator: _Namer
 ) -> list[str]:
     required = list(schema.get("required", []) or [])
     properties: Mapping[str, Any] = schema.get("properties") or {}
@@ -240,7 +245,7 @@ def _validator_lines(
     return lines
 
 
-def _field_type(schema: Mapping[str, Any], generator: _Generator) -> str:
+def _field_type(schema: Mapping[str, Any], generator: _Namer) -> str:
     """Name an object by its registered interface, and look inside an array."""
     name = generator.name_for(schema)
     if name is not None:
@@ -256,7 +261,7 @@ def _element(rendered: str) -> str:
 
 
 def _member_validator(
-    expression: str, schema: Mapping[str, Any], generator: _Generator
+    expression: str, schema: Mapping[str, Any], generator: _Namer
 ) -> str:
     """Validate by name where the item has one, so a page item uses its interface."""
     name = generator.name_for(schema)
@@ -268,7 +273,7 @@ def _member_validator(
     return _inline_validator(schema, expression, generator)
 
 
-def _inline_type(schema: Mapping[str, Any], generator: _Generator | None = None) -> str:
+def _inline_type(schema: Mapping[str, Any], generator: _Namer | None = None) -> str:
     if "anyOf" in schema:
         return " | ".join(_inline_type(branch, generator) for branch in schema["anyOf"])
     if "enum" in schema:
@@ -300,7 +305,7 @@ def _inline_type(schema: Mapping[str, Any], generator: _Generator | None = None)
 
 
 def _inline_validator(
-    schema: Mapping[str, Any], expression: str, generator: _Generator | None = None
+    schema: Mapping[str, Any], expression: str, generator: _Namer | None = None
 ) -> str:
     if "anyOf" in schema:
         return (

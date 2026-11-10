@@ -236,14 +236,7 @@ class _Names:
             ):
                 continue
             target = statement.value.func
-            is_constructor = isinstance(target, ast.Name) and target.id in constructors
-            is_constructor |= (
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id in self.modules
-                and target.attr == "QgisSdkPlugin"
-            )
-            if is_constructor:
+            if self._is_plugin_constructor(target, constructors):
                 targets = (
                     statement.targets
                     if isinstance(statement, ast.Assign)
@@ -253,17 +246,42 @@ class _Names:
                     name.id for name in targets if isinstance(name, ast.Name)
                 )
 
+    def _is_module_member(self, node: ast.expr, members: frozenset[str]) -> bool:
+        """Whether ``node`` is one of ``members`` on a module this file imported."""
+        if not isinstance(node, ast.Attribute) or node.attr not in members:
+            return False
+        return isinstance(node.value, ast.Name) and node.value.id in self.modules
+
+    def _is_ui_module_member(self, node: ast.expr, members: frozenset[str]) -> bool:
+        """Whether ``node`` names a member of the UI package, however it is spelled."""
+        if not isinstance(node, ast.Attribute) or node.attr not in members:
+            return False
+        return isinstance(node.value, ast.Attribute | ast.Name) and (
+            ast.unparse(node.value) in _UI_MODULES
+        )
+
+    def _is_application_action(self, node: ast.expr) -> bool:
+        """Whether ``node`` is ``app.action`` for an application this module made."""
+        if not isinstance(node, ast.Attribute) or node.attr != "action":
+            return False
+        return isinstance(node.value, ast.Name) and node.value.id in self.applications
+
+    def _is_plugin_constructor(self, node: ast.expr, constructors: set[str]) -> bool:
+        """Whether a call target constructs the plugin the way this module spells it."""
+        if isinstance(node, ast.Name):
+            return node.id in constructors
+        if not isinstance(node, ast.Attribute):
+            return False
+        if not isinstance(node.value, ast.Name):
+            return False
+        return node.value.id in self.modules and node.attr == "QgisSdkPlugin"
+
     def is_surface(self, node: ast.ClassDef) -> bool:
         """Whether the class subclasses ``Dialog``/``Dock`` as this module spells them."""
         for base in node.bases:
             if isinstance(base, ast.Name) and base.id in self.surfaces:
                 return True
-            if (
-                isinstance(base, ast.Attribute)
-                and base.attr in _SURFACES
-                and isinstance(base.value, ast.Attribute | ast.Name)
-                and ast.unparse(base.value) in _UI_MODULES
-            ):
+            if self._is_ui_module_member(base, _SURFACES):
                 return True
         return False
 
@@ -294,19 +312,9 @@ class _Names:
             if target.id in self.bindings:
                 return self.bindings[target.id]
             return None
-        if (
-            isinstance(target, ast.Attribute)
-            and isinstance(target.value, ast.Name)
-            and target.value.id in self.modules
-            and target.attr in _BINDINGS
-        ):
+        if self._is_module_member(target, _BINDINGS):
             return target.attr
-        if (
-            isinstance(target, ast.Attribute)
-            and isinstance(target.value, ast.Name)
-            and target.value.id in self.applications
-            and target.attr == "action"
-        ):
+        if self._is_application_action(target):
             return "action"
         return None
 

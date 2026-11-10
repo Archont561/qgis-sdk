@@ -80,24 +80,28 @@ def _redact(message: str) -> str:
     return _PASSWORD.sub("password=…", message)
 
 
+#: The precedence the model's docstring records, as the order the flags are
+#: tested in: a materialised view is a view, a view stays a view even when it has
+#: geometry, and a foreign table keeps its place last.
+_ITEM_KINDS = (
+    ("MaterializedView", "materialized_view"),
+    ("View", "view"),
+    ("Raster", "raster"),
+    ("Vector", "vector"),
+    ("Aspatial", "aspatial"),
+)
+
+
 def _item_kind(flags: object) -> str:
     """Name one table the way ``CONNECTION_ITEM_KINDS`` declares the order.
 
-    A materialised view is a view, a view is a view even when it has geometry,
-    and a foreign table keeps its place last - the precedence the model's
-    docstring records, applied here so both backends answer alike.
+    Both backends answer alike because both walk the same table: the order is
+    data here rather than a chain of guards, so a new flag is a row.
     """
     table_flag = QgsAbstractDatabaseProviderConnection.TableFlag
-    if flags & table_flag.MaterializedView:  # type: ignore[operator]
-        return "materialized_view"
-    if flags & table_flag.View:  # type: ignore[operator]
-        return "view"
-    if flags & table_flag.Raster:  # type: ignore[operator]
-        return "raster"
-    if flags & table_flag.Vector:  # type: ignore[operator]
-        return "vector"
-    if flags & table_flag.Aspatial:  # type: ignore[operator]
-        return "aspatial"
+    for name, kind in _ITEM_KINDS:
+        if flags & getattr(table_flag, name):  # type: ignore[operator]
+            return kind
     return "foreign"
 
 

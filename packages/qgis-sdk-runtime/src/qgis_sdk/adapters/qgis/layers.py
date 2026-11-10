@@ -281,6 +281,18 @@ class NativeLayers:
         self._export_sources.clear()
 
 
+def _is_local_path(path: object) -> bool:
+    """Whether a decoded source names a path on this machine.
+
+    A provider may answer no path at all, a relative one, or a URI -
+    ``/vsizip//…`` and ``postgres://…`` alike - and none of those is a file this
+    process may describe.
+    """
+    if not isinstance(path, str) or not path:
+        return False
+    return "://" not in path
+
+
 def _capture_source(layer: QgsVectorLayer) -> export_policy.SourceIdentity | None:
     """Identify only qualified direct local datasets; leave others unexportable."""
     try:
@@ -294,12 +306,7 @@ def _capture_source(layer: QgsVectorLayer) -> export_policy.SourceIdentity | Non
             layer.providerType(), layer.source()
         )
         path = decoded.get("path")
-        if (
-            not isinstance(path, str)
-            or not path
-            or "://" in path
-            or decoded.get("vsiPrefix")
-        ):
+        if not _is_local_path(path) or decoded.get("vsiPrefix"):
             return None
         return export_policy.capture_source(Path(path))
     except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
