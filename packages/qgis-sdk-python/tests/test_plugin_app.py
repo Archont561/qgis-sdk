@@ -31,7 +31,7 @@ def test_runtime_rejects_former_plugin_classes() -> None:
         pass
 
     scope = ResourceScope()
-    context = PluginContext(scope=scope, notifications=RecordingNotifications(scope))
+    context = PluginContext(RecordingNotifications(scope), scope)
     with pytest.raises(QgisSdkDeclarationError, match="QgisSdkPlugin"):
         PluginRuntime(Legacy, context)
 
@@ -69,7 +69,7 @@ def test_app_and_original_handler_share_description_without_context_input() -> N
         }
     }
     scope = ResourceScope()
-    context = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    context = PluginContext(RecordingNotifications(scope), scope)
     assert double(context, 21) == 42
     scope.close()
 
@@ -138,12 +138,8 @@ def test_two_runtimes_of_same_app_keep_contexts_isolated() -> None:
     first_scope, second_scope = ResourceScope(), ResourceScope()
     first_log = RecordingNotifications(first_scope)
     second_log = RecordingNotifications(second_scope)
-    first = PluginRuntime(
-        app=app, context=PluginContext(scope=first_scope, notifications=first_log)
-    )
-    second = PluginRuntime(
-        app, PluginContext(scope=second_scope, notifications=second_log)
-    )
+    first = PluginRuntime(app=app, context=PluginContext(first_log, first_scope))
+    second = PluginRuntime(app, PluginContext(second_log, second_scope))
     first.start()
     second.start()
     try:

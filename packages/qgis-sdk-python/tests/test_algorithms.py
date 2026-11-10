@@ -7,7 +7,13 @@ from typing import Annotated, Any
 
 import pytest
 from qgis_sdk.algorithms import AlgorithmDescription, describe_algorithm, invoke
-from qgis_sdk.core import AlgorithmContext, JobContext, PluginContext, ResourceScope
+from qgis_sdk.core import (
+    AlgorithmContext,
+    JobContext,
+    PluginContext,
+    PluginServices,
+    ResourceScope,
+)
 from qgis_sdk.declarations import QgisSdkDeclarationError, describe
 from qgis_sdk.models import (
     BufferRequest,
@@ -95,10 +101,9 @@ def _plugin_context(
     algorithms: FakeAlgorithms, project: FakeProject, scope: ResourceScope
 ) -> PluginContext:
     return PluginContext(
-        notifications=RecordingNotifications(scope),
-        scope=scope,
-        algorithms=algorithms,
-        project=project,
+        RecordingNotifications(scope),
+        scope,
+        PluginServices(algorithms=algorithms, project=project),
     )
 
 
@@ -359,7 +364,7 @@ def test_a_job_context_without_processing_refuses_by_name() -> None:
 def test_adding_to_a_project_the_context_lacks_refuses_before_anything_runs() -> None:
     algorithms, _, _project, scope = _declared()
     ctx = PluginContext(
-        notifications=RecordingNotifications(scope), scope=scope, algorithms=algorithms
+        RecordingNotifications(scope), scope, PluginServices(algorithms=algorithms)
     )
 
     with pytest.raises(QgisSdkUnsupportedCapabilityError, match="project"):

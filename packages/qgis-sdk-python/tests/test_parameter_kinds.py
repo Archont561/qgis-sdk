@@ -261,7 +261,7 @@ def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
     from qgis_sdk.testing import RecordingNotifications
 
     scope = ResourceScope()
-    ctx = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    ctx = PluginContext(RecordingNotifications(scope), scope)
 
     with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
         invoke(

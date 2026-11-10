@@ -18,7 +18,13 @@ from typing import TYPE_CHECKING, Literal
 import pytest
 from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.algorithms import describe_algorithm
-from qgis_sdk.core import AlgorithmContext, PluginContext, PluginRuntime, ResourceScope
+from qgis_sdk.core import (
+    AlgorithmContext,
+    PluginContext,
+    PluginRuntime,
+    PluginServices,
+    ResourceScope,
+)
 from qgis_sdk.models import (
     CentroidRequest,
     Colour,
@@ -60,12 +66,14 @@ def _processing(native_services: Services):
 
 def _runtime(native_services: Services, app: QgisSdkPlugin) -> PluginRuntime:
     context = PluginContext(
-        notifications=native_services.notifications,
-        scope=native_services.scope.child(),
-        layers=native_services.layers,
-        project=native_services.project,
-        algorithms=native_services.algorithms,
-        processing=_processing(native_services),
+        native_services.notifications,
+        native_services.scope.child(),
+        PluginServices(
+            layers=native_services.layers,
+            project=native_services.project,
+            algorithms=native_services.algorithms,
+            processing=_processing(native_services),
+        ),
     )
     return PluginRuntime(app, context)
 
@@ -366,9 +374,9 @@ def test_a_plugin_over_a_context_without_processing_registers_nothing(
     native_services: Services,
 ) -> None:
     context = PluginContext(
-        notifications=native_services.notifications,
-        scope=ResourceScope(),
-        algorithms=native_services.algorithms,
+        native_services.notifications,
+        ResourceScope(),
+        PluginServices(algorithms=native_services.algorithms),
     )
     runtime = PluginRuntime(sample_app, context)
 

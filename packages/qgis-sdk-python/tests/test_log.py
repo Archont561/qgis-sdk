@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from qgis_sdk.core import PluginContext, ResourceScope, UiContext
+from qgis_sdk.core import PluginContext, ResourceScope, UiContext, UiServices
 from qgis_sdk.models import QgisSdkScopeClosedError, QgisSdkUnsupportedCapabilityError
 from qgis_sdk.services import LOG_LEVELS, LogBase, LogRecord
 from qgis_sdk.testing import FakeViewControl, RecordingLog, RecordingNotifications
@@ -76,6 +76,6 @@ def test_log_is_a_capability_of_both_contexts() -> None:
         _ = bare.log
     assert bare.with_services(log=log).log is log
 
-    ui = UiContext(notifications, FakeViewControl(), scope, log=log)
+    ui = UiContext(notifications, FakeViewControl(), scope, UiServices(log=log))
     assert ui.log is log
     assert ui.capabilities == frozenset({"log"})

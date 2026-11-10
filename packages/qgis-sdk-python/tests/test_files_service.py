@@ -14,7 +14,13 @@ from pathlib import Path
 
 import pytest
 from qgis_sdk.bridge.authority import HostAuthority
-from qgis_sdk.core import PluginContext, ResourceScope, UiContext
+from qgis_sdk.core import (
+    PluginContext,
+    PluginServices,
+    ResourceScope,
+    UiContext,
+    UiServices,
+)
 from qgis_sdk.files import FilesService
 from qgis_sdk.models import (
     FileRef,
@@ -123,9 +129,9 @@ def test_files_is_a_plugin_and_a_view_capability(dataset: Path) -> None:
     files = FakeFiles(scope)
     notifications = RecordingNotifications(scope)
 
-    plugin = PluginContext(notifications=notifications, scope=scope, files=files)
-    view = UiContext(notifications, FakeViewControl(), scope, files=files)
-    bare = PluginContext(notifications=notifications, scope=scope)
+    plugin = PluginContext(notifications, scope, PluginServices(files=files))
+    view = UiContext(notifications, FakeViewControl(), scope, UiServices(files=files))
+    bare = PluginContext(notifications, scope)
 
     ref = view.files.grant_file(dataset)
     assert plugin.files.resolve(ref) == dataset.resolve()

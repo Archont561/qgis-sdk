@@ -67,3 +67,37 @@ about.
   much larger surface, and they are recorded in TASK-167 rather than folded in
   here. CC202 (class size: `HostAuthority` at 18 methods, `Dispatcher` at 21) is a
   different cut - collaborators, not records - and is recorded there too.
+
+## Follow-through: the two contexts
+
+The two entries this decision left in `core/contexts.py` were the rule applied
+to the surface it was written for, and they took the same shape: `PluginServices`
+for `PluginContext` (19 capabilities and the host it is) and `UiServices` for
+`UiContext` (16 and the host), both frozen slots records exported from
+`qgis_sdk.core`.
+
+```python
+PluginContext(notifications, scope, PluginServices(host=Host.DESKTOP, layers=...))
+UiContext(notifications, view, scope, UiServices(streams=...))
+```
+
+The one thing that differs from the Processing slice is how a record field
+reaches the context. A capability is two declarations - a `_capability_names`
+entry and a slot - and `__init__` is one comprehension over the names, so a
+service cannot be added to one and forgotten in the other: the record is a slots
+dataclass, so a name the class knows and the record does not is an
+`AttributeError` at construction rather than a missing attribute later.
+`with_services` rebuilds the record from the slots it already set, which is why
+it kept its signature.
+
+Budget 813 -> 808: the two CC102 entries (`PluginContext` 22 parameters,
+`UiContext` 21) and two CC101 entries (the 47- and 45-line `__init__`s) are gone.
+The four parameters that remain in the file are `AlgorithmContext` and
+`ServerContext`, a following slice with their own call sites to move.
+
+The rewrite was 115 call sites across tests, examples, adapters and the scaffold
+templates - and the gate caught what a mechanical rewrite costs: two surfaces grew
+past 30 lines on the way, `adapters/surfaces.py`'s view assembly (extracted as
+`_view_services`) and one test that then asserted two contexts at once (split in
+two). A record is a line of its own at every call site, so the budget is what says
+whether the trade paid, not the parameter count alone.

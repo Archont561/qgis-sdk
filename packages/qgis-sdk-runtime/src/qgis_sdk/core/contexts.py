@@ -17,6 +17,7 @@ from __future__ import annotations
 import threading
 import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Generic, TypeVar, overload
 
 from qgis_sdk.environment import dev_request
@@ -201,6 +202,42 @@ class _Context:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class PluginServices:
+    """What a host provides to a plugin context, and which host it is.
+
+    One record instead of twenty keyword parameters (decision-81). Every field
+    is optional because every one of them is a :class:`Capability` on the
+    context: `PluginContext` reads this once and sets one slot per capability
+    name, so a service added to the context is still two lines - the field here
+    and the slot the class declares.
+
+    ``host`` travels with the services rather than beside them: it is what the
+    host says about itself (decision-52 point 4), and a host that builds a
+    context to hand its services over is stating both at once.
+    """
+
+    host: Host = Host.DESKTOP
+    desktop: DesktopAccess | None = None
+    network: Network | None = None
+    layers: Layers | None = None
+    rasters: Rasters | None = None
+    features: Features | None = None
+    layouts: Layouts | None = None
+    connections: Connections | None = None
+    canvas: Canvas | None = None
+    project: Project | None = None
+    settings: Settings | None = None
+    styles: Styles | None = None
+    algorithms: Algorithms | None = None
+    workers: Workers | None = None
+    processing: Processing | None = None
+    ui: Ui | None = None
+    files: Files | None = None
+    log: Log | None = None
+    jobs: Jobs | None = None
+
+
 class PluginContext(_Context):
     """Capabilities owned by one plugin runtime, not an invocation.
 
@@ -310,48 +347,14 @@ class PluginContext(_Context):
         self,
         notifications: Notifications,
         scope: ResourceScope,
-        desktop: DesktopAccess | None = None,
-        network: Network | None = None,
-        layers: Layers | None = None,
-        rasters: Rasters | None = None,
-        features: Features | None = None,
-        layouts: Layouts | None = None,
-        connections: Connections | None = None,
-        canvas: Canvas | None = None,
-        project: Project | None = None,
-        settings: Settings | None = None,
-        styles: Styles | None = None,
-        algorithms: Algorithms | None = None,
-        workers: Workers | None = None,
-        processing: Processing | None = None,
-        ui: Ui | None = None,
-        files: Files | None = None,
-        log: Log | None = None,
-        jobs: Jobs | None = None,
-        host: Host = Host.DESKTOP,
+        services: PluginServices | None = None,
     ) -> None:
+        services = services if services is not None else PluginServices()
         self._assemble(
             notifications=notifications,
             scope=scope,
-            host=host,
-            _jobs=jobs,
-            _desktop=desktop,
-            _network=network,
-            _layers=layers,
-            _rasters=rasters,
-            _features=features,
-            _layouts=layouts,
-            _connections=connections,
-            _canvas=canvas,
-            _project=project,
-            _settings=settings,
-            _styles=styles,
-            _algorithms=algorithms,
-            _workers=workers,
-            _processing=processing,
-            _ui=ui,
-            _files=files,
-            _log=log,
+            host=services.host,
+            **{f"_{name}": getattr(services, name) for name in self._capability_names},
         )
 
     def with_services(self, **services: Any) -> PluginContext:
@@ -369,7 +372,38 @@ class PluginContext(_Context):
                 raise ValueError(f"PluginContext already provides {name!r}")
         current = {name: getattr(self, f"_{name}") for name in self._capability_names}
         current.update(services)
-        return PluginContext(self.notifications, self.scope, host=self.host, **current)
+        return PluginContext(
+            self.notifications,
+            self.scope,
+            PluginServices(host=self.host, **current),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class UiServices:
+    """What a host shares with one view's context, and which host it is.
+
+    The plugin's own service objects, not view-owned copies: a surface handler
+    reads the same project, layers and canvas a page does (decision-55).
+    """
+
+    host: Host = Host.DESKTOP
+    network: Network | None = None
+    actions: ViewActions | None = None
+    algorithms: Algorithms | None = None
+    desktop: DesktopAccess | None = None
+    settings: Settings | None = None
+    layers: Layers | None = None
+    rasters: Rasters | None = None
+    features: Features | None = None
+    project: Project | None = None
+    canvas: Canvas | None = None
+    files: Files | None = None
+    log: Log | None = None
+    streams: ViewStreams | None = None
+    styles: Styles | None = None
+    ui: Ui | None = None
+    jobs: Jobs | None = None
 
 
 class UiContext(_Context):
@@ -470,45 +504,15 @@ class UiContext(_Context):
         notifications: Notifications,
         view: ViewControl,
         scope: ResourceScope,
-        network: Network | None = None,
-        actions: ViewActions | None = None,
-        settings: Settings | None = None,
-        layers: Layers | None = None,
-        rasters: Rasters | None = None,
-        features: Features | None = None,
-        canvas: Canvas | None = None,
-        project: Project | None = None,
-        files: Files | None = None,
-        log: Log | None = None,
-        streams: ViewStreams | None = None,
-        algorithms: Algorithms | None = None,
-        ui: Ui | None = None,
-        styles: Styles | None = None,
-        desktop: DesktopAccess | None = None,
-        jobs: Jobs | None = None,
-        host: Host = Host.DESKTOP,
+        services: UiServices | None = None,
     ) -> None:
+        services = services if services is not None else UiServices()
         self._assemble(
             notifications=notifications,
             view=view,
             scope=scope,
-            host=host,
-            _jobs=jobs,
-            _network=network,
-            _actions=actions,
-            _algorithms=algorithms,
-            _desktop=desktop,
-            _settings=settings,
-            _layers=layers,
-            _rasters=rasters,
-            _features=features,
-            _canvas=canvas,
-            _project=project,
-            _files=files,
-            _log=log,
-            _streams=streams,
-            _styles=styles,
-            _ui=ui,
+            host=services.host,
+            **{f"_{name}": getattr(services, name) for name in self._capability_names},
         )
 
     def on(

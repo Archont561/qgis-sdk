@@ -266,7 +266,7 @@
 		"CC102": 4
 	},
 	"packages/qgis-sdk-python/tests/test_plugin_app_declarations.py": {
-		"CC101": 4,
+		"CC101": 3,
 		"CC104": 2
 	},
 	"packages/qgis-sdk-python/tests/test_plugin_app_host.py": {
@@ -577,8 +577,7 @@
 		"CC303": 2
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/core/contexts.py": {
-		"CC101": 2,
-		"CC102": 4
+		"CC102": 2
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/core/runtime.py": {
 		"CC201": 1,

@@ -93,7 +93,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qgis_sdk import QgisSdkPlugin
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
 from qgis_sdk.ui import Button, Column, Dialog, Form
 
 OBSERVED: dict[str, object] = {{}}
@@ -139,7 +139,9 @@ def build_context(iface: object) -> PluginContext:
     return PluginContext(
         notifications=MessageBarNotifications(iface),
         scope=ResourceScope(),
-        desktop=None if iface is None else IfaceDesktopAccess(iface),
+        services=PluginServices(
+            desktop=None if iface is None else IfaceDesktopAccess(iface)
+        ),
     )
 
 

@@ -165,7 +165,7 @@ def _run_lifecycle(prefix: Path) -> LifecycleReport:
         scope = ResourceScope()
         for name in ("action", "signal", "dock", "work"):
             scope.on_close(lambda name=name: released.append(name))
-        return PluginContext(notifications=Notifications(), scope=scope)
+        return PluginContext(Notifications(), scope)
 
     qgis_initialised = True
     try:

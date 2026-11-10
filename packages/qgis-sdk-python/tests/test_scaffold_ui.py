@@ -89,7 +89,7 @@ def test_the_starter_dialog_opens_under_the_fake_with_its_initial_value(
     scope = ResourceScope()
     runtime = PluginRuntime(
         plugin_module.app,
-        PluginContext(notifications=RecordingNotifications(scope), scope=scope),
+        PluginContext(RecordingNotifications(scope), scope),
     )
     runtime.start()
     try:

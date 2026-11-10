@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 from conftest import WORKING_CRS
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
 from qgis_sdk.models import (
     BufferRequest,
     QgisSdkAlgorithmCancelledError,
@@ -78,12 +78,14 @@ def _context(
     styles.apply_style = apply_style  # type: ignore[method-assign]
     project.add_layer = add_layer  # type: ignore[method-assign]
     context = PluginContext(
-        notifications=RecordingNotifications(scope),
-        scope=scope,
-        layers=layers,
-        project=project,
-        styles=styles,
-        algorithms=algorithms if algorithms_available else None,
+        RecordingNotifications(scope),
+        scope,
+        PluginServices(
+            layers=layers,
+            project=project,
+            styles=styles,
+            algorithms=algorithms if algorithms_available else None,
+        ),
     )
     return context, project, styles
 

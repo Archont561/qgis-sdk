@@ -31,7 +31,7 @@ from qgis_sdk.bindings import (
     ShortcutBinding,
     ToolbarBinding,
 )
-from qgis_sdk.core import PluginContext, PluginRuntime, UiContext
+from qgis_sdk.core import PluginContext, PluginRuntime, UiContext, UiServices
 from qgis_sdk.models import QgisSdkError, QgisSdkUiError
 from qgis_sdk.resources import icon_path
 from qgis_sdk.ui.actions import ViewActions
@@ -339,21 +339,18 @@ class SurfaceHost:
             return None
         return context.settings
 
-    def _ui_context(
-        self, view_id: str, close: Callable[[], None]
-    ) -> tuple[UiContext, Any]:
-        runtime, context = self._require_attached()
-        scope = context.scope.child()
-        pump = _StreamPump(scope)
-        streams = ViewStreams(runtime, view_id=view_id, wake=pump.wake)
-        pump.streams = streams
-        ui = UiContext(
-            context.notifications,
-            _WidgetControl(close),
-            scope,
+    def _view_services(
+        self,
+        context: PluginContext,
+        scope: Any,
+        actions: ViewActions,
+        streams: ViewStreams,
+    ) -> UiServices:
+        """What a view's context offers: its own actions and streams, and the rest."""
+        return UiServices(
             host=context.host,
             network=context.network if context.has("network") else None,
-            actions=ViewActions(runtime, view_id=view_id, scope=scope),
+            actions=actions,
             settings=self._settings(),
             layers=context.layers if context.has("layers") else None,
             project=context.project if context.has("project") else None,
@@ -365,6 +362,22 @@ class SurfaceHost:
             desktop=context.desktop if context.has("desktop") else None,
             ui=context.ui if context.has("ui") else None,
             jobs=context.jobs.scoped(scope) if context.has("jobs") else None,
+        )
+
+    def _ui_context(
+        self, view_id: str, close: Callable[[], None]
+    ) -> tuple[UiContext, Any]:
+        runtime, context = self._require_attached()
+        scope = context.scope.child()
+        pump = _StreamPump(scope)
+        streams = ViewStreams(runtime, view_id=view_id, wake=pump.wake)
+        pump.streams = streams
+        actions = ViewActions(runtime, view_id=view_id, scope=scope)
+        ui = UiContext(
+            context.notifications,
+            _WidgetControl(close),
+            scope,
+            self._view_services(context, scope, actions, streams),
         )
         scope.on_close(streams.dispose)
         return ui, scope

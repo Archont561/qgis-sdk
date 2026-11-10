@@ -19,8 +19,10 @@ from qgis_sdk.core import (
     GUI_BOUND_CAPABILITIES,
     JobContext,
     PluginContext,
+    PluginServices,
     ResourceScope,
     UiContext,
+    UiServices,
 )
 from qgis_sdk.core.contexts import _reported_cross_thread
 from qgis_sdk.environment import DEV_REQUEST_ENV
@@ -65,7 +67,9 @@ def _fresh_reports() -> Any:
 def plugin_context(**services: object) -> PluginContext:
     """A plugin context on this thread with ``services`` provided."""
     return PluginContext(
-        notifications=RecordingNotifications(), scope=ResourceScope(), **services
+        notifications=RecordingNotifications(),
+        scope=ResourceScope(),
+        services=PluginServices(**services),
     )
 
 
@@ -174,11 +178,10 @@ def test_the_guard_covers_exactly_the_capabilities_that_reach_gui_state() -> Non
 
 def test_the_view_and_job_contexts_record_their_thread_too() -> None:
     ui = UiContext(
-        notifications=RecordingNotifications(),
-        view=object(),  # type: ignore[arg-type]
-        scope=ResourceScope(),
-        layers=object(),
-        ui=object(),
+        RecordingNotifications(),
+        object(),
+        ResourceScope(),
+        UiServices(layers=object(), ui=object()),
     )
     job = JobContext(
         progress=RecordingProgress(),

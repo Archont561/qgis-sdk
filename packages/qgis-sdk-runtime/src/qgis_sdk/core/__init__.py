@@ -5,7 +5,9 @@ from .contexts import (
     AlgorithmContext,
     JobContext,
     PluginContext,
+    PluginServices,
     UiContext,
+    UiServices,
     WorkerContext,
 )
 from .host import Host
@@ -39,11 +41,13 @@ __all__ = [
     "PluginContext",
     "PluginRuntime",
     "PluginRuntimeState",
+    "PluginServices",
     "QgisSdkPluginLifecycleError",
     "QuiesceOutcome",
     "ResourceScope",
     "StepScheduler",
     "UiContext",
+    "UiServices",
     "WorkerContext",
     "Yield",
 ]

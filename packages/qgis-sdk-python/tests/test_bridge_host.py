@@ -31,6 +31,9 @@ from qgis_sdk.bridge.host import (
     register_host_operations,
 )
 from qgis_sdk.bridge.protocol import BRIDGE_PROTOCOL_VERSION, HOST_SCHEMA_VERSION
+from qgis_sdk.core import (
+    PluginServices,
+)
 from qgis_sdk.models.canvas import CanvasExtent, ZoomTarget
 from qgis_sdk.models.errors import QgisSdkBridgeError
 from qgis_sdk.models.features import Geometry
@@ -988,12 +991,11 @@ def test_host_services_built_from_a_plugin_context_share_its_instances() -> None
     transport = FakeNetworkTransport()
     authority = HostAuthority()
     context = PluginContext(
-        notifications=notifications,
-        scope=ResourceScope(),
-        layers=layers,
-        project=project,
-        settings=settings,
-        styles=styles,
+        notifications,
+        ResourceScope(),
+        PluginServices(
+            layers=layers, project=project, settings=settings, styles=styles
+        ),
     )
 
     services = HostServices.from_context(
@@ -1019,11 +1021,13 @@ def test_host_services_from_a_context_missing_a_service_name_the_gap() -> None:
     from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 
     context = PluginContext(
-        notifications=FakeNotifications(),
-        scope=ResourceScope(),
-        layers=FakeLayers(layers=[]),
-        project=FakeProject(ids=[]),
-        settings=FakeSettings(values={}),
+        FakeNotifications(),
+        ResourceScope(),
+        PluginServices(
+            layers=FakeLayers(layers=[]),
+            project=FakeProject(ids=[]),
+            settings=FakeSettings(values={}),
+        ),
     )
 
     with pytest.raises(QgisSdkUnsupportedCapabilityError) as caught:
@@ -1040,13 +1044,15 @@ def test_host_services_from_a_context_share_the_files_authority() -> None:
     scope = ResourceScope()
     files = FakeFiles(scope, owner="plugin:demo")
     context = PluginContext(
-        notifications=FakeNotifications(),
-        scope=scope,
-        layers=FakeLayers(layers=[]),
-        project=FakeProject(ids=[]),
-        settings=FakeSettings(values={}),
-        styles=FakeStyles(),
-        files=files,
+        FakeNotifications(),
+        scope,
+        PluginServices(
+            layers=FakeLayers(layers=[]),
+            project=FakeProject(ids=[]),
+            settings=FakeSettings(values={}),
+            styles=FakeStyles(),
+            files=files,
+        ),
     )
 
     services = HostServices.from_context(context)
@@ -1279,14 +1285,16 @@ def test_host_services_from_a_context_carry_algorithms_and_files() -> None:
     files = FakeFiles(scope, owner="plugin:demo")
     algorithms = FakeAlgorithms(layers, scope, files=files)
     context = PluginContext(
-        notifications=FakeNotifications(),
-        scope=scope,
-        layers=layers,
-        project=FakeProject(ids=[]),
-        settings=FakeSettings(values={}),
-        styles=FakeStyles(),
-        files=files,
-        algorithms=algorithms,
+        FakeNotifications(),
+        scope,
+        PluginServices(
+            layers=layers,
+            project=FakeProject(ids=[]),
+            settings=FakeSettings(values={}),
+            styles=FakeStyles(),
+            files=files,
+            algorithms=algorithms,
+        ),
     )
 
     services = HostServices.from_context(context)

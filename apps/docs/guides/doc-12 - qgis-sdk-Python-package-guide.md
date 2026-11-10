@@ -3144,14 +3144,14 @@ only ever sees `Network`.
 
 ```python
 from qgis_sdk.adapters.qgis import NativeNetworkTransport
-from qgis_sdk.core import PluginContext, ResourceScope
+from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
 from qgis_sdk.network import NetworkClient
 
 scope = ResourceScope()
 context = PluginContext(
     notifications=notifications,
     scope=scope,
-    network=NetworkClient(NativeNetworkTransport(scope), scope),
+    services=PluginServices(network=NetworkClient(NativeNetworkTransport(scope), scope)),
 )
 ```
 

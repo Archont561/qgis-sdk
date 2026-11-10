@@ -2,7 +2,7 @@
 
 import pytest
 from qgis_sdk import QgisSdkDeclarationError, QgisSdkPlugin
-from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+from qgis_sdk.core import PluginContext, PluginRuntime, PluginServices, ResourceScope
 from qgis_sdk.declarations import describe
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin
@@ -32,7 +32,7 @@ def test_registered_action_preserves_identity_and_matches_class_contract() -> No
     assert "ctx" not in actual["actions"][0]["request"]["properties"]
     assert generate_schema_typescript(actual) == generate_schema_typescript(expected)
     scope = ResourceScope()
-    context = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    context = PluginContext(RecordingNotifications(scope), scope)
     runtime = PluginRuntime(generated, context)
     runtime.start()
     assert runtime.actions["double"](value=21) == 42
@@ -89,8 +89,8 @@ def test_fake_contexts_and_dispatch_preserve_authority_and_validate_inputs() -> 
         RecordingNotifications(first_scope),
         RecordingNotifications(second_scope),
     )
-    ctx1 = PluginContext(notifications=first, scope=first_scope)
-    ctx2 = PluginContext(notifications=second, scope=second_scope)
+    ctx1 = PluginContext(first, first_scope)
+    ctx2 = PluginContext(second, second_scope)
     assert notify(ctx1, "direct") == "direct"
     runtime = PluginRuntime(app, ctx2)
     runtime.start()
@@ -190,7 +190,7 @@ def test_input_named_function_does_not_replace_the_registered_handler() -> None:
         return _function + 1
 
     scope = ResourceScope()
-    ctx = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    ctx = PluginContext(RecordingNotifications(scope), scope)
     runtime = PluginRuntime(app, ctx)
     runtime.start()
     assert runtime.actions["run"](_function=41) == 42
@@ -225,12 +225,8 @@ def test_two_live_applications_have_independent_contexts_and_unload() -> None:
         RecordingNotifications(scope1),
         RecordingNotifications(scope2),
     )
-    first = PluginRuntime(
-        one, PluginContext(notifications=notifications1, scope=scope1)
-    )
-    second = PluginRuntime(
-        two, PluginContext(notifications=notifications2, scope=scope2)
-    )
+    first = PluginRuntime(one, PluginContext(notifications1, scope1))
+    second = PluginRuntime(two, PluginContext(notifications2, scope2))
     first.start()
     second.start()
     first.actions["speak"](message="one")
@@ -291,7 +287,7 @@ def test_multi_module_groups_require_explicit_inclusion(tmp_path, monkeypatch) -
     module = importlib.import_module("application_survey.plugin")
     assert [item.id for item in describe(module.app).actions] == ["double"]
     scope = ResourceScope()
-    ctx = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    ctx = PluginContext(RecordingNotifications(scope), scope)
     runtime = PluginRuntime(module.app, ctx)
     runtime.start()
     assert runtime.actions["double"](value=21) == 42
@@ -339,7 +335,7 @@ def test_explicit_surface_and_provider_are_owned_by_the_lowered_runtime() -> Non
     scope = ResourceScope()
     processing = FakeProcessing(scope)
     ctx = PluginContext(
-        notifications=RecordingNotifications(scope), scope=scope, processing=processing
+        RecordingNotifications(scope), scope, PluginServices(processing=processing)
     )
     runtime = PluginRuntime(generated, ctx)
     runtime.start()
@@ -366,7 +362,7 @@ def test_group_stream_lowers_to_sdk_stream_and_shares_action_namespace() -> None
     scope = ResourceScope()
     runtime = PluginRuntime(
         app,
-        PluginContext(notifications=RecordingNotifications(scope), scope=scope),
+        PluginContext(RecordingNotifications(scope), scope),
     )
     runtime.start()
     assert list(runtime.streams["ticks"](count=2)) == [

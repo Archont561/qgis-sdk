@@ -35,7 +35,12 @@ try:
     )
     from qgis_sdk.adapters._qt import action_class, qt_enum
     from qgis_sdk.adapters.qgis import QgsJobPump, QgsTaskWorkers
-    from qgis_sdk.core import PluginContext, ResourceScope, WorkerContext
+    from qgis_sdk.core import (
+        PluginContext,
+        PluginServices,
+        ResourceScope,
+        WorkerContext,
+    )
     from qgis_sdk.jobs import JobRegistry, JobService, JobStatus, job
     from qgis_sdk.testing import RecordingNotifications
 except ImportError as error:  # pragma: no cover - depends on the host
@@ -184,9 +189,9 @@ def plugin_scope() -> Iterator[ResourceScope]:
 
 def test_a_plugin_context_is_assembled_from_this_host(app, plugin_scope) -> None:
     context = PluginContext(
-        scope=plugin_scope,
-        notifications=RecordingNotifications(plugin_scope),
-        workers=QgsTaskWorkers(plugin_scope),
+        RecordingNotifications(plugin_scope),
+        plugin_scope,
+        PluginServices(workers=QgsTaskWorkers(plugin_scope)),
     )
 
     assert context.host.value == "desktop"

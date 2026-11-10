@@ -12,7 +12,13 @@ from __future__ import annotations
 from collections.abc import Coroutine
 
 import pytest
-from qgis_sdk.core import JobState, ResourceScope, StepScheduler
+from qgis_sdk.core import (
+    JobState,
+    PluginServices,
+    ResourceScope,
+    StepScheduler,
+    UiServices,
+)
 from qgis_sdk.core.contexts import AlgorithmContext, PluginContext, UiContext
 from qgis_sdk.models import (
     DEFAULT_TIMEOUT_SECONDS,
@@ -378,7 +384,7 @@ def test_contexts_expose_the_injected_client_and_refuse_its_absence(
     from qgis_sdk.testing import RecordingNotifications
 
     notifications = RecordingNotifications(scope)
-    with_network = PluginContext(notifications, scope, network=network)
+    with_network = PluginContext(notifications, scope, PluginServices(network=network))
     without = PluginContext(notifications, scope)
 
     assert with_network.network is network
@@ -386,13 +392,15 @@ def test_contexts_expose_the_injected_client_and_refuse_its_absence(
         _ = without.network
     assert caught.value.capability == "network"
 
-    class Closeable:
-        def request_close(self) -> None:
-            return
 
-    assert (
-        UiContext(notifications, Closeable(), scope, network=network).network is network
-    )
+def test_a_view_and_an_algorithm_see_the_same_client(
+    network: NetworkClient, scope: ResourceScope
+) -> None:
+    from qgis_sdk.testing import RecordingNotifications
+
+    notifications = RecordingNotifications(scope)
+    view = UiContext(notifications, _Closeable(), scope, UiServices(network=network))
+    assert view.network is network
     algorithm = AlgorithmContext(
         progress=_Progress(),
         cancellation=_Never(),
@@ -401,6 +409,11 @@ def test_contexts_expose_the_injected_client_and_refuse_its_absence(
     )
     with pytest.raises(QgisSdkUnsupportedCapabilityError):
         _ = algorithm.network
+
+
+class _Closeable:
+    def request_close(self) -> None:
+        return
 
 
 class _Progress:

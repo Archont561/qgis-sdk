@@ -11,6 +11,7 @@ from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
     PluginRuntimeState,
+    PluginServices,
     ResourceScope,
 )
 from qgis_sdk.declarations._describe import describe_plugin
@@ -24,7 +25,7 @@ from sample_algorithms import sample_provider
 
 def _context(scope: ResourceScope, processing: FakeProcessing | None) -> PluginContext:
     return PluginContext(
-        notifications=RecordingNotifications(scope), scope=scope, processing=processing
+        RecordingNotifications(scope), scope, PluginServices(processing=processing)
     )
 
 

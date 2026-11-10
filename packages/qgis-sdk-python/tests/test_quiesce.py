@@ -128,7 +128,7 @@ class TestJobService:
 
 class TestPluginRuntime:
     def test_a_running_plugin_without_work_is_safe_and_stays_running(self) -> None:
-        context = PluginContext(notifications=Notes(), scope=ResourceScope())
+        context = PluginContext(Notes(), ResourceScope())
         runtime = PluginRuntime._from_plugin_class(Tools, context)
         runtime.start()
 
@@ -140,7 +140,7 @@ class TestPluginRuntime:
 
     def test_stuck_work_refuses_and_resume_restores_the_old_revision(self) -> None:
         scope = ResourceScope()
-        context = PluginContext(notifications=Notes(), scope=scope)
+        context = PluginContext(Notes(), scope)
         runtime = PluginRuntime._from_plugin_class(Tools, context)
         runtime.start()
         workers = FakeWorkers()
@@ -159,7 +159,7 @@ class TestPluginRuntime:
         )  # accepting work again
 
     def test_a_plugin_that_is_not_running_refuses_with_its_state(self) -> None:
-        context = PluginContext(notifications=Notes(), scope=ResourceScope())
+        context = PluginContext(Notes(), ResourceScope())
         runtime = PluginRuntime._from_plugin_class(Tools, context)
 
         outcome = runtime.quiesce()

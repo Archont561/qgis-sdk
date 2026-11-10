@@ -125,7 +125,7 @@ def scope() -> Iterator[ResourceScope]:
 
 @pytest.fixture
 def runtime(scope: ResourceScope) -> Iterator[PluginRuntime]:
-    context = PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+    context = PluginContext(RecordingNotifications(scope), scope)
     runtime = PluginRuntime._from_plugin_class(WiringPlugin, context)
     runtime.start()
     instance = runtime.instance
@@ -360,7 +360,7 @@ def test_a_failing_or_malformed_stream_ends_with_an_error_event(
 
     scope = ResourceScope()
     runtime = PluginRuntime._from_plugin_class(
-        Broken, PluginContext(notifications=RecordingNotifications(scope), scope=scope)
+        Broken, PluginContext(RecordingNotifications(scope), scope)
     )
     runtime.start()
     other = fake_ui_context(scope.child(), runtime=runtime)
