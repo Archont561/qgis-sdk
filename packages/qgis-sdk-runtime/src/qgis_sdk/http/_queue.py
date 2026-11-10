@@ -33,6 +33,117 @@ class _Work:
     error: BaseException | None = None
 
 
+def _refuse_all(items: deque[_Work], error: QgisSdkError) -> None:
+    """Tell every waiting caller its work will never run; the caller holds the lock."""
+    while items:
+        work = items.popleft()
+        work.cancelled = True
+        work.error = error
+        work.picked.set()
+        work.done.set()
+
+
+def _settle_late(items: deque[_Work], work: _Work, deadline: float) -> bool:
+    """Settle a request whose pickup deadline has just expired.
+
+    ``True`` means the request has begun - the owner picked it up, or took it
+    out of the queue as the deadline expired - so its outcome is owed to the
+    caller, because a deadline only covers pickup. ``False`` means it was taken
+    back out before it started, and the caller is told the pickup failed.
+    """
+    if work.picked.is_set():
+        return True
+    work.cancelled = True
+    try:
+        items.remove(work)
+    except ValueError:
+        # Popped between the deadline expiring and this sweep, so the owner is
+        # starting it: leave it uncancelled and wait for the pickup to be
+        # announced rather than losing the outcome.
+        work.cancelled = False
+        return work.picked.wait(deadline)
+    return False
+
+
+class _Cleanups:
+    """The one-per-session work a host defers: kept until the owner runs it.
+
+    Unlike requests, a cleanup is not discarded when the request queue fills or
+    a post is rejected: the session still has to be disposed of, so it is
+    retried until the host accepts it.
+
+    Guarded by the queue's lock rather than its own: what is deferred, whether
+    the owner is busy and whether a turn is already scheduled are read together,
+    and a second lock would only add an ordering to get wrong.
+    """
+
+    def __init__(self) -> None:
+        self._items: dict[str, _Work] = {}
+
+    def __bool__(self) -> bool:
+        return bool(self._items)
+
+    def add(self, key: str, fn: Callable[[], Any]) -> None:
+        """Keep the first cleanup queued for a session; a repeat is a no-op."""
+        self._items.setdefault(key, _Work(fn))
+
+    def take(self) -> _Work | None:
+        """Take the oldest cleanup, if the host still has one to run."""
+        if not self._items:
+            return None
+        return self._items.pop(next(iter(self._items)))
+
+    def clear(self) -> None:
+        """Drop every cleanup, for a host that disposes its sessions itself."""
+        self._items.clear()
+
+
+class _Turn:
+    """What the owner thread is running, and the cleanup it owes when it stops.
+
+    One item at a time: `start` hands it over, `finish` records its outcome and
+    frees the owner, and anything deferred meanwhile waits in `owed` so it runs
+    once the callback returns rather than inside it. Guarded by the queue's
+    lock, like `_Cleanups`.
+    """
+
+    def __init__(self) -> None:
+        self.thread: int | None = None
+        self.current: _Work | None = None
+        self.owed: list[Callable[[], None]] = []
+
+    @property
+    def busy(self) -> bool:
+        """Whether the owner is running an item right now."""
+        return self.current is not None
+
+    def start(self, item: _Work) -> None:
+        """Give the item to the owner thread and announce the pickup."""
+        self.thread = threading.get_ident()
+        self.current = item
+        item.picked.set()
+
+    def finish(
+        self, item: _Work, value: Any, error: BaseException | None
+    ) -> list[Callable[[], None]]:
+        """Record the outcome, free the owner, and hand back what it owes."""
+        if not item.cancelled:
+            item.value = value
+            item.error = error
+            item.done.set()
+        self.thread = None
+        self.current = None
+        owed, self.owed = self.owed, []
+        return owed
+
+    def owe(self, fn: Callable[[], None]) -> bool:
+        """Keep a cleanup for when the running item returns, if one is running."""
+        if not self.busy:
+            return False
+        self.owed.append(fn)
+        return True
+
+
 class GuiQueue:
     """Serialize work even when a callback spins a nested Qt event loop.
 
@@ -47,13 +158,8 @@ class GuiQueue:
         self._deadline = deadline
         self._lock = threading.Lock()
         self._items: deque[_Work] = deque()
-        # At most one cleanup per session; unlike requests, cleanup is not
-        # discarded when the request queue fills or a post is rejected.
-        self._cleanups: dict[str, _Work] = {}
-        self._active = False
-        self._active_thread: int | None = None
-        self._current: _Work | None = None
-        self._idle_callbacks: list[Callable[[], None]] = []
+        self._cleanups = _Cleanups()
+        self._turn = _Turn()
         self._retry_timer: threading.Timer | None = None
         self._scheduled = False
         self._closed = False
@@ -71,7 +177,7 @@ class GuiQueue:
     def busy(self) -> bool:
         """Whether the owner thread is running queued work right now."""
         with self._lock:
-            return self._active
+            return self._turn.busy
 
     def close(self) -> None:
         """Withdraw queued work and fail active callers without undoing effects."""
@@ -80,35 +186,28 @@ class GuiQueue:
             if self._retry_timer is not None:
                 self._retry_timer.cancel()
                 self._retry_timer = None
-            if self._current is not None:
-                self._current.cancelled = True
-                self._current.error = QgisSdkHostReloadedError(
+            current = self._turn.current
+            if current is not None:
+                current.cancelled = True
+                current.error = QgisSdkHostReloadedError(
                     "The QGIS host closed; an already-started action may have had effects"
                 )
-                self._current.done.set()
+                current.done.set()
             self._cleanups.clear()  # The owner disposes every session during close.
-            while self._items:
-                work = self._items.popleft()
-                work.cancelled = True
-                work.error = QgisSdkHostReloadedError("The QGIS host closed")
-                work.picked.set()
-                work.done.set()
+            _refuse_all(self._items, QgisSdkHostReloadedError("The QGIS host closed"))
 
     def defer_until_idle(self, fn: Callable[[], None]) -> bool:
         """Defer owner cleanup if an already-started callback is still running."""
         with self._lock:
-            if not self._active:
-                return False
-            self._idle_callbacks.append(fn)
-            return True
+            return self._turn.owe(fn)
 
     def defer(self, key: str, fn: Callable[[], Any]) -> bool:
         """Retain one cleanup per session until the owner can execute it."""
         with self._lock:
             if self._closed:
                 return False
-            self._cleanups.setdefault(key, _Work(fn))
-            schedule = not self._active and not self._scheduled
+            self._cleanups.add(key, fn)
+            schedule = not self._turn.busy and not self._scheduled
             if schedule:
                 self._scheduled = True
         if schedule:
@@ -120,7 +219,7 @@ class GuiQueue:
         with self._lock:
             if self._closed:
                 raise QgisSdkHostReloadedError("The QGIS host closed")
-            if self._active_thread == threading.get_ident():
+            if self._turn.thread == threading.get_ident():
                 # Calling back into the owner from work it is already running
                 # would wait for a turn that cannot arrive; refuse at once
                 # instead of blocking the owner thread for the whole deadline.
@@ -130,7 +229,7 @@ class GuiQueue:
             if len(self._items) >= 64:
                 raise QgisSdkHostBusyError("The QGIS host request queue is full")
             self._items.append(work)
-            schedule = not self._active and not self._scheduled
+            schedule = not self._turn.busy and not self._scheduled
             if schedule:
                 self._scheduled = True
         if schedule:
@@ -145,27 +244,9 @@ class GuiQueue:
         return work.value
 
     def _adopt_late(self, work: _Work) -> bool:
-        """Settle a request whose pickup deadline has just expired.
-
-        ``True`` means the request has begun - the owner picked it up, or took
-        it out of the queue as the deadline expired - so its outcome is owed to
-        the caller, because a deadline only covers pickup. ``False`` means it was
-        taken back out before it started, and the caller is told the pickup
-        failed.
-        """
+        """Settle a request whose pickup deadline has just expired."""
         with self._lock:
-            if work.picked.is_set():
-                return True
-            work.cancelled = True
-            try:
-                self._items.remove(work)
-            except ValueError:
-                # Popped between the deadline expiring and this sweep, so the
-                # owner is starting it: leave it uncancelled and wait for the
-                # pickup to be announced rather than losing the outcome.
-                work.cancelled = False
-                return work.picked.wait(self._deadline)
-            return False
+            return _settle_late(self._items, work, self._deadline)
 
     def _schedule(self) -> None:
         try:
@@ -173,15 +254,15 @@ class GuiQueue:
         except Exception:  # noqa: BLE001 - fail queued callers if the host rejects a post
             with self._lock:
                 self._scheduled = False
-                while self._items:
-                    work = self._items.popleft()
-                    work.cancelled = True
-                    work.error = QgisSdkHostBusyError(
-                        "The QGIS host rejected scheduling"
-                    )
-                    work.picked.set()
-                    work.done.set()
-                if self._cleanups and not self._closed and self._retry_timer is None:
+                _refuse_all(
+                    self._items,
+                    QgisSdkHostBusyError("The QGIS host rejected scheduling"),
+                )
+                if (
+                    bool(self._cleanups)
+                    and not self._closed
+                    and self._retry_timer is None
+                ):
                     timer = threading.Timer(0.25, self._retry_cleanups)
                     timer.daemon = True
                     self._retry_timer = timer
@@ -191,7 +272,7 @@ class GuiQueue:
         with self._lock:
             self._retry_timer = None
             schedule = bool(self._cleanups) and not (
-                self._closed or self._active or self._scheduled
+                self._closed or self._turn.busy or self._scheduled
             )
             if schedule:
                 self._scheduled = True
@@ -225,43 +306,41 @@ class GuiQueue:
             local.draining = False
 
     def _drain_one(self) -> None:
-        with self._lock:
-            self._scheduled = False
-            if self._active:
-                return
-            while self._items and self._items[0].cancelled:
-                self._items.popleft()
-            if self._cleanups:
-                key = next(iter(self._cleanups))
-                item = self._cleanups.pop(key)
-            elif self._items:
-                item = self._items.popleft()
-            else:
-                return
-            self._active = True
-            self._active_thread = threading.get_ident()
-            self._current = item
-            item.picked.set()
+        item = self._take()
+        if item is None:
+            return
         value = None
         error = None
         try:
             value = item.fn()
         except BaseException as caught:  # noqa: BLE001 - always release the waiting caller
             error = caught
-        finally:
-            with self._lock:
-                if not item.cancelled:
-                    item.value = value
-                    item.error = error
-                    item.done.set()
-                self._current = None
-                self._active = False
-                self._active_thread = None
-                idle_callbacks, self._idle_callbacks = self._idle_callbacks, []
-                schedule = bool(self._cleanups or self._items) and not self._scheduled
-                if schedule:
-                    self._scheduled = True
-            for callback in idle_callbacks:
-                callback()
-            if schedule:
-                self._schedule()
+        with self._lock:
+            owed = self._turn.finish(item, value, error)
+        for callback in owed:
+            callback()
+        self._next_turn()
+
+    def _take(self) -> _Work | None:
+        """Claim the next item - a cleanup before a request - for the owner."""
+        with self._lock:
+            self._scheduled = False
+            if self._turn.busy:
+                return None
+            while self._items and self._items[0].cancelled:
+                self._items.popleft()
+            item = self._cleanups.take()
+            if item is None and self._items:
+                item = self._items.popleft()
+            if item is None:
+                return None
+            self._turn.start(item)
+            return item
+
+    def _next_turn(self) -> None:
+        """Post the next turn unless one is already on its way."""
+        with self._lock:
+            if self._scheduled or not (self._items or bool(self._cleanups)):
+                return
+            self._scheduled = True
+        self._schedule()

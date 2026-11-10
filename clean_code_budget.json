@@ -616,11 +616,6 @@
 	"packages/qgis-sdk-runtime/src/qgis_sdk/exports.py": {
 		"CC101": 3
 	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/http/_queue.py": {
-		"CC101": 1,
-		"CC201": 1,
-		"CC303": 1
-	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/http/_server.py": {
 		"CC102": 1
 	},
