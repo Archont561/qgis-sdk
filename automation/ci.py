@@ -36,6 +36,9 @@ NATIVE_COMMAND = [
     # and errored test ids in the log, which is what `native()` annotates and
     # what a rerun otherwise has to rediscover.
     "-rfEs",
+    # TEMPORARY diagnostic: name the test a Qt abort kills, since an abort
+    # leaves no summary for `failures()` to read.
+    "-v",
 ]
 LTS_PROBE = (
     "import qgis.core, qgis.server; "
