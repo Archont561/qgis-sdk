@@ -207,9 +207,7 @@ class GuiQueue:
             if self._closed:
                 return False
             self._cleanups.add(key, fn)
-            schedule = not self._turn.busy and not self._scheduled
-            if schedule:
-                self._scheduled = True
+            schedule = self._wake()
         if schedule:
             self._schedule()
         return True
@@ -229,9 +227,7 @@ class GuiQueue:
             if len(self._items) >= 64:
                 raise QgisSdkHostBusyError("The QGIS host request queue is full")
             self._items.append(work)
-            schedule = not self._turn.busy and not self._scheduled
-            if schedule:
-                self._scheduled = True
+            schedule = self._wake()
         if schedule:
             self._schedule()
         if not work.picked.wait(self._deadline) and not self._adopt_late(work):
@@ -271,11 +267,7 @@ class GuiQueue:
     def _retry_cleanups(self) -> None:
         with self._lock:
             self._retry_timer = None
-            schedule = bool(self._cleanups) and not (
-                self._closed or self._turn.busy or self._scheduled
-            )
-            if schedule:
-                self._scheduled = True
+            schedule = bool(self._cleanups) and not self._closed and self._wake()
         if schedule:
             self._schedule()
 
@@ -317,9 +309,15 @@ class GuiQueue:
             error = caught
         with self._lock:
             owed = self._turn.finish(item, value, error)
+            # Reserved in the same critical section that frees the owner: a
+            # caller that saw "idle and unscheduled" just after the release
+            # would post the next turn itself, and a host whose post runs the
+            # callback inline would then drain on that caller's thread.
+            wake = (bool(self._items) or bool(self._cleanups)) and self._wake()
         for callback in owed:
             callback()
-        self._next_turn()
+        if wake:
+            self._schedule()
 
     def _take(self) -> _Work | None:
         """Claim the next item - a cleanup before a request - for the owner."""
@@ -337,10 +335,9 @@ class GuiQueue:
             self._turn.start(item)
             return item
 
-    def _next_turn(self) -> None:
-        """Post the next turn unless one is already on its way."""
-        with self._lock:
-            if self._scheduled or not (self._items or bool(self._cleanups)):
-                return
-            self._scheduled = True
-        self._schedule()
+    def _wake(self) -> bool:
+        """Reserve the next turn if the owner is idle; the caller holds the lock."""
+        if self._scheduled or self._turn.busy:
+            return False
+        self._scheduled = True
+        return True
