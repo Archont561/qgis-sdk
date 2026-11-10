@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from qgis_sdk.jobs import JobStatus
@@ -604,6 +604,18 @@ def test_a_named_destination_is_honoured_and_the_source_file_untouched(
     assert _digest(native_services.dataset) == before
 
 
+def _record(native_services: Services) -> Any:
+    """The one record a host hands ``NativeProcessing``."""
+    from qgis_sdk.adapters.qgis import ProcessingServices
+
+    return ProcessingServices(
+        layers=native_services.layers,
+        algorithms=native_services.algorithms,
+        project=native_services.project,
+        scope=native_services.scope,
+    )
+
+
 def test_describe_sees_a_provider_registered_at_runtime(
     native_services: Services,
 ) -> None:
@@ -612,12 +624,7 @@ def test_describe_sees_a_provider_registered_at_runtime(
     from qgis_sdk.adapters.qgis import NativeProcessing
     from sample_algorithms import sample_provider
 
-    processing = NativeProcessing(
-        layers=native_services.layers,
-        algorithms=native_services.algorithms,
-        project=native_services.project,
-        scope=native_services.scope,
-    )
+    processing = NativeProcessing(_record(native_services))
     before = {p.id for p in native_services.algorithms.providers()}
     assert sample_provider.id not in before
     handle = processing.register_provider(sample_provider)

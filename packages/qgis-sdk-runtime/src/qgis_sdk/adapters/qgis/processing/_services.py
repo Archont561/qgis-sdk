@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from qgis.core import QgsProcessingException
@@ -17,12 +17,14 @@ from ..rasters import NativeRasters
 
 
 @dataclass(frozen=True, slots=True)
-class _Services:
+class ProcessingServices:
     """The caller's runtime objects, which an algorithm borrows and does not own.
 
     One record rather than six keyword parameters: registering a provider and
     building the service that registers it are the same facts, and passing them
-    as a record is what keeps the two from drifting apart.
+    as a record is what keeps the two from drifting apart. ``NativeProcessing``
+    takes one of these - or the same keys as a plain mapping - so a host names
+    the services once instead of unpacking them into a constructor.
     """
 
     layers: NativeLayers
@@ -37,6 +39,16 @@ class _Services:
     #: Without one, a raster input on an algorithm refuses by name - the dialog
     #: would otherwise accept a layer nothing can read.
     rasters: NativeRasters | None = None
+
+    def with_default_authority(self) -> ProcessingServices:
+        """The same record, minting into a fresh authority when it has none.
+
+        One authority per runtime (decision-20): resolving it here is what makes
+        every provider a service registers mint into the same one.
+        """
+        if self.authority is not None:
+            return self
+        return replace(self, authority=HostAuthority())
 
 
 def _rasters_of(bridge: Any) -> Any:

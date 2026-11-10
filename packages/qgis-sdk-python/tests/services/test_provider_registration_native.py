@@ -46,13 +46,15 @@ def _digest(path: Path) -> str:
 def _processing(native_services: Services):
     """The ``ctx.processing`` service a QGIS host builds over these services."""
     # The fixture starts QGIS; the adapters below must be imported after it.
-    from qgis_sdk.adapters.qgis import NativeProcessing
+    from qgis_sdk.adapters.qgis import NativeProcessing, ProcessingServices
 
     return NativeProcessing(
-        layers=native_services.layers,
-        algorithms=native_services.algorithms,
-        project=native_services.project,
-        scope=native_services.scope,
+        ProcessingServices(
+            layers=native_services.layers,
+            algorithms=native_services.algorithms,
+            project=native_services.project,
+            scope=native_services.scope,
+        )
     )
 
 
@@ -376,3 +378,30 @@ def test_a_plugin_over_a_context_without_processing_registers_nothing(
         assert _algorithm_ids("sample") == []
     finally:
         runtime.unload()
+
+
+def test_the_service_takes_a_record_or_the_same_keys_as_a_mapping(
+    native_services: Services,
+) -> None:
+    """A host names its services once: a ``ProcessingServices``, or the same keys."""
+    from qgis_sdk.adapters.qgis import NativeProcessing, ProcessingServices
+
+    keys = {
+        "layers": native_services.layers,
+        "algorithms": native_services.algorithms,
+        "project": native_services.project,
+        "scope": native_services.scope,
+    }
+    for processing in (
+        NativeProcessing(ProcessingServices(**keys)),
+        NativeProcessing(keys),
+    ):
+        assert processing._scope is native_services.scope
+
+
+def test_a_mapping_must_name_only_services_that_exist() -> None:
+    """An unknown key or a missing one fails at construction, not at registration."""
+    from qgis_sdk.adapters.qgis import NativeProcessing
+
+    with pytest.raises(TypeError):
+        NativeProcessing({"scope": None, "raster": None})

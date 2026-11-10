@@ -13,7 +13,7 @@ from qgis_sdk.providers import Provider
 
 from ..algorithms import _processing
 from ._algorithm import _BridgeAlgorithm
-from ._services import _Services
+from ._services import ProcessingServices
 
 
 class NativeProcessingProvider(QgsProcessingProvider):
@@ -24,7 +24,7 @@ class NativeProcessingProvider(QgsProcessingProvider):
     the scope that owns them stay the plugin's, not this adapter's.
     """
 
-    def __init__(self, provider: Provider, services: _Services) -> None:
+    def __init__(self, provider: Provider, services: ProcessingServices) -> None:
         super().__init__()
         self._provider = provider
         self.layers = services.layers
@@ -78,7 +78,7 @@ class NativeProcessingProvider(QgsProcessingProvider):
 
 
 def register_provider(
-    provider: Provider, services: _Services
+    provider: Provider, services: ProcessingServices
 ) -> NativeProcessingProvider:
     """Register ``provider`` with QGIS and return the adapter that owns it.
 

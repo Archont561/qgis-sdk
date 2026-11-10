@@ -30,7 +30,7 @@ from .layouts import NativeLayouts
 from .log import NativeLog
 from .network import NativeNetworkTransport
 from .notifications import NativeNotifications
-from .processing import NativeProcessing
+from .processing import NativeProcessing, ProcessingServices
 from .project import NativeProject
 from .rasters import NativeRasters
 from .settings import NativeSettings
@@ -128,12 +128,14 @@ def native_plugin_context(
         algorithms=algorithms,
         workers=workers,
         processing=NativeProcessing(
-            layers=layers,
-            algorithms=algorithms,
-            project=project,
-            scope=scope,
-            authority=authority,
-            rasters=rasters,
+            ProcessingServices(
+                layers=layers,
+                algorithms=algorithms,
+                project=project,
+                scope=scope,
+                authority=authority,
+                rasters=rasters,
+            )
         ),
         files=files,
         log=NativeLog(scope, settings_prefix),

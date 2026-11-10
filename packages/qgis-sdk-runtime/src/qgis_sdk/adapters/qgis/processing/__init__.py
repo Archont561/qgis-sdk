@@ -43,5 +43,6 @@ from __future__ import annotations
 
 from ._provider import NativeProcessingProvider
 from ._service import NativeProcessing
+from ._services import ProcessingServices
 
-__all__ = ["NativeProcessing", "NativeProcessingProvider"]
+__all__ = ["NativeProcessing", "NativeProcessingProvider", "ProcessingServices"]
