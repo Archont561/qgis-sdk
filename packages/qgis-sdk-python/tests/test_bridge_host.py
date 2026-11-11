@@ -230,6 +230,401 @@ def _subscribe(
     )
 
 
+# -- records and helpers the long scenarios share ---------------------------
+
+EXPECTED_HOST_GRANTS = frozenset(
+    {
+        "layers.read",
+        "layers.open",
+        "project.read",
+        "settings.read",
+        "notifications.info",
+        "styles.apply",
+        "files.export",
+        "blob.read",
+        "network.fetch",
+        "algorithms.read",
+        "algorithms.run",
+        "features.read",
+        "features.edit",
+        "expressions.evaluate",
+        "canvas.read",
+        "canvas.control",
+        "rasters.read",
+        "rasters.open",
+        "project.write",
+        "layouts.read",
+        "layouts.write",
+        "layouts.export",
+        # TASK-93: a layer's appearance is read and written under its own two
+        # grants, apart from applying a packaged style.
+        "symbology.read",
+        "symbology.write",
+        "styles.read",
+        "styles.write",
+        # TASK-92: the connection registry and the auth configuration listing
+        # read under one grant each, and re-binding a credential is its own.
+        "connections.read",
+        "auth.read",
+        "auth.write",
+    }
+)
+
+
+def _assert_manifest_ids(described: dict) -> None:
+    assert [action["id"] for action in described["actions"]] == [
+        operation.id for operation in HOST_OPERATIONS if operation.events is None
+    ]
+    assert [stream["id"] for stream in described["streams"]] == [
+        operation.id for operation in HOST_OPERATIONS if operation.events is not None
+    ]
+
+
+def _assert_action_result(result: dict, action_id: str) -> None:
+    # A result is a closed object, nothing at all, one of the bare JSON
+    # scalars, or a union - anything open-ended would generate a type a page
+    # cannot narrow, which is the drift this assertion exists to catch.
+    items = result.get("items") or {}
+    # An array of one declared object is narrowable in exactly the way a
+    # page needs: the element has a name and a closed shape.
+    array_of_one_closed_object = (
+        result.get("type") == "array" and items.get("additionalProperties") is False
+    )
+    assert any(
+        (
+            result.get("additionalProperties") is False,
+            result.get("type") in {"null", "number", "string", "boolean"},
+            "anyOf" in result,
+            array_of_one_closed_object,
+        )
+    ), action_id
+
+
+def _assert_manifest_actions(described: dict) -> None:
+    for action in described["actions"]:
+        assert action["request"]["type"] == "object"
+        _assert_action_result(action["result"], action["id"])
+
+
+def _assert_manifest_streams(described: dict) -> None:
+    for stream in described["streams"]:
+        assert stream["request"]["type"] == "object"
+        assert "result" not in stream
+        assert set(stream["events"]) == {"data"}
+
+
+def _refusal(dispatcher, payload, code, *, binding=None):
+    answer = _call(dispatcher, "layers.open_vector", payload, binding=binding)
+    assert answer["error"]["code"] == code
+    return answer
+
+
+def _foreign_refusal(dispatcher, ref):
+    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
+    return _refusal(
+        dispatcher,
+        {"file": ref.to_wire()},
+        BridgeErrorCode.UNKNOWN_HANDLE.value,
+        binding=other,
+    )
+
+
+def _stale_refusal(dispatcher, ref):
+    dispatcher.advance_generation()
+    later = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    return _refusal(
+        dispatcher,
+        {"file": ref.to_wire()},
+        BridgeErrorCode.STALE_HANDLE.value,
+        binding=later,
+    )
+
+
+def _fetch_expectation(network) -> None:
+    network.expect(
+        "GET",
+        "https://api.example.org/collections",
+        reply(json={"collections": []}, headers={"X-Trace": "t1"}),
+        hold=True,
+    )
+
+
+def _fetch_payload() -> dict:
+    return {
+        "url": "https://api.example.org/collections",
+        "headers": [{"name": "Accept", "value": "application/json"}],
+    }
+
+
+def _assert_fetch_request(dispatcher, network, binding) -> None:
+    (sent,) = network.requests
+    assert sent.method == "GET"
+    assert sent.headers["accept"] == "application/json"
+    assert sent.allowed_origins == frozenset({"https://api.example.org"})
+    assert sent.max_body_bytes == 64
+    assert dispatcher.pump(binding) == []
+
+
+def _assert_fetch_delivery(dispatcher, network, binding) -> None:
+    network.pending[0].deliver()
+    data, terminal = dispatcher.pump(binding)
+    assert data["event"]["kind"] == "data"
+    assert data["event"]["payload"] == {
+        "url": "https://api.example.org/collections",
+        "status_code": 200,
+        "reason": "OK",
+        "headers": [
+            {"name": "Content-Type", "value": "application/json"},
+            {"name": "X-Trace", "value": "t1"},
+        ],
+        "text": '{"collections": []}',
+        "base64": None,
+    }
+    assert terminal["terminal"] == {"kind": "complete"}
+
+
+def _assert_grant_refusal(dispatcher, binding, payload, code, *, fragment=None):
+    answer = _subscribe(dispatcher, "network.fetch", payload, binding=binding)
+    assert answer["error"]["code"] == code
+    if fragment is not None:
+        assert fragment in answer["error"]["message"]
+
+
+@dataclass(frozen=True, slots=True)
+class _ContextRig:
+    """One plugin context and the service objects it must hand to the host."""
+
+    layers: Any
+    project: Any
+    settings: Any
+    styles: Any
+    notifications: Any
+    transport: Any
+    authority: Any
+    context: Any
+
+
+def _context_rig() -> _ContextRig:
+    from qgis_sdk.core import PluginContext, ResourceScope
+
+    layers = FakeLayers(layers=[_info(0)])
+    project = FakeProject(ids=["layer-0"])
+    settings = FakeSettings(values={"theme": "dark"})
+    styles = FakeStyles()
+    notifications = FakeNotifications()
+    transport = FakeNetworkTransport()
+    authority = HostAuthority()
+    context = PluginContext(
+        notifications,
+        ResourceScope(),
+        PluginServices(
+            layers=layers, project=project, settings=settings, styles=styles
+        ),
+    )
+    return _ContextRig(
+        layers,
+        project,
+        settings,
+        styles,
+        notifications,
+        transport,
+        authority,
+        context,
+    )
+
+
+def _registered_layers(scope, fixtures):
+    from qgis_sdk.testing import FakeLayers as FakeLayerService
+
+    layers = FakeLayerService(scope)
+    layers.register(
+        VectorLayerDeclaration(
+            fixtures / "points.geojson",
+            name="points",
+            geometry_type="point",
+            field_names=("id",),
+        )
+    )
+    layers.register(
+        VectorLayerDeclaration(
+            fixtures / "lines.geojson",
+            name="lines",
+            geometry_type="line",
+            field_names=("id",),
+        )
+    )
+    return layers
+
+
+@dataclass(frozen=True, slots=True)
+class _AlgorithmRunCase:
+    """One view's scripted algorithm runs and the files they may mint."""
+
+    dispatcher: Any
+    services: Any
+    layers: Any
+    files: Any
+    algorithms: Any
+    fixtures: Path
+    binding: Any
+    tmp_path: Path
+    raster: Path
+    report: Path
+    view_ref: Any
+
+
+def _algorithm_files(tmp_path: Path, services, binding):
+    """Write the three files a scripted run may read and mint a view ref for."""
+    raster = tmp_path / "dem.tif"
+    raster.write_bytes(b"not really a raster")
+    report = tmp_path / "report.html"
+    report.write_text("<p>ok</p>")
+    (tmp_path / "out.tif").write_bytes(b"translated")
+    view_ref = services.authority.grant_file(
+        binding, raster, FilePolicy(source="picker")
+    )
+    return raster, report, view_ref
+
+
+def _algorithm_run_case(tmp_path: Path) -> _AlgorithmRunCase:
+    services, layers, files, algorithms, fixtures = _algorithm_services(tmp_path)
+    dispatcher = _dispatcher(services)
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    raster, report, view_ref = _algorithm_files(tmp_path, services, binding)
+    algorithms.script_run(
+        "gdal:translate",
+        lambda run: {"OUTPUT": tmp_path / "out.tif", "SEEN": run.params["INPUT"]},
+    )
+    algorithms.script_run(
+        "native:basicstatisticsforfields",
+        {"COUNT": 3, "OUTPUT_HTML_FILE": report, "OUTPUT": fixtures / "points.geojson"},
+    )
+    return _AlgorithmRunCase(
+        dispatcher,
+        services,
+        layers,
+        files,
+        algorithms,
+        fixtures,
+        binding,
+        tmp_path,
+        raster,
+        report,
+        view_ref,
+    )
+
+
+def _assert_translated(case: _AlgorithmRunCase) -> None:
+    translated = _call(
+        case.dispatcher,
+        "algorithms.run",
+        {
+            "algorithm_id": "gdal:translate",
+            "params": {"INPUT": case.view_ref.to_wire()},
+        },
+        binding=case.binding,
+    )
+    assert translated["ok"] is True, translated
+    outputs = {o["name"]: o for o in translated["value"]["outputs"]}
+    # The ref was resolved against the calling view; the algorithm saw a path.
+    assert outputs["SEEN"] == {
+        "name": "SEEN",
+        "kind": "value",
+        "value": str(case.raster.resolve()),
+    }
+    assert outputs["OUTPUT"]["kind"] == "file"
+    produced = outputs["OUTPUT"]["file"]
+    assert (
+        case.services.authority.resolve_file(case.binding, produced, FileOperation.READ)
+        == (case.tmp_path / "out.tif").resolve()
+    )
+
+
+def _assert_statistics(case: _AlgorithmRunCase) -> None:
+    points = case.layers.open_vector(case.fixtures / "points.geojson")
+    stats = _call(
+        case.dispatcher,
+        "algorithms.run",
+        {
+            "algorithm_id": "native:basicstatisticsforfields",
+            "params": {"INPUT_LAYER": points.id, "FIELD_NAME": "id"},
+        },
+        binding=case.binding,
+    )
+    assert stats["ok"] is True, stats
+    outputs = {o["name"]: o for o in stats["value"]["outputs"]}
+    assert outputs["COUNT"]["value"] == 3
+    handed = outputs["OUTPUT_HTML_FILE"]["file"]
+    # Minted for the view: the view can open it, the plugin's own ref stays its own.
+    assert handed["operations"] == ["read"]
+    assert handed["id"] not in {ref.id for ref in case.files.granted}
+    assert (
+        case.services.authority.resolve_file(case.binding, handed, FileOperation.READ)
+        == case.report.resolve()
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _AlgorithmContext:
+    """A plugin context whose algorithms and files the host must keep."""
+
+    context: Any
+    layers: Any
+    files: Any
+    algorithms: Any
+
+
+def _algorithm_context() -> _AlgorithmContext:
+    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.testing import FakeAlgorithms, FakeFiles
+    from qgis_sdk.testing import FakeLayers as FakeLayerService
+
+    scope = ResourceScope()
+    layers = FakeLayerService(scope)
+    files = FakeFiles(scope, owner="plugin:demo")
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope, files=files))
+    context = PluginContext(
+        FakeNotifications(),
+        scope,
+        PluginServices(
+            layers=layers,
+            project=FakeProject(ids=[]),
+            settings=FakeSettings(values={}),
+            styles=FakeStyles(),
+            files=files,
+            algorithms=algorithms,
+        ),
+    )
+    return _AlgorithmContext(context, layers, files, algorithms)
+
+
+def _assert_extent_frames(dispatcher, canvas, binding) -> None:
+    canvas.zoom_to(ZoomTarget.to_extent(CANVAS_BOX))
+    (frame,) = dispatcher.pump(binding)
+    assert frame["event"]["kind"] == "data"
+    assert frame["event"]["payload"]["x_min"] == 21.0
+    assert frame["seq"] == 0
+    canvas.zoom_to(
+        ZoomTarget.to_extent(CanvasExtent(20.0, 51.0, 21.0, 52.0, "EPSG:4326"))
+    )
+    (second,) = dispatcher.pump(binding)
+    assert second["seq"] == 1
+    assert second["event"]["payload"]["x_min"] == 20.0
+
+
+def _unsubscribe(dispatcher, binding, subscription_id) -> None:
+    closed = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "unsubscribe",
+            "call_id": "unsub",
+            "subscription_id": subscription_id,
+        },
+    )
+    assert closed["ok"] is True
+
+
 # -- the inventory ---------------------------------------------------------
 
 
@@ -304,41 +699,7 @@ def test_an_unknown_grant_is_refused_by_name() -> None:
 def test_every_operation_carries_a_canonical_grant_and_a_gui_affinity() -> None:
     grants = host_grants()
     assert set(grants) == {operation.id for operation in HOST_OPERATIONS}
-    assert set(grants.values()) == {
-        "layers.read",
-        "layers.open",
-        "project.read",
-        "settings.read",
-        "notifications.info",
-        "styles.apply",
-        "files.export",
-        "blob.read",
-        "network.fetch",
-        "algorithms.read",
-        "algorithms.run",
-        "features.read",
-        "features.edit",
-        "expressions.evaluate",
-        "canvas.read",
-        "canvas.control",
-        "rasters.read",
-        "rasters.open",
-        "project.write",
-        "layouts.read",
-        "layouts.write",
-        "layouts.export",
-        # TASK-93: a layer's appearance is read and written under its own two
-        # grants, apart from applying a packaged style.
-        "symbology.read",
-        "symbology.write",
-        "styles.read",
-        "styles.write",
-        # TASK-92: the connection registry and the auth configuration listing
-        # read under one grant each, and re-binding a credential is its own.
-        "connections.read",
-        "auth.read",
-        "auth.write",
-    }
+    assert set(grants.values()) == EXPECTED_HOST_GRANTS
     for operation in HOST_OPERATIONS:
         # A namespace-wide flag would grant every future method at once.
         assert operation.grant.count(".") == 1
@@ -349,36 +710,9 @@ def test_the_description_is_the_manifest_in_the_generator_shape() -> None:
     described = host_description()
     assert described["schema_version"] == HOST_SCHEMA_VERSION
     assert described["id"] == "qgis.host"
-    assert [action["id"] for action in described["actions"]] == [
-        operation.id for operation in HOST_OPERATIONS if operation.events is None
-    ]
-    assert [stream["id"] for stream in described["streams"]] == [
-        operation.id for operation in HOST_OPERATIONS if operation.events is not None
-    ]
-    for action in described["actions"]:
-        assert action["request"]["type"] == "object"
-        result = action["result"]
-        # A result is a closed object, nothing at all, one of the bare JSON
-        # scalars, or a union - anything open-ended would generate a type a page
-        # cannot narrow, which is the drift this assertion exists to catch.
-        items = result.get("items") or {}
-        # An array of one declared object is narrowable in exactly the way a
-        # page needs: the element has a name and a closed shape.
-        array_of_one_closed_object = (
-            result.get("type") == "array" and items.get("additionalProperties") is False
-        )
-        assert any(
-            (
-                result.get("additionalProperties") is False,
-                result.get("type") in {"null", "number", "string", "boolean"},
-                "anyOf" in result,
-                array_of_one_closed_object,
-            )
-        ), action["id"]
-    for stream in described["streams"]:
-        assert stream["request"]["type"] == "object"
-        assert "result" not in stream
-        assert set(stream["events"]) == {"data"}
+    _assert_manifest_ids(described)
+    _assert_manifest_actions(described)
+    _assert_manifest_streams(described)
 
 
 # -- paging ----------------------------------------------------------------
@@ -678,28 +1012,22 @@ def test_open_vector_refuses_a_path_a_foreign_ref_and_a_stale_ref(
     tmp_path: Path,
 ) -> None:
     dispatcher, services, _binding, ref, dataset = _granted(tmp_path)
-
-    path = _call(dispatcher, "layers.open_vector", {"file": str(dataset)})
-    assert path["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
-    forged_kind = _call(
-        dispatcher, "layers.open_vector", {"file": {"kind": "layer", "id": ref.id}}
+    responses = (
+        _refusal(
+            dispatcher,
+            {"file": str(dataset)},
+            BridgeErrorCode.INVALID_PAYLOAD.value,
+        ),
+        _refusal(
+            dispatcher,
+            {"file": {"kind": "layer", "id": ref.id}},
+            BridgeErrorCode.INVALID_PAYLOAD.value,
+        ),
+        _foreign_refusal(dispatcher, ref),
+        _stale_refusal(dispatcher, ref),
     )
-    assert forged_kind["error"]["code"] == BridgeErrorCode.INVALID_PAYLOAD.value
-
-    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
-    foreign = _call(
-        dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=other
-    )
-    assert foreign["error"]["code"] == BridgeErrorCode.UNKNOWN_HANDLE.value
-
-    dispatcher.advance_generation()
-    later = dispatcher.bind(view_id="view-1", origin=ORIGIN)
-    stale = _call(
-        dispatcher, "layers.open_vector", {"file": ref.to_wire()}, binding=later
-    )
-    assert stale["error"]["code"] == BridgeErrorCode.STALE_HANDLE.value
     assert services.layers.opened == []
-    for refusal in (path, forged_kind, foreign, stale):
+    for refusal in responses:
         assert str(dataset) not in refusal["error"]["message"]
 
 
@@ -773,88 +1101,46 @@ def _fetching(hold: bool = True):
 
 def test_network_fetch_is_a_stream_that_answers_once_through_the_grant() -> None:
     dispatcher, _, binding, network = _fetching()
-    network.expect(
-        "GET",
-        "https://api.example.org/collections",
-        reply(json={"collections": []}, headers={"X-Trace": "t1"}),
-        hold=True,
-    )
-
-    opened = _subscribe(
-        dispatcher,
-        "network.fetch",
-        {
-            "url": "https://api.example.org/collections",
-            "headers": [{"name": "Accept", "value": "application/json"}],
-        },
-        binding=binding,
-    )
-
+    _fetch_expectation(network)
+    opened = _subscribe(dispatcher, "network.fetch", _fetch_payload(), binding=binding)
     assert opened["ok"] is True
-    (sent,) = network.requests
-    assert sent.method == "GET"
-    assert sent.headers["accept"] == "application/json"
-    assert sent.allowed_origins == frozenset({"https://api.example.org"})
-    assert sent.max_body_bytes == 64
-    assert dispatcher.pump(binding) == []
+    _assert_fetch_request(dispatcher, network, binding)
+    _assert_fetch_delivery(dispatcher, network, binding)
 
-    network.pending[0].deliver()
-    data, terminal = dispatcher.pump(binding)
 
-    assert data["event"]["kind"] == "data"
-    assert data["event"]["payload"] == {
-        "url": "https://api.example.org/collections",
-        "status_code": 200,
-        "reason": "OK",
-        "headers": [
-            {"name": "Content-Type", "value": "application/json"},
-            {"name": "X-Trace", "value": "t1"},
-        ],
-        "text": '{"collections": []}',
-        "base64": None,
-    }
-    assert terminal["terminal"] == {"kind": "complete"}
+def _assert_all_grant_refusals(dispatcher, binding) -> None:
+    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
+    _assert_grant_refusal(
+        dispatcher,
+        other,
+        {"url": "https://api.example.org/"},
+        BridgeErrorCode.GRANT_REFUSED.value,
+    )
+    for payload, fragment in (
+        ({"url": "https://evil.example.org/"}, "evil.example.org"),
+        ({"url": "https://api.example.org/", "method": "DELETE"}, None),
+        ({"url": "https://api.example.org/", "auth_config": "cfg1"}, None),
+    ):
+        _assert_grant_refusal(
+            dispatcher,
+            binding,
+            payload,
+            BridgeErrorCode.GRANT_REFUSED.value,
+            fragment=fragment,
+        )
+    _assert_grant_refusal(
+        dispatcher,
+        binding,
+        {"url": "https://u:p@api.example.org/"},
+        BridgeErrorCode.OPERATION_FAILED.value,
+    )
 
 
 def test_network_fetch_without_a_grant_or_outside_it_is_refused_before_sending() -> (
     None
 ):
     dispatcher, _, binding, network = _fetching()
-    other = dispatcher.bind(view_id="view-2", origin=ORIGIN)
-
-    ungranted = _subscribe(
-        dispatcher, "network.fetch", {"url": "https://api.example.org/"}, binding=other
-    )
-    assert ungranted["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
-    elsewhere = _subscribe(
-        dispatcher,
-        "network.fetch",
-        {"url": "https://evil.example.org/"},
-        binding=binding,
-    )
-    assert elsewhere["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
-    assert "evil.example.org" in elsewhere["error"]["message"]
-    method = _subscribe(
-        dispatcher,
-        "network.fetch",
-        {"url": "https://api.example.org/", "method": "DELETE"},
-        binding=binding,
-    )
-    assert method["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
-    auth = _subscribe(
-        dispatcher,
-        "network.fetch",
-        {"url": "https://api.example.org/", "auth_config": "cfg1"},
-        binding=binding,
-    )
-    assert auth["error"]["code"] == BridgeErrorCode.GRANT_REFUSED.value
-    malformed = _subscribe(
-        dispatcher,
-        "network.fetch",
-        {"url": "https://u:p@api.example.org/"},
-        binding=binding,
-    )
-    assert malformed["error"]["code"] == BridgeErrorCode.OPERATION_FAILED.value
+    _assert_all_grant_refusals(dispatcher, binding)
     assert network.requests == []
 
 
@@ -988,35 +1274,17 @@ def test_host_services_built_from_a_plugin_context_share_its_instances() -> None
     ``layers.list`` answers from, so the two sides can never see different
     projects, settings or styles.
     """
-    from qgis_sdk.core import PluginContext, ResourceScope
-
-    layers = FakeLayers(layers=[_info(0)])
-    project = FakeProject(ids=["layer-0"])
-    settings = FakeSettings(values={"theme": "dark"})
-    styles = FakeStyles()
-    notifications = FakeNotifications()
-    transport = FakeNetworkTransport()
-    authority = HostAuthority()
-    context = PluginContext(
-        notifications,
-        ResourceScope(),
-        PluginServices(
-            layers=layers, project=project, settings=settings, styles=styles
-        ),
-    )
-
+    rig = _context_rig()
     services = HostServices.from_context(
-        context, authority=authority, network=transport
+        rig.context, authority=rig.authority, network=rig.transport
     )
-
-    assert services.layers is layers
-    assert services.project is project
-    assert services.settings is settings
-    assert services.styles is styles
-    assert services.notifications is notifications
-    assert services.authority is authority
-    assert services.network is transport
-
+    assert services.layers is rig.layers
+    assert services.project is rig.project
+    assert services.settings is rig.settings
+    assert services.styles is rig.styles
+    assert services.notifications is rig.notifications
+    assert services.authority is rig.authority
+    assert services.network is rig.transport
     dispatcher = _dispatcher(services)
     result = _call(dispatcher, "layers.list", {})
     assert result["ok"] is True
@@ -1076,27 +1344,10 @@ def _algorithm_services(tmp_path: Path):
     """A host over the fake algorithms, with a plugin files service to re-mint from."""
     from qgis_sdk.core import ResourceScope
     from qgis_sdk.testing import FakeAlgorithms, FakeFiles
-    from qgis_sdk.testing import FakeLayers as FakeLayerService
 
     scope = ResourceScope()
-    layers = FakeLayerService(scope)
     fixtures = Path(__file__).resolve().parent / "fixtures" / "reference"
-    layers.register(
-        VectorLayerDeclaration(
-            fixtures / "points.geojson",
-            name="points",
-            geometry_type="point",
-            field_names=("id",),
-        )
-    )
-    layers.register(
-        VectorLayerDeclaration(
-            fixtures / "lines.geojson",
-            name="lines",
-            geometry_type="line",
-            field_names=("id",),
-        )
-    )
+    layers = _registered_layers(scope, fixtures)
     files = FakeFiles(scope, owner="plugin:demo")
     algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope, files=files))
     services = HostServices(
@@ -1166,68 +1417,9 @@ def test_algorithms_describe_spells_every_field_and_the_default_as_json(
 def test_algorithms_run_takes_view_refs_and_hands_outputs_back_as_view_refs(
     tmp_path: Path,
 ) -> None:
-    services, layers, files, algorithms, fixtures = _algorithm_services(tmp_path)
-    dispatcher = _dispatcher(services)
-    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
-    raster = tmp_path / "dem.tif"
-    raster.write_bytes(b"not really a raster")
-    report = tmp_path / "report.html"
-    report.write_text("<p>ok</p>")
-    (tmp_path / "out.tif").write_bytes(b"translated")
-    view_ref = services.authority.grant_file(
-        binding, raster, FilePolicy(source="picker")
-    )
-    algorithms.script_run(
-        "gdal:translate",
-        lambda run: {"OUTPUT": tmp_path / "out.tif", "SEEN": run.params["INPUT"]},
-    )
-    algorithms.script_run(
-        "native:basicstatisticsforfields",
-        {"COUNT": 3, "OUTPUT_HTML_FILE": report, "OUTPUT": fixtures / "points.geojson"},
-    )
-
-    translated = _call(
-        dispatcher,
-        "algorithms.run",
-        {"algorithm_id": "gdal:translate", "params": {"INPUT": view_ref.to_wire()}},
-        binding=binding,
-    )
-    assert translated["ok"] is True, translated
-    outputs = {o["name"]: o for o in translated["value"]["outputs"]}
-    # The ref was resolved against the calling view; the algorithm saw a path.
-    assert outputs["SEEN"] == {
-        "name": "SEEN",
-        "kind": "value",
-        "value": str(raster.resolve()),
-    }
-    assert outputs["OUTPUT"]["kind"] == "file"
-    produced = outputs["OUTPUT"]["file"]
-    assert (
-        services.authority.resolve_file(binding, produced, FileOperation.READ)
-        == (tmp_path / "out.tif").resolve()
-    )
-
-    points = layers.open_vector(fixtures / "points.geojson")
-    stats = _call(
-        dispatcher,
-        "algorithms.run",
-        {
-            "algorithm_id": "native:basicstatisticsforfields",
-            "params": {"INPUT_LAYER": points.id, "FIELD_NAME": "id"},
-        },
-        binding=binding,
-    )
-    assert stats["ok"] is True, stats
-    outputs = {o["name"]: o for o in stats["value"]["outputs"]}
-    assert outputs["COUNT"]["value"] == 3
-    handed = outputs["OUTPUT_HTML_FILE"]["file"]
-    # Minted for the view: the view can open it, the plugin's own ref stays its own.
-    assert handed["operations"] == ["read"]
-    assert handed["id"] not in {ref.id for ref in files.granted}
-    assert (
-        services.authority.resolve_file(binding, handed, FileOperation.READ)
-        == report.resolve()
-    )
+    case = _algorithm_run_case(tmp_path)
+    _assert_translated(case)
+    _assert_statistics(case)
 
 
 def test_algorithms_run_refuses_a_ref_of_another_view_before_running(
@@ -1287,32 +1479,11 @@ def test_a_host_without_an_algorithms_service_fails_rather_than_pretending() -> 
 
 
 def test_host_services_from_a_context_carry_algorithms_and_files() -> None:
-    from qgis_sdk.core import PluginContext, ResourceScope
-    from qgis_sdk.testing import FakeAlgorithms, FakeFiles
-    from qgis_sdk.testing import FakeLayers as FakeLayerService
-
-    scope = ResourceScope()
-    layers = FakeLayerService(scope)
-    files = FakeFiles(scope, owner="plugin:demo")
-    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope, files=files))
-    context = PluginContext(
-        FakeNotifications(),
-        scope,
-        PluginServices(
-            layers=layers,
-            project=FakeProject(ids=[]),
-            settings=FakeSettings(values={}),
-            styles=FakeStyles(),
-            files=files,
-            algorithms=algorithms,
-        ),
-    )
-
-    services = HostServices.from_context(context)
-
-    assert services.algorithms is algorithms
-    assert services.files is files
-    assert services.authority is files.authority
+    rig = _algorithm_context()
+    services = HostServices.from_context(rig.context)
+    assert services.algorithms is rig.algorithms
+    assert services.files is rig.files
+    assert services.authority is rig.files.authority
 
 
 # -- the map canvas ----------------------------------------------------------
@@ -1483,37 +1654,13 @@ def test_a_refresh_redraws_without_moving_the_canvas() -> None:
 
 def test_the_extent_stream_follows_the_canvas_until_it_is_unsubscribed() -> None:
     dispatcher, canvas, binding = _canvased()
-
     opened = _subscribe(dispatcher, "canvas.extent_changed", binding=binding)
     assert opened["ok"] is True
     subscription_id = opened["value"]["subscription_id"]
     assert dispatcher.pump(binding) == []
-
-    canvas.zoom_to(ZoomTarget.to_extent(CANVAS_BOX))
-    (frame,) = dispatcher.pump(binding)
-    assert frame["event"]["kind"] == "data"
-    assert frame["event"]["payload"]["x_min"] == 21.0
-    assert frame["seq"] == 0
-
-    canvas.zoom_to(
-        ZoomTarget.to_extent(CanvasExtent(20.0, 51.0, 21.0, 52.0, "EPSG:4326"))
-    )
-    (second,) = dispatcher.pump(binding)
-    assert second["seq"] == 1
-    assert second["event"]["payload"]["x_min"] == 20.0
-
-    closed = dispatcher.dispatch(
-        binding,
-        {
-            "protocol": BRIDGE_PROTOCOL_VERSION,
-            "kind": "unsubscribe",
-            "call_id": "unsub",
-            "subscription_id": subscription_id,
-        },
-    )
-    assert closed["ok"] is True
+    _assert_extent_frames(dispatcher, canvas, binding)
+    _unsubscribe(dispatcher, binding, subscription_id)
     assert canvas.subscriptions() == 0
-
     canvas.zoom_to(ZoomTarget.to_extent(CANVAS_BOX))
     assert dispatcher.pump(binding) == []
 

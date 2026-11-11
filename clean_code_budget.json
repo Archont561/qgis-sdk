@@ -140,10 +140,6 @@
 	"packages/qgis-sdk-python/tests/test_bridge_generate.py": {
 		"CC101": 3
 	},
-	"packages/qgis-sdk-python/tests/test_bridge_host.py": {
-		"CC101": 8,
-		"CC104": 4
-	},
 	"packages/qgis-sdk-python/tests/test_bridge_host_project.py": {
 		"CC101": 1
 	},
