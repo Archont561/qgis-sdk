@@ -58,9 +58,8 @@ def test_registered_action_preserves_identity_and_matches_class_contract() -> No
     assert context.scope.closed
 
 
-def test_explicit_group_inclusion_is_isolated_and_rejects_duplicates_atomically() -> (
-    None
-):
+def _isolated_groups():
+    """A shared action group included by two independent plugins."""
     group = QgisSdkPlugin()
 
     @group.action(id="alpha", title="Alpha")
@@ -70,10 +69,11 @@ def test_explicit_group_inclusion_is_isolated_and_rejects_duplicates_atomically(
     one = QgisSdkPlugin(id="survey.one", title="One")
     two = QgisSdkPlugin(id="survey.two", title="Two")
     one.include(group)
-    assert [item.id for item in one.describe().actions] == ["alpha"]
-    assert list(two.describe().actions) == []
-    two.include(group)
-    assert [item.id for item in two.describe().actions] == ["alpha"]
+    return group, one, two
+
+
+def _conflicting_group():
+    """A group whose second action duplicates the shared group's ``alpha``."""
     conflicting = QgisSdkPlugin()
 
     @conflicting.action(id="beta", title="Beta")
@@ -84,16 +84,11 @@ def test_explicit_group_inclusion_is_isolated_and_rejects_duplicates_atomically(
     def duplicate(ctx: PluginContext, value: int) -> int:
         return value
 
-    with pytest.raises(QgisSdkDeclarationError, match="duplicate"):
-        one.include(conflicting)
-    assert [item.id for item in one.describe().actions] == ["alpha"]
-    with pytest.raises(QgisSdkDeclarationError, match="duplicate"):
-        one.include(group)
+    return conflicting
 
 
-def test_fake_contexts_and_dispatch_preserve_authority_and_validate_inputs() -> None:
-    from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, Dispatcher
-
+def _notify_app():
+    """An application with one action that reports through its context."""
     app = QgisSdkPlugin(id="survey.plugin", title="Survey")
 
     @app.action(id="notify", title="Notify")
@@ -101,20 +96,12 @@ def test_fake_contexts_and_dispatch_preserve_authority_and_validate_inputs() -> 
         ctx.notifications.info(message)
         return message
 
-    first_scope, second_scope = ResourceScope(), ResourceScope()
-    first, second = (
-        RecordingNotifications(first_scope),
-        RecordingNotifications(second_scope),
-    )
-    ctx1 = PluginContext(first, first_scope)
-    ctx2 = PluginContext(second, second_scope)
-    assert notify(ctx1, "direct") == "direct"
-    runtime = PluginRuntime(app, ctx2)
-    runtime.start()
-    dispatcher = Dispatcher.from_runtime(
-        runtime, authorize=lambda binding, op: op == "notify"
-    )
-    binding = dispatcher.bind(view_id="one", origin="qgis://desktop")
+    return app, notify
+
+
+def _dispatch_call(dispatcher, binding):
+    """A wire-call helper that sends one operation and payload."""
+    from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION
 
     def call(operation, payload):
         return dispatcher.dispatch(
@@ -127,6 +114,82 @@ def test_fake_contexts_and_dispatch_preserve_authority_and_validate_inputs() -> 
             },
         )
 
+    return call
+
+
+def _dispatch_contexts():
+    """Two independent fake contexts over their own resource scopes."""
+    first_scope, second_scope = ResourceScope(), ResourceScope()
+    first = RecordingNotifications(first_scope)
+    second = RecordingNotifications(second_scope)
+    return (
+        first,
+        PluginContext(first, first_scope),
+        second,
+        PluginContext(second, second_scope),
+    )
+
+
+def _dispatch_harness():
+    """Two fake contexts, one dispatcher, and a wire-call helper."""
+    from qgis_sdk.bridge import Dispatcher
+
+    app, notify = _notify_app()
+    first, ctx1, second, ctx2 = _dispatch_contexts()
+    assert notify(ctx1, "direct") == "direct"
+    runtime = PluginRuntime(app, ctx2)
+    runtime.start()
+    dispatcher = Dispatcher.from_runtime(
+        runtime, authorize=lambda binding, op: op == "notify"
+    )
+    binding = dispatcher.bind(view_id="one", origin="qgis://desktop")
+    return _dispatch_call(dispatcher, binding), ctx2, first, runtime, second
+
+
+def _lowered_surface_runtime():
+    """A runtime that owns one declared surface and one provider."""
+    from qgis_sdk.bindings import menu
+    from qgis_sdk.providers import Provider
+    from qgis_sdk.testing import FakeProcessing
+    from qgis_sdk.ui import Dialog
+
+    @menu("Plugins/Survey")
+    class ReportDialog(Dialog):
+        title = "Report"
+
+        def build(self) -> object:
+            return object()
+
+    app = QgisSdkPlugin(id="survey.plugin", title="Survey")
+    app.add_surface(ReportDialog)
+    app.add_provider(Provider(id="survey", title="Survey"))
+    scope = ResourceScope()
+    ctx = PluginContext(
+        RecordingNotifications(scope),
+        scope,
+        PluginServices(processing=FakeProcessing(scope)),
+    )
+    return app, PluginRuntime(app, ctx)
+
+
+def test_explicit_group_inclusion_is_isolated_and_rejects_duplicates_atomically() -> (
+    None
+):
+    group, one, two = _isolated_groups()
+    assert [item.id for item in one.describe().actions] == ["alpha"]
+    assert list(two.describe().actions) == []
+    two.include(group)
+    assert [item.id for item in two.describe().actions] == ["alpha"]
+    conflicting = _conflicting_group()
+    with pytest.raises(QgisSdkDeclarationError, match="duplicate"):
+        one.include(conflicting)
+    assert [item.id for item in one.describe().actions] == ["alpha"]
+    with pytest.raises(QgisSdkDeclarationError, match="duplicate"):
+        one.include(group)
+
+
+def test_fake_contexts_and_dispatch_preserve_authority_and_validate_inputs() -> None:
+    call, ctx2, first, runtime, second = _dispatch_harness()
     assert call("notify", {"message": "wire"})["value"] == "wire"
     _fake_contexts_and_dispatch_phase1(call, ctx2, first, runtime, second)
 
@@ -322,29 +385,8 @@ def test_unsupported_async_and_generator_handlers_fail_closed() -> None:
 
 
 def test_explicit_surface_and_provider_are_owned_by_the_lowered_runtime() -> None:
-    from qgis_sdk.bindings import menu
-    from qgis_sdk.providers import Provider
-    from qgis_sdk.testing import FakeProcessing
-    from qgis_sdk.ui import Dialog
-
-    @menu("Plugins/Survey")
-    class ReportDialog(Dialog):
-        title = "Report"
-
-        def build(self) -> object:
-            return object()
-
-    app = QgisSdkPlugin(id="survey.plugin", title="Survey")
-    app.add_surface(ReportDialog)
-    app.add_provider(Provider(id="survey", title="Survey"))
-    generated = app
-    assert [s.id for s in describe(generated).bindings.surfaces] == ["report_dialog"]
-    scope = ResourceScope()
-    processing = FakeProcessing(scope)
-    ctx = PluginContext(
-        RecordingNotifications(scope), scope, PluginServices(processing=processing)
-    )
-    runtime = PluginRuntime(generated, ctx)
+    app, runtime = _lowered_surface_runtime()
+    assert [s.id for s in describe(app).bindings.surfaces] == ["report_dialog"]
     runtime.start()
     assert runtime.registered_providers == ("survey",)
     runtime.unload()

@@ -33,36 +33,12 @@ apply GUI changes in a callback, which is delivered on the driving thread.
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from .diagnostics import Diagnostic
 from .names import ModuleNames
-
-
-def _local_names_tail1(**values):
-    function = values["function"]
-    globals_ = values["globals_"]
-    local = values["local"]
-    for node in ast.walk(function):
-        if isinstance(node, ast.arg):
-            local.add(node.arg)
-        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            local.add(node.id)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            local.add(node.name)
-        elif isinstance(node, ast.Import):
-            local.update(
-                alias.asname or alias.name.split(".")[0] for alias in node.names
-            )
-        elif isinstance(node, ast.ImportFrom):
-            local.update(alias.asname or alias.name for alias in node.names)
-        elif isinstance(node, ast.ExceptHandler) and node.name:
-            local.add(node.name)
-        elif isinstance(node, ast.Global):
-            globals_.update(node.names)
-    return local - globals_
-
 
 __all__ = [
     "GUI_CLASSES",
@@ -203,11 +179,37 @@ class _Module:
         return attribute == "job" and base not in _SDK_MODULES
 
 
-def _is_gui_path(dotted: str) -> bool:
-    """Whether a resolved dotted path is GUI state or a GUI class."""
-    if dotted in GUI_ONLY_PATHS:
-        return True
-    return dotted.rpartition(".")[2] in GUI_CLASSES
+def _bound_argument(node: ast.arg) -> tuple[str, ...]:
+    return (node.arg,)
+
+
+def _bound_definition(node: ast.AST) -> tuple[str, ...]:
+    return (node.name,)
+
+
+def _bound_import(node: ast.Import) -> Iterable[str]:
+    return (alias.asname or alias.name.split(".")[0] for alias in node.names)
+
+
+def _bound_import_from(node: ast.ImportFrom) -> Iterable[str]:
+    return (alias.asname or alias.name for alias in node.names)
+
+
+def _bound_except(node: ast.ExceptHandler) -> tuple[str, ...]:
+    return (node.name,) if node.name else ()
+
+
+#: Which names one AST node binds locally. ``Name`` with a ``Store`` context and
+#: ``Global`` are handled in the loop because they depend on more than the type.
+_LOCAL_BINDERS: dict[type, Callable[[ast.AST], Iterable[str]]] = {
+    ast.arg: _bound_argument,
+    ast.FunctionDef: _bound_definition,
+    ast.AsyncFunctionDef: _bound_definition,
+    ast.ClassDef: _bound_definition,
+    ast.Import: _bound_import,
+    ast.ImportFrom: _bound_import_from,
+    ast.ExceptHandler: _bound_except,
+}
 
 
 def _local_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
@@ -219,7 +221,16 @@ def _local_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     """
     local: set[str] = set()
     globals_: set[str] = set()
-    return _local_names_tail1(**{**globals(), **locals()})
+    for node in ast.walk(function):
+        if isinstance(node, ast.Global):
+            globals_.update(node.names)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            local.add(node.id)
+        else:
+            binder = _LOCAL_BINDERS.get(type(node))
+            if binder is not None:
+                local.update(binder(node))
+    return local - globals_
 
 
 def _imports_in_body(
@@ -266,52 +277,126 @@ def _context_parameter(function: ast.FunctionDef | ast.AsyncFunctionDef) -> str 
     return positional[0].arg if positional else None
 
 
+@dataclass(frozen=True, slots=True)
+class _JobCheck:
+    """Everything the probes need to classify one node of a job body."""
+
+    name: str
+    module: _Module
+    path: Path
+    context: str | None
+    local: set[str]
+    imports: dict[str, str]
+    gui_bindings: dict[str, str]
+
+
+#: A probe returns ``None`` when the node is not its shape, ``_HANDLED`` when it
+#: classified the node with no finding, or one Diagnostic to report.
+_HANDLED = object()
+_Probe = Callable[[ast.AST, _JobCheck], object]
+
+
+def _dynamic_probe(node: ast.AST, check: _JobCheck) -> object:
+    if (
+        isinstance(node, ast.Call)
+        and check.module.dotted(node.func) in _DYNAMIC_IMPORTS
+    ):
+        return _dynamic_diagnostic(check.name, node, check.path)
+    return None
+
+
+def _context_probe(node: ast.AST, check: _JobCheck) -> object:
+    if not _is_context_attribute(node, check.context):
+        return None
+    if node.attr in WORKER_SAFE_ATTRIBUTES:
+        return _HANDLED
+    return _context_diagnostic(check.name, check.context, node, check.path)
+
+
+def _import_probe(node: ast.AST, check: _JobCheck) -> object:
+    if not (isinstance(node, ast.Name) and node.id in check.imports):
+        return None
+    dotted = check.imports[node.id]
+    if _is_gui_path(dotted):
+        return _gui_diagnostic(check.name, dotted, node, check.path, attribute=node.id)
+    return _HANDLED
+
+
+def _local_probe(node: ast.AST, check: _JobCheck) -> object:
+    if isinstance(node, ast.Name) and node.id in check.local:
+        return _HANDLED
+    return None
+
+
+def _binding_probe(node: ast.AST, check: _JobCheck) -> object:
+    if not isinstance(node, ast.Name):
+        return None
+    bound = check.gui_bindings.get(node.id)
+    if bound is not None:
+        return _gui_diagnostic(check.name, bound, node, check.path, attribute=node.id)
+    return None
+
+
+def _expression_probe(node: ast.AST, check: _JobCheck) -> object:
+    expression = node.func if isinstance(node, ast.Call) else node
+    if not isinstance(expression, (ast.Name, ast.Attribute)):
+        return _HANDLED
+    if isinstance(expression, ast.Name) and (
+        expression.id in check.local or not isinstance(expression.ctx, ast.Load)
+    ):
+        return _HANDLED
+    dotted = check.module.dotted(expression)
+    if dotted is not None and _is_gui_path(dotted):
+        return _gui_diagnostic(check.name, dotted, node, check.path)
+    return _HANDLED
+
+
+_PROBES: tuple[_Probe, ...] = (
+    _dynamic_probe,
+    _context_probe,
+    _import_probe,
+    _local_probe,
+    _binding_probe,
+    _expression_probe,
+)
+
+
+def _diagnose_node(node: ast.AST, check: _JobCheck) -> Diagnostic | None:
+    """The first probe that claims the node decides its one finding, if any."""
+    for probe in _PROBES:
+        result = probe(node, check)
+        if result is not None:
+            return result if isinstance(result, Diagnostic) else None
+    return None
+
+
+def _body_nodes(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.AST]:
+    """Only the body: annotations and defaults run on the driving thread."""
+    nodes: list[ast.AST] = []
+    for statement in function.body:
+        nodes.extend(ast.walk(statement))
+    return nodes
+
+
 def _diagnose(
     function: ast.FunctionDef | ast.AsyncFunctionDef,
     module: _Module,
     path: Path,
 ) -> Iterator[Diagnostic]:
     """Every worker-safety finding inside one job body."""
-    name = function.name
-    local = _local_names(function)
-    imports = _imports_in_body(function)
-    gui_bindings = module.gui_bindings()
-    context = _context_parameter(function)
-    # Only the body: an annotation or a default value is evaluated when the
-    # module is defined, on the driving thread, not on the worker.
-    nodes: list[ast.AST] = []
-    for statement in function.body:
-        nodes.extend(ast.walk(statement))
-    for node in nodes:
-        if isinstance(node, ast.Call) and module.dotted(node.func) in _DYNAMIC_IMPORTS:
-            yield _dynamic_diagnostic(name, node, path)
-            continue
-        if _is_context_attribute(node, context):
-            if node.attr not in WORKER_SAFE_ATTRIBUTES:
-                yield _context_diagnostic(name, context, node, path)
-            continue
-        if isinstance(node, ast.Name) and node.id in imports:
-            dotted = imports[node.id]
-            if _is_gui_path(dotted):
-                yield _gui_diagnostic(name, dotted, node, path, attribute=node.id)
-            continue
-        if isinstance(node, ast.Name) and node.id in local:
-            continue
-        if isinstance(node, ast.Name):
-            bound = gui_bindings.get(node.id)
-            if bound is not None:
-                yield _gui_diagnostic(name, bound, node, path, attribute=node.id)
-                continue
-        expression = node.func if isinstance(node, ast.Call) else node
-        if not isinstance(expression, (ast.Name, ast.Attribute)):
-            continue
-        if isinstance(expression, ast.Name) and (
-            expression.id in local or not isinstance(expression.ctx, ast.Load)
-        ):
-            continue
-        dotted = module.dotted(expression)
-        if dotted is not None and _is_gui_path(dotted):
-            yield _gui_diagnostic(name, dotted, node, path)
+    check = _JobCheck(
+        name=function.name,
+        module=module,
+        path=path,
+        context=_context_parameter(function),
+        local=_local_names(function),
+        imports=_imports_in_body(function),
+        gui_bindings=module.gui_bindings(),
+    )
+    for node in _body_nodes(function):
+        finding = _diagnose_node(node, check)
+        if finding is not None:
+            yield finding
 
 
 def _is_gui_path(dotted: str) -> bool:

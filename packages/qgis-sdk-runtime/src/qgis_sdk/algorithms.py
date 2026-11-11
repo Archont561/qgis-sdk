@@ -38,6 +38,7 @@ from qgis_sdk.core import (
     AlgorithmServices,
     JobContext,
     PluginContext,
+    ResourceScope,
 )
 from qgis_sdk.declarations import (
     Metadata,
@@ -202,16 +203,10 @@ def _is_plain_function(function: Any) -> bool:
     )
 
 
-def describe_declared_algorithm(
-    function: Callable[..., Any], declared: AlgorithmDeclaration
-) -> AlgorithmDescription:
-    """Describe ``function`` under ``declared``; the provider calls this first.
-
-    Separate from :func:`describe_algorithm` so the provider can validate a
-    function *before* committing its marker, and remove the marker again when
-    validation refuses - a half-declared algorithm must not describe.
-    """
-    path = f"algorithm {declared.qualified_id}"
+def _algorithm_signature(
+    function: Callable[..., Any], path: str
+) -> tuple[list[inspect.Parameter], dict[str, Any]]:
+    """Validate the plain function and its injected context; return inputs/hints."""
     if not _is_plain_function(function):
         raise QgisSdkDeclarationError(
             f"{path}: an algorithm is a plain synchronous function, not a "
@@ -236,13 +231,11 @@ def describe_declared_algorithm(
             raise QgisSdkDeclarationError(
                 f"{path}.{parameter.name}: every input must be annotated"
             )
-    properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
-    kinds = {
-        parameter.name: parameter_kind(
-            f"{path}.{parameter.name}", hints[parameter.name]
-        )
-        for parameter in inputs
-    }
+    return inputs, hints
+
+
+def _algorithm_result(hints: dict[str, Any], path: str) -> tuple[Any, Any]:
+    """Resolve and validate the one declared output the algorithm returns."""
     result_type = hints.get("return", inspect.Signature.empty)
     if result_type is inspect.Signature.empty:
         raise QgisSdkDeclarationError(f"{path}: an algorithm must declare its result")
@@ -254,6 +247,23 @@ def describe_declared_algorithm(
             f"FolderOutput or HtmlOutput ref, a number, a string, a boolean or "
             f"MultipleLayers - not {type_name(result_type)}"
         )
+    return result_type, result_kind
+
+
+def describe_declared_algorithm(
+    function: Callable[..., Any], declared: AlgorithmDeclaration
+) -> AlgorithmDescription:
+    """Describe ``function`` under ``declared`` before the provider commits."""
+    path = f"algorithm {declared.qualified_id}"
+    inputs, hints = _algorithm_signature(function, path)
+    properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
+    kinds = {
+        parameter.name: parameter_kind(
+            f"{path}.{parameter.name}", hints[parameter.name]
+        )
+        for parameter in inputs
+    }
+    result_type, result_kind = _algorithm_result(hints, path)
     return AlgorithmDescription(
         id=declared.id,
         title=declared.title,
@@ -353,6 +363,117 @@ def _range_of(annotation: Any) -> RangeParameter | None:
 _CONTEXTS = (PluginContext, JobContext, AlgorithmContext)
 
 
+@dataclass(frozen=True, slots=True)
+class _InvokeRequest:
+    """The public ``invoke`` call as one record (decision-81)."""
+
+    function: Callable[..., Any]
+    ctx: PluginContext | JobContext | AlgorithmContext
+    inputs: dict[str, Any]
+    progress: Progress | None
+    cancellation: Cancellation | None
+    add_to_project: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _Run:
+    """One invocation's body, checks, child scope and commit target."""
+
+    request: _InvokeRequest
+    description: AlgorithmDescription
+    context: AlgorithmContext
+    scope: ResourceScope
+    project: Any
+    cancellation: Cancellation
+
+
+def _invoke_controls(
+    ctx: PluginContext | JobContext | AlgorithmContext,
+    progress: Progress | None,
+    cancellation: Cancellation | None,
+) -> tuple[Progress, Cancellation]:
+    """Inherit progress/cancellation from a job or algorithm context."""
+    if progress is None:
+        progress = getattr(ctx, "progress", None) or _SilentProgress()
+    if cancellation is None:
+        cancellation = getattr(ctx, "cancellation", None) or _NotCancelled()
+    return progress, cancellation
+
+
+def _run_context(
+    ctx: PluginContext | JobContext | AlgorithmContext,
+    description: AlgorithmDescription,
+    progress: Progress,
+    cancellation: Cancellation,
+    add_to_project: bool,
+) -> tuple[AlgorithmContext, ResourceScope, Any]:
+    """Build a fresh AlgorithmContext over a child scope for one call."""
+    ctx.scope.ensure_open()
+    algorithms = ctx.algorithms
+    project = ctx.project if add_to_project or ctx.has("project") else None
+    network = ctx.network if ctx.has("network") else None
+    if cancellation.is_cancelled():
+        raise QgisSdkAlgorithmCancelledError(description.id)
+    scope = ctx.scope.child()
+    context = AlgorithmContext(
+        progress=progress,
+        cancellation=cancellation,
+        scope=scope,
+        services=AlgorithmServices(
+            algorithms=algorithms, project=project, network=network
+        ),
+    )
+    return context, scope, project
+
+
+def _run(run: _Run) -> AlgorithmResult:
+    """Run the body, check its result, then commit layers - in that order.
+
+    Ordering is the whole safety story (decision-19): inputs were already
+    checked, cancellation was read before anything runs, the function runs
+    into a new output, the result is checked against the declared type,
+    cancellation is read once more, and only then is the output added to the
+    project. A failure or cancellation at any point leaves the project as it
+    was, and the child scope always closes.
+    """
+    request = run.request
+    try:
+        result = request.function(run.context, **request.inputs)
+        _check_result(run.description, result)
+        if run.cancellation.is_cancelled():
+            raise QgisSdkAlgorithmCancelledError(run.description.id)
+        if request.add_to_project:
+            assert run.project is not None
+            for layer_id in _produced_layers(result):
+                run.project.add_layer(layer_id)
+    finally:
+        run.scope.close()
+    return result
+
+
+def _execute(request: _InvokeRequest) -> AlgorithmResult:
+    """Validate the call, then run it through one child-scoped context."""
+    description = describe_algorithm(request.function)
+    if not isinstance(request.ctx, _CONTEXTS):
+        raise QgisSdkDeclarationError(
+            f"invoke({description.id}): the second argument is the context the "
+            "runtime injected (a PluginContext, JobContext or AlgorithmContext), "
+            f"not {type_name(type(request.ctx))}; inputs are keyword arguments"
+        )
+    _check_inputs(description, request.inputs)
+    progress, cancellation = _invoke_controls(
+        request.ctx, request.progress, request.cancellation
+    )
+    context, scope, project = _run_context(
+        request.ctx,
+        description,
+        progress,
+        cancellation,
+        request.add_to_project,
+    )
+    return _run(_Run(request, description, context, scope, project, cancellation))
+
+
 def invoke(
     function: Callable[..., Any],
     ctx: PluginContext | JobContext | AlgorithmContext,
@@ -365,72 +486,18 @@ def invoke(
 ) -> AlgorithmResult:
     """Run one declared algorithm once from the context the caller already holds.
 
-    ``ctx`` is the ``PluginContext`` of an action, the ``JobContext`` of a job
-    or the ``AlgorithmContext`` of another algorithm; ``invoke`` reads its
-    ``algorithms``, ``project`` and ``scope`` and builds a *new*
-    ``AlgorithmContext`` over a child scope for the call, closing that child
-    scope again afterwards. Nothing an invocation registers on its scope
-    outlives it, so a second run cannot see the first run's context
-    (decision-11, kept by decision-42). ``progress`` and ``cancellation`` left
-    out are inherited from a job or algorithm context, so a job's cancellation
-    reaches the algorithm it runs; a plugin context has neither, and the call
-    runs silently and uncancelled.
-
-    ``add_to_project=False`` is for a caller that owns the destination itself:
-    the Processing bridge hands the produced layer to a feature sink, and the
-    reference workflow styles the output before presenting it. With the
-    default the output is added to ``ctx.project`` on success, so a context
-    without a project refuses by name before anything runs.
-
-    Ordering is the whole safety story (decision-19). The inputs are checked
-    against the declared parameters, cancellation is read before anything
-    runs, the function runs into a new output, the result is checked against
-    the declared type, cancellation is read once more, and only then is the
-    output added to the project. A failure or cancellation at any point leaves
-    the project exactly as it was.
+    ``ctx`` is a PluginContext, JobContext or AlgorithmContext; ``invoke``
+    builds a new AlgorithmContext over a child scope and closes it afterwards,
+    so nothing an invocation registers outlives it (decision-11, decision-42).
+    ``progress``/``cancellation`` omitted are inherited from a job or algorithm
+    context. ``add_to_project=False`` leaves the produced layers with the
+    caller; the default adds them to ``ctx.project`` on success.
     """
-    description = describe_algorithm(function)
-    if not isinstance(ctx, _CONTEXTS):
-        raise QgisSdkDeclarationError(
-            f"invoke({description.id}): the second argument is the context the "
-            "runtime injected (a PluginContext, JobContext or AlgorithmContext), "
-            f"not {type_name(type(ctx))}; inputs are keyword arguments"
+    return _execute(
+        _InvokeRequest(
+            function, ctx, dict(inputs), progress, cancellation, add_to_project
         )
-    _check_inputs(description, inputs)
-    if progress is None:
-        progress = getattr(ctx, "progress", None) or _SilentProgress()
-    if cancellation is None:
-        cancellation = getattr(ctx, "cancellation", None) or _NotCancelled()
-    ctx.scope.ensure_open()
-    algorithms = ctx.algorithms
-    if add_to_project:
-        project = ctx.project
-    else:
-        project = ctx.project if ctx.has("project") else None
-    network = ctx.network if ctx.has("network") else None
-    if cancellation.is_cancelled():
-        raise QgisSdkAlgorithmCancelledError(description.id)
-    invocation_scope = ctx.scope.child()
-    context = AlgorithmContext(
-        progress=progress,
-        cancellation=cancellation,
-        scope=invocation_scope,
-        services=AlgorithmServices(
-            algorithms=algorithms, project=project, network=network
-        ),
     )
-    try:
-        result = function(context, **inputs)
-        _check_result(description, result)
-        if cancellation.is_cancelled():
-            raise QgisSdkAlgorithmCancelledError(description.id)
-        if add_to_project:
-            assert project is not None
-            for layer_id in _produced_layers(result):
-                project.add_layer(layer_id)
-    finally:
-        invocation_scope.close()
-    return result
 
 
 def _check_result(description: AlgorithmDescription, result: Any) -> None:

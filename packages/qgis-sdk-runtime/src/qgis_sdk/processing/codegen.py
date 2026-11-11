@@ -28,6 +28,7 @@ from __future__ import annotations
 import keyword
 import re
 from collections.abc import Iterable, Sequence
+from typing import Final
 
 from qgis_sdk.models import AlgorithmInfo, Catalogue, OutputInfo, ParameterInfo
 
@@ -63,15 +64,6 @@ def _python_algorithm_tail1(**values):
     return _python_algorithm_facts11(algorithm, fields, lines)
 
 
-def _emit_python_module_facts1(header, text, used, value_types):
-    if used(value_types):
-        header.append(
-            f"from qgis_sdk.processing.types import {', '.join(used(value_types))}"
-        )
-    header.extend(["", ""])
-    return "\n".join(header) + text
-
-
 def _python_algorithm_facts11(algorithm, fields, lines):
     algorithm_line = f"    algorithm: ClassVar[str] = {_q(algorithm.id)}"
     if len(algorithm_line) > 88:
@@ -100,24 +92,6 @@ def _python_algorithm_facts1(fields, lines):
     lines.append("")
     lines.append("")
     return lines
-
-
-def _emit_typescript_module_facts11(names, out):
-    out.append("}")
-    out.append("")
-    out.append("export const ALGORITHM_IDS = [")
-    out.extend(f'\t"{algorithm_id}",' for algorithm_id, _ in names)
-    out.append("] as const;")
-    return _emit_typescript_module_facts1(out)
-
-
-def _emit_typescript_module_facts1(out):
-    out.append("")
-    out.append("export type AlgorithmId = keyof AlgorithmRegistry;")
-    out.append("")
-    out.extend(_TS_RUN.splitlines())
-    out.append("")
-    return "\n".join(out)
 
 
 __all__ = [
@@ -345,10 +319,20 @@ def _first_sentence(text: str, limit: int = 240) -> str:
     return first if len(first) <= limit else first[: limit - 1].rstrip() + "…"
 
 
-def emit_python_module(
-    catalogue: Catalogue, provider: str, *, module_name: str | None = None
-) -> str:
-    """The Python module for one provider of ``catalogue``."""
+_PYTHON_MODELS: Final[tuple[str, ...]] = ("FileRef", "TypedRun", "VectorLayerInfo")
+_PYTHON_VALUE_TYPES: Final[tuple[str, ...]] = (
+    "Destination",
+    "Extent",
+    "LayerRef",
+    "PointValue",
+    "RangeValue",
+)
+
+
+def _python_registry_body(
+    catalogue: Catalogue, provider: str
+) -> tuple[str, list[tuple[str, str]]]:
+    """The request classes, REGISTRY and ``__all__`` for one provider."""
     algorithms = catalogue.by_provider(provider)
     body: list[str] = [f"PROVIDER = {_q(provider)}", ""]
     classes: list[tuple[str, str]] = []
@@ -374,32 +358,58 @@ def emit_python_module(
     body.append("__all__ = [")
     body.extend(f'    "{name}",' for name in exported)
     body.extend(["]", ""])
-    text = "\n".join(body)
+    return "\n".join(body), classes
 
-    # Import only what the module uses, so a small provider lints clean.
-    def used(names: Sequence[str]) -> list[str]:
-        return [n for n in names if re.search(rf"\b{n}\b", text)]
 
-    models = ["FileRef", "TypedRun", "VectorLayerInfo"]
-    value_types = ["Destination", "Extent", "LayerRef", "PointValue", "RangeValue"]
-    typing = ["ClassVar"] + used(["Required"]) + ["TypedDict"]
-    header: list[str] = [
+def _python_docstring(catalogue: Catalogue, provider: str) -> list[str]:
+    """The generated module's docstring, naming its provider and shape."""
+    count = len(catalogue.by_provider(provider))
+    return [
         f'"""{HEADER.format(version=catalogue.qgis_version)}',
         "",
-        f"Provider ``{provider}``: {len(algorithms)} algorithms. Each algorithm has a",
+        f"Provider ``{provider}``: {count} algorithms. Each algorithm has a",
         "``...Params`` TypedDict (the QGIS parameter names, for ``run(id, params)``),",
         "a ``...Result`` TypedDict (its output names) and a keyword-only request",
         "class deriving from ``TypedRun`` (``run(native.Buffer(input=...))``).",
         '"""',
         "",
-        "from __future__ import annotations",
-        "",
-        "from dataclasses import dataclass",
-        f"from typing import {', '.join(typing)}",
-        "",
-        f"from qgis_sdk.models import {', '.join(used(models))}",
     ]
-    return _emit_python_module_facts1(header, text, used, value_types)
+
+
+def _python_header(catalogue: Catalogue, provider: str, text: str) -> list[str]:
+    """The module docstring and the imports only this provider's text uses."""
+
+    def used(names: Sequence[str]) -> list[str]:
+        return [n for n in names if re.search(rf"\b{n}\b", text)]
+
+    typing = ["ClassVar"] + used(["Required"]) + ["TypedDict"]
+    header: list[str] = _python_docstring(catalogue, provider)
+    header.extend(
+        [
+            "from __future__ import annotations",
+            "",
+            "from dataclasses import dataclass",
+            f"from typing import {', '.join(typing)}",
+            "",
+            f"from qgis_sdk.models import {', '.join(used(_PYTHON_MODELS))}",
+        ]
+    )
+    if used(_PYTHON_VALUE_TYPES):
+        header.append(
+            "from qgis_sdk.processing.types import "
+            + ", ".join(used(_PYTHON_VALUE_TYPES))
+        )
+    header.extend(["", ""])
+    return header
+
+
+def emit_python_module(
+    catalogue: Catalogue, provider: str, *, module_name: str | None = None
+) -> str:
+    """The Python module for one provider of ``catalogue``."""
+    text, _classes = _python_registry_body(catalogue, provider)
+    header = _python_header(catalogue, provider, text)
+    return "\n".join(header) + text
 
 
 def _python_algorithm(algorithm: AlgorithmInfo, name: str) -> list[str]:
@@ -490,6 +500,109 @@ def _ts_key(name: str) -> str:
     return name if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*", name) else f'"{name}"'
 
 
+def _ts_algorithm_shape(
+    algorithm: AlgorithmInfo, taken: dict[str, set[str]]
+) -> tuple[str, list[str]]:
+    """One algorithm's Params/Result interfaces, with a collision-free name."""
+    base = class_name(algorithm, taken.setdefault(algorithm.provider, set()))
+    taken[algorithm.provider].add(base)
+    name = _ts_prefix(algorithm.provider) + base
+    shape = [f"/** {algorithm.label} (`{algorithm.id}`). */"]
+    shape.extend(_ts_shape(f"{name}Params", _ts_parameter_lines(algorithm)))
+    shape.extend(
+        _ts_shape(
+            f"{name}Result",
+            [
+                f"\t{_ts_key(output.name)}?: "
+                f"{TYPESCRIPT_OUTPUT_TYPES.get(output.kind, 'unknown')};"
+                for output in algorithm.outputs
+            ],
+        )
+    )
+    shape.append("")
+    return name, shape
+
+
+def _ts_shapes(
+    catalogue: Catalogue, wanted: tuple[str, ...]
+) -> tuple[list[str], list[tuple[str, str]], set[str]]:
+    """The parameter/result shapes for every wanted algorithm, and used aliases."""
+    algorithms = [a for a in catalogue.algorithms if a.provider in wanted]
+    body: list[str] = []
+    names: list[tuple[str, str]] = []
+    taken: dict[str, set[str]] = {}
+    for algorithm in algorithms:
+        name, shape = _ts_algorithm_shape(algorithm, taken)
+        names.append((algorithm.id, name))
+        body.extend(shape)
+    used = {
+        alias
+        for alias in _TS_VALUE_ALIASES
+        if any(re.search(rf"\b{alias}\b", line) for line in body)
+    }
+    return body, names, used
+
+
+def _ts_imports(used: set[str]) -> list[str]:
+    """Only the value aliases the shapes use, plus the fixed runner imports."""
+    return sorted(
+        [f"\ttype {alias}," for alias in used]
+        + [
+            "\ttype AlgorithmHost,",
+            "\ttype AlgorithmRun,",
+            "\ttype HostInvokeOptions,",
+            "\trunAlgorithm as runAny,",
+        ],
+        key=lambda line: line.replace("\ttype ", "\t").lower(),
+    )
+
+
+def _ts_header(
+    catalogue: Catalogue,
+    wanted: tuple[str, ...],
+    body: Sequence[str],
+    used: set[str],
+    package: str,
+) -> list[str]:
+    """The file header, its imports and the algorithm shapes."""
+    return [
+        f"// {HEADER.format(version=catalogue.qgis_version)}",
+        "// Regenerate with `qgis-sdk processing generate`; CI fails when this file is stale.",
+        "",
+        "import {",
+        *_ts_imports(used),
+        f'}} from "{package}";',
+        "",
+        f"export const QGIS_VERSION = {_ts_string(catalogue.qgis_version)};",
+        f"export const PROVIDERS = [{', '.join(_ts_string(p) for p in wanted)}] as const;",
+        "",
+        *body,
+    ]
+
+
+def _ts_footer(out: list[str], names: Sequence[tuple[str, str]]) -> str:
+    """The registry, ids and bound runner appended after the shapes."""
+    out.append(
+        "/** Every generated algorithm by id; `runAlgorithm` is generic over it. */"
+    )
+    out.append("export interface AlgorithmRegistry {")
+    for algorithm_id, name in names:
+        out.append(
+            f'\t"{algorithm_id}": {{ params: {name}Params; result: {name}Result }};'
+        )
+    out.append("}")
+    out.append("")
+    out.append("export const ALGORITHM_IDS = [")
+    out.extend(f'\t"{algorithm_id}",' for algorithm_id, _ in names)
+    out.append("] as const;")
+    out.append("")
+    out.append("export type AlgorithmId = keyof AlgorithmRegistry;")
+    out.append("")
+    out.extend(_TS_RUN.splitlines())
+    out.append("")
+    return "\n".join(out)
+
+
 def emit_typescript_module(
     catalogue: Catalogue,
     providers: Sequence[str] | None = None,
@@ -502,67 +615,9 @@ def emit_typescript_module(
         if providers is not None
         else tuple(p.id for p in catalogue.providers)
     )
-    algorithms = [a for a in catalogue.algorithms if a.provider in wanted]
-    body: list[str] = []
-    names: list[tuple[str, str]] = []
-    taken: dict[str, set[str]] = {}
-    for algorithm in algorithms:
-        base = class_name(algorithm, taken.setdefault(algorithm.provider, set()))
-        taken[algorithm.provider].add(base)
-        name = _ts_prefix(algorithm.provider) + base
-        names.append((algorithm.id, name))
-        body.append(f"/** {algorithm.label} (`{algorithm.id}`). */")
-        body.extend(_ts_shape(f"{name}Params", _ts_parameter_lines(algorithm)))
-        body.extend(
-            _ts_shape(
-                f"{name}Result",
-                [
-                    f"\t{_ts_key(output.name)}?: "
-                    f"{TYPESCRIPT_OUTPUT_TYPES.get(output.kind, 'unknown')};"
-                    for output in algorithm.outputs
-                ],
-            )
-        )
-        body.append("")
-    # Import only the aliases the shapes use: a provider without an extent
-    # parameter gets no `Extent`, so the module lints clean as source does.
-    used = {
-        alias
-        for alias in _TS_VALUE_ALIASES
-        if any(re.search(rf"\b{alias}\b", line) for line in body)
-    }
-    imports = sorted(
-        [f"\ttype {alias}," for alias in used]
-        + [
-            "\ttype AlgorithmHost,",
-            "\ttype AlgorithmRun,",
-            "\ttype HostInvokeOptions,",
-            "\trunAlgorithm as runAny,",
-        ],
-        key=lambda line: line.replace("\ttype ", "\t").lower(),
-    )
-    out: list[str] = [
-        f"// {HEADER.format(version=catalogue.qgis_version)}",
-        "// Regenerate with `qgis-sdk processing generate`; CI fails when this file is stale.",
-        "",
-        "import {",
-        *imports,
-        f'}} from "{package}";',
-        "",
-        f"export const QGIS_VERSION = {_ts_string(catalogue.qgis_version)};",
-        f"export const PROVIDERS = [{', '.join(_ts_string(p) for p in wanted)}] as const;",
-        "",
-        *body,
-    ]
-    out.append(
-        "/** Every generated algorithm by id; `runAlgorithm` is generic over it. */"
-    )
-    out.append("export interface AlgorithmRegistry {")
-    for algorithm_id, name in names:
-        out.append(
-            f'\t"{algorithm_id}": {{ params: {name}Params; result: {name}Result }};'
-        )
-    return _emit_typescript_module_facts11(names, out)
+    body, names, used = _ts_shapes(catalogue, wanted)
+    out = _ts_header(catalogue, wanted, body, used, package)
+    return _ts_footer(out, names)
 
 
 #: The bound runner: the bridge's generic ``runAlgorithm`` with this module's

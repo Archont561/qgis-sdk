@@ -221,18 +221,302 @@ def plan_web_server(project: DevProject, port: int) -> WebServerPlan | None:
     return WebServerPlan(argv=tuple(argv), cwd=project.web, port=port)
 
 
+class _DevOptions(TypedDict, total=False):
+    """The keyword options ``plan_dev`` accepts; a single typed record.
+
+    Every key is optional because the tests and ``_dev`` command build a plan
+    with only the knobs the chosen mode needs (decision-81).
+    """
+
+    env: Mapping[str, str]
+    workspace: Path
+    headless: bool
+    dev_server: str | None
+    exercise: Path | None
+    watch: bool
+    port: int | None
+
+
+class _AppOptions(TypedDict, total=False):
+    """The keyword options ``plan_app`` accepts; a single typed record."""
+
+    env: Mapping[str, str]
+    workspace: Path
+    gui: bool
+    once: bool
+    grace: float | None
+    title: str | None
+    toolkit_args: Sequence[str]
+
+
+@dataclass(frozen=True, slots=True)
+class _DevFacts:
+    """Everything a mode planner needs, resolved once from the typed options."""
+
+    project: DevProject
+    mode: str
+    install: QgisInstall
+    env: Mapping[str, str]
+    workspace: Path
+    headless: bool
+    dev_server: str | None
+    exercise: Path | None
+    watch: bool
+    port: int | None
+    host_root: Path
+    request_path: Path
+    served: str
+
+
+def _dev_request(
+    project: DevProject,
+    mode: str,
+    host_root: Path,
+    dev_server: str | None,
+    options: _DevOptions,
+) -> dict[str, object]:
+    """The JSON request the generated probe reads from the workspace."""
+    exercise = options.get("exercise")
+    return {
+        "root": str(project.root),
+        "plugin": project.plugin,
+        "host": str(host_root),
+        "mode": mode,
+        "web": project.has_web and mode != "server",
+        "dev_server": dev_server,
+        "port": options.get("port"),
+        "exercise": None if exercise is None else str(exercise),
+        "watch": options.get("watch", True),
+    }
+
+
+def _validate_dev_mode(mode: str) -> None:
+    if mode not in MODES:
+        raise QgisSdkDevError(
+            f"unknown mode {mode!r}; choose one of {', '.join(MODES)}"
+        )
+
+
+def _write_dev_request(workspace: Path, request: dict[str, object]) -> Path:
+    """Write the JSON the generated probe reads; return its path."""
+    path = workspace / REQUEST_NAME
+    path.write_text(json.dumps(request, indent=2), encoding="utf-8")
+    return path
+
+
+def _dev_facts(
+    project: DevProject,
+    mode: str,
+    install: QgisInstall,
+    options: _DevOptions,
+) -> _DevFacts:
+    """Resolve every mode planner input once from the typed options."""
+    _validate_dev_mode(mode)
+    workspace = Path(options.get("workspace", "."))
+    dev_server = options.get("dev_server")
+    host_root = stage_host(project)
+    request = _dev_request(project, mode, host_root, dev_server, options)
+    request_path = _write_dev_request(workspace, request)
+    return _DevFacts(
+        project=project,
+        mode=mode,
+        install=install,
+        env=options.get("env", {}),
+        workspace=workspace,
+        headless=options.get("headless", False),
+        dev_server=dev_server,
+        exercise=options.get("exercise"),
+        watch=options.get("watch", True),
+        port=options.get("port"),
+        host_root=host_root,
+        request_path=request_path,
+        served="" if dev_server is None else f", page from {dev_server}",
+    )
+
+
+def _probe_env(
+    facts: _DevFacts, *, headless: bool, desktop: bool = False
+) -> dict[str, str]:
+    """Build the QGIS process environment and point it at the written request."""
+    process_env = facts.install.environment(
+        facts.env,
+        extra_paths=(facts.host_root, *sdk_import_paths()),
+        headless=headless,
+        desktop=desktop,
+    )
+    process_env[REQUEST_ENV] = str(facts.request_path)
+    if facts.dev_server is not None:
+        process_env[DEV_SERVER_ENV] = facts.dev_server
+    return process_env
+
+
+def _reload_note(facts: _DevFacts, when_on: str, when_off: str) -> str:
+    return when_on if facts.watch else when_off
+
+
+def _server_notes(
+    facts: _DevFacts, install: QgisInstall, origin: str
+) -> tuple[str, ...]:
+    """The three console lines a server-mode run prints."""
+    return (
+        (
+            f"server: QGIS Server from {install.prefix} "
+            f"({install.source}) answering on {origin} through "
+            f"{facts.project.plugin} from {facts.project.root}; nothing is installed "
+            "and no FCGI process is started"
+        ),
+        (
+            f"try: curl '{origin}/?MAP=/path/to/project.qgs&SERVICE=WMS"
+            "&REQUEST=GetCapabilities', or the SERVICE your plugin declares"
+        ),
+        _reload_note(
+            facts,
+            "reload: a saved Python change re-imports the plugin and hands "
+            "QGIS's registration the new hooks; a changed priority or "
+            "service name needs a new `qgis-sdk dev`; Ctrl+C stops it",
+            "reload: off (--no-watch); Ctrl+C stops it",
+        ),
+    )
+
+
+def _server_plan(facts: _DevFacts) -> DevPlan:
+    """The QGIS Server interpreter answering HTTP on loopback."""
+    install = facts.install
+    if install.python is None:
+        raise QgisSdkDevError(
+            f"{install.prefix} has no Python interpreter, so it cannot run "
+            "the server mode; QGIS Server bindings only import into the "
+            "interpreter they were built for"
+        )
+    if facts.port is None:
+        raise QgisSdkDevError("server mode needs a loopback port")
+    probe = facts.workspace / SERVER_PROBE_NAME
+    probe.write_text(SERVER_PROBE, encoding="utf-8", newline="\n")
+    process_env = _probe_env(facts, headless=True)
+    origin = f"http://{LOOPBACK}:{facts.port}"
+    return DevPlan(
+        mode=facts.mode,
+        argv=(str(install.python), str(probe)),
+        cwd=facts.project.root,
+        env=process_env,
+        notes=_server_notes(facts, install, origin),
+        profile=None,
+    )
+
+
+def _standalone_plan(facts: _DevFacts) -> DevPlan:
+    """A bare QgsApplication started by the install's interpreter."""
+    install = facts.install
+    if install.python is None:
+        raise QgisSdkDevError(
+            f"{install.prefix} has no Python interpreter, so it cannot run the "
+            "standalone mode; use --mode desktop"
+        )
+    probe = facts.workspace / STANDALONE_PROBE_NAME
+    probe.write_text(STANDALONE_PROBE, encoding="utf-8", newline="\n")
+    process_env = _probe_env(facts, headless=facts.headless)
+    return DevPlan(
+        mode=facts.mode,
+        argv=(str(install.python), str(probe)),
+        cwd=facts.project.root,
+        env=process_env,
+        notes=(
+            (
+                f"standalone: QgsApplication from {install.prefix} "
+                f"({install.source}); no iface, no plugin lifecycle, no reload - "
+                f"{facts.project.plugin} runs through the generated "
+                f"{facts.host_root / facts.project.plugin} classFactory(None){facts.served}"
+            ),
+        ),
+        profile=None,
+    )
+
+
+def _desktop_notes(
+    facts: _DevFacts, install: QgisInstall, profile: Path
+) -> tuple[str, ...]:
+    """The three console lines a desktop-mode run prints."""
+    return (
+        (
+            f"desktop: {install.executable} ({install.source}), profile "
+            f"{profile}, {facts.project.plugin} from {facts.project.root} through the "
+            f"generated {facts.host_root / facts.project.plugin} on "
+            f"QGIS_PLUGINPATH{facts.served}"
+        ),
+        _reload_note(
+            facts,
+            "reload: on save of Python changes, the Reload button, "
+            "or Ctrl+Shift+R in QGIS; quit QGIS to stop "
+            "(a pyproject.toml change needs a new `qgis-sdk dev`)",
+            "reload: the Reload button or Ctrl+Shift+R in QGIS; quit QGIS to stop",
+        ),
+        (
+            # decision-48 point 5: the two lines a console needs, printed
+            # where a developer is already looking.
+            f"console: in Plugins > Python Console: import qgis.utils; "
+            f'session = qgis.utils.plugins["{facts.project.plugin}"].console() '
+            f"(or: from qgis_sdk.console import connect; session = connect())"
+        ),
+    )
+
+
+def _validate_desktop_binary(install: QgisInstall) -> None:
+    if install.executable is None:
+        raise QgisSdkDevError(
+            f"{install.prefix} has no QGIS Desktop binary (bin/qgis or "
+            "bin/qgis-bin.exe); install QGIS Desktop there, point --qgis-prefix at "
+            "one, or use --mode standalone"
+        )
+
+
+def _desktop_argv(install: QgisInstall, state: Path, probe: Path) -> tuple[str, ...]:
+    # QGIS appends ``profiles/<name>`` to --profiles-path itself.
+    return (
+        str(install.executable),
+        "--profiles-path",
+        str(state),
+        "--profile",
+        PROFILE_NAME,
+        "--code",
+        str(probe),
+    )
+
+
+def _desktop_plan(facts: _DevFacts) -> DevPlan:
+    """The QGIS Desktop binary with an isolated profile and generated host."""
+    install = facts.install
+    _validate_desktop_binary(install)
+    probe = facts.workspace / DESKTOP_PROBE_NAME
+    probe.write_text(DESKTOP_PROBE, encoding="utf-8", newline="\n")
+    # QGIS appends ``profiles/<name>`` to --profiles-path itself.
+    state = facts.project.root / STATE_DIRECTORY
+    profile = state / "profiles" / PROFILE_NAME
+    process_env = _probe_env(facts, headless=facts.headless, desktop=True)
+    process_env["QGIS_PLUGINPATH"] = _prepend_path(
+        str(facts.host_root), facts.env.get("QGIS_PLUGINPATH")
+    )
+    return DevPlan(
+        mode=facts.mode,
+        argv=_desktop_argv(install, state, probe),
+        cwd=facts.project.root,
+        env=process_env,
+        notes=_desktop_notes(facts, install, profile),
+        profile=profile,
+    )
+
+
+_DEV_PLANNERS: Final[dict[str, Callable[[_DevFacts], DevPlan]]] = {
+    "server": _server_plan,
+    "standalone": _standalone_plan,
+    "desktop": _desktop_plan,
+}
+
+
 def plan_dev(
     project: DevProject,
     mode: str,
     install: QgisInstall,
-    *,
-    env: Mapping[str, str],
-    workspace: Path,
-    headless: bool = False,
-    dev_server: str | None = None,
-    exercise: Path | None = None,
-    watch: bool = True,
-    port: int | None = None,
+    **options: Unpack[_DevOptions],
 ) -> DevPlan:
     """The QGIS process for ``mode``; the probe it runs is written to ``workspace``.
 
@@ -241,231 +525,96 @@ def plan_dev(
     metadata changes (debounced, serialised; see ``devtools.reloader``);
     the Reload button works either way. ``exercise`` makes the bootstrap
     drive itself through the reload policy, write a JSON report there and
-    quit; it is how the harness proves the reload policy without a human at
-    the keyboard. The SDK's own packages join ``PYTHONPATH`` so the bootstrap
+    quit. The SDK's own packages join ``PYTHONPATH`` so the bootstrap
     imports inside QGIS's interpreter whichever Python runs the CLI.
     """
-    if mode not in MODES:
-        raise QgisSdkDevError(
-            f"unknown mode {mode!r}; choose one of {', '.join(MODES)}"
+    facts = _dev_facts(project, mode, install, options)
+    return _DEV_PLANNERS[facts.mode](facts)
+
+
+def _app_flags(options: _AppOptions) -> list[str]:
+    """The flags ``qgis_sdk.app`` reads, in the order the CLI declares them."""
+    flags: list[str] = []
+    if not options.get("gui", True):
+        flags.append("--headless")
+    if options.get("once", False):
+        flags.append("--once")
+    grace = options.get("grace")
+    if grace is not None:
+        flags.extend(("--grace", f"{grace:g}"))
+    title = options.get("title")
+    if title is not None:
+        flags.extend(("--title", title))
+    return flags
+
+
+def _app_entry(
+    project: DevProject, install: QgisInstall, workspace: Path, flags: Sequence[str]
+) -> tuple[tuple[str, ...], str]:
+    """Use the project's ``__main__.py``, else write a probe that imports its spec."""
+    root = project.root
+    entry = root / project.plugin / "__main__.py"
+    if entry.is_file():
+        return (str(install.python), "-m", project.plugin, *flags), (
+            f"{project.plugin} from {entry}"
         )
-    workspace = Path(workspace)
-    host_root = stage_host(project)
-    request = {
-        "root": str(project.root),
-        "plugin": project.plugin,
-        "host": str(host_root),
-        "mode": mode,
-        "web": project.has_web and mode != "server",
-        "dev_server": dev_server,
-        "port": port,
-        "exercise": None if exercise is None else str(exercise),
-        "watch": watch,
-    }
-    request_path = workspace / REQUEST_NAME
-    request_path.write_text(json.dumps(request, indent=2), encoding="utf-8")
-    served = "" if dev_server is None else f", page from {dev_server}"
-    if mode == "server":
-        if install.python is None:
-            raise QgisSdkDevError(
-                f"{install.prefix} has no Python interpreter, so it cannot run "
-                "the server mode; QGIS Server bindings only import into the "
-                "interpreter they were built for"
-            )
-        if port is None:
-            raise QgisSdkDevError("server mode needs a loopback port")
-        probe = workspace / SERVER_PROBE_NAME
-        probe.write_text(SERVER_PROBE, encoding="utf-8", newline="\n")
-        process_env = install.environment(
-            env, extra_paths=(host_root, *sdk_import_paths()), headless=True
-        )
-        process_env[REQUEST_ENV] = str(request_path)
-        origin = f"http://{LOOPBACK}:{port}"
-        return DevPlan(
-            mode=mode,
-            argv=(str(install.python), str(probe)),
-            cwd=project.root,
-            env=process_env,
-            notes=(
-                (
-                    f"server: QGIS Server from {install.prefix} "
-                    f"({install.source}) answering on {origin} through "
-                    f"{project.plugin} from {project.root}; nothing is installed "
-                    "and no FCGI process is started"
-                ),
-                (
-                    f"try: curl '{origin}/?MAP=/path/to/project.qgs&SERVICE=WMS"
-                    "&REQUEST=GetCapabilities', or the SERVICE your plugin declares"
-                ),
-                (
-                    "reload: a saved Python change re-imports the plugin and hands "
-                    "QGIS's registration the new hooks; a changed priority or "
-                    "service name needs a new `qgis-sdk dev`; Ctrl+C stops it"
-                    if watch
-                    else "reload: off (--no-watch); Ctrl+C stops it"
-                ),
-            ),
-            profile=None,
-        )
-    if mode == "standalone":
-        if install.python is None:
-            raise QgisSdkDevError(
-                f"{install.prefix} has no Python interpreter, so it cannot run the "
-                "standalone mode; use --mode desktop"
-            )
-        probe = workspace / STANDALONE_PROBE_NAME
-        probe.write_text(STANDALONE_PROBE, encoding="utf-8", newline="\n")
-        process_env = install.environment(
-            env, extra_paths=(host_root, *sdk_import_paths()), headless=headless
-        )
-        process_env[REQUEST_ENV] = str(request_path)
-        if dev_server is not None:
-            process_env[DEV_SERVER_ENV] = dev_server
-        return DevPlan(
-            mode=mode,
-            argv=(str(install.python), str(probe)),
-            cwd=project.root,
-            env=process_env,
-            notes=(
-                (
-                    f"standalone: QgsApplication from {install.prefix} "
-                    f"({install.source}); no iface, no plugin lifecycle, no reload - "
-                    f"{project.plugin} runs through the generated "
-                    f"{host_root / project.plugin} classFactory(None){served}"
-                ),
-            ),
-            profile=None,
-        )
-    if install.executable is None:
-        raise QgisSdkDevError(
-            f"{install.prefix} has no QGIS Desktop binary (bin/qgis or "
-            "bin/qgis-bin.exe); install QGIS Desktop there, point --qgis-prefix at "
-            "one, or use --mode standalone"
-        )
-    probe = workspace / DESKTOP_PROBE_NAME
-    probe.write_text(DESKTOP_PROBE, encoding="utf-8", newline="\n")
-    # QGIS appends ``profiles/<name>`` to --profiles-path itself.
-    state = project.root / STATE_DIRECTORY
-    profile = state / "profiles" / PROFILE_NAME
-    process_env = install.environment(
-        env,
-        extra_paths=(host_root, *sdk_import_paths()),
-        headless=headless,
-        desktop=True,
-    )
-    process_env[REQUEST_ENV] = str(request_path)
-    process_env["QGIS_PLUGINPATH"] = _prepend_path(
-        str(host_root), env.get("QGIS_PLUGINPATH")
-    )
-    if dev_server is not None:
-        process_env[DEV_SERVER_ENV] = dev_server
-    return DevPlan(
-        mode=mode,
-        argv=(
-            str(install.executable),
-            "--profiles-path",
-            str(state),
-            "--profile",
-            PROFILE_NAME,
-            "--code",
-            str(probe),
-        ),
-        cwd=project.root,
-        env=process_env,
-        notes=(
-            (
-                f"desktop: {install.executable} ({install.source}), profile "
-                f"{profile}, {project.plugin} from {project.root} through the "
-                f"generated {host_root / project.plugin} on QGIS_PLUGINPATH{served}"
-            ),
-            (
-                "reload: on save of Python changes, the Reload button, "
-                "or Ctrl+Shift+R in QGIS; quit QGIS to stop "
-                "(a pyproject.toml change needs a new `qgis-sdk dev`)"
-                if watch
-                else "reload: the Reload button or Ctrl+Shift+R in QGIS; quit QGIS to stop"
-            ),
-            (
-                # decision-48 point 5: the two lines a console needs, printed
-                # where a developer is already looking.
-                f"console: in Plugins > Python Console: import qgis.utils; "
-                f'session = qgis.utils.plugins["{project.plugin}"].console() '
-                f"(or: from qgis_sdk.console import connect; session = connect())"
-            ),
-        ),
-        profile=profile,
+    probe = workspace / APP_PROBE_NAME
+    probe.write_text(_app_probe(project), encoding="utf-8", newline="\n")
+    return (str(install.python), str(probe), *flags), (
+        f"a generated probe for {project.config.spec} "
+        f"(the project has no {project.plugin}/__main__.py)"
     )
 
 
-def plan_app(
-    project: DevProject,
-    install: QgisInstall,
-    *,
-    env: Mapping[str, str],
-    workspace: Path,
-    gui: bool = True,
-    once: bool = False,
-    grace: float | None = None,
-    title: str | None = None,
-    toolkit_args: Sequence[str] = (),
-) -> DevPlan:
-    """The QGIS process that starts ``project`` as a standalone app.
-
-    The entry is the project's own ``<plugin>/__main__.py`` when it has one,
-    because that is the file ``qgis-sdk build --target app`` installs as a
-    launcher and ``python -m <plugin>`` runs - a project that customises its
-    argv should see the same thing from ``qgis-sdk run``. A project without one
-    gets a generated probe in ``workspace`` that imports ``config.spec`` and
-    calls the same ``qgis_sdk.app.main``, so a Desktop plugin can be tried as
-    an app without editing it.
-
-    ``gui`` opens the app's window; ``once`` starts it, delivers what is queued
-    and stops, which is the smoke run a CI job makes. ``toolkit_args`` go after
-    ``--``, so Qt sees them and the SDK does not.
-    """
-    _require_application(project)
+def _app_interpreter(install: QgisInstall) -> None:
+    """The app host imports PyQGIS into the interpreter it was built for."""
     if install.python is None:
         raise QgisSdkDevError(
             f"{install.prefix} has no Python interpreter, so it cannot run a "
             "standalone app; the app host imports PyQGIS into the interpreter it "
             "was built for"
         )
-    workspace = Path(workspace)
-    root = project.root
-    package = root / project.plugin
-    flags: list[str] = []
-    if not gui:
-        flags.append("--headless")
-    if once:
-        flags.append("--once")
-    if grace is not None:
-        flags.extend(("--grace", f"{grace:g}"))
-    if title is not None:
-        flags.extend(("--title", title))
-    entry = package / "__main__.py"
-    if entry.is_file():
-        argv = (str(install.python), "-m", project.plugin, *flags)
-        where = f"{project.plugin} from {entry}"
-    else:
-        probe = workspace / APP_PROBE_NAME
-        probe.write_text(_app_probe(project), encoding="utf-8", newline="\n")
-        argv = (str(install.python), str(probe), *flags)
-        where = (
-            f"a generated probe for {project.config.spec} "
-            f"(the project has no {project.plugin}/__main__.py)"
-        )
+
+
+def _app_plan(
+    project: DevProject, install: QgisInstall, options: _AppOptions
+) -> DevPlan:
+    """Assemble the app run: flags, entry, environment and its console note."""
+    workspace = Path(options.get("workspace", "."))
+    env = options.get("env", {})
+    gui = options.get("gui", True)
+    argv, where = _app_entry(project, install, workspace, _app_flags(options))
+    toolkit_args = options.get("toolkit_args", ())
     if toolkit_args:
         argv = (*argv, "--", *toolkit_args)
     process_env = install.environment(
         env,
-        extra_paths=(root, *sdk_import_paths()),
+        extra_paths=(project.root, *sdk_import_paths()),
         headless=not gui or wants_headless(env),
     )
     note = (
         f"app: {install.python} ({install.source}) running {where}, "
         f"{'with a window' if gui else 'headless'}"
     )
-    return _plan_app_phase1(argv, gui, note, process_env, root)
+    return _plan_app_phase1(argv, gui, note, process_env, project.root)
+
+
+def plan_app(
+    project: DevProject,
+    install: QgisInstall,
+    **options: Unpack[_AppOptions],
+) -> DevPlan:
+    """The QGIS process that starts ``project`` as a standalone app.
+
+    The entry is the project's own ``<plugin>/__main__.py`` when it has one
+    (what ``build --target app`` installs as a launcher); without one a
+    generated probe imports ``config.spec`` and calls ``qgis_sdk.app.main``.
+    ``gui`` opens the window; ``once`` makes the CI smoke run; ``toolkit_args``
+    go after ``--`` so Qt, not the SDK, sees them.
+    """
+    _require_application(project)
+    _app_interpreter(install)
+    return _app_plan(project, install, options)
 
 
 def _require_application(project: DevProject) -> None:

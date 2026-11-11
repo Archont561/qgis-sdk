@@ -27,205 +27,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 
-def _facts_cancellation_facts11234567891011121314151617(**values):
-    return _facts_cancellation_facts112345678910111213141516(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts112345678910111213141516(**values):
-    return _facts_cancellation_facts1123456789101112131415(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts1123456789101112131415(**values):
-    return _facts_cancellation_facts11234567891011121314(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts11234567891011121314(**values):
-    return _facts_cancellation_facts112345678910111213(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts112345678910111213(**values):
-    return _facts_cancellation_facts1123456789101112(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts1123456789101112(**values):
-    return _facts_cancellation_facts11234567891011(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts11234567891011(**values):
-    return _facts_cancellation_facts112345678910(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts112345678910(**values):
-    return _facts_cancellation_facts1123456789(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts1123456789(**values):
-    return _facts_cancellation_facts112345678(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts112345678(**values):
-    return _facts_cancellation_facts11234567(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts11234567(**values):
-    return _facts_cancellation_facts1123456(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts1123456(**values):
-    return _facts_cancellation_facts112345(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts112345(**values):
-    return _facts_cancellation_facts11234(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts11234(**values):
-    return _facts_cancellation_facts1123(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts1123(**values):
-    return _facts_cancellation_facts112(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts112(**values):
-    return _facts_cancellation_facts11(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts11(**values):
-    return _facts_cancellation_facts1(
-        cancel_job=values["cancel_job"],
-        cancelled=values["cancelled"],
-        harness=values["harness"],
-        iterations=values["iterations"],
-        scheduler=values["scheduler"],
-        worker_ids=values["worker_ids"],
-    )
-
-
-def _facts_cancellation_facts1(**values):
-    values["harness"].pump(
-        values["scheduler"], lambda: values["cancel_job"].state.settled
-    )
-    return (
-        tuple(values["worker_ids"]),
-        bool(values["iterations"]) and values["cancelled"] == [True],
-        values["cancelled"] == [True],
-    )
-
-
-def _failed_report_phase1(empty, error, qgis_initialised, reasons, verdict):
+def _failed_report_value(empty, error, qgis_initialised, reasons, verdict):
     return replace(
         SchedulerReport(
             platform=platform.platform(),
@@ -507,6 +309,311 @@ class _ReplacementEvidence:
     still_waiting: bool
 
 
+@dataclass
+class _ScheduledFacts:
+    """The mutable observations one scheduled-work phase collects."""
+
+    handoff: object
+    worker_ids: list[int]
+    delivery_ids: list[int]
+    results: list[object]
+
+
+@dataclass
+class _CancellationFacts:
+    """The mutable observations one cooperative-cancellation phase collects."""
+
+    handoff: object
+    job: object
+    worker_ids: list[int]
+    iterations: list[int]
+    cancelled: list[bool]
+
+
+@dataclass
+class _LateFacts:
+    """The mutable observations one disposal-phase report collects."""
+
+    handoff: object
+    deliveries: list[object]
+
+
+@dataclass(frozen=True, slots=True)
+class _QtRig:
+    """The live Qt loop, its worker factory and the version it reported."""
+
+    harness: _Harness
+    timer: object
+    qt_version: str
+
+
+@dataclass(frozen=True, slots=True)
+class _OwnedEvidence:
+    """Phases 1-3, all measured under one owner scope."""
+
+    blocking_phase: GapSummary
+    control_polled: bool
+    scheduled: _ScheduledEvidence
+    cancel_worker_ids: tuple[int, ...]
+    worker_acknowledged: bool
+    cleanup_ran: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _DisposalEvidence:
+    """Phases 4-5, each measured under its own disposed scope."""
+
+    late_report_dropped: bool
+    replacement: _ReplacementEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class _PhaseEvidence:
+    """Every phase's answer, plus the two facts the report header needs."""
+
+    owned: _OwnedEvidence
+    disposal: _DisposalEvidence
+    gui_thread: int
+    qt_version: str
+
+
+async def _scheduled(facts: _ScheduledFacts) -> None:
+    """Record the thread a handoff was delivered on, and the value it carried."""
+    from PyQt6.QtCore import QThread
+
+    value = await facts.handoff
+    facts.delivery_ids.append(int(QThread.currentThreadId()))
+    facts.results.append(value)
+
+
+def _do_scheduled_work(facts: _ScheduledFacts) -> None:
+    """Sleep off-thread, then resolve the handoff back onto the GUI thread."""
+    from PyQt6.QtCore import QThread
+
+    facts.worker_ids.append(int(QThread.currentThreadId()))
+    time.sleep(WORKER_DURATION_MS / 1000)
+    facts.handoff.resolve("payload")
+
+
+async def _cancellable(facts: _CancellationFacts) -> None:
+    """Cooperatively acknowledge cancellation rather than swallowing it."""
+    from qgis_sdk.models import QgisSdkJobCancelledError
+
+    try:
+        await facts.handoff
+    except QgisSdkJobCancelledError:
+        facts.cancelled.append(True)
+        raise
+
+
+def _do_cancellable_work(facts: _CancellationFacts) -> None:
+    """Poll until the job is cancelled, then acknowledge on the worker thread."""
+    from PyQt6.QtCore import QThread
+
+    facts.worker_ids.append(int(QThread.currentThreadId()))
+    rounds = 0
+    while (
+        rounds < CANCELLATION_POLL_ROUNDS and not facts.job.cancellation.is_cancelled()
+    ):
+        rounds += 1
+        time.sleep(CANCELLATION_POLL_INTERVAL_S)
+    facts.iterations.append(rounds)
+    facts.handoff.resolve("acknowledged")
+
+
+async def _awaiting_late_report(facts: _LateFacts) -> None:
+    facts.deliveries.append(await facts.handoff)
+
+
+def _report_late(handoff: object) -> None:
+    time.sleep(LATE_REPORT_DELAY_MS / 1000)
+    handoff.resolve("too late")
+
+
+async def _stuck(handoff: object) -> None:
+    await handoff
+
+
+def _acknowledge_late(handoff: object) -> None:
+    time.sleep(STUCK_ACK_MS / 1000)
+    handoff.resolve("late acknowledgement")
+
+
+def _stuck_evidence(
+    harness: _Harness, scheduler: object, scope: object, job: object
+) -> _ReplacementEvidence:
+    """Quiesce a stuck job, resume it and report what the attempt observed."""
+    from qgis_sdk.core import JobState
+
+    outcome = scheduler.quiesce(max_ticks=QUIESCE_TICKS)
+    blocker = outcome.blockers[0] if outcome.blockers else None
+    still_waiting = job.state is JobState.WAITING
+    scheduler.resume()
+    harness.pump(scheduler, lambda: job.state.settled)
+    scope.close()
+    return _ReplacementEvidence(
+        refused=outcome.refused and bool(blocker) and still_waiting,
+        blocker=blocker,
+        still_waiting=still_waiting,
+    )
+
+
+def _qt_worker_class():
+    """A QRunnable that runs one callable on the pool."""
+    from PyQt6.QtCore import QRunnable
+
+    class _Worker(QRunnable):
+        def __init__(self, action: Callable[[], None]) -> None:
+            super().__init__()
+            self._action = action
+            self.setAutoDelete(True)
+
+        def run(self) -> None:
+            self._action()
+
+    return _Worker
+
+
+def _qt_rig(application: object) -> _QtRig:
+    """Start the heartbeat timer and wire the shared harness to a live pool."""
+    from PyQt6.QtCore import QT_VERSION_STR, QThread, QThreadPool, QTimer
+
+    marks: list[float] = []
+
+    def beat() -> None:
+        marks.append(time.perf_counter())
+
+    timer = QTimer()
+    timer.setInterval(HEARTBEAT_INTERVAL_MS)
+    timer.timeout.connect(beat)
+    timer.start()
+    harness = _Harness(
+        application=application,
+        pool=QThreadPool.globalInstance(),
+        worker=_qt_worker_class(),
+        gui_thread=int(QThread.currentThreadId()),
+        heartbeat=_Heartbeat(marks),
+    )
+    return _QtRig(harness, timer, str(QT_VERSION_STR))
+
+
+def _owned_phases(
+    harness: _Harness, scheduler: object, scope: object
+) -> _OwnedEvidence:
+    """Phases 1-3 share one owner scope, then dispose it."""
+    blocking_phase, control_polled = _phase_blocking_control(harness, scheduler)
+    scheduled = _phase_scheduled_work(harness, scheduler)
+    cancel_worker_ids, worker_acknowledged, cleanup_ran = _phase_cancellation(
+        harness, scheduler
+    )
+    scope.close()
+    return _OwnedEvidence(
+        blocking_phase,
+        control_polled,
+        scheduled,
+        cancel_worker_ids,
+        worker_acknowledged,
+        cleanup_ran,
+    )
+
+
+def _disposal_phases(harness: _Harness) -> _DisposalEvidence:
+    """A disposed scope gets its own phases, so it can refuse new work."""
+    return _DisposalEvidence(
+        late_report_dropped=_phase_late_report(harness),
+        replacement=_phase_stuck_replacement(harness),
+    )
+
+
+def _criteria(evidence: _PhaseEvidence) -> dict[str, bool]:
+    """The six deciding criteria, each read from one phase's evidence."""
+    owned, disposal = evidence.owned, evidence.disposal
+    return {
+        "gui_responsive_for_scheduled_work": all(
+            (
+                owned.scheduled.polled,
+                owned.control_polled,
+                owned.scheduled.summary.responsive(GUI_GAP_BUDGET_MS),
+                owned.blocking_phase.stalled(GUI_GAP_BUDGET_MS),
+            )
+        ),
+        "handoff_delivered_on_gui_thread": delivered_only_on(
+            evidence.gui_thread, list(owned.scheduled.delivery_thread_ids)
+        )
+        and owned.scheduled.results == ("payload",),
+        "work_ran_off_the_gui_thread": ran_on_a_different_thread(
+            evidence.gui_thread, list(owned.scheduled.worker_thread_ids)
+        ),
+        "worker_acknowledged_cancellation": owned.worker_acknowledged,
+        "late_report_dropped_after_disposal": disposal.late_report_dropped,
+        "replacement_refused_while_stuck": disposal.replacement.refused,
+    }
+
+
+def _scheduler_report(
+    evidence: _PhaseEvidence, checks: Mapping[str, bool]
+) -> SchedulerReport:
+    """Assemble the report from the phases and the verdict they decided."""
+    owned, disposal = evidence.owned, evidence.disposal
+    verdict, reasons = decide_verdict(checks)
+    return SchedulerReport(
+        platform=platform.platform(),
+        python_version=platform.python_version(),
+        qgis_version=_qgis_version(),
+        qt_version=evidence.qt_version,
+        qgis_initialised=True,
+        event_loop_polled=owned.control_polled and owned.scheduled.polled,
+        gui_thread_id=evidence.gui_thread,
+        worker_thread_ids=owned.scheduled.worker_thread_ids + owned.cancel_worker_ids,
+        delivery_thread_ids=owned.scheduled.delivery_thread_ids,
+        blocking_phase=owned.blocking_phase,
+        scheduled_phase=owned.scheduled.summary,
+        gui_responsive_for_scheduled_work=checks["gui_responsive_for_scheduled_work"],
+        handoff_delivered_on_gui_thread=checks["handoff_delivered_on_gui_thread"],
+        work_ran_off_the_gui_thread=checks["work_ran_off_the_gui_thread"],
+        worker_acknowledged_cancellation=checks["worker_acknowledged_cancellation"],
+        author_cleanup_ran=owned.cleanup_ran,
+        late_report_dropped_after_disposal=checks["late_report_dropped_after_disposal"],
+        replacement_refused_while_stuck=checks["replacement_refused_while_stuck"],
+        refused_blocker=disposal.replacement.blocker,
+        verdict=verdict,
+        scope_review_criteria=reasons,
+    )
+
+
+def _report_from_phases(rig: _QtRig) -> SchedulerReport:
+    """Drive every phase against one harness, then close the timer and pool."""
+    from qgis_sdk.core import ResourceScope, StepScheduler
+
+    scope = ResourceScope()
+    scheduler = StepScheduler(scope)
+    owned = _owned_phases(rig.harness, scheduler, scope)
+    disposal = _disposal_phases(rig.harness)
+    rig.timer.stop()
+    rig.harness.pool.waitForDone(POOL_DRAIN_MS)
+    evidence = _PhaseEvidence(owned, disposal, rig.harness.gui_thread, rig.qt_version)
+    criteria = _criteria(evidence)
+    return _scheduler_report(evidence, criteria)
+
+
+def _prepare_qgis_environment() -> Path:
+    """Point the interpreter at a headless QGIS before any binding is imported."""
+    import os
+
+    from smoke_support.desktop_lifecycle_smoke import (
+        headless_environment,
+        qgis_python_path,
+    )
+
+    prefix = Path(sys.prefix)
+    for key, value in headless_environment(prefix, os.environ).items():
+        os.environ[key] = value
+    for path in (qgis_python_path(prefix), SOURCE_ROOT):
+        if str(path) not in sys.path:
+            sys.path.insert(0, str(path))
+    return prefix
+
+
 def _phase_blocking_control(
     harness: _Harness, scheduler: object
 ) -> tuple[GapSummary, bool]:
@@ -521,34 +628,19 @@ def _phase_blocking_control(
 
 def _phase_scheduled_work(harness: _Harness, scheduler: object) -> _ScheduledEvidence:
     """Phase 2: the same duration of work off-thread, resumed on the GUI thread."""
-    from PyQt6.QtCore import QThread
     from qgis_sdk.core import Handoff
 
     start = harness.heartbeat.baseline_index()
-    handoff = Handoff()
-    worker_ids: list[int] = []
-    delivery_ids: list[int] = []
-    results: list[object] = []
-
-    async def scheduled() -> None:
-        value = await handoff
-        delivery_ids.append(int(QThread.currentThreadId()))
-        results.append(value)
-
-    def do_work() -> None:
-        worker_ids.append(int(QThread.currentThreadId()))
-        time.sleep(WORKER_DURATION_MS / 1000)
-        handoff.resolve("payload")
-
-    job = scheduler.submit(scheduled())
-    harness.start(do_work)
+    facts = _ScheduledFacts(Handoff(), [], [], [])
+    job = scheduler.submit(_scheduled(facts))
+    harness.start(lambda: _do_scheduled_work(facts))
     polled = harness.pump(scheduler, lambda: job.state.settled)
     return _ScheduledEvidence(
         summary=harness.heartbeat.phase(start),
         polled=polled,
-        worker_thread_ids=tuple(worker_ids),
-        delivery_thread_ids=tuple(delivery_ids),
-        results=tuple(results),
+        worker_thread_ids=tuple(facts.worker_ids),
+        delivery_thread_ids=tuple(facts.delivery_ids),
+        results=tuple(facts.results),
     )
 
 
@@ -556,48 +648,21 @@ def _phase_cancellation(
     harness: _Harness, scheduler: object
 ) -> tuple[tuple[int, ...], bool, bool]:
     """Phase 3: cancellation is cooperative - the worker acknowledges, then cleanup runs."""
-    from PyQt6.QtCore import QThread
     from qgis_sdk.core import Handoff
-    from qgis_sdk.models import QgisSdkJobCancelledError
 
-    cancel_handoff = Handoff()
-    worker_ids: list[int] = []
-    iterations: list[int] = []
-    cancelled: list[bool] = []
-
-    async def cancellable() -> None:
-        try:
-            await cancel_handoff
-        except QgisSdkJobCancelledError:
-            cancelled.append(True)
-            raise
-
-    def do_cancellable_work() -> None:
-        worker_ids.append(int(QThread.currentThreadId()))
-        rounds = 0
-        while (
-            rounds < CANCELLATION_POLL_ROUNDS
-            and not cancel_job.cancellation.is_cancelled()
-        ):
-            rounds += 1
-            time.sleep(CANCELLATION_POLL_INTERVAL_S)
-        iterations.append(rounds)
-        cancel_handoff.resolve("acknowledged")
-
-    cancel_job = scheduler.submit(cancellable())
+    facts = _CancellationFacts(Handoff(), None, [], [], [])
+    facts.job = scheduler.submit(_cancellable(facts))
     # Start the job into its suspension first: cancelling a queued job runs no
     # author code at all, which would not exercise the cooperative path here.
     scheduler.tick()
-    harness.start(do_cancellable_work)
+    harness.start(lambda: _do_cancellable_work(facts))
     time.sleep(WORKER_DURATION_MS / 1000)
-    cancel_job.cancel()
-    return _facts_cancellation_facts11234567891011121314151617(
-        cancel_job=cancel_job,
-        cancelled=cancelled,
-        harness=harness,
-        iterations=iterations,
-        scheduler=scheduler,
-        worker_ids=worker_ids,
+    facts.job.cancel()
+    harness.pump(scheduler, lambda: facts.job.state.settled)
+    return (
+        tuple(facts.worker_ids),
+        bool(facts.iterations) and facts.cancelled == [True],
+        facts.cancelled == [True],
     )
 
 
@@ -607,59 +672,30 @@ def _phase_late_report(harness: _Harness) -> bool:
 
     late_scope = ResourceScope()
     late_scheduler = StepScheduler(late_scope)
-    late_handoff = Handoff()
-    late_deliveries: list[object] = []
-
-    async def awaiting_late_report() -> None:
-        late_deliveries.append(await late_handoff)
-
-    late_job = late_scheduler.submit(awaiting_late_report())
+    facts = _LateFacts(Handoff(), [])
+    late_job = late_scheduler.submit(_awaiting_late_report(facts))
     late_scheduler.tick()
-
-    def report_late() -> None:
-        time.sleep(LATE_REPORT_DELAY_MS / 1000)
-        late_handoff.resolve("too late")
-
-    harness.start(report_late)
+    harness.start(lambda: _report_late(facts.handoff))
     late_scope.close()
     _pump_for(harness.application, late_scheduler, DISPOSED_DRAIN_S)
     return (
         late_scheduler.dropped_reports == 1
-        and late_deliveries == []
+        and facts.deliveries == []
         and late_job.state is JobState.FAILED
     )
 
 
 def _phase_stuck_replacement(harness: _Harness) -> _ReplacementEvidence:
     """Phase 5: stuck work that ignores cancellation refuses an in-process replacement."""
-    from qgis_sdk.core import Handoff, JobState, ResourceScope, StepScheduler
+    from qgis_sdk.core import Handoff, ResourceScope, StepScheduler
 
-    stuck_scope = ResourceScope()
-    stuck_scheduler = StepScheduler(stuck_scope)
-    stuck_handoff = Handoff()
-
-    async def stuck() -> None:
-        await stuck_handoff
-
-    stuck_job = stuck_scheduler.submit(stuck())
-
-    def acknowledge_late() -> None:
-        time.sleep(STUCK_ACK_MS / 1000)
-        stuck_handoff.resolve("late acknowledgement")
-
-    harness.start(acknowledge_late)
-    stuck_scheduler.tick()
-    outcome = stuck_scheduler.quiesce(max_ticks=QUIESCE_TICKS)
-    blocker = outcome.blockers[0] if outcome.blockers else None
-    still_waiting = stuck_job.state is JobState.WAITING
-    stuck_scheduler.resume()
-    harness.pump(stuck_scheduler, lambda: stuck_job.state.settled)
-    stuck_scope.close()
-    return _ReplacementEvidence(
-        refused=outcome.refused and bool(blocker) and still_waiting,
-        blocker=blocker,
-        still_waiting=still_waiting,
-    )
+    scope = ResourceScope()
+    scheduler = StepScheduler(scope)
+    handoff = Handoff()
+    job = scheduler.submit(_stuck(handoff))
+    harness.start(lambda: _acknowledge_late(handoff))
+    scheduler.tick()
+    return _stuck_evidence(harness, scheduler, scope, job)
 
 
 def _run_phases(application: object) -> SchedulerReport:
@@ -669,102 +705,7 @@ def _run_phases(application: object) -> SchedulerReport:
     shared harness together and assembles the report, so porting one phase to a new
     platform cannot silently change what another one asserts.
     """
-    from PyQt6.QtCore import QT_VERSION_STR, QRunnable, QThread, QThreadPool, QTimer
-    from qgis_sdk.core import ResourceScope, StepScheduler
-
-    class _Worker(QRunnable):
-        """Run a callable on the pool; the callable owns its own reporting."""
-
-        def __init__(self, action: Callable[[], None]) -> None:
-            super().__init__()
-            self._action = action
-            self.setAutoDelete(True)
-
-        def run(self) -> None:
-            self._action()
-
-    marks: list[float] = []
-
-    def beat() -> None:
-        marks.append(time.perf_counter())
-
-    timer = QTimer()
-    timer.setInterval(HEARTBEAT_INTERVAL_MS)
-    timer.timeout.connect(beat)
-    timer.start()
-
-    harness = _Harness(
-        application=application,
-        pool=QThreadPool.globalInstance(),
-        worker=_Worker,
-        gui_thread=int(QThread.currentThreadId()),
-        heartbeat=_Heartbeat(marks),
-    )
-
-    # Phases 1-3 run under one owner scope. Disposal gets its own scope, because a
-    # disposed scope must refuse new work (ADR-21) rather than be reused.
-    scope = ResourceScope()
-    scheduler = StepScheduler(scope)
-    blocking_phase, control_polled = _phase_blocking_control(harness, scheduler)
-    scheduled = _phase_scheduled_work(harness, scheduler)
-    cancel_worker_ids, worker_acknowledged, cleanup_ran = _phase_cancellation(
-        harness, scheduler
-    )
-    scope.close()
-
-    late_report_dropped = _phase_late_report(harness)
-    replacement = _phase_stuck_replacement(harness)
-
-    timer.stop()
-    harness.pool.waitForDone(POOL_DRAIN_MS)
-
-    criteria = {
-        "gui_responsive_for_scheduled_work": all(
-            (
-                scheduled.polled,
-                control_polled,
-                scheduled.summary.responsive(GUI_GAP_BUDGET_MS),
-                blocking_phase.stalled(GUI_GAP_BUDGET_MS),
-            )
-        ),
-        "handoff_delivered_on_gui_thread": delivered_only_on(
-            harness.gui_thread, list(scheduled.delivery_thread_ids)
-        )
-        and scheduled.results == ("payload",),
-        "work_ran_off_the_gui_thread": ran_on_a_different_thread(
-            harness.gui_thread, list(scheduled.worker_thread_ids)
-        ),
-        "worker_acknowledged_cancellation": worker_acknowledged,
-        "late_report_dropped_after_disposal": late_report_dropped,
-        "replacement_refused_while_stuck": replacement.refused,
-    }
-    verdict, reasons = decide_verdict(criteria)
-
-    return SchedulerReport(
-        platform=platform.platform(),
-        python_version=platform.python_version(),
-        qgis_version=_qgis_version(),
-        qt_version=QT_VERSION_STR,
-        qgis_initialised=True,
-        event_loop_polled=control_polled and scheduled.polled,
-        gui_thread_id=harness.gui_thread,
-        worker_thread_ids=scheduled.worker_thread_ids + cancel_worker_ids,
-        delivery_thread_ids=scheduled.delivery_thread_ids,
-        blocking_phase=blocking_phase,
-        scheduled_phase=scheduled.summary,
-        gui_responsive_for_scheduled_work=criteria["gui_responsive_for_scheduled_work"],
-        handoff_delivered_on_gui_thread=criteria["handoff_delivered_on_gui_thread"],
-        work_ran_off_the_gui_thread=criteria["work_ran_off_the_gui_thread"],
-        worker_acknowledged_cancellation=criteria["worker_acknowledged_cancellation"],
-        author_cleanup_ran=cleanup_ran,
-        late_report_dropped_after_disposal=criteria[
-            "late_report_dropped_after_disposal"
-        ],
-        replacement_refused_while_stuck=criteria["replacement_refused_while_stuck"],
-        refused_blocker=replacement.blocker,
-        verdict=verdict,
-        scope_review_criteria=reasons,
-    )
+    return _report_from_phases(_qt_rig(application))
 
 
 def _qgis_version() -> str | None:
@@ -789,20 +730,7 @@ def _qt_version() -> str | None:
 
 def run_smoke() -> SchedulerReport:
     """Start a headless QGIS application and report what the run observed."""
-    import os
-
-    from smoke_support.desktop_lifecycle_smoke import (
-        headless_environment,
-        qgis_python_path,
-    )
-
-    prefix = Path(sys.prefix)
-    for key, value in headless_environment(prefix, os.environ).items():
-        os.environ[key] = value
-    for path in (qgis_python_path(prefix), SOURCE_ROOT):
-        if str(path) not in sys.path:
-            sys.path.insert(0, str(path))
-
+    prefix = _prepare_qgis_environment()
     try:
         from qgis.core import QgsApplication
 
@@ -828,4 +756,4 @@ def _failed_report(error: str, *, qgis_initialised: bool) -> SchedulerReport:
     criteria = dict.fromkeys(DECIDING_CRITERIA, False)
     verdict, reasons = decide_verdict(criteria)
     empty = GapSummary(count=0, max_ms=0.0, mean_ms=0.0)
-    return _failed_report_phase1(empty, error, qgis_initialised, reasons, verdict)
+    return _failed_report_value(empty, error, qgis_initialised, reasons, verdict)

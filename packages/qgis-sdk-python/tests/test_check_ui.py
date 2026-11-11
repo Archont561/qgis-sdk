@@ -8,6 +8,142 @@ from pathlib import Path
 from qgis_sdk_tools.check import check_project
 from qgis_sdk_tools.check.ui import check_bindings
 
+_UI001_SOURCE = """
+        from qgis_sdk.ui import Dialog as Window, Form
+
+
+        class Buffer(Window):
+            def build(self):
+                from qgis.PyQt.QtWidgets import QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget
+
+                widget = QWidget()
+                layout = QVBoxLayout(widget)
+                self.name = QLineEdit(widget)
+                self.name.setObjectName("form/name")
+                count = QSpinBox(widget)
+                layout.addWidget(QLabel("Count"))
+                layout.addWidget(count)
+                layout.addWidget(QPushButton("Run", widget))
+                self.form = Form.for_action(self.ctx, "buffer")
+                return widget
+
+            def helper(self):
+                from qgis import gui
+
+                picker = gui.QgsMapLayerComboBox()
+                picker.setObjectName("form/layer")
+                return picker
+
+
+        class NotASurface:
+            def build(self):
+                from qgis.PyQt.QtWidgets import QSpinBox
+
+                return QSpinBox()
+        """
+
+
+_UI002_SOURCE = """
+        from qgis_sdk import ui
+        from qgis_sdk.ui import Dialog, on as wired
+
+
+        class Buffer(Dialog):
+            ui = "buffer.ui"
+
+            @wired("distance").changed
+            def distance(self, value): ...
+
+            @ui.on("go", "clicked")
+            def go(self): ...
+
+            @wired("gone").clicked
+            def gone(self): ...
+
+            @ui.on("missing", "toggled")
+            def missing(self, state): ...
+
+
+        class Lost(ui.Dock):
+            ui = "lost.ui"
+
+            @wired("x").changed
+            def x(self, value): ...
+
+
+        class HandBuilt(Dialog):
+            @wired("anything").changed
+            def anything(self, value): ...
+
+
+        GO = "go"
+        GONE = "gone"
+
+
+        class Constants(Dialog):
+            ui = "buffer.ui"
+            spare = ui.Button(text="Spare")
+
+            @wired(GO).clicked
+            def go(self): ...
+
+            @wired(GONE).clicked
+            def gone(self): ...
+
+            @wired(spare).clicked
+            def spare_clicked(self): ...
+
+            @wired(unknown_name).clicked
+            def unknown(self): ...
+        """
+
+
+_UI005_SOURCE = """
+        from qgis.PyQt.QtWidgets import QLabel
+
+        from qgis_sdk import ui
+        from qgis_sdk.ui import Button, Custom, Dialog, Dock, Row, on
+
+
+        def make_label(parent=None):
+            return QLabel("made", parent)
+
+
+        class Fine(Dialog):
+            go = Button(text="Go")
+            tools = Row([go])
+            canvas = Custom(make_label)
+            klass = Custom(widget=QLabel)
+            lazy = ui.Custom(widget=lambda parent=None: QLabel("x", parent))
+            helper = make_button()  # the checker cannot tell; the host will
+
+            @on(go).clicked
+            def went(self): ...
+
+            @on(helper).clicked
+            def helped(self): ...
+
+
+        class Broken(Dock):
+            title = "Broken"
+            clear = "clear"
+            count = 3
+            label = Custom(widget=QLabel("built at import"))
+            other = ui.Custom(QLabel("positional"))
+
+            @on(clear).clicked
+            def cleared(self): ...
+
+            @on(count).changed
+            def counted(self, value): ...
+
+            @on(title).clicked
+            def titled(self): ...
+
+            @on(nowhere).clicked
+            def lost(self): ...
+        """
+
 
 def _a_bound_typed_action_facts1(source, tmp_path):
     typed = (
@@ -220,39 +356,7 @@ def test_a_missing_icon_is_icon001_on_actions_and_surfaces(tmp_path: Path) -> No
 
 
 def test_an_unnamed_interactive_widget_in_a_surface_is_ui001(tmp_path: Path) -> None:
-    source = """
-        from qgis_sdk.ui import Dialog as Window, Form
-
-
-        class Buffer(Window):
-            def build(self):
-                from qgis.PyQt.QtWidgets import QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout, QWidget
-
-                widget = QWidget()
-                layout = QVBoxLayout(widget)
-                self.name = QLineEdit(widget)
-                self.name.setObjectName("form/name")
-                count = QSpinBox(widget)
-                layout.addWidget(QLabel("Count"))
-                layout.addWidget(count)
-                layout.addWidget(QPushButton("Run", widget))
-                self.form = Form.for_action(self.ctx, "buffer")
-                return widget
-
-            def helper(self):
-                from qgis import gui
-
-                picker = gui.QgsMapLayerComboBox()
-                picker.setObjectName("form/layer")
-                return picker
-
-
-        class NotASurface:
-            def build(self):
-                from qgis.PyQt.QtWidgets import QSpinBox
-
-                return QSpinBox()
-        """
+    source = _UI001_SOURCE
     assert findings(source, tmp_path=tmp_path) == [
         "UI001:13:count (QSpinBox) in Buffer.build() has no objectName",
         "UI001:16:an unassigned QPushButton in Buffer.build() has no objectName",
@@ -301,107 +405,11 @@ def test_an_on_name_missing_from_the_designer_file_is_ui002(tmp_path: Path) -> N
     package = tmp_path / "pkg"
     package.mkdir()
     (package / "buffer.ui").write_text(UI_FILE, encoding="utf-8")
-    source = """
-        from qgis_sdk import ui
-        from qgis_sdk.ui import Dialog, on as wired
-
-
-        class Buffer(Dialog):
-            ui = "buffer.ui"
-
-            @wired("distance").changed
-            def distance(self, value): ...
-
-            @ui.on("go", "clicked")
-            def go(self): ...
-
-            @wired("gone").clicked
-            def gone(self): ...
-
-            @ui.on("missing", "toggled")
-            def missing(self, state): ...
-
-
-        class Lost(ui.Dock):
-            ui = "lost.ui"
-
-            @wired("x").changed
-            def x(self, value): ...
-
-
-        class HandBuilt(Dialog):
-            @wired("anything").changed
-            def anything(self, value): ...
-
-
-        GO = "go"
-        GONE = "gone"
-
-
-        class Constants(Dialog):
-            ui = "buffer.ui"
-            spare = ui.Button(text="Spare")
-
-            @wired(GO).clicked
-            def go(self): ...
-
-            @wired(GONE).clicked
-            def gone(self): ...
-
-            @wired(spare).clicked
-            def spare_clicked(self): ...
-
-            @wired(unknown_name).clicked
-            def unknown(self): ...
-        """
+    source = _UI002_SOURCE
     _an_on_name_missing_facts11(package, source)
 
 
 def test_declared_surfaces_are_read_statically_ui005(tmp_path: Path) -> None:
     """TASK-108 AC #2: what the host refuses at open, ``check`` says first."""
-    source = """
-        from qgis.PyQt.QtWidgets import QLabel
-
-        from qgis_sdk import ui
-        from qgis_sdk.ui import Button, Custom, Dialog, Dock, Row, on
-
-
-        def make_label(parent=None):
-            return QLabel("made", parent)
-
-
-        class Fine(Dialog):
-            go = Button(text="Go")
-            tools = Row([go])
-            canvas = Custom(make_label)
-            klass = Custom(widget=QLabel)
-            lazy = ui.Custom(widget=lambda parent=None: QLabel("x", parent))
-            helper = make_button()  # the checker cannot tell; the host will
-
-            @on(go).clicked
-            def went(self): ...
-
-            @on(helper).clicked
-            def helped(self): ...
-
-
-        class Broken(Dock):
-            title = "Broken"
-            clear = "clear"
-            count = 3
-            label = Custom(widget=QLabel("built at import"))
-            other = ui.Custom(QLabel("positional"))
-
-            @on(clear).clicked
-            def cleared(self): ...
-
-            @on(count).changed
-            def counted(self, value): ...
-
-            @on(title).clicked
-            def titled(self): ...
-
-            @on(nowhere).clicked
-            def lost(self): ...
-        """
+    source = _UI005_SOURCE
     _declared_surfaces_are_read_phase2(source, tmp_path)

@@ -71,31 +71,10 @@ _STATUS_OF_STATE = {
 }
 
 
-def job(
-    function: Callable[..., Any] | None = None,
-    /,
-    *,
-    id: str | None = None,
-    title: str | None = None,
-) -> Any:
-    """Attach job metadata to a plain function without wrapping it.
-
-    The function takes the :class:`~qgis_sdk.core.WorkerContext` first and its
-    inputs as typed keyword parameters, and declares its result::
-
-        @job(id="demo.sum", title="Sum two numbers")
-        def sum_numbers(ctx: WorkerContext, a: int, b: int = 0) -> SumResult: ...
-
-    ``@job`` alone derives the id and title from the function name, the way
-    a declaration does for a named function; ``id=`` and ``title=`` override either one.
-    The decorator adds ``describe()`` but does not wrap the function; the runtime
-    hands the restricted context to the worker that runs the body, so a test
-    calls the function directly with a fake.
-
-    Since 0.9.0 the whole body runs on a worker (decision-65): the function is
-    a plain ``def``. ``async def`` is refused with a migration note - a worker
-    runs no event loop, and the driving thread no longer executes job bodies.
-    """
+def _job_decorator(
+    id: str | None, title: str | None
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Build the decorator that attaches @job metadata to one plain function."""
     validate_given(id, title)
 
     def decorate(target: Callable[..., Any]) -> Callable[..., Any]:
@@ -105,6 +84,34 @@ def job(
         )
         return target
 
+    return decorate
+
+
+def job(
+    function: Callable[..., Any] | None = None,
+    /,
+    *,
+    id: str | None = None,
+    title: str | None = None,
+) -> Any:
+    """Attach job metadata to a plain function without wrapping it.
+
+    The function takes :class:`~qgis_sdk.core.WorkerContext` first, then its
+    typed keyword inputs, and declares its result::
+
+        @job(id="demo.sum", title="Sum two numbers")
+        def sum_numbers(ctx: WorkerContext, a: int, b: int = 0) -> SumResult: ...
+
+    ``@job`` alone derives the id and title from the function name; ``id=``
+    and ``title=`` override either one. The decorator adds ``describe()`` but
+    does not wrap the function: the runtime hands the restricted context to
+    the worker, so a test calls the body directly with a fake.
+
+    Since 0.9.0 the whole body runs on a worker (decision-65): a plain ``def``.
+    ``async def`` is refused with a migration note - a worker runs no event
+    loop, and the driving thread no longer executes job bodies.
+    """
+    decorate = _job_decorator(id, title)
     if function is None:
         return decorate
     return decorate(function)
@@ -153,12 +160,8 @@ class JobDescription:
         return canonical_json(self.to_dict())
 
 
-def describe_job(function: Callable[..., Any]) -> JobDescription:
-    """Inspect one decorated function without calling it."""
-    declared = declared_function_metadata(
-        function, _JOB_ATTRIBUTE, "describe_job", "@job"
-    )
-    path = f"job {declared.id}"
+def _refuse_job_shape(function: Callable[..., Any], path: str) -> None:
+    """A job is a plain def; generators and coroutines are refused."""
     if inspect.isgeneratorfunction(function) or inspect.isasyncgenfunction(function):
         raise QgisSdkDeclarationError(
             f"{path}: a job is a function or coroutine function, not a generator"
@@ -170,6 +173,12 @@ def describe_job(function: Callable[..., Any]) -> JobDescription:
             "work is already off the driving thread, and anything the GUI must "
             "do belongs in a success/failure subscriber, which runs there"
         )
+
+
+def _job_inputs(
+    function: Callable[..., Any], path: str
+) -> tuple[list[inspect.Parameter], dict[str, Any]]:
+    """Validate the injected WorkerContext; return the keyword inputs and hints."""
     parameters = list(inspect.signature(function).parameters.values())
     hints = resolve_hints(function, path)
     first = parameters[0] if parameters else None
@@ -193,7 +202,17 @@ def describe_job(function: Callable[..., Any]) -> JobDescription:
             f"{path}: first parameter must be the WorkerContext the runtime injects "
             "(annotate it `ctx: WorkerContext`)"
         )
-    inputs = parameters[1:]
+    return parameters[1:], hints
+
+
+def describe_job(function: Callable[..., Any]) -> JobDescription:
+    """Inspect one decorated function without calling it."""
+    declared = declared_function_metadata(
+        function, _JOB_ATTRIBUTE, "describe_job", "@job"
+    )
+    path = f"job {declared.id}"
+    _refuse_job_shape(function, path)
+    inputs, hints = _job_inputs(function, path)
     properties, required = keyword_inputs(inputs, hints, f"{path}.inputs")
     result_type = hints.get("return", inspect.Signature.empty)
     if result_type is inspect.Signature.empty:
@@ -214,6 +233,61 @@ def describe_job(function: Callable[..., Any]) -> JobDescription:
 register_describer(_JOB_ATTRIBUTE, describe_job)
 
 
+def _accepts_annotated(value: object, annotation: Any) -> bool:
+    return _accepts(value, get_args(annotation)[0])
+
+
+def _accepts_any(value: object, annotation: Any) -> bool:
+    return True
+
+
+def _accepts_none(value: object, annotation: Any) -> bool:
+    return value is None
+
+
+def _accepts_union(value: object, annotation: Any) -> bool:
+    return any(_accepts(value, arg) for arg in get_args(annotation))
+
+
+def _accepts_literal(value: object, annotation: Any) -> bool:
+    return value in get_args(annotation)
+
+
+def _accepts_float(value: object, annotation: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _accepts_int(value: object, annotation: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+#: Dispatch tables keyed by ``get_origin(annotation)`` and by the annotation
+#: itself. ``is`` comparisons keep the exact identity the ladder used, so an
+#: unhashable annotation cannot turn a refusal into a ``TypeError``.
+_ORIGIN_ACCEPTS: tuple[tuple[object, Callable[[object, Any], bool]], ...] = (
+    (Annotated, _accepts_annotated),
+    (Union, _accepts_union),
+    (UnionType, _accepts_union),
+    (Literal, _accepts_literal),
+)
+_ANNOTATION_ACCEPTS: tuple[tuple[object, Callable[[object, Any], bool]], ...] = (
+    (Any, _accepts_any),
+    (None, _accepts_none),
+    (type(None), _accepts_none),
+    (float, _accepts_float),
+    (int, _accepts_int),
+)
+
+
+def _acceptance_handler(
+    table: tuple[tuple[object, Callable[[object, Any], bool]], ...], key: object
+) -> Callable[[object, Any], bool] | None:
+    for candidate, handler in table:
+        if key is candidate:
+            return handler
+    return None
+
+
 def _accepts(value: object, annotation: Any) -> bool:
     """Whether ``value`` fits ``annotation`` for the shapes a job may declare.
 
@@ -224,25 +298,15 @@ def _accepts(value: object, annotation: Any) -> bool:
     the author's function keeps the last word on the values.
     """
     origin = get_origin(annotation)
-    if origin is Annotated:
-        accepted = _accepts(value, get_args(annotation)[0])
-    elif annotation is Any:
-        accepted = True
-    elif annotation is None or annotation is type(None):
-        accepted = value is None
-    elif origin in (Union, UnionType):
-        accepted = any(_accepts(value, arg) for arg in get_args(annotation))
-    elif origin is Literal:
-        accepted = value in get_args(annotation)
-    elif origin is not None:
-        accepted = isinstance(value, origin)
-    elif annotation is float:
-        accepted = isinstance(value, (int, float)) and not isinstance(value, bool)
-    elif annotation is int:
-        accepted = isinstance(value, int) and not isinstance(value, bool)
-    else:
-        accepted = isinstance(value, annotation)
-    return accepted
+    if origin is not None:
+        handler = _acceptance_handler(_ORIGIN_ACCEPTS, origin)
+        if handler is not None:
+            return handler(value, annotation)
+        return isinstance(value, origin)
+    handler = _acceptance_handler(_ANNOTATION_ACCEPTS, annotation)
+    if handler is not None:
+        return handler(value, annotation)
+    return isinstance(value, annotation)
 
 
 def _describe_annotation(annotation: Any) -> str:
