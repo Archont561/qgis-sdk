@@ -145,3 +145,7 @@ The `**kwargs` forwarder is worth reading twice: `_example_manifests` used to pa
 ## Follow-through: test doubles and harnesses
 
 Slice 16 applied the rule to the two 16-finding test files. `test_plugin_rest.py`'s `request()` and server setup now take `_Request` and `_ServerOptions`; `fakes.py`'s six long setup signatures take `FakeAlgorithmSetup`, `DeclaredOutput`, `VectorLayerDeclaration`, `OtherLayerDeclaration`, `ConnectionDeclaration` and `TableDeclaration`. The 82 call sites moved in the same change, including a `getattr` dispatch and a generated starter test held in a string template. A record is still a line of its own at a call site: three test functions crossed 30 lines and got named declaration helpers instead of an upward rebaseline. Budget 707 -> 675; no threshold changed and nothing was suppressed.
+
+## Follow-through: checker contexts
+
+Slice 17 applied the rule to the UI checker's AST walks. `check_bindings` builds one `_CheckContext`; `_Names` is assembled from `_ImportFacts`; UI001, UI002 and UI005 carry `_WidgetSite`, `_UiScope` and `_DeclaredSite` instead of threading the same four or five facts through every helper. The records group *read-only context*, not mutable state: each diagnostic builder still returns one `Diagnostic`, and `Diagnostic` itself stays frozen. Budget 675 -> 660; no threshold changed and nothing was suppressed.

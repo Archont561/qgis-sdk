@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from qgis_sdk.models import QgisSdkUiError
@@ -103,6 +104,84 @@ INTERACTIVE_WIDGETS = frozenset(
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _CheckContext:
+    """The read-only facts one UI checker pass needs at every node."""
+
+    names: _Names
+    path: Path
+    package_directory: Path | None
+    directory: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ImportFacts:
+    """How one module spells the imported UI and binding names."""
+
+    bindings: dict[str, str]
+    surfaces: set[str]
+    on: set[str]
+    modules: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _WidgetSite:
+    """One surface method's named widgets while UI001 walks its calls."""
+
+    node: ast.ClassDef
+    method: ast.FunctionDef | ast.AsyncFunctionDef
+    path: Path
+    holders: dict[int, str | None]
+    named: set[str]
+
+
+@dataclass(frozen=True, slots=True)
+class _DeclaredSite:
+    """The class attributes and module names UI005 resolves against."""
+
+    node: ast.ClassDef
+    names: _Names
+    bound: dict[str, ast.expr | None]
+    path: Path
+
+
+@dataclass(frozen=True, slots=True)
+class _UiScope:
+    """The Designer-file facts one UI002 pass resolves ``@on`` against."""
+
+    node: ast.ClassDef
+    ui: str
+    known: str
+    declared: tuple[str, ...]
+    path: Path
+    error: Diagnostic | None
+
+
+_MISSING = object()
+_COMPOUND = (ast.For, ast.With, ast.If, ast.Try)
+
+
+def _node_diagnostics(node: ast.AST, context: _CheckContext) -> Iterator[Diagnostic]:
+    """Yield every finding one AST node can own."""
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+        yield from _check_function(node, context)
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        for decorator in node.decorator_list:
+            yield from _check_icon(decorator, context)
+    if isinstance(node, ast.ClassDef) and context.names.is_surface(node):
+        yield from _surface_diagnostics(node, context)
+
+
+def _surface_diagnostics(
+    node: ast.ClassDef, context: _CheckContext
+) -> Iterator[Diagnostic]:
+    """Yield the three checks a Dialog/Dock class owns."""
+    yield from _check_surface_widgets(node, context)
+    if context.directory is not None:
+        yield from _check_ui_names(node, context)
+    yield from _check_declared(node, context)
+
+
 def check_bindings(
     source: str,
     *,
@@ -112,10 +191,9 @@ def check_bindings(
 ) -> Iterator[Diagnostic]:
     """Yield the UI001-UI003 and ICON001 findings in ``source``, in source order.
 
-    ``path`` is the root-relative path the diagnostics report;
-    ``package_directory`` is where ``icons/`` is looked up (``None`` skips
-    ICON001, for a file outside any package); ``directory`` is where the
-    file lives, so a relative ``ui = "x.ui"`` resolves (``None`` skips UI002).
+    ``path`` is the reported path; ``package_directory`` locates ``icons/``;
+    ``directory`` resolves a relative ``ui = "x.ui"``. ``None`` skips ICON001
+    or UI002 respectively. Only the source is read (decision-8).
     """
     try:
         tree = ast.parse(source, filename=str(path))
@@ -128,17 +206,45 @@ def check_bindings(
         )
     if not names.bindings and names.modules == () and not names.surfaces:
         return
+    context = _CheckContext(names, path, package_directory, directory)
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            yield from _check_function(node, names, path)
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            for decorator in node.decorator_list:
-                yield from _check_icon(decorator, names, path, package_directory)
-        if isinstance(node, ast.ClassDef) and names.is_surface(node):
-            yield from _check_surface_widgets(node, path)
-            if directory is not None:
-                yield from _check_ui_names(node, names, path, directory)
-            yield from _check_declared(node, names, path)
+        yield from _node_diagnostics(node, context)
+
+
+def _import_base(
+    node: ast.ImportFrom, directory: Path, package: Path, package_name: str
+) -> Path | None:
+    """Resolve one ImportFrom to a local module path, or refuse a foreign root."""
+    parts = node.module.split(".")
+    if node.level:
+        base = directory
+        for _ in range(node.level - 1):
+            base = base.parent
+    else:
+        if parts[0] != package_name:
+            return None
+        base = package
+        parts = parts[1:]
+    return base.joinpath(*parts)
+
+
+def _imported_names(node: ast.ImportFrom, module: Path, package: Path) -> set[str]:
+    """The imported plugin names one local module actually declares."""
+    for candidate in (module.with_suffix(".py"), module / "__init__.py"):
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(package) or not resolved.is_file():
+            continue
+        try:
+            imported = ast.parse(resolved.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, SyntaxError):
+            break
+        applications = _Names(imported).applications
+        return {
+            alias.asname or alias.name
+            for alias in node.names
+            if alias.name in applications
+        }
+    return set()
 
 
 def _imported_applications(
@@ -150,101 +256,131 @@ def _imported_applications(
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom) or not node.module:
             continue
-        if node.level:
-            base = directory
-            for _ in range(node.level - 1):
-                base = base.parent
-            parts = node.module.split(".")
-        else:
-            parts = node.module.split(".")
-            if parts[0] != package.name:
-                continue
-            base = package
-            parts = parts[1:]
-        module = base.joinpath(*parts)
-        candidates = (module.with_suffix(".py"), module / "__init__.py")
-        for candidate in candidates:
-            resolved = candidate.resolve()
-            if not resolved.is_relative_to(package) or not resolved.is_file():
-                continue
-            try:
-                imported = ast.parse(resolved.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError, SyntaxError):
-                break
-            applications = _Names(imported).applications
-            found.update(
-                alias.asname or alias.name
-                for alias in node.names
-                if alias.name in applications
-            )
-            break
+        module = _import_base(node, directory, package, package.name)
+        if module is None:
+            continue
+        found.update(_imported_names(node, module, package))
     return found
+
+
+def _module_names(tree: ast.Module) -> tuple[set[str], dict[str, str]]:
+    """Top-level bound names and the string constants ``@on(NAME)`` can read."""
+    names: set[str] = set()
+    constants: dict[str, str] = {}
+    for statement in tree.body:
+        names.update(_bound_names(statement))
+        if (
+            isinstance(statement, ast.Assign)
+            and isinstance(statement.value, ast.Constant)
+            and isinstance(statement.value.value, str)
+        ):
+            for target in statement.targets:
+                if isinstance(target, ast.Name):
+                    constants[target.id] = statement.value.value
+    return names, constants
+
+
+def _constructors(tree: ast.Module) -> set[str]:
+    """The local names ``QgisSdkPlugin`` was imported as."""
+    return {
+        alias.asname or alias.name
+        for statement in tree.body
+        if isinstance(statement, ast.ImportFrom) and statement.module == "qgis_sdk"
+        for alias in statement.names
+        if alias.name == "QgisSdkPlugin"
+    }
+
+
+def _is_plugin_constructor(
+    node: ast.expr, constructors: set[str], modules: tuple[str, ...]
+) -> bool:
+    """Whether a call target constructs the plugin the way this module spells it."""
+    if isinstance(node, ast.Name):
+        return node.id in constructors
+    if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Name):
+        return False
+    return node.value.id in modules and node.attr == "QgisSdkPlugin"
+
+
+def _applications(
+    tree: ast.Module, constructors: set[str], modules: tuple[str, ...]
+) -> set[str]:
+    """The module-level names one plugin application is assigned to."""
+    applications: set[str] = set()
+    for statement in tree.body:
+        if not isinstance(statement, ast.Assign | ast.AnnAssign) or not isinstance(
+            statement.value, ast.Call
+        ):
+            continue
+        if not _is_plugin_constructor(statement.value.func, constructors, modules):
+            continue
+        targets = (
+            statement.targets
+            if isinstance(statement, ast.Assign)
+            else [statement.target]
+        )
+        applications.update(name.id for name in targets if isinstance(name, ast.Name))
+    return applications
+
+
+def _ui_import_aliases(node: ast.ImportFrom) -> tuple[set[str], set[str]]:
+    """The surface and ``on`` aliases one UI/wiring import declares."""
+    surfaces: set[str] = set()
+    on: set[str] = set()
+    for alias in node.names:
+        if alias.name in _SURFACES and node.module in _SURFACE_SOURCES:
+            surfaces.add(alias.asname or alias.name)
+        elif alias.name == "on" and node.module in _WIRING_SOURCES:
+            on.add(alias.asname or alias.name)
+    return surfaces, on
+
+
+def _binding_import_aliases(node: ast.ImportFrom, bindings: dict[str, str]) -> None:
+    """Record the local spelling of toolbar/menu/shortcut imports."""
+    for alias in node.names:
+        local = alias.asname or alias.name
+        if alias.name in _BINDINGS:
+            bindings[local] = alias.name
+
+
+def _module_import_aliases(node: ast.Import, modules: list[str]) -> None:
+    """Record the local spelling of an imported SDK module."""
+    for alias in node.names:
+        if alias.name in _SOURCES:
+            modules.append(alias.asname or alias.name)
+
+
+def _collect_imports(tree: ast.Module) -> _ImportFacts:
+    """Collect the four import vocabularies in one walk of the module."""
+    bindings: dict[str, str] = {}
+    surfaces: set[str] = set()
+    on: set[str] = set()
+    modules: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in (
+            _SURFACE_SOURCES | _WIRING_SOURCES
+        ):
+            surfaces_part, on_part = _ui_import_aliases(node)
+            surfaces.update(surfaces_part)
+            on.update(on_part)
+        elif isinstance(node, ast.ImportFrom) and node.module in _SOURCES:
+            _binding_import_aliases(node, bindings)
+        elif isinstance(node, ast.Import):
+            _module_import_aliases(node, modules)
+    return _ImportFacts(bindings, surfaces, on, tuple(modules))
 
 
 class _Names:
     """How this module spells ``toolbar``, ``menu``, ``shortcut`` and ``action``."""
 
     def __init__(self, tree: ast.Module) -> None:
-        self.bindings: dict[str, str] = {}
-        self.surfaces: set[str] = set()
-        self.on: set[str] = set()
-        #: Module-level ``NAME = "literal"`` assignments, for ``@on(NAME)``.
-        self.constants: dict[str, str] = {}
-        #: Every name the module binds at top level (imports, defs, assignments).
-        self.module_names: set[str] = set()
-        for statement in tree.body:
-            self.module_names.update(_bound_names(statement))
-            if (
-                isinstance(statement, ast.Assign)
-                and isinstance(statement.value, ast.Constant)
-                and isinstance(statement.value.value, str)
-            ):
-                for target in statement.targets:
-                    if isinstance(target, ast.Name):
-                        self.constants[target.id] = statement.value.value
-        modules: list[str] = []
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module in (
-                _SURFACE_SOURCES | _WIRING_SOURCES
-            ):
-                for alias in node.names:
-                    if alias.name in _SURFACES and node.module in _SURFACE_SOURCES:
-                        self.surfaces.add(alias.asname or alias.name)
-                    elif alias.name == "on" and node.module in _WIRING_SOURCES:
-                        self.on.add(alias.asname or alias.name)
-            elif isinstance(node, ast.ImportFrom) and node.module in _SOURCES:
-                for alias in node.names:
-                    local = alias.asname or alias.name
-                    if alias.name in _BINDINGS:
-                        self.bindings[local] = alias.name
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    if alias.name in _SOURCES:
-                        modules.append(alias.asname or alias.name)
-        self.modules = tuple(modules)
-        constructors = {
-            alias.asname or alias.name
-            for statement in tree.body
-            if isinstance(statement, ast.ImportFrom) and statement.module == "qgis_sdk"
-            for alias in statement.names
-            if alias.name == "QgisSdkPlugin"
-        }
-        self.applications: set[str] = set()
-        for statement in tree.body:
-            if not isinstance(statement, ast.Assign | ast.AnnAssign) or not isinstance(
-                statement.value, ast.Call
-            ):
-                continue
-            target = statement.value.func
-            if self._is_plugin_constructor(target, constructors):
-                targets = (
-                    statement.targets
-                    if isinstance(statement, ast.Assign)
-                    else [statement.target]
-                )
-                self.applications.update(
-                    name.id for name in targets if isinstance(name, ast.Name)
-                )
+        facts = _collect_imports(tree)
+        self.bindings = facts.bindings
+        self.surfaces = facts.surfaces
+        self.on = facts.on
+        self.modules = facts.modules
+        self.module_names, self.constants = _module_names(tree)
+        self.applications = _applications(tree, _constructors(tree), self.modules)
 
     def _is_module_member(self, node: ast.expr, members: frozenset[str]) -> bool:
         """Whether ``node`` is one of ``members`` on a module this file imported."""
@@ -266,16 +402,6 @@ class _Names:
             return False
         return isinstance(node.value, ast.Name) and node.value.id in self.applications
 
-    def _is_plugin_constructor(self, node: ast.expr, constructors: set[str]) -> bool:
-        """Whether a call target constructs the plugin the way this module spells it."""
-        if isinstance(node, ast.Name):
-            return node.id in constructors
-        if not isinstance(node, ast.Attribute):
-            return False
-        if not isinstance(node.value, ast.Name):
-            return False
-        return node.value.id in self.modules and node.attr == "QgisSdkPlugin"
-
     def is_surface(self, node: ast.ClassDef) -> bool:
         """Whether the class subclasses ``Dialog``/``Dock`` as this module spells them."""
         for base in node.bases:
@@ -286,11 +412,7 @@ class _Names:
         return False
 
     def on_target(self, decorator: ast.expr) -> ast.expr | None:
-        """The first argument of ``@on(...)`` however the decorator is spelled.
-
-        ``@on("x").changed``, ``@on("x", "sig")``, ``@ui.on("x")`` and an
-        alias ``from qgis_sdk.ui import on as wired`` all count.
-        """
+        """The first argument of ``@on(...)`` however the decorator is spelled."""
         call = decorator.value if isinstance(decorator, ast.Attribute) else decorator
         if not isinstance(call, ast.Call) or not call.args:
             return None
@@ -319,24 +441,24 @@ class _Names:
         return None
 
 
-def _check_function(
-    node: ast.FunctionDef | ast.AsyncFunctionDef, names: _Names, path: Path
-) -> Iterator[Diagnostic]:
-    kinds = [names.kind(decorator) for decorator in node.decorator_list]
-    bound = [kind for kind in kinds if kind in _BINDINGS]
-    if not bound or "action" not in kinds:
-        return
-    inputs = [
-        argument.arg
-        for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
-    ][1:]
+def _input_names(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    """The input names a UI003 message reports, after the context argument."""
+    arguments = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+    inputs = [argument.arg for argument in arguments][1:]
     if node.args.vararg is not None:
         inputs.append("*" + node.args.vararg.arg)
     if node.args.kwarg is not None:
         inputs.append("**" + node.args.kwarg.arg)
-    if not inputs:
-        return
-    yield Diagnostic(
+    return inputs
+
+
+def _ui003(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    bound: list[str],
+    inputs: list[str],
+    path: Path,
+) -> Diagnostic:
+    return Diagnostic(
         rule="UI003",
         path=path,
         line=node.lineno,
@@ -353,144 +475,199 @@ def _check_function(
     )
 
 
-def _check_icon(
-    decorator: ast.expr, names: _Names, path: Path, package_directory: Path | None
+def _check_function(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, context: _CheckContext
 ) -> Iterator[Diagnostic]:
-    if names.kind(decorator) != "toolbar" or not isinstance(decorator, ast.Call):
+    kinds = [context.names.kind(decorator) for decorator in node.decorator_list]
+    bound = [kind for kind in kinds if kind in _BINDINGS]
+    if not bound or "action" not in kinds:
+        return
+    inputs = _input_names(node)
+    if not inputs:
+        return
+    yield _ui003(node, bound, inputs, context.path)
+
+
+def _check_icon(decorator: ast.expr, context: _CheckContext) -> Iterator[Diagnostic]:
+    if context.names.kind(decorator) != "toolbar" or not isinstance(
+        decorator, ast.Call
+    ):
         return
     for keyword in decorator.keywords:
         if keyword.arg != "icon" or not isinstance(keyword.value, ast.Constant):
             continue
         icon = keyword.value.value
-        if not isinstance(icon, str) or package_directory is None:
+        if not isinstance(icon, str) or context.package_directory is None:
             continue
-        where = package_directory / ICON_DIRECTORY / icon
+        where = context.package_directory / ICON_DIRECTORY / icon
         if Path(icon).name == icon and where.is_file():
             continue
         yield Diagnostic(
             rule="ICON001",
-            path=path,
+            path=context.path,
             line=keyword.value.lineno,
             column=keyword.value.col_offset + 1,
             message=(
                 f"@toolbar icon {icon!r} is not a file under "
-                f"{package_directory.name}/{ICON_DIRECTORY}/"
+                f"{context.package_directory.name}/{ICON_DIRECTORY}/"
             ),
             remediation=(
-                f"Add {package_directory.name}/{ICON_DIRECTORY}/{icon} to the package "
-                "(a file name, not a path), or fix the name; QGIS loads it at initGui."
+                f"Add {context.package_directory.name}/{ICON_DIRECTORY}/{icon} to "
+                "the package (a file name, not a path), or fix the name; QGIS "
+                "loads it at initGui."
             ),
         )
 
 
-def _check_surface_widgets(node: ast.ClassDef, path: Path) -> Iterator[Diagnostic]:
-    """UI001: an interactive widget built in a surface method without an objectName."""
+def _widget_holders(
+    method: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> tuple[dict[int, str | None], set[str]]:
+    """The assignment holders and setObjectName targets of one surface method."""
+    holders: dict[int, str | None] = {}
+    named: set[str] = set()
+    for statement in ast.walk(method):
+        if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
+            target = statement.targets[0]
+            holders[id(statement.value)] = (
+                ast.unparse(target)
+                if isinstance(target, ast.Name | ast.Attribute)
+                else None
+            )
+        elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
+            holders[id(statement.value)] = ast.unparse(statement.target)
+        elif (
+            isinstance(statement, ast.Call)
+            and isinstance(statement.func, ast.Attribute)
+            and statement.func.attr == "setObjectName"
+        ):
+            named.add(ast.unparse(statement.func.value))
+    return holders, named
+
+
+def _widget_diagnostic(call: ast.Call, site: _WidgetSite) -> Diagnostic | None:
+    """UI001 for one interactive widget without an objectName, else ``None``."""
+    widget = _callee_name(call)
+    if widget not in INTERACTIVE_WIDGETS:
+        return None
+    target = site.holders.get(id(call))
+    if target is not None and target in site.named:
+        return None
+    where = f"{site.node.name}.{site.method.name}()"
+    subject = f"{target} ({widget})" if target else f"an unassigned {widget}"
+    return Diagnostic(
+        rule="UI001",
+        path=site.path,
+        line=call.lineno,
+        column=call.col_offset + 1,
+        message=f"{subject} in {where} has no objectName",
+        remediation=(
+            (
+                f"Call {target}.setObjectName('...') in {where}"
+                if target
+                else f"Keep the {widget} in a name and call setObjectName on it"
+            )
+            + " - agents and tests find widgets by objectName (decision-51); "
+            "a qgis_sdk.ui component (Text, Number, Button, Form, ...) names "
+            "its widget for you."
+        ),
+    )
+
+
+def _check_surface_widgets(
+    node: ast.ClassDef, context: _CheckContext
+) -> Iterator[Diagnostic]:
+    """Yield UI001 for interactive widgets built in surface methods."""
     for method in node.body:
         if not isinstance(method, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        named: set[str] = set()
-        holders: dict[int, str | None] = {}
-        for statement in ast.walk(method):
-            if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
-                target = statement.targets[0]
-                holders[id(statement.value)] = (
-                    ast.unparse(target)
-                    if isinstance(target, ast.Name | ast.Attribute)
-                    else None
-                )
-            elif isinstance(statement, ast.AnnAssign) and statement.value is not None:
-                holders[id(statement.value)] = ast.unparse(statement.target)
-            elif (
-                isinstance(statement, ast.Call)
-                and isinstance(statement.func, ast.Attribute)
-                and statement.func.attr == "setObjectName"
-            ):
-                named.add(ast.unparse(statement.func.value))
+        holders, named = _widget_holders(method)
+        site = _WidgetSite(node, method, context.path, holders, named)
         for call in ast.walk(method):
             if not isinstance(call, ast.Call):
                 continue
-            widget = _callee_name(call)
-            if widget not in INTERACTIVE_WIDGETS:
-                continue
-            target = holders.get(id(call))
-            if target is not None and target in named:
-                continue
-            where = f"{node.name}.{method.name}()"
-            subject = f"{target} ({widget})" if target else f"an unassigned {widget}"
-            yield Diagnostic(
-                rule="UI001",
-                path=path,
-                line=call.lineno,
-                column=call.col_offset + 1,
-                message=f"{subject} in {where} has no objectName",
-                remediation=(
-                    (
-                        f"Call {target}.setObjectName('...') in {where}"
-                        if target
-                        else f"Keep the {widget} in a name and call setObjectName on it"
-                    )
-                    + " - agents and tests find widgets by objectName (decision-51); "
-                    "a qgis_sdk.ui component (Text, Number, Button, Form, ...) names "
-                    "its widget for you."
-                ),
-            )
+            diagnostic = _widget_diagnostic(call, site)
+            if diagnostic is not None:
+                yield diagnostic
 
 
-def _check_ui_names(
-    node: ast.ClassDef, names: _Names, path: Path, directory: Path
-) -> Iterator[Diagnostic]:
-    """UI002: ``@on`` over a Designer file that declares no such widget."""
+def _read_ui_names(file: Path) -> tuple[tuple[str, ...], str | None]:
+    """The widget names a Designer file declares, or the reason it cannot be read."""
+    try:
+        return tuple(ui_names(file)), None
+    except QgisSdkUiError as error:
+        reason = "does not exist" if not file.is_file() else str(error)
+        return (), reason
+
+
+def _ui_file_error(
+    node: ast.ClassDef, ui: str, file: Path, path: Path, reason: str
+) -> Diagnostic:
+    shown = file if Path(ui).is_absolute() else path.parent / ui
+    return Diagnostic(
+        rule="UI002",
+        path=path,
+        line=node.lineno,
+        column=node.col_offset + 1,
+        message=f"{node.name}.ui = {ui!r}: {shown.as_posix()} {reason}",
+        remediation=(
+            f"Save the Designer form next to {path.name} as {ui}, or point "
+            "`ui` at the file; the host loads it before wiring @on."
+        ),
+    )
+
+
+def _ui_scope(node: ast.ClassDef, context: _CheckContext) -> _UiScope | None:
+    """Read the Designer file once, or record why it cannot be read."""
     ui = _class_constant(node, "ui")
     if not isinstance(ui, str) or not ui:
-        return
-    file = directory / ui
-    try:
-        declared = ui_names(file)
-    except QgisSdkUiError as error:
-        shown = file if Path(ui).is_absolute() else path.parent / ui
-        reason = "does not exist" if not file.is_file() else str(error)
-        yield Diagnostic(
-            rule="UI002",
-            path=path,
-            line=node.lineno,
-            column=node.col_offset + 1,
-            message=f"{node.name}.ui = {ui!r}: {shown.as_posix()} {reason}",
-            remediation=(
-                f"Save the Designer form next to {path.name} as {ui}, or point "
-                "`ui` at the file; the host loads it before wiring @on."
-            ),
-        )
-        return
+        return None
+    file = context.directory / ui  # type: ignore[operator]
+    declared, reason = _read_ui_names(file)
+    if reason is not None:
+        error = _ui_file_error(node, ui, file, context.path, reason)
+        return _UiScope(node, ui, "", (), context.path, error)
     known = ", ".join(declared) or "none"
+    return _UiScope(node, ui, known, declared, context.path, None)
+
+
+def _ui_name_diagnostic(decorator: ast.expr, name: str, scope: _UiScope) -> Diagnostic:
+    return Diagnostic(
+        rule="UI002",
+        path=scope.path,
+        line=decorator.lineno,
+        column=decorator.col_offset + 1,
+        message=(
+            f"@on({name!r}) in {scope.node.name}: {scope.ui} declares no "
+            f"widget named {name!r}"
+        ),
+        remediation=(
+            f"Use one of the objectNames the file declares ({scope.known}) or "
+            "name the widget in Qt Designer; wiring fails when the "
+            "surface opens otherwise."
+        ),
+    )
+
+
+def _check_ui_names(node: ast.ClassDef, context: _CheckContext) -> Iterator[Diagnostic]:
+    """Yield UI002 when ``@on`` names no widget in the Designer file."""
+    scope = _ui_scope(node, context)
+    if scope is None:
+        return
+    if scope.error is not None:
+        yield scope.error
+        return
     for method in node.body:
         if not isinstance(method, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         for decorator in method.decorator_list:
-            target = names.on_target(decorator)
-            name = _literal_name(target, names)
-            if name is None or name in declared:
+            name = _literal_name(context.names.on_target(decorator), context.names)
+            if name is None or name in scope.declared:
                 continue
-            yield Diagnostic(
-                rule="UI002",
-                path=path,
-                line=decorator.lineno,
-                column=decorator.col_offset + 1,
-                message=(
-                    f"@on({name!r}) in {node.name}: {ui} declares no "
-                    f"widget named {name!r}"
-                ),
-                remediation=(
-                    f"Use one of the objectNames the file declares ({known}) or "
-                    "name the widget in Qt Designer; wiring fails when the "
-                    "surface opens otherwise."
-                ),
-            )
+            yield _ui_name_diagnostic(decorator, name, scope)
 
 
-def _check_declared(
-    node: ast.ClassDef, names: _Names, path: Path
-) -> Iterator[Diagnostic]:
-    """UI005: the declarative form, as far as the source shows it."""
+def _bound_attributes(node: ast.ClassDef) -> dict[str, ast.expr | None]:
+    """The class attributes UI005 can resolve, including bare definitions."""
     bound: dict[str, ast.expr | None] = {}
     for statement in node.body:
         if isinstance(statement, ast.Assign):
@@ -503,67 +680,107 @@ def _check_declared(
         else:
             for name in _bound_names(statement):
                 bound.setdefault(name, None)
+    return bound
+
+
+def _custom_diagnostic(
+    attribute: str, value: ast.expr | None, site: _DeclaredSite
+) -> Diagnostic | None:
+    """UI005 for a ``Custom`` holding a widget built at class definition time."""
+    if not isinstance(value, ast.Call) or _callee_name(value) != "Custom":
+        return None
+    widget = _custom_widget(value)
+    if not isinstance(widget, ast.Call):
+        return None
+    return Diagnostic(
+        rule="UI005",
+        path=site.path,
+        line=value.lineno,
+        column=value.col_offset + 1,
+        message=(
+            f"{site.node.name}.{attribute} = Custom({_callee_name(widget)}"
+            "(...)): a widget built when the class is defined cannot "
+            "be copied for each window"
+        ),
+        remediation=(
+            "Pass Custom the widget class or a factory "
+            "(Custom(widget=QLabel), Custom(lambda parent: ...)); it "
+            "runs once per opening, when the tree is mounted."
+        ),
+    )
+
+
+def _literal_on_diagnostic(
+    name: str, kind: str, site: _DeclaredSite
+) -> tuple[str, str]:
+    """The UI005 wording for a class attribute that is a literal, not a component."""
+    return (
+        f"@on({name}) in {site.node.name}: {name!r} is {kind}, not a component",
+        (
+            f"Assign a catalogue component to the class attribute "
+            f"({name} = Button(text=...)) and wire @on({name}), or pass "
+            f"the widget's objectName as a string: @on({name!r})."
+        ),
+    )
+
+
+def _missing_on_diagnostic(name: str, site: _DeclaredSite) -> tuple[str, str]:
+    """The UI005 wording for an ``@on`` name the class never declares."""
+    return (
+        (
+            f"@on({name}) in {site.node.name}: the class declares no component "
+            f"named {name!r}"
+        ),
+        (
+            f"Declare the component as a class attribute ({name} = "
+            f"Button(text=...)) above the method, or pass the widget's "
+            f"objectName as a string: @on({name!r})."
+        ),
+    )
+
+
+def _on_diagnostic(
+    decorator: ast.expr, name: str, site: _DeclaredSite
+) -> Diagnostic | None:
+    """UI005 for an ``@on(NAME)`` that resolves to no component."""
+    value = site.bound.get(name, _MISSING)
+    if value is not _MISSING:
+        kind = _literal_kind(value)  # type: ignore[arg-type]
+        if kind is None:
+            return None  # a call, a name, an attribute: the host resolves it
+        message, remediation = _literal_on_diagnostic(name, kind, site)
+    elif name in site.names.module_names:
+        return None  # a module-level component or import: the host decides
+    else:
+        message, remediation = _missing_on_diagnostic(name, site)
+    return Diagnostic(
+        rule="UI005",
+        path=site.path,
+        line=decorator.lineno,
+        column=decorator.col_offset + 1,
+        message=message,
+        remediation=remediation,
+    )
+
+
+def _check_declared(node: ast.ClassDef, context: _CheckContext) -> Iterator[Diagnostic]:
+    """Yield UI005 for the declarative form, as far as the source shows it."""
+    bound = _bound_attributes(node)
+    site = _DeclaredSite(node, context.names, bound, context.path)
     for attribute, value in bound.items():
-        if isinstance(value, ast.Call) and _callee_name(value) == "Custom":
-            widget = _custom_widget(value)
-            if isinstance(widget, ast.Call):
-                yield Diagnostic(
-                    rule="UI005",
-                    path=path,
-                    line=value.lineno,
-                    column=value.col_offset + 1,
-                    message=(
-                        f"{node.name}.{attribute} = Custom({_callee_name(widget)}"
-                        "(...)): a widget built when the class is defined cannot "
-                        "be copied for each window"
-                    ),
-                    remediation=(
-                        "Pass Custom the widget class or a factory "
-                        "(Custom(widget=QLabel), Custom(lambda parent: ...)); it "
-                        "runs once per opening, when the tree is mounted."
-                    ),
-                )
+        diagnostic = _custom_diagnostic(attribute, value, site)
+        if diagnostic is not None:
+            yield diagnostic
     for method in node.body:
         if not isinstance(method, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
         for decorator in method.decorator_list:
-            target = names.on_target(decorator)
-            if not isinstance(target, ast.Name) or target.id in names.constants:
+            target = site.names.on_target(decorator)
+            if not isinstance(target, ast.Name) or target.id in site.names.constants:
                 continue
-            name = target.id
-            if name in bound:
-                value = bound[name]
-                kind = _literal_kind(value)
-                if kind is None:
-                    continue  # a call, a name, an attribute: the host resolves it
-                message = (
-                    f"@on({name}) in {node.name}: {name!r} is {kind}, not a component"
-                )
-                remediation = (
-                    f"Assign a catalogue component to the class attribute "
-                    f"({name} = Button(text=...)) and wire @on({name}), or pass "
-                    f"the widget's objectName as a string: @on({name!r})."
-                )
-            elif name in names.module_names:
-                continue  # a module-level component or import: the host decides
-            else:
-                message = (
-                    f"@on({name}) in {node.name}: the class declares no component "
-                    f"named {name!r}"
-                )
-                remediation = (
-                    f"Declare the component as a class attribute ({name} = "
-                    f"Button(text=...)) above the method, or pass the widget's "
-                    f"objectName as a string: @on({name!r})."
-                )
-            yield Diagnostic(
-                rule="UI005",
-                path=path,
-                line=decorator.lineno,
-                column=decorator.col_offset + 1,
-                message=message,
-                remediation=remediation,
-            )
+            diagnostic = _on_diagnostic(decorator, target.id, site)
+            if diagnostic is not None:
+                yield diagnostic
 
 
 def _custom_widget(call: ast.Call) -> ast.expr | None:
@@ -589,22 +806,32 @@ def _literal_kind(value: ast.expr | None) -> str | None:
     return f"{article} {name}"
 
 
+def _child_statements(statement: ast.stmt) -> Iterator[ast.stmt]:
+    """The nested statements a compound statement may bind names in."""
+    for child in ast.iter_child_nodes(statement):
+        if isinstance(child, ast.stmt):
+            yield child
+
+
 def _bound_names(statement: ast.stmt) -> Iterator[str]:
     """The names a statement binds in its scope, as far as a checker needs."""
     if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
         yield statement.name
-    elif isinstance(statement, ast.Import | ast.ImportFrom):
+        return
+    if isinstance(statement, ast.Import | ast.ImportFrom):
         for alias in statement.names:
             yield alias.asname or alias.name.split(".")[0]
-    elif isinstance(statement, ast.Assign):
+        return
+    if isinstance(statement, ast.Assign):
         for target in statement.targets:
             yield from _names_in(target)
-    elif isinstance(statement, ast.AnnAssign | ast.AugAssign):
+        return
+    if isinstance(statement, ast.AnnAssign | ast.AugAssign):
         yield from _names_in(statement.target)
-    elif isinstance(statement, ast.For | ast.With | ast.If | ast.Try):
-        for child in ast.iter_child_nodes(statement):
-            if isinstance(child, ast.stmt):
-                yield from _bound_names(child)
+        return
+    if isinstance(statement, _COMPOUND):
+        for child in _child_statements(statement):
+            yield from _bound_names(child)
         if isinstance(statement, ast.For):
             yield from _names_in(statement.target)
 

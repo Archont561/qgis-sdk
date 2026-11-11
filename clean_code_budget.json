@@ -816,11 +816,6 @@
 		"CC101": 4,
 		"CC104": 1
 	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/ui.py": {
-		"CC101": 7,
-		"CC104": 3,
-		"CC303": 5
-	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/versions.py": {
 		"CC101": 4,
 		"CC303": 2
