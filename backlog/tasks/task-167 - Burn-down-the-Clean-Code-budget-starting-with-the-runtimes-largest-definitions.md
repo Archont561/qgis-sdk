@@ -228,4 +228,16 @@ In `fakes.py`, six long setup signatures became records: `FakeAlgorithmSetup`, `
 
 **What is left.** 675 findings in 251 files: CC101 390, CC104 98, CC102 95, CC303 44, CC201 23, CC202 25. `check/ui.py` (15) is the next worst file. CC202 and AC 4 remain the two different cuts after the long tail. PR #197 merged first, so this slice ships on its own PR.
 
+**Slice 17 (landed): the UI checker, as contexts and diagnostics.** 675 -> 660 findings, 251 -> 250 files. `packages/qgis-sdk-tools/src/qgis_sdk_tools/check/ui.py` carried 15 (7 CC101, 3 CC104, 5 CC303) and has zero now, with no threshold change, no suppression and no finding added anywhere else. Its 32 focused UI-check tests pass unchanged, and the generated scaffold UI checks stay green.
+
+Five frozen slots records carry the facts the checker used to pass as long argument lists or scattered locals: `_CheckContext` (names, path, package directory, source directory), `_ImportFacts` (bindings, surfaces, `on`, modules), `_WidgetSite` (one surface method's holders and named widgets), `_DeclaredSite` (class attributes and module names UI005 resolves) and `_UiScope` (the Designer file's declared names, or the diagnostic explaining why it cannot be read). `check_bindings` is a 21-line driver over `_node_diagnostics` and `_surface_diagnostics`; `_Names.__init__` is five assignments over `_collect_imports`, `_module_names`, `_constructors` and `_applications`.
+
+The rest is one owner per job. `_imported_applications` delegates local module resolution and imported plugin names to `_import_base` / `_imported_names`; `_collect_imports` delegates each import kind to `_ui_import_aliases`, `_binding_import_aliases` and `_module_import_aliases`. UI001 has `_widget_holders` and `_widget_diagnostic`; UI002 has `_read_ui_names`, `_ui_file_error`, `_ui_scope` and `_ui_name_diagnostic`; UI005 has `_bound_attributes`, `_custom_diagnostic`, `_on_diagnostic` and two wording helpers. `_bound_names` returns early instead of carrying an eleven-branch `elif` chain, and `_child_statements` owns the compound-statement walk. One correctness detail worth keeping: `Diagnostic` is frozen, so UI002 builds its diagnostic with the real `path` from `_UiScope` rather than trying to patch the field afterwards.
+
+**Tests.** Focused UI checks 32 passed; combined local suite 3438 passed, 130 skipped, 7 deselected; `tests/scripts` 340; alint policy 20; backlog guards 21; examples 26 passed / 8 skipped; ruff, format, alint and the clean-code gate clean.
+
+**Documentation impact.** No user-facing documentation changes: the UI001/UI002/UI003/UI005/ICON001 rules, their messages and their remediations are unchanged. This note and decision-81's follow-through record the context records and the budget ratchet.
+
+**What is left.** 660 findings in 250 files: CC101 383, CC104 95, CC102 95, CC303 39, CC201 23, CC202 25. The next worst files are `test_bridge_host.py`, `test_zz_plugin_rest_native.py` and `adapters/qgis/algorithms.py` (12 each). CC202 and AC 4 remain the two different cuts after the long tail.
+
 <!-- SECTION:NOTES:END -->
