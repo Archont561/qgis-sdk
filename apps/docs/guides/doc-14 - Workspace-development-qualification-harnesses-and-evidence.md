@@ -91,6 +91,16 @@ pixi run -e bun typecheck
 
 Root `build`, `test`, and `coverage` scripts delegate to Turbo. Tests run from source and do not depend on builds. Coverage has separate 90% checks for `qgis-sdk-python` and `qgis-sdk-typescript`, with repository-root-relative LCOV reports for Codecov. In CI, Linux coverage runs on its own runner in parallel with the other Linux checks; the `checks` status requires both jobs to succeed. Each job restores its own environments and artifacts, trading extra runner setup for a shorter critical path.
 
+Codecov is a reporting destination, not the gate. The three LCOV uploads keep
+`fail_ci_if_error: true` so a rejection is still annotated, but they carry
+`continue-on-error: true`: a deactivated repository, an expired token or an
+upload outage cannot turn a green pull request red. A dedicated step records a
+`::warning::` annotation and a job-summary line when any upload fails. The 90%
+Python, TypeScript and UI coverage checks above remain the gate - if one of
+those fails, `Linux coverage` is red and the required `checks` context fails
+with it. Reactivate the repository in the Codecov UI to resume dashboard
+uploads; no workflow change is needed once it accepts reports again.
+
 | Task | Command | Purpose |
 | :-- | :-- | :-- |
 | All local gates | `pixi run automation check` | Ruff lint, Ruff format, the clean-code budget, Alint and actionlint in one run |

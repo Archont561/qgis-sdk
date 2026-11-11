@@ -721,6 +721,14 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         assert coverage[name]["with"]["files"] == path
         assert coverage[name]["with"]["flags"] == flag
         assert coverage[name]["with"]["fail_ci_if_error"] is True
+        assert coverage[name]["continue-on-error"] is True
+    report = coverage["Report unavailable Codecov uploads"]
+    assert report["id"] == "s29"
+    for step_id in ("s16", "s17", "s24"):
+        assert f"steps.{step_id}.outcome == 'failure'" in report["if"]
+    assert "::warning" in report["run"]
+    assert "title=Codecov upload unavailable" in report["run"]
+    assert "GITHUB_STEP_SUMMARY" in report["run"]
     assert jobs["cross-platform"]["if"] == "${{ github.event_name != 'push' }}"
     assert "needs" not in jobs["cross-platform"]
     assert checks["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"

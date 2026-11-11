@@ -129,6 +129,8 @@ Cost trade-off: a backlog-only or agent-instructions-only pull request now pays 
 
 **LTS outage tolerance (2026-11-11).** `QGIS 3.44 LTS` is a required context, but its only external dependency is the qgis.org apt mirror; when that mirror hangs, the job used to sit until its 30-minute timeout and then fail a merge for reasons unrelated to the change. Provisioning now has bounded, retried commands and reports `ready=false` with a `::warning::` annotation and a step-summary line; the two native steps skip and the context stays green. Real native failures are still red. `tests/scripts/test_ci.py` guards the shape and doc-14 records the behaviour.
 
+**Codecov outage tolerance (2026-11-11).** Run `43060093469` showed all three `codecov-action` uploads failing with `This repository is deactivated. To resume uploading to it, please activate the repository in the Codecov UI`, even after the owner regenerated `CODECOV_TOKEN`; the 90% coverage checks themselves passed. Regenerating the token cannot fix a deactivated Codecov project. The uploads keep `fail_ci_if_error: true` for the annotation but now carry `continue-on-error: true`, and a follow-up step writes a `::warning::` annotation and a job-summary line. `Linux coverage` stays green on a third-party rejection while a real coverage failure stays red. `tests/scripts/test_ci.py` guards the shape and doc-14 records the behaviour. Reactivate `Archont561/qgis-sdk` in the Codecov UI to resume dashboard uploads; no workflow change is needed then.
+
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
