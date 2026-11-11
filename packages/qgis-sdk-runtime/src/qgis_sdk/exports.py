@@ -32,6 +32,19 @@ from types import MappingProxyType
 
 from .models import QgisSdkError, QgisSdkExportFailedError, QgisSdkExportRefusedError
 
+
+def _plan_export_facts1(destination, driver, overwrite, reasons):
+    if destination.is_dir():
+        reasons.append("the destination is a directory")
+    elif destination.exists() and not overwrite:
+        reasons.append("the destination exists; pass overwrite=True to replace it")
+    if not destination.parent.is_dir():
+        reasons.append("the destination's directory does not exist")
+    if reasons:
+        raise QgisSdkExportRefusedError(str(destination), reasons)
+    return ExportPlan(destination=destination, driver=driver or "", overwrite=overwrite)
+
+
 __all__ = ["EXPORT_DRIVERS", "ExportPlan", "plan_export", "run_export"]
 
 #: Destination suffix (lower-case) -> OGR driver name. Two formats on purpose:
@@ -73,15 +86,7 @@ def plan_export(
             f"unsupported format {destination.suffix or '(no suffix)'!r}; "
             f"the destination must end in one of {known}"
         )
-    if destination.is_dir():
-        reasons.append("the destination is a directory")
-    elif destination.exists() and not overwrite:
-        reasons.append("the destination exists; pass overwrite=True to replace it")
-    if not destination.parent.is_dir():
-        reasons.append("the destination's directory does not exist")
-    if reasons:
-        raise QgisSdkExportRefusedError(str(destination), reasons)
-    return ExportPlan(destination=destination, driver=driver or "", overwrite=overwrite)
+    return _plan_export_facts1(destination, driver, overwrite, reasons)
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 from qgis_sdk_tools.cli import CliRuntime
 
@@ -48,15 +50,13 @@ class FakeCliRuntime(CliRuntime):
         self,
         cwd: Path,
         env: Mapping[str, str] | None = None,
-        *,
-        input: str = "",
-        interactive: bool = False,
-        run_process: ExitCodeFor | None = None,
+        **options: Unpack[_InitOptions1],
     ) -> None:
+        values = _InitValues1(**options)
         self.processes: list[tuple[tuple[str, ...], Path]] = []
         self.environments: list[Mapping[str, str] | None] = []
         self.started: list[FakeProcess] = []
-        exit_code = run_process if run_process is not None else _succeed
+        exit_code = values.run_process if values.run_process is not None else _succeed
 
         def record(
             argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
@@ -78,8 +78,8 @@ class FakeCliRuntime(CliRuntime):
             env=dict(env or {}),
             out=io.StringIO(),
             err=io.StringIO(),
-            inp=io.StringIO(input),
-            interactive=interactive,
+            inp=io.StringIO(values.input),
+            interactive=values.interactive,
             run_process=record,
             start_process=start,
         )
@@ -97,3 +97,16 @@ class FakeCliRuntime(CliRuntime):
 
 def _succeed(argv: Sequence[str], cwd: Path) -> int:
     return 0
+
+
+class _InitOptions1(TypedDict, total=False):
+    input: str
+    interactive: bool
+    run_process: ExitCodeFor | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    input: str = ""
+    interactive: bool = False
+    run_process: ExitCodeFor | None = None

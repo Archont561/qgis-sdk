@@ -36,6 +36,36 @@ from qgis_sdk.processing.codegen import (
     typescript_type,
 )
 
+
+def _generated_python_imports_and_phase1(grass, native, p3d, qgis):
+    assert "end_cap_style: End cap style" in native.Buffer.__doc__
+    assert "one of: Round, Flat, Square" in native.Buffer.__doc__
+
+    assert qgis.BasicStatisticsForFields.algorithm == "qgis:basicstatisticsforfields"
+    assert qgis.Basicstatistics2(class_="x").params() == {"class": "x"}
+    flags = grass.RBuffer(input="r", flag_z=True, algorithm_="a", p_2nd=1)
+    assert flags.params() == {"input": "r", "-z": True, "algorithm": "a", "2nd": 1}
+    assert flags.algorithm == "grass:r.buffer"
+    assert p3d.Tessellate(input="l").algorithm == "3d:tessellate"
+
+
+def _typescript_module_declares_params_phase1(text):
+    assert (
+        'export const PROVIDERS = ["3d", "grass", "native", "qgis"] as const;' in text
+    )
+    assert "export type AlgorithmId = keyof AlgorithmRegistry;" in text
+    assert "/** End cap style — one of: Round, Flat, Square */" in text
+    # The bound runner: the bridge's generic one with this registry filled in.
+    assert "\trunAlgorithm as runAny," in text
+    assert "export function runAlgorithm<K extends AlgorithmId>(" in text
+    assert "\treturn runAny<AlgorithmRegistry, K>(qgis, id, params, options);" in text
+
+    only_native = emit_typescript_module(CATALOGUE, ["native"])
+    assert "GrassRBuffer" not in only_native
+    assert 'from "@archont561/qgis-sdk";' in only_native
+    assert only_native == emit_typescript_module(CATALOGUE, ["native"])
+
+
 BUFFER = AlgorithmInfo(
     id="native:buffer",
     provider="native",
@@ -224,15 +254,7 @@ def test_generated_python_imports_and_builds_requests(generated: Path) -> None:
     with pytest.raises(TypeError):
         native.Buffer(distance=3)  # a required input has no default
     assert "Computes a '''buffer''' area." in native.Buffer.__doc__
-    assert "end_cap_style: End cap style" in native.Buffer.__doc__
-    assert "one of: Round, Flat, Square" in native.Buffer.__doc__
-
-    assert qgis.BasicStatisticsForFields.algorithm == "qgis:basicstatisticsforfields"
-    assert qgis.Basicstatistics2(class_="x").params() == {"class": "x"}
-    flags = grass.RBuffer(input="r", flag_z=True, algorithm_="a", p_2nd=1)
-    assert flags.params() == {"input": "r", "-z": True, "algorithm": "a", "2nd": 1}
-    assert flags.algorithm == "grass:r.buffer"
-    assert p3d.Tessellate(input="l").algorithm == "3d:tessellate"
+    _generated_python_imports_and_phase1(grass, native, p3d, qgis)
 
 
 def test_generated_typeddicts_carry_qgis_names_and_requiredness(
@@ -312,20 +334,7 @@ def test_typescript_module_declares_params_results_and_the_registry() -> None:
         '\t"native:buffer": { params: NativeBufferParams; result: NativeBufferResult };'
         in text
     )
-    assert (
-        'export const PROVIDERS = ["3d", "grass", "native", "qgis"] as const;' in text
-    )
-    assert "export type AlgorithmId = keyof AlgorithmRegistry;" in text
-    assert "/** End cap style — one of: Round, Flat, Square */" in text
-    # The bound runner: the bridge's generic one with this registry filled in.
-    assert "\trunAlgorithm as runAny," in text
-    assert "export function runAlgorithm<K extends AlgorithmId>(" in text
-    assert "\treturn runAny<AlgorithmRegistry, K>(qgis, id, params, options);" in text
-
-    only_native = emit_typescript_module(CATALOGUE, ["native"])
-    assert "GrassRBuffer" not in only_native
-    assert 'from "@archont561/qgis-sdk";' in only_native
-    assert only_native == emit_typescript_module(CATALOGUE, ["native"])
+    _typescript_module_declares_params_phase1(text)
 
 
 def test_typescript_module_lints_clean_as_source_does() -> None:

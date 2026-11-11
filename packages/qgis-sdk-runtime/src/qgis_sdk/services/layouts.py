@@ -51,7 +51,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, TypedDict, Unpack, runtime_checkable
 
 from qgis_sdk.models import (
     LAYOUT_FORMATS,
@@ -67,6 +67,25 @@ from qgis_sdk.models import (
     QgisSdkJobCancelledError,
 )
 from qgis_sdk.services.contracts import Cancellation, Progress
+
+
+class ExportOptions(TypedDict, total=False):
+    """Everything one layout export may vary, as one keyword mapping."""
+
+    format: str
+    destination: FileRef | None
+    settings: LayoutSettings | None
+    overwrite: bool
+
+
+class AtlasOptions(TypedDict, total=False):
+    """Everything one atlas run may vary, as one keyword mapping."""
+
+    format: str
+    directory: FileRef | None
+    pattern: str | None
+    settings: LayoutSettings | None
+    overwrite: bool
 
 
 class JobHandle(Protocol):
@@ -102,6 +121,8 @@ class JobHandle(Protocol):
 __all__ = [
     "ATLAS_JOB_ID",
     "EXPORT_JOB_ID",
+    "AtlasOptions",
+    "ExportOptions",
     "LayoutBackend",
     "Layouts",
     "NullCancellation",
@@ -220,15 +241,7 @@ class Layouts(Protocol):
         """
         ...
 
-    def export(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        destination: FileRef | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> JobHandle:
+    def export(self, layout: str, **options: Unpack[ExportOptions]) -> JobHandle:
         """Export ``layout`` as a job and answer its handle.
 
         The outcome is a :class:`~qgis_sdk.models.LayoutExport`; ``overwrite``
@@ -236,28 +249,11 @@ class Layouts(Protocol):
         """
         ...
 
-    def render(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        destination: FileRef | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> LayoutExport:
+    def render(self, layout: str, **options: Unpack[ExportOptions]) -> LayoutExport:
         """Export ``layout`` and wait for the file: the same work, no job."""
         ...
 
-    def run_atlas(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        directory: FileRef | None = None,
-        pattern: str | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> JobHandle:
+    def run_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> JobHandle:
         """Run ``layout``'s atlas as a job, one file per coverage feature.
 
         ``pattern`` names each file without its suffix and may use ``{index}``
@@ -265,16 +261,7 @@ class Layouts(Protocol):
         """
         ...
 
-    def render_atlas(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        directory: FileRef | None = None,
-        pattern: str | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> AtlasExport:
+    def render_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> AtlasExport:
         """Run ``layout``'s atlas and wait for every file: the same work, no job."""
         ...
 

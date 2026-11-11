@@ -17,6 +17,16 @@ from qgis_sdk_tools.bundle import (
 from qgis_sdk_tools.bundle.app import build_app
 from qgis_sdk_tools.cli import CliRuntime
 
+
+def _build_phase1(result, runtime):
+    typer.echo(
+        f"built {result.plugin} {result.version}: {result.archive} "
+        f"({len(result.files)} files, runtime {result.runtime_version}, "
+        f"web: {result.web})",
+        file=runtime.out,
+    )
+
+
 #: ``--target``: the plugin ZIP QGIS installs, or an installable app distribution.
 TARGETS = ("plugin", "app")
 
@@ -93,9 +103,4 @@ def build(
             file=runtime.out,
         )
         return
-    typer.echo(
-        f"built {result.plugin} {result.version}: {result.archive} "
-        f"({len(result.files)} files, runtime {result.runtime_version}, "
-        f"web: {result.web})",
-        file=runtime.out,
-    )
+    _build_phase1(result, runtime)

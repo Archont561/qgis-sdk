@@ -26,6 +26,19 @@ from qgis_sdk.models import QgisSdkUiError
 
 from qgis_sdk_tools.ui_diff import SnapshotDiff, diff_snapshots
 
+
+def _call_phase1(approved, capture, difference, self, surface):
+    result = SurfaceSnapshot(
+        surface=surface,
+        capture=capture,
+        directory=self.directory,
+        approved=approved,
+        difference=difference,
+    )
+    self.results.append(result)
+    return result
+
+
 __all__ = ["SNAPSHOTS_DIRECTORY", "SnapshotMismatch", "Snapshots", "SurfaceSnapshot"]
 
 SNAPSHOTS_DIRECTORY: Final = "__snapshots__"
@@ -135,15 +148,7 @@ class Snapshots:
             if approved is not None
             else SnapshotDiff()
         )
-        result = SurfaceSnapshot(
-            surface=surface,
-            capture=capture,
-            directory=self.directory,
-            approved=approved,
-            difference=difference,
-        )
-        self.results.append(result)
-        return result
+        return _call_phase1(approved, capture, difference, self, surface)
 
     def verify(self) -> None:
         """Fail with every unapproved or changed surface, in one readable text.

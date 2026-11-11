@@ -31,12 +31,31 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, TypedDict, Unpack
 
 from qgis_sdk.core import QuiesceOutcome
 
 from qgis_sdk_tools.check import check_project
 from qgis_sdk_tools.paths import walk_files
+
+
+def _init_facts1(preflight, self):
+    self._preflight = preflight
+    self.revision = 0
+    self.generation = 0
+    self.running = False
+    self._busy = False
+    self._pending = False
+
+
+def _reload_once_phase1(plugin, self):
+    self._say(
+        f"{plugin} is disabled until a Reload succeeds; fix the error, or "
+        "restart `qgis-sdk dev`"
+    )
+    self._notify("critical", f"{plugin} is disabled: fix the error and Reload")
+    return self._report("disabled", reason="start failed after teardown")
+
 
 Outcome = Literal["reloaded", "refused", "disabled", "coalesced"]
 NotifyLevel = Literal["info", "warning", "critical"]
@@ -138,41 +157,26 @@ def preflight(root: Path, plugin: str) -> tuple[list[str], list[str]]:
 class ReloadCoordinator:
     """Serialise reloads of one source plugin and apply the policy above."""
 
-    def __init__(
-        self,
-        *,
-        root: Path,
-        plugin: str,
-        host: PluginHost,
-        say: Callable[[str], None],
-        notify: Callable[[NotifyLevel, str], None],
-        schedule: Callable[[], None] | None = None,
-        quiesce_timeout: float = QUIESCE_SECONDS,
-        clock: Callable[[], float] = time.monotonic,
-        pump: Callable[[], None] | None = None,
-        preflight: Callable[[Path, str], tuple[list[str], list[str]]] = preflight,
-    ) -> None:
+    def __init__(self, **options: Unpack[_InitOptions1]) -> None:
         """``schedule`` arms the host's debounce timer, which calls ``reload``.
 
         ``pump`` runs between safe-point checks (the Qt event loop in QGIS)
         and ``clock`` bounds the wait; both are injectable so the bound is
         testable without sleeping.
         """
-        self._root = Path(root)
-        self._plugin = plugin
-        self._host = host
-        self._say = say
-        self._notify = notify
-        self._schedule = schedule
-        self._quiesce_timeout = quiesce_timeout
-        self._clock = clock
-        self._pump = pump if pump is not None else (lambda: time.sleep(0.05))
-        self._preflight = preflight
-        self.revision = 0
-        self.generation = 0
-        self.running = False
-        self._busy = False
-        self._pending = False
+        values = _InitValues1(**options)
+        self._root = Path(values.root)
+        self._plugin = values.plugin
+        self._host = values.host
+        self._say = values.say
+        self._notify = values.notify
+        self._schedule = values.schedule
+        self._quiesce_timeout = values.quiesce_timeout
+        self._clock = values.clock
+        self._pump = (
+            values.pump if values.pump is not None else (lambda: time.sleep(0.05))
+        )
+        _init_facts1(values.preflight, self)
 
     @property
     def plugin(self) -> str:
@@ -257,12 +261,7 @@ class ReloadCoordinator:
         if self._start():
             self._notify("info", f"{plugin} reloaded (revision {self.revision})")
             return self._report("reloaded")
-        self._say(
-            f"{plugin} is disabled until a Reload succeeds; fix the error, or "
-            "restart `qgis-sdk dev`"
-        )
-        self._notify("critical", f"{plugin} is disabled: fix the error and Reload")
-        return self._report("disabled", reason="start failed after teardown")
+        return _reload_once_phase1(plugin, self)
 
     def _quiesce(self) -> QuiesceOutcome:
         """Give the running revision a bounded time to reach a safe point."""
@@ -347,3 +346,30 @@ class SourceWatcher:
     def resync(self) -> None:
         """Take the current tree as the baseline, forgetting edits made meanwhile."""
         self._seen = self.snapshot()
+
+
+class _InitOptions1(TypedDict, total=False):
+    root: Path
+    plugin: str
+    host: PluginHost
+    say: Callable[[str], None]
+    notify: Callable[[NotifyLevel, str], None]
+    schedule: Callable[[], None] | None
+    quiesce_timeout: float
+    clock: Callable[[], float]
+    pump: Callable[[], None] | None
+    preflight: Callable[[Path, str], tuple[list[str], list[str]]]
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    root: Path
+    plugin: str
+    host: PluginHost
+    say: Callable[[str], None]
+    notify: Callable[[NotifyLevel, str], None]
+    schedule: Callable[[], None] | None = None
+    quiesce_timeout: float = QUIESCE_SECONDS
+    clock: Callable[[], float] = time.monotonic
+    pump: Callable[[], None] | None = None
+    preflight: Callable[[Path, str], tuple[list[str], list[str]]] = preflight

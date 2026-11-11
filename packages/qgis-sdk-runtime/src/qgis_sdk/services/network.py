@@ -7,21 +7,29 @@ form, which a transport refuses on the GUI thread rather than nesting an event
 loop. Both forms share one :class:`NetworkTransport`, which is what a host
 adapter implements over ``QgsNetworkAccessManager`` and what a test replaces
 with a scripted fake. Live ``QNetworkReply`` objects never cross either line.
+
+The per-call knobs are one :class:`RequestOptions` mapping and the derived
+client's overrides one :class:`ConfigureOptions` mapping. Both are ``TypedDict``
+shapes expanded by ``Unpack``, so every method keeps its keyword-call form and
+its static types while taking a single parameter: the client parses them into
+one validated record before a transport is touched (decision-81).
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Protocol
+from typing import Protocol, TypedDict, Unpack
 
 from qgis_sdk.models import NetworkRequest, Response
 
 __all__ = [
     "BlockingNetwork",
+    "ConfigureOptions",
     "Deliver",
     "Network",
     "NetworkTransport",
     "Params",
+    "RequestOptions",
 ]
 
 Params = Mapping[str, str | int | float | bool | None]
@@ -29,6 +37,27 @@ Params = Mapping[str, str | int | float | bool | None]
 
 Deliver = Callable[[Response | Exception], None]
 """How a transport reports exactly one outcome for one started request."""
+
+
+class RequestOptions(TypedDict, total=False):
+    """Everything one call may vary, without repeating it in every signature."""
+
+    params: Params | None
+    json: object
+    data: bytes | str | Mapping[str, str] | None
+    headers: Mapping[str, str] | None
+    timeout: float | None
+
+
+class ConfigureOptions(TypedDict, total=False):
+    """The defaults a derived client may layer over the current ones."""
+
+    base_url: str | None
+    headers: Mapping[str, str] | None
+    timeout: float | None
+    auth_config: str | None
+    max_redirects: int | None
+    max_body_bytes: int | None
 
 
 class NetworkTransport(Protocol):
@@ -60,36 +89,12 @@ class NetworkTransport(Protocol):
 class BlockingNetwork(Protocol):
     """The explicit blocking form; only for threads that may wait."""
 
-    def get(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> Response: ...
+    def get(self, url: str, **options: Unpack[RequestOptions]) -> Response: ...
 
-    def post(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> Response: ...
+    def post(self, url: str, **options: Unpack[RequestOptions]) -> Response: ...
 
     def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        self, method: str, url: str, **options: Unpack[RequestOptions]
     ) -> Response: ...
 
 
@@ -103,47 +108,18 @@ class Network(Protocol):
     """
 
     def get(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        self, url: str, **options: Unpack[RequestOptions]
     ) -> Awaitable[Response]: ...
 
     def post(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        self, url: str, **options: Unpack[RequestOptions]
     ) -> Awaitable[Response]: ...
 
     def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        self, method: str, url: str, **options: Unpack[RequestOptions]
     ) -> Awaitable[Response]: ...
 
-    def configure(
-        self,
-        *,
-        base_url: str | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-        auth_config: str | None = None,
-        max_redirects: int | None = None,
-        max_body_bytes: int | None = None,
-    ) -> Network: ...
+    def configure(self, **options: Unpack[ConfigureOptions]) -> Network: ...
 
     @property
     def blocking(self) -> BlockingNetwork:

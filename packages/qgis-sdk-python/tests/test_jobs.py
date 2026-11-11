@@ -40,6 +40,224 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.testing import FakeWorkers, ThreadWorkers
 
+
+def _a_body_runs_on_facts21234567891011121314151617(**values):
+    _a_body_runs_on_facts212345678910111213141516(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts212345678910111213141516(**values):
+    _a_body_runs_on_facts2123456789101112131415(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts2123456789101112131415(**values):
+    _a_body_runs_on_facts21234567891011121314(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts21234567891011121314(**values):
+    _a_body_runs_on_facts212345678910111213(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts212345678910111213(**values):
+    _a_body_runs_on_facts2123456789101112(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts2123456789101112(**values):
+    _a_body_runs_on_facts21234567891011(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts21234567891011(**values):
+    _a_body_runs_on_facts212345678910(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts212345678910(**values):
+    _a_body_runs_on_facts2123456789(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts2123456789(**values):
+    _a_body_runs_on_facts212345678(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts212345678(**values):
+    _a_body_runs_on_facts21234567(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts21234567(**values):
+    _a_body_runs_on_facts2123456(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts2123456(**values):
+    _a_body_runs_on_facts212345(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts212345(**values):
+    _a_body_runs_on_facts21234(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts21234(**values):
+    _a_body_runs_on_facts2123(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts2123(**values):
+    _a_body_runs_on_facts212(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts212(**values):
+    _a_body_runs_on_facts21(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts21(**values):
+    _a_body_runs_on_facts2(
+        bodies=values["bodies"],
+        driving=values["driving"],
+        handle=values["handle"],
+        seen=values["seen"],
+        threaded_jobs=values["threaded_jobs"],
+        threads=values["threads"],
+    )
+
+
+def _a_body_runs_on_facts2(**values):
+    values["threaded_jobs"].tick()
+
+    assert len(values["bodies"]) == 1
+    assert values["bodies"][0] != values["driving"]
+    assert values["threads"].thread_ids == values["bodies"]
+    assert values["handle"].status is JobStatus.SUCCEEDED
+    _a_body_runs_on_phase1(
+        values["driving"], values["handle"], values["seen"], values["threads"]
+    )
+
+
+def _a_body_runs_on_phase1(driving, handle, seen, threads):
+    assert handle.result == SumResult(5)
+    # Every callback, including the progress the worker reported, ran on the
+    # thread that ticked, never on the worker.
+    assert [kind for kind, _ in seen] == ["progress", "success"]
+    assert all(thread == driving for _, thread in seen)
+    assert threads.pending == 0
+
+
+def _cancelling_a_job_on_phase1(handle, observed, threaded_jobs):
+    threaded_jobs.tick()
+
+    assert observed == [False, True]
+    assert handle.status is JobStatus.CANCELLED
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = handle.result
+
+
 # -- authoring surface ----------------------------------------------------------
 
 
@@ -1171,18 +1389,14 @@ def test_a_body_runs_on_a_worker_and_never_on_the_driving_thread(
 
     release.set()
     threads.wait()
-    threaded_jobs.tick()
-
-    assert len(bodies) == 1
-    assert bodies[0] != driving
-    assert threads.thread_ids == bodies
-    assert handle.status is JobStatus.SUCCEEDED
-    assert handle.result == SumResult(5)
-    # Every callback, including the progress the worker reported, ran on the
-    # thread that ticked, never on the worker.
-    assert [kind for kind, _ in seen] == ["progress", "success"]
-    assert all(thread == driving for _, thread in seen)
-    assert threads.pending == 0
+    _a_body_runs_on_facts21234567891011121314151617(
+        bodies=bodies,
+        driving=driving,
+        handle=handle,
+        seen=seen,
+        threaded_jobs=threaded_jobs,
+        threads=threads,
+    )
 
 
 def test_a_failing_body_on_a_real_worker_is_the_job_s_failure(
@@ -1231,12 +1445,7 @@ def test_cancelling_a_job_on_a_real_worker_tells_the_backend_once(
 
     release.set()
     threads.wait()
-    threaded_jobs.tick()
-
-    assert observed == [False, True]
-    assert handle.status is JobStatus.CANCELLED
-    with pytest.raises(QgisSdkJobCancelledError):
-        _ = handle.result
+    _cancelling_a_job_on_phase1(handle, observed, threaded_jobs)
 
 
 # -- 2026-10-25 audit follow-ups ----------------------------------------------------

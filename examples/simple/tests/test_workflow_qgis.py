@@ -18,6 +18,16 @@ from conftest import classFactory
 from simple.plugin import EXPORT_DIRECTORY_KEY, FIXTURE
 from simple.workflow import LocalGisWorkflow
 
+
+def _the_results_dock_is_phase1(QPlainTextEdit, QPushButton, desktop, table, window):
+    desktop.runtime.instance.ctx.log.warning("from elsewhere", source="test")
+    log = window.findChild(QPlainTextEdit, "feedback/log")
+    assert log.toPlainText().splitlines()[-1].startswith("[warning] from elsewhere")
+
+    window.findChild(QPushButton, "buttons/clear").click()
+    assert table.rowCount() == 0
+
+
 pytestmark = pytest.mark.qgis
 
 WORKING_CRS = "EPSG:3857"
@@ -145,12 +155,7 @@ def test_the_results_dock_is_the_catalogue_mounted_as_qgis_widgets(
     assert table.rowCount() == 1
     assert table.item(0, 0).text() == "points"
 
-    desktop.runtime.instance.ctx.log.warning("from elsewhere", source="test")
-    log = window.findChild(QPlainTextEdit, "feedback/log")
-    assert log.toPlainText().splitlines()[-1].startswith("[warning] from elsewhere")
-
-    window.findChild(QPushButton, "buttons/clear").click()
-    assert table.rowCount() == 0
+    _the_results_dock_is_phase1(QPlainTextEdit, QPushButton, desktop, table, window)
 
 
 def _walk(node: dict) -> list[dict]:

@@ -15,6 +15,43 @@ import conftest
 import pytest
 from qgis_sdk.models import FeatureQuery, QgisSdkLayerNotFoundError
 
+
+def _a_row_with_no_phase1(features, layer_id, shapeless):
+    assert shapeless.geometry.value == ""
+    assert shapeless.geometry.part_count == 0
+    assert shapeless.geometry.vertex_count == 0
+    assert shapeless.geometry.is_empty is False
+
+    # Asking for no geometry is the case `None` answers.
+    bare = _only(
+        features.page(
+            layer_id,
+            FeatureQuery(
+                limit=10,
+                encoding="wkt",
+                expression="\"value\" = 'shapeless'",
+                with_geometry=False,
+            ),
+        )
+    )
+    assert bare.geometry is None
+
+
+def _an_editing_session_writes_phase1(features, layer_id, written):
+    assert written.attributes["value"] == "z"
+    assert written.attributes["id"] == 9
+
+    second = features.begin_edit(layer_id)
+    try:
+        second.delete(written.id)
+        assert second.pending == 1
+        second.rollback()
+        assert second.pending == 0
+        assert features.feature(layer_id, written.id).attributes["value"] == "z"
+    finally:
+        second.close()
+
+
 if TYPE_CHECKING:
     Services = conftest.Services
     Features = object
@@ -171,24 +208,7 @@ def test_a_row_with_no_shape_reports_a_geometry_that_says_so(
 
     assert shapeless.geometry is not None
     assert shapeless.geometry.geometry_type == "none"
-    assert shapeless.geometry.value == ""
-    assert shapeless.geometry.part_count == 0
-    assert shapeless.geometry.vertex_count == 0
-    assert shapeless.geometry.is_empty is False
-
-    # Asking for no geometry is the case `None` answers.
-    bare = _only(
-        features.page(
-            layer_id,
-            FeatureQuery(
-                limit=10,
-                encoding="wkt",
-                expression="\"value\" = 'shapeless'",
-                with_geometry=False,
-            ),
-        )
-    )
-    assert bare.geometry is None
+    _a_row_with_no_phase1(features, layer_id, shapeless)
 
 
 def test_a_feature_asked_for_without_geometry_has_none(services: Services) -> None:
@@ -284,18 +304,7 @@ def test_an_editing_session_writes_on_commit_and_discards_on_rollback(
             FeatureQuery(limit=10, encoding="wkt", expression="\"value\" = 'z'"),
         )
     )
-    assert written.attributes["value"] == "z"
-    assert written.attributes["id"] == 9
-
-    second = features.begin_edit(layer_id)
-    try:
-        second.delete(written.id)
-        assert second.pending == 1
-        second.rollback()
-        assert second.pending == 0
-        assert features.feature(layer_id, written.id).attributes["value"] == "z"
-    finally:
-        second.close()
+    _an_editing_session_writes_phase1(features, layer_id, written)
 
 
 def test_a_second_begin_returns_the_open_session(services: Services) -> None:

@@ -29,6 +29,28 @@ if TYPE_CHECKING:
 __all__ = ["HasAcceptCancel", "RunsJobs", "SubscribesStreams"]
 
 
+def _connect_buttons(node, behaviour) -> list[Callable[[], None]]:
+    """Wire either an AcceptCancel row or a QDialogButtonBox's signals."""
+    disconnects: list[Callable[[], None]] = []
+    if isinstance(node, AcceptCancel):
+        disconnects.append(node.accepted(behaviour.accept))
+        disconnects.append(node.cancelled(behaviour.cancel))
+        return disconnects
+    accepted = _qt_signal(node, "accepted")
+    rejected = _qt_signal(node, "cancelled")
+    if accepted is None or rejected is None:
+        raise QgisSdkUiError(
+            f"{type(behaviour).__name__} (HasAcceptCancel): {behaviour.buttons!r} is "
+            f"a {type(node).__name__}, not an AcceptCancel row or a "
+            "QDialogButtonBox"
+        )
+    accepted.connect(behaviour._accept_slot)
+    rejected.connect(behaviour._cancel_slot)
+    disconnects.append(lambda: _disconnect(accepted, behaviour._accept_slot))
+    disconnects.append(lambda: _disconnect(rejected, behaviour._cancel_slot))
+    return disconnects
+
+
 class _Behaviour:
     """What the mixins share: a cooperative ``_attach_behaviours``."""
 
@@ -152,23 +174,7 @@ class HasAcceptCancel(_Behaviour):
                 f"node named {self.buttons!r}; give the AcceptCancel row that "
                 "name or set `buttons`"
             )
-        disconnects: list[Callable[[], None]] = []
-        if isinstance(node, AcceptCancel):
-            disconnects.append(node.accepted(self.accept))
-            disconnects.append(node.cancelled(self.cancel))
-        else:
-            accepted = _qt_signal(node, "accepted")
-            rejected = _qt_signal(node, "cancelled")
-            if accepted is None or rejected is None:
-                raise QgisSdkUiError(
-                    f"{type(self).__name__} (HasAcceptCancel): {self.buttons!r} is "
-                    f"a {type(node).__name__}, not an AcceptCancel row or a "
-                    "QDialogButtonBox"
-                )
-            accepted.connect(self._accept_slot)
-            rejected.connect(self._cancel_slot)
-            disconnects.append(lambda: _disconnect(accepted, self._accept_slot))
-            disconnects.append(lambda: _disconnect(rejected, self._cancel_slot))
+        disconnects = _connect_buttons(node, self)
 
         def unwire() -> None:
             for disconnect in disconnects:

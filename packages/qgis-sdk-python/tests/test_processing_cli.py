@@ -27,6 +27,37 @@ from qgis_sdk_tools.testing import FakeCliRuntime
 from test_devtools_installs import make_prefix
 from typer.testing import CliRunner
 
+
+def _generate_runs_the_reader_phase1(result, runtime, web):
+    assert (
+        '"saga:slope": { params: SagaSlopeParams; result: SagaSlopeResult };'
+        in web.read_text()
+    )
+    assert "2 algorithms from 2 providers; 5 of 5 files changed" in result.output
+    assert "reading the Processing registry of" in runtime.stderr
+
+
+def _the_generated_package_imports_phase1(os, project, script, subprocess, sys):
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(project), *filter(None, [env.get("PYTHONPATH")])]
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == (
+        "('native', 'saga') native:buffer ['DISTANCE', 'INPUT'] saga:slope 2"
+    )
+    assert json.loads(
+        (project / "field_tools" / "processing" / "catalogue.json").read_text()
+    )
+
+
 runner = CliRunner()
 
 CATALOGUE = Catalogue(
@@ -125,12 +156,7 @@ def test_generate_runs_the_reader_in_the_qgis_install_and_writes_both_sides(
     assert "class Slope(TypedRun):" in (package / "saga.py").read_text()
     web = project / "web" / "src" / "processing.schema.ts"
     assert "export interface SagaSlopeParams {" in web.read_text()
-    assert (
-        '"saga:slope": { params: SagaSlopeParams; result: SagaSlopeResult };'
-        in web.read_text()
-    )
-    assert "2 algorithms from 2 providers; 5 of 5 files changed" in result.output
-    assert "reading the Processing registry of" in runtime.stderr
+    _generate_runs_the_reader_phase1(result, runtime, web)
 
 
 def test_provider_filters_restrict_the_reader_and_the_outputs(
@@ -298,21 +324,4 @@ def test_the_generated_package_imports_from_the_project(
     )
     import os
 
-    env = dict(os.environ)
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(project), *filter(None, [env.get("PYTHONPATH")])]
-    )
-    completed = subprocess.run(
-        [sys.executable, "-c", script],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == (
-        "('native', 'saga') native:buffer ['DISTANCE', 'INPUT'] saga:slope 2"
-    )
-    assert json.loads(
-        (project / "field_tools" / "processing" / "catalogue.json").read_text()
-    )
+    _the_generated_package_imports_phase1(os, project, script, subprocess, sys)

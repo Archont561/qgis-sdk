@@ -40,6 +40,34 @@ from qgis_sdk_tools.generate import (
 )
 from typer.testing import CliRunner
 
+
+def _a_union_result_is_phase1(described):
+    generated = generate_typescript(described)
+
+    assert (
+        "(candidate: unknown, strict = false) => (VectorReading(candidate, strict) || "
+        "RasterReading(candidate, strict))" in generated
+    )
+    assert "isRecord(candidate) || isRecord(candidate)" not in generated
+
+
+def _the_cli_round_trips_phase1(described, target):
+    drifted = runner.invoke(
+        app,
+        [
+            "bridge",
+            "generate",
+            "--description",
+            str(described),
+            "--check",
+            "--out",
+            str(target),
+        ],
+    )
+    assert drifted.exit_code == 1
+    assert "out of date" in drifted.output
+
+
 runner = CliRunner()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -339,13 +367,7 @@ def test_a_union_result_is_validated_by_its_named_validators() -> None:
         },
     )
 
-    generated = generate_typescript(described)
-
-    assert (
-        "(candidate: unknown, strict = false) => (VectorReading(candidate, strict) || "
-        "RasterReading(candidate, strict))" in generated
-    )
-    assert "isRecord(candidate) || isRecord(candidate)" not in generated
+    _a_union_result_is_phase1(described)
 
 
 def test_an_open_map_inside_a_union_renders_as_a_record() -> None:
@@ -533,20 +555,7 @@ def test_the_cli_round_trips_a_description_file(tmp_path: Path) -> None:
     assert "is up to date" in fresh.output
 
     target.write_text("// stale\n", encoding="utf-8")
-    drifted = runner.invoke(
-        app,
-        [
-            "bridge",
-            "generate",
-            "--description",
-            str(described),
-            "--check",
-            "--out",
-            str(target),
-        ],
-    )
-    assert drifted.exit_code == 1
-    assert "out of date" in drifted.output
+    _the_cli_round_trips_phase1(described, target)
 
 
 def test_the_cli_prints_the_module_without_writing(tmp_path: Path) -> None:

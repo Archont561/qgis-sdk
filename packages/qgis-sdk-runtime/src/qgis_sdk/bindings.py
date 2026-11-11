@@ -53,6 +53,16 @@ from qgis_sdk.ui.surfaces import (
     is_surface_class,
 )
 
+
+def _bind_facts1(binding, target):
+    attach_describe(target)
+    existing = bindings_of(target)
+    if not existing:
+        setattr(target, BINDING_ORDER_ATTRIBUTE, next(_sequence))
+    setattr(target, BINDINGS_ATTRIBUTE, (*existing, binding))
+    return target
+
+
 if TYPE_CHECKING:
     from qgis_sdk.core._application import QgisSdkPlugin
 
@@ -254,12 +264,7 @@ def _bind(target: Any, binding: Binding, decorator: str) -> Any:
         raise QgisSdkDeclarationError(
             f"{decorator} binds an application action or a Dialog/Dock subclass"
         )
-    attach_describe(target)
-    existing = bindings_of(target)
-    if not existing:
-        setattr(target, BINDING_ORDER_ATTRIBUTE, next(_sequence))
-    setattr(target, BINDINGS_ATTRIBUTE, (*existing, binding))
-    return target
+    return _bind_facts1(binding, target)
 
 
 def _order_of(target: object) -> int:

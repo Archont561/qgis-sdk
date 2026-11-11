@@ -50,6 +50,20 @@ from qgis_sdk.services import (
     Styles,
 )
 
+
+def _declare_layouts_phase1(
+    QgsPrintLayout, QgsProject, QgsReadWriteContext, manager, template_file
+):
+    existing = manager.layoutByName(TEMPLATE_LAYOUT)
+    if existing is not None:
+        manager.removeLayout(existing)
+    source = QgsPrintLayout(QgsProject.instance())
+    source.initializeDefaults()
+    source.setName(TEMPLATE_LAYOUT)
+    if not source.saveAsTemplate(str(template_file()), QgsReadWriteContext()):
+        pytest.fail("the layout template fixture could not be written")
+
+
 NATIVE_ENV_FLAG = "QGIS_SDK_NATIVE_SERVICES"
 # Catalog identifiers, identical on both backends because the catalog is shipped
 # with the package rather than declared by the test.
@@ -1118,14 +1132,9 @@ def _native_services() -> Services:
         atlas.setEnabled(True)
         # The template is saved from a layout of its own name and the layout is
         # removed again, so loading the file adds that name to the project.
-        existing = manager.layoutByName(TEMPLATE_LAYOUT)
-        if existing is not None:
-            manager.removeLayout(existing)
-        source = QgsPrintLayout(QgsProject.instance())
-        source.initializeDefaults()
-        source.setName(TEMPLATE_LAYOUT)
-        if not source.saveAsTemplate(str(template_file()), QgsReadWriteContext()):
-            pytest.fail("the layout template fixture could not be written")
+        _declare_layouts_phase1(
+            QgsPrintLayout, QgsProject, QgsReadWriteContext, manager, template_file
+        )
 
     def drive_layouts() -> None:
         service = layouts.jobs

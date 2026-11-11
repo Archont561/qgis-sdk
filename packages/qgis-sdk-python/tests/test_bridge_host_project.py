@@ -33,6 +33,23 @@ from qgis_sdk.testing import (
     VectorLayerDeclaration,
 )
 
+
+def _the_project_stream_emits_phase1(binding, dispatcher, doubles, info):
+    dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "call_id": "call",
+            "operation": "project.add_layer",
+            "payload": {"layer_id": info.id},
+        },
+    )
+    frames = doubles.project.changes
+
+    assert [frame.kind for frame in frames] == ["layers"]
+    assert frames[0].layer_ids == (info.id,)
+
+
 ORIGIN = "qgis://desktop"
 
 #: The operations that replace or discard project state. Written out by hand,
@@ -420,16 +437,4 @@ def test_the_project_stream_emits_its_frames_in_order(
     assert opened["ok"] is True
     info = doubles.layers.open_vector(tmp_path / "sites.geojson")
 
-    dispatcher.dispatch(
-        binding,
-        {
-            "protocol": BRIDGE_PROTOCOL_VERSION,
-            "call_id": "call",
-            "operation": "project.add_layer",
-            "payload": {"layer_id": info.id},
-        },
-    )
-    frames = doubles.project.changes
-
-    assert [frame.kind for frame in frames] == ["layers"]
-    assert frames[0].layer_ids == (info.id,)
+    _the_project_stream_emits_phase1(binding, dispatcher, doubles, info)

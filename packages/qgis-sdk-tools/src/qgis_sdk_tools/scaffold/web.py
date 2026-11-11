@@ -25,6 +25,42 @@ from qgis_sdk_tools.generate import generate_schema_typescript
 
 from .options import PackageManager, ScaffoldOptions, WebOptions
 
+
+def _plan_web_phase1(files, options, web):
+    if web.framework == "react":
+        files += [
+            ("web/src/main.tsx", REACT_MAIN),
+            ("web/src/App.tsx", REACT_APP.replace("{title}", options.title)),
+            ("web/src/App.test.tsx", REACT_TEST),
+        ]
+    else:
+        files += [
+            ("web/src/main.ts", VANILLA_MAIN),
+            ("web/src/app.ts", VANILLA_APP.replace("{title}", options.title)),
+            ("web/src/app.test.ts", VANILLA_TEST),
+        ]
+    return tuple(files)
+
+
+def _package_json_phase1(dependencies, dev_dependencies, options):
+    package = {
+        "name": f"{options.plugin}-web",
+        "private": True,
+        "version": options.version,
+        "type": "module",
+        "scripts": {
+            "dev": "vite",
+            "build": "vite build",
+            "test": "vitest run",
+            "typecheck": "tsc --noEmit",
+            "bindings": f"cd .. && {bindings_command()}",
+        },
+        "dependencies": dict(sorted(dependencies.items())),
+        "devDependencies": dict(sorted(dev_dependencies.items())),
+    }
+    return json.dumps(package, indent="\t") + LF
+
+
 __all__ = [
     "BROWSER_TARGET",
     "SDK_NPM_PACKAGE",
@@ -142,19 +178,7 @@ def plan_web(options: ScaffoldOptions) -> tuple[WebFile, ...]:
             emit_typescript_module(core_catalogue(), [SCAFFOLD_PROCESSING_PROVIDER]),
         ),
     ]
-    if web.framework == "react":
-        files += [
-            ("web/src/main.tsx", REACT_MAIN),
-            ("web/src/App.tsx", REACT_APP.replace("{title}", options.title)),
-            ("web/src/App.test.tsx", REACT_TEST),
-        ]
-    else:
-        files += [
-            ("web/src/main.ts", VANILLA_MAIN),
-            ("web/src/app.ts", VANILLA_APP.replace("{title}", options.title)),
-            ("web/src/app.test.ts", VANILLA_TEST),
-        ]
-    return tuple(files)
+    return _plan_web_phase1(files, options, web)
 
 
 #: The Processing provider the starter page is typed for. The scaffold writes
@@ -204,22 +228,7 @@ def _package_json(options: ScaffoldOptions, web: WebOptions) -> str:
                 for name in ("@types/react", "@types/react-dom", "@vitejs/plugin-react")
             }
         )
-    package = {
-        "name": f"{options.plugin}-web",
-        "private": True,
-        "version": options.version,
-        "type": "module",
-        "scripts": {
-            "dev": "vite",
-            "build": "vite build",
-            "test": "vitest run",
-            "typecheck": "tsc --noEmit",
-            "bindings": f"cd .. && {bindings_command()}",
-        },
-        "dependencies": dict(sorted(dependencies.items())),
-        "devDependencies": dict(sorted(dev_dependencies.items())),
-    }
-    return json.dumps(package, indent="\t") + LF
+    return _package_json_phase1(dependencies, dev_dependencies, options)
 
 
 def _vite_config(options: ScaffoldOptions, web: WebOptions) -> str:

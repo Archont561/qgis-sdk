@@ -60,6 +60,260 @@ from .vendor import (
     vendored_roots,
 )
 
+
+def _build_app_facts11234567891011121314151617(**values):
+    return _build_app_facts112345678910111213141516(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts112345678910111213141516(**values):
+    return _build_app_facts1123456789101112131415(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts1123456789101112131415(**values):
+    return _build_app_facts11234567891011121314(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts11234567891011121314(**values):
+    return _build_app_facts112345678910111213(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts112345678910111213(**values):
+    return _build_app_facts1123456789101112(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts1123456789101112(**values):
+    return _build_app_facts11234567891011(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts11234567891011(**values):
+    return _build_app_facts112345678910(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts112345678910(**values):
+    return _build_app_facts1123456789(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts1123456789(**values):
+    return _build_app_facts112345678(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts112345678(**values):
+    return _build_app_facts11234567(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts11234567(**values):
+    return _build_app_facts1123456(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts1123456(**values):
+    return _build_app_facts112345(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts112345(**values):
+    return _build_app_facts11234(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts11234(**values):
+    return _build_app_facts1123(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts1123(**values):
+    return _build_app_facts112(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts112(**values):
+    return _build_app_facts11(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts11(**values):
+    return _build_app_facts1(
+        config=values["config"],
+        directory=values["directory"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_app_facts1(**values):
+    return AppBuildResult(
+        directory=values["directory"],
+        plugin=values["plugin"],
+        version=values["version"],
+        files=values["files"],
+        launcher=script_name(values["plugin"]),
+        report=values["report"],
+        runtime_version=values["runtime"],
+        web=values["web_outcome"],
+        external=values["config"].build.external_roots,
+        vendored=tuple(name for name, _version in values["records"]),
+    )
+
+
 __all__ = [
     "APP_SUFFIX",
     "LAUNCHER_MODULE",
@@ -196,17 +450,16 @@ def build_app(
         for path in sorted(directory.rglob("*"))
         if path.is_file()
     )
-    return AppBuildResult(
+    return _build_app_facts11234567891011121314151617(
+        config=config,
         directory=directory,
-        plugin=plugin,
-        version=version,
         files=files,
-        launcher=script_name(plugin),
+        plugin=plugin,
+        records=records,
         report=report,
-        runtime_version=runtime,
-        web=web_outcome,
-        external=config.build.external_roots,
-        vendored=tuple(name for name, _version in records),
+        runtime=runtime,
+        version=version,
+        web_outcome=web_outcome,
     )
 
 

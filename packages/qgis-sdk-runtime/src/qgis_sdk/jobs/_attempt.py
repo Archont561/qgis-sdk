@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
+    TypedDict,
+    Unpack,
 )
 
 from qgis_sdk.core import ResourceScope, WorkerContext
@@ -115,23 +118,16 @@ class _Cancellation:
 class _Attempt:
     """Everything the service tracks about one submitted job."""
 
-    def __init__(
-        self,
-        *,
-        runtime: _Runtime,
-        owner: JobService,
-        description: JobDescription,
-        logical_id: str,
-        prerequisites: tuple[JobHandle, ...] = (),
-    ) -> None:
-        self.runtime = runtime
-        self.owner = owner
-        self.description = description
-        self.id = logical_id
-        self.prerequisites = prerequisites
+    def __init__(self, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        self.runtime = values.runtime
+        self.owner = values.owner
+        self.description = values.description
+        self.id = values.logical_id
+        self.prerequisites = values.prerequisites
         """Jobs this attempt runs after (``ctx.jobs.after``), submitted earlier."""
         self.attempt = 1
-        self.scope = runtime.scope.child()
+        self.scope = values.runtime.scope.child()
         self.progress = _Progress()
         self._cancelled = threading.Event()
         self._job: Job | None = None
@@ -403,3 +399,20 @@ async def _run_attempt(
             f"declared {type_name(description.result_type)}"
         )
     return outcome
+
+
+class _InitOptions1(TypedDict, total=False):
+    runtime: _Runtime
+    owner: JobService
+    description: JobDescription
+    logical_id: str
+    prerequisites: tuple[JobHandle, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    runtime: _Runtime
+    owner: JobService
+    description: JobDescription
+    logical_id: str
+    prerequisites: tuple[JobHandle, ...] = ()

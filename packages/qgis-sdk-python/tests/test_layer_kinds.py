@@ -54,6 +54,56 @@ from qgis_sdk.testing import (
 )
 from qgis_sdk.ui.components import LayerPicker
 
+
+def _declare_every_kind_facts11(layers):
+    layers.register_layer(
+        OtherLayerDeclaration(
+            VECTOR_TILES,
+            name="basemap",
+            kind="vector_tile",
+            crs="EPSG:3857",
+            detail={"source_type": "xyz", "min_zoom": 0, "max_zoom": 14},
+        )
+    )
+    _declare_every_kind_facts1(layers)
+
+
+def _declare_every_kind_facts1(layers):
+    layers.register_layer(
+        OtherLayerDeclaration(
+            TILED_SCENE,
+            name="city",
+            kind="tiled_scene",
+            crs="EPSG:4978",
+            detail={
+                "extent": {"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2}
+            },
+        )
+    )
+
+
+def _a_page_opens_a_facts11(binding, dispatcher, opened, scope):
+    listed = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "call_id": "call",
+            "operation": "layers.list",
+            "payload": {},
+        },
+    )
+    _a_page_opens_a_facts1(listed, opened, scope)
+
+
+def _a_page_opens_a_facts1(listed, opened, scope):
+    scope.close()
+
+    assert opened["ok"] is True
+    assert opened["value"]["kind"] == "mesh"
+    assert opened["value"]["vertex_count"] == 4
+    assert [item["kind"] for item in listed["value"]["items"]] == ["mesh"]
+
+
 ORIGIN = "qgis://desktop"
 
 MESH = Path("fixtures/lagoon.2dm")
@@ -289,26 +339,7 @@ def _declare_every_kind(layers: FakeLayers) -> None:
             detail={"point_count": 12, "attribute_names": ("X", "Y", "Z")},
         )
     )
-    layers.register_layer(
-        OtherLayerDeclaration(
-            VECTOR_TILES,
-            name="basemap",
-            kind="vector_tile",
-            crs="EPSG:3857",
-            detail={"source_type": "xyz", "min_zoom": 0, "max_zoom": 14},
-        )
-    )
-    layers.register_layer(
-        OtherLayerDeclaration(
-            TILED_SCENE,
-            name="city",
-            kind="tiled_scene",
-            crs="EPSG:4978",
-            detail={
-                "extent": {"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2}
-            },
-        )
-    )
+    _declare_every_kind_facts11(layers)
 
 
 def test_the_fake_opens_every_kind_and_answers_the_same_ids() -> None:
@@ -584,21 +615,7 @@ def test_a_page_opens_a_mesh_with_a_granted_ref_and_reads_it_back(
             "payload": {"file": ref.to_wire()},
         },
     )
-    listed = dispatcher.dispatch(
-        binding,
-        {
-            "protocol": BRIDGE_PROTOCOL_VERSION,
-            "call_id": "call",
-            "operation": "layers.list",
-            "payload": {},
-        },
-    )
-    scope.close()
-
-    assert opened["ok"] is True
-    assert opened["value"]["kind"] == "mesh"
-    assert opened["value"]["vertex_count"] == 4
-    assert [item["kind"] for item in listed["value"]["items"]] == ["mesh"]
+    _a_page_opens_a_facts11(binding, dispatcher, opened, scope)
 
 
 def test_an_annotation_layer_is_opened_by_name_rather_than_by_ref() -> None:

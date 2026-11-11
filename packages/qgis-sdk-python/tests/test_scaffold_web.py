@@ -31,6 +31,16 @@ from qgis_sdk_tools.scaffold.web import (
     script_command,
 )
 
+
+def _package_json_pins_the_phase1(framework, package, pinned):
+    assert "vitest" in package["devDependencies"]
+    assert "bunup" not in pinned  # library tooling, never an app's (decision-18)
+    assert ("react" in package["dependencies"]) is (framework == "react")
+    assert ("@vitejs/plugin-react" in package["devDependencies"]) is (
+        framework == "react"
+    )
+
+
 PLAIN_FILES = [
     ".gitignore",
     "README.md",
@@ -175,12 +185,7 @@ def test_package_json_pins_the_sdk_exactly_and_keeps_vite_whatever_the_manager(
         expected = UI_NPM_VERSION if name == UI_NPM_PACKAGE else SDK_NPM_VERSION
         assert version == WEB_TEMPLATE_VERSIONS.get(name, expected)
     assert "vite" in package["devDependencies"]
-    assert "vitest" in package["devDependencies"]
-    assert "bunup" not in pinned  # library tooling, never an app's (decision-18)
-    assert ("react" in package["dependencies"]) is (framework == "react")
-    assert ("@vitejs/plugin-react" in package["devDependencies"]) is (
-        framework == "react"
-    )
+    _package_json_pins_the_phase1(framework, package, pinned)
 
 
 def test_an_explicit_sdk_dependency_replaces_the_pin_and_nothing_else() -> None:

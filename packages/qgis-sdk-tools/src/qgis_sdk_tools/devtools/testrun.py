@@ -36,7 +36,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, TypedDict, Unpack
 
 from qgis_sdk.environment import TEST_TARGET_ENV as TARGET_ENV
 from qgis_sdk.models import QgisSdkError
@@ -44,6 +44,28 @@ from qgis_sdk.models import QgisSdkError
 from qgis_sdk_tools.scaffold.web import script_command
 
 from .installs import QgisInstall, sdk_import_paths, wants_headless
+
+
+def _plan_server_facts1(install, process_env, pytest_args, root):
+    return TestPlan(
+        target="server",
+        argv=(
+            str(install.python),
+            "-m",
+            "pytest",
+            *_pytest_args("server", pytest_args),
+        ),
+        cwd=root,
+        env=process_env,
+        notes=(
+            (
+                f"target server: QGIS {install.prefix} ({install.source}), "
+                f"python {install.python}, offscreen; the tests marked server "
+                "need a QGIS built with WITH_SERVER=ON and its bindings"
+            ),
+        ),
+    )
+
 
 __all__ = [
     "PLUGIN",
@@ -130,12 +152,7 @@ def plan_tests(
     root: Path,
     target: str,
     pytest_args: Sequence[str],
-    *,
-    env: Mapping[str, str],
-    install: QgisInstall | None = None,
-    workspace: Path | None = None,
-    python: str = sys.executable,
-    platform: str = sys.platform,
+    **options: Unpack[_PlanOptions1],
 ) -> TestPlan:
     """Return the process for ``target`` at ``root``; raise when it cannot run.
 
@@ -143,6 +160,7 @@ def plan_tests(
     ``workspace`` is the throwaway directory the ``desktop`` target writes its
     probe and profile into; the caller owns and removes it.
     """
+    values = _PlanValues1(**options)
     root = Path(root).resolve()
     if not root.is_dir():
         raise QgisSdkTestRunError(f"{root} is not a directory; give a project root")
@@ -151,26 +169,28 @@ def plan_tests(
             f"unknown target {target!r}; choose one of {', '.join(TARGETS)}"
         )
     if target == "web":
-        return _plan_web(root, pytest_args, env)
+        return _plan_web(root, pytest_args, values.env)
     if target == "pure":
-        argv = (python, "-m", "pytest", *_pytest_args("pure", pytest_args))
+        argv = (values.python, "-m", "pytest", *_pytest_args("pure", pytest_args))
         return TestPlan(
             target="pure",
             argv=argv,
             cwd=root,
-            env={**env, TARGET_ENV: "pure"},
+            env={**values.env, TARGET_ENV: "pure"},
             notes=("target pure: this interpreter, native imports refused",),
         )
-    if install is None:
+    if values.install is None:
         raise QgisSdkTestRunError(f"target {target} needs a QGIS install")
-    headless = wants_headless(env, platform=platform)
+    headless = wants_headless(values.env, platform=values.platform)
     if target == "qgis":
-        return _plan_qgis(root, pytest_args, env, install, headless)
+        return _plan_qgis(root, pytest_args, values.env, values.install, headless)
     if target == "server":
-        return _plan_server(root, pytest_args, env, install)
-    if workspace is None:
+        return _plan_server(root, pytest_args, values.env, values.install)
+    if values.workspace is None:
         raise QgisSdkTestRunError("target desktop needs a workspace directory")
-    return _plan_desktop(root, pytest_args, env, install, headless, workspace)
+    return _plan_desktop(
+        root, pytest_args, values.env, values.install, headless, values.workspace
+    )
 
 
 def _pytest_args(target: str, pytest_args: Sequence[str]) -> tuple[str, ...]:
@@ -232,24 +252,7 @@ def _plan_server(
         env, extra_paths=sdk_import_paths(), headless=True
     )
     process_env[TARGET_ENV] = "server"
-    return TestPlan(
-        target="server",
-        argv=(
-            str(install.python),
-            "-m",
-            "pytest",
-            *_pytest_args("server", pytest_args),
-        ),
-        cwd=root,
-        env=process_env,
-        notes=(
-            (
-                f"target server: QGIS {install.prefix} ({install.source}), "
-                f"python {install.python}, offscreen; the tests marked server "
-                "need a QGIS built with WITH_SERVER=ON and its bindings"
-            ),
-        ),
-    )
+    return _plan_server_facts1(install, process_env, pytest_args, root)
 
 
 def _plan_desktop(
@@ -355,3 +358,20 @@ def _plan_web(root: Path, args: Sequence[str], env: Mapping[str, str]) -> TestPl
         env=dict(env),
         notes=(f"target web: {manager} in web/",),
     )
+
+
+class _PlanOptions1(TypedDict, total=False):
+    env: Mapping[str, str]
+    install: QgisInstall | None
+    workspace: Path | None
+    python: str
+    platform: str
+
+
+@dataclass(frozen=True, slots=True)
+class _PlanValues1:
+    env: Mapping[str, str]
+    install: QgisInstall | None = None
+    workspace: Path | None = None
+    python: str = sys.executable
+    platform: str = sys.platform

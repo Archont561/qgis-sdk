@@ -16,6 +16,27 @@ import subprocess
 import sys
 from pathlib import Path
 
+
+def _check_generated_facts1():
+    reference = [
+        "pixi",
+        "run",
+        "-e",
+        "default",
+        "python",
+        "-m",
+        "qgis_sdk_tools",
+        "bridge",
+        "generate",
+        "--out",
+        "web/src/bridge.schema.ts",
+        "--check",
+    ]
+    return status_code(
+        subprocess.run(reference, cwd=ROOT / "examples/simple", check=False).returncode
+    )
+
+
 ROOT = Path(__file__).resolve().parent.parent
 NATIVE_COMMAND = [
     "pixi",
@@ -383,23 +404,7 @@ def check_generated() -> int:
             "::error title=generated client is stale::Run `python packages/qgis-sdk-python/scripts/generate_bridge_clients.py` and commit the result."
         )
         return 1
-    reference = [
-        "pixi",
-        "run",
-        "-e",
-        "default",
-        "python",
-        "-m",
-        "qgis_sdk_tools",
-        "bridge",
-        "generate",
-        "--out",
-        "web/src/bridge.schema.ts",
-        "--check",
-    ]
-    return status_code(
-        subprocess.run(reference, cwd=ROOT / "examples/simple", check=False).returncode
-    )
+    return _check_generated_facts1()
 
 
 #: Where the BDD scenarios live, relative to the checkout root. Every

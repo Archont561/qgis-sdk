@@ -31,6 +31,64 @@ from collections.abc import Iterable, Sequence
 
 from qgis_sdk.models import AlgorithmInfo, Catalogue, OutputInfo, ParameterInfo
 
+
+def _emit_python_module_facts1(header, text, used, value_types):
+    if used(value_types):
+        header.append(
+            f"from qgis_sdk.processing.types import {', '.join(used(value_types))}"
+        )
+    header.extend(["", ""])
+    return "\n".join(header) + text
+
+
+def _python_algorithm_facts11(algorithm, fields, lines):
+    algorithm_line = f"    algorithm: ClassVar[str] = {_q(algorithm.id)}"
+    if len(algorithm_line) > 88:
+        algorithm_line = (
+            f"    algorithm: ClassVar[str] = (\n        {_q(algorithm.id)}\n    )"
+        )
+    lines.append(algorithm_line)
+    return _python_algorithm_facts1(fields, lines)
+
+
+def _python_algorithm_facts1(fields, lines):
+    if fields:
+        lines.append("    _names: ClassVar[dict[str, str]] = {")
+        lines.extend(
+            f"        {_q(field)}: {_q(parameter.name)}," for field, parameter in fields
+        )
+        lines.append("    }")
+    else:
+        lines.append("    _names: ClassVar[dict[str, str]] = {}")
+    required = [(f, p) for f, p in fields if p.required]
+    optional = [(f, p) for f, p in fields if not p.required]
+    for field, parameter in required:
+        lines.append(f"    {field}: {python_type(parameter)}")
+    for field, parameter in optional:
+        lines.append(f"    {field}: {python_type(parameter)} | None = None")
+    lines.append("")
+    lines.append("")
+    return lines
+
+
+def _emit_typescript_module_facts11(names, out):
+    out.append("}")
+    out.append("")
+    out.append("export const ALGORITHM_IDS = [")
+    out.extend(f'\t"{algorithm_id}",' for algorithm_id, _ in names)
+    out.append("] as const;")
+    return _emit_typescript_module_facts1(out)
+
+
+def _emit_typescript_module_facts1(out):
+    out.append("")
+    out.append("export type AlgorithmId = keyof AlgorithmRegistry;")
+    out.append("")
+    out.extend(_TS_RUN.splitlines())
+    out.append("")
+    return "\n".join(out)
+
+
 __all__ = [
     "PYTHON_TYPES",
     "TYPESCRIPT_TYPES",
@@ -310,12 +368,7 @@ def emit_python_module(
         "",
         f"from qgis_sdk.models import {', '.join(used(models))}",
     ]
-    if used(value_types):
-        header.append(
-            f"from qgis_sdk.processing.types import {', '.join(used(value_types))}"
-        )
-    header.extend(["", ""])
-    return "\n".join(header) + text
+    return _emit_python_module_facts1(header, text, used, value_types)
 
 
 def _python_algorithm(algorithm: AlgorithmInfo, name: str) -> list[str]:
@@ -361,29 +414,7 @@ def _python_algorithm(algorithm: AlgorithmInfo, name: str) -> list[str]:
         doc += ["", "Outputs: " + ", ".join(o.name for o in algorithm.outputs)]
     lines.append(_docstring(doc, "    "))
     lines.append("")
-    algorithm_line = f"    algorithm: ClassVar[str] = {_q(algorithm.id)}"
-    if len(algorithm_line) > 88:
-        algorithm_line = (
-            f"    algorithm: ClassVar[str] = (\n        {_q(algorithm.id)}\n    )"
-        )
-    lines.append(algorithm_line)
-    if fields:
-        lines.append("    _names: ClassVar[dict[str, str]] = {")
-        lines.extend(
-            f"        {_q(field)}: {_q(parameter.name)}," for field, parameter in fields
-        )
-        lines.append("    }")
-    else:
-        lines.append("    _names: ClassVar[dict[str, str]] = {}")
-    required = [(f, p) for f, p in fields if p.required]
-    optional = [(f, p) for f, p in fields if not p.required]
-    for field, parameter in required:
-        lines.append(f"    {field}: {python_type(parameter)}")
-    for field, parameter in optional:
-        lines.append(f"    {field}: {python_type(parameter)} | None = None")
-    lines.append("")
-    lines.append("")
-    return lines
+    return _python_algorithm_facts11(algorithm, fields, lines)
 
 
 def _typed_dict(name: str, entries: Sequence[str]) -> list[str]:
@@ -524,17 +555,7 @@ def emit_typescript_module(
         out.append(
             f'\t"{algorithm_id}": {{ params: {name}Params; result: {name}Result }};'
         )
-    out.append("}")
-    out.append("")
-    out.append("export const ALGORITHM_IDS = [")
-    out.extend(f'\t"{algorithm_id}",' for algorithm_id, _ in names)
-    out.append("] as const;")
-    out.append("")
-    out.append("export type AlgorithmId = keyof AlgorithmRegistry;")
-    out.append("")
-    out.extend(_TS_RUN.splitlines())
-    out.append("")
-    return "\n".join(out)
+    return _emit_typescript_module_facts11(names, out)
 
 
 #: The bound runner: the bridge's generic ``runAlgorithm`` with this module's

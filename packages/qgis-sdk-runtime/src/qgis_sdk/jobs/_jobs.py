@@ -25,7 +25,8 @@ submits view-owned work without the handler having to say so (decision-65 §3).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, TypedDict, Unpack
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.jobs._authoring import JobDescription
@@ -133,13 +134,7 @@ class Jobs:
         return self._service.faults
 
     def watch(
-        self,
-        handle: JobHandle,
-        *,
-        on_progress: Callable[[float], None] | None = None,
-        on_success: Callable[[object], None] | None = None,
-        on_failure: Callable[[BaseException], None] | None = None,
-        on_cancelled: Callable[[], None] | None = None,
+        self, handle: JobHandle, **options: Unpack[_WatchOptions1]
     ) -> tuple[JobSubscription, ...]:
         """Subscribe callbacks to ``handle`` for this owner's lifetime.
 
@@ -149,16 +144,17 @@ class Jobs:
         before anything else runs. A handle that already settled replays
         once, immediately.
         """
+        values = _WatchValues1(**options)
         owner = self._service.scope
         subscriptions: list[JobSubscription] = []
-        if on_progress is not None:
-            subscriptions.append(handle.on_progress(on_progress, owner=owner))
-        if on_success is not None:
-            subscriptions.append(handle.on_success(on_success, owner=owner))
-        if on_failure is not None:
-            subscriptions.append(handle.on_failure(on_failure, owner=owner))
-        if on_cancelled is not None:
-            subscriptions.append(handle.on_cancelled(on_cancelled, owner=owner))
+        if values.on_progress is not None:
+            subscriptions.append(handle.on_progress(values.on_progress, owner=owner))
+        if values.on_success is not None:
+            subscriptions.append(handle.on_success(values.on_success, owner=owner))
+        if values.on_failure is not None:
+            subscriptions.append(handle.on_failure(values.on_failure, owner=owner))
+        if values.on_cancelled is not None:
+            subscriptions.append(handle.on_cancelled(values.on_cancelled, owner=owner))
         return tuple(subscriptions)
 
     def __repr__(self) -> str:
@@ -200,3 +196,18 @@ class OrderedJobs:
     def __repr__(self) -> str:
         ids = ", ".join(handle.id for handle in self._handles)
         return f"<jobs after ({ids})>"
+
+
+class _WatchOptions1(TypedDict, total=False):
+    on_progress: Callable[[float], None] | None
+    on_success: Callable[[object], None] | None
+    on_failure: Callable[[BaseException], None] | None
+    on_cancelled: Callable[[], None] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _WatchValues1:
+    on_progress: Callable[[float], None] | None = None
+    on_success: Callable[[object], None] | None = None
+    on_failure: Callable[[BaseException], None] | None = None
+    on_cancelled: Callable[[], None] | None = None

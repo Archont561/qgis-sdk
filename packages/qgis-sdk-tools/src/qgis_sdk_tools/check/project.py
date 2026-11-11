@@ -42,6 +42,28 @@ from .versions import (
     check_runtime_requirement,
 )
 
+
+def _check_project_facts1(diagnostics, files, imports, root):
+    return CheckReport(
+        root=root,
+        diagnostics=tuple(diagnostics),
+        files_checked=files,
+        imports=imports,
+    )
+
+
+def _buckets_facts1(config, findings, package, root, vendored):
+    report = bucket_imports(
+        root,
+        config.plugin,
+        tuple(_python_files(package)),
+        external=config.build.external_roots,
+        vendored=vendored,
+    )
+    findings.extend(import_findings(report))
+    return report, tuple(findings)
+
+
 if TYPE_CHECKING:  # imported by the caller: this module is imported by it
     from qgis_sdk_tools.project import ProjectConfig
 
@@ -149,12 +171,7 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
         )
 
     diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
-    return CheckReport(
-        root=root,
-        diagnostics=tuple(diagnostics),
-        files_checked=files,
-        imports=imports,
-    )
+    return _check_project_facts1(diagnostics, files, imports, root)
 
 
 def _buckets(
@@ -193,15 +210,7 @@ def _buckets(
             )
         vendored.extend(distribution.roots)
     findings.extend(_requirement_findings(distributions, config))
-    report = bucket_imports(
-        root,
-        config.plugin,
-        tuple(_python_files(package)),
-        external=config.build.external_roots,
-        vendored=vendored,
-    )
-    findings.extend(import_findings(report))
-    return report, tuple(findings)
+    return _buckets_facts1(config, findings, package, root, vendored)
 
 
 def _requirement_findings(

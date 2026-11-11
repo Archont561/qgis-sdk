@@ -18,6 +18,18 @@ from pathlib import Path
 
 import pytest
 
+
+def _record_ids_are_unique_phase1(declared):
+    clashes = {
+        identifier: paths for identifier, paths in declared.items() if len(paths) > 1
+    }
+    assert not clashes, "duplicate record ids:\n" + "\n".join(
+        f"{identifier}: "
+        + ", ".join(path.relative_to(ROOT).as_posix() for path in paths)
+        for identifier, paths in sorted(clashes.items())
+    )
+
+
 ROOT = Path(__file__).resolve().parents[2]
 BACKLOG = ROOT / "backlog"
 MILESTONES = BACKLOG / "milestones"
@@ -227,14 +239,7 @@ def test_record_ids_are_unique() -> None:
             continue
         declared.setdefault(match.group(1), []).append(path)
 
-    clashes = {
-        identifier: paths for identifier, paths in declared.items() if len(paths) > 1
-    }
-    assert not clashes, "duplicate record ids:\n" + "\n".join(
-        f"{identifier}: "
-        + ", ".join(path.relative_to(ROOT).as_posix() for path in paths)
-        for identifier, paths in sorted(clashes.items())
-    )
+    _record_ids_are_unique_phase1(declared)
 
 
 @pytest.mark.parametrize("identifier", sorted(milestone_files()))

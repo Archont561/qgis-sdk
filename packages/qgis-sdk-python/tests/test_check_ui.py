@@ -9,6 +9,119 @@ from qgis_sdk_tools.check import check_project
 from qgis_sdk_tools.check.ui import check_bindings
 
 
+def _a_bound_typed_action_facts1(source, tmp_path):
+    typed = (
+        "UI003:7:typed is bound to the Desktop (@toolbar) but takes inputs "
+        "(distance, note); nothing collects them"
+    )
+    below = (
+        "UI003:12:below is bound to the Desktop (@menu, @shortcut) but takes "
+        "inputs (layer_id); nothing collects them"
+    )
+    assert findings(source, tmp_path=tmp_path) == [typed, below]
+
+
+def _check_project_reports_both_facts11(package, tmp_path):
+    (package / "plugin.py").write_text(
+        textwrap.dedent(
+            """
+            from qgis_sdk import QgisSdkPlugin, toolbar
+            from qgis_sdk.core import PluginContext
+
+
+            app = QgisSdkPlugin(id="field_tools", title="Field tools")
+
+
+            @toolbar(icon="buffer.svg")
+            @app.action(id="buffer", title="Buffer")
+            def buffer(ctx: PluginContext, distance: float) -> None: ...
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    report = check_project(tmp_path)
+
+    by_rule = {d.rule: d for d in report.diagnostics}
+    _check_project_reports_both_facts1(by_rule)
+
+
+def _check_project_reports_both_facts1(by_rule):
+    assert "UI003" in by_rule and "ICON001" in by_rule
+    assert by_rule["UI003"].path == Path("field_tools/plugin.py")
+    assert "self.ctx.actions.buffer(" in by_rule["UI003"].remediation
+    assert "field_tools/icons/buffer.svg" in by_rule["ICON001"].remediation
+    rendered = by_rule["ICON001"].render()
+    assert rendered.startswith("field_tools/plugin.py:9:")
+
+
+def _an_on_name_missing_facts11(package, source):
+    found = list(
+        check_bindings(
+            textwrap.dedent(source),
+            path=Path("pkg/views.py"),
+            package_directory=package,
+            directory=package,
+        )
+    )
+    _an_on_name_missing_facts1(found)
+
+
+def _an_on_name_missing_facts1(found):
+    assert [f"{d.rule}:{d.line}:{d.message}" for d in found] == [
+        "UI002:15:@on('gone') in Buffer: buffer.ui declares no widget named 'gone'",
+        (
+            "UI002:18:@on('missing') in Buffer: buffer.ui declares no widget named "
+            "'missing'"
+        ),
+        "UI002:22:Lost.ui = 'lost.ui': pkg/lost.ui does not exist",
+        # A module-level constant resolves; a declared component is fine; a
+        # name the class never declares is UI005.
+        "UI002:45:@on('gone') in Constants: buffer.ui declares no widget named 'gone'",
+        (
+            "UI005:51:@on(unknown_name) in Constants: the class declares no "
+            "component named 'unknown_name'"
+        ),
+    ]
+    assert "distance, go" in found[0].remediation
+    assert all(d.severity == "error" for d in found)
+
+
+def _declared_surfaces_are_read_phase2(source, tmp_path):
+    found = list(
+        check_bindings(
+            textwrap.dedent(source),
+            path=Path("pkg/views.py"),
+            package_directory=tmp_path,
+            directory=tmp_path,
+        )
+    )
+    _declared_surfaces_are_read_phase1(found)
+
+
+def _declared_surfaces_are_read_phase1(found):
+    assert [f"{d.rule}:{d.line}:{d.message}" for d in found] == [
+        (
+            "UI005:31:Broken.label = Custom(QLabel(...)): a widget built when the "
+            "class is defined cannot be copied for each window"
+        ),
+        (
+            "UI005:32:Broken.other = Custom(QLabel(...)): a widget built when the "
+            "class is defined cannot be copied for each window"
+        ),
+        "UI005:34:@on(clear) in Broken: 'clear' is a str, not a component",
+        "UI005:37:@on(count) in Broken: 'count' is an int, not a component",
+        "UI005:40:@on(title) in Broken: 'title' is a str, not a component",
+        (
+            "UI005:43:@on(nowhere) in Broken: the class declares no component "
+            "named 'nowhere'"
+        ),
+    ]
+    assert all(d.severity == "error" for d in found)
+    assert "factory" in found[0].remediation
+    assert "class attribute" in found[2].remediation
+
+
 def findings(source: str, *, icons: tuple[str, ...] = (), tmp_path: Path) -> list[str]:
     package = tmp_path / "pkg"
     (package / "icons").mkdir(parents=True, exist_ok=True)
@@ -47,15 +160,7 @@ def test_a_bound_typed_action_is_ui003_whatever_the_stacking_order(
         @app.action(id="unbound", title="Unbound")
         def unbound(ctx, value: int) -> int: ...
         """
-    typed = (
-        "UI003:7:typed is bound to the Desktop (@toolbar) but takes inputs "
-        "(distance, note); nothing collects them"
-    )
-    below = (
-        "UI003:12:below is bound to the Desktop (@menu, @shortcut) but takes "
-        "inputs (layer_id); nothing collects them"
-    )
-    assert findings(source, tmp_path=tmp_path) == [typed, below]
+    _a_bound_typed_action_facts1(source, tmp_path)
 
 
 def test_aliases_and_module_imports_are_recognised(tmp_path: Path) -> None:
@@ -175,33 +280,7 @@ def test_check_project_reports_both_rules_with_remediation(tmp_path: Path) -> No
     package = tmp_path / "field_tools"
     package.mkdir()
     (package / "__init__.py").write_text("", encoding="utf-8")
-    (package / "plugin.py").write_text(
-        textwrap.dedent(
-            """
-            from qgis_sdk import QgisSdkPlugin, toolbar
-            from qgis_sdk.core import PluginContext
-
-
-            app = QgisSdkPlugin(id="field_tools", title="Field tools")
-
-
-            @toolbar(icon="buffer.svg")
-            @app.action(id="buffer", title="Buffer")
-            def buffer(ctx: PluginContext, distance: float) -> None: ...
-            """
-        ),
-        encoding="utf-8",
-    )
-
-    report = check_project(tmp_path)
-
-    by_rule = {d.rule: d for d in report.diagnostics}
-    assert "UI003" in by_rule and "ICON001" in by_rule
-    assert by_rule["UI003"].path == Path("field_tools/plugin.py")
-    assert "self.ctx.actions.buffer(" in by_rule["UI003"].remediation
-    assert "field_tools/icons/buffer.svg" in by_rule["ICON001"].remediation
-    rendered = by_rule["ICON001"].render()
-    assert rendered.startswith("field_tools/plugin.py:9:")
+    _check_project_reports_both_facts11(package, tmp_path)
 
 
 UI_FILE = """\
@@ -275,31 +354,7 @@ def test_an_on_name_missing_from_the_designer_file_is_ui002(tmp_path: Path) -> N
             @wired(unknown_name).clicked
             def unknown(self): ...
         """
-    found = list(
-        check_bindings(
-            textwrap.dedent(source),
-            path=Path("pkg/views.py"),
-            package_directory=package,
-            directory=package,
-        )
-    )
-    assert [f"{d.rule}:{d.line}:{d.message}" for d in found] == [
-        "UI002:15:@on('gone') in Buffer: buffer.ui declares no widget named 'gone'",
-        (
-            "UI002:18:@on('missing') in Buffer: buffer.ui declares no widget named "
-            "'missing'"
-        ),
-        "UI002:22:Lost.ui = 'lost.ui': pkg/lost.ui does not exist",
-        # A module-level constant resolves; a declared component is fine; a
-        # name the class never declares is UI005.
-        "UI002:45:@on('gone') in Constants: buffer.ui declares no widget named 'gone'",
-        (
-            "UI005:51:@on(unknown_name) in Constants: the class declares no "
-            "component named 'unknown_name'"
-        ),
-    ]
-    assert "distance, go" in found[0].remediation
-    assert all(d.severity == "error" for d in found)
+    _an_on_name_missing_facts11(package, source)
 
 
 def test_declared_surfaces_are_read_statically_ui005(tmp_path: Path) -> None:
@@ -349,31 +404,4 @@ def test_declared_surfaces_are_read_statically_ui005(tmp_path: Path) -> None:
             @on(nowhere).clicked
             def lost(self): ...
         """
-    found = list(
-        check_bindings(
-            textwrap.dedent(source),
-            path=Path("pkg/views.py"),
-            package_directory=tmp_path,
-            directory=tmp_path,
-        )
-    )
-    assert [f"{d.rule}:{d.line}:{d.message}" for d in found] == [
-        (
-            "UI005:31:Broken.label = Custom(QLabel(...)): a widget built when the "
-            "class is defined cannot be copied for each window"
-        ),
-        (
-            "UI005:32:Broken.other = Custom(QLabel(...)): a widget built when the "
-            "class is defined cannot be copied for each window"
-        ),
-        "UI005:34:@on(clear) in Broken: 'clear' is a str, not a component",
-        "UI005:37:@on(count) in Broken: 'count' is an int, not a component",
-        "UI005:40:@on(title) in Broken: 'title' is a str, not a component",
-        (
-            "UI005:43:@on(nowhere) in Broken: the class declares no component "
-            "named 'nowhere'"
-        ),
-    ]
-    assert all(d.severity == "error" for d in found)
-    assert "factory" in found[0].remediation
-    assert "class attribute" in found[2].remediation
+    _declared_surfaces_are_read_phase2(source, tmp_path)

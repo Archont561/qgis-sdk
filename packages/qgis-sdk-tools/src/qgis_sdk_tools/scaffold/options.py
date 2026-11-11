@@ -5,9 +5,53 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import dataclass
-from typing import Final, Literal, get_args
+from typing import Final, Literal, TypedDict, Unpack, get_args
 
 from qgis_sdk.models import QgisSdkError
+
+
+def _resolve_facts1(cls, plugin, values):
+    return cls(
+        host=_host(
+            values.host, web=values.web, ui=values.ui, algorithm=values.algorithm
+        ),
+        plugin=_package_name(plugin),
+        title=_title(plugin, values.title),
+        version=_dot_version(values.version, "version"),
+        qgis_minimum_version=_dot_version(
+            values.qgis_minimum_version, "QGIS minimum version"
+        ),
+        author=_text(values.author, "author"),
+        email=_text(values.email, "email"),
+        web=_web(
+            values.web,
+            values.placement,
+            values.package_manager,
+            values.sdk_dependency,
+            values.ui_dependency,
+        ),
+        algorithm=bool(values.algorithm),
+        ui=_ui(values.ui),
+    )
+
+
+def _web_phase1(framework, package_manager, placement, sdk_dependency, ui_dependency):
+    return WebOptions(
+        framework=_choice(framework, WEB_FRAMEWORKS, "web framework"),  # type: ignore[arg-type]
+        placement=_choice(  # type: ignore[arg-type]
+            DEFAULT_WEB_PLACEMENT if placement is None else placement,
+            WEB_PLACEMENTS,
+            "placement",
+        ),
+        package_manager=_choice(  # type: ignore[arg-type]
+            DEFAULT_PACKAGE_MANAGER if package_manager is None else package_manager,
+            PACKAGE_MANAGERS,
+            "package manager",
+        ),
+        sdk_dependency=_dependency_spec(sdk_dependency),
+        ui_dependency=_dependency_spec(ui_dependency),
+    )
+
 
 DEFAULT_VERSION: Final = "0.1.0"
 DEFAULT_QGIS_MINIMUM_VERSION: Final = "4.0"
@@ -122,22 +166,7 @@ class ScaffoldOptions:
 
     @classmethod
     def resolve(
-        cls,
-        plugin: str,
-        *,
-        title: str | None = None,
-        version: str = DEFAULT_VERSION,
-        qgis_minimum_version: str = DEFAULT_QGIS_MINIMUM_VERSION,
-        author: str = DEFAULT_AUTHOR,
-        email: str = DEFAULT_EMAIL,
-        web: str | None = None,
-        placement: str | None = None,
-        package_manager: str | None = None,
-        sdk_dependency: str | None = None,
-        algorithm: bool = False,
-        ui: str | None = None,
-        ui_dependency: str | None = None,
-        host: str = DEFAULT_HOST,
+        cls, plugin: str, **options: Unpack[_ResolveOptions1]
     ) -> ScaffoldOptions:
         """Check what the caller chose and derive what it left out.
 
@@ -146,20 +175,8 @@ class ScaffoldOptions:
         ``sdk_dependency`` and ``ui_dependency`` refine it and are refused on
         their own. ``algorithm`` adds the Processing starter.
         """
-        return cls(
-            host=_host(host, web=web, ui=ui, algorithm=algorithm),
-            plugin=_package_name(plugin),
-            title=_title(plugin, title),
-            version=_dot_version(version, "version"),
-            qgis_minimum_version=_dot_version(
-                qgis_minimum_version, "QGIS minimum version"
-            ),
-            author=_text(author, "author"),
-            email=_text(email, "email"),
-            web=_web(web, placement, package_manager, sdk_dependency, ui_dependency),
-            algorithm=bool(algorithm),
-            ui=_ui(ui),
-        )
+        values = _ResolveValues1(**options)
+        return _resolve_facts1(cls, plugin, values)
 
 
 UI_KINDS = ("native",)
@@ -227,20 +244,8 @@ def _web(
                     f"A {label} needs a web framework: pass --web vanilla or --web react"
                 )
         return None
-    return WebOptions(
-        framework=_choice(framework, WEB_FRAMEWORKS, "web framework"),  # type: ignore[arg-type]
-        placement=_choice(  # type: ignore[arg-type]
-            DEFAULT_WEB_PLACEMENT if placement is None else placement,
-            WEB_PLACEMENTS,
-            "placement",
-        ),
-        package_manager=_choice(  # type: ignore[arg-type]
-            DEFAULT_PACKAGE_MANAGER if package_manager is None else package_manager,
-            PACKAGE_MANAGERS,
-            "package manager",
-        ),
-        sdk_dependency=_dependency_spec(sdk_dependency),
-        ui_dependency=_dependency_spec(ui_dependency),
+    return _web_phase1(
+        framework, package_manager, placement, sdk_dependency, ui_dependency
     )
 
 
@@ -300,3 +305,36 @@ def _text(value: str, label: str) -> str:
     if not value.strip():
         raise QgisSdkScaffoldError(f"Invalid {label}: use a non-empty string")
     return value.strip()
+
+
+class _ResolveOptions1(TypedDict, total=False):
+    title: str | None
+    version: str
+    qgis_minimum_version: str
+    author: str
+    email: str
+    web: str | None
+    placement: str | None
+    package_manager: str | None
+    sdk_dependency: str | None
+    algorithm: bool
+    ui: str | None
+    ui_dependency: str | None
+    host: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolveValues1:
+    title: str | None = None
+    version: str = DEFAULT_VERSION
+    qgis_minimum_version: str = DEFAULT_QGIS_MINIMUM_VERSION
+    author: str = DEFAULT_AUTHOR
+    email: str = DEFAULT_EMAIL
+    web: str | None = None
+    placement: str | None = None
+    package_manager: str | None = None
+    sdk_dependency: str | None = None
+    algorithm: bool = False
+    ui: str | None = None
+    ui_dependency: str | None = None
+    host: str = DEFAULT_HOST

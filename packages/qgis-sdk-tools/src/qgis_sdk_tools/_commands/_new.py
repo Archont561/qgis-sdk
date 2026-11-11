@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, TypedDict, Unpack
 
 import typer
 
@@ -167,26 +168,25 @@ def new(
         _install(runtime, options, target, root)
 
 
-def _web_answers(
-    runtime: CliRuntime,
-    *,
-    web: str | None,
-    placement: str | None,
-    package_manager: str | None,
-    sdk_dependency: str | None,
-    ui_dependency: str | None = None,
-    install: bool | None,
-    no_input: bool,
-) -> WebAnswers:
+def _web_answers(runtime: CliRuntime, **options: Unpack[_WebOptions1]) -> WebAnswers:
     """Flags when any were given; the questionnaire on a terminal; else no web UI."""
+    values = _WebValues1(**options)
     flagged = any(
         value is not None
-        for value in (web, placement, package_manager, sdk_dependency, ui_dependency)
+        for value in (
+            values.web,
+            values.placement,
+            values.package_manager,
+            values.sdk_dependency,
+            values.ui_dependency,
+        )
     )
-    if install and not flagged:
+    if values.install and not flagged:
         raise QgisSdkScaffoldError("--install needs --web vanilla or --web react")
-    if flagged or no_input or not runtime.interactive:
-        return WebAnswers(web, placement, package_manager, bool(install))
+    if flagged or values.no_input or not runtime.interactive:
+        return WebAnswers(
+            values.web, values.placement, values.package_manager, bool(values.install)
+        )
     return ask_web_questions(_prompter(runtime))
 
 
@@ -214,43 +214,27 @@ def _prompter(runtime: CliRuntime) -> Callable[[Question, str | None], str]:
 app.command("scaffold", hidden=True, deprecated=True)(new)
 
 
-def _resolve(
-    target: Path,
-    *,
-    plugin: str | None,
-    title: str | None,
-    author: str | None,
-    email: str | None,
-    version: str | None,
-    qgis_minimum_version: str | None,
-    web: str | None,
-    placement: str | None,
-    package_manager: str | None,
-    sdk_dependency: str | None = None,
-    ui_dependency: str | None = None,
-    algorithm: bool = False,
-    ui: str | None = None,
-    host: str = "desktop",
-) -> ScaffoldOptions:
+def _resolve(target: Path, **options: Unpack[_ResolveOptions1]) -> ScaffoldOptions:
     """Pass only what the caller chose, so the API keeps its own defaults."""
-    given: dict[str, object] = {"plugin": plugin or target.name}
-    if algorithm:
+    values = _ResolveValues1(**options)
+    given: dict[str, object] = {"plugin": values.plugin or target.name}
+    if values.algorithm:
         given["algorithm"] = True
-    if ui is not None:
-        given["ui"] = ui
-    if host != "desktop":
-        given["host"] = host
+    if values.ui is not None:
+        given["ui"] = values.ui
+    if values.host != "desktop":
+        given["host"] = values.host
     for key, value in (
-        ("title", title),
-        ("author", author),
-        ("email", email),
-        ("version", version),
-        ("qgis_minimum_version", qgis_minimum_version),
-        ("web", web),
-        ("placement", placement),
-        ("package_manager", package_manager),
-        ("sdk_dependency", sdk_dependency),
-        ("ui_dependency", ui_dependency),
+        ("title", values.title),
+        ("author", values.author),
+        ("email", values.email),
+        ("version", values.version),
+        ("qgis_minimum_version", values.qgis_minimum_version),
+        ("web", values.web),
+        ("placement", values.placement),
+        ("package_manager", values.package_manager),
+        ("sdk_dependency", values.sdk_dependency),
+        ("ui_dependency", values.ui_dependency),
     ):
         if value is not None:
             given[key] = value
@@ -272,3 +256,59 @@ def _report(
         return
     for path in write_scaffold(options, root, force=force):
         typer.echo(path.relative_to(root).as_posix(), file=runtime.out)
+
+
+class _WebOptions1(TypedDict, total=False):
+    web: str | None
+    placement: str | None
+    package_manager: str | None
+    sdk_dependency: str | None
+    ui_dependency: str | None
+    install: bool | None
+    no_input: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _WebValues1:
+    web: str | None
+    placement: str | None
+    package_manager: str | None
+    sdk_dependency: str | None
+    install: bool | None
+    no_input: bool
+    ui_dependency: str | None = None
+
+
+class _ResolveOptions1(TypedDict, total=False):
+    plugin: str | None
+    title: str | None
+    author: str | None
+    email: str | None
+    version: str | None
+    qgis_minimum_version: str | None
+    web: str | None
+    placement: str | None
+    package_manager: str | None
+    sdk_dependency: str | None
+    ui_dependency: str | None
+    algorithm: bool
+    ui: str | None
+    host: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolveValues1:
+    plugin: str | None
+    title: str | None
+    author: str | None
+    email: str | None
+    version: str | None
+    qgis_minimum_version: str | None
+    web: str | None
+    placement: str | None
+    package_manager: str | None
+    sdk_dependency: str | None = None
+    ui_dependency: str | None = None
+    algorithm: bool = False
+    ui: str | None = None
+    host: str = "desktop"

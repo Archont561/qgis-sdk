@@ -24,6 +24,21 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+
+def _run_headless_load_phase1(QT_VERSION_STR, Qgis, finished, user_agent):
+    return QualificationReport(
+        platform=platform.platform(),
+        python_version=platform.python_version(),
+        qgis_version=Qgis.QGIS_VERSION,
+        qt_version=QT_VERSION_STR,
+        chromium_version=chromium_version(user_agent),
+        webengine_available=True,
+        qgis_initialised=True,
+        load_finished=bool(finished) and finished[-1],
+        qgis_exited=True,
+    )
+
+
 HEADLESS_PLATFORM = "offscreen"
 CHROMIUM_FLAGS = "--no-sandbox --disable-gpu --disable-dev-shm-usage --single-process"
 LOAD_TIMEOUT_MS = 30_000
@@ -173,14 +188,4 @@ def _run_headless_load(prefix: Path, timeout_ms: int) -> QualificationReport:
     application.exec()
 
     application.exitQgis()
-    return QualificationReport(
-        platform=platform.platform(),
-        python_version=platform.python_version(),
-        qgis_version=Qgis.QGIS_VERSION,
-        qt_version=QT_VERSION_STR,
-        chromium_version=chromium_version(user_agent),
-        webengine_available=True,
-        qgis_initialised=True,
-        load_finished=bool(finished) and finished[-1],
-        qgis_exited=True,
-    )
+    return _run_headless_load_phase1(QT_VERSION_STR, Qgis, finished, user_agent)

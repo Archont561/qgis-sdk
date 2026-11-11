@@ -23,7 +23,9 @@ holds Qt or QGIS: the class is a consumer of the injected
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 from qgis_sdk.algorithms import invoke
 from qgis_sdk.core import PluginContext
@@ -40,6 +42,18 @@ from qgis_sdk.models import (
 from qgis_sdk.services import Cancellation, Progress
 
 from .algorithms import buffer_layer
+
+
+def _buffer_phase1(output, self):
+    self.ctx.project.add_layer(output.id)
+    # Present it where the user is looking. The canvas is a capability a host
+    # may not have - a QGIS Server request has map settings, not a view - so
+    # the workflow asks whether this runtime has one instead of assuming a
+    # window it cannot see.
+    if self.ctx.has("canvas"):
+        self.ctx.canvas.zoom_to(ZoomTarget.layer(output.id))
+    return output
+
 
 __all__ = ["LocalGisWorkflow"]
 
@@ -68,34 +82,26 @@ class LocalGisWorkflow:
         layer_id: str,
         distance_metres: float,
         working_crs: str,
-        *,
-        progress: Progress | None = None,
-        cancellation: Cancellation | None = None,
+        **options: Unpack[_BufferOptions1],
     ) -> VectorLayerInfo:
         """Buffer a layer in metres inside ``working_crs``; style, then present.
 
         The algorithm's request refuses an empty CRS, and the native service
         refuses a geographic or non-metre one, before anything is written.
         """
+        values = _BufferValues1(**options)
         output = invoke(
             buffer_layer,
             self.ctx,
-            progress=progress,
-            cancellation=cancellation,
+            progress=values.progress,
+            cancellation=values.cancellation,
             add_to_project=False,
             layer_id=layer_id,
             distance_metres=distance_metres,
             working_crs=working_crs,
         )
         self.ctx.styles.apply_style(output.id, self.OUTPUT_STYLE)
-        self.ctx.project.add_layer(output.id)
-        # Present it where the user is looking. The canvas is a capability a host
-        # may not have - a QGIS Server request has map settings, not a view - so
-        # the workflow asks whether this runtime has one instead of assuming a
-        # window it cannot see.
-        if self.ctx.has("canvas"):
-            self.ctx.canvas.zoom_to(ZoomTarget.layer(output.id))
-        return output
+        return _buffer_phase1(output, self)
 
     def open_raster(self, source: Path) -> RasterLayerInfo:
         """Open a local raster and present it: a raster is a layer too.
@@ -150,3 +156,14 @@ class LocalGisWorkflow:
             ),
             overwrite=overwrite,
         )
+
+
+class _BufferOptions1(TypedDict, total=False):
+    progress: Progress | None
+    cancellation: Cancellation | None
+
+
+@dataclass(frozen=True, slots=True)
+class _BufferValues1:
+    progress: Progress | None = None
+    cancellation: Cancellation | None = None

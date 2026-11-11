@@ -3,10 +3,24 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from typing import TypedDict, Unpack
 
 import pytest
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.ui import canonical_json, surface_snapshot
+
+
+def _a_form_surface_lists_phase1(button, label, spin):
+    assert spin["declared"] == {"field": "distance"}
+    assert spin["state"] == {"enabled": True, "visible": True, "focus": False}
+    assert spin["geometry"] == {"x": 15, "y": 27, "width": 10, "height": 10}
+
+    assert label["role"] == "label"
+    assert label["value"] == "Distance"
+    assert button["id"] == "buttons/ok"
+    assert button["role"] == "button"
+    assert button["declared"] == {"button": "ok"}
 
 
 class _Point:
@@ -24,10 +38,11 @@ class _Point:
 class _Widget:
     """The slice of the QWidget protocol a snapshot reads."""
 
-    def __init__(self, name: str = "", *, x=0, y=0, width=10, height=10) -> None:
+    def __init__(self, name: str = "", **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
         self._name = name
-        self._x, self._y = x, y
-        self._width, self._height = width, height
+        self._x, self._y = values.x, values.y
+        self._width, self._height = values.width, values.height
         self._children: list[_Widget] = []
         self._parent: _Widget | None = None
         self._enabled = True
@@ -160,15 +175,7 @@ def test_a_form_surface_lists_roles_values_labels_and_state():
     assert spin["role"] == "spinbox"
     assert spin["value"] == 12.5
     assert spin["label"] == "Distance"
-    assert spin["declared"] == {"field": "distance"}
-    assert spin["state"] == {"enabled": True, "visible": True, "focus": False}
-    assert spin["geometry"] == {"x": 15, "y": 27, "width": 10, "height": 10}
-
-    assert label["role"] == "label"
-    assert label["value"] == "Distance"
-    assert button["id"] == "buttons/ok"
-    assert button["role"] == "button"
-    assert button["declared"] == {"button": "ok"}
+    _a_form_surface_lists_phase1(button, label, spin)
 
 
 def test_an_unnamed_actionable_widget_is_a_ui001_finding():
@@ -219,3 +226,18 @@ def test_canonical_json_sorts_keys_and_separates_nothing():
 def test_surface_snapshot_refuses_what_is_not_a_surface():
     with pytest.raises(QgisSdkUiError, match="opened Qt surface"):
         surface_snapshot(object(), surface_id="x", kind="dialog")
+
+
+class _InitOptions1(TypedDict, total=False):
+    x: object
+    y: object
+    width: object
+    height: object
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    x: object = 0
+    y: object = 0
+    width: object = 10
+    height: object = 10

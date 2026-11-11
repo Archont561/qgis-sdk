@@ -30,6 +30,16 @@ from qgis_sdk.models import (
     QgisSdkUnknownHandleError,
 )
 
+
+def _the_handshake_carries_the_phase1(binding, dispatcher):
+    again = dispatcher.dispatch(
+        binding,
+        {"protocol": BRIDGE_PROTOCOL_VERSION, "call_id": "theme", "kind": "handshake"},
+    )
+    assert again["value"]["theme"] == {"palette": {"window": "#efefef"}, "dark": False}
+    assert json.loads(json.dumps(again)) == again
+
+
 ECHO = BridgeOperation(id="demo.echo", title="Echo the payload")
 FAILS = BridgeOperation(id="demo.fails", title="Fail on purpose")
 
@@ -580,12 +590,7 @@ def test_the_handshake_carries_the_theme_the_provider_reads() -> None:
     )
     assert "theme" not in without["value"]
 
-    again = dispatcher.dispatch(
-        binding,
-        {"protocol": BRIDGE_PROTOCOL_VERSION, "call_id": "theme", "kind": "handshake"},
-    )
-    assert again["value"]["theme"] == {"palette": {"window": "#efefef"}, "dark": False}
-    assert json.loads(json.dumps(again)) == again
+    _the_handshake_carries_the_phase1(binding, dispatcher)
 
 
 def test_a_dispatcher_without_a_provider_advertises_no_theme() -> None:

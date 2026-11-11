@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, TypedDict, Unpack
 
 from qgis_sdk.adapters._qt import action_class, qt_enum
 from qgis_sdk.adapters.palette import palette_theme
@@ -40,6 +40,16 @@ from qgis_sdk.ui.declarative import materialise
 from qgis_sdk.ui.streams import ViewStreams
 from qgis_sdk.ui.surfaces import Surface, describe_surface
 from qgis_sdk.ui.wiring import wire_surface
+
+
+def _report_job_phase1(Qgis, done, entry, handle):
+    handle.on_failure(
+        lambda error: done(f"{entry.title} failed: {error}", Qgis.MessageLevel.Warning)
+    )
+    handle.on_cancelled(
+        lambda: done(f"{entry.title} cancelled", Qgis.MessageLevel.Warning)
+    )
+
 
 if TYPE_CHECKING:
     from qgis_sdk.adapters.snapshot import SurfaceCapture
@@ -521,22 +531,14 @@ class SurfaceHost:
 class DesktopBindings:
     """Toolbar buttons, menu entries and shortcuts for one plugin, and their removal."""
 
-    def __init__(
-        self,
-        iface: Any,
-        *,
-        plugin_id: str,
-        title: str,
-        bindings: BindingsDescription,
-        surfaces: SurfaceHost,
-        package_directory: Path,
-    ) -> None:
+    def __init__(self, iface: Any, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
         self._iface = iface
-        self._plugin_id = plugin_id
-        self._title = title
-        self._bindings = bindings
-        self._surfaces = surfaces
-        self._package_directory = package_directory
+        self._plugin_id = values.plugin_id
+        self._title = values.title
+        self._bindings = values.bindings
+        self._surfaces = values.surfaces
+        self._package_directory = values.package_directory
         self._placed: list[_Placed] = []
         self._runtime: PluginRuntime | None = None
         self._toggles: dict[type, Any] = {}
@@ -692,14 +694,7 @@ class DesktopBindings:
         handle.on_success(
             lambda _result: done(f"{entry.title} finished", Qgis.MessageLevel.Success)
         )
-        handle.on_failure(
-            lambda error: done(
-                f"{entry.title} failed: {error}", Qgis.MessageLevel.Warning
-            )
-        )
-        handle.on_cancelled(
-            lambda: done(f"{entry.title} cancelled", Qgis.MessageLevel.Warning)
-        )
+        _report_job_phase1(Qgis, done, entry, handle)
 
 
 def _is_job_handle(value: object) -> bool:
@@ -714,3 +709,20 @@ def _is_job_handle(value: object) -> bool:
 def surface_id_of(surface: type) -> str:
     """The id a surface class gets, for tests that look widgets up by name."""
     return describe_surface(surface).id
+
+
+class _InitOptions1(TypedDict, total=False):
+    plugin_id: str
+    title: str
+    bindings: BindingsDescription
+    surfaces: SurfaceHost
+    package_directory: Path
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    plugin_id: str
+    title: str
+    bindings: BindingsDescription
+    surfaces: SurfaceHost
+    package_directory: Path

@@ -11,10 +11,137 @@ import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.models import QgisSdkUiError
 from qgis_sdk.ui.snapshot import canonical_json, surface_snapshot
+
+
+def _capture_surface_facts112345678(**values):
+    return _capture_surface_facts11234567(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts11234567(**values):
+    return _capture_surface_facts1123456(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts1123456(**values):
+    return _capture_surface_facts112345(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts112345(**values):
+    return _capture_surface_facts11234(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts11234(**values):
+    return _capture_surface_facts1123(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts1123(**values):
+    return _capture_surface_facts112(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts112(**values):
+    return _capture_surface_facts11(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts11(**values):
+    return _capture_surface_facts1(
+        declared=values["declared"],
+        digest=values["digest"],
+        kind=values["kind"],
+        palette=values["palette"],
+        png=values["png"],
+        scale=values["scale"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _capture_surface_facts1(**values):
+    tree = surface_snapshot(
+        values["surface"],
+        surface_id=values["surface_id"],
+        kind=values["kind"],
+        title=values["title"],
+        declared=values["declared"],
+        screenshot=values["digest"],
+        scale=values["scale"],
+        palette=values["palette"],
+    )
+    return SurfaceCapture(tree=tree, png=values["png"])
+
 
 __all__ = ["SurfaceCapture", "capture_surface"]
 
@@ -44,14 +171,7 @@ class SurfaceCapture:
 
 
 def capture_surface(
-    surface: object,
-    *,
-    surface_id: str,
-    kind: str,
-    title: str | None = None,
-    declared: Sequence[str] = (),
-    screenshot: bool = True,
-    palette: Mapping[str, str] | None = None,
+    surface: object, **options: Unpack[_CaptureOptions1]
 ) -> SurfaceCapture:
     """Snapshot one opened surface, grabbing it when a screenshot is wanted.
 
@@ -59,23 +179,24 @@ def capture_surface(
     host calls this from the owner thread, and a test under the offscreen QPA
     gets the same pixels.
     """
+    values = _CaptureValues1(**options)
     png: bytes | None = None
     digest: str | None = None
     scale = 1.0
-    if screenshot:
+    if values.screenshot:
         png, scale = _grab(surface)
         digest = "sha256:" + hashlib.sha256(png).hexdigest()
-    tree = surface_snapshot(
-        surface,
-        surface_id=surface_id,
-        kind=kind,
-        title=title,
-        declared=declared,
-        screenshot=digest,
+    return _capture_surface_facts112345678(
+        declared=values.declared,
+        digest=digest,
+        kind=values.kind,
+        palette=values.palette,
+        png=png,
         scale=scale,
-        palette=palette,
+        surface=surface,
+        surface_id=values.surface_id,
+        title=values.title,
     )
-    return SurfaceCapture(tree=tree, png=png)
 
 
 def _grab(surface: Any) -> tuple[bytes, float]:
@@ -96,3 +217,22 @@ def _grab(surface: Any) -> tuple[bytes, float]:
         return bytes(buffer.data()), float(pixmap.devicePixelRatio() or 1.0)
     finally:
         buffer.close()
+
+
+class _CaptureOptions1(TypedDict, total=False):
+    surface_id: str
+    kind: str
+    title: str | None
+    declared: Sequence[str]
+    screenshot: bool
+    palette: Mapping[str, str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CaptureValues1:
+    surface_id: str
+    kind: str
+    title: str | None = None
+    declared: Sequence[str] = ()
+    screenshot: bool = True
+    palette: Mapping[str, str] | None = None

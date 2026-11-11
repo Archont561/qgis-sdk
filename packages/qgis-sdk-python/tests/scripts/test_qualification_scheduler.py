@@ -26,6 +26,36 @@ from smoke_support.qt_scheduler_smoke import (
 )
 
 
+def _report_serialises_to_a_facts1(payload):
+    assert set(payload) == {
+        "author_cleanup_ran",
+        "blocking_phase",
+        "blocking_phase_max_ms",
+        "delivery_thread_ids",
+        "error",
+        "event_loop_polled",
+        "gui_responsive_for_scheduled_work",
+        "gui_thread_id",
+        "handoff_delivered_on_gui_thread",
+        "late_report_dropped_after_disposal",
+        "passed",
+        "platform",
+        "python_version",
+        "qt_version",
+        "qgis_initialised",
+        "qgis_version",
+        "refused_blocker",
+        "replacement_refused_while_stuck",
+        "scheduled_phase",
+        "scheduled_phase_max_ms",
+        "scope_review_criteria",
+        "verdict",
+        "worker_acknowledged_cancellation",
+        "worker_thread_ids",
+        "work_ran_off_the_gui_thread",
+    }
+
+
 def test_a_phase_measures_only_the_heartbeats_after_its_own_baseline() -> None:
     """The sampler is shared by every phase, so a phase must not read another's gaps."""
     heartbeat = _Heartbeat([1.0, 1.01, 1.025, 1.03])
@@ -158,33 +188,7 @@ def test_report_serialises_to_a_stable_json_shape() -> None:
     assert payload["blocking_phase_max_ms"] == 61.0
     assert payload["worker_thread_ids"] == [2]
     assert payload["scope_review_criteria"] == []
-    assert set(payload) == {
-        "author_cleanup_ran",
-        "blocking_phase",
-        "blocking_phase_max_ms",
-        "delivery_thread_ids",
-        "error",
-        "event_loop_polled",
-        "gui_responsive_for_scheduled_work",
-        "gui_thread_id",
-        "handoff_delivered_on_gui_thread",
-        "late_report_dropped_after_disposal",
-        "passed",
-        "platform",
-        "python_version",
-        "qt_version",
-        "qgis_initialised",
-        "qgis_version",
-        "refused_blocker",
-        "replacement_refused_while_stuck",
-        "scheduled_phase",
-        "scheduled_phase_max_ms",
-        "scope_review_criteria",
-        "verdict",
-        "worker_acknowledged_cancellation",
-        "worker_thread_ids",
-        "work_ran_off_the_gui_thread",
-    }
+    _report_serialises_to_a_facts1(payload)
 
 
 @pytest.mark.desktop

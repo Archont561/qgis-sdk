@@ -10,6 +10,13 @@ Ownership follows the scope the client was built with: closing it cancels what
 is in flight, and a request started after that is refused. Cancellation of the
 awaiting job - thrown in at the suspension point by the scheduler - cancels the
 transport request on the way out, so a cancelled job leaves no socket behind.
+
+One :class:`~qgis_sdk.services.network.RequestOptions` mapping carries the
+per-call knobs and one :class:`~qgis_sdk.services.network.ConfigureOptions`
+mapping carries a derived client's overrides (decision-81). The keyword-call
+form is unchanged: ``Unpack`` keeps the names statically typed while each
+method takes one parameter. Both mappings are parsed into frozen records before
+any transport is touched, so defaults and limit checks live in one place.
 """
 
 from __future__ import annotations
@@ -18,6 +25,7 @@ import json as json_module
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from math import isfinite
+from typing import Unpack
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from qgis_sdk.core import Handoff, ResourceScope
@@ -33,6 +41,7 @@ from qgis_sdk.models import (
     Response,
 )
 from qgis_sdk.services import NetworkTransport, Params
+from qgis_sdk.services.network import ConfigureOptions, RequestOptions
 
 __all__ = ["BlockingNetworkClient", "NetworkClient", "NetworkDefaults", "build_request"]
 
@@ -50,6 +59,77 @@ class NetworkDefaults:
     auth_config: str | None = None
     max_redirects: int = DEFAULT_MAX_REDIRECTS
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES
+
+
+@dataclass(frozen=True, slots=True)
+class _RequestValues:
+    """One call's parsed options, with every omission spelled once."""
+
+    params: Params | None = None
+    json: object = None
+    data: bytes | str | Mapping[str, str] | None = None
+    headers: Mapping[str, str] | None = None
+    timeout: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ConfigureValues:
+    """The overrides a derived client asked for, already checked."""
+
+    base_url: str | None = None
+    headers: Mapping[str, str] | None = None
+    timeout: float | None = None
+    auth_config: str | None = None
+    max_redirects: int | None = None
+    max_body_bytes: int | None = None
+
+
+def _request_values(options: RequestOptions | None) -> _RequestValues:
+    """Parse one call's mapping; an unknown key is a caller's mistake."""
+    return _RequestValues(**(options or {}))
+
+
+def _configure_values(options: ConfigureOptions) -> _ConfigureValues:
+    """Parse and refuse nonsense limits before a derived client is built."""
+    values = _ConfigureValues(**options)
+    if values.max_redirects is not None and values.max_redirects < 0:
+        raise QgisSdkRequestRejectedError("max_redirects must not be negative")
+    if values.max_body_bytes is not None and values.max_body_bytes < 1:
+        raise QgisSdkRequestRejectedError("max_body_bytes must be at least 1")
+    if values.timeout is not None and (
+        not isfinite(values.timeout) or values.timeout <= 0
+    ):
+        raise QgisSdkRequestRejectedError(
+            "timeout must be a positive number of seconds"
+        )
+    return values
+
+
+def _derive_defaults(
+    current: NetworkDefaults, values: _ConfigureValues
+) -> NetworkDefaults:
+    """Layer the asked-for overrides over the current immutable defaults."""
+    return replace(
+        current,
+        base_url=current.base_url if values.base_url is None else values.base_url,
+        headers=current.headers.merge(values.headers),
+        timeout_seconds=(
+            current.timeout_seconds if values.timeout is None else values.timeout
+        ),
+        auth_config=(
+            current.auth_config if values.auth_config is None else values.auth_config
+        ),
+        max_redirects=(
+            current.max_redirects
+            if values.max_redirects is None
+            else values.max_redirects
+        ),
+        max_body_bytes=(
+            current.max_body_bytes
+            if values.max_body_bytes is None
+            else values.max_body_bytes
+        ),
+    )
 
 
 def _reject(message: str, method: str, url: str) -> QgisSdkRequestRejectedError:
@@ -126,39 +206,52 @@ def _encode_body(
     )
 
 
+def _verb(method: str, url: str) -> str:
+    verb = method.upper()
+    if verb not in _METHODS:
+        raise _reject(f"method {method!r} is not supported", verb, url)
+    return verb
+
+
+def _merged_headers(
+    defaults: Headers, extra: Mapping[str, str] | None, implied_type: str | None
+) -> Headers:
+    merged = defaults.merge(extra)
+    if implied_type is not None and "content-type" not in merged:
+        merged = merged.merge({"Content-Type": implied_type})
+    return merged
+
+
+def _seconds(default: float, override: float | None, verb: str, url: str) -> float:
+    seconds = default if override is None else override
+    if not isfinite(seconds) or seconds <= 0:
+        raise _reject("timeout must be a positive number of seconds", verb, url)
+    return float(seconds)
+
+
 def build_request(
     defaults: NetworkDefaults,
     method: str,
     url: str,
-    *,
-    params: Params | None = None,
-    json: object = None,
-    data: bytes | str | Mapping[str, str] | None = None,
-    headers: Mapping[str, str] | None = None,
-    timeout: float | None = None,
+    options: RequestOptions | None = None,
 ) -> NetworkRequest:
     """Validate and resolve one call into the request a transport receives.
 
     Every refusal is a :class:`QgisSdkRequestRejectedError` raised before any
     transport is touched, so a mistake costs no socket and no host round trip.
     """
-    verb = method.upper()
-    if verb not in _METHODS:
-        raise _reject(f"method {method!r} is not supported", verb, url)
-    resolved = _with_params(_resolve_url(url, defaults.base_url, verb), params)
-    body, implied_type = _encode_body(json, data, verb, resolved)
-    merged = defaults.headers.merge(headers)
-    if implied_type is not None and "content-type" not in merged:
-        merged = merged.merge({"Content-Type": implied_type})
-    seconds = defaults.timeout_seconds if timeout is None else timeout
-    if not isfinite(seconds) or seconds <= 0:
-        raise _reject("timeout must be a positive number of seconds", verb, resolved)
+    values = _request_values(options)
+    verb = _verb(method, url)
+    resolved = _with_params(_resolve_url(url, defaults.base_url, verb), values.params)
+    body, implied_type = _encode_body(values.json, values.data, verb, resolved)
+    headers = _merged_headers(defaults.headers, values.headers, implied_type)
+    seconds = _seconds(defaults.timeout_seconds, values.timeout, verb, resolved)
     return NetworkRequest(
         method=verb,
         url=resolved,
-        headers=merged,
+        headers=headers,
         body=body,
-        timeout_seconds=float(seconds),
+        timeout_seconds=seconds,
         max_redirects=defaults.max_redirects,
         max_body_bytes=defaults.max_body_bytes,
         auth_config=defaults.auth_config,
@@ -191,60 +284,19 @@ class BlockingNetworkClient:
         self._scope = scope
         self._defaults = defaults
 
-    def get(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> Response:
+    def get(self, url: str, **options: Unpack[RequestOptions]) -> Response:
         """Perform a GET on the calling thread."""
-        return self.request("GET", url, params=params, headers=headers, timeout=timeout)
+        return self.request("GET", url, **options)
 
-    def post(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> Response:
+    def post(self, url: str, **options: Unpack[RequestOptions]) -> Response:
         """Perform a POST on the calling thread."""
-        return self.request(
-            "POST",
-            url,
-            params=params,
-            json=json,
-            data=data,
-            headers=headers,
-            timeout=timeout,
-        )
+        return self.request("POST", url, **options)
 
     def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        self, method: str, url: str, **options: Unpack[RequestOptions]
     ) -> Response:
         """Perform any supported method on the calling thread."""
-        request = build_request(
-            self._defaults,
-            method,
-            url,
-            params=params,
-            json=json,
-            data=data,
-            headers=headers,
-            timeout=timeout,
-        )
+        request = build_request(self._defaults, method, url, options)
         self._scope.ensure_open()
         return _check_size(request, self._transport.send_blocking(request))
 
@@ -298,114 +350,38 @@ class NetworkClient:
         """The same configuration, performed on the calling thread."""
         return BlockingNetworkClient(self._transport, self._scope, self._defaults)
 
-    def configure(
-        self,
-        *,
-        base_url: str | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-        auth_config: str | None = None,
-        max_redirects: int | None = None,
-        max_body_bytes: int | None = None,
-    ) -> NetworkClient:
+    def configure(self, **options: Unpack[ConfigureOptions]) -> NetworkClient:
         """Derive a client with these defaults layered over the current ones."""
-        if max_redirects is not None and max_redirects < 0:
-            raise QgisSdkRequestRejectedError("max_redirects must not be negative")
-        if max_body_bytes is not None and max_body_bytes < 1:
-            raise QgisSdkRequestRejectedError("max_body_bytes must be at least 1")
-        if timeout is not None and (not isfinite(timeout) or timeout <= 0):
-            raise QgisSdkRequestRejectedError(
-                "timeout must be a positive number of seconds"
-            )
-        current = self._defaults
-        derived = replace(
-            current,
-            base_url=current.base_url if base_url is None else base_url,
-            headers=current.headers.merge(headers),
-            timeout_seconds=current.timeout_seconds if timeout is None else timeout,
-            auth_config=current.auth_config if auth_config is None else auth_config,
-            max_redirects=(
-                current.max_redirects if max_redirects is None else max_redirects
-            ),
-            max_body_bytes=(
-                current.max_body_bytes if max_body_bytes is None else max_body_bytes
-            ),
-        )
+        derived = _derive_defaults(self._defaults, _configure_values(options))
         return NetworkClient(
             self._transport, self._scope, defaults=derived, _in_flight=self._in_flight
         )
 
-    async def get(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> Response:
+    async def get(self, url: str, **options: Unpack[RequestOptions]) -> Response:
         """GET ``url``; suspends the job until the response is buffered."""
-        return await self.request(
-            "GET", url, params=params, headers=headers, timeout=timeout
-        )
+        return await self.request("GET", url, **options)
 
-    async def post(
-        self,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
-    ) -> Response:
+    async def post(self, url: str, **options: Unpack[RequestOptions]) -> Response:
         """POST to ``url`` with a ``json`` or ``data`` body."""
-        return await self.request(
-            "POST",
-            url,
-            params=params,
-            json=json,
-            data=data,
-            headers=headers,
-            timeout=timeout,
-        )
+        return await self.request("POST", url, **options)
 
     async def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        params: Params | None = None,
-        json: object = None,
-        data: bytes | str | Mapping[str, str] | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float | None = None,
+        self, method: str, url: str, **options: Unpack[RequestOptions]
     ) -> Response:
         """Send any supported method and await its buffered response."""
-        request = build_request(
-            self._defaults,
-            method,
-            url,
-            params=params,
-            json=json,
-            data=data,
-            headers=headers,
-            timeout=timeout,
-        )
+        request = build_request(self._defaults, method, url, options)
         self._scope.ensure_open()
+        return await self._deliver(request)
+
+    async def _deliver(self, request: NetworkRequest) -> Response:
+        """Suspend on one handoff, forwarding cancellation to the transport."""
         cancels: list[Callable[[], None]] = []
         # A job cancelled while suspended here cannot resume until the transport
         # reports, so the handoff forwards the cancellation to the transport,
         # which answers with a cancelled outcome instead of leaving the job as a
         # replacement blocker (ADR-21).
         handoff = Handoff(on_cancel=lambda: [cancel() for cancel in cancels])
-
-        def deliver(outcome: Response | Exception) -> None:
-            if isinstance(outcome, Exception):
-                handoff.fail(outcome)
-            else:
-                handoff.resolve(outcome)
-
-        cancel = self._transport.send(request, deliver)
+        cancel = self._transport.send(request, _deliver_outcome(handoff))
         cancels.append(cancel)
         self._in_flight[handoff] = cancel
         try:
@@ -418,6 +394,15 @@ class NetworkClient:
         finally:
             self._in_flight.pop(handoff, None)
         return _check_size(request, response)
+
+
+def _deliver_outcome(handoff: Handoff) -> Callable[[Response | Exception], None]:
+    """Report exactly one transport outcome to the suspended job."""
+    return lambda outcome: (
+        handoff.fail(outcome)
+        if isinstance(outcome, Exception)
+        else handoff.resolve(outcome)
+    )
 
 
 def _cancel_all(in_flight: dict[Handoff, Callable[[], None]]) -> None:

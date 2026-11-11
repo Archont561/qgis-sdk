@@ -24,6 +24,44 @@ from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.models import FileInput, FileRef
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
+
+def _a_nested_object_is_facts1(binding, dispatcher):
+    reply = dispatcher.dispatch(
+        binding, _call("demo.nested", {"options": {"rows": [1, "two"]}})
+    )
+
+    assert reply["error"]["message"] == (
+        "payload.options.rows[1]: expected an integer, got string"
+    )
+
+
+def _a_subscription_payload_is_facts1(binding, dispatcher, refused):
+    accepted = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "s2",
+            "operation": "demo.ticks",
+            "payload": {"count": 2},
+        },
+    )
+
+    assert refused["error"]["code"] == "invalid_payload"
+    assert refused["error"]["message"] == "payload.count: required property is missing"
+    assert accepted["ok"] is True
+    assert dispatcher.subscriptions() != ()
+
+
+def _a_pushed_event_is_phase1(StreamEventType, binding, dispatcher, subscription_id):
+    assert not dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.DATA)
+    frames = dispatcher.pump(binding)
+    assert [frame.get("event", frame.get("terminal"))["kind"] for frame in frames] == [
+        "progress",
+        "error",
+    ]
+
+
 ORIGIN = "qgis://desktop"
 
 
@@ -242,13 +280,7 @@ def test_a_nested_object_is_validated_field_by_field() -> None:
     )
     binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
 
-    reply = dispatcher.dispatch(
-        binding, _call("demo.nested", {"options": {"rows": [1, "two"]}})
-    )
-
-    assert reply["error"]["message"] == (
-        "payload.options.rows[1]: expected an integer, got string"
-    )
+    _a_nested_object_is_facts1(binding, dispatcher)
 
 
 def test_a_declared_action_whose_result_breaks_the_schema_is_reported() -> None:
@@ -474,21 +506,7 @@ def test_a_subscription_payload_is_validated_the_same_way() -> None:
             "payload": {},
         },
     )
-    accepted = dispatcher.dispatch(
-        binding,
-        {
-            "protocol": BRIDGE_PROTOCOL_VERSION,
-            "kind": "subscribe",
-            "call_id": "s2",
-            "operation": "demo.ticks",
-            "payload": {"count": 2},
-        },
-    )
-
-    assert refused["error"]["code"] == "invalid_payload"
-    assert refused["error"]["message"] == "payload.count: required property is missing"
-    assert accepted["ok"] is True
-    assert dispatcher.subscriptions() != ()
+    _a_subscription_payload_is_facts1(binding, dispatcher, refused)
 
 
 def test_an_input_that_is_not_a_python_name_is_refused_at_wiring_time() -> None:
@@ -712,12 +730,7 @@ def test_a_pushed_event_is_held_to_the_declaration_too() -> None:
     from qgis_sdk.bridge import StreamEventType
 
     assert dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.PROGRESS)
-    assert not dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.DATA)
-    frames = dispatcher.pump(binding)
-    assert [frame.get("event", frame.get("terminal"))["kind"] for frame in frames] == [
-        "progress",
-        "error",
-    ]
+    _a_pushed_event_is_phase1(StreamEventType, binding, dispatcher, subscription_id)
 
 
 def test_an_operation_cannot_both_answer_and_stream() -> None:

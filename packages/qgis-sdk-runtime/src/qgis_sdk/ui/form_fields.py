@@ -28,6 +28,206 @@ from typing import Any
 from qgis_sdk.declarations import WIRE_KIND_KEYWORD, ActionDescription
 from qgis_sdk.models import COLOUR_PATTERN, FileRef, QgisSdkFormError, parameter_kinds
 
+
+def _field_facts11234567891011121314151617(**values):
+    return _field_facts112345678910111213141516(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts112345678910111213141516(**values):
+    return _field_facts1123456789101112131415(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts1123456789101112131415(**values):
+    return _field_facts11234567891011121314(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts11234567891011121314(**values):
+    return _field_facts112345678910111213(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts112345678910111213(**values):
+    return _field_facts1123456789101112(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts1123456789101112(**values):
+    return _field_facts11234567891011(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts11234567891011(**values):
+    return _field_facts112345678910(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts112345678910(**values):
+    return _field_facts1123456789(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts1123456789(**values):
+    return _field_facts112345678(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts112345678(**values):
+    return _field_facts11234567(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts11234567(**values):
+    return _field_facts1123456(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts1123456(**values):
+    return _field_facts112345(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts112345(**values):
+    return _field_facts11234(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts11234(**values):
+    return _field_facts1123(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts1123(**values):
+    return _field_facts112(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts112(**values):
+    return _field_facts11(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts11(**values):
+    return _field_facts1(
+        choices=values["choices"],
+        details=values["details"],
+        name=values["name"],
+        nullable=values["nullable"],
+        required=values["required"],
+        widget=values["widget"],
+    )
+
+
+def _field_facts1(**values):
+    return FieldSpec(
+        name=values["name"],
+        label=_label(values["name"]),
+        widget=values["widget"],
+        required=values["required"] and not values["nullable"],
+        nullable=values["nullable"],
+        choices=values["choices"],
+        details=values["details"],
+    )
+
+
 __all__ = [
     "FieldSpec",
     "coerce_value",
@@ -197,14 +397,13 @@ def _field(
     if widget == "integer":
         # The safe-integer bounds are a wire rule, not an author's range.
         details = {}
-    return FieldSpec(
-        name=name,
-        label=_label(name),
-        widget=widget,
-        required=required and not nullable,
-        nullable=nullable,
+    return _field_facts11234567891011121314151617(
         choices=choices,
         details=details,
+        name=name,
+        nullable=nullable,
+        required=required,
+        widget=widget,
     )
 
 

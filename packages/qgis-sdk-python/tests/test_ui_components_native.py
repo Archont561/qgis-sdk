@@ -14,6 +14,17 @@ from pathlib import Path
 
 import pytest
 
+
+def _native_edits_by_the_facts1(seen):
+    assert [type(item).__name__ for item in seen] == [
+        "str",
+        "int",
+        "str",
+        "str",
+        "FileRef",
+    ]
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -94,13 +105,7 @@ def test_native_edits_by_the_user_reach_the_state_and_its_listeners(
     assert colour.value() == "#ff000080"
     assert file.value().name == "a.csv"
     assert rendering.ctx.files.resolve(file.value()) == source.resolve()
-    assert [type(item).__name__ for item in seen] == [
-        "str",
-        "int",
-        "str",
-        "str",
-        "FileRef",
-    ]
+    _native_edits_by_the_facts1(seen)
 
 
 def test_every_layer_kind_mounts_and_offers_only_its_own_kind(

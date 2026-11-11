@@ -21,6 +21,51 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+
+def _build_cases_facts11(binding, cases, releasing):
+    request = {
+        "protocol": BRIDGE_PROTOCOL_VERSION,
+        "kind": "release",
+        "call_id": "case-release",
+        "payload": {
+            "handles": [
+                {"kind": "borrowed", "id": "layer-1"},
+                {"kind": "borrowed", "id": "layer-9"},
+            ]
+        },
+    }
+    reply = releasing.dispatch(binding, request)
+    return _build_cases_facts1(cases, reply, request)
+
+
+def _build_cases_facts1(cases, reply, request):
+    cases.append(
+        {
+            "name": "release-borrowed",
+            "request": request,
+            "reply": reply,
+            "expect": {"ok": True, "value": reply["value"]},
+        }
+    )
+
+    return {
+        "protocol": BRIDGE_PROTOCOL_VERSION,
+        "cases": cases,
+        "streams": _stream_cases(),
+    }
+
+
+def _stream_cases_phase1(binding, overflow, streams, subscription_id):
+    streams.append(
+        {
+            "name": "gap-overflow",
+            "frames": _drain(overflow, binding, subscription_id),
+        }
+    )
+
+    return streams
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = PROJECT_ROOT.parents[1]
 CASES_PATH = (
@@ -289,32 +334,7 @@ def build_cases() -> dict[str, Any]:
     releasing = _host()
     binding = releasing.bind(view_id="view-1", origin="qgis://desktop")
     releasing.track(binding, HandleKind.BORROWED, "layer-1")
-    request = {
-        "protocol": BRIDGE_PROTOCOL_VERSION,
-        "kind": "release",
-        "call_id": "case-release",
-        "payload": {
-            "handles": [
-                {"kind": "borrowed", "id": "layer-1"},
-                {"kind": "borrowed", "id": "layer-9"},
-            ]
-        },
-    }
-    reply = releasing.dispatch(binding, request)
-    cases.append(
-        {
-            "name": "release-borrowed",
-            "request": request,
-            "reply": reply,
-            "expect": {"ok": True, "value": reply["value"]},
-        }
-    )
-
-    return {
-        "protocol": BRIDGE_PROTOCOL_VERSION,
-        "cases": cases,
-        "streams": _stream_cases(),
-    }
+    return _build_cases_facts11(binding, cases, releasing)
 
 
 def _drain(
@@ -383,14 +403,7 @@ def _stream_cases() -> list[dict[str, Any]]:
     subscription_id = _subscribe(overflow, binding, PUSHED.id)
     for index in range(MAX_QUEUED_EVENTS + 1):
         overflow.emit(subscription_id, {"index": index})
-    streams.append(
-        {
-            "name": "gap-overflow",
-            "frames": _drain(overflow, binding, subscription_id),
-        }
-    )
-
-    return streams
+    return _stream_cases_phase1(binding, overflow, streams, subscription_id)
 
 
 _SCALAR_ARRAY = re.compile(r"\[\n(?P<body>(?:[^\[\]{}\n]*\n)+?)(?P<indent>\t*)\]")

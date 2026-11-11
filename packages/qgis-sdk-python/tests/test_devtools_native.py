@@ -43,6 +43,43 @@ from qgis_sdk_tools.devtools.dev import DEV_SERVER_ENV
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command
 
+
+def _desktop_loads_reloads_refuses_facts11(blockers, project, report, result):
+    assert report == {
+        "started": True,
+        "error": None,
+        "reload_ok": True,
+        "reload_refused": True,
+        "kept_running": True,
+        "reload_after_fix": True,
+        "ping_after_edit": 1001,
+        "stuck_refused": True,
+        "kept_running_stuck": True,
+        "reload_after_release": True,
+        "start_failure_disabled": True,
+        "reload_after_start_failure": True,
+        "coalesced": True,
+        "watch_reloaded": True,
+        "ping_after_watched_edit": 2001,
+        "revision": 9,
+        "unloaded": True,
+    }
+    # decision-21: the refusal names the work that could not reach a safe point.
+    assert len(blockers) == 1
+    assert "exercise.stuck#1" in blockers[0]
+    assert "worker handoff" in blockers[0]
+    _desktop_loads_reloads_refuses_facts1(project, result)
+
+
+def _desktop_loads_reloads_refuses_facts1(project, result):
+    assert "reload refused, revision 2 keeps running" in result.stderr
+    assert "restart `qgis-sdk dev`" in result.stderr
+    assert "field_tools is disabled until a Reload succeeds" in result.stderr
+    assert "field_tools running (revision 9)" in result.stderr
+    assert (project / ".qgis-sdk" / "profiles" / "dev").is_dir()
+    assert "1000" not in (project / "field_tools" / "plugin.py").read_text()
+
+
 pytestmark = pytest.mark.desktop
 
 if not os.environ.get("QGIS_SDK_DEVTOOLS"):
@@ -197,35 +234,7 @@ class TestDevCommand:
             "closed": True,
         }
         assert surface["after"] == {**surface["before"], "initial": "Edited"}
-        assert report == {
-            "started": True,
-            "error": None,
-            "reload_ok": True,
-            "reload_refused": True,
-            "kept_running": True,
-            "reload_after_fix": True,
-            "ping_after_edit": 1001,
-            "stuck_refused": True,
-            "kept_running_stuck": True,
-            "reload_after_release": True,
-            "start_failure_disabled": True,
-            "reload_after_start_failure": True,
-            "coalesced": True,
-            "watch_reloaded": True,
-            "ping_after_watched_edit": 2001,
-            "revision": 9,
-            "unloaded": True,
-        }
-        # decision-21: the refusal names the work that could not reach a safe point.
-        assert len(blockers) == 1
-        assert "exercise.stuck#1" in blockers[0]
-        assert "worker handoff" in blockers[0]
-        assert "reload refused, revision 2 keeps running" in result.stderr
-        assert "restart `qgis-sdk dev`" in result.stderr
-        assert "field_tools is disabled until a Reload succeeds" in result.stderr
-        assert "field_tools running (revision 9)" in result.stderr
-        assert (project / ".qgis-sdk" / "profiles" / "dev").is_dir()
-        assert "1000" not in (project / "field_tools" / "plugin.py").read_text()
+        _desktop_loads_reloads_refuses_facts11(blockers, project, report, result)
 
     def test_standalone_runs_without_desktop(
         self, project: Path, tmp_path: Path

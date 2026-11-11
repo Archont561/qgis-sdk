@@ -20,6 +20,35 @@ from typing import Any
 
 import pytest
 
+
+def _a_declared_surface_opens_phase1(QDoubleSpinBox, QPushButton, one, qgis_app, two):
+    assert EVENTS == [
+        ("distance", 4.0),
+        ("ran", "buffered 3.0"),
+        ("distance", 0.0),
+        ("reset", 0.0),
+    ]
+    assert one.findChild(QDoubleSpinBox, "form/distance").value() == 0
+
+    one.close()
+    EVENTS.clear()
+    two.findChild(QPushButton, "buttons/reset").click()
+    assert EVENTS == [("reset", 0.0)]
+    pump(qgis_app, 0.05)
+
+
+def _subscribe_delivers_pushed_and_phase1(plugin_instance, qgis_app, surfaces):
+    pump(qgis_app, 0.3)
+    assert [item for item in EVENTS if item[0] == "tick"][-1] == (
+        "tick",
+        ({"value": 3}, False),
+    )
+
+    surfaces.dialogs[0].widget.close()
+    pump(qgis_app, 0.05)
+    assert plugin_instance.tickers == []
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -340,19 +369,7 @@ def test_a_declared_surface_opens_twice_without_sharing_a_widget(
     assert two.findChild(QDoubleSpinBox, "form/distance").value() == 0
     one.findChild(QPushButton, "buttons/run").click()
     one.findChild(QPushButton, "buttons/reset").click()
-    assert EVENTS == [
-        ("distance", 4.0),
-        ("ran", "buffered 3.0"),
-        ("distance", 0.0),
-        ("reset", 0.0),
-    ]
-    assert one.findChild(QDoubleSpinBox, "form/distance").value() == 0
-
-    one.close()
-    EVENTS.clear()
-    two.findChild(QPushButton, "buttons/reset").click()
-    assert EVENTS == [("reset", 0.0)]
-    pump(qgis_app, 0.05)
+    _a_declared_surface_opens_phase1(QDoubleSpinBox, QPushButton, one, qgis_app, two)
 
 
 def test_on_over_a_hand_built_qt_tree(
@@ -420,12 +437,4 @@ def test_subscribe_delivers_pushed_and_pulled_events_through_the_host_pump(
     worker.start()
     worker.join()
     assert [item for item in EVENTS if item[0] == "tick"][-1][1] == ({"value": 2}, True)
-    pump(qgis_app, 0.3)
-    assert [item for item in EVENTS if item[0] == "tick"][-1] == (
-        "tick",
-        ({"value": 3}, False),
-    )
-
-    surfaces.dialogs[0].widget.close()
-    pump(qgis_app, 0.05)
-    assert plugin_instance.tickers == []
+    _subscribe_delivers_pushed_and_phase1(plugin_instance, qgis_app, surfaces)

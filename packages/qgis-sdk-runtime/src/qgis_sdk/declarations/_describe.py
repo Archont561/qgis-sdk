@@ -24,6 +24,26 @@ from qgis_sdk.declarations._schemas import (
 )
 
 
+def _describe_facts1(cls):
+    if not (inspect.isclass(cls) or inspect.isfunction(cls)):
+        raise QgisSdkDeclarationError(
+            "describe requires a QgisSdkPlugin, a declared function or surface, or a Provider"
+        )
+    raise QgisSdkDeclarationError(
+        "describe requires a QgisSdkPlugin, a function registered as an action or stream, "
+        "a job, algorithm, provider, UI surface or wired UI handler"
+    )
+
+
+def _describe_plugin_phase1(actions, own, streams):
+    return PluginDescription(
+        own.id,
+        own.title,
+        tuple(sorted(actions, key=lambda item: item.id)),
+        streams=tuple(sorted(streams, key=lambda item: item.id)),
+    )
+
+
 def _describe_action(
     name: str, method: Any, declaration: Metadata
 ) -> ActionDescription:
@@ -128,14 +148,7 @@ def describe(cls: Any) -> Any:
     for predicate, describer in _PREDICATE_DESCRIBERS:
         if predicate(cls):
             return describer(cls)
-    if not (inspect.isclass(cls) or inspect.isfunction(cls)):
-        raise QgisSdkDeclarationError(
-            "describe requires a QgisSdkPlugin, a declared function or surface, or a Provider"
-        )
-    raise QgisSdkDeclarationError(
-        "describe requires a QgisSdkPlugin, a function registered as an action or stream, "
-        "a job, algorithm, provider, UI surface or wired UI handler"
-    )
+    _describe_facts1(cls)
 
 
 def describe_plugin(cls: type) -> PluginDescription:
@@ -179,12 +192,7 @@ def describe_plugin(cls: type) -> PluginDescription:
             actions.append(_describe_action(name, member, declaration))
         else:
             streams.append(_describe_stream(name, member, streamed))
-    return PluginDescription(
-        own.id,
-        own.title,
-        tuple(sorted(actions, key=lambda item: item.id)),
-        streams=tuple(sorted(streams, key=lambda item: item.id)),
-    )
+    return _describe_plugin_phase1(actions, own, streams)
 
 
 def _describe_lowered_plugin(cls: type) -> PluginDescription:

@@ -30,6 +30,27 @@ import sqlite3
 import struct
 from pathlib import Path
 
+
+def _write_point_cloud_facts1(header, path, points):
+    records = b"".join(
+        struct.pack(
+            "<3iHBBbBH",
+            round(x / LAS_SCALE),
+            round(y / LAS_SCALE),
+            round(z / LAS_SCALE),
+            0,  # intensity
+            0,  # return number, number of returns, scan direction, edge of flight
+            0,  # classification: never classified
+            0,  # scan angle rank
+            0,  # user data
+            0,  # point source id
+        )
+        for x, y, z in points
+    )
+    path.write_bytes(header + records)
+    return path
+
+
 # -- LAS 1.2, point data format 0 --------------------------------------------
 #: The header of a LAS 1.2 file is exactly this long, and a file with no VLRs
 #: puts its first point record right after it.
@@ -115,23 +136,7 @@ def write_point_cloud(
         min(zs),
     )
     assert len(header) == LAS_HEADER_SIZE, "the LAS header layout moved"
-    records = b"".join(
-        struct.pack(
-            "<3iHBBbBH",
-            round(x / LAS_SCALE),
-            round(y / LAS_SCALE),
-            round(z / LAS_SCALE),
-            0,  # intensity
-            0,  # return number, number of returns, scan direction, edge of flight
-            0,  # classification: never classified
-            0,  # scan angle rank
-            0,  # user data
-            0,  # point source id
-        )
-        for x, y, z in points
-    )
-    path.write_bytes(header + records)
-    return path
+    return _write_point_cloud_facts1(header, path, points)
 
 
 def write_vector_tiles(

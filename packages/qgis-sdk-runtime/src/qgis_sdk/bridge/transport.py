@@ -30,6 +30,22 @@ from qgis_sdk.bridge.protocol import BRIDGE_PROTOCOL_VERSION
 from qgis_sdk.bridge.streams import MAX_FRAMES_PER_PUMP
 
 
+def _dispatch_message(channel, message: Mapping[str, Any]) -> bool:
+    """Dispatch one decoded frame and flush anything it queued."""
+    channel._receiving, channel._woken = True, False
+    try:
+        reply = channel.dispatcher.dispatch(channel.binding, message)
+        channel._send_reply(reply)
+    finally:
+        channel._receiving = False
+    # A frame pushed while the call was being handled waits until the
+    # acknowledgement is out: the view has to know the subscription id
+    # before it sees the id's first frame.
+    if channel._woken:
+        channel.flush()
+    return True
+
+
 @dataclass(slots=True)
 class ChannelTransport:
     """Move envelopes between a channel and one view's dispatcher."""
@@ -85,18 +101,7 @@ class ChannelTransport:
             return False
         # Invocations, subscriptions, disposals and releases all arrive here as
         # the same text and leave through the same narrow entry point.
-        self._receiving, self._woken = True, False
-        try:
-            reply = self.dispatcher.dispatch(self.binding, message)
-            self._send_reply(reply)
-        finally:
-            self._receiving = False
-        # A frame pushed while the call was being handled waits until the
-        # acknowledgement is out: the view has to know the subscription id
-        # before it sees the id's first frame.
-        if self._woken:
-            self.flush()
-        return True
+        return _dispatch_message(self, message)
 
     def flush(self, *, limit: int = MAX_FRAMES_PER_PUMP) -> int:
         """Send the frames waiting for this view; return how many went out."""

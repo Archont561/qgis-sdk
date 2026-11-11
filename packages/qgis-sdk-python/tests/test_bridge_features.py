@@ -29,6 +29,17 @@ from qgis_sdk.models import FeatureQuery, Geometry
 from qgis_sdk.models.errors import QgisSdkLayerNotFoundError
 from qgis_sdk.testing import FakeFeatures, FakeNetworkTransport
 
+
+def _an_editing_session_adds_phase1(committed, dispatcher, feature_id):
+    assert feature_id in committed["value"]["feature_ids"]
+
+    read_back = _call(
+        dispatcher, "features.get", {"layer_id": "parcels", "feature_id": feature_id}
+    )
+    assert read_back["ok"] is True
+    assert read_back["value"]["attributes"] == {"name": "F", "area": 60}
+
+
 ORIGIN = "qgis://desktop"
 
 
@@ -407,13 +418,7 @@ def test_an_editing_session_adds_updates_and_commits(dispatcher: Dispatcher) -> 
     assert committed["ok"] is True, committed
     assert committed["value"]["committed"] is True
     assert committed["value"]["applied"] == 2
-    assert feature_id in committed["value"]["feature_ids"]
-
-    read_back = _call(
-        dispatcher, "features.get", {"layer_id": "parcels", "feature_id": feature_id}
-    )
-    assert read_back["ok"] is True
-    assert read_back["value"]["attributes"] == {"name": "F", "area": 60}
+    _an_editing_session_adds_phase1(committed, dispatcher, feature_id)
 
 
 def test_a_rollback_discards_what_the_session_held(dispatcher: Dispatcher) -> None:

@@ -36,6 +36,15 @@ from ui_catalogue_contract import *
 from ui_component_contract import Rendering, make_rendering
 
 
+def _a_surface_builds_under_phase1(built, scope):
+    built.close()
+    assert built.surface.closed is True
+    assert scope.closed is True
+    assert built.root.attached is False
+    with pytest.raises(QgisSdkUiError, match="no child named 'other'"):
+        built.find("other")
+
+
 @pytest.fixture
 def rendering(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[Rendering]:
     """The fake rendering: attached to the fakes, never mounted."""
@@ -87,12 +96,7 @@ def test_a_surface_builds_under_the_fake_and_its_snapshot_needs_no_qt() -> None:
     )
     assert ui_snapshot(built.root) == ui_snapshot(built)
 
-    built.close()
-    assert built.surface.closed is True
-    assert scope.closed is True
-    assert built.root.attached is False
-    with pytest.raises(QgisSdkUiError, match="no child named 'other'"):
-        built.find("other")
+    _a_surface_builds_under_phase1(built, scope)
 
 
 def test_fake_ui_context_defaults_and_refusals() -> None:

@@ -37,6 +37,15 @@ from qgis_sdk.server import (
 )
 
 
+def _a_plugin_becomes_one_phase1(host, iface):
+    assert [item.name() for item in iface.services] == ["SDKDEMO"]
+    assert [item.version() for item in iface.services] == ["1.0.0"]
+    assert host.services == tuple(iface.services)
+    # One access-control object for the whole hook set.
+    assert len(iface.access_controls[30]) == 1
+    assert host.access_control is iface.access_controls[30][0]
+
+
 @pytest.fixture
 def wired(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     """Make ``from qgis import server`` resolve to the stand-ins."""
@@ -102,12 +111,7 @@ def test_a_plugin_becomes_one_filter_one_service_and_one_access_object(
     assert len(iface.filters[10]) == 1
     assert host.filter is iface.filters[10][0]
     # One service, answering the SERVICE and VERSION it declares.
-    assert [item.name() for item in iface.services] == ["SDKDEMO"]
-    assert [item.version() for item in iface.services] == ["1.0.0"]
-    assert host.services == tuple(iface.services)
-    # One access-control object for the whole hook set.
-    assert len(iface.access_controls[30]) == 1
-    assert host.access_control is iface.access_controls[30][0]
+    _a_plugin_becomes_one_phase1(host, iface)
 
 
 def test_registering_twice_does_not_duplicate_the_objects(

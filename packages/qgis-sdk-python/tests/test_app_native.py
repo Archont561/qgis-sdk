@@ -34,6 +34,31 @@ from pathlib import Path
 import pytest
 from layers import qgis_bindings, source_path
 
+
+def _run_probe_facts1(environment, probe, tmp_path):
+    finished = subprocess.run(
+        [sys.executable, str(probe)],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+    )
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    lines = [line for line in finished.stdout.splitlines() if line.startswith("{")]
+    assert lines, finished.stdout + finished.stderr
+    return json.loads(lines[-1])
+
+
+def _qgis_sdk_run_starts_phase1(Qgis, find_qgis_install, reported):
+    assert reported["version"] == Qgis.version(), "not the QGIS this row has"
+    assert reported["platform"] == "offscreen", "--headless must reach the toolkit"
+    # The interpreter the command discovered, not one the test named: a symlinked
+    # `bin/python` is the same interpreter, so compare where it resolves to.
+    install = find_qgis_install(os.environ)
+    assert Path(reported["interpreter"]).resolve() == Path(install.python).resolve()
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -236,18 +261,7 @@ def run_probe(tmp_path: Path, *, gui: bool) -> dict[str, object]:
     )
     environment["QT_QPA_PLATFORM"] = "offscreen"
     environment.setdefault("QT_LOGGING_RULES", "*.debug=false")
-    finished = subprocess.run(
-        [sys.executable, str(probe)],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=tmp_path,
-        env=environment,
-    )
-    assert finished.returncode == 0, finished.stdout + finished.stderr
-    lines = [line for line in finished.stdout.splitlines() if line.startswith("{")]
-    assert lines, finished.stdout + finished.stderr
-    return json.loads(lines[-1])
+    return _run_probe_facts1(environment, probe, tmp_path)
 
 
 def test_the_app_runs_headless_on_a_real_qgis(tmp_path: Path) -> None:
@@ -380,9 +394,4 @@ def test_qgis_sdk_run_starts_the_project_through_the_found_qgis(
     assert entry.is_file(), "the project's own __main__.py was not the entry"
     assert marker.is_file(), "the child never imported the project's plugin"
     reported = json.loads(marker.read_text(encoding="utf-8"))
-    assert reported["version"] == Qgis.version(), "not the QGIS this row has"
-    assert reported["platform"] == "offscreen", "--headless must reach the toolkit"
-    # The interpreter the command discovered, not one the test named: a symlinked
-    # `bin/python` is the same interpreter, so compare where it resolves to.
-    install = find_qgis_install(os.environ)
-    assert Path(reported["interpreter"]).resolve() == Path(install.python).resolve()
+    _qgis_sdk_run_starts_phase1(Qgis, find_qgis_install, reported)

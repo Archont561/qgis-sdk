@@ -26,6 +26,61 @@ from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from test_devtools_installs import make_prefix, no_which
 
 
+def _runs_desktop_in_place_phase3(host, install, plan, root, workspace):
+    init = (host / "field_tools" / "__init__.py").read_text(encoding="utf-8")
+    assert "classFactory = host('field_tools.plugin:app')" in init
+    assert str((root / "field_tools").as_posix()) in init
+    assert not (root / "field_tools" / "metadata.txt").exists()
+    assert plan.env["PYTHONHOME"] == str(install.prefix)
+    assert plan.env["QT_QPA_PLATFORM"] == "offscreen"
+    assert DEV_SERVER_ENV not in plan.env
+    assert plan.env["HOME"] == "/h"
+    request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
+    assert request == {
+        "root": str(root),
+        "plugin": "field_tools",
+        "host": str(host),
+        "mode": "desktop",
+        "web": False,
+        "dev_server": None,
+        "exercise": None,
+        "watch": True,
+        "port": None,
+    }
+    assert (workspace / "dev-desktop.py").read_text(encoding="utf-8") == DESKTOP_PROBE
+    assert "Ctrl+Shift+R" in plan.notes[1]
+    assert "on save" in plan.notes[1]
+    _runs_desktop_in_place_phase2(host, install, plan)
+
+
+def _runs_desktop_in_place_phase2(host, install, plan):
+    assert "generated" in plan.notes[0] and "on QGIS_PLUGINPATH" in plan.notes[0]
+    # TASK-73: the console recipe is printed where the developer is looking.
+    assert plan.notes[2].startswith("console: ")
+    assert 'qgis.utils.plugins["field_tools"].console()' in plan.notes[2]
+    assert "from qgis_sdk.console import connect" in plan.notes[2]
+    # The bootstrap imports qgis_sdk_tools inside QGIS's own interpreter.
+    _runs_desktop_in_place_phase1(host, install, plan)
+
+
+def _runs_desktop_in_place_phase1(host, install, plan):
+    sdk_paths = [str(path) for path in sdk_import_paths()]
+    assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
+        str(install.bindings),
+        str(host),
+        *sdk_paths,
+    ]
+
+
+def _runs_the_installs_interpreter_phase1(plan, request, tmp_path):
+    assert request["port"] == 8080
+    assert request["web"] is False
+    assert "http://127.0.0.1:8080" in plan.notes[0]
+    assert "curl" in plan.notes[1]
+    assert "reload" in plan.notes[2]
+    assert (tmp_path / "dev-server.py").read_text(encoding="utf-8") == SERVER_PROBE
+
+
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     root = tmp_path / "field_tools"
@@ -168,43 +223,7 @@ class TestDesktopPlan:
         host = root / ".qgis-sdk" / "dev" / "host"
         assert plan.env["QGIS_PLUGINPATH"] == os.pathsep.join((str(host), "/elsewhere"))
         assert (host / "field_tools" / "metadata.txt").is_file()
-        init = (host / "field_tools" / "__init__.py").read_text(encoding="utf-8")
-        assert "classFactory = host('field_tools.plugin:app')" in init
-        assert str((root / "field_tools").as_posix()) in init
-        assert not (root / "field_tools" / "metadata.txt").exists()
-        assert plan.env["PYTHONHOME"] == str(install.prefix)
-        assert plan.env["QT_QPA_PLATFORM"] == "offscreen"
-        assert DEV_SERVER_ENV not in plan.env
-        assert plan.env["HOME"] == "/h"
-        request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
-        assert request == {
-            "root": str(root),
-            "plugin": "field_tools",
-            "host": str(host),
-            "mode": "desktop",
-            "web": False,
-            "dev_server": None,
-            "exercise": None,
-            "watch": True,
-            "port": None,
-        }
-        assert (workspace / "dev-desktop.py").read_text(
-            encoding="utf-8"
-        ) == DESKTOP_PROBE
-        assert "Ctrl+Shift+R" in plan.notes[1]
-        assert "on save" in plan.notes[1]
-        assert "generated" in plan.notes[0] and "on QGIS_PLUGINPATH" in plan.notes[0]
-        # TASK-73: the console recipe is printed where the developer is looking.
-        assert plan.notes[2].startswith("console: ")
-        assert 'qgis.utils.plugins["field_tools"].console()' in plan.notes[2]
-        assert "from qgis_sdk.console import connect" in plan.notes[2]
-        # The bootstrap imports qgis_sdk_tools inside QGIS's own interpreter.
-        sdk_paths = [str(path) for path in sdk_import_paths()]
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[: 2 + len(sdk_paths)] == [
-            str(install.bindings),
-            str(host),
-            *sdk_paths,
-        ]
+        _runs_desktop_in_place_phase3(host, install, plan, root, workspace)
 
     def test_no_watch_leaves_reloads_to_the_button(
         self, project: Path, install: QgisInstall, tmp_path: Path
@@ -356,12 +375,7 @@ class TestServerPlan:
         ]
         request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
         assert request["mode"] == "server"
-        assert request["port"] == 8080
-        assert request["web"] is False
-        assert "http://127.0.0.1:8080" in plan.notes[0]
-        assert "curl" in plan.notes[1]
-        assert "reload" in plan.notes[2]
-        assert (tmp_path / "dev-server.py").read_text(encoding="utf-8") == SERVER_PROBE
+        _runs_the_installs_interpreter_phase1(plan, request, tmp_path)
 
     def test_a_web_page_is_not_served_to_a_server_plugin(
         self, web_project: Path, install: QgisInstall, tmp_path: Path

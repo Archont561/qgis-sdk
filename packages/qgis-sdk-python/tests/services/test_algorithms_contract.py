@@ -26,6 +26,26 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.testing import VectorLayerDeclaration
 
+
+def _an_explicit_existing_destination_phase1(
+    alias_kind, destination, info, services, source
+):
+    source_before = source.read_bytes()
+    output_before = destination.read_bytes()
+    output_inode = destination.stat().st_ino
+
+    with pytest.raises(QgisSdkAlgorithmRejectedError):
+        services.algorithms.run(
+            "native:centroids", {"INPUT": info.id, "OUTPUT": str(destination)}
+        )
+
+    assert source.read_bytes() == source_before
+    assert destination.read_bytes() == output_before
+    assert destination.stat().st_ino == output_inode
+    if alias_kind == "symlink":
+        assert destination.is_symlink()
+
+
 if TYPE_CHECKING:
     from .conftest import Services
 
@@ -251,20 +271,9 @@ def test_an_explicit_existing_destination_is_preserved(
             pytest.skip(f"symbolic links unavailable: {error}")
     else:
         destination.write_text("unrelated user data", encoding="utf-8")
-    source_before = source.read_bytes()
-    output_before = destination.read_bytes()
-    output_inode = destination.stat().st_ino
-
-    with pytest.raises(QgisSdkAlgorithmRejectedError):
-        services.algorithms.run(
-            "native:centroids", {"INPUT": info.id, "OUTPUT": str(destination)}
-        )
-
-    assert source.read_bytes() == source_before
-    assert destination.read_bytes() == output_before
-    assert destination.stat().st_ino == output_inode
-    if alias_kind == "symlink":
-        assert destination.is_symlink()
+    _an_explicit_existing_destination_phase1(
+        alias_kind, destination, info, services, source
+    )
 
 
 @pytest.mark.parametrize(

@@ -18,6 +18,15 @@ from qgis_sdk.models import (
 )
 
 
+def _cancelling_a_job_suspended_phase1(handoff, job, outcome, scheduler):
+    scheduler.tick()
+    assert job.state is JobState.WAITING
+    handoff.fail(RuntimeError("aborted"))
+    scheduler.tick()
+    assert job.state is JobState.CANCELLED
+    assert outcome == ["cancelled at the handoff"]
+
+
 def scheduler_with_scope() -> StepScheduler:
     return StepScheduler(ResourceScope())
 
@@ -137,12 +146,7 @@ def test_cancelling_a_job_suspended_on_a_cancellable_handoff_tells_the_worker() 
 
     # Nothing resumes until the worker acknowledges by reporting; then the job
     # sees the cancellation, not the report.
-    scheduler.tick()
-    assert job.state is JobState.WAITING
-    handoff.fail(RuntimeError("aborted"))
-    scheduler.tick()
-    assert job.state is JobState.CANCELLED
-    assert outcome == ["cancelled at the handoff"]
+    _cancelling_a_job_suspended_phase1(handoff, job, outcome, scheduler)
 
 
 def test_a_handoff_without_a_hook_still_waits_for_its_worker() -> None:

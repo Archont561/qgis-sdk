@@ -16,6 +16,20 @@ from qgis_sdk_tools.generate._contract import (
 )
 
 
+def _check_prefixes(ordered: list[str]) -> None:
+    """No id may be both a method and the namespace of a longer one."""
+    for index, id in enumerate(ordered):
+        prefix = id + "."
+        extended = next(
+            (other for other in ordered[index + 1 :] if other.startswith(prefix)), None
+        )
+        if extended is not None:
+            raise QgisSdkBridgeError(
+                f"operation id {id!r} is a prefix of {extended!r}; QgisSdk cannot "
+                f"make {id!r} both a method and the namespace of the other"
+            )
+
+
 def _declared_name(preferred: Any, fallback: str, *, kind: str, action: str) -> str:
     """Use the manifest's name, refusing one the emitter cannot declare.
 
@@ -110,16 +124,7 @@ def _check_sdk_tree(ids: Iterable[str]) -> None:
                 f"operation id {id!r} has an empty segment; QgisSdk nests "
                 "methods by the dots in an id"
             )
-    for index, id in enumerate(ordered):
-        prefix = id + "."
-        extended = next(
-            (other for other in ordered[index + 1 :] if other.startswith(prefix)), None
-        )
-        if extended is not None:
-            raise QgisSdkBridgeError(
-                f"operation id {id!r} is a prefix of {extended!r}; QgisSdk cannot "
-                f"make {id!r} both a method and the namespace of the other"
-            )
+    _check_prefixes(ordered)
 
 
 @dataclass(frozen=True, slots=True)

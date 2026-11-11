@@ -22,6 +22,19 @@ from qgis_sdk_tools.targets import (
 from qgis_sdk_tools.testing import FakeCliRuntime
 from typer.testing import CliRunner
 
+
+def _targets_describes_the_qgis_phase1(asked, runtime, tmp_path):
+    result = CliRunner().invoke(
+        app, ["targets", "--json", "--qgis-prefix", "/opt/qgis"], obj=runtime
+    )
+
+    assert result.exit_code == 0, result.output
+    assert asked == {"prefix": Path("/opt/qgis"), "project": tmp_path}
+    payload = json.loads(runtime.out.getvalue())
+    assert payload["host"]["qgis"] == "4.2"
+    assert payload["status"] == "qualified"
+
+
 ROOT = Path(__file__).resolve().parents[3]
 GUIDE = ROOT / "apps" / "docs" / "guides" / "doc-12 - qgis-sdk-Python-package-guide.md"
 
@@ -299,15 +312,7 @@ def test_targets_describes_the_qgis_install_the_other_commands_find(
     monkeypatch.setattr(targets_module.platform, "python_version", lambda: "3.14.8")
     runtime = FakeCliRuntime(tmp_path)
 
-    result = CliRunner().invoke(
-        app, ["targets", "--json", "--qgis-prefix", "/opt/qgis"], obj=runtime
-    )
-
-    assert result.exit_code == 0, result.output
-    assert asked == {"prefix": Path("/opt/qgis"), "project": tmp_path}
-    payload = json.loads(runtime.out.getvalue())
-    assert payload["host"]["qgis"] == "4.2"
-    assert payload["status"] == "qualified"
+    _targets_describes_the_qgis_phase1(asked, runtime, tmp_path)
 
 
 def test_targets_falls_back_to_the_interpreter_without_a_qgis_install(

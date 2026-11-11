@@ -24,6 +24,76 @@ from simple.plugin import EXPORT_DIRECTORY_KEY, app
 from simple.workflow import LocalGisWorkflow
 
 
+def _the_buffer_dialog_is_facts212(**values):
+    assert values["form"].values()["distance_metres"] == 250.0
+
+    values["run"].click()  # nothing chosen yet: a warning, the window stays
+    assert values["fake_host"].notifications.records[-1].level == "warning"
+    _the_buffer_dialog_is_facts21(
+        ctx=values["ctx"],
+        dialog=values["dialog"],
+        fake_host=values["fake_host"],
+        form=values["form"],
+        run=values["run"],
+        source=values["source"],
+    )
+
+
+def _the_buffer_dialog_is_facts21(**values):
+    assert (
+        "layer_id, working_crs are required"
+        in values["fake_host"].notifications.messages[-1]
+    )
+    assert values["ctx"].view.close_requests == 0
+
+    _the_buffer_dialog_is_facts2(
+        ctx=values["ctx"],
+        dialog=values["dialog"],
+        fake_host=values["fake_host"],
+        form=values["form"],
+        run=values["run"],
+        source=values["source"],
+    )
+
+
+def _the_buffer_dialog_is_facts2(**values):
+    values["form"].set_values(
+        {"layer_id": values["source"].id, "working_crs": WORKING_CRS}
+    )
+    values["run"].click()  # @on("run").clicked is wired by build_surface as by the host
+
+    assert values["fake_host"].notifications.records[-1].level == "success"
+    assert values["ctx"].view.close_requests == 1
+    _the_buffer_dialog_is_phase1(
+        values["ctx"],
+        values["dialog"],
+        values["fake_host"],
+        values["form"],
+        values["source"],
+    )
+
+
+def _the_buffer_dialog_is_phase1(ctx, dialog, fake_host, form, source):
+    assert ctx.log.messages[-1] == "buffered"
+    output = next(
+        layer for layer in fake_host.project.layer_ids() if layer != source.id
+    )
+    assert fake_host.layers.layer(output).crs == WORKING_CRS
+    assert dialog.form is form
+
+
+def _the_results_dock_lists_phase1(built):
+    assert built.find("fixture") is built.surface.fixture
+
+    built.find("fixture").click()
+    assert built.surface.results.cells() == (("points", "point", ""),)
+    assert built.find("log").lines()[-1] == "[info] layer ready layer='points' crs=''"
+
+    built.find("clear").click()
+    assert built.surface.results.rows() == ()
+    built.close()
+
+
 def test_the_plugin_declares_the_workflow_and_nothing_else() -> None:
     description = describe(app)
 
@@ -256,24 +326,9 @@ def test_the_buffer_dialog_is_the_buffer_action_as_a_form(fake_host: FakeHost) -
         "form/working_crs",
     ]
     assert snapshot["children"][1]["objectName"] == "buttons/run"
-    assert form.values()["distance_metres"] == 250.0
-
-    run.click()  # nothing chosen yet: a warning, the window stays
-    assert fake_host.notifications.records[-1].level == "warning"
-    assert "layer_id, working_crs are required" in fake_host.notifications.messages[-1]
-    assert ctx.view.close_requests == 0
-
-    form.set_values({"layer_id": source.id, "working_crs": WORKING_CRS})
-    run.click()  # @on("run").clicked is wired by build_surface as by the host
-
-    assert fake_host.notifications.records[-1].level == "success"
-    assert ctx.view.close_requests == 1
-    assert ctx.log.messages[-1] == "buffered"
-    output = next(
-        layer for layer in fake_host.project.layer_ids() if layer != source.id
+    _the_buffer_dialog_is_facts212(
+        ctx=ctx, dialog=dialog, fake_host=fake_host, form=form, run=run, source=source
     )
-    assert fake_host.layers.layer(output).crs == WORKING_CRS
-    assert dialog.form is form
 
 
 def test_the_results_dock_lists_what_the_plugin_produced(fake_host: FakeHost) -> None:
@@ -305,15 +360,7 @@ def test_the_results_dock_lists_what_the_plugin_produced(fake_host: FakeHost) ->
         "feedback/log",
     ]
     assert built.surface.results is not ResultsDock.results
-    assert built.find("fixture") is built.surface.fixture
-
-    built.find("fixture").click()
-    assert built.surface.results.cells() == (("points", "point", ""),)
-    assert built.find("log").lines()[-1] == "[info] layer ready layer='points' crs=''"
-
-    built.find("clear").click()
-    assert built.surface.results.rows() == ()
-    built.close()
+    _the_results_dock_lists_phase1(built)
 
 
 def _walk(node: dict) -> list[dict]:

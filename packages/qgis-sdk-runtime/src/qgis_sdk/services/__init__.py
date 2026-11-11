@@ -17,9 +17,17 @@ from .contracts import (
 from .features import EditingSession, Features
 from .files import Files
 from .layers import Layers
-from .layouts import Layouts
+from .layouts import AtlasOptions, ExportOptions, Layouts
 from .log import LOG_LEVELS, Log, LogBase, LogLevel, LogListener, LogRecord
-from .network import BlockingNetwork, Deliver, Network, NetworkTransport, Params
+from .network import (
+    BlockingNetwork,
+    ConfigureOptions,
+    Deliver,
+    Network,
+    NetworkTransport,
+    Params,
+    RequestOptions,
+)
 from .notifications import (
     LEVELS,
     Notification,
@@ -37,14 +45,17 @@ __all__ = [
     "LEVELS",
     "LOG_LEVELS",
     "Algorithms",
+    "AtlasOptions",
     "BlockingNetwork",
     "Cancellation",
     "Canvas",
     "CaptureCanceller",
+    "ConfigureOptions",
     "Connections",
     "Deliver",
     "DesktopAccess",
     "EditingSession",
+    "ExportOptions",
     "ExtentListener",
     "Features",
     "Files",
@@ -71,6 +82,7 @@ __all__ = [
     "ProjectWatchCanceller",
     "ProviderRegistration",
     "Rasters",
+    "RequestOptions",
     "Settings",
     "Styles",
     "Ui",

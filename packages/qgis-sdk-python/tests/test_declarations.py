@@ -9,6 +9,40 @@ from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.declarations._schemas import _schema
 
 
+def _dataclass_request_and_result_facts1(description):
+    assert description["request"] == {
+        "type": "object",
+        "properties": {
+            "request": {
+                "type": "object",
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                    },
+                    "label": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["count"],
+                "additionalProperties": False,
+            }
+        },
+        "required": ["request"],
+        "additionalProperties": False,
+    }
+    assert description["result"]["required"] == ["count", "label", "tags"]
+
+
+def _inherited_actions_are_sorted_facts1(Example, description):
+    assert description.actions[0].result == {"type": "number"}
+    assert description.actions[1].result == {"type": "null"}
+    assert description.to_json() == describe_plugin(Example).to_json()
+    value = description.to_dict()
+    value["actions"][0]["request"].clear()
+    assert description.actions[0].request["type"] == "object"
+
+
 def test_plain_plugin_is_inspected_without_constructing_or_running_it():
     @plugin(id="example.tools", title="Example")
     class Tools:
@@ -59,28 +93,7 @@ def test_dataclass_request_and_result_preserve_required_nullable_and_safe_intege
             pass
 
     description = describe_plugin(Sample).to_dict()["actions"][0]
-    assert description["request"] == {
-        "type": "object",
-        "properties": {
-            "request": {
-                "type": "object",
-                "properties": {
-                    "count": {
-                        "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991,
-                    },
-                    "label": {"anyOf": [{"type": "string"}, {"type": "null"}]},
-                    "tags": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["count"],
-                "additionalProperties": False,
-            }
-        },
-        "required": ["request"],
-        "additionalProperties": False,
-    }
-    assert description["result"]["required"] == ["count", "label", "tags"]
+    _dataclass_request_and_result_facts1(description)
 
 
 def test_inherited_actions_are_sorted_and_overrides_follow_python_lookup():
@@ -112,12 +125,7 @@ def test_inherited_actions_are_sorted_and_overrides_follow_python_lookup():
         "properties": {"enabled": {"type": "boolean"}},
         "additionalProperties": False,
     }
-    assert description.actions[0].result == {"type": "number"}
-    assert description.actions[1].result == {"type": "null"}
-    assert description.to_json() == describe_plugin(Example).to_json()
-    value = description.to_dict()
-    value["actions"][0]["request"].clear()
-    assert description.actions[0].request["type"] == "object"
+    _inherited_actions_are_sorted_facts1(Example, description)
 
 
 def test_literal_values_and_resolvable_forward_references():

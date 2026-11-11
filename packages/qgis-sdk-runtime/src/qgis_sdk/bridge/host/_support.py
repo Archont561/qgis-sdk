@@ -185,9 +185,11 @@ def _fetch_request(payload: Mapping[str, Any]) -> NetworkRequest:
         NetworkDefaults(),
         str(payload.get("method", "GET")),
         str(payload["url"]),
-        data=payload.get("body"),
-        headers=headers,
-        timeout=payload.get("timeout_seconds"),
+        {
+            "data": payload.get("body"),
+            "headers": headers,
+            "timeout": payload.get("timeout_seconds"),
+        },
     )
     auth_config = payload.get("auth_config")
     if auth_config is not None:

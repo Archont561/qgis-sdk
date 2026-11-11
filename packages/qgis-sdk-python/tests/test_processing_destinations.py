@@ -21,6 +21,18 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.processing.runs import destination_path, plan_destinations
 
+
+def _a_model_that_exposes_facts1(names, renamed):
+    assert names == {
+        "native:centroids_1:CENTROIDS": "centroids",
+        "native:basicstatisticsforfields_1:OUTPUT_HTML_FILE": "report",
+    }
+    kinds = {output.name: output.kind for output in renamed.outputs}
+    assert kinds["centroids"] == "outputVector"
+    # A file destination is a file, whatever it writes.
+    assert kinds["report"] == "outputFile"
+
+
 RUN = Path("/run/run-1")
 
 
@@ -222,14 +234,7 @@ def test_a_model_that_exposes_destinations_names_them_by_description() -> None:
 
     renamed, names = model_output_names(info)
 
-    assert names == {
-        "native:centroids_1:CENTROIDS": "centroids",
-        "native:basicstatisticsforfields_1:OUTPUT_HTML_FILE": "report",
-    }
-    kinds = {output.name: output.kind for output in renamed.outputs}
-    assert kinds["centroids"] == "outputVector"
-    # A file destination is a file, whatever it writes.
-    assert kinds["report"] == "outputFile"
+    _a_model_that_exposes_facts1(names, renamed)
 
 
 def test_the_answer_is_matched_whatever_case_the_file_declares() -> None:

@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
@@ -99,23 +99,18 @@ class FakeFeatures:
 
     # -- declaring data -----------------------------------------------------
 
-    def declare(
-        self,
-        layer_id: str,
-        *,
-        fields: Sequence[str],
-        rows: Iterable[tuple[int, Mapping[str, Any], Any]] = (),
-        editable: bool = True,
-        atomic: bool = True,
-    ) -> FakeLayer:
+    def declare(self, layer_id: str, **options: Unpack[_DeclareOptions1]) -> FakeLayer:
         """Create a layer the service answers for, and return it for inspection.
 
         A row's third item is one :class:`Geometry` or a mapping of encodings to
         geometries - ``{"wkt": ..., "geojson": ...}`` - which is how a test
         declares the encodings it will read back.
         """
-        layer = FakeLayer(fields=tuple(fields), editable=editable, atomic=atomic)
-        for feature_id, attributes, geometry in rows:
+        values = _DeclareValues1(**options)
+        layer = FakeLayer(
+            fields=tuple(values.fields), editable=values.editable, atomic=values.atomic
+        )
+        for feature_id, attributes, geometry in values.rows:
             layer.rows[feature_id] = dict(attributes)
             if isinstance(geometry, Geometry):
                 layer.geometries[feature_id] = {geometry.encoding: geometry}
@@ -469,3 +464,18 @@ class FakeEditingSession:
     def _require(self, feature_id: int) -> None:
         if feature_id not in self.layer.rows or feature_id in self.deleted:
             raise QgisSdkLayerNotFoundError(f"{self.layer_id}#{feature_id}")
+
+
+class _DeclareOptions1(TypedDict, total=False):
+    fields: Sequence[str]
+    rows: Iterable[tuple[int, Mapping[str, Any], Any]]
+    editable: bool
+    atomic: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _DeclareValues1:
+    fields: Sequence[str]
+    rows: Iterable[tuple[int, Mapping[str, Any], Any]] = ()
+    editable: bool = True
+    atomic: bool = True

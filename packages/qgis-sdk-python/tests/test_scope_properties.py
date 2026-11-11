@@ -6,6 +6,21 @@ from hypothesis import strategies as st
 from qgis_sdk.core import ResourceScope
 
 
+def _closing_plugin_releases_every_phase1(
+    plugin, plugin_cleanup_count, released, view_cleanup_counts, views
+):
+    expected = [
+        f"view {view_index} cleanup {callback_index}"
+        for view_index in reversed(range(len(view_cleanup_counts)))
+        for callback_index in reversed(range(view_cleanup_counts[view_index]))
+    ] + [
+        f"plugin cleanup {callback_index}"
+        for callback_index in reversed(range(plugin_cleanup_count))
+    ]
+    assert released == expected
+    assert plugin.closed and all(view.closed for view in views)
+
+
 @given(
     view_cleanup_counts=st.lists(st.integers(min_value=0, max_value=4), max_size=5),
     plugin_cleanup_count=st.integers(min_value=0, max_value=4),
@@ -34,16 +49,9 @@ def test_closing_plugin_releases_every_view_then_plugin_once(
     plugin.close()
     plugin.close()
 
-    expected = [
-        f"view {view_index} cleanup {callback_index}"
-        for view_index in reversed(range(len(view_cleanup_counts)))
-        for callback_index in reversed(range(view_cleanup_counts[view_index]))
-    ] + [
-        f"plugin cleanup {callback_index}"
-        for callback_index in reversed(range(plugin_cleanup_count))
-    ]
-    assert released == expected
-    assert plugin.closed and all(view.closed for view in views)
+    _closing_plugin_releases_every_phase1(
+        plugin, plugin_cleanup_count, released, view_cleanup_counts, views
+    )
 
 
 @given(failing_indices=st.sets(st.integers(min_value=0, max_value=6)))

@@ -29,6 +29,15 @@ from qgis_sdk_tools.scaffold import (
 from qgis_sdk_tools.scaffold.generate import sdk_requirements
 
 
+def _metadata_rendered_from_the_phase1(fields, project):
+    assert fields["version"] == "1.2.3"
+    assert fields["qgisMinimumVersion"] == "4.0"
+    assert fields["author"] == "Ada"
+    assert fields["email"] == "ada@example.test"
+    assert fields["hasProcessingProvider"] == "no"
+    assert not (project / "demo_tools" / "metadata.txt").exists()
+
+
 def content_of(plan: tuple[GeneratedFile, ...], path: str) -> str:
     return next(file.content for file in plan if file.path == path)
 
@@ -188,12 +197,7 @@ def test_metadata_rendered_from_the_manifest_carries_the_fields_qgis_reads(
         "version",
     }
     assert fields["name"] == "Demo Tools"
-    assert fields["version"] == "1.2.3"
-    assert fields["qgisMinimumVersion"] == "4.0"
-    assert fields["author"] == "Ada"
-    assert fields["email"] == "ada@example.test"
-    assert fields["hasProcessingProvider"] == "no"
-    assert not (project / "demo_tools" / "metadata.txt").exists()
+    _metadata_rendered_from_the_phase1(fields, project)
 
 
 def test_the_package_init_is_empty_because_build_appends_the_entry_point() -> None:

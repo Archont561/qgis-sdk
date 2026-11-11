@@ -36,6 +36,36 @@ from qgis_sdk.core._application import QgisSdkPlugin
 from qgis_sdk.models import QgisSdkAppError
 from qgis_sdk.services import Notification, NotificationsBase
 
+
+def _bind_setup2(runtime, self):
+    loops: list[NamedLoop] = []
+    service = runtime.jobs
+    layouts = self._context.layouts if self._context.has("layouts") else None
+    algorithms = self._context.algorithms if self._context.has("algorithms") else None
+    return algorithms, layouts, loops, service
+
+
+def _bind_phase1(loops, runtime, self):
+    if self._surfaces is not None and self._bindings is not None:
+        self._surfaces.attach(runtime, self._context)
+        self._bindings.install(runtime)
+        self._surfaces.restore_docks()
+        self._bindings.sync_toggles()
+    return tuple(loops)
+
+
+def _init_phase1(QgsApplication, argv, gui, prefix, self):
+    if prefix:
+        QgsApplication.setPrefixPath(prefix, True)
+    # PyQt6's ``QgsApplication`` takes ``list[bytes]`` and raises
+    # "expected bytes, str found" for a list of str; bytes works on both
+    # bindings, and every other place the SDK constructs one already does
+    # this (the dev probe, the catalogue, the pytest plugin).
+    arguments = [b"qgis-sdk-app", *(item.encode("utf-8") for item in argv)]
+    self._application = QgsApplication(arguments, gui)
+    self._application.initQgis()
+
+
 if TYPE_CHECKING:
     from qgis_sdk.bindings import BindingsDescription
 
@@ -363,12 +393,7 @@ class QtAppSurface:
 
     def bind(self, runtime: PluginRuntime) -> tuple[NamedLoop, ...]:
         """Place the UI and start the job pump; return the loops started."""
-        loops: list[NamedLoop] = []
-        service = runtime.jobs
-        layouts = self._context.layouts if self._context.has("layouts") else None
-        algorithms = (
-            self._context.algorithms if self._context.has("algorithms") else None
-        )
+        algorithms, layouts, loops, service = _bind_setup2(runtime, self)
         if service is None and layouts is None and algorithms is None:
             return tuple(loops)
         from qgis_sdk.adapters.qgis.jobs import QgsJobPump
@@ -394,12 +419,7 @@ class QtAppSurface:
             )
             algorithms_pump.start()
             loops.append(algorithms_pump)
-        if self._surfaces is not None and self._bindings is not None:
-            self._surfaces.attach(runtime, self._context)
-            self._bindings.install(runtime)
-            self._surfaces.restore_docks()
-            self._bindings.sync_toggles()
-        return tuple(loops)
+        return _bind_phase1(loops, runtime, self)
 
     def close(self) -> None:
         """Remove the bindings, close the surfaces, close the window."""
@@ -452,15 +472,7 @@ class QtAppBackend:
                 "belongs in a plain interpreter (`qgis-sdk run`)"
             )
         prefix = os.environ.get("QGIS_PREFIX_PATH")
-        if prefix:
-            QgsApplication.setPrefixPath(prefix, True)
-        # PyQt6's ``QgsApplication`` takes ``list[bytes]`` and raises
-        # "expected bytes, str found" for a list of str; bytes works on both
-        # bindings, and every other place the SDK constructs one already does
-        # this (the dev probe, the catalogue, the pytest plugin).
-        arguments = [b"qgis-sdk-app", *(item.encode("utf-8") for item in argv)]
-        self._application = QgsApplication(arguments, gui)
-        self._application.initQgis()
+        _init_phase1(QgsApplication, argv, gui, prefix, self)
 
     def build(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> AppSurface:
         """The surface for this run: a window when ``gui``, a headless context else."""

@@ -45,6 +45,16 @@ from qgis_sdk.core import Host, PluginContext, PluginServices, ResourceScope
 from qgis_sdk.environment import dev_request
 from qgis_sdk.models import QgisSdkError
 
+
+def _reload_phase1(qgis, self):
+    if not (qgis.utils.loadPlugin(self._name) and qgis.utils.startPlugin(self._name)):
+        raise QgisSdkConsoleError(
+            f"{self._name} unloaded but QGIS could not load it again; see the "
+            "QGIS message log, or restart `qgis-sdk dev`"
+        )
+    return f"{self._name} reloaded"
+
+
 __all__ = [
     "ConsoleSession",
     "PluginHandle",
@@ -404,14 +414,7 @@ class PluginHandle:
 
         if not qgis.utils.unloadPlugin(self._name):
             raise QgisSdkConsoleError(f"{self._name} ({state}) refused to unload")
-        if not (
-            qgis.utils.loadPlugin(self._name) and qgis.utils.startPlugin(self._name)
-        ):
-            raise QgisSdkConsoleError(
-                f"{self._name} unloaded but QGIS could not load it again; see the "
-                "QGIS message log, or restart `qgis-sdk dev`"
-            )
-        return f"{self._name} reloaded"
+        return _reload_phase1(qgis, self)
 
     def __repr__(self) -> str:
         try:

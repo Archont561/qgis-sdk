@@ -64,6 +64,46 @@ from qgis_sdk.models import (
 from qgis_sdk.network.grants import origin_of
 from qgis_sdk.services import Deliver
 
+
+def _issue_facts1(reply, self):
+    reply.finished.connect(self._on_finished)
+    timer = QTimer(reply)
+    timer.setSingleShot(True)
+    timer.timeout.connect(self._on_timeout)
+    timer.start(int(self._request.timeout_seconds * 1000))
+    self._timer = timer
+
+
+def _classify_facts1(content, reason, reply, self, status):
+    return Response(
+        url=reply.url().toString(),
+        status_code=int(status),
+        reason=_text(reason),
+        headers=Headers(
+            (_text(name), _text(value)) for name, value in reply.rawHeaderPairs()
+        ),
+        content=content,
+        method=self._method,
+    )
+
+
+def _follow_phase2(current, self, status, target_url):
+    self._hops += 1
+    if _origin(current.toString()) != _origin(target_url):
+        # Credentials belong to the origin they were given for.
+        self._headers = self._headers.without(*_CREDENTIAL_HEADERS)
+        self._auth_config = None
+    return _follow_phase1(self, status, target_url)
+
+
+def _follow_phase1(self, status, target_url):
+    if status == 303 or (status in (301, 302) and self._method == "POST"):
+        self._method = "GET"
+        self._body = None
+        self._headers = self._headers.without("Content-Type", "Content-Length")
+    self._issue(target_url)
+
+
 __all__ = ["NativeNetworkTransport"]
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
@@ -198,12 +238,7 @@ class _Exchange(QObject):
         reply = self._send(qt_request)
         self._reply = reply
         reply.downloadProgress.connect(self._on_progress)
-        reply.finished.connect(self._on_finished)
-        timer = QTimer(reply)
-        timer.setSingleShot(True)
-        timer.timeout.connect(self._on_timeout)
-        timer.start(int(self._request.timeout_seconds * 1000))
-        self._timer = timer
+        _issue_facts1(reply, self)
 
     #: The methods QNetworkAccessManager sends through an accessor of its own,
     #: and whether that accessor takes the body. Everything else, including a
@@ -313,16 +348,7 @@ class _Exchange(QObject):
                 url=reply.url().toString(),
             )
         reason = reply.attribute(QNetworkRequest.Attribute.HttpReasonPhraseAttribute)
-        return Response(
-            url=reply.url().toString(),
-            status_code=int(status),
-            reason=_text(reason),
-            headers=Headers(
-                (_text(name), _text(value)) for name, value in reply.rawHeaderPairs()
-            ),
-            content=content,
-            method=self._method,
-        )
+        return _classify_facts1(content, reason, reply, self, status)
 
     def _transport_failure(
         self, reply: QNetworkReply, error: QNetworkReply.NetworkError
@@ -372,17 +398,7 @@ class _Exchange(QObject):
                 method=self._method,
                 url=target_url,
             )
-        self._hops += 1
-        if _origin(current.toString()) != _origin(target_url):
-            # Credentials belong to the origin they were given for.
-            self._headers = self._headers.without(*_CREDENTIAL_HEADERS)
-            self._auth_config = None
-        if status == 303 or (status in (301, 302) and self._method == "POST"):
-            self._method = "GET"
-            self._body = None
-            self._headers = self._headers.without("Content-Type", "Content-Length")
-        self._issue(target_url)
-        return None
+        return _follow_phase2(current, self, status, target_url)
 
     def _error(
         self, kind: type[QgisSdkNetworkError], message: str

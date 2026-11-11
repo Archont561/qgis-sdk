@@ -42,6 +42,23 @@ PROBE_ENTRYPOINT: Final = "qgis_sdk_tools.devtools.ui_probe"
 VERBS: Final = ("click", "focus", "select", "set", "type")
 
 
+def _capture_chosen(surfaces, request, report, describe_surface, host) -> None:
+    """Capture the one named surface, naming the declared ones if absent."""
+    chosen = [
+        surface
+        for surface in surfaces
+        if describe_surface(surface).id == request.surface
+    ]
+    spec = f"{request.plugin}.plugin:app"
+    if not chosen:
+        known = ", ".join(entry["id"] for entry in report.surfaces) or "none"
+        raise LookupError(
+            f"{request.plugin} declares no surface named {request.surface!r} "
+            f"(declared: {known})"
+        )
+    _capture(host(spec), chosen[0], request, report)
+
+
 @dataclass(frozen=True, slots=True)
 class ActStep:
     """One synthetic interaction with the surface, by node id."""
@@ -183,18 +200,7 @@ def _run(request: CaptureRequest, report: CaptureReport) -> None:
         for surface in surfaces
     ]
     if request.surface != "-":
-        chosen = [
-            surface
-            for surface in surfaces
-            if describe_surface(surface).id == request.surface
-        ]
-        if not chosen:
-            known = ", ".join(entry["id"] for entry in report.surfaces) or "none"
-            raise LookupError(
-                f"{request.plugin} declares no surface named {request.surface!r} "
-                f"(declared: {known})"
-            )
-        _capture(host(spec), chosen[0], request, report)
+        _capture_chosen(surfaces, request, report, describe_surface, host)
         return
     report.ok = True  # listing asks a question and writes nothing
 

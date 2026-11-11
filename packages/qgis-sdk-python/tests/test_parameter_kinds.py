@@ -39,6 +39,58 @@ from qgis_sdk.models import (
 from qgis_sdk.providers import Provider
 from qgis_sdk.ui.form_fields import coerce_values, form_fields
 
+
+def _the_describer_reports_the_facts11(properties):
+    assert properties["attribute"] == {
+        "type": "string",
+        "x-qgis-sdk": {"kind": "field", "of": "layer"},
+    }
+    assert properties["source"]["title"] == "FileRef"
+    assert properties["source"]["x-qgis-sdk"] == {"kind": "file", "filters": ["*.csv"]}
+    assert properties["folder"]["x-qgis-sdk"] == {"kind": "directory"}
+    _the_describer_reports_the_facts1(properties)
+
+
+def _the_describer_reports_the_facts1(properties):
+    assert properties["weight"] == {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "x-qgis-sdk": {"kind": "range"},
+    }
+    assert properties["fill"] == {"type": "string", "x-qgis-sdk": {"kind": "colour"}}
+    assert properties["mode"] == {"enum": ["fast", "safe"]}
+
+
+def _invoke_checks_the_new_facts1(calls, reasons):
+    assert "source must be a FileRef, not str" in reasons
+    assert "folder must be a directory FileRef, not a file FileRef" in reasons
+    assert "weight must be between 0.0 and 1.0" in reasons
+    assert "fill must be a #RRGGBB or #RRGGBBAA colour" in reasons
+    assert "mode must be one of fast, safe" in reasons
+    assert calls == []
+
+
+def _form_fields_derive_the_facts1(specs):
+    by_name = {spec.name: spec for spec in specs}
+    assert by_name["attribute"].details == {"of": "layer"}
+    assert by_name["source"].details == {"filters": ("*.csv",)}
+    assert by_name["weight"].details == {"minimum": 0, "maximum": 5}
+    assert by_name["mode"].choices == ("fast", "safe")
+    assert by_name["source"].to_dict()["details"] == {"filters": ["*.csv"]}
+
+
+def _coercion_returns_the_models_facts1(directory, values):
+    assert values == {
+        "source": _ref(),
+        "folder": directory,
+        "weight": 3,
+        "fill": "#ff0000",
+        "layer": "layer-1",
+        "attribute": "name",
+    }
+
+
 KIND_NAMES = (
     "layer",
     "crs",
@@ -175,21 +227,7 @@ def test_the_describer_reports_the_new_kinds() -> None:
         "mode": "enum",
     }
     properties = description.inputs_schema["properties"]
-    assert properties["attribute"] == {
-        "type": "string",
-        "x-qgis-sdk": {"kind": "field", "of": "layer"},
-    }
-    assert properties["source"]["title"] == "FileRef"
-    assert properties["source"]["x-qgis-sdk"] == {"kind": "file", "filters": ["*.csv"]}
-    assert properties["folder"]["x-qgis-sdk"] == {"kind": "directory"}
-    assert properties["weight"] == {
-        "type": "number",
-        "minimum": 0.0,
-        "maximum": 1.0,
-        "x-qgis-sdk": {"kind": "range"},
-    }
-    assert properties["fill"] == {"type": "string", "x-qgis-sdk": {"kind": "colour"}}
-    assert properties["mode"] == {"enum": ["fast", "safe"]}
+    _the_describer_reports_the_facts11(properties)
 
 
 def test_a_field_input_of_an_unknown_or_non_layer_input_is_refused() -> None:
@@ -275,12 +313,7 @@ def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
         )
 
     reasons = refused.value.reasons
-    assert "source must be a FileRef, not str" in reasons
-    assert "folder must be a directory FileRef, not a file FileRef" in reasons
-    assert "weight must be between 0.0 and 1.0" in reasons
-    assert "fill must be a #RRGGBB or #RRGGBBAA colour" in reasons
-    assert "mode must be one of fast, safe" in reasons
-    assert calls == []
+    _invoke_checks_the_new_facts1(calls, reasons)
 
 
 # -- the form rule reads the annotation from the schema ----------------------
@@ -314,12 +347,7 @@ def test_form_fields_derive_the_widget_from_the_wire_annotation() -> None:
         ("fill", "colour"),
         ("mode", "choice"),
     ]
-    by_name = {spec.name: spec for spec in specs}
-    assert by_name["attribute"].details == {"of": "layer"}
-    assert by_name["source"].details == {"filters": ("*.csv",)}
-    assert by_name["weight"].details == {"minimum": 0, "maximum": 5}
-    assert by_name["mode"].choices == ("fast", "safe")
-    assert by_name["source"].to_dict()["details"] == {"filters": ["*.csv"]}
+    _form_fields_derive_the_facts1(specs)
 
 
 def test_coercion_returns_the_models_the_handler_declared() -> None:
@@ -351,11 +379,4 @@ def test_coercion_returns_the_models_the_handler_declared() -> None:
         },
     )
 
-    assert values == {
-        "source": _ref(),
-        "folder": directory,
-        "weight": 3,
-        "fill": "#ff0000",
-        "layer": "layer-1",
-        "attribute": "name",
-    }
+    _coercion_returns_the_models_facts1(directory, values)

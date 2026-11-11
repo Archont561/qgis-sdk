@@ -15,6 +15,16 @@ from qgis_sdk.services import LEVELS, Notification, NotificationAction, Notifica
 from qgis_sdk.testing import RecordingNotifications
 
 
+def _pressing_the_button_runs_phase1(calls, notifications, runtime):
+    runtime.actions["warn"]()
+
+    with pytest.raises(ValueError, match="carries no action"):
+        notifications.info("no button")
+        notifications.press()
+    assert notifications.press(0) == "undone L1"
+    assert calls == ["L1"]
+
+
 def test_every_level_is_recorded_with_its_message_and_no_button() -> None:
     scope = ResourceScope()
     notifications = RecordingNotifications(scope)
@@ -78,13 +88,7 @@ def test_pressing_the_button_runs_the_plugin_action_with_its_arguments() -> None
     runtime.start()
     notifications.bind_actions(lambda action_id, **kw: runtime.actions[action_id](**kw))
 
-    runtime.actions["warn"]()
-
-    with pytest.raises(ValueError, match="carries no action"):
-        notifications.info("no button")
-        notifications.press()
-    assert notifications.press(0) == "undone L1"
-    assert calls == ["L1"]
+    _pressing_the_button_runs_phase1(calls, notifications, runtime)
 
 
 def test_press_without_bound_actions_and_a_closed_scope_refuse() -> None:

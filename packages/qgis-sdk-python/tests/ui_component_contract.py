@@ -11,7 +11,9 @@ a property of the run, as it is for the services (``tests/services``).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 import pytest
 from qgis_sdk.core import (
@@ -97,17 +99,15 @@ class Rendering:
         ctx: UiContext,
         scope: ResourceScope,
         dataset: Path,
-        *,
-        native: bool,
-        runtime: PluginRuntime | None = None,
-        raster_dataset: Path | None = None,
+        **options: Unpack[_InitOptions1],
     ) -> None:
+        values = _InitValues1(**options)
         self.ctx = ctx
         self.scope = scope
         self.dataset = dataset
-        self.raster_dataset = raster_dataset
-        self.native = native
-        self.runtime = runtime
+        self.raster_dataset = values.raster_dataset
+        self.native = values.native
+        self.runtime = values.runtime
 
     @property
     def plugin(self) -> CataloguePlugin:
@@ -556,3 +556,16 @@ __all__ = [
     "test_subscriptions_drop_with_the_scope",
     "test_the_initial_value_is_the_same_under_both_renderings",
 ]
+
+
+class _InitOptions1(TypedDict, total=False):
+    native: bool
+    runtime: PluginRuntime | None
+    raster_dataset: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    native: bool
+    runtime: PluginRuntime | None = None
+    raster_dataset: Path | None = None

@@ -14,6 +14,20 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+
+def _diff_snapshots_facts1(after, before, changes, pixels):
+    if before.get(_PIXEL_FIELD) != after.get(_PIXEL_FIELD):
+        pixels.append(
+            Change(
+                where=str(before.get("surface", "")) or "surface",
+                field=_PIXEL_FIELD,
+                before=before.get(_PIXEL_FIELD),
+                after=after.get(_PIXEL_FIELD),
+            )
+        )
+    return SnapshotDiff(changes=tuple(changes), pixels=tuple(pixels))
+
+
 __all__ = ["Change", "SnapshotDiff", "diff_snapshots", "structural_change"]
 
 #: Surface-level fields a change to which is structural, in reading order.
@@ -95,16 +109,7 @@ def diff_snapshots(before: Mapping[str, Any], after: Mapping[str, Any]) -> Snaps
         where=str(before.get("surface", "")) or "surface",
     )
     pixels: list[Change] = []
-    if before.get(_PIXEL_FIELD) != after.get(_PIXEL_FIELD):
-        pixels.append(
-            Change(
-                where=str(before.get("surface", "")) or "surface",
-                field=_PIXEL_FIELD,
-                before=before.get(_PIXEL_FIELD),
-                after=after.get(_PIXEL_FIELD),
-            )
-        )
-    return SnapshotDiff(changes=tuple(changes), pixels=tuple(pixels))
+    return _diff_snapshots_facts1(after, before, changes, pixels)
 
 
 def structural_change(before: Mapping[str, Any], after: Mapping[str, Any]) -> bool:
