@@ -168,47 +168,7 @@ def qgis_server() -> Any:
 # -- the host --------------------------------------------------------------------
 
 
-class QgsServerHost:
-    """One plugin's hooks, registered on a live ``QgsServerInterface``.
-
-    The object is both the SDK-side :class:`~qgis_sdk.server.ServerInterface`
-    (``register_filter`` and the two beside it) and the owner of the QGIS objects
-    those calls create: one filter that runs the whole filter chain, one
-    ``QgsService`` per declared service, and one access-control object that
-    answers QGIS's per-layer questions with the plugin's access hooks.
-    """
-
-    __slots__ = (
-        "_access",
-        "_context_factory",
-        "_filter",
-        "_host",
-        "_iface",
-        "_jobs",
-        "_server",
-        "_services",
-    )
-
-    def __init__(
-        self,
-        hooks: ServerHooks,
-        server_interface: Any,
-        *,
-        context_factory: (
-            Callable[[ResourceScope, ServerRequest, ServerResponse], ServerContext]
-            | None
-        ) = None,
-        jobs: JobService | None = None,
-    ) -> None:
-        self._server = qgis_server()
-        self._iface = server_interface
-        self._filter: Any = None
-        self._access: Any = None
-        self._services: list[Any] = []
-        self._context_factory = context_factory
-        self._jobs = jobs
-        self._host = ServerHost(hooks, self, context_factory=context_factory, jobs=jobs)
-
+class _QgsServerHostMixin1:
     # -- what a plugin loader calls ----------------------------------------------
 
     def register(self) -> QgsServerHost:
@@ -383,6 +343,8 @@ class QgsServerHost:
         rewrite_parameters(handler, request, outcome)
         return True
 
+
+class _QgsServerHostMixin2:
     def serve_service(
         self, hook: Callable[..., Any], qgs_request: Any, qgs_response: Any
     ) -> None:
@@ -423,6 +385,48 @@ class QgsServerHost:
             return self._host.permits(context, request, str(layer.name()))
         finally:
             scope.close()
+
+
+class QgsServerHost(_QgsServerHostMixin1, _QgsServerHostMixin2):
+    """One plugin's hooks, registered on a live ``QgsServerInterface``.
+
+    The object is both the SDK-side :class:`~qgis_sdk.server.ServerInterface`
+    (``register_filter`` and the two beside it) and the owner of the QGIS objects
+    those calls create: one filter that runs the whole filter chain, one
+    ``QgsService`` per declared service, and one access-control object that
+    answers QGIS's per-layer questions with the plugin's access hooks.
+    """
+
+    __slots__ = (
+        "_access",
+        "_context_factory",
+        "_filter",
+        "_host",
+        "_iface",
+        "_jobs",
+        "_server",
+        "_services",
+    )
+
+    def __init__(
+        self,
+        hooks: ServerHooks,
+        server_interface: Any,
+        *,
+        context_factory: (
+            Callable[[ResourceScope, ServerRequest, ServerResponse], ServerContext]
+            | None
+        ) = None,
+        jobs: JobService | None = None,
+    ) -> None:
+        self._server = qgis_server()
+        self._iface = server_interface
+        self._filter: Any = None
+        self._access: Any = None
+        self._services: list[Any] = []
+        self._context_factory = context_factory
+        self._jobs = jobs
+        self._host = ServerHost(hooks, self, context_factory=context_factory, jobs=jobs)
 
     def __repr__(self) -> str:
         return f"QgsServerHost({self._host!r})"

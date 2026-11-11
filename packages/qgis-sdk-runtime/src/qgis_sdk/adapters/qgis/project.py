@@ -80,29 +80,7 @@ GROUP_ID_PREFIX = "group:"
 PROPERTY_SCOPE = "qgis-sdk"
 
 
-class NativeProject:
-    """Edit the application's ``QgsProject`` and read it back."""
-
-    def __init__(
-        self,
-        layers: NativeLayers,
-        scope: ResourceScope,
-        project: QgsProject | None = None,
-        *,
-        rasters: NativeRasters | None = None,
-    ) -> None:
-        self._layers = layers
-        self._scope = scope
-        self._project = project if project is not None else QgsProject.instance()
-        self._rasters = rasters
-        self._listeners: list[ProjectChanged] = []
-        self._connected = False
-        #: Depth of service calls in progress. QGIS emits its own signal for
-        #: edits this service makes, so the signal is ignored while a call runs
-        #: and the call emits exactly one frame itself - one change, one frame.
-        self._busy = 0
-        scope.on_close(self._release)
-
+class _NativeProjectMixin1:
     # -- membership and tree ------------------------------------------------
 
     def layer_ids(self) -> tuple[str, ...]:
@@ -255,6 +233,8 @@ class NativeProject:
         self._notify("properties")
         return self.custom_properties()
 
+
+class _NativeProjectMixin2:
     def unset_custom_property(self, name: str) -> tuple[ProjectEntry, ...]:
         """Remove one custom property; an absent name is a no-op."""
         self._scope.ensure_open()
@@ -435,6 +415,8 @@ class NativeProject:
         connect(handler)
         return True
 
+
+class _NativeProjectMixin3:
     @contextmanager
     def _editing(self) -> Iterator[None]:
         """Ignore QGIS's own signals while the service performs one edit.
@@ -550,6 +532,30 @@ class NativeProject:
     def _release(self) -> None:
         """Drop the listeners; the project itself belongs to the application."""
         self._listeners.clear()
+
+
+class NativeProject(_NativeProjectMixin1, _NativeProjectMixin2, _NativeProjectMixin3):
+    """Edit the application's ``QgsProject`` and read it back."""
+
+    def __init__(
+        self,
+        layers: NativeLayers,
+        scope: ResourceScope,
+        project: QgsProject | None = None,
+        *,
+        rasters: NativeRasters | None = None,
+    ) -> None:
+        self._layers = layers
+        self._scope = scope
+        self._project = project if project is not None else QgsProject.instance()
+        self._rasters = rasters
+        self._listeners: list[ProjectChanged] = []
+        self._connected = False
+        #: Depth of service calls in progress. QGIS emits its own signal for
+        #: edits this service makes, so the signal is ignored while a call runs
+        #: and the call emits exactly one frame itself - one change, one frame.
+        self._busy = 0
+        scope.on_close(self._release)
 
 
 def _is_layer(node: QgsLayerTreeNode) -> bool:

@@ -27,19 +27,7 @@ if TYPE_CHECKING:
 # -- handles ------------------------------------------------------------------------
 
 
-class JobHandle:
-    """What ``delay`` returns: identity, state, cancellation, outcome, subscriptions.
-
-    Everything on a handle is safe to call from the driving thread. ``cancel``
-    and the read-only properties are safe from any thread; ``get`` is for any
-    thread *but* the GUI thread.
-    """
-
-    __slots__ = ("_attempt",)
-
-    def __init__(self, attempt: _Attempt) -> None:
-        self._attempt = attempt
-
+class _JobHandleMixin1:
     # -- identity and state
 
     @property
@@ -141,6 +129,8 @@ class JobHandle:
         """Hear the typed result exactly once."""
         return self._attempt.subscribe("success", callback, owner)
 
+
+class _JobHandleMixin2:
     def on_failure(
         self,
         callback: Callable[[BaseException], None],
@@ -155,6 +145,20 @@ class JobHandle:
     ) -> JobSubscription:
         """Hear acknowledged cancellation exactly once."""
         return self._attempt.subscribe("cancelled", callback, owner)
+
+
+class JobHandle(_JobHandleMixin1, _JobHandleMixin2):
+    """What ``delay`` returns: identity, state, cancellation, outcome, subscriptions.
+
+    Everything on a handle is safe to call from the driving thread. ``cancel``
+    and the read-only properties are safe from any thread; ``get`` is for any
+    thread *but* the GUI thread.
+    """
+
+    __slots__ = ("_attempt",)
+
+    def __init__(self, attempt: _Attempt) -> None:
+        self._attempt = attempt
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, JobHandle) and other._attempt is self._attempt

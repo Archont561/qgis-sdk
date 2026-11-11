@@ -25,6 +25,27 @@ from qgis_sdk.models import (
     TypedRun,
 )
 
+
+def _destination_name_tail1(**values):
+    name = values["name"]
+    parameter = values["parameter"]
+    extension = parameter.extension or DEFAULT_EXTENSIONS.get(parameter.kind, "out")
+    if (
+        not name
+        or name in _RESERVED_NAMES
+        or (
+            parameter.kind != "folderDestination"
+            and not re.fullmatch(r"[a-zA-Z0-9]{1,16}", extension)
+        )
+    ):
+        raise ValueError(
+            "an allocated destination has an unsafe provider-defined name or extension"
+        )
+    if parameter.kind == "folderDestination":
+        return name
+    return f"{name}.{extension}"
+
+
 __all__ = [
     "DEFAULT_EXTENSIONS",
     "FILE_OUTPUT_KINDS",
@@ -327,21 +348,7 @@ def _destination_name(parameter: ParameterInfo) -> str:
             "an allocated destination has an unsafe provider-defined name or extension"
         )
     name = _UNSAFE_IN_NAME.sub("_", parameter.name.lower()).strip("_")[:128]
-    extension = parameter.extension or DEFAULT_EXTENSIONS.get(parameter.kind, "out")
-    if (
-        not name
-        or name in _RESERVED_NAMES
-        or (
-            parameter.kind != "folderDestination"
-            and not re.fullmatch(r"[a-zA-Z0-9]{1,16}", extension)
-        )
-    ):
-        raise ValueError(
-            "an allocated destination has an unsafe provider-defined name or extension"
-        )
-    if parameter.kind == "folderDestination":
-        return name
-    return f"{name}.{extension}"
+    return _destination_name_tail1(**{**globals(), **locals()})
 
 
 def destination_path(run_directory: Path, parameter: ParameterInfo) -> Path:

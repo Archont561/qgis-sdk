@@ -16,6 +16,37 @@ from qgis_sdk.bridge.resources import HandleKind
 from qgis_sdk.bridge.streams import MAX_QUEUED_EVENTS
 from qgis_sdk.bridge.transport import ChannelTransport, envelope_protocol
 
+
+def _test_a_pushed_stream_tail1(**values):
+    sent = values["sent"]
+    transport = values["transport"]
+    subscription_id = _frames(sent)[0]["value"]["subscription_id"]
+    sent.clear()
+    dispatcher = transport.dispatcher
+    for index in range(MAX_QUEUED_EVENTS + 1):
+        dispatcher.emit(subscription_id, {"index": index})
+
+    # A protocol-2 reader acks what it delivered; without an ack the host stops
+    # after MAX_IN_FLIGHT_FRAMES by design, so this loop is the client's side of
+    # the contract, not a workaround.
+    frames = []
+    for _ in range(MAX_QUEUED_EVENTS):
+        sent.clear()
+        transport.flush(limit=MAX_QUEUED_EVENTS + 1)
+        batch = _frames(sent)
+        frames.extend(batch)
+        if not batch:
+            break
+        for frame in batch:
+            if "terminal" not in frame:
+                transport.acknowledge(frame["subscription_id"], frame["seq"])
+        if any("terminal" in frame for frame in batch):
+            break
+
+    assert frames[-1]["terminal"]["kind"] == "gap"
+    assert frames[-1]["terminal"]["dropped"] == 1
+
+
 ORIGIN = "qgis://desktop"
 ECHO = BridgeOperation(id="demo.echo", title="Echo the payload")
 TICKS = BridgeOperation(id="demo.ticks", title="Emit a tick")
@@ -151,31 +182,7 @@ def test_a_pushed_stream_reaches_the_channel_through_flush() -> None:
             }
         )
     )
-    subscription_id = _frames(sent)[0]["value"]["subscription_id"]
-    sent.clear()
-    dispatcher = transport.dispatcher
-    for index in range(MAX_QUEUED_EVENTS + 1):
-        dispatcher.emit(subscription_id, {"index": index})
-
-    # A protocol-2 reader acks what it delivered; without an ack the host stops
-    # after MAX_IN_FLIGHT_FRAMES by design, so this loop is the client's side of
-    # the contract, not a workaround.
-    frames = []
-    for _ in range(MAX_QUEUED_EVENTS):
-        sent.clear()
-        transport.flush(limit=MAX_QUEUED_EVENTS + 1)
-        batch = _frames(sent)
-        frames.extend(batch)
-        if not batch:
-            break
-        for frame in batch:
-            if "terminal" not in frame:
-                transport.acknowledge(frame["subscription_id"], frame["seq"])
-        if any("terminal" in frame for frame in batch):
-            break
-
-    assert frames[-1]["terminal"]["kind"] == "gap"
-    assert frames[-1]["terminal"]["dropped"] == 1
+    _test_a_pushed_stream_tail1(**{**globals(), **locals()})
 
 
 def test_release_crosses_the_channel_like_any_other_call() -> None:

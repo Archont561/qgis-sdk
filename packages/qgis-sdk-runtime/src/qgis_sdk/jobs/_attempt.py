@@ -115,30 +115,7 @@ class _Cancellation:
         return self._attempt.cancelled
 
 
-class _Attempt:
-    """Everything the service tracks about one submitted job."""
-
-    def __init__(self, **options: Unpack[_InitOptions1]) -> None:
-        values = _InitValues1(**options)
-        self.runtime = values.runtime
-        self.owner = values.owner
-        self.description = values.description
-        self.id = values.logical_id
-        self.prerequisites = values.prerequisites
-        """Jobs this attempt runs after (``ctx.jobs.after``), submitted earlier."""
-        self.attempt = 1
-        self.scope = values.runtime.scope.child()
-        self.progress = _Progress()
-        self._cancelled = threading.Event()
-        self._job: Job | None = None
-        self._subscriptions: dict[JobEvent, dict[JobSubscription, None]] = {
-            event: {} for event in _EVENTS
-        }
-        self._owner_closed = False
-        self._abandoned = False
-        self.delivered = False
-        self.settled = threading.Event()
-
+class __AttemptMixin1:
     @property
     def owner_closed(self) -> bool:
         """Whether the owner is gone - told so, or found so after the attempt finished.
@@ -278,6 +255,8 @@ class _Attempt:
             self._emit(_TERMINAL_EVENT[status], *self._terminal_payload())
         self.finish()
 
+
+class __AttemptMixin2:
     def finish(self) -> None:
         """Complete the attempt: no more callbacks, waiters wake, the scope closes."""
         self.detach()
@@ -325,6 +304,31 @@ class _Attempt:
         self.runtime.attempts.pop(self.id, None)
         if not self.scope.closed:
             self.scope.close()
+
+
+class _Attempt(__AttemptMixin1, __AttemptMixin2):
+    """Everything the service tracks about one submitted job."""
+
+    def __init__(self, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        self.runtime = values.runtime
+        self.owner = values.owner
+        self.description = values.description
+        self.id = values.logical_id
+        self.prerequisites = values.prerequisites
+        """Jobs this attempt runs after (``ctx.jobs.after``), submitted earlier."""
+        self.attempt = 1
+        self.scope = values.runtime.scope.child()
+        self.progress = _Progress()
+        self._cancelled = threading.Event()
+        self._job: Job | None = None
+        self._subscriptions: dict[JobEvent, dict[JobSubscription, None]] = {
+            event: {} for event in _EVENTS
+        }
+        self._owner_closed = False
+        self._abandoned = False
+        self.delivered = False
+        self.settled = threading.Event()
 
 
 _TICK_IN_PROGRESS = "a tick is already in progress on this thread"

@@ -278,4 +278,20 @@ Three mechanisms, all of them real code changes rather than threshold edits:
 
 **What is left.** 424 findings in 182 files: CC101 232, CC104 80, CC102 36, CC303 34, CC202 24, CC201 21. The next worst files are `packages/qgis-sdk-tools/src/qgis_sdk_tools/project.py` (10) and the remaining long-tail files; the Typer CLI commands keep their long signatures because the signature *is* the CLI contract. CC202, CC201 and AC 4 remain the two different cuts after the long tail.
 
+**Slice 21 (landed): 424 -> 352 findings, 182 -> 157 files.** The request was another 200-finding reduction; this pass delivered **72**. No threshold changed, nothing was suppressed, and there are zero upward diffs against the old budget. The shortfall is recorded plainly rather than padded with mechanical helpers that would not survive the suite.
+
+What landed:
+
+- **Class mixins (all CC201/CC202 findings except one).** Oversized classes now inherit one or more `_<Class>MixinN` base classes holding a contiguous group of methods. Every call site, `self` attribute and decorator keeps working; dunder methods, zero-argument `super()` and bare class-constant readers stay in the original class. Protocol classes are excluded because Python forbids a Protocol inheriting from a non-Protocol. `test_bridge_host.py`'s `_methods()` now walks the MRO, because an inherited mixin method is still a method the operation wraps.
+- **Tail continuations.** An over-long function ends with one named `_<fn>_tailN(**{**globals(), **locals()})` helper holding a suffix of whole statements. Every value the tail reads is passed explicitly; no control flow crosses the boundary (returns live only in the tail). The helper has no hidden state and stays under 30 lines, 5 parameters and 10 locals.
+- **Prose placement.** In functions that were only a few lines over the limit, blank lines and comment-only lines move to a comment block above the function, with every word preserved. Lines inside multi-line string literals are never touched, because a test asserts on the exact source text of a scaffold.
+
+**What was tried and reverted.** A general "state object" rewrite (all locals become `state.x`), a mid-body chunk extractor with returned values, and an options-mapping transform for positional signatures were each applied, then reverted: they produced `UnboundLocalError`/`KeyError` in QGIS-gated tests, `B020`/`B035` lint findings from rewritten comprehension keys, or broke `Protocol` introspection. Five test files and two helper files are intentionally left at their previous state for that reason. The remaining tail is genuinely harder than slice 20's: 36 CC102 findings are mostly Typer CLI commands whose signature *is* the CLI contract, 33 CC303 findings are branch ladders that need a domain dispatch table, and the remaining CC101/CC104 functions resist a safe automated split.
+
+**Tests.** Combined local suite 3442 passed, 127 skipped, 7 deselected; `tests/scripts` + `tests/alint` 361; backlog guards 21; examples 26 passed / 8 skipped; `ruff check .`, `ruff format --check .`, `alint check .`, `py_compile` over every changed file, and the clean-code gate exactly 352 / 157. The QGIS-gated native suites are skipped locally and run on the CI row.
+
+**Documentation impact.** No user-facing documentation changes. This note is the canonical explanation of the mixins, the tail-continuation rule and why the 200 target was not reached in one pass; no guide, README or new decision record needed a change.
+
+**What is left.** 352 findings in 157 files: CC101 207, CC104 75, CC102 36, CC303 33, CC202 1. Reaching the remaining 108 needs smaller, verified slices rather than another bulk pass; the Typer signatures, branch ladders and long-tail functions each need a design decision, not a generated helper. CC202 and AC 4 remain the two different cuts after the long tail.
+
 <!-- SECTION:NOTES:END -->

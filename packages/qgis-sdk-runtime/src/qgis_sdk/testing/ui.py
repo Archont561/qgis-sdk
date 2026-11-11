@@ -19,6 +19,27 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
+
+def _build_surface_tail1(**values):
+    ctx = values["ctx"]
+    initial = values["initial"]
+    surface = values["surface"]
+    instance = surface()
+    materialise(instance)  # the declared components, as this window's copies
+    instance.ctx = ctx
+    instance.initial = MappingProxyType(dict(initial or {}))
+    if surface.ui is not None and _uses_default_build(surface):
+        # The Designer file as declared names, not widgets: ``@on`` wires to
+        # fake signals a test emits.
+        root: Any = fake_ui_tree(resolve_ui_path(surface, surface.ui))
+    else:
+        root = instance.build()
+    if isinstance(root, Component) and not root.attached:
+        root.attach(ctx)
+    wire_surface(instance, root, ctx)
+    return BuiltSurface(instance, root, ctx)
+
+
 if TYPE_CHECKING:
     from qgis_sdk.core._application import QgisSdkPlugin
 
@@ -198,20 +219,7 @@ def build_surface(
         raise QgisSdkUiError(
             f"{surface.__name__} is a widget surface; it needs Qt and a host to open"
         )
-    instance = surface()
-    materialise(instance)  # the declared components, as this window's copies
-    instance.ctx = ctx
-    instance.initial = MappingProxyType(dict(initial or {}))
-    if surface.ui is not None and _uses_default_build(surface):
-        # The Designer file as declared names, not widgets: ``@on`` wires to
-        # fake signals a test emits.
-        root: Any = fake_ui_tree(resolve_ui_path(surface, surface.ui))
-    else:
-        root = instance.build()
-    if isinstance(root, Component) and not root.attached:
-        root.attach(ctx)
-    wire_surface(instance, root, ctx)
-    return BuiltSurface(instance, root, ctx)
+    return _build_surface_tail1(**{**globals(), **locals()})
 
 
 def _uses_default_build(surface: type) -> bool:

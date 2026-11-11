@@ -40,21 +40,7 @@ if TYPE_CHECKING:
 __all__ = ["Jobs"]
 
 
-class Jobs:
-    """The named jobs of one plugin, submitted on behalf of one owner.
-
-    ``service`` is a :class:`~qgis_sdk.jobs.JobService`: the plugin's own for
-    ``PluginContext.jobs``, a view-scoped one for ``UiContext.jobs``. The facade
-    adds nothing to the engine but the names, so ``ctx.jobs.<name>`` is a
-    :class:`~qgis_sdk.jobs.BoundJob` and the rest reads the same whichever
-    context it came from.
-    """
-
-    __slots__ = ("_service",)
-
-    def __init__(self, service: JobService) -> None:
-        self._service = service
-
+class _JobsMixin1:
     # -- what is declared
 
     @property
@@ -70,25 +56,6 @@ class Jobs:
     def describe(self, name: str) -> JobDescription:
         """The declared description of ``name``: its title, inputs and result."""
         return self.registry.description(name)
-
-    def __len__(self) -> int:
-        return len(self.registry)
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.registry)
-
-    def __contains__(self, name: object) -> bool:
-        return name in self.registry
-
-    # -- submitting
-
-    def __getattr__(self, name: str) -> BoundJob:
-        if name.startswith("_"):
-            raise AttributeError(name)
-        return getattr(self._service, name)
-
-    def __getitem__(self, name: str) -> BoundJob:
-        return getattr(self._service, name)
 
     def after(self, *handles: JobHandle) -> OrderedJobs:
         """Name jobs ordered behind work already submitted.
@@ -156,6 +123,41 @@ class Jobs:
         if values.on_cancelled is not None:
             subscriptions.append(handle.on_cancelled(values.on_cancelled, owner=owner))
         return tuple(subscriptions)
+
+
+class Jobs(_JobsMixin1):
+    """The named jobs of one plugin, submitted on behalf of one owner.
+
+    ``service`` is a :class:`~qgis_sdk.jobs.JobService`: the plugin's own for
+    ``PluginContext.jobs``, a view-scoped one for ``UiContext.jobs``. The facade
+    adds nothing to the engine but the names, so ``ctx.jobs.<name>`` is a
+    :class:`~qgis_sdk.jobs.BoundJob` and the rest reads the same whichever
+    context it came from.
+    """
+
+    __slots__ = ("_service",)
+
+    def __init__(self, service: JobService) -> None:
+        self._service = service
+
+    def __len__(self) -> int:
+        return len(self.registry)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.registry)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.registry
+
+    # -- submitting
+
+    def __getattr__(self, name: str) -> BoundJob:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._service, name)
+
+    def __getitem__(self, name: str) -> BoundJob:
+        return getattr(self._service, name)
 
     def __repr__(self) -> str:
         names = ", ".join(self.names) or "none"

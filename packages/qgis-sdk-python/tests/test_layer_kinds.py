@@ -55,6 +55,60 @@ from qgis_sdk.testing import (
 from qgis_sdk.ui.components import LayerPicker
 
 
+def _test_a_picker_narrows_tail1(**values):
+    kind = values["kind"]
+    layers = values["layers"]
+    scope = values["scope"]
+    vector = layers.open_vector(POINTS)
+    mesh = layers.open_mesh(MESH)
+    cloud = layers.open_point_cloud(POINT_CLOUD)
+    opened = {"mesh": mesh, "point_cloud": cloud}
+    # Every picker of a new kind lists the layer of that kind and no other; the
+    # two kinds no declaration opens in this module list nothing, which is the
+    # answer a project holding none of them gives.
+    picker = LayerPicker(kind, kind=kind)  # type: ignore[arg-type]
+    picker.attach(_PickerContext(layers, scope))  # type: ignore[arg-type]
+    listing = [option.id for option in picker.options()]
+    every = LayerPicker("any", kind="any")
+    every.attach(_PickerContext(layers, scope))  # type: ignore[arg-type]
+    listed_by_any = {option.id for option in every.options()}
+    scope.close()
+
+    assert listing == ([opened[kind].id] if kind in opened else [])
+    assert {opened["mesh"].id, opened["point_cloud"].id, vector.id} <= listed_by_any
+
+
+def _test_every_open_is_tail1(**values):
+    authority = values["authority"]
+    binding = values["binding"]
+    detail = values["detail"]
+    dispatcher = values["dispatcher"]
+    layers = values["layers"]
+    scope = values["scope"]
+    tmp_path = values["tmp_path"]
+    for kind, source in (
+        ("point_cloud", POINT_CLOUD),
+        ("vector_tile", VECTOR_TILES),
+        ("tiled_scene", TILED_SCENE),
+    ):
+        dataset = _grantable(tmp_path, source)
+        _declare_at(layers, dataset, kind, **detail[kind])
+        ref = authority.grant_file(binding, dataset, FilePolicy(source="picker"))
+        answered = dispatcher.dispatch(
+            binding,
+            {
+                "protocol": BRIDGE_PROTOCOL_VERSION,
+                "call_id": "call",
+                "operation": f"layers.open_{kind}",
+                "payload": {"file": ref.to_wire()},
+            },
+        )
+        assert answered["ok"] is True, answered
+        assert answered["value"]["kind"] == kind
+
+    scope.close()
+
+
 def _declare_every_kind_facts11(layers):
     layers.register_layer(
         OtherLayerDeclaration(
@@ -476,23 +530,7 @@ class _PickerContext:
 def test_a_picker_narrows_the_listing_to_its_own_kind(kind: str) -> None:
     scope, layers, _ = _layers()
     _declare_every_kind(layers)
-    vector = layers.open_vector(POINTS)
-    mesh = layers.open_mesh(MESH)
-    cloud = layers.open_point_cloud(POINT_CLOUD)
-    opened = {"mesh": mesh, "point_cloud": cloud}
-    # Every picker of a new kind lists the layer of that kind and no other; the
-    # two kinds no declaration opens in this module list nothing, which is the
-    # answer a project holding none of them gives.
-    picker = LayerPicker(kind, kind=kind)  # type: ignore[arg-type]
-    picker.attach(_PickerContext(layers, scope))  # type: ignore[arg-type]
-    listing = [option.id for option in picker.options()]
-    every = LayerPicker("any", kind="any")
-    every.attach(_PickerContext(layers, scope))  # type: ignore[arg-type]
-    listed_by_any = {option.id for option in every.options()}
-    scope.close()
-
-    assert listing == ([opened[kind].id] if kind in opened else [])
-    assert {opened["mesh"].id, opened["point_cloud"].id, vector.id} <= listed_by_any
+    _test_a_picker_narrows_tail1(**{**globals(), **locals()})
 
 
 def test_a_picker_refuses_a_kind_a_layer_input_does_not_offer() -> None:
@@ -652,27 +690,7 @@ def test_every_open_is_typed_and_answered_by_a_handler(tmp_path: Path) -> None:
             "extent": {"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2}
         },
     }
-    for kind, source in (
-        ("point_cloud", POINT_CLOUD),
-        ("vector_tile", VECTOR_TILES),
-        ("tiled_scene", TILED_SCENE),
-    ):
-        dataset = _grantable(tmp_path, source)
-        _declare_at(layers, dataset, kind, **detail[kind])
-        ref = authority.grant_file(binding, dataset, FilePolicy(source="picker"))
-        answered = dispatcher.dispatch(
-            binding,
-            {
-                "protocol": BRIDGE_PROTOCOL_VERSION,
-                "call_id": "call",
-                "operation": f"layers.open_{kind}",
-                "payload": {"file": ref.to_wire()},
-            },
-        )
-        assert answered["ok"] is True, answered
-        assert answered["value"]["kind"] == kind
-
-    scope.close()
+    _test_every_open_is_tail1(**{**globals(), **locals()})
 
 
 # -- the fixtures a native half opens ----------------------------------------

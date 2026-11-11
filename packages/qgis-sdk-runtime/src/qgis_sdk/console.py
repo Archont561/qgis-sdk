@@ -277,22 +277,7 @@ class ConsoleSession:
             )
 
 
-class PluginHandle:
-    """One running plugin, reached the way a page and a surface reach it.
-
-    Everything is read from the object QGIS holds for the plugin - what
-    ``classFactory`` returned - so a plugin built by another SDK version is
-    usable while it offers the attributes read here, and refuses by name for
-    the rest. Nothing is imported from the plugin's own vendored copy.
-    """
-
-    __slots__ = ("_adapter", "_name", "_session")
-
-    def __init__(self, name: str, adapter: Any, *, session: ConsoleSession) -> None:
-        self._name = name
-        self._adapter = adapter
-        self._session = session
-
+class _PluginHandleMixin1:
     @property
     def name(self) -> str:
         """The name QGIS loaded the plugin under."""
@@ -416,13 +401,6 @@ class PluginHandle:
             raise QgisSdkConsoleError(f"{self._name} ({state}) refused to unload")
         return _reload_phase1(qgis, self)
 
-    def __repr__(self) -> str:
-        try:
-            state = self._state_text()
-        except QgisSdkError:  # pragma: no cover - an adapter without a runtime
-            state = "unknown"
-        return f"PluginHandle({self._name!r}, state={state!r})"
-
     # -- what the plugin exposes -----------------------------------------------------
 
     def _adapter_runtime(self) -> Any:
@@ -436,6 +414,8 @@ class PluginHandle:
             )
         return runtime
 
+
+class _PluginHandleMixin2:
     def _read(self, attribute: str) -> Any:
         """Read ``attribute`` from the plugin's runtime, refusing by name."""
         value = getattr(self._adapter_runtime(), attribute, None)
@@ -512,6 +492,30 @@ class PluginHandle:
             "a plugin surface opens on the GUI thread; run this from the QGIS Python "
             "console rather than a worker thread"
         )
+
+
+class PluginHandle(_PluginHandleMixin1, _PluginHandleMixin2):
+    """One running plugin, reached the way a page and a surface reach it.
+
+    Everything is read from the object QGIS holds for the plugin - what
+    ``classFactory`` returned - so a plugin built by another SDK version is
+    usable while it offers the attributes read here, and refuses by name for
+    the rest. Nothing is imported from the plugin's own vendored copy.
+    """
+
+    __slots__ = ("_adapter", "_name", "_session")
+
+    def __init__(self, name: str, adapter: Any, *, session: ConsoleSession) -> None:
+        self._name = name
+        self._adapter = adapter
+        self._session = session
+
+    def __repr__(self) -> str:
+        try:
+            state = self._state_text()
+        except QgisSdkError:  # pragma: no cover - an adapter without a runtime
+            state = "unknown"
+        return f"PluginHandle({self._name!r}, state={state!r})"
 
 
 def _validated_payload(action: Any, inputs: Mapping[str, object]) -> dict[str, Any]:

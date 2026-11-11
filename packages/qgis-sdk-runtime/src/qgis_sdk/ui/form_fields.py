@@ -29,6 +29,36 @@ from qgis_sdk.declarations import WIRE_KIND_KEYWORD, ActionDescription
 from qgis_sdk.models import COLOUR_PATTERN, FileRef, QgisSdkFormError, parameter_kinds
 
 
+def _field_tail1(**values):
+    concrete = values["concrete"]
+    intent = values["intent"]
+    marker = values["marker"]
+    name = values["name"]
+    nullable = values["nullable"]
+    owner = values["owner"]
+    required = values["required"]
+    widget = _widget_for(owner, name, concrete, marker)
+    choices: tuple[Any, ...] = ()
+    if widget == "choice":
+        choices = tuple(concrete["enum"])
+    details = {
+        key: tuple(value) if isinstance(value, list) else value
+        for key, value in {**concrete, **intent}.items()
+        if key in _DETAIL_KEYS
+    }
+    if widget == "integer":
+        # The safe-integer bounds are a wire rule, not an author's range.
+        details = {}
+    return _field_facts11234567891011121314151617(
+        choices=choices,
+        details=details,
+        name=name,
+        nullable=nullable,
+        required=required,
+        widget=widget,
+    )
+
+
 def _field_facts11234567891011121314151617(**values):
     return _field_facts112345678910111213141516(
         choices=values["choices"],
@@ -385,26 +415,7 @@ def _field(
     intent = concrete.get(WIRE_KIND_KEYWORD) or {}
     if marker is None and intent.get("kind") in _MARKER_WIDGETS:
         marker = intent["kind"]
-    widget = _widget_for(owner, name, concrete, marker)
-    choices: tuple[Any, ...] = ()
-    if widget == "choice":
-        choices = tuple(concrete["enum"])
-    details = {
-        key: tuple(value) if isinstance(value, list) else value
-        for key, value in {**concrete, **intent}.items()
-        if key in _DETAIL_KEYS
-    }
-    if widget == "integer":
-        # The safe-integer bounds are a wire rule, not an author's range.
-        details = {}
-    return _field_facts11234567891011121314151617(
-        choices=choices,
-        details=details,
-        name=name,
-        nullable=nullable,
-        required=required,
-        widget=widget,
-    )
+    return _field_tail1(**{**globals(), **locals()})
 
 
 def _concrete(subschema: Mapping[str, Any]) -> tuple[Mapping[str, Any], bool]:

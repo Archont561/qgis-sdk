@@ -68,44 +68,7 @@ class ServerInterface(Protocol):
         """Register a layer permission hook under ``name`` at ``priority``."""
 
 
-class ServerHost:
-    """The hooks of one plugin, registered once and served request by request.
-
-    ``context_factory`` is how a host adds the services a request's project
-    makes possible: it is called with the scope, the request and the response
-    and returns the :class:`ServerContext` the hooks receive. Without one the
-    context carries the request and the response and refuses ``project``,
-    ``layers`` and ``log`` by name, which is what a capabilities-only
-    deployment needs.
-
-    ``jobs`` is the plugin's job service, if the host has one. Each request gets
-    a service derived over the *request* scope, so a job a hook submits is
-    request-scoped: it is ticked at request start and abandoned when the
-    response is sent, which here means when the request scope closes
-    (decision-52). Work submitted through ``ctx.jobs.plugin`` keeps the plugin's
-    lifetime. A host without a job service leaves ``ctx.jobs`` out, and the
-    context refuses it by name like any other capability it never had.
-    """
-
-    __slots__ = ("_context_factory", "_hooks", "_interface", "_jobs", "_registered")
-
-    def __init__(
-        self,
-        hooks: ServerHooks,
-        interface: ServerInterface,
-        *,
-        context_factory: (
-            Callable[[ResourceScope, ServerRequest, ServerResponse], ServerContext]
-            | None
-        ) = None,
-        jobs: JobService | None = None,
-    ) -> None:
-        self._hooks = hooks
-        self._interface = interface
-        self._context_factory = context_factory
-        self._jobs = jobs
-        self._registered = False
-
+class _ServerHostMixin1:
     @property
     def hooks(self) -> ServerHooks:
         """The hooks this host serves, in the order it serves them."""
@@ -289,6 +252,8 @@ class ServerHost:
                 return hook
         return None
 
+
+class _ServerHostMixin2:
     def context(
         self,
         scope: ResourceScope,
@@ -316,6 +281,45 @@ class ServerHost:
                 project=values.project, layers=values.layers, log=values.log, jobs=jobs
             ),
         )
+
+
+class ServerHost(_ServerHostMixin1, _ServerHostMixin2):
+    """The hooks of one plugin, registered once and served request by request.
+
+    ``context_factory`` is how a host adds the services a request's project
+    makes possible: it is called with the scope, the request and the response
+    and returns the :class:`ServerContext` the hooks receive. Without one the
+    context carries the request and the response and refuses ``project``,
+    ``layers`` and ``log`` by name, which is what a capabilities-only
+    deployment needs.
+
+    ``jobs`` is the plugin's job service, if the host has one. Each request gets
+    a service derived over the *request* scope, so a job a hook submits is
+    request-scoped: it is ticked at request start and abandoned when the
+    response is sent, which here means when the request scope closes
+    (decision-52). Work submitted through ``ctx.jobs.plugin`` keeps the plugin's
+    lifetime. A host without a job service leaves ``ctx.jobs`` out, and the
+    context refuses it by name like any other capability it never had.
+    """
+
+    __slots__ = ("_context_factory", "_hooks", "_interface", "_jobs", "_registered")
+
+    def __init__(
+        self,
+        hooks: ServerHooks,
+        interface: ServerInterface,
+        *,
+        context_factory: (
+            Callable[[ResourceScope, ServerRequest, ServerResponse], ServerContext]
+            | None
+        ) = None,
+        jobs: JobService | None = None,
+    ) -> None:
+        self._hooks = hooks
+        self._interface = interface
+        self._context_factory = context_factory
+        self._jobs = jobs
+        self._registered = False
 
     def __repr__(self) -> str:
         state = "registered" if self._registered else "unregistered"

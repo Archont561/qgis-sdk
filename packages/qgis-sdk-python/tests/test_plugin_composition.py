@@ -155,6 +155,7 @@ def test_surface_decorator_preserves_class_and_both_binding_orders() -> None:
     ]
 
 
+# A function with synthetic globals simulates entry points without a module.
 def test_plugin_defaults_follow_declaring_module(tmp_path, monkeypatch) -> None:
     import importlib
 
@@ -171,14 +172,12 @@ def test_plugin_defaults_follow_declaring_module(tmp_path, monkeypatch) -> None:
     assert module.plugin.describe().id == "composition_defaults_fixture.reports"
     assert module.plugin.describe().title == "Reports"
     assert module.overridden.describe().title == "Cadastral survey"
-
     from types import FunctionType
 
     import pytest
     import qgis_sdk
     from qgis_sdk import QgisSdkDeclarationError
 
-    # A function with synthetic globals simulates entry points without a module.
     def construct():
         return synthetic_sdk.QgisSdkPlugin()  # noqa: F821
 

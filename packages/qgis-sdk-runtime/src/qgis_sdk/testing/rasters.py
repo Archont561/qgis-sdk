@@ -271,24 +271,7 @@ __all__ = ["FakeRasters"]
 _EMPTY_STATISTICS = (None, None, None, None)
 
 
-class FakeRasters:
-    """A ``Rasters`` backend over datasets declared in the test.
-
-    The fake carries an owner scope like every real backend, so a pure test can
-    prove the same disposal rules the native adapter must honour.
-    """
-
-    def __init__(self, scope: ResourceScope) -> None:
-        self._scope = scope
-        self._datasets: dict[str, dict[str, Any]] = {}
-        self._rasters: dict[str, RasterLayerInfo] = {}
-        self._sources: dict[str, Path] = {}
-        self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
-        self._values: dict[str, tuple[float | None, ...]] = {}
-        self._holes: dict[str, frozenset[tuple[float, float]]] = {}
-        self._statistics: dict[str, dict[int, RasterStatistics]] = {}
-        scope.on_close(self._release)
-
+class _FakeRastersMixin1:
     def register(
         self,
         source: Path,
@@ -476,3 +459,22 @@ class FakeRasters:
         self._values.clear()
         self._holes.clear()
         self._statistics.clear()
+
+
+class FakeRasters(_FakeRastersMixin1):
+    """A ``Rasters`` backend over datasets declared in the test.
+
+    The fake carries an owner scope like every real backend, so a pure test can
+    prove the same disposal rules the native adapter must honour.
+    """
+
+    def __init__(self, scope: ResourceScope) -> None:
+        self._scope = scope
+        self._datasets: dict[str, dict[str, Any]] = {}
+        self._rasters: dict[str, RasterLayerInfo] = {}
+        self._sources: dict[str, Path] = {}
+        self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
+        self._values: dict[str, tuple[float | None, ...]] = {}
+        self._holes: dict[str, frozenset[tuple[float, float]]] = {}
+        self._statistics: dict[str, dict[int, RasterStatistics]] = {}
+        scope.on_close(self._release)

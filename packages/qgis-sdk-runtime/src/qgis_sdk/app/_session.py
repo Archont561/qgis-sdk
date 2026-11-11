@@ -39,6 +39,53 @@ from qgis_sdk.models import QgisSdkAppError
 from ._backend import AppBackend, AppSurface
 
 
+def _start_tail1(**values):
+    self = values["self"]
+    try:
+        surface = self._backend.build(self._app, gui=self._gui, title=self._title)
+        self._surface = surface
+        host = surface.context.host
+        if host is not Host.APP:
+            raise QgisSdkAppError(
+                f"{self._title}: the app host reported {host.value!r} as its "
+                "host; a context built for this host says 'app'"
+            )
+        runtime = PluginRuntime(self._app, surface.context)
+        runtime.start()
+        self._runtime = runtime
+        for loop in surface.bind(runtime):
+            self._loops.add(loop)
+    except BaseException:
+        self._release()
+        raise
+    return _start_facts1(self)
+
+
+def _drain_jobs_tail1(**values):
+    self = values["self"]
+    service = values["service"]
+    if service is None:
+        return (), ()
+    active = tuple(service.active)
+    if not active:
+        return (), ()
+    names = tuple(handle.id for handle in active)
+    deadline = self._clock() + self._grace
+    while service.active and self._clock() < deadline:
+        service.tick()
+        if not service.active:
+            break
+        remaining = deadline - self._clock()
+        if remaining <= 0:
+            break
+        self._pause(min(DRAIN_INTERVAL, remaining))
+    still: tuple[str, ...] = tuple(handle.id for handle in service.active)
+    for handle in service.active:
+        handle.cancel()
+    drained = tuple(name for name in names if name not in still)
+    return drained, still
+
+
 def _init_facts1(self):
     self._loops = LoopRegistry()
     self._surface: AppSurface | None = None
@@ -129,35 +176,7 @@ def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
 
-class AppSession:
-    """Start one plugin under an application host, and stop it in bounds.
-
-    The object exists so the lifecycle is testable without an event loop:
-    :meth:`start` and :meth:`stop` are the two halves ``run()`` performs around
-    ``exec()``, and the native tests drive them directly - the same shape
-    ``ServerHost`` has for the server. ``gui`` decides only what the backend
-    builds; ``ctx.host`` is ``app`` either way.
-    """
-
-    def __init__(self, app: QgisSdkPlugin, **options: Unpack[_InitOptions1]) -> None:
-        values = _InitValues1(**options)
-        if not isinstance(app, QgisSdkPlugin):
-            raise QgisSdkDeclarationError("AppSession requires a QgisSdkPlugin")
-        if values.grace < 0:
-            raise QgisSdkAppError(f"grace must not be negative, got {values.grace!r}")
-        description = app.describe()
-        self._app = app
-        self._app_id = description.id
-        self._backend = values.backend
-        self._gui = bool(values.gui)
-        self._argv = tuple(values.argv or ())
-        self._grace = float(values.grace)
-        self._title = values.title or description.title
-        self._say = values.say if values.say is not None else (lambda _message: None)
-        self._clock = values.clock
-        self._pause = values.pause
-        _init_facts1(self)
-
+class _AppSessionMixin1:
     # -- what a host reads -------------------------------------------------------------
 
     @property
@@ -205,24 +224,7 @@ class AppSession:
                 "and build a new one"
             )
         self._backend.init(self._argv, gui=self._gui)
-        try:
-            surface = self._backend.build(self._app, gui=self._gui, title=self._title)
-            self._surface = surface
-            host = surface.context.host
-            if host is not Host.APP:
-                raise QgisSdkAppError(
-                    f"{self._title}: the app host reported {host.value!r} as its "
-                    "host; a context built for this host says 'app'"
-                )
-            runtime = PluginRuntime(self._app, surface.context)
-            runtime.start()
-            self._runtime = runtime
-            for loop in surface.bind(runtime):
-                self._loops.add(loop)
-        except BaseException:
-            self._release()
-            raise
-        return _start_facts1(self)
+        return _start_tail1(**{**globals(), **locals()})
 
     def run(self, *, once: bool = False) -> int:
         """Start, spin the event loop, stop; return the process exit code.
@@ -288,26 +290,7 @@ class AppSession:
         """
         runtime = self._runtime
         service = None if runtime is None else runtime.jobs
-        if service is None:
-            return (), ()
-        active = tuple(service.active)
-        if not active:
-            return (), ()
-        names = tuple(handle.id for handle in active)
-        deadline = self._clock() + self._grace
-        while service.active and self._clock() < deadline:
-            service.tick()
-            if not service.active:
-                break
-            remaining = deadline - self._clock()
-            if remaining <= 0:
-                break
-            self._pause(min(DRAIN_INTERVAL, remaining))
-        still: tuple[str, ...] = tuple(handle.id for handle in service.active)
-        for handle in service.active:
-            handle.cancel()
-        drained = tuple(name for name in names if name not in still)
-        return drained, still
+        return _drain_jobs_tail1(**{**globals(), **locals()})
 
     def _release(self) -> None:
         """Close the UI, unload the runtime, exit the toolkit - each at most once."""
@@ -329,12 +312,44 @@ class AppSession:
         self._exited = True
         self._backend.exit()
 
+
+class _AppSessionMixin2:
     def _loops_line(self, stopped: Sequence[str]) -> str:
         if stopped:
             return f"app: stopping {_plural(len(stopped), 'background loop')}: " + (
                 ", ".join(stopped)
             )
         return "app: no background loops were running"
+
+
+class AppSession(_AppSessionMixin1, _AppSessionMixin2):
+    """Start one plugin under an application host, and stop it in bounds.
+
+    The object exists so the lifecycle is testable without an event loop:
+    :meth:`start` and :meth:`stop` are the two halves ``run()`` performs around
+    ``exec()``, and the native tests drive them directly - the same shape
+    ``ServerHost`` has for the server. ``gui`` decides only what the backend
+    builds; ``ctx.host`` is ``app`` either way.
+    """
+
+    def __init__(self, app: QgisSdkPlugin, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        if not isinstance(app, QgisSdkPlugin):
+            raise QgisSdkDeclarationError("AppSession requires a QgisSdkPlugin")
+        if values.grace < 0:
+            raise QgisSdkAppError(f"grace must not be negative, got {values.grace!r}")
+        description = app.describe()
+        self._app = app
+        self._app_id = description.id
+        self._backend = values.backend
+        self._gui = bool(values.gui)
+        self._argv = tuple(values.argv or ())
+        self._grace = float(values.grace)
+        self._title = values.title or description.title
+        self._say = values.say if values.say is not None else (lambda _message: None)
+        self._clock = values.clock
+        self._pause = values.pause
+        _init_facts1(self)
 
     def __repr__(self) -> str:
         state = (

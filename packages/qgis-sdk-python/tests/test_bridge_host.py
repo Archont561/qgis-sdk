@@ -79,10 +79,11 @@ PROTOCOLS: dict[str, type] = {
 
 
 def _methods(protocol: type) -> set[str]:
-    """Return the public method names a Protocol declares."""
+    """Return the public method names a Protocol declares, mixins included."""
     return {
         name
-        for name, value in vars(protocol).items()
+        for base in protocol.__mro__
+        for name, value in vars(base).items()
         if not name.startswith("_") and callable(value)
     }
 

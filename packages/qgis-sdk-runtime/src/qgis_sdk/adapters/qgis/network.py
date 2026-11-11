@@ -150,42 +150,7 @@ _FAILURE_CLASSES = (
 )
 
 
-class _Exchange(QObject):
-    """One request from first hop to delivered outcome.
-
-    A ``QObject`` so that it has a thread: every reply it owns lives on the
-    thread that started it, and a cancellation coming from another thread (a
-    scope closing on the GUI thread while a blocking request runs on a worker)
-    is queued to that thread instead of touching the reply directly.
-    """
-
-    _cancel_requested = pyqtSignal()
-
-    def __init__(
-        self,
-        manager: QNetworkAccessManager,
-        request: NetworkRequest,
-        deliver: Deliver,
-        on_done: Callable[[_Exchange], None],
-    ) -> None:
-        super().__init__()
-        self._manager = manager
-        self._request = request
-        self._deliver = deliver
-        self._on_done = on_done
-        self._reply: QNetworkReply | None = None
-        self._timer: QTimer | None = None
-        self._hops = 0
-        self._delivered = False
-        self._cancelled = False
-        self._timed_out = False
-        self._too_large = False
-        self._headers = request.headers
-        self._auth_config = request.auth_config
-        self._method = request.method
-        self._body = request.body
-        self._cancel_requested.connect(self._cancel_now)
-
+class __ExchangeMixin1:
     # -- driving -------------------------------------------------------------------
 
     def start(self) -> None:
@@ -239,15 +204,6 @@ class _Exchange(QObject):
         self._reply = reply
         reply.downloadProgress.connect(self._on_progress)
         _issue_facts1(reply, self)
-
-    #: The methods QNetworkAccessManager sends through an accessor of its own,
-    #: and whether that accessor takes the body. Everything else, including a
-    #: GET or a DELETE that carries one, goes through ``sendCustomRequest``.
-    _ACCESSORS: ClassVar[dict[str, tuple[str, bool]]] = {
-        "HEAD": ("head", False),
-        "POST": ("post", True),
-        "PUT": ("put", True),
-    }
 
     def _send(self, qt_request: QNetworkRequest) -> QNetworkReply:
         method = self._method
@@ -364,6 +320,8 @@ class _Exchange(QObject):
                 return failure_class(message, method=self._method, url=url)
         return QgisSdkConnectionError(message, method=self._method, url=url)
 
+
+class __ExchangeMixin2:
     def _follow(
         self, reply: QNetworkReply, status: int, location: QUrl
     ) -> QgisSdkNetworkError | None:
@@ -411,6 +369,52 @@ class _Exchange(QObject):
         self._delivered = True
         self._on_done(self)
         self._deliver(outcome)
+
+
+class _Exchange(__ExchangeMixin1, __ExchangeMixin2, QObject):
+    """One request from first hop to delivered outcome.
+
+    A ``QObject`` so that it has a thread: every reply it owns lives on the
+    thread that started it, and a cancellation coming from another thread (a
+    scope closing on the GUI thread while a blocking request runs on a worker)
+    is queued to that thread instead of touching the reply directly.
+    """
+
+    _cancel_requested = pyqtSignal()
+
+    def __init__(
+        self,
+        manager: QNetworkAccessManager,
+        request: NetworkRequest,
+        deliver: Deliver,
+        on_done: Callable[[_Exchange], None],
+    ) -> None:
+        super().__init__()
+        self._manager = manager
+        self._request = request
+        self._deliver = deliver
+        self._on_done = on_done
+        self._reply: QNetworkReply | None = None
+        self._timer: QTimer | None = None
+        self._hops = 0
+        self._delivered = False
+        self._cancelled = False
+        self._timed_out = False
+        self._too_large = False
+        self._headers = request.headers
+        self._auth_config = request.auth_config
+        self._method = request.method
+        self._body = request.body
+        self._cancel_requested.connect(self._cancel_now)
+
+    #: The methods QNetworkAccessManager sends through an accessor of its own,
+    #: and whether that accessor takes the body. Everything else, including a
+    #: GET or a DELETE that carries one, goes through ``sendCustomRequest``.
+    _ACCESSORS: ClassVar[dict[str, tuple[str, bool]]] = {
+        "HEAD": ("head", False),
+        "POST": ("post", True),
+        "PUT": ("put", True),
+    }
 
 
 class NativeNetworkTransport:

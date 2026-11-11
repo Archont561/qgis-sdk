@@ -125,19 +125,7 @@ def _geometries(property: object) -> tuple[str, ...]:
     return tuple(found)
 
 
-class NativeConnections:
-    """The ``Connections`` protocol over QGIS's own connection registry.
-
-    Ownership: layers this adapter opens land in the sibling
-    :class:`NativeLayers` registry and are released with its scope; the
-    connection registry itself is QGIS's, and attaching an authentication
-    configuration writes back through ``saveConnection`` - the one write this
-    surface owns, which is why it is annotated ``destructive`` on the wire.
-    """
-
-    def __init__(self, layers: NativeLayers) -> None:
-        self._layers = layers
-
+class _NativeConnectionsMixin1:
     def list_connections(self) -> tuple[ConnectionInfo, ...]:
         found: list[ConnectionInfo] = []
         for provider in QgsProviderRegistry.instance().providerList():
@@ -321,6 +309,8 @@ class NativeConnections:
                 ) from error
         return schemas
 
+
+class _NativeConnectionsMixin2:
     def _tables(
         self, connection: Any, provider: str, name: str, schema: str
     ) -> tuple[ConnectionItem, ...]:
@@ -348,3 +338,17 @@ class NativeConnections:
             provider=provider,
             auth_config=auth_config or None,
         )
+
+
+class NativeConnections(_NativeConnectionsMixin1, _NativeConnectionsMixin2):
+    """The ``Connections`` protocol over QGIS's own connection registry.
+
+    Ownership: layers this adapter opens land in the sibling
+    :class:`NativeLayers` registry and are released with its scope; the
+    connection registry itself is QGIS's, and attaching an authentication
+    configuration writes back through ``saveConnection`` - the one write this
+    surface owns, which is why it is annotated ``destructive`` on the wire.
+    """
+
+    def __init__(self, layers: NativeLayers) -> None:
+        self._layers = layers

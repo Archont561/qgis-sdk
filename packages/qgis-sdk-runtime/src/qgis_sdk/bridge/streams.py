@@ -260,27 +260,7 @@ StreamSource = Callable[
 ]
 
 
-@dataclass(slots=True)
-class Subscription:
-    """One open subscription: a bounded queue plus the source behind it."""
-
-    id: str
-    view_id: str
-    generation: int
-    operation: str
-    capacity: int = MAX_QUEUED_EVENTS
-    events: Mapping[str, Mapping[str, Any]] | None = None
-    seq: int = 0
-    #: How many frames have been handed to the transport; also the seq the next
-    #: acknowledgement may not exceed.
-    handed: int = 0
-    #: Every frame below this seq is acknowledged by the client.
-    acked: int = 0
-    dropped: int = 0
-    state: StreamState = StreamState.OPEN
-    _queue: deque[dict[str, Any]] = field(default_factory=deque)
-    _source: Iterator[Mapping[str, Any]] | PushSource | None = None
-
+class _SubscriptionMixin1:
     @property
     def open(self) -> bool:
         """Whether this subscription still accepts events."""
@@ -405,26 +385,6 @@ class Subscription:
             return f"{self.operation}: {error}"
         return None
 
-    def terminate(
-        self,
-        terminal: StreamTerminal,
-        *,
-        message: str | None = None,
-        dropped: int = 0,
-    ) -> bool:
-        """Queue the terminal frame exactly once."""
-        if not self.open:
-            return False
-        self._queue.append(
-            terminal_frame(
-                self.id, self.seq, terminal, message=message, dropped=dropped
-            )
-        )
-        self.seq += 1
-        self.state = StreamState.TERMINATED
-        self.close_source()
-        return True
-
     def dispose(self) -> None:
         """End the subscription without a frame: the view asked, or is gone.
 
@@ -464,6 +424,8 @@ class Subscription:
             self.state = StreamState.DRAINED
         return frames
 
+
+class _SubscriptionMixin2:
     def pull(self, limit: int) -> None:
         """Take up to ``limit`` events from the source into the queue.
 
@@ -487,6 +449,48 @@ class Subscription:
                 return
             self.emit(payload, kind=kind)
             produced += 1
+
+
+@dataclass(slots=True)
+class Subscription(_SubscriptionMixin1, _SubscriptionMixin2):
+    """One open subscription: a bounded queue plus the source behind it."""
+
+    id: str
+    view_id: str
+    generation: int
+    operation: str
+    capacity: int = MAX_QUEUED_EVENTS
+    events: Mapping[str, Mapping[str, Any]] | None = None
+    seq: int = 0
+    #: How many frames have been handed to the transport; also the seq the next
+    #: acknowledgement may not exceed.
+    handed: int = 0
+    #: Every frame below this seq is acknowledged by the client.
+    acked: int = 0
+    dropped: int = 0
+    state: StreamState = StreamState.OPEN
+    _queue: deque[dict[str, Any]] = field(default_factory=deque)
+    _source: Iterator[Mapping[str, Any]] | PushSource | None = None
+
+    def terminate(
+        self,
+        terminal: StreamTerminal,
+        *,
+        message: str | None = None,
+        dropped: int = 0,
+    ) -> bool:
+        """Queue the terminal frame exactly once."""
+        if not self.open:
+            return False
+        self._queue.append(
+            terminal_frame(
+                self.id, self.seq, terminal, message=message, dropped=dropped
+            )
+        )
+        self.seq += 1
+        self.state = StreamState.TERMINATED
+        self.close_source()
+        return True
 
 
 _EXHAUSTED = object()

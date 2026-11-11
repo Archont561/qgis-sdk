@@ -227,36 +227,7 @@ class CancellationToken:
         return not already_requested and not settled
 
 
-class Job:
-    """Handle for one submitted job: state, outcome and cancellation request."""
-
-    __slots__ = (
-        "_awaiting",
-        "_cancel_delivered",
-        "_cancellation",
-        "_coro",
-        "_error",
-        "_id",
-        "_result",
-        "_started",
-        "_state",
-        "_steps",
-        "_yielded",
-    )
-
-    def __init__(self, identifier: int, coro: Coroutine[object, None, object]) -> None:
-        self._id = identifier
-        self._coro = coro
-        self._state = JobState.QUEUED
-        self._result: object = None
-        self._error: BaseException | None = None
-        self._started = False
-        self._yielded = False
-        self._steps = 0
-        self._awaiting: Handoff | None = None
-        self._cancel_delivered = False
-        self._cancellation = CancellationToken(self)
-
+class _JobMixin1:
     @property
     def id(self) -> int:
         """Return the scheduler-assigned job identifier."""
@@ -370,6 +341,8 @@ class Job:
             return _StepOutcome.SETTLED
         return self._suspend_on(suspended)
 
+
+class _JobMixin2:
     def _settled_by_disposal(self) -> bool:
         """Whether disposal already settled this job while its author code was running."""
         return self._state.settled
@@ -422,6 +395,37 @@ class Job:
             self._state = JobState.CANCELLED
         else:
             self._state = JobState.FAILED
+
+
+class Job(_JobMixin1, _JobMixin2):
+    """Handle for one submitted job: state, outcome and cancellation request."""
+
+    __slots__ = (
+        "_awaiting",
+        "_cancel_delivered",
+        "_cancellation",
+        "_coro",
+        "_error",
+        "_id",
+        "_result",
+        "_started",
+        "_state",
+        "_steps",
+        "_yielded",
+    )
+
+    def __init__(self, identifier: int, coro: Coroutine[object, None, object]) -> None:
+        self._id = identifier
+        self._coro = coro
+        self._state = JobState.QUEUED
+        self._result: object = None
+        self._error: BaseException | None = None
+        self._started = False
+        self._yielded = False
+        self._steps = 0
+        self._awaiting: Handoff | None = None
+        self._cancel_delivered = False
+        self._cancellation = CancellationToken(self)
 
 
 class StepScheduler:

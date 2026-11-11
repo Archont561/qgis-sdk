@@ -300,7 +300,6 @@ def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
 
     scope = ResourceScope()
     ctx = PluginContext(RecordingNotifications(scope), scope)
-
     with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
         invoke(
             classify,
@@ -311,7 +310,6 @@ def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
             fill="red",
             mode="slow",
         )
-
     reasons = refused.value.reasons
     _invoke_checks_the_new_facts1(calls, reasons)
 

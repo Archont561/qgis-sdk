@@ -91,28 +91,7 @@ class Observed:
         return self.terminal is not None or self.disposed
 
 
-class StreamDelivery(RuleBasedStateMachine):
-    def __init__(self) -> None:
-        super().__init__()
-        self.dispatcher = Dispatcher(
-            description={"schema_version": 1, "id": "prop.plugin", "title": "Prop"},
-            authorize=lambda binding, operation: True,
-        )
-        self.sinks: dict[str, StreamSink] = {}
-        self.closed: dict[str, int] = {}
-        self.dispatcher.register_stream(
-            PUSH, lambda payload: _Pushed(self.sinks, self.closed)
-        )
-        self.dispatcher.register_stream(
-            TICKS, lambda payload: _ticks(payload.get("count", 3))
-        )
-        self.bindings: dict[str, ViewBinding] = {
-            view: self.dispatcher.bind(view_id=view, origin=ORIGIN) for view in VIEWS
-        }
-        self.stale: list[ViewBinding] = []
-        self.subscriptions: dict[str, Observed] = {}
-        self.calls = 0
-
+class _StreamDeliveryMixin1:
     # -- helpers --------------------------------------------------------------
 
     def _call(self, binding: ViewBinding, message: dict[str, Any]) -> dict[str, Any]:
@@ -288,6 +267,8 @@ class StreamDelivery(RuleBasedStateMachine):
             view: self.dispatcher.bind(view_id=view, origin=ORIGIN) for view in VIEWS
         }
 
+
+class _StreamDeliveryMixin2:
     # -- invariants -----------------------------------------------------------
 
     @invariant()
@@ -319,6 +300,31 @@ class StreamDelivery(RuleBasedStateMachine):
             assert closes <= 1, f"{key} was closed {closes} times"
             if observed.ended:
                 assert closes == 1, f"{key} ended but its source was not closed"
+
+
+class StreamDelivery(
+    _StreamDeliveryMixin1, _StreamDeliveryMixin2, RuleBasedStateMachine
+):
+    def __init__(self) -> None:
+        super().__init__()
+        self.dispatcher = Dispatcher(
+            description={"schema_version": 1, "id": "prop.plugin", "title": "Prop"},
+            authorize=lambda binding, operation: True,
+        )
+        self.sinks: dict[str, StreamSink] = {}
+        self.closed: dict[str, int] = {}
+        self.dispatcher.register_stream(
+            PUSH, lambda payload: _Pushed(self.sinks, self.closed)
+        )
+        self.dispatcher.register_stream(
+            TICKS, lambda payload: _ticks(payload.get("count", 3))
+        )
+        self.bindings: dict[str, ViewBinding] = {
+            view: self.dispatcher.bind(view_id=view, origin=ORIGIN) for view in VIEWS
+        }
+        self.stale: list[ViewBinding] = []
+        self.subscriptions: dict[str, Observed] = {}
+        self.calls = 0
 
 
 TestStreamDelivery = StreamDelivery.TestCase

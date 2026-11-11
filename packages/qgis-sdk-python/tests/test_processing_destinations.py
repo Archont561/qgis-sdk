@@ -268,12 +268,12 @@ def test_the_answer_is_matched_whatever_case_the_file_declares() -> None:
     )
 
 
+# The shape this Processing answers: destination parameters whose own
+# descriptions are empty, and a model that still declares what each
+# exposed output is.
 def test_what_the_model_declares_decides_the_name() -> None:
     from qgis_sdk.processing.runs import model_output_names
 
-    # The shape this Processing answers: destination parameters whose own
-    # descriptions are empty, and a model that still declares what each
-    # exposed output is.
     info = AlgorithmInfo(
         id="model:report",
         provider="model",
@@ -293,12 +293,10 @@ def test_what_the_model_declares_decides_the_name() -> None:
         ),
         outputs=(),
     )
-
     renamed, names = model_output_names(
         info,
         {"native:basicstatisticsforfields_1:OUTPUT_HTML_FILE": "Report"},
     )
-
     assert names == {"native:basicstatisticsforfields_1:OUTPUT_HTML_FILE": "report"}
     assert [output.name for output in renamed.outputs] == ["report"]
 

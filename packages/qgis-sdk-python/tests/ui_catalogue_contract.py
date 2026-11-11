@@ -33,6 +33,36 @@ from qgis_sdk.ui import (
 from ui_component_contract import Rendering
 
 
+def _test_a_result_table_tail1(**values):
+    rendering = values["rendering"]
+    seen = values["seen"]
+    table = values["table"]
+    assert table.headings == ("Name", "How many")
+    table.set_rows([{"name": "a", "count": 1}, {"name": "b", "count": 2.5, "x": 1}])
+    assert table.cells() == (("a", "1"), ("b", "2.5"))
+    assert table.selected() is None
+    table.select(1)
+    assert table.selected_row() == {"name": "b", "count": 2.5, "x": 1}
+    assert seen == [None, 1]
+    table.select(1)
+    assert seen == [None, 1]
+    with pytest.raises(QgisSdkUiError, match="cannot select 5"):
+        table.select(5)
+    if rendering.native:
+        widget = table.widget
+        assert widget.rowCount() == 2
+        assert widget.item(1, 1).text() == "2.5"
+        assert {index.row() for index in widget.selectionModel().selectedRows()} == {1}
+        widget.selectRow(0)
+        assert table.selected() == 0
+        assert seen[-1] == 0
+
+    table.set_rows([])
+    assert table.selected() is None
+    assert table.snapshot()["rows"] == []
+    _a_result_table_lists_facts1(table)
+
+
 def _tabs_show_one_page_facts1(rendering, seen, tabs):
     if rendering.native:
         assert tabs.widget.currentIndex() == 1
@@ -259,30 +289,7 @@ def test_a_result_table_lists_rows_and_tracks_the_selection(
     seen: list[object] = []
     table.changed(seen.append)
 
-    assert table.headings == ("Name", "How many")
-    table.set_rows([{"name": "a", "count": 1}, {"name": "b", "count": 2.5, "x": 1}])
-    assert table.cells() == (("a", "1"), ("b", "2.5"))
-    assert table.selected() is None
-    table.select(1)
-    assert table.selected_row() == {"name": "b", "count": 2.5, "x": 1}
-    assert seen == [None, 1]
-    table.select(1)
-    assert seen == [None, 1]
-    with pytest.raises(QgisSdkUiError, match="cannot select 5"):
-        table.select(5)
-    if rendering.native:
-        widget = table.widget
-        assert widget.rowCount() == 2
-        assert widget.item(1, 1).text() == "2.5"
-        assert {index.row() for index in widget.selectionModel().selectedRows()} == {1}
-        widget.selectRow(0)
-        assert table.selected() == 0
-        assert seen[-1] == 0
-
-    table.set_rows([])
-    assert table.selected() is None
-    assert table.snapshot()["rows"] == []
-    _a_result_table_lists_facts1(table)
+    _test_a_result_table_tail1(**{**globals(), **locals()})
 
 
 # -- buttons ----------------------------------------------------------------------------
