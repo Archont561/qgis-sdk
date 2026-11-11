@@ -132,22 +132,7 @@ class AppNotifications(NotificationsBase):
             self._window.statusBar().showMessage(text, 10_000)
 
 
-class AppWindowInterface:
-    """A ``QMainWindow`` dressed as the ``iface`` the SDK's bindings expect.
-
-    The methods are the subset ``DesktopBindings`` and ``SurfaceHost`` call -
-    ``mainWindow``, the toolbar hooks, one add/remove pair per menu family,
-    dock placement and main-window shortcuts. Shortcuts use the window's own
-    action list rather than the QGIS shortcut manager: an app has one window, so
-    there is nothing to arbitrate between plugins.
-    """
-
-    def __init__(self, window: Any, *, toolbar: Any, title: str) -> None:
-        self._window = window
-        self._toolbar = toolbar
-        self._title = title
-        self._menus: dict[str, Any] = {}
-
+class _AppWindowInterfaceMixin1:
     @property
     def window(self) -> Any:
         """The ``QMainWindow`` this interface places things in."""
@@ -224,6 +209,8 @@ class AppWindowInterface:
     def removePluginVectorMenu(self, name: str, action: Any) -> None:
         self._remove_from_menu("addPluginToVectorMenu", name, action)
 
+
+class _AppWindowInterfaceMixin2:
     def addPluginToRasterMenu(self, name: str, action: Any) -> None:
         self._add_to_menu("addPluginToRasterMenu", name, action)
 
@@ -259,6 +246,23 @@ class AppWindowInterface:
 
     def removeDockWidget(self, dock: Any) -> None:
         self._window.removeDockWidget(dock)
+
+
+class AppWindowInterface(_AppWindowInterfaceMixin1, _AppWindowInterfaceMixin2):
+    """A ``QMainWindow`` dressed as the ``iface`` the SDK's bindings expect.
+
+    The methods are the subset ``DesktopBindings`` and ``SurfaceHost`` call -
+    ``mainWindow``, the toolbar hooks, one add/remove pair per menu family,
+    dock placement and main-window shortcuts. Shortcuts use the window's own
+    action list rather than the QGIS shortcut manager: an app has one window, so
+    there is nothing to arbitrate between plugins.
+    """
+
+    def __init__(self, window: Any, *, toolbar: Any, title: str) -> None:
+        self._window = window
+        self._toolbar = toolbar
+        self._title = title
+        self._menus: dict[str, Any] = {}
 
     def __repr__(self) -> str:
         return f"AppWindowInterface({self._title!r}, {len(self._menus)} menu(s))"

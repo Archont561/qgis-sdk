@@ -252,22 +252,7 @@ FORMAT = "qgis-sdk-fake-project"
 FORMAT_VERSION = 1
 
 
-class FakeProject:
-    """A ``Project`` backend over one in-memory project, with a JSON file."""
-
-    def __init__(self, layers: Layers, scope: ResourceScope) -> None:
-        self._layers = layers
-        self._scope = scope
-        self._nodes: list[LayerNode] = []
-        self._crs: str | None = None
-        self._variables: dict[str, str] = {}
-        self._properties: dict[str, str] = {}
-        self._bookmarks: dict[str, CanvasExtent] = {}
-        self._path: Path | None = None
-        self._listeners: list[ProjectChanged] = []
-        self.changes: list[ProjectChange] = []
-        """Every frame the project emitted, in order - observation, not contract."""
-
+class _FakeProjectMixin1:
     # -- membership and tree ------------------------------------------------
 
     def layer_ids(self) -> tuple[str, ...]:
@@ -401,6 +386,8 @@ class FakeProject:
         self._changed("properties")
         return self.custom_properties()
 
+
+class _FakeProjectMixin2:
     def unset_custom_property(self, name: str) -> tuple[ProjectEntry, ...]:
         """Remove one custom property; an absent name is a no-op."""
         self._scope.ensure_open()
@@ -545,6 +532,8 @@ class FakeProject:
                 return position
         return None
 
+
+class _FakeProjectMixin3:
     def _require_layer_node(self, layer_id: str) -> int:
         position = self._index_of(layer_id)
         if position is None or self._nodes[position].kind != "layer":
@@ -574,3 +563,20 @@ class FakeProject:
         }
         values.update(changes)
         return LayerNode(**values)
+
+
+class FakeProject(_FakeProjectMixin1, _FakeProjectMixin2, _FakeProjectMixin3):
+    """A ``Project`` backend over one in-memory project, with a JSON file."""
+
+    def __init__(self, layers: Layers, scope: ResourceScope) -> None:
+        self._layers = layers
+        self._scope = scope
+        self._nodes: list[LayerNode] = []
+        self._crs: str | None = None
+        self._variables: dict[str, str] = {}
+        self._properties: dict[str, str] = {}
+        self._bookmarks: dict[str, CanvasExtent] = {}
+        self._path: Path | None = None
+        self._listeners: list[ProjectChanged] = []
+        self.changes: list[ProjectChange] = []
+        """Every frame the project emitted, in order - observation, not contract."""

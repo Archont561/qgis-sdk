@@ -179,29 +179,7 @@ class _Placed:
     shortcut: bool = False
 
 
-class SurfaceHost:
-    """``ctx.ui`` under the Desktop host; also what the bindings open and toggle."""
-
-    def __init__(
-        self,
-        iface: Any,
-        *,
-        plugin_id: str,
-        title: str,
-        bindings: BindingsDescription,
-    ) -> None:
-        self._iface = iface
-        self._plugin_id = plugin_id
-        self._title = title
-        self._bindings = bindings
-        self._runtime: PluginRuntime | None = None
-        self._context: PluginContext | None = None
-        self._dialogs: list[OpenDialog] = []
-        self._docks: dict[type, OpenDock] = {}
-        self._openings = 0
-        self._closing = False
-        self._toggles: dict[type, Any] = {}
-
+class _SurfaceHostMixin1:
     def attach(self, runtime: PluginRuntime, context: PluginContext) -> None:
         """Bind the started runtime and its context; ``host()`` does this once."""
         self._runtime = runtime
@@ -374,6 +352,8 @@ class SurfaceHost:
             jobs=context.jobs.scoped(scope) if context.has("jobs") else None,
         )
 
+
+class _SurfaceHostMixin2:
     def _ui_context(
         self, view_id: str, close: Callable[[], None]
     ) -> tuple[UiContext, Any]:
@@ -526,6 +506,30 @@ class SurfaceHost:
 
     def unbind_toggles(self) -> None:
         self._toggles.clear()
+
+
+class SurfaceHost(_SurfaceHostMixin1, _SurfaceHostMixin2):
+    """``ctx.ui`` under the Desktop host; also what the bindings open and toggle."""
+
+    def __init__(
+        self,
+        iface: Any,
+        *,
+        plugin_id: str,
+        title: str,
+        bindings: BindingsDescription,
+    ) -> None:
+        self._iface = iface
+        self._plugin_id = plugin_id
+        self._title = title
+        self._bindings = bindings
+        self._runtime: PluginRuntime | None = None
+        self._context: PluginContext | None = None
+        self._dialogs: list[OpenDialog] = []
+        self._docks: dict[type, OpenDock] = {}
+        self._openings = 0
+        self._closing = False
+        self._toggles: dict[type, Any] = {}
 
 
 class DesktopBindings:

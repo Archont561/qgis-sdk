@@ -72,43 +72,7 @@ def split_name_and_children(
     )
 
 
-class Component:
-    """One node of a surface: a named thing with a widget on demand.
-
-    ``name`` is what the node is called in ``objectName`` (``form/<name>``
-    for an :class:`Input`, ``buttons/<name>`` for a :class:`Button`, the
-    bare name for a container), which is how a test or an agent selects the
-    widget. A component assigned to a class attribute of a surface may leave
-    the name out and takes the attribute's (``go = Button(text="Go")`` is
-    ``buttons/go``); until it has one, anything that needs the name refuses.
-    ``attach(ctx)`` binds it to a surface's :class:`UiContext`, ``mount()``
-    builds the widget, ``snapshot()`` is its node in a UI snapshot
-    (decision-51).
-    """
-
-    #: ``objectName`` prefix; a container uses its bare name.
-    prefix: ClassVar[str] = ""
-
-    def __init__(self, name: str | None = None, *, label: str | None = None) -> None:
-        self._name: str | None = None
-        if name is not None:
-            self._name = self._valid_name(name)
-        self._attribute: str | None = None
-        self._label = label
-        self._ctx: UiContext | None = None
-        self._native: NativeRendering | None = None
-        self._syncing = False
-
-    def __set_name__(self, owner: type, attribute: str) -> None:
-        """A component declared on a class is called after its attribute.
-
-        The attribute is remembered either way, so a snapshot can say which
-        class attribute a node came from when its name was given explicitly.
-        """
-        self._attribute = attribute
-        if self._name is None:
-            self._name = self._valid_name(attribute)
-
+class _ComponentMixin1:
     # -- identity -------------------------------------------------------------------
 
     @property
@@ -198,6 +162,8 @@ class Component:
         self._attached()
         return self
 
+
+class _ComponentMixin2:
     def mount(self, parent: Any = None) -> Any:
         """Build the widget mirroring the state and return it; idempotent.
 
@@ -278,33 +244,45 @@ class Component:
         return getattr(self._ctx, capability)
 
 
-class Input(Component):
-    """A component that holds one value: the catalogue's eleven inputs.
+class Component(_ComponentMixin1, _ComponentMixin2):
+    """One node of a surface: a named thing with a widget on demand.
 
-    Subclasses set ``kind`` (a name from ``parameter_kinds()``) and build the
-    :class:`FieldSpec` that validates ``set_value``. ``name`` is the
-    handler's parameter name; ``required`` marks a field a form refuses to
-    submit empty.
+    ``name`` is what the node is called in ``objectName`` (``form/<name>``
+    for an :class:`Input`, ``buttons/<name>`` for a :class:`Button`, the
+    bare name for a container), which is how a test or an agent selects the
+    widget. A component assigned to a class attribute of a surface may leave
+    the name out and takes the attribute's (``go = Button(text="Go")`` is
+    ``buttons/go``); until it has one, anything that needs the name refuses.
+    ``attach(ctx)`` binds it to a surface's :class:`UiContext`, ``mount()``
+    builds the widget, ``snapshot()`` is its node in a UI snapshot
+    (decision-51).
     """
 
-    prefix = "form"
-    kind: ClassVar[str]
+    #: ``objectName`` prefix; a container uses its bare name.
+    prefix: ClassVar[str] = ""
 
-    def __init__(
-        self,
-        name: str | None = None,
-        *,
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
-    ) -> None:
-        super().__init__(name, label=label)
-        self.required = required
-        self._listeners: list[Listener] = []
-        self._value: object = self._default()
-        if value is not None:
-            self.set_value(value)
+    def __init__(self, name: str | None = None, *, label: str | None = None) -> None:
+        self._name: str | None = None
+        if name is not None:
+            self._name = self._valid_name(name)
+        self._attribute: str | None = None
+        self._label = label
+        self._ctx: UiContext | None = None
+        self._native: NativeRendering | None = None
+        self._syncing = False
 
+    def __set_name__(self, owner: type, attribute: str) -> None:
+        """A component declared on a class is called after its attribute.
+
+        The attribute is remembered either way, so a snapshot can say which
+        class attribute a node came from when its name was given explicitly.
+        """
+        self._attribute = attribute
+        if self._name is None:
+            self._name = self._valid_name(attribute)
+
+
+class _InputMixin1:
     @property
     def spec(self) -> FieldSpec:
         """The field specification ``set_value`` validates against."""
@@ -339,20 +317,6 @@ class Input(Component):
     def refresh(self) -> None:
         """Re-read what the component lists; a value no longer listed becomes ``None``."""
         self._refreshed()
-
-    def dispose(self) -> None:
-        super().dispose()
-        self._listeners.clear()
-
-    def snapshot(self) -> dict[str, Any]:
-        value = self._value
-        node = super().snapshot()
-        node["kind"] = self.kind
-        node["value"] = value.to_wire() if isinstance(value, FileRef) else value
-        if self.required:
-            node["required"] = True
-        node.update(self._details())
-        return node
 
     # -- for subclasses -------------------------------------------------------------
 
@@ -399,8 +363,52 @@ class Input(Component):
         for listener in tuple(self._listeners):
             listener(value)
 
+
+class _InputMixin2:
     def _from_widget(self, value: object) -> None:
         """The widget changed under the user: adopt the value the adapter read."""
         if self._syncing:
             return
         self._store(value)
+
+
+class Input(_InputMixin1, _InputMixin2, Component):
+    """A component that holds one value: the catalogue's eleven inputs.
+
+    Subclasses set ``kind`` (a name from ``parameter_kinds()``) and build the
+    :class:`FieldSpec` that validates ``set_value``. ``name`` is the
+    handler's parameter name; ``required`` marks a field a form refuses to
+    submit empty.
+    """
+
+    prefix = "form"
+    kind: ClassVar[str]
+
+    def __init__(
+        self,
+        name: str | None = None,
+        *,
+        label: str | None = None,
+        value: object = None,
+        required: bool = False,
+    ) -> None:
+        super().__init__(name, label=label)
+        self.required = required
+        self._listeners: list[Listener] = []
+        self._value: object = self._default()
+        if value is not None:
+            self.set_value(value)
+
+    def dispose(self) -> None:
+        super().dispose()
+        self._listeners.clear()
+
+    def snapshot(self) -> dict[str, Any]:
+        value = self._value
+        node = super().snapshot()
+        node["kind"] = self.kind
+        node["value"] = value.to_wire() if isinstance(value, FileRef) else value
+        if self.required:
+            node["required"] = True
+        node.update(self._details())
+        return node

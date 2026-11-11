@@ -39,6 +39,53 @@ from qgis_sdk.models.canvas import (
     CanvasPoint,
 )
 
+
+def _post_init___tail2(**values):
+    self = values["self"]
+    for name in ("data_types", "no_data"):
+        values = getattr(self, name)
+        if len(values) != self.band_count:
+            raise ValueError(
+                f"{name} has one entry per band ({self.band_count}), not {len(values)}"
+            )
+    for data_type in self.data_types:
+        if not isinstance(data_type, str) or not data_type:
+            raise ValueError("a band data type is a nonempty string")
+    for value in self.no_data:
+        if value is not None and not _is_number(value):
+            raise ValueError("a no-data value is a finite number or None")
+    if len(self.resolution) != 2:
+        raise ValueError("resolution is (x, y)")
+    for value in self.resolution:
+        if not _is_number(value) or value <= 0:
+            raise ValueError("a pixel size is a finite positive number")
+    if self.extent.crs is not None:
+        raise ValueError(
+            "a raster extent carries no CRS of its own; the raster names it"
+        )
+    if self.crs is not None and (not isinstance(self.crs, str) or not self.crs):
+        raise ValueError("crs is a nonempty string or None")
+
+
+def _post_init___tail1(**values):
+    self = values["self"]
+    values = (self.minimum, self.maximum, self.mean, self.std_dev)
+    if any(value is None for value in values) and not all(
+        value is None for value in values
+    ):
+        raise ValueError(
+            "a band with no valid cell has no minimum, maximum, mean or "
+            "standard deviation; a band with one has all four"
+        )
+    for value in values:
+        if value is not None and not _is_number(value):
+            raise ValueError("a statistic is a finite number or None")
+    for name in ("valid_count", "no_data_count"):
+        count = getattr(self, name)
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise ValueError(f"{name} is a non-negative integer")
+
+
 __all__ = [
     "ANNOTATION_LAYER_INFO",
     "LAYER_INFO_NAMES",
@@ -191,30 +238,7 @@ class RasterLayerInfo:
             raise TypeError("band_count is an integer")
         if self.band_count < 1:
             raise ValueError(f"band_count is at least 1, not {self.band_count}")
-        for name in ("data_types", "no_data"):
-            values = getattr(self, name)
-            if len(values) != self.band_count:
-                raise ValueError(
-                    f"{name} has one entry per band ({self.band_count}), "
-                    f"not {len(values)}"
-                )
-        for data_type in self.data_types:
-            if not isinstance(data_type, str) or not data_type:
-                raise ValueError("a band data type is a nonempty string")
-        for value in self.no_data:
-            if value is not None and not _is_number(value):
-                raise ValueError("a no-data value is a finite number or None")
-        if len(self.resolution) != 2:
-            raise ValueError("resolution is (x, y)")
-        for value in self.resolution:
-            if not _is_number(value) or value <= 0:
-                raise ValueError("a pixel size is a finite positive number")
-        if self.extent.crs is not None:
-            raise ValueError(
-                "a raster extent carries no CRS of its own; the raster names it"
-            )
-        if self.crs is not None and (not isinstance(self.crs, str) or not self.crs):
-            raise ValueError("crs is a nonempty string or None")
+        _post_init___tail2(**{**globals(), **locals()})
 
     def to_wire(self) -> dict[str, Any]:
         """Return the transport representation of this description."""
@@ -650,21 +674,7 @@ class RasterStatistics:
             raise TypeError("band is an integer")
         if self.band < 1:
             raise ValueError(f"band is 1-based, not {self.band}")
-        values = (self.minimum, self.maximum, self.mean, self.std_dev)
-        if any(value is None for value in values) and not all(
-            value is None for value in values
-        ):
-            raise ValueError(
-                "a band with no valid cell has no minimum, maximum, mean or "
-                "standard deviation; a band with one has all four"
-            )
-        for value in values:
-            if value is not None and not _is_number(value):
-                raise ValueError("a statistic is a finite number or None")
-        for name in ("valid_count", "no_data_count"):
-            count = getattr(self, name)
-            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-                raise ValueError(f"{name} is a non-negative integer")
+        _post_init___tail1(**{**globals(), **locals()})
 
     def to_wire(self) -> dict[str, Any]:
         return {

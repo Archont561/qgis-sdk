@@ -76,27 +76,7 @@ __all__ = [
 ]
 
 
-@dataclass
-class HostAuthority:
-    """Mint, resolve and revoke the refs and grants of every view of one host.
-
-    One instance per dispatcher: the generation in a binding is the
-    dispatcher's, and a ref minted in a replaced generation is stale even if
-    the same view id comes back. Each kind of grant has its own record - files,
-    blobs, network - and this object is where a host reaches all three.
-    """
-
-    clock: Callable[[], float] = time.monotonic
-    token: Callable[[], str] = field(default=lambda: secrets.token_hex(16))
-    _files: _FileGrants = field(init=False, repr=False)
-    _blobs: _BlobGrants = field(init=False, repr=False)
-    _networks: _NetworkGrants = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        self._files = _FileGrants(self.clock, self.token)
-        self._blobs = _BlobGrants(self.clock, self.token)
-        self._networks = _NetworkGrants()
-
+class _HostAuthorityMixin1:
     def grant_file(
         self,
         binding: ViewBinding,
@@ -211,6 +191,8 @@ class HostAuthority:
         """Return the stored ref (size, media type, checksum) without the bytes."""
         return self._blobs.info(binding, raw)
 
+
+class _HostAuthorityMixin2:
     def grant_network(self, binding: ViewBinding, grant: NetworkGrant) -> None:
         """Give ``binding``'s view ``grant``, replacing any earlier one."""
         self._networks.grant(binding, grant)
@@ -226,3 +208,25 @@ class HostAuthority:
     def revoke_network(self, binding: ViewBinding) -> bool:
         """Withdraw the view's network grant."""
         return self._networks.revoke(binding)
+
+
+@dataclass
+class HostAuthority(_HostAuthorityMixin1, _HostAuthorityMixin2):
+    """Mint, resolve and revoke the refs and grants of every view of one host.
+
+    One instance per dispatcher: the generation in a binding is the
+    dispatcher's, and a ref minted in a replaced generation is stale even if
+    the same view id comes back. Each kind of grant has its own record - files,
+    blobs, network - and this object is where a host reaches all three.
+    """
+
+    clock: Callable[[], float] = time.monotonic
+    token: Callable[[], str] = field(default=lambda: secrets.token_hex(16))
+    _files: _FileGrants = field(init=False, repr=False)
+    _blobs: _BlobGrants = field(init=False, repr=False)
+    _networks: _NetworkGrants = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._files = _FileGrants(self.clock, self.token)
+        self._blobs = _BlobGrants(self.clock, self.token)
+        self._networks = _NetworkGrants()

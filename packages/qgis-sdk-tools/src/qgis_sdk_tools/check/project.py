@@ -43,6 +43,37 @@ from .versions import (
 )
 
 
+def _requirement_findings_tail1(**values):
+    available = values["available"]
+    distributions = values["distributions"]
+    available.update(normalize(name) for name in HOST_ROOTS)
+    available.update(names for names in sys.stdlib_module_names)
+    findings: list[Diagnostic] = []
+    for distribution in distributions:
+        for requirement in distribution.requires:
+            if normalize(requirement) in available:
+                continue
+            findings.append(
+                Diagnostic(
+                    rule="DEP004",
+                    path=Path("pyproject.toml"),
+                    line=0,
+                    column=0,
+                    message=(
+                        f"vendored `{distribution.name}` requires "
+                        f"`{requirement}`, which is neither vendored nor "
+                        "declared external"
+                    ),
+                    remediation=(
+                        f"Add `{requirement}` to `[tool.qgis-sdk.build] vendor` "
+                        "when it is pure Python, or to `external` when every "
+                        "QGIS you target ships it."
+                    ),
+                )
+            )
+    return tuple(findings)
+
+
 def _check_project_facts1(diagnostics, files, imports, root):
     return CheckReport(
         root=root,
@@ -225,32 +256,7 @@ def _requirement_findings(
     """
     available = {normalize(item.name) for item in distributions}
     available.update(normalize(root) for root in config.build.external_roots)
-    available.update(normalize(name) for name in HOST_ROOTS)
-    available.update(names for names in sys.stdlib_module_names)
-    findings: list[Diagnostic] = []
-    for distribution in distributions:
-        for requirement in distribution.requires:
-            if normalize(requirement) in available:
-                continue
-            findings.append(
-                Diagnostic(
-                    rule="DEP004",
-                    path=Path("pyproject.toml"),
-                    line=0,
-                    column=0,
-                    message=(
-                        f"vendored `{distribution.name}` requires "
-                        f"`{requirement}`, which is neither vendored nor "
-                        "declared external"
-                    ),
-                    remediation=(
-                        f"Add `{requirement}` to `[tool.qgis-sdk.build] vendor` "
-                        "when it is pure Python, or to `external` when every "
-                        "QGIS you target ships it."
-                    ),
-                )
-            )
-    return tuple(findings)
+    return _requirement_findings_tail1(**{**globals(), **locals()})
 
 
 def _declared(rule: str, message: str, name: str, *, vendored: bool) -> Diagnostic:

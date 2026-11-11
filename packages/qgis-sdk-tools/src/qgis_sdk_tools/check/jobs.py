@@ -39,6 +39,31 @@ from pathlib import Path
 from .diagnostics import Diagnostic
 from .names import ModuleNames
 
+
+def _local_names_tail1(**values):
+    function = values["function"]
+    globals_ = values["globals_"]
+    local = values["local"]
+    for node in ast.walk(function):
+        if isinstance(node, ast.arg):
+            local.add(node.arg)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            local.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            local.add(node.name)
+        elif isinstance(node, ast.Import):
+            local.update(
+                alias.asname or alias.name.split(".")[0] for alias in node.names
+            )
+        elif isinstance(node, ast.ImportFrom):
+            local.update(alias.asname or alias.name for alias in node.names)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            local.add(node.name)
+        elif isinstance(node, ast.Global):
+            globals_.update(node.names)
+    return local - globals_
+
+
 __all__ = [
     "GUI_CLASSES",
     "GUI_ONLY_PATHS",
@@ -194,24 +219,7 @@ def _local_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
     """
     local: set[str] = set()
     globals_: set[str] = set()
-    for node in ast.walk(function):
-        if isinstance(node, ast.arg):
-            local.add(node.arg)
-        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            local.add(node.id)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            local.add(node.name)
-        elif isinstance(node, ast.Import):
-            local.update(
-                alias.asname or alias.name.split(".")[0] for alias in node.names
-            )
-        elif isinstance(node, ast.ImportFrom):
-            local.update(alias.asname or alias.name for alias in node.names)
-        elif isinstance(node, ast.ExceptHandler) and node.name:
-            local.add(node.name)
-        elif isinstance(node, ast.Global):
-            globals_.update(node.names)
-    return local - globals_
+    return _local_names_tail1(**{**globals(), **locals()})
 
 
 def _imports_in_body(

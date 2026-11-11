@@ -32,6 +32,37 @@ from collections.abc import Iterable, Sequence
 from qgis_sdk.models import AlgorithmInfo, Catalogue, OutputInfo, ParameterInfo
 
 
+def _python_algorithm_tail1(**values):
+    algorithm = values["algorithm"]
+    lines = values["lines"]
+    name = values["name"]
+    lines.append("@dataclass(frozen=True, slots=True, kw_only=True)")
+    lines.append(f"class {name}(TypedRun):")
+    doc = [f"{algorithm.label} (``{algorithm.id}``)."]
+    if algorithm.help:
+        doc += ["", _first_sentence(algorithm.help)]
+    fields: list[tuple[str, ParameterInfo]] = []
+    used: list[str] = []
+    for parameter in algorithm.parameters:
+        field = field_name(parameter.name, used)
+        used.append(field)
+        fields.append((field, parameter))
+    doc += ["", "Parameters:"]
+    for field, parameter in fields:
+        note = " (required)" if parameter.required else ""
+        if parameter.destination:
+            note = " (destination; allocated when left out)"
+        label = parameter.label or parameter.name
+        doc.append(f"    {field}: {label}{note}")
+        if parameter.options:
+            doc.append(f"        one of: {', '.join(parameter.options)}")
+    if algorithm.outputs:
+        doc += ["", "Outputs: " + ", ".join(o.name for o in algorithm.outputs)]
+    lines.append(_docstring(doc, "    "))
+    lines.append("")
+    return _python_algorithm_facts11(algorithm, fields, lines)
+
+
 def _emit_python_module_facts1(header, text, used, value_types):
     if used(value_types):
         header.append(
@@ -390,31 +421,7 @@ def _python_algorithm(algorithm: AlgorithmInfo, name: str) -> list[str]:
     )
     lines.append("")
     lines.append("")
-    lines.append("@dataclass(frozen=True, slots=True, kw_only=True)")
-    lines.append(f"class {name}(TypedRun):")
-    doc = [f"{algorithm.label} (``{algorithm.id}``)."]
-    if algorithm.help:
-        doc += ["", _first_sentence(algorithm.help)]
-    fields: list[tuple[str, ParameterInfo]] = []
-    used: list[str] = []
-    for parameter in algorithm.parameters:
-        field = field_name(parameter.name, used)
-        used.append(field)
-        fields.append((field, parameter))
-    doc += ["", "Parameters:"]
-    for field, parameter in fields:
-        note = " (required)" if parameter.required else ""
-        if parameter.destination:
-            note = " (destination; allocated when left out)"
-        label = parameter.label or parameter.name
-        doc.append(f"    {field}: {label}{note}")
-        if parameter.options:
-            doc.append(f"        one of: {', '.join(parameter.options)}")
-    if algorithm.outputs:
-        doc += ["", "Outputs: " + ", ".join(o.name for o in algorithm.outputs)]
-    lines.append(_docstring(doc, "    "))
-    lines.append("")
-    return _python_algorithm_facts11(algorithm, fields, lines)
+    return _python_algorithm_tail1(**{**globals(), **locals()})
 
 
 def _typed_dict(name: str, entries: Sequence[str]) -> list[str]:

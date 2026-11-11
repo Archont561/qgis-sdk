@@ -34,7 +34,6 @@ def test_direct_desktop_adapters_accept_applications_and_reject_classes() -> Non
             assert adapter.runtime.actions["double"](21) == 42
         finally:
             adapter.unload()
-
     from qgis_sdk.declarations._plugin import plugin
 
     @plugin(id="legacy", title="Legacy")

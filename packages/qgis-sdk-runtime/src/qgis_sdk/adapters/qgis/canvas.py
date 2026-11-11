@@ -83,32 +83,7 @@ def _extent_of(rectangle: QgsRectangle, crs: str | None) -> CanvasExtent:
     )
 
 
-class NativeCanvas:
-    """The ``Canvas`` contract over one ``QgsMapCanvas``.
-
-    ``canvas`` is resolved lazily from ``iface.mapCanvas()`` so a context built
-    before QGIS hands out an interface still works once it does; a host with no
-    canvas refuses every method by name. ``layers`` is what a zoom to a layer or
-    a selection resolves through, so a page cannot name a layer the plugin never
-    opened.
-    """
-
-    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
-        values = _InitValues1(**options)
-        self._scope = scope
-        self._layers = values.layers
-        self._iface = values.iface
-        self._canvas = values.canvas
-        self._host = values.host
-        #: The tool that was active before a capture installed its own, put back
-        #: when the capture ends however it ends.
-        self._previous_tool: object | None = None
-        self._active_capture: _CaptureTool | None = None
-        #: The theme this adapter applied last. ``mapTheme`` is the truth where
-        #: the host exposes it; this is what a canvas that cannot report one is
-        #: drawn with.
-        self._applied_theme: str | None = None
-
+class _NativeCanvasMixin1:
     # -- reading ------------------------------------------------------------
 
     def extent(self) -> CanvasExtent:
@@ -263,6 +238,8 @@ class NativeCanvas:
             return applied
         return None
 
+
+class _NativeCanvasMixin2:
     def _target_rectangle(self, target: ZoomTarget) -> QgsRectangle:
         if target.kind == "extent":
             assert target.extent is not None  # refused by ZoomTarget itself
@@ -320,6 +297,33 @@ class NativeCanvas:
             else:
                 canvas.setMapTool(self._previous_tool)
         self._previous_tool = None
+
+
+class NativeCanvas(_NativeCanvasMixin1, _NativeCanvasMixin2):
+    """The ``Canvas`` contract over one ``QgsMapCanvas``.
+
+    ``canvas`` is resolved lazily from ``iface.mapCanvas()`` so a context built
+    before QGIS hands out an interface still works once it does; a host with no
+    canvas refuses every method by name. ``layers`` is what a zoom to a layer or
+    a selection resolves through, so a page cannot name a layer the plugin never
+    opened.
+    """
+
+    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        self._scope = scope
+        self._layers = values.layers
+        self._iface = values.iface
+        self._canvas = values.canvas
+        self._host = values.host
+        #: The tool that was active before a capture installed its own, put back
+        #: when the capture ends however it ends.
+        self._previous_tool: object | None = None
+        self._active_capture: _CaptureTool | None = None
+        #: The theme this adapter applied last. ``mapTheme`` is the truth where
+        #: the host exposes it; this is what a canvas that cannot report one is
+        #: drawn with.
+        self._applied_theme: str | None = None
 
 
 class _CaptureTool(QgsMapTool):

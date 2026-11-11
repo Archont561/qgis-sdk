@@ -89,27 +89,7 @@ class _Tracked:
         return [event for event in self.events if event[0] != "progress"]
 
 
-class JobLifetimes(RuleBasedStateMachine):
-    def __init__(self) -> None:
-        super().__init__()
-        NESTED.clear()
-        HOST_TICK.clear()
-        self.plugin_scope = ResourceScope()
-        self.view_scope = self.plugin_scope.child()
-        self.workers = FakeWorkers()
-        self.jobs = JobService(
-            self.plugin_scope, workers=self.workers, gui_thread=lambda: False
-        )
-        HOST_TICK.append(self.jobs.tick)
-        self.view_jobs = self.jobs.scoped(self.view_scope)
-        # A second view that only *subscribes* to other owners' jobs, so the
-        # explicit-owner hooks (TASK-47) are exercised and released.
-        self.listener_scope = self.plugin_scope.child()
-        self.tracked: list[_Tracked] = []
-        self.listener_subscribed = 0
-        self.view_closed = False
-        self.plugin_closed = False
-
+class _JobLifetimesMixin1:
     # -- rules
 
     @precondition(lambda self: not self.plugin_closed)
@@ -270,6 +250,8 @@ class JobLifetimes(RuleBasedStateMachine):
                 assert kind == "raised"
                 assert payload[0] is QgisSdkJobCancelledError
 
+
+class _JobLifetimesMixin2:
     @invariant()
     def a_settled_job_holds_no_listener_hook(self) -> None:
         live = self.jobs._runtime.owner_hooks.get(self.listener_scope, {})
@@ -289,6 +271,28 @@ class JobLifetimes(RuleBasedStateMachine):
     def teardown(self) -> None:
         if not self.plugin_closed:
             self.plugin_scope.close()
+
+
+class JobLifetimes(_JobLifetimesMixin1, _JobLifetimesMixin2, RuleBasedStateMachine):
+    def __init__(self) -> None:
+        super().__init__()
+        NESTED.clear()
+        HOST_TICK.clear()
+        self.plugin_scope = ResourceScope()
+        self.view_scope = self.plugin_scope.child()
+        self.workers = FakeWorkers()
+        self.jobs = JobService(
+            self.plugin_scope, workers=self.workers, gui_thread=lambda: False
+        )
+        HOST_TICK.append(self.jobs.tick)
+        self.view_jobs = self.jobs.scoped(self.view_scope)
+        # A second view that only *subscribes* to other owners' jobs, so the
+        # explicit-owner hooks (TASK-47) are exercised and released.
+        self.listener_scope = self.plugin_scope.child()
+        self.tracked: list[_Tracked] = []
+        self.listener_subscribed = 0
+        self.view_closed = False
+        self.plugin_closed = False
 
 
 def _result_of(handle: JobHandle) -> object:

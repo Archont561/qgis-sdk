@@ -31,6 +31,35 @@ from qgis_sdk.models import QgisSdkError
 
 from .project import ProjectConfig
 
+
+def _render_metadata_tail1(**values):
+    about = values["about"]
+    config = values["config"]
+    extra = values["extra"]
+    facts = values["facts"]
+    fields = [
+        ("name", facts.title),
+        ("description", _described(config)),
+        ("about", about),
+        ("version", config.version),
+        ("qgisMinimumVersion", config.qgis_minimum_version),
+        ("author", config.author),
+        ("email", config.email),
+        ("experimental", "True" if config.experimental else "False"),
+        ("hasProcessingProvider", "yes" if facts.has_providers else "no"),
+    ]
+    if "server" in config.hosts:
+        # QGIS Server reads this key to decide whether to load the plugin at
+        # all, and QGIS Desktop ignores it, so a plugin that declares the host
+        # is loaded by both from one ZIP (decision-52).
+        fields.append(("server", "True"))
+    fields.extend(extra.items())
+    lines = ["[general]"]
+    for key, value in fields:
+        lines.append(f"{key}={_continued(value)}")
+    return LF.join(lines) + LF
+
+
 __all__ = [
     "DEV_HOST_DIRECTORY",
     "METADATA_FILE",
@@ -131,27 +160,7 @@ def render_metadata(config: ProjectConfig, facts: PluginFacts) -> str:
     """
     extra = dict(config.metadata)
     about = extra.pop("about", config.description)
-    fields = [
-        ("name", facts.title),
-        ("description", _described(config)),
-        ("about", about),
-        ("version", config.version),
-        ("qgisMinimumVersion", config.qgis_minimum_version),
-        ("author", config.author),
-        ("email", config.email),
-        ("experimental", "True" if config.experimental else "False"),
-        ("hasProcessingProvider", "yes" if facts.has_providers else "no"),
-    ]
-    if "server" in config.hosts:
-        # QGIS Server reads this key to decide whether to load the plugin at
-        # all, and QGIS Desktop ignores it, so a plugin that declares the host
-        # is loaded by both from one ZIP (decision-52).
-        fields.append(("server", "True"))
-    fields.extend(extra.items())
-    lines = ["[general]"]
-    for key, value in fields:
-        lines.append(f"{key}={_continued(value)}")
-    return LF.join(lines) + LF
+    return _render_metadata_tail1(**{**globals(), **locals()})
 
 
 def _described(config: ProjectConfig) -> str:

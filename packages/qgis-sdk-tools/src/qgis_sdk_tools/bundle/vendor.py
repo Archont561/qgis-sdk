@@ -35,6 +35,30 @@ import qgis_sdk
 from qgis_sdk_tools.check.versions import installed_runtime_version
 from qgis_sdk_tools.distributions import Distribution, file_path, normalize
 
+
+def _rewrite_imports_tail1(**values):
+    lines = values["lines"]
+    prefix = values["prefix"]
+    roots = values["roots"]
+    tree = values["tree"]
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            root = _vendored_root(node.module, roots)
+            if node.level or root is None:
+                continue
+            index = node.lineno - 1
+            lines[index] = _from_pattern(root).sub(
+                rf"\g<1>{prefix}.{root}", lines[index], count=1
+            )
+        elif isinstance(node, ast.Import):
+            moved = [alias for alias in node.names if _vendored_root(alias.name, roots)]
+            if not moved:
+                continue
+            index = node.lineno - 1
+            lines[index] = _rewrite_import_line(lines[index], node, roots, prefix)
+    return "".join(lines)
+
+
 RUNTIME_PACKAGE: Final = "qgis_sdk"
 #: Where a vendored distribution's licence file lands, beside the copies.
 LICENCES_DIRECTORY: Final = "LICENSES"
@@ -92,22 +116,7 @@ def rewrite_imports(
     """
     tree = ast.parse(source)
     lines = source.splitlines(keepends=True)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            root = _vendored_root(node.module, roots)
-            if node.level or root is None:
-                continue
-            index = node.lineno - 1
-            lines[index] = _from_pattern(root).sub(
-                rf"\g<1>{prefix}.{root}", lines[index], count=1
-            )
-        elif isinstance(node, ast.Import):
-            moved = [alias for alias in node.names if _vendored_root(alias.name, roots)]
-            if not moved:
-                continue
-            index = node.lineno - 1
-            lines[index] = _rewrite_import_line(lines[index], node, roots, prefix)
-    return "".join(lines)
+    return _rewrite_imports_tail1(**{**globals(), **locals()})
 
 
 def _rewrite_import_line(

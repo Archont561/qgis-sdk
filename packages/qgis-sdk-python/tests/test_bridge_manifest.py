@@ -25,6 +25,27 @@ from qgis_sdk.models import FileInput, FileRef
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
 
+def _test_a_pushed_event_tail1(**values):
+    dispatcher = values["dispatcher"]
+    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
+    reply = dispatcher.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "kind": "subscribe",
+            "call_id": "s1",
+            "operation": "demo.push",
+            "payload": {},
+        },
+    )
+    subscription_id = reply["value"]["subscription_id"]
+
+    from qgis_sdk.bridge import StreamEventType
+
+    assert dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.PROGRESS)
+    _a_pushed_event_is_phase1(StreamEventType, binding, dispatcher, subscription_id)
+
+
 def _a_nested_object_is_facts1(binding, dispatcher):
     reply = dispatcher.dispatch(
         binding, _call("demo.nested", {"options": {"rows": [1, "two"]}})
@@ -714,23 +735,7 @@ def test_a_pushed_event_is_held_to_the_declaration_too() -> None:
         ),
         lambda payload: None,
     )
-    binding = dispatcher.bind(view_id="view-1", origin=ORIGIN)
-    reply = dispatcher.dispatch(
-        binding,
-        {
-            "protocol": BRIDGE_PROTOCOL_VERSION,
-            "kind": "subscribe",
-            "call_id": "s1",
-            "operation": "demo.push",
-            "payload": {},
-        },
-    )
-    subscription_id = reply["value"]["subscription_id"]
-
-    from qgis_sdk.bridge import StreamEventType
-
-    assert dispatcher.emit(subscription_id, {"done": 1}, kind=StreamEventType.PROGRESS)
-    _a_pushed_event_is_phase1(StreamEventType, binding, dispatcher, subscription_id)
+    _test_a_pushed_event_tail1(**{**globals(), **locals()})
 
 
 def test_an_operation_cannot_both_answer_and_stream() -> None:

@@ -64,31 +64,7 @@ _LOCAL_SOURCE_DRIVERS = frozenset({"GeoJSON", "GPKG", "ESRI Shapefile"})
 __all__ = ["NativeLayers"]
 
 
-class NativeLayers:
-    """Open local vector datasets through QGIS's own providers.
-
-    Ownership: every layer this runtime opens is released when the owner scope
-    closes, and every operation is refused afterwards rather than returning a
-    stale reference (decision-20).
-    """
-
-    def __init__(
-        self, scope: ResourceScope, *, rasters: NativeRasters | None = None
-    ) -> None:
-        self._scope = scope
-        self._layers: dict[str, QgsVectorLayer] = {}
-        #: The layers of the five other kinds this adapter opened (TASK-91), each
-        #: with the description its kind answers, keyed by layer id. The PyQGIS
-        #: handle is kept only so the scope can drop it with everything else.
-        self._native_others: dict[str, QgsMapLayer] = {}
-        self._others: dict[str, LayerInfo] = {}
-        self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
-        #: The sibling raster adapter, when the host built one: ``list_layers``
-        #: answers both kinds and a raster id reaching a vector-only method is
-        #: refused by name rather than reported as missing.
-        self._rasters = rasters
-        scope.on_close(self._release)
-
+class _NativeLayersMixin1:
     def open_vector(self, source: Path) -> VectorLayerInfo:
         """Open a local dataset with OGR and describe the resulting layer."""
         self._scope.ensure_open()
@@ -252,6 +228,8 @@ class NativeLayers:
         self._native_others[layer.id()] = layer
         self._others[layer.id()] = _describe_other(layer)
 
+
+class _NativeLayersMixin2:
     def _require(self, layer_id: str) -> QgsVectorLayer:
         try:
             return self._layers[layer_id]
@@ -279,6 +257,32 @@ class NativeLayers:
         self._native_others.clear()
         self._others.clear()
         self._export_sources.clear()
+
+
+class NativeLayers(_NativeLayersMixin1, _NativeLayersMixin2):
+    """Open local vector datasets through QGIS's own providers.
+
+    Ownership: every layer this runtime opens is released when the owner scope
+    closes, and every operation is refused afterwards rather than returning a
+    stale reference (decision-20).
+    """
+
+    def __init__(
+        self, scope: ResourceScope, *, rasters: NativeRasters | None = None
+    ) -> None:
+        self._scope = scope
+        self._layers: dict[str, QgsVectorLayer] = {}
+        #: The layers of the five other kinds this adapter opened (TASK-91), each
+        #: with the description its kind answers, keyed by layer id. The PyQGIS
+        #: handle is kept only so the scope can drop it with everything else.
+        self._native_others: dict[str, QgsMapLayer] = {}
+        self._others: dict[str, LayerInfo] = {}
+        self._export_sources: dict[str, export_policy.SourceIdentity | None] = {}
+        #: The sibling raster adapter, when the host built one: ``list_layers``
+        #: answers both kinds and a raster id reaching a vector-only method is
+        #: refused by name rather than reported as missing.
+        self._rasters = rasters
+        scope.on_close(self._release)
 
 
 def _is_local_path(path: object) -> bool:

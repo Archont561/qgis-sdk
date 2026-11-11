@@ -314,42 +314,7 @@ class _After:
         return f"<jobs after {ids}>"
 
 
-class JobService:
-    """``ctx.jobs``: binds job functions to an owner and delivers their outcomes.
-
-    One *root* service exists per plugin runtime; it owns the step scheduler
-    over the plugin scope. :meth:`scoped` derives a view-owned service over a
-    child scope that shares the same scheduler, which is how view ownership
-    works: a view's service closes with the view, the plugin's scheduler does
-    not. ``parent`` on a derived service is the explicit route to
-    plugin-lifetime work from a view.
-
-    ``gui_thread`` answers "is the calling thread the GUI thread?" for
-    :meth:`JobHandle.get`; the default says yes for the interpreter's main
-    thread, which is where QGIS runs its GUI. ``workers`` is required to submit
-    at all: since 0.9.0 a job body runs in its entirety on a worker
-    (decision-65), so a service without one refuses every submission rather
-    than running author code here. The ``WorkerContext`` a body receives is
-    built per attempt with progress and cancellation only; ``network``,
-    ``algorithms`` and ``project`` stay on this side of the seam.
-    """
-
-    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
-        values = _InitValues1(**options)
-        scheduler = _init_setup2(values.max_steps_per_job, scope)
-        _init_facts212345678(
-            algorithms=values.algorithms,
-            gui_thread=values.gui_thread,
-            network=values.network,
-            on_fault=values.on_fault,
-            project=values.project,
-            registry=values.registry,
-            scheduler=scheduler,
-            scope=scope,
-            self=self,
-            workers=values.workers,
-        )
-
+class _JobServiceMixin1:
     def _bind(
         self,
         scope: ResourceScope,
@@ -479,27 +444,6 @@ class JobService:
             return owner.bind(function)
         return BoundJob(describe_job(function), function, self)
 
-    def __getattr__(self, name: str) -> BoundJob:
-        """Reach a declared job by name: ``service.add`` is what ``ctx.jobs.add`` is.
-
-        Only the names the plugin declared exist here; anything else is an
-        ``AttributeError`` naming what it does have, so a typo never looks
-        like a job that failed to start.
-        """
-        if name.startswith("_"):
-            raise AttributeError(name)
-        runtime = self.__dict__.get("_runtime")
-        if runtime is None:
-            raise AttributeError(name)
-        # A declared name is a dictionary read: the description was validated
-        # when the plugin started, so submission neither imports nor inspects
-        # anything (decision-65 §2).
-        description = runtime.registry.description(name)
-        owner = self._owner()
-        if owner is not self:
-            return owner.__getattr__(name)
-        return BoundJob(description, runtime.registry.function(name), self)
-
     def _owner(self) -> JobService:
         """The service a submission belongs to, given who is invoking it."""
         if self._pinned or self._parent is not None:
@@ -513,6 +457,8 @@ class JobService:
             return self
         return self.scoped(scope)
 
+
+class _JobServiceMixin2:
     def delay(self, function: Callable[..., Any], /, **arguments: Any) -> JobHandle:
         """``bind(function).delay(**arguments)`` in one call."""
         return self.bind(function).delay(**arguments)
@@ -643,6 +589,64 @@ class JobService:
         for attempt in tuple(self._runtime.attempts.values()):
             if attempt.owner is self:
                 attempt.cancelled_by_request()
+
+
+class JobService(_JobServiceMixin1, _JobServiceMixin2):
+    """``ctx.jobs``: binds job functions to an owner and delivers their outcomes.
+
+    One *root* service exists per plugin runtime; it owns the step scheduler
+    over the plugin scope. :meth:`scoped` derives a view-owned service over a
+    child scope that shares the same scheduler, which is how view ownership
+    works: a view's service closes with the view, the plugin's scheduler does
+    not. ``parent`` on a derived service is the explicit route to
+    plugin-lifetime work from a view.
+
+    ``gui_thread`` answers "is the calling thread the GUI thread?" for
+    :meth:`JobHandle.get`; the default says yes for the interpreter's main
+    thread, which is where QGIS runs its GUI. ``workers`` is required to submit
+    at all: since 0.9.0 a job body runs in its entirety on a worker
+    (decision-65), so a service without one refuses every submission rather
+    than running author code here. The ``WorkerContext`` a body receives is
+    built per attempt with progress and cancellation only; ``network``,
+    ``algorithms`` and ``project`` stay on this side of the seam.
+    """
+
+    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        scheduler = _init_setup2(values.max_steps_per_job, scope)
+        _init_facts212345678(
+            algorithms=values.algorithms,
+            gui_thread=values.gui_thread,
+            network=values.network,
+            on_fault=values.on_fault,
+            project=values.project,
+            registry=values.registry,
+            scheduler=scheduler,
+            scope=scope,
+            self=self,
+            workers=values.workers,
+        )
+
+    def __getattr__(self, name: str) -> BoundJob:
+        """Reach a declared job by name: ``service.add`` is what ``ctx.jobs.add`` is.
+
+        Only the names the plugin declared exist here; anything else is an
+        ``AttributeError`` naming what it does have, so a typo never looks
+        like a job that failed to start.
+        """
+        if name.startswith("_"):
+            raise AttributeError(name)
+        runtime = self.__dict__.get("_runtime")
+        if runtime is None:
+            raise AttributeError(name)
+        # A declared name is a dictionary read: the description was validated
+        # when the plugin started, so submission neither imports nor inspects
+        # anything (decision-65 §2).
+        description = runtime.registry.description(name)
+        owner = self._owner()
+        if owner is not self:
+            return owner.__getattr__(name)
+        return BoundJob(description, runtime.registry.function(name), self)
 
 
 def _belongs_to(scope: ResourceScope, ancestor: ResourceScope) -> bool:

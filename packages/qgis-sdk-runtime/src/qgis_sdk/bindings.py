@@ -54,6 +54,27 @@ from qgis_sdk.ui.surfaces import (
 )
 
 
+def _describe_lowered_bindings_tail1(**values):
+    actions = values["actions"]
+    cls = values["cls"]
+    description = values["description"]
+    surfaces: list[BoundSurface] = []
+    seen: dict[str, str] = {}
+    for entry in _listed_surfaces(cls):
+        surface = describe_surface(entry)
+        if surface.id in seen:
+            raise QgisSdkDeclarationError(
+                f"{cls.__name__}.surfaces: {entry.__name__} and {seen[surface.id]} "
+                f"share the id {surface.id!r}"
+            )
+        seen[surface.id] = entry.__name__
+        surfaces.append(
+            BoundSurface(surface, entry, bindings_of(entry), order=_order_of(entry))
+        )
+    actions.sort(key=lambda bound: bound.order)
+    return BindingsDescription(description.id, tuple(actions), tuple(surfaces))
+
+
 def _bind_facts1(binding, target):
     attach_describe(target)
     existing = bindings_of(target)
@@ -305,21 +326,7 @@ def _describe_lowered_bindings(cls: type) -> BindingsDescription:
                 order=_order_of(function),
             )
         )
-    surfaces: list[BoundSurface] = []
-    seen: dict[str, str] = {}
-    for entry in _listed_surfaces(cls):
-        surface = describe_surface(entry)
-        if surface.id in seen:
-            raise QgisSdkDeclarationError(
-                f"{cls.__name__}.surfaces: {entry.__name__} and {seen[surface.id]} "
-                f"share the id {surface.id!r}"
-            )
-        seen[surface.id] = entry.__name__
-        surfaces.append(
-            BoundSurface(surface, entry, bindings_of(entry), order=_order_of(entry))
-        )
-    actions.sort(key=lambda bound: bound.order)
-    return BindingsDescription(description.id, tuple(actions), tuple(surfaces))
+    return _describe_lowered_bindings_tail1(**{**globals(), **locals()})
 
 
 def _listed_surfaces(cls: type) -> Sequence[type]:

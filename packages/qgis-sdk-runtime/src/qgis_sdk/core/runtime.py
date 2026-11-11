@@ -45,27 +45,7 @@ class PluginRuntimeState(StrEnum):
     FAILED = "failed"
 
 
-class PluginRuntime:
-    """Own one :class:`QgisSdkPlugin` and its context for a lifecycle.
-
-    The runtime creates a private lowered instance for each application runtime,
-    validates declarations and providers at construction, and injects the given
-    context into registered functions. :meth:`start` registers providers when
-    Processing is available; :meth:`unload` releases them and owned resources.
-    A failed start rolls back its registrations.
-    """
-
-    def __init__(
-        self,
-        app: QgisSdkPlugin,
-        context: PluginContext,
-    ) -> None:
-        from qgis_sdk.core._application import QgisSdkPlugin
-
-        if not isinstance(app, QgisSdkPlugin):
-            raise QgisSdkDeclarationError("PluginRuntime requires a QgisSdkPlugin")
-        self._initialize(app._plugin_class(), context)
-
+class _PluginRuntimeMixin1:
     @classmethod
     def _from_plugin_class(
         cls,
@@ -191,6 +171,8 @@ class PluginRuntime:
             for described in provider.describe().algorithms
         )
 
+
+class _PluginRuntimeMixin2:
     def start(self) -> object:
         """Construct and bind the plugin once, or raise a typed lifecycle error."""
         if self._state is not PluginRuntimeState.NEW:
@@ -375,6 +357,8 @@ class PluginRuntime:
             bound[description.id] = handler
         return bound
 
+
+class _PluginRuntimeMixin3:
     def _discard_after_failed_start(self) -> BaseException | None:
         self._state = PluginRuntimeState.FAILED
         self._instance = None
@@ -387,6 +371,28 @@ class PluginRuntime:
         except BaseException as cleanup_error:  # noqa: BLE001 - preserve cleanup evidence
             return cleanup_error
         return None
+
+
+class PluginRuntime(_PluginRuntimeMixin1, _PluginRuntimeMixin2, _PluginRuntimeMixin3):
+    """Own one :class:`QgisSdkPlugin` and its context for a lifecycle.
+
+    The runtime creates a private lowered instance for each application runtime,
+    validates declarations and providers at construction, and injects the given
+    context into registered functions. :meth:`start` registers providers when
+    Processing is available; :meth:`unload` releases them and owned resources.
+    A failed start rolls back its registrations.
+    """
+
+    def __init__(
+        self,
+        app: QgisSdkPlugin,
+        context: PluginContext,
+    ) -> None:
+        from qgis_sdk.core._application import QgisSdkPlugin
+
+        if not isinstance(app, QgisSdkPlugin):
+            raise QgisSdkDeclarationError("PluginRuntime requires a QgisSdkPlugin")
+        self._initialize(app._plugin_class(), context)
 
 
 def _declared_providers(plugin_class: type) -> tuple[Provider, ...]:

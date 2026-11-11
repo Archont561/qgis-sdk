@@ -106,36 +106,7 @@ class DispatchSetup:
     theme: ThemeProvider | None = None
 
 
-class Dispatcher:
-    """Route allowlisted operations for one host, per view generation.
-
-    Four roles composed here, one per way a call can be answered - what may be
-    called, who may call it, what is running, the invocation itself - so the
-    order the endpoint decides in is stated once, in
-    :mod:`qgis_sdk.bridge.endpoint`, not in a method that also decides.
-    """
-
-    def __init__(
-        self,
-        *,
-        description: Mapping[str, Any] | None = None,
-        authorize: Authorizer | None = None,
-        ledger: ReleaseLedger | None = None,
-        theme: ThemeProvider | None = None,
-    ) -> None:
-        self._ledger = ledger if ledger is not None else ReleaseLedger()
-        self._registry, self._views, self._streams, self._calls = _assembled(
-            description, authorize, self._ledger, theme
-        )
-        #: Every other kind of call names one method, so adding a kind is a line
-        #: here - never a branch in :meth:`dispatch`.
-        self._kinds: dict[str, Callable[..., dict]] = {
-            "ack": self._streams.acknowledge,
-            "handshake": self._views.reply,
-            "release": self._calls.release,
-            "unsubscribe": self._streams.unsubscribe,
-        }
-
+class _DispatcherMixin1:
     @classmethod
     def from_description(cls, setup: DispatchSetup) -> Dispatcher:
         """Build a dispatcher whose allowlist *is* the plugin description.
@@ -232,6 +203,8 @@ class Dispatcher:
         """Stop waking this view; a wake after this is simply not delivered."""
         self._views.unwatch(binding)
 
+
+class _DispatcherMixin2:
     def dispatch(
         self,
         binding: ViewBinding,
@@ -299,6 +272,37 @@ class Dispatcher:
     def dispose(self, binding: ViewBinding) -> int:
         """Close every subscription and editing session of ``binding``'s view."""
         return self._streams.dispose(binding)
+
+
+class Dispatcher(_DispatcherMixin1, _DispatcherMixin2):
+    """Route allowlisted operations for one host, per view generation.
+
+    Four roles composed here, one per way a call can be answered - what may be
+    called, who may call it, what is running, the invocation itself - so the
+    order the endpoint decides in is stated once, in
+    :mod:`qgis_sdk.bridge.endpoint`, not in a method that also decides.
+    """
+
+    def __init__(
+        self,
+        *,
+        description: Mapping[str, Any] | None = None,
+        authorize: Authorizer | None = None,
+        ledger: ReleaseLedger | None = None,
+        theme: ThemeProvider | None = None,
+    ) -> None:
+        self._ledger = ledger if ledger is not None else ReleaseLedger()
+        self._registry, self._views, self._streams, self._calls = _assembled(
+            description, authorize, self._ledger, theme
+        )
+        #: Every other kind of call names one method, so adding a kind is a line
+        #: here - never a branch in :meth:`dispatch`.
+        self._kinds: dict[str, Callable[..., dict]] = {
+            "ack": self._streams.acknowledge,
+            "handshake": self._views.reply,
+            "release": self._calls.release,
+            "unsubscribe": self._streams.unsubscribe,
+        }
 
 
 def _assembled(

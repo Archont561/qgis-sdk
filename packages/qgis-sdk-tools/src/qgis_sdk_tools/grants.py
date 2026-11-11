@@ -31,6 +31,34 @@ from qgis_sdk.bridge.host import (
 
 from qgis_sdk_tools.project import ProjectConfig
 
+
+def _render_tail1(**values):
+    grant_width = values["grant_width"]
+    lines = values["lines"]
+    operation_width = values["operation_width"]
+    self = values["self"]
+    if not self.page_declared:
+        lines.append("")
+        lines.append("no [tool.qgis-sdk.web] is declared, so no page reaches anything")
+    page_width = max(len("page"), len("granted"), len("none"))
+    console_width = max(len("console"), len("granted"))
+    lines += [
+        "",
+        (
+            f"{'operation':<{operation_width}}  {'grant':<{grant_width}}  "
+            f"{'page':<{page_width}}  {'console':<{console_width}}"
+        ),
+    ]
+    for row in self.rows:
+        page = _mark(row.page, declared=self.page_declared)
+        console = "granted" if row.console else "-"
+        lines.append(
+            f"{row.operation:<{operation_width}}  {row.grant:<{grant_width}}  "
+            f"{page:<{page_width}}  {console:<{console_width}}"
+        )
+    return "\n".join(lines)
+
+
 #: One line per client: what declares its authority, and what vocabulary it names.
 CLIENTS: Final = (
     (
@@ -94,28 +122,7 @@ class GrantsMatrix:
             lines.append(
                 f"{name:<{client_width}}  {declares:<{declares_width}}  {names}"
             )
-        if not self.page_declared:
-            lines.append("")
-            lines.append(
-                "no [tool.qgis-sdk.web] is declared, so no page reaches anything"
-            )
-        page_width = max(len("page"), len("granted"), len("none"))
-        console_width = max(len("console"), len("granted"))
-        lines += [
-            "",
-            (
-                f"{'operation':<{operation_width}}  {'grant':<{grant_width}}  "
-                f"{'page':<{page_width}}  {'console':<{console_width}}"
-            ),
-        ]
-        for row in self.rows:
-            page = _mark(row.page, declared=self.page_declared)
-            console = "granted" if row.console else "-"
-            lines.append(
-                f"{row.operation:<{operation_width}}  {row.grant:<{grant_width}}  "
-                f"{page:<{page_width}}  {console:<{console_width}}"
-            )
-        return "\n".join(lines)
+        return _render_tail1(**{**globals(), **locals()})
 
 
 def _mark(granted: bool, *, declared: bool) -> str:

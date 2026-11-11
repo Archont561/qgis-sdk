@@ -21,6 +21,30 @@ from qgis_sdk.models.files import FILE_REF, FileRef
 from qgis_sdk.models.parameters import ParameterKind, RangeParameter, parameter_kinds
 
 
+def _resolve_kind_tail1(**values):
+    annotation = values["annotation"]
+    base = values["base"]
+    kinds = values["kinds"]
+    markers = values["markers"]
+    path = values["path"]
+    strict = values["strict"]
+    if get_origin(annotation) is Annotated:
+        base, *markers = get_args(annotation)
+    for marker in markers:
+        kind = next((k for k in kinds.values() if k.marker is type(marker)), None)
+        if kind is None:
+            if strict:
+                raise _refuse_kind(path, f"unknown parameter marker {marker!r}")
+            continue
+        if base not in kind.stored:
+            raise _refuse_kind(path, kind.refusal)
+        return kind, marker
+    literal = _literal_kind(base, path)
+    if literal is not None:
+        return literal
+    return _resolve_kind_phase1(base, kinds, path)
+
+
 def _literal_kind(base, path):
     """An enum is a ``Literal[...]`` of strings, with no marker."""
     if get_origin(base) is Literal:
@@ -195,21 +219,7 @@ def resolve_kind(
     """
     kinds = parameter_kinds()
     base, markers = annotation, ()
-    if get_origin(annotation) is Annotated:
-        base, *markers = get_args(annotation)
-    for marker in markers:
-        kind = next((k for k in kinds.values() if k.marker is type(marker)), None)
-        if kind is None:
-            if strict:
-                raise _refuse_kind(path, f"unknown parameter marker {marker!r}")
-            continue
-        if base not in kind.stored:
-            raise _refuse_kind(path, kind.refusal)
-        return kind, marker
-    literal = _literal_kind(base, path)
-    if literal is not None:
-        return literal
-    return _resolve_kind_phase1(base, kinds, path)
+    return _resolve_kind_tail1(**{**globals(), **locals()})
 
 
 def _refuse_kind(path: str, detail: str) -> QgisSdkDeclarationError:

@@ -74,7 +74,6 @@ def test_explicit_group_inclusion_is_isolated_and_rejects_duplicates_atomically(
     assert list(two.describe().actions) == []
     two.include(group)
     assert [item.id for item in two.describe().actions] == ["alpha"]
-
     conflicting = QgisSdkPlugin()
 
     @conflicting.action(id="beta", title="Beta")

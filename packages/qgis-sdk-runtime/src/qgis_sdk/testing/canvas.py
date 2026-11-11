@@ -73,29 +73,7 @@ class _ExtentSubscription:
     live: bool = True
 
 
-class FakeCanvas:
-    """A ``Canvas`` over a rectangle the test controls.
-
-    ``layer_extents`` declares what ``zoom_to(ZoomTarget.layer(...))`` lands on,
-    keyed by the layer id the layers service also knows; ``themes`` seeds the
-    project's theme list. A selection is declared with :meth:`select`, because
-    "zoom to selection" with nothing selected is a refusal the contract has to
-    produce on both backends.
-    """
-
-    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
-        values = _InitValues1(**options)
-        self._scope = scope
-        self._extent = values.extent
-        self._layer_extents = dict(values.layer_extents or {})
-        self._selections: dict[str, CanvasExtent] = {}
-        self._theme_names = list(values.themes)
-        self._active_theme = values.active_theme
-        self._captures: list[_CaptureSession] = []
-        self._subscriptions: list[_ExtentSubscription] = []
-        self._drawn: list[Geometry] = []
-        self.refreshes = 0
-
+class _FakeCanvasMixin1:
     # -- reading ------------------------------------------------------------
 
     def extent(self) -> CanvasExtent:
@@ -241,6 +219,8 @@ class FakeCanvas:
         if name not in self._theme_names:
             self._theme_names.append(name)
 
+
+class _FakeCanvasMixin2:
     def clear_selection(self, layer_id: str) -> None:
         """Declare that nothing is selected in one layer."""
         self._scope.ensure_open()
@@ -288,6 +268,30 @@ class FakeCanvas:
         for subscription in list(self._subscriptions):
             if subscription.live:
                 subscription.on_extent(extent)
+
+
+class FakeCanvas(_FakeCanvasMixin1, _FakeCanvasMixin2):
+    """A ``Canvas`` over a rectangle the test controls.
+
+    ``layer_extents`` declares what ``zoom_to(ZoomTarget.layer(...))`` lands on,
+    keyed by the layer id the layers service also knows; ``themes`` seeds the
+    project's theme list. A selection is declared with :meth:`select`, because
+    "zoom to selection" with nothing selected is a refusal the contract has to
+    produce on both backends.
+    """
+
+    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        self._scope = scope
+        self._extent = values.extent
+        self._layer_extents = dict(values.layer_extents or {})
+        self._selections: dict[str, CanvasExtent] = {}
+        self._theme_names = list(values.themes)
+        self._active_theme = values.active_theme
+        self._captures: list[_CaptureSession] = []
+        self._subscriptions: list[_ExtentSubscription] = []
+        self._drawn: list[Geometry] = []
+        self.refreshes = 0
 
 
 def _margin(extent: CanvasExtent, margin: float) -> CanvasExtent:

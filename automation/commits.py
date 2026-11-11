@@ -19,11 +19,14 @@ import sys
 from pathlib import Path
 
 
+# A real PR base or non-zero before SHA: review only new commits.
+# New-branch pushes have an all-zero before SHA; manual runs have none.
+# Fall back to the merge-base with the default branch.
+# Nothing to compare against: check only this commit.
 def main() -> int:
     base_sha = os.environ.get("BASE_SHA", "").strip()
     default_branch = os.environ.get("DEFAULT_BRANCH", "main").strip()
     github_sha = os.environ.get("GITHUB_SHA", "").strip()
-
     env_path = os.environ.get("GITHUB_ENV", "")
 
     def emit(name: str, value: str) -> None:
@@ -33,13 +36,9 @@ def main() -> int:
                 handle.write(f"{name}={value}\n")
 
     if base_sha and base_sha.lstrip("0") != "":
-        # A real PR base or non-zero before SHA: review only new commits.
         print(f"::notice::convco range: {base_sha}..{github_sha}")
         emit("CONVCO_REV", f"{base_sha}..{github_sha}")
         return 0
-
-    # New-branch pushes have an all-zero before SHA; manual runs have none.
-    # Fall back to the merge-base with the default branch.
     try:
         base = subprocess.check_output(
             ["git", "merge-base", github_sha, f"origin/{default_branch}"],
@@ -48,13 +47,10 @@ def main() -> int:
         ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         base = ""
-
     if base == github_sha or not base:
-        # Nothing to compare against: check only this commit.
         print("::notice::convco: single-commit check")
         emit("CONVCO_MAX_COUNT", "1")
         return 0
-
     print(f"::notice::convco range: {base}..{github_sha}")
     emit("CONVCO_REV", f"{base}..{github_sha}")
     return 0

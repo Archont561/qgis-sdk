@@ -140,37 +140,7 @@ class _ActionRegistry:
         self._actions = combined
 
 
-class QgisSdkPlugin(_ActionRegistry):
-    """Collect functions explicitly and lower them to an SDK plugin class."""
-
-    def __init__(self, *, id: str | None = None, title: str | None = None) -> None:
-        try:
-            module = sys._getframe(1).f_globals.get("__name__")
-        except (AttributeError, ValueError):  # pragma: no cover - no frame to read
-            module = None
-        if id is None:
-            if not isinstance(module, str) or module == "__main__":
-                raise QgisSdkDeclarationError(
-                    "cannot derive plugin id from the declaring module; pass id= explicitly"
-                )
-            id = module
-        if title is None:
-            if not isinstance(id, str):
-                raise QgisSdkDeclarationError("id and title must be strings")
-            parts = id.split(".")
-            name = parts[-2] if len(parts) > 1 and parts[-1] == "plugin" else parts[-1]
-            title = derive_title(name.replace("-", "_"))
-        _validate_metadata(id, title)
-        super().__init__()
-        self.id = id
-        self.title = title
-        #: The module that declared this application, kept because a host needs
-        #: it for the paths a declaration names (a toolbar icon lives beside
-        #: the plugin, not beside the runtime) - `qgis_sdk.app.run` fills it.
-        self.module = module if isinstance(module, str) else None
-        self._surfaces: list[type[Surface]] = []
-        _init_facts1(self)
-
+class _QgisSdkPluginMixin1:
     @property
     def surfaces(self) -> tuple[type[Surface], ...]:
         """The surfaces owned by this application."""
@@ -348,6 +318,8 @@ class QgisSdkPlugin(_ActionRegistry):
     def describe(self) -> PluginDescription:
         return _describe_lowered_plugin(self._plugin_class())
 
+
+class _QgisSdkPluginMixin2:
     def _plugin_class(self) -> type:
         members: dict[str, Any] = {
             "surfaces": tuple(self._surfaces),
@@ -429,6 +401,38 @@ class QgisSdkPlugin(_ActionRegistry):
         return plugin(id=self.id, title=self.title)(
             type("_ApplicationPlugin", (), members)
         )
+
+
+class QgisSdkPlugin(_QgisSdkPluginMixin1, _QgisSdkPluginMixin2, _ActionRegistry):
+    """Collect functions explicitly and lower them to an SDK plugin class."""
+
+    def __init__(self, *, id: str | None = None, title: str | None = None) -> None:
+        try:
+            module = sys._getframe(1).f_globals.get("__name__")
+        except (AttributeError, ValueError):  # pragma: no cover - no frame to read
+            module = None
+        if id is None:
+            if not isinstance(module, str) or module == "__main__":
+                raise QgisSdkDeclarationError(
+                    "cannot derive plugin id from the declaring module; pass id= explicitly"
+                )
+            id = module
+        if title is None:
+            if not isinstance(id, str):
+                raise QgisSdkDeclarationError("id and title must be strings")
+            parts = id.split(".")
+            name = parts[-2] if len(parts) > 1 and parts[-1] == "plugin" else parts[-1]
+            title = derive_title(name.replace("-", "_"))
+        _validate_metadata(id, title)
+        super().__init__()
+        self.id = id
+        self.title = title
+        #: The module that declared this application, kept because a host needs
+        #: it for the paths a declaration names (a toolbar icon lives beside
+        #: the plugin, not beside the runtime) - `qgis_sdk.app.run` fills it.
+        self.module = module if isinstance(module, str) else None
+        self._surfaces: list[type[Surface]] = []
+        _init_facts1(self)
 
 
 def _describe_function(function):

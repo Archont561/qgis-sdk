@@ -17,6 +17,61 @@ import sys
 from pathlib import Path
 
 
+def _reference_example_tail1(**values):
+    runs = values["runs"]
+    status = values["status"]
+    REFERENCE_EXAMPLE_LOGS.mkdir(parents=True, exist_ok=True)
+    for label, run in runs:
+        log = REFERENCE_EXAMPLE_LOGS / f"{label}.log"
+        code = run_logged(list(run), log)
+        if code == 0:
+            continue
+        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+        # The tail is the last few tracebacks, so the summary is what names them.
+        named = failures(text)
+        if named:
+            annotation(
+                f"reference example: {label}: {len(named)} failed", "\n".join(named)
+            )
+        annotation(
+            f"reference example: {label}: pytest",
+            "\n".join(text.splitlines()[-80:]),
+        )
+        status = status or code
+    return status
+
+
+def _main_tail1(**values):
+    argv = values["argv"]
+    commands = values["commands"]
+    parser = values["parser"]
+    coverage = commands.add_parser("annotate-coverage")
+    coverage.add_argument("log", type=Path)
+    step_log = commands.add_parser("annotate-log")
+    step_log.add_argument("log", type=Path)
+    step_log.add_argument("--title", default="failed step")
+    step_log.add_argument("--tail", type=int, default=25)
+    step_log.add_argument("--skip-missing", action="store_true")
+    bun = commands.add_parser("report-bun")
+    bun.add_argument("log", type=Path)
+    bun.add_argument("--title", required=True)
+    reference = commands.add_parser("reference-example")
+    reference.add_argument("command", nargs=argparse.REMAINDER)
+    commands.add_parser("report-steps")
+    commands.add_parser("bun-ui")
+    args = parser.parse_args(argv)
+    if args.action in STREAMED_ACTIONS:
+        return _streamed(args, parser)
+    if args.action == "check-generated":
+        return check_generated()
+    if args.action == "check-gherkin":
+        return check_gherkin(args.gherlint, args.root)
+    if args.action == "bun-ui":
+        return bun_ui()
+    _report(args)
+    return 0
+
+
 def _check_generated_facts1():
     reference = [
         "pixi",
@@ -257,25 +312,7 @@ def reference_example(command: list[str] | None = None) -> int:
         )
     )
     status = 0
-    REFERENCE_EXAMPLE_LOGS.mkdir(parents=True, exist_ok=True)
-    for label, run in runs:
-        log = REFERENCE_EXAMPLE_LOGS / f"{label}.log"
-        code = run_logged(list(run), log)
-        if code == 0:
-            continue
-        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
-        # The tail is the last few tracebacks, so the summary is what names them.
-        named = failures(text)
-        if named:
-            annotation(
-                f"reference example: {label}: {len(named)} failed", "\n".join(named)
-            )
-        annotation(
-            f"reference example: {label}: pytest",
-            "\n".join(text.splitlines()[-80:]),
-        )
-        status = status or code
-    return status
+    return _reference_example_tail1(**{**globals(), **locals()})
 
 
 def lts_command(module: str) -> list[str]:
@@ -656,31 +693,7 @@ def main(argv: list[str] | None = None) -> int:
         default=ROOT,
         help="the checkout to lint; defaults to this script's repository",
     )
-    coverage = commands.add_parser("annotate-coverage")
-    coverage.add_argument("log", type=Path)
-    step_log = commands.add_parser("annotate-log")
-    step_log.add_argument("log", type=Path)
-    step_log.add_argument("--title", default="failed step")
-    step_log.add_argument("--tail", type=int, default=25)
-    step_log.add_argument("--skip-missing", action="store_true")
-    bun = commands.add_parser("report-bun")
-    bun.add_argument("log", type=Path)
-    bun.add_argument("--title", required=True)
-    reference = commands.add_parser("reference-example")
-    reference.add_argument("command", nargs=argparse.REMAINDER)
-    commands.add_parser("report-steps")
-    commands.add_parser("bun-ui")
-    args = parser.parse_args(argv)
-    if args.action in STREAMED_ACTIONS:
-        return _streamed(args, parser)
-    if args.action == "check-generated":
-        return check_generated()
-    if args.action == "check-gherkin":
-        return check_gherkin(args.gherlint, args.root)
-    if args.action == "bun-ui":
-        return bun_ui()
-    _report(args)
-    return 0
+    return _main_tail1(**{**globals(), **locals()})
 
 
 def _streamed(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:

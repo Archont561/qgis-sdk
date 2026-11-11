@@ -60,32 +60,7 @@ class _Feedback(Component):
             listener(value)
 
 
-class JobProgress(_Feedback):
-    """A progress bar, a message and a Cancel button over one job handle.
-
-    ``bind(handle)`` follows the handle's progress and outcome through its
-    own subscriptions, owned by the surface's scope once attached, so a
-    closed window hears nothing more. ``status`` is one of ``idle``,
-    ``queued``, ``running``, ``succeeded``, ``failed``, ``cancelled``;
-    ``fraction`` the latest report; ``message`` the failure text. ``cancel()``
-    is what the button does: asks the bound job to stop.
-    """
-
-    def __init__(
-        self,
-        name: str | None = None,
-        *,
-        label: str | None = None,
-        cancellable: bool = True,
-    ) -> None:
-        super().__init__(name, label=label)
-        self.cancellable = cancellable
-        self._handle: Any | None = None
-        self._subscriptions: list[Any] = []
-        self._status: ProgressStatus = "idle"
-        self._fraction: float | None = None
-        self._message = ""
-
+class _JobProgressMixin1:
     @property
     def handle(self) -> Any | None:
         """The job handle currently followed, if any."""
@@ -138,20 +113,6 @@ class JobProgress(_Feedback):
             return False
         return bool(self._handle.cancel())
 
-    def dispose(self) -> None:
-        self._unbind()
-        super().dispose()
-
-    def snapshot(self) -> dict[str, Any]:
-        node = super().snapshot()
-        node["status"] = self._status
-        node["fraction"] = self._fraction
-        node["message"] = self._message
-        node["cancellable"] = self.cancellable
-        if self._handle is not None:
-            node["job"] = self._handle.id
-        return node
-
     def _state(self) -> object:
         return (self._status, self._fraction, self._message)
 
@@ -177,6 +138,8 @@ class JobProgress(_Feedback):
     def _failed(self, error: BaseException) -> None:
         self._set("failed", self._fraction, str(error) or type(error).__name__)
 
+
+class _JobProgressMixin2:
     def _cancelled(self) -> None:
         self._set("cancelled", self._fraction, "")
 
@@ -186,6 +149,47 @@ class JobProgress(_Feedback):
         self._message = message
         self._sync()
         self._notify(status)
+
+
+class JobProgress(_JobProgressMixin1, _JobProgressMixin2, _Feedback):
+    """A progress bar, a message and a Cancel button over one job handle.
+
+    ``bind(handle)`` follows the handle's progress and outcome through its
+    own subscriptions, owned by the surface's scope once attached, so a
+    closed window hears nothing more. ``status`` is one of ``idle``,
+    ``queued``, ``running``, ``succeeded``, ``failed``, ``cancelled``;
+    ``fraction`` the latest report; ``message`` the failure text. ``cancel()``
+    is what the button does: asks the bound job to stop.
+    """
+
+    def __init__(
+        self,
+        name: str | None = None,
+        *,
+        label: str | None = None,
+        cancellable: bool = True,
+    ) -> None:
+        super().__init__(name, label=label)
+        self.cancellable = cancellable
+        self._handle: Any | None = None
+        self._subscriptions: list[Any] = []
+        self._status: ProgressStatus = "idle"
+        self._fraction: float | None = None
+        self._message = ""
+
+    def dispose(self) -> None:
+        self._unbind()
+        super().dispose()
+
+    def snapshot(self) -> dict[str, Any]:
+        node = super().snapshot()
+        node["status"] = self._status
+        node["fraction"] = self._fraction
+        node["message"] = self._message
+        node["cancellable"] = self.cancellable
+        if self._handle is not None:
+            node["job"] = self._handle.id
+        return node
 
 
 class LogView(_Feedback):

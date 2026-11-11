@@ -81,22 +81,7 @@ class FakeLayer:
     revision: int = 0
 
 
-class FakeFeatures:
-    """The ``Features`` protocol over :class:`FakeLayer` values.
-
-    Layers are declared by the test with :meth:`declare`, which is also how a
-    non-editable layer (a raster source, a read-only file) is modelled: editing
-    it raises by name, exactly as the native adapter does.
-    """
-
-    def __init__(self, scope: ResourceScope) -> None:
-        self._scope = scope
-        self._layers: dict[str, FakeLayer] = {}
-        self._sessions: dict[str, FakeEditingSession] = {}
-        self._next_id: dict[str, int] = {}
-        self._next_session = 0
-        scope.on_close(self._release)
-
+class _FakeFeaturesMixin1:
     # -- declaring data -----------------------------------------------------
 
     def declare(self, layer_id: str, **options: Unpack[_DeclareOptions1]) -> FakeLayer:
@@ -288,6 +273,8 @@ class FakeFeatures:
             return parsed.matches(layer.rows[feature_id])
         return True
 
+
+class _FakeFeaturesMixin2:
     def _feature(
         self, layer: FakeLayer, feature_id: int, encoding: str, with_geometry: bool
     ) -> Feature:
@@ -340,6 +327,23 @@ class FakeFeatures:
             session.close()
         self._sessions.clear()
         self._layers.clear()
+
+
+class FakeFeatures(_FakeFeaturesMixin1, _FakeFeaturesMixin2):
+    """The ``Features`` protocol over :class:`FakeLayer` values.
+
+    Layers are declared by the test with :meth:`declare`, which is also how a
+    non-editable layer (a raster source, a read-only file) is modelled: editing
+    it raises by name, exactly as the native adapter does.
+    """
+
+    def __init__(self, scope: ResourceScope) -> None:
+        self._scope = scope
+        self._layers: dict[str, FakeLayer] = {}
+        self._sessions: dict[str, FakeEditingSession] = {}
+        self._next_id: dict[str, int] = {}
+        self._next_session = 0
+        scope.on_close(self._release)
 
 
 @dataclass
