@@ -68,313 +68,156 @@ from qgis_sdk_tools.check.diagnostics import Diagnostic
 from qgis_sdk_tools.manifest import read_pyproject, table
 
 
-def _load_project_facts1123456789101112131415(**values):
-    return _load_project_facts11234567891011121314(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
+@dataclass(slots=True)
+class _ProjectFacts:
+    """The fields one ``pyproject.toml`` contributes to a :class:`ProjectConfig`.
+
+    Validation fills this record in place and appends diagnostics as it goes,
+    so the configuration is assembled from one value rather than a long
+    argument list (decision-81).
+    """
+
+    root: Path
+    spec: str
+    tool: Mapping[str, object]
+    findings: list[Diagnostic] = field(default_factory=list)
+    version: str = ""
+    description: str = ""
+    author: str = ""
+    email: str = ""
+    minimum: str = ""
+    experimental: bool = True
+    metadata: dict[str, str] = field(default_factory=dict)
+    hosts: tuple[str, ...] = ()
+
+
+def _plugin_spec_finding(value: object) -> Diagnostic:
+    """The one diagnostic for a missing or malformed ``plugin`` entry."""
+    if value is None:
+        return _missing_plugin("[tool.qgis-sdk] plugin is not set")
+    return _config(
+        f"[tool.qgis-sdk] plugin must be 'pkg.module:app', got {value!r}",
+        'plugin = "field_tools.plugin:app"',
     )
 
 
-def _load_project_facts11234567891011121314(**values):
-    return _load_project_facts112345678910111213(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
+def _read_project_fields(facts: _ProjectFacts, project: Mapping[str, object]) -> None:
+    """Read the ``[project]`` values metadata.txt needs, in that order."""
+    facts.version = _required_text(project, "version", facts.findings, "version")
+    facts.description = _required_text(
+        project, "description", facts.findings, "description"
     )
+    facts.author, facts.email = _first_author(project, facts.findings)
 
 
-def _load_project_facts112345678910111213(**values):
-    return _load_project_facts1123456789101112(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
+def _minimum_version(tool: Mapping[str, object], findings: list[Diagnostic]) -> str:
+    minimum = tool.get("qgis-minimum-version")
+    if minimum is None:
+        findings.append(
+            _missing_key("[tool.qgis-sdk] qgis-minimum-version", "qgisMinimumVersion")
+        )
+        return ""
+    if not isinstance(minimum, str) or not minimum.strip():
+        findings.append(
+            _config(
+                "[tool.qgis-sdk] qgis-minimum-version must be a version string",
+                'qgis-minimum-version = "4.0"',
+            )
+        )
+        return ""
+    return minimum
 
 
-def _load_project_facts1123456789101112(**values):
-    return _load_project_facts11234567891011(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
+def _experimental_flag(tool: Mapping[str, object], findings: list[Diagnostic]) -> bool:
+    experimental = tool.get("experimental", True)
+    if not isinstance(experimental, bool):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk] experimental must be true or false",
+                "experimental = true",
+            )
+        )
+        return True
+    return experimental
 
 
-def _load_project_facts11234567891011(**values):
-    return _load_project_facts112345678910(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
+def _read_tool_fields(facts: _ProjectFacts) -> None:
+    """Read the ``[tool.qgis-sdk]`` values that are not the plugin spec."""
+    facts.minimum = _minimum_version(facts.tool, facts.findings)
+    facts.experimental = _experimental_flag(facts.tool, facts.findings)
+    facts.metadata = _passthrough(facts.tool.get("metadata"), facts.findings)
+    facts.hosts = _hosts(facts.tool.get("hosts"), facts.findings)
 
 
-def _load_project_facts112345678910(**values):
-    return _load_project_facts1123456789(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts1123456789(**values):
-    return _load_project_facts112345678(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts112345678(**values):
-    return _load_project_facts11234567(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts11234567(**values):
-    return _load_project_facts1123456(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts1123456(**values):
-    return _load_project_facts112345(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts112345(**values):
-    return _load_project_facts11234(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts11234(**values):
-    return _load_project_facts1123(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts1123(**values):
-    return _load_project_facts112(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts112(**values):
-    return _load_project_facts11(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts11(**values):
-    return _load_project_facts1(
-        author=values["author"],
-        description=values["description"],
-        email=values["email"],
-        experimental=values["experimental"],
-        findings=values["findings"],
-        hosts=values["hosts"],
-        metadata=values["metadata"],
-        minimum=values["minimum"],
-        root=values["root"],
-        spec=values["spec"],
-        tool=values["tool"],
-        version=values["version"],
-    )
-
-
-def _load_project_facts1(**values):
-    web = _web(values["tool"].get("web"), values["findings"])
-    console = _console(values["tool"].get("console"), values["findings"])
-    build = _build(values["tool"].get("build"), values["findings"])
+def _config_from_facts(
+    facts: _ProjectFacts,
+) -> tuple[ProjectConfig, tuple[Diagnostic, ...]]:
+    """Derive the host artifacts and close the record into a configuration."""
+    web = _web(facts.tool.get("web"), facts.findings)
+    console = _console(facts.tool.get("console"), facts.findings)
+    build = _build(facts.tool.get("build"), facts.findings)
     config = ProjectConfig(
-        root=values["root"],
-        spec=values["spec"],
-        version=str(values["version"]),
-        description=values["description"],
-        author=values["author"],
-        email=values["email"],
-        qgis_minimum_version=values["minimum"].strip(),
-        experimental=values["experimental"],
-        metadata=values["metadata"],
+        root=facts.root,
+        spec=facts.spec,
+        version=str(facts.version),
+        description=facts.description,
+        author=facts.author,
+        email=facts.email,
+        qgis_minimum_version=facts.minimum.strip(),
+        experimental=facts.experimental,
+        metadata=facts.metadata,
         web=web,
         console=console,
         build=build,
-        hosts=values["hosts"],
+        hosts=facts.hosts,
     )
-    return config, tuple(values["findings"])
+    return config, tuple(facts.findings)
 
 
-def _external_entry_facts11(findings, item, name, package):
-    requirement = item.get("requirement")
-    if requirement is not None and (
-        not isinstance(requirement, str) or not requirement.strip()
-    ):
+#: The two optional texts of an ``external`` table: what the diagnostic says
+#: and the line it suggests. A dispatch table keeps the validator to one shape.
+_EXTERNAL_TEXTS: dict[str, tuple[str, str]] = {
+    "requirement": (
+        "must be a requirement string",
+        'requirement = "pandas>=2"',
+    ),
+    "reason": (
+        "must be a sentence",
+        'reason = "reads spreadsheets"',
+    ),
+}
+
+
+def _external_text(
+    item: Mapping[str, object], key: str, name: str, findings: list[Diagnostic]
+) -> str | None:
+    """One optional text of an ``external`` entry, or ``None`` when invalid."""
+    value = item.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        description, example = _EXTERNAL_TEXTS[key]
         findings.append(
             _config(
-                f"[tool.qgis-sdk.build] external `{name}` requirement must be "
-                "a requirement string",
-                'requirement = "pandas>=2"',
+                f"[tool.qgis-sdk.build] external `{name}` {key} {description}",
+                example,
             )
         )
-        requirement = None
-    return _external_entry_facts1(findings, item, name, package, requirement)
+        return None
+    return value.strip()
 
 
-def _external_entry_facts1(findings, item, name, package, requirement):
-    reason = item.get("reason")
-    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
-        findings.append(
-            _config(
-                f"[tool.qgis-sdk.build] external `{name}` reason must be a sentence",
-                'reason = "reads spreadsheets"',
-            )
-        )
-        reason = None
+def _external_details(
+    item: Mapping[str, object],
+    name: str,
+    package: ExternalPackage,
+    findings: list[Diagnostic],
+) -> ExternalPackage:
+    """Add the optional requirement and reason to a validated import root."""
     return ExternalPackage(
         import_name=package.import_name,
-        requirement=requirement.strip() if isinstance(requirement, str) else None,
-        reason=reason.strip() if isinstance(reason, str) else None,
+        requirement=_external_text(item, "requirement", name, findings),
+        reason=_external_text(item, "reason", name, findings),
     )
 
 
@@ -545,61 +388,13 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
             )  # CONFIG001 from check_project already names the parse error
         return None, (_missing_plugin(f"{root} has no {PYPROJECT}"),)
     tool = table(data, "tool", "qgis-sdk") or {}
-    findings: list[Diagnostic] = []
     spec = tool.get("plugin")
-    if spec is None:
-        return None, (_missing_plugin("[tool.qgis-sdk] plugin is not set"),)
     if not isinstance(spec, str) or _PLUGIN_SPEC.match(spec) is None:
-        return None, (
-            _config(
-                f"[tool.qgis-sdk] plugin must be 'pkg.module:app', got {spec!r}",
-                'plugin = "field_tools.plugin:app"',
-            ),
-        )
-
-    project = table(data, "project") or {}
-    version = _required_text(project, "version", findings, "version")
-    description = _required_text(project, "description", findings, "description")
-    author, email = _first_author(project, findings)
-    minimum = tool.get("qgis-minimum-version")
-    if minimum is None:
-        findings.append(
-            _missing_key("[tool.qgis-sdk] qgis-minimum-version", "qgisMinimumVersion")
-        )
-        minimum = ""
-    elif not isinstance(minimum, str) or not minimum.strip():
-        findings.append(
-            _config(
-                "[tool.qgis-sdk] qgis-minimum-version must be a version string",
-                'qgis-minimum-version = "4.0"',
-            )
-        )
-        minimum = ""
-    experimental = tool.get("experimental", True)
-    if not isinstance(experimental, bool):
-        findings.append(
-            _config(
-                "[tool.qgis-sdk] experimental must be true or false",
-                "experimental = true",
-            )
-        )
-        experimental = True
-    metadata = _passthrough(tool.get("metadata"), findings)
-    hosts = _hosts(tool.get("hosts"), findings)
-    return _load_project_facts1123456789101112131415(
-        author=author,
-        description=description,
-        email=email,
-        experimental=experimental,
-        findings=findings,
-        hosts=hosts,
-        metadata=metadata,
-        minimum=minimum,
-        root=root,
-        spec=spec,
-        tool=tool,
-        version=version,
-    )
+        return None, (_plugin_spec_finding(spec),)
+    facts = _ProjectFacts(root, spec, tool)
+    _read_project_fields(facts, table(data, "project") or {})
+    _read_tool_fields(facts)
+    return _config_from_facts(facts)
 
 
 def require_project(root: Path) -> ProjectConfig:
@@ -654,6 +449,32 @@ def _first_author(
     return name.strip(), email.strip()
 
 
+def _metadata_value(
+    key: object, item: object, findings: list[Diagnostic]
+) -> str | None:
+    """One metadata value, or ``None`` when the key is derived or malformed."""
+    if key in GENERATED_METADATA_KEYS:
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.metadata] {key} is derived from [project] and "
+                "[tool.qgis-sdk]; it cannot be set here",
+                "Delete the key; `build` and `dev` write it.",
+            )
+        )
+        return None
+    if isinstance(item, bool):
+        return "True" if item else "False"
+    if isinstance(item, int | float | str):
+        return str(item)
+    findings.append(
+        _config(
+            f"[tool.qgis-sdk.metadata] {key} must be a string",
+            f'{key} = "..."',
+        )
+    )
+    return None
+
+
 def _passthrough(value: object, findings: list[Diagnostic]) -> dict[str, str]:
     if value is None:
         return {}
@@ -667,27 +488,26 @@ def _passthrough(value: object, findings: list[Diagnostic]) -> dict[str, str]:
         return {}
     kept: dict[str, str] = {}
     for key, item in value.items():
-        if key in GENERATED_METADATA_KEYS:
-            findings.append(
-                _config(
-                    f"[tool.qgis-sdk.metadata] {key} is derived from [project] and "
-                    "[tool.qgis-sdk]; it cannot be set here",
-                    "Delete the key; `build` and `dev` write it.",
-                )
-            )
-            continue
-        if isinstance(item, bool):
-            kept[key] = "True" if item else "False"
-        elif isinstance(item, int | float | str):
-            kept[key] = str(item)
-        else:
-            findings.append(
-                _config(
-                    f"[tool.qgis-sdk.metadata] {key} must be a string",
-                    f'{key} = "..."',
-                )
-            )
+        text = _metadata_value(key, item, findings)
+        if text is not None:
+            kept[key] = text
     return kept
+
+
+def _host_name(
+    name: object, known: list[str], findings: list[Diagnostic]
+) -> str | None:
+    """One declared host name, or ``None`` when it is not a host at all."""
+    if not isinstance(name, str) or name not in known:
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk] hosts names {name!r}, which is not one of "
+                f"{', '.join(known)}",
+                'hosts = ["desktop", "server"]',
+            )
+        )
+        return None
+    return name
 
 
 def _hosts(value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
@@ -711,17 +531,9 @@ def _hosts(value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
     known = [host.value for host in Host]
     declared: list[str] = []
     for name in value:
-        if not isinstance(name, str) or name not in known:
-            findings.append(
-                _config(
-                    f"[tool.qgis-sdk] hosts names {name!r}, which is not one of "
-                    f"{', '.join(known)}",
-                    'hosts = ["desktop", "server"]',
-                )
-            )
-            continue
-        if name not in declared:
-            declared.append(name)
+        host = _host_name(name, known, findings)
+        if host is not None and host not in declared:
+            declared.append(host)
     return tuple(declared) or (Host.DESKTOP.value,)
 
 
@@ -776,6 +588,38 @@ def _console(value: object, findings: list[Diagnostic]) -> ConsoleConfig:
     )
 
 
+def _grants_shape_finding(section: str) -> Diagnostic:
+    return _config(
+        f"{section} grants must be a list of host grants or operation ids",
+        'grants = ["layers.read", "project.layer_ids"]',
+    )
+
+
+def _unknown_grant_finding(
+    section: str,
+    grant: str,
+    known_grants: tuple[str, ...] | list[str],
+    known_ids: tuple[str, ...] | list[str],
+) -> Diagnostic:
+    return Diagnostic(
+        rule="GRANT001",
+        path=_PATH,
+        line=0,
+        column=0,
+        message=(
+            f"{section} grants names `{grant}`, neither a host grant "
+            "nor a host operation"
+        ),
+        remediation=(
+            "The grants are "
+            + ", ".join(known_grants)
+            + "; the operation ids are "
+            + ", ".join(known_ids)
+            + ". Remove the entry or fix the name."
+        ),
+    )
+
+
 def _grants(section: str, value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
     """Read one ``grants`` list: the same names and the same finding everywhere.
 
@@ -790,35 +634,12 @@ def _grants(section: str, value: object, findings: list[Diagnostic]) -> tuple[st
     if not isinstance(value, list) or not all(
         isinstance(entry, str) for entry in value
     ):
-        findings.append(
-            _config(
-                f"{section} grants must be a list of host grants or operation ids",
-                'grants = ["layers.read", "project.layer_ids"]',
-            )
-        )
+        findings.append(_grants_shape_finding(section))
         return ()
     known_grants = host_grant_names()
     known_ids = host_operation_ids()
     for grant in sorted(set(value) - set(known_grants) - set(known_ids)):
-        findings.append(
-            Diagnostic(
-                rule="GRANT001",
-                path=_PATH,
-                line=0,
-                column=0,
-                message=(
-                    f"{section} grants names `{grant}`, neither a host grant "
-                    "nor a host operation"
-                ),
-                remediation=(
-                    "The grants are "
-                    + ", ".join(known_grants)
-                    + "; the operation ids are "
-                    + ", ".join(known_ids)
-                    + ". Remove the entry or fix the name."
-                ),
-            )
-        )
+        findings.append(_unknown_grant_finding(section, grant, known_grants, known_ids))
     return tuple(dict.fromkeys(value))
 
 
@@ -853,6 +674,13 @@ def _build(value: object, findings: list[Diagnostic]) -> BuildConfig:
     )
 
 
+def _duplicate_external_finding(import_name: str) -> Diagnostic:
+    return _config(
+        f"[tool.qgis-sdk.build] external names `{import_name}` twice",
+        "List each import root once.",
+    )
+
+
 def _external(value: object, findings: list[Diagnostic]) -> tuple[ExternalPackage, ...]:
     """The declared externals: bare import roots, or tables adding detail."""
     if value is None:
@@ -874,17 +702,40 @@ def _external(value: object, findings: list[Diagnostic]) -> tuple[ExternalPackag
         if package is None:
             continue
         if package.import_name in seen:
-            findings.append(
-                _config(
-                    "[tool.qgis-sdk.build] external names "
-                    f"`{package.import_name}` twice",
-                    "List each import root once.",
-                )
-            )
+            findings.append(_duplicate_external_finding(package.import_name))
             continue
         seen.add(package.import_name)
         declared.append(package)
     return tuple(declared)
+
+
+def _external_entry_keys(
+    item: Mapping[str, object], findings: list[Diagnostic]
+) -> None:
+    """An ``external`` table names only import, requirement and reason."""
+    for key in sorted(set(item) - _EXTERNAL_KEYS):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external entry has no key `{key}` "
+                "(only import, requirement, reason)",
+                '[tool.qgis-sdk.build]\nexternal = [{ import = "pandas" }]',
+            )
+        )
+
+
+def _external_entry_name(
+    item: Mapping[str, object], findings: list[Diagnostic]
+) -> str | None:
+    name = item.get("import")
+    if not isinstance(name, str):
+        findings.append(
+            _config(
+                "[tool.qgis-sdk.build] external entry needs `import`",
+                'external = [{ import = "pandas", requirement = "pandas>=2" }]',
+            )
+        )
+        return None
+    return name
 
 
 def _external_entry(item: object, findings: list[Diagnostic]) -> ExternalPackage | None:
@@ -899,27 +750,14 @@ def _external_entry(item: object, findings: list[Diagnostic]) -> ExternalPackage
             )
         )
         return None
-    for key in sorted(set(item) - _EXTERNAL_KEYS):
-        findings.append(
-            _config(
-                f"[tool.qgis-sdk.build] external entry has no key `{key}` "
-                "(only import, requirement, reason)",
-                '[tool.qgis-sdk.build]\nexternal = [{ import = "pandas" }]',
-            )
-        )
-    name = item.get("import")
-    if not isinstance(name, str):
-        findings.append(
-            _config(
-                "[tool.qgis-sdk.build] external entry needs `import`",
-                'external = [{ import = "pandas", requirement = "pandas>=2" }]',
-            )
-        )
+    _external_entry_keys(item, findings)
+    name = _external_entry_name(item, findings)
+    if name is None:
         return None
     package = _named_external(name, findings)
     if package is None:
         return None
-    return _external_entry_facts11(findings, item, name, package)
+    return _external_details(item, name, package, findings)
 
 
 def _named_external(name: str, findings: list[Diagnostic]) -> ExternalPackage | None:
@@ -933,6 +771,28 @@ def _named_external(name: str, findings: list[Diagnostic]) -> ExternalPackage | 
         )
         return None
     return ExternalPackage(import_name=name.strip())
+
+
+def _vendor_name(name: str, seen: set[str], findings: list[Diagnostic]) -> str | None:
+    """One vendored distribution, or ``None`` when malformed or duplicated."""
+    if _DISTRIBUTION_NAME.match(name) is None:
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] vendor entry {name!r} is not a "
+                "distribution name",
+                'vendor = ["shapely"]',
+            )
+        )
+        return None
+    if name.lower() in seen:
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] vendor names `{name}` twice",
+                "List each distribution once.",
+            )
+        )
+        return None
+    return name
 
 
 def _vendor(value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
@@ -950,25 +810,11 @@ def _vendor(value: object, findings: list[Diagnostic]) -> tuple[str, ...]:
     declared: list[str] = []
     seen: set[str] = set()
     for name in (n.strip() for n in value):
-        if _DISTRIBUTION_NAME.match(name) is None:
-            findings.append(
-                _config(
-                    f"[tool.qgis-sdk.build] vendor entry {name!r} is not a "
-                    "distribution name",
-                    'vendor = ["shapely"]',
-                )
-            )
+        accepted = _vendor_name(name, seen, findings)
+        if accepted is None:
             continue
-        if name.lower() in seen:
-            findings.append(
-                _config(
-                    f"[tool.qgis-sdk.build] vendor names `{name}` twice",
-                    "List each distribution once.",
-                )
-            )
-            continue
-        seen.add(name.lower())
-        declared.append(name)
+        seen.add(accepted.lower())
+        declared.append(accepted)
     return tuple(declared)
 
 

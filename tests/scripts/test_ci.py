@@ -7,129 +7,231 @@ import os
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+#: The Linux job's named gates, as this checkout declares them. Kept as data
+#: beside the assertions so one added step changes one line, not a function.
+EXPECTED_LINUX_CHECKS = {
+    "Check commit messages": "pixi run -e default automation -- check_commits",
+    "Lint Python": "pixi run -e default automation -- lint_python",
+    "Check Python formatting": "pixi run -e default automation -- format_check",
+    "Test release tooling": "pixi run -e default automation -- test_scripts",
+    "Verify the scoped versions and the shared contract": "pixi run -e default automation -- release_verify_versions",
+    "Check the generated bridge clients are current": "pixi run -e default automation -- check_generated",
+    "Check the Processing snapshot is current": "pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check",
+    "Test the reference plugin through qgis-sdk test": "pixi run -e default automation -- reference_example",
+    "Test the reference page on the workspace bridge": "pixi run -e default automation -- test_reference_web",
+    "Lint and format TypeScript": "pixi run -e default automation -- biome",
+    "Lint GitHub Actions": "pixi run -e default automation -- lint_actions",
+    "Check repository policy": "pixi run -e default automation -- lint_repository",
+    "Test repository policy": "pixi run -e default automation -- test_alint_policy",
+    "Typecheck TypeScript": "pixi run -e default automation -- typecheck",
+    "Build the qgis-sdk-ui Storybook": "pixi run -e default automation -- storybook",
+}
 
-def _real_generated_gate_detects_facts112345678(**values):
-    _real_generated_gate_detects_facts11234567(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+
+class _Writer:
+    """The part of doit's writer ``emit`` is allowed to rely on."""
+
+    def __init__(self) -> None:
+        self.text = ""
+        self.flushes = 0
+
+    def write(self, text: str) -> None:
+        self.text += text
+
+    def flush(self) -> None:
+        self.flushes += 1
+
+
+@dataclass(frozen=True, slots=True)
+class _GateTree:
+    """A throwaway checkout that runs the generated-client gate with a fake pixi."""
+
+    root: Path
+    script: Path
+    generator: Path
+    pixi: Path
+    env: dict[str, str]
+
+    def run(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(self.script), "check-generated"],
+            cwd=self.root,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
+#: The generator entry whose removal leaves one owned artifact orphaned.
+PLUGIN_CLIENT_ENTRY = """        (
+            PLUGIN_CLIENT_PATH,
+            describe(sites_app).to_dict(),
+            generate_typescript,
+        ),
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class _UnchangedFiles:
+    """The bytes a stopped artifact must leave exactly as they were."""
+
+    old: Path
+    old_bytes: bytes
+    unrelated: tuple[Path, ...]
+    unrelated_bytes: dict[Path, bytes]
+
+
+def _commit(root: Path, message: str) -> None:
+    """Initialise and commit a throwaway tree, so the gate has a baseline."""
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "."], cwd=root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            message,
+        ],
+        cwd=root,
+        check=True,
     )
 
 
-def _real_generated_gate_detects_facts11234567(**values):
-    _real_generated_gate_detects_facts1123456(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+def _install_fake_pixi(root: Path) -> Path:
+    """A pixi on PATH that stands in for the reference check."""
+    bindir = root / "bin"
+    bindir.mkdir()
+    pixi = bindir / "pixi"
+    pixi.write_text("#!/bin/sh\necho reference-check-ran\n", encoding="utf-8")
+    pixi.chmod(0o755)
+    return pixi
+
+
+def _generated_gate_tree(tmp_path: Path) -> _GateTree:
+    """A committed checkout whose generator and reference check are stubs."""
+    script = tmp_path / "automation/ci.py"
+    script.parent.mkdir()
+    script.write_bytes(SCRIPT.read_bytes())
+    generator = tmp_path / "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
+    generator.parent.mkdir(parents=True)
+    generator.write_text("print('generator ran')\n", encoding="utf-8")
+    (tmp_path / "examples/simple").mkdir(parents=True)
+    _commit(tmp_path, "baseline")
+    pixi = _install_fake_pixi(tmp_path)
+    env = {
+        **os.environ,
+        "PATH": f"{pixi.parent}{os.pathsep}{os.environ['PATH']}",
+    }
+    return _GateTree(tmp_path, script, generator, pixi, env)
+
+
+def _copy_repo_sources(tmp_path: Path) -> None:
+    """The real generator and the source trees it imports."""
+    root = SCRIPT.parents[1]
+    for directory in (
+        "packages/qgis-sdk-runtime/src",
+        "packages/qgis-sdk-tools/src",
+        "packages/qgis-sdk-python/tests/contract_sample",
+    ):
+        shutil.copytree(
+            root / directory,
+            tmp_path / directory,
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
+    for filename in (
+        "automation/ci.py",
+        "packages/qgis-sdk-python/scripts/generate_bridge_clients.py",
+        "packages/qgis-sdk-typescript/src/generated/host.ts",
+        "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts",
+        "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.schema.ts",
+    ):
+        target = tmp_path / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / filename, target)
+
+
+def _write_repo_extras(tmp_path: Path) -> None:
+    """Generated and ungenerated neighbours that the gate must not touch."""
+    (tmp_path / "examples/simple").mkdir(parents=True)
+    other_generated = (
+        tmp_path
+        / "packages/qgis-sdk-typescript/tests/contracts/generated/clients/other.ts"
     )
-
-
-def _real_generated_gate_detects_facts1123456(**values):
-    _real_generated_gate_detects_facts112345(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+    other_generated.write_text(
+        "// Generated by qgis-sdk. Do not edit.\n// Source: the declarations of another.plugin.\n",
+        encoding="utf-8",
     )
-
-
-def _real_generated_gate_detects_facts112345(**values):
-    _real_generated_gate_detects_facts11234(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+    outside = tmp_path / "packages/qgis-sdk-typescript/other/sites.ts"
+    outside.parent.mkdir()
+    outside.write_bytes(
+        (
+            tmp_path
+            / "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts"
+        ).read_bytes()
     )
+    other = tmp_path / "packages/qgis-sdk-typescript/src/generated/unrelated.ts"
+    other.write_text("// An unrelated manually maintained file.\n", encoding="utf-8")
 
 
-def _real_generated_gate_detects_facts11234(**values):
-    _real_generated_gate_detects_facts1123(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+@dataclass(frozen=True, slots=True)
+class _StoppedArtifact:
+    """The generator entry to remove and the files that must stay unchanged."""
+
+    generator: Path
+    contents: str
+    files: _UnchangedFiles
+
+
+def _stopped_artifact(generated_repo: Path) -> _StoppedArtifact:
+    """Read the generator and record the bytes a stopped output must not change."""
+    old = (
+        generated_repo
+        / "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts"
     )
-
-
-def _real_generated_gate_detects_facts1123(**values):
-    _real_generated_gate_detects_facts112(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+    generator = (
+        generated_repo / "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
     )
-
-
-def _real_generated_gate_detects_facts112(**values):
-    _real_generated_gate_detects_facts11(
-        contents=values["contents"],
-        entry=values["entry"],
-        generated_repo=values["generated_repo"],
-        generator=values["generator"],
-        old=values["old"],
-        old_bytes=values["old_bytes"],
-        unrelated=values["unrelated"],
-        unrelated_bytes=values["unrelated_bytes"],
+    unrelated = (
+        generated_repo / "packages/qgis-sdk-typescript/src/generated/unrelated.ts",
+        old.parent / "other.ts",
+        generated_repo / "packages/qgis-sdk-typescript/other/sites.ts",
     )
-
-
-def _real_generated_gate_detects_facts11(**values):
-    values["generator"].write_text(
-        values["contents"].replace(values["entry"], ""), encoding="utf-8"
+    files = _UnchangedFiles(
+        old=old,
+        old_bytes=old.read_bytes(),
+        unrelated=unrelated,
+        unrelated_bytes={path: path.read_bytes() for path in unrelated},
     )
-    stopped = run_real_generated_gate(values["generated_repo"])
-    assert stopped.returncode != 0, stopped.stdout + stopped.stderr
-    _real_generated_gate_detects_facts1(
-        values["old"],
-        values["old_bytes"],
-        stopped,
-        values["unrelated"],
-        values["unrelated_bytes"],
-    )
+    return _StoppedArtifact(generator, generator.read_text(encoding="utf-8"), files)
 
 
-def _real_generated_gate_detects_facts1(
-    old, old_bytes, stopped, unrelated, unrelated_bytes
-):
-    assert "sites.ts" in stopped.stdout + stopped.stderr
-    assert "orphan" in (stopped.stdout + stopped.stderr).lower()
+def _assert_stopped_artifact(
+    files: _UnchangedFiles, stopped: subprocess.CompletedProcess[str]
+) -> None:
+    """A stopped artifact is reported, but no existing file is changed."""
+    output = stopped.stdout + stopped.stderr
+    assert "sites.ts" in output
+    assert "orphan" in output.lower()
     assert "::error title=generated client is stale::" in stopped.stdout
     assert "reference-check-ran" not in stopped.stdout
-    assert old.read_bytes() == old_bytes
-    assert {path: path.read_bytes() for path in unrelated} == unrelated_bytes
+    assert files.old.read_bytes() == files.old_bytes
+    assert {
+        path: path.read_bytes() for path in files.unrelated
+    } == files.unrelated_bytes
 
 
-def _real_generated_gate_rejects_facts1(generated_repo, path, relative):
+def _assert_drift_rejected(generated_repo: Path, path: Path, relative: str) -> None:
+    """Committed drift is restored from the generator, never from thin air."""
     result = run_real_generated_gate(generated_repo)
     assert result.returncode == 1
     assert "generated client is stale" in result.stdout
@@ -138,16 +240,156 @@ def _real_generated_gate_rejects_facts1(generated_repo, path, relative):
     assert path.read_bytes() == (SCRIPT.parents[1] / relative).read_bytes()
 
 
-def _ci_workflow_calls_helpers_facts11(checks, jobs, report):
+def _assert_ci_triggers(workflow: dict) -> None:
+    """Every PR is gated; a green PR is not repeated on the main push."""
+    assert "push" not in workflow[True]
+    assert not workflow[True]["pull_request"]
+
+
+def _assert_aggregate_gate(jobs: dict) -> None:
+    """The aggregate job turns any failed required row into a red check."""
+    assert "needs" not in jobs["linux"] and "needs" not in jobs["coverage"]
+    aggregate = jobs["checks"]
+    assert set(aggregate["needs"]) == {"linux", "coverage", "lts"}
+    assert aggregate["if"] == "${{ always() }}"
+    gate = aggregate["steps"][-1]
+    assert gate["if"] == (
+        "${{ needs.linux.result != 'success' || needs.coverage.result != 'success'"
+        " || needs.lts.result != 'success' }}"
+    )
+    assert gate["run"] == "exit 1"
+
+
+def _assert_pixi_setup(jobs: dict) -> None:
+    """Both Linux rows share the locked Pixi setup and failure reporting."""
+    for name in ("linux", "coverage"):
+        steps = {step.get("name"): step for step in jobs[name]["steps"]}
+        assert steps["Set up Pixi"]["with"]["locked"] is True
+        assert steps["Set up Pixi"]["with"]["cache"] is True
+        assert (
+            steps["Install JavaScript dependencies"]["run"]
+            == "pixi run -e default automation -- install_js"
+        )
+        assert steps["Report the failed step"]["if"] == "failure()"
+        assert steps["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
+
+
+def _assert_linux_steps(checks: dict) -> None:
+    """The named Linux gates stay the ones the branch protection expects."""
+    for name, command in EXPECTED_LINUX_CHECKS.items():
+        assert checks[name]["run"] == command
+
+
+def _assert_checkout_and_native(checks: dict) -> None:
+    """The commit range and the offscreen native row keep their settings."""
+    assert checks["Checkout"]["with"]["fetch-depth"] == 0
+    assert (
+        checks["Compute commit range"]["env"]["BASE_SHA"]
+        == "${{ github.event.pull_request.base.sha || github.event.before }}"
+    )
+    assert (
+        checks["Test the native layers offscreen"]["run"]
+        == "pixi run -e default automation -- native"
+    )
+    assert checks["Test the native layers offscreen"]["env"] == {
+        "QT_QPA_PLATFORM": "offscreen",
+        "QGIS_SDK_NATIVE_SERVICES": "1",
+    }
+
+
+def _assert_lts_install(lts: dict) -> None:
+    """QGIS provisioning outages are tolerated, but never silently pass."""
+    install = lts["Install the QGIS 3.44 LTS packages"]["run"]
+    assert "qgis qgis-server python3-qgis" in install
+    assert "timeout " in install and "ready=false" in install
+    assert "GITHUB_STEP_SUMMARY" in install
+    assert (
+        "--system-site-packages"
+        in lts["Install the SDK over the system bindings"]["run"]
+    )
+
+
+def _assert_lts_job(jobs: dict, lts: dict) -> None:
+    """The LTS row runs only when the bindings are actually installable."""
+    assert jobs["lts"]["runs-on"] == "ubuntu-24.04"
+    assert "needs" not in jobs["lts"]
+    assert (
+        lts["Test both hosts on the LTS"]["run"]
+        == ".venv-lts/bin/python -m automation.ci lts"
+    )
+    assert lts["Test both hosts on the LTS"]["env"] == {
+        "QT_QPA_PLATFORM": "offscreen",
+        # The dev-loop harness starts a real QgsServer, so the row opts it in.
+        "QGIS_SDK_SERVER_DEV": "1",
+    }
+    ready = "${{ steps.s02.outputs.ready == 'true' }}"
+    assert lts["Install the SDK over the system bindings"]["if"] == ready
+    assert lts["Test both hosts on the LTS"]["if"] == ready
+    assert jobs["lts"]["timeout-minutes"] == 20
+
+
+def _assert_coverage_run(coverage: dict) -> None:
+    """Coverage is logged, and its failure is annotated for the PR."""
+    assert coverage["Check coverage for all packages"]["id"] == "coverage"
+    # The coverage run drives the workspace from the Bun environment, so it is a
+    # harness call rather than a task: `run_logged` keeps the output that the
+    # annotation step reads, and the Bun environment is the one it belongs to.
+    assert coverage["Check coverage for all packages"]["run"] == (
+        "python -m automation.ci run-log coverage-output.log -- "
+        "pixi run -e bun bun run coverage"
+    )
+    assert (
+        coverage["Annotate the coverage failure"]["if"]
+        == "failure() && steps.coverage.outcome == 'failure'"
+    )
+    assert coverage["Annotate the coverage failure"]["run"] == (
+        "python -m automation.ci annotate-coverage coverage-output.log"
+    )
+
+
+def _assert_upload_steps(coverage: dict) -> None:
+    """Each LCOV upload is optional and names its own flag."""
+    for name, path, flag in (
+        (
+            "Upload Python coverage",
+            "packages/qgis-sdk-python/coverage/lcov.info",
+            "qgis-sdk-python",
+        ),
+        (
+            "Upload TypeScript coverage",
+            "coverage/qgis-sdk-typescript/lcov.info",
+            "qgis-sdk-typescript",
+        ),
+        ("Upload UI coverage", "coverage/qgis-sdk-ui/lcov.info", "qgis-sdk-ui"),
+    ):
+        assert (
+            coverage[name]["if"]
+            == "${{ !cancelled() && steps.coverage.outcome == 'success' }}"
+        )
+        assert coverage[name]["with"]["files"] == path
+        assert coverage[name]["with"]["flags"] == flag
+        assert coverage[name]["with"]["fail_ci_if_error"] is True
+        assert coverage[name]["continue-on-error"] is True
+
+
+def _assert_upload_report(coverage: dict) -> dict:
+    """An unavailable Codecov upload is a warning, not a red required check."""
+    report = coverage["Report unavailable Codecov uploads"]
+    assert report["id"] == "s29"
+    for step_id in ("s16", "s17", "s24"):
+        assert f"steps.{step_id}.outcome == 'failure'" in report["if"]
+    assert "::warning" in report["run"]
+    assert "title=Codecov upload unavailable" in report["run"]
+    return report
+
+
+def _assert_cross_platform(jobs: dict, checks: dict, report: dict) -> None:
+    """The cross-platform row never repeats on main and reports its own tests."""
     assert "GITHUB_STEP_SUMMARY" in report["run"]
     assert jobs["cross-platform"]["if"] == "${{ github.event_name != 'push' }}"
     assert "needs" not in jobs["cross-platform"]
     assert checks["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
     cross = {step.get("name"): step for step in jobs["cross-platform"]["steps"]}
-    _ci_workflow_calls_helpers_facts1(cross)
-
-
-def _ci_workflow_calls_helpers_facts1(cross):
     assert "run-log bun-tests.log" in cross["Test TypeScript bridge"]["run"]
     assert cross["Test qgis-sdk-ui"]["run"] == "python -m automation.ci bun-ui"
     assert "report-bun bun-tests.log" in cross["Report TypeScript test results"]["run"]
@@ -184,20 +426,7 @@ def test_run_log_tees_through_a_stdout_without_a_buffer(
     """
     from automation import ci
 
-    class Writer:
-        """The part of doit's writer ``emit`` is allowed to rely on."""
-
-        def __init__(self) -> None:
-            self.text = ""
-            self.flushes = 0
-
-        def write(self, text: str) -> None:
-            self.text += text
-
-        def flush(self) -> None:
-            self.flushes += 1
-
-    writer = Writer()
+    writer = _Writer()
     monkeypatch.setattr(sys, "stdout", writer)
     log = tmp_path / "run.log"
     status = ci.run_logged([sys.executable, "-c", "print('hello')"], log)
@@ -393,58 +622,22 @@ def test_bun_summary_first_match_or_missing_log(tmp_path: Path):
 
 
 def test_generated_gate_runs_generator_git_sweep_and_reference_check(tmp_path: Path):
-    # Copy the entrypoint into a throwaway tree so its own repo root is isolated.
-    script = tmp_path / "automation/ci.py"
-    script.parent.mkdir()
-    script.write_bytes(SCRIPT.read_bytes())
-    generator = tmp_path / "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
-    generator.parent.mkdir(parents=True)
-    generator.write_text("print('generator ran')\n", encoding="utf-8")
-    (tmp_path / "examples/simple").mkdir(parents=True)
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qm",
-            "baseline",
-        ],
-        cwd=tmp_path,
-        check=True,
-    )
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    pixi = bindir / "pixi"
-    pixi.write_text("#!/bin/sh\necho reference-check-ran\n", encoding="utf-8")
-    pixi.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"}
-    run = lambda: subprocess.run(
-        [sys.executable, str(script), "check-generated"],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    clean = run()
+    """A stale client, a failed reference check and a failed generator stop the gate."""
+    tree = _generated_gate_tree(tmp_path)
+    clean = tree.run()
     assert clean.returncode == 0 and "reference-check-ran" in clean.stdout
     changed = tmp_path / "packages/qgis-sdk-typescript/src/generated/new.ts"
     changed.parent.mkdir(parents=True)
     changed.write_text("new\n", encoding="utf-8")
-    stale = run()
+    stale = tree.run()
     assert stale.returncode == 1 and "generated client is stale" in stale.stdout
     assert "reference-check-ran" not in stale.stdout
     changed.unlink()
-    pixi.write_text("#!/bin/sh\necho reference-failed\nexit 7\n", encoding="utf-8")
-    bad_reference = run()
+    tree.pixi.write_text("#!/bin/sh\necho reference-failed\nexit 7\n", encoding="utf-8")
+    bad_reference = tree.run()
     assert bad_reference.returncode == 7 and "reference-failed" in bad_reference.stdout
-    generator.write_text("import sys\nsys.exit(4)\n", encoding="utf-8")
-    bad_generator = run()
+    tree.generator.write_text("import sys\nsys.exit(4)\n", encoding="utf-8")
+    bad_generator = tree.run()
     assert bad_generator.returncode == 4
     assert "reference-failed" not in bad_generator.stdout
 
@@ -452,67 +645,10 @@ def test_generated_gate_runs_generator_git_sweep_and_reference_check(tmp_path: P
 @pytest.fixture
 def generated_repo(tmp_path: Path) -> Path:
     """A committed Git tree with the real generator and its actual dependencies."""
-    root = SCRIPT.parents[1]
-    for directory in (
-        "packages/qgis-sdk-runtime/src",
-        "packages/qgis-sdk-tools/src",
-        "packages/qgis-sdk-python/tests/contract_sample",
-    ):
-        shutil.copytree(
-            root / directory,
-            tmp_path / directory,
-            ignore=shutil.ignore_patterns("__pycache__"),
-        )
-    for filename in (
-        "automation/ci.py",
-        "packages/qgis-sdk-python/scripts/generate_bridge_clients.py",
-        "packages/qgis-sdk-typescript/src/generated/host.ts",
-        "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts",
-        "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.schema.ts",
-    ):
-        target = tmp_path / filename
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(root / filename, target)
-    (tmp_path / "examples/simple").mkdir(parents=True)
-    other_generated = (
-        tmp_path
-        / "packages/qgis-sdk-typescript/tests/contracts/generated/clients/other.ts"
-    )
-    other_generated.write_text(
-        "// Generated by qgis-sdk. Do not edit.\n// Source: the declarations of another.plugin.\n",
-        encoding="utf-8",
-    )
-    outside = tmp_path / "packages/qgis-sdk-typescript/other/sites.ts"
-    outside.parent.mkdir(parents=True)
-    outside.write_bytes(
-        (
-            tmp_path
-            / "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts"
-        ).read_bytes()
-    )
-    other = tmp_path / "packages/qgis-sdk-typescript/src/generated/unrelated.ts"
-    other.write_text("// An unrelated manually maintained file.\n", encoding="utf-8")
-    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qm",
-            "baseline",
-        ],
-        cwd=tmp_path,
-        check=True,
-    )
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
-    pixi = bindir / "pixi"
-    pixi.write_text("#!/bin/sh\necho reference-check-ran\n", encoding="utf-8")
-    pixi.chmod(0o755)
+    _copy_repo_sources(tmp_path)
+    _write_repo_extras(tmp_path)
+    _commit(tmp_path, "baseline")
+    _install_fake_pixi(tmp_path)
     return tmp_path
 
 
@@ -531,41 +667,18 @@ def run_real_generated_gate(root: Path) -> subprocess.CompletedProcess[str]:
 def test_real_generated_gate_detects_a_stopped_artifact_without_deleting_files(
     generated_repo: Path,
 ):
+    """Removing one owned output is reported without deleting any file."""
     clean = run_real_generated_gate(generated_repo)
     assert clean.returncode == 0, clean.stdout + clean.stderr
     assert "reference-check-ran" in clean.stdout
-    old = (
-        generated_repo
-        / "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts"
+    artifact = _stopped_artifact(generated_repo)
+    assert artifact.contents.count(PLUGIN_CLIENT_ENTRY) == 1
+    artifact.generator.write_text(
+        artifact.contents.replace(PLUGIN_CLIENT_ENTRY, ""), encoding="utf-8"
     )
-    old_bytes = old.read_bytes()
-    unrelated = [
-        generated_repo / "packages/qgis-sdk-typescript/src/generated/unrelated.ts",
-        old.parent / "other.ts",
-        generated_repo / "packages/qgis-sdk-typescript/other/sites.ts",
-    ]
-    unrelated_bytes = {path: path.read_bytes() for path in unrelated}
-    generator = (
-        generated_repo / "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
-    )
-    contents = generator.read_text(encoding="utf-8")
-    entry = """        (
-            PLUGIN_CLIENT_PATH,
-            describe(sites_app).to_dict(),
-            generate_typescript,
-        ),
-"""
-    assert contents.count(entry) == 1
-    _real_generated_gate_detects_facts112345678(
-        contents=contents,
-        entry=entry,
-        generated_repo=generated_repo,
-        generator=generator,
-        old=old,
-        old_bytes=old_bytes,
-        unrelated=unrelated,
-        unrelated_bytes=unrelated_bytes,
-    )
+    stopped = run_real_generated_gate(generated_repo)
+    assert stopped.returncode != 0, stopped.stdout + stopped.stderr
+    _assert_stopped_artifact(artifact.files, stopped)
 
 
 @pytest.mark.parametrize(
@@ -617,21 +730,8 @@ def test_real_generated_gate_rejects_committed_drift_and_missing_files(
         subprocess.run(["git", "add", relative], cwd=generated_repo, check=True)
     else:
         subprocess.run(["git", "rm", "-q", relative], cwd=generated_repo, check=True)
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-            "commit",
-            "-qm",
-            "drift",
-        ],
-        cwd=generated_repo,
-        check=True,
-    )
-    _real_generated_gate_rejects_facts1(generated_repo, path, relative)
+    _commit(generated_repo, "drift")
+    _assert_drift_rejected(generated_repo, path, relative)
 
 
 def test_real_generated_gate_reports_renamed_output_and_leaves_old_file(
@@ -743,133 +843,21 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     )
     # Branch protection requires six contexts from this workflow on every PR,
     # so it must run on every PR (no path filter) and must not repeat on `main`.
-    assert "push" not in workflow[True]
-    assert not workflow[True]["pull_request"]
+    _assert_ci_triggers(workflow)
     jobs = workflow["jobs"]
     checks = {step.get("name"): step for step in jobs["linux"]["steps"]}
     coverage = {step.get("name"): step for step in jobs["coverage"]["steps"]}
-    assert "needs" not in jobs["linux"] and "needs" not in jobs["coverage"]
-    aggregate = jobs["checks"]
-    assert set(aggregate["needs"]) == {"linux", "coverage", "lts"}
-    assert aggregate["if"] == "${{ always() }}"
-    gate = aggregate["steps"][-1]
-    assert gate["if"] == (
-        "${{ needs.linux.result != 'success' || needs.coverage.result != 'success'"
-        " || needs.lts.result != 'success' }}"
-    )
-    assert gate["run"] == "exit 1"
-    for name in ("linux", "coverage"):
-        steps = {step.get("name"): step for step in jobs[name]["steps"]}
-        assert steps["Set up Pixi"]["with"]["locked"] is True
-        assert steps["Set up Pixi"]["with"]["cache"] is True
-        assert (
-            steps["Install JavaScript dependencies"]["run"]
-            == "pixi run -e default automation -- install_js"
-        )
-        assert steps["Report the failed step"]["if"] == "failure()"
-        assert steps["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
-    expected_checks = {
-        "Check commit messages": "pixi run -e default automation -- check_commits",
-        "Lint Python": "pixi run -e default automation -- lint_python",
-        "Check Python formatting": "pixi run -e default automation -- format_check",
-        "Test release tooling": "pixi run -e default automation -- test_scripts",
-        "Verify the scoped versions and the shared contract": "pixi run -e default automation -- release_verify_versions",
-        "Check the generated bridge clients are current": "pixi run -e default automation -- check_generated",
-        "Check the Processing snapshot is current": "pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check",
-        "Test the reference plugin through qgis-sdk test": "pixi run -e default automation -- reference_example",
-        "Test the reference page on the workspace bridge": "pixi run -e default automation -- test_reference_web",
-        "Lint and format TypeScript": "pixi run -e default automation -- biome",
-        "Lint GitHub Actions": "pixi run -e default automation -- lint_actions",
-        "Check repository policy": "pixi run -e default automation -- lint_repository",
-        "Test repository policy": "pixi run -e default automation -- test_alint_policy",
-        "Typecheck TypeScript": "pixi run -e default automation -- typecheck",
-        "Build the qgis-sdk-ui Storybook": "pixi run -e default automation -- storybook",
-    }
-    for name, command in expected_checks.items():
-        assert checks[name]["run"] == command
-    assert checks["Checkout"]["with"]["fetch-depth"] == 0
-    assert (
-        checks["Compute commit range"]["env"]["BASE_SHA"]
-        == "${{ github.event.pull_request.base.sha || github.event.before }}"
-    )
-    assert (
-        checks["Test the native layers offscreen"]["run"]
-        == "pixi run -e default automation -- native"
-    )
-    assert checks["Test the native layers offscreen"]["env"] == {
-        "QT_QPA_PLATFORM": "offscreen",
-        "QGIS_SDK_NATIVE_SERVICES": "1",
-    }
     lts = {step.get("name"): step for step in jobs["lts"]["steps"]}
-    assert jobs["lts"]["runs-on"] == "ubuntu-24.04"
-    assert "needs" not in jobs["lts"]
-    assert (
-        "qgis qgis-server python3-qgis"
-        in lts["Install the QGIS 3.44 LTS packages"]["run"]
-    )
-    assert (
-        "--system-site-packages"
-        in lts["Install the SDK over the system bindings"]["run"]
-    )
-    assert (
-        lts["Test both hosts on the LTS"]["run"]
-        == ".venv-lts/bin/python -m automation.ci lts"
-    )
-    assert lts["Test both hosts on the LTS"]["env"] == {
-        "QT_QPA_PLATFORM": "offscreen",
-        # The dev-loop harness starts a real QgsServer, so the row opts it in.
-        "QGIS_SDK_SERVER_DEV": "1",
-    }
-    install = lts["Install the QGIS 3.44 LTS packages"]["run"]
-    assert "timeout " in install and "ready=false" in install
-    assert "GITHUB_STEP_SUMMARY" in install
-    ready = "${{ steps.s02.outputs.ready == 'true' }}"
-    assert lts["Install the SDK over the system bindings"]["if"] == ready
-    assert lts["Test both hosts on the LTS"]["if"] == ready
-    assert jobs["lts"]["timeout-minutes"] == 20
-    assert coverage["Check coverage for all packages"]["id"] == "coverage"
-    # The coverage run drives the workspace from the Bun environment, so it is a
-    # harness call rather than a task: `run_logged` keeps the output that the
-    # annotation step reads, and the Bun environment is the one it belongs to.
-    assert coverage["Check coverage for all packages"]["run"] == (
-        "python -m automation.ci run-log coverage-output.log -- "
-        "pixi run -e bun bun run coverage"
-    )
-    assert (
-        coverage["Annotate the coverage failure"]["if"]
-        == "failure() && steps.coverage.outcome == 'failure'"
-    )
-    assert coverage["Annotate the coverage failure"]["run"] == (
-        "python -m automation.ci annotate-coverage coverage-output.log"
-    )
-    for name, path, flag in (
-        (
-            "Upload Python coverage",
-            "packages/qgis-sdk-python/coverage/lcov.info",
-            "qgis-sdk-python",
-        ),
-        (
-            "Upload TypeScript coverage",
-            "coverage/qgis-sdk-typescript/lcov.info",
-            "qgis-sdk-typescript",
-        ),
-        ("Upload UI coverage", "coverage/qgis-sdk-ui/lcov.info", "qgis-sdk-ui"),
-    ):
-        assert (
-            coverage[name]["if"]
-            == "${{ !cancelled() && steps.coverage.outcome == 'success' }}"
-        )
-        assert coverage[name]["with"]["files"] == path
-        assert coverage[name]["with"]["flags"] == flag
-        assert coverage[name]["with"]["fail_ci_if_error"] is True
-        assert coverage[name]["continue-on-error"] is True
-    report = coverage["Report unavailable Codecov uploads"]
-    assert report["id"] == "s29"
-    for step_id in ("s16", "s17", "s24"):
-        assert f"steps.{step_id}.outcome == 'failure'" in report["if"]
-    assert "::warning" in report["run"]
-    assert "title=Codecov upload unavailable" in report["run"]
-    _ci_workflow_calls_helpers_facts11(checks, jobs, report)
+    _assert_aggregate_gate(jobs)
+    _assert_pixi_setup(jobs)
+    _assert_linux_steps(checks)
+    _assert_checkout_and_native(checks)
+    _assert_lts_install(lts)
+    _assert_lts_job(jobs, lts)
+    _assert_coverage_run(coverage)
+    _assert_upload_steps(coverage)
+    report = _assert_upload_report(coverage)
+    _assert_cross_platform(jobs, checks, report)
 
 
 def test_bun_ui_stops_if_a_build_fails(tmp_path: Path):

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -183,6 +183,91 @@ def _next_after_prefix(prefix: tuple[int, ...]) -> tuple[int, ...]:
     return (*prefix[:-1], prefix[-1] + 1)
 
 
+#: One clause of a range specifier tightens the ``(lower, upper)`` bounds.
+#: ``!=`` cannot empty a range on its own, so it leaves the bounds alone;
+#: this is the dispatch the arithmetic uses instead of an operator ladder.
+def _exact_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    lower, upper = bounds
+    return (
+        _tighter_lower(lower, (version, True)),
+        _tighter_upper(upper, (version, True)),
+    )
+
+
+def _at_least_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    return _tighter_lower(bounds[0], (version, True)), bounds[1]
+
+
+def _more_than_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    return _tighter_lower(bounds[0], (version, False)), bounds[1]
+
+
+def _at_most_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    return bounds[0], _tighter_upper(bounds[1], (version, True))
+
+
+def _less_than_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    return bounds[0], _tighter_upper(bounds[1], (version, False))
+
+
+def _compatible_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    lower = _tighter_lower(bounds[0], (version, True))
+    if len(version) >= 2:
+        upper = _tighter_upper(bounds[1], (_next_after_prefix(version[:-1]), False))
+        return lower, upper
+    return lower, bounds[1]
+
+
+def _exclude_bounds(bounds: _Bounds, version: tuple[int, ...]) -> _Bounds:
+    """``!=`` alone cannot empty a range (see the rule's docstring)."""
+    return bounds
+
+
+_Bounds = tuple[Bound | None, Bound | None]
+_RANGE_CLAUSES: dict[str, Callable[[_Bounds, tuple[int, ...]], _Bounds]] = {
+    "==": _exact_bounds,
+    "===": _exact_bounds,
+    ">=": _at_least_bounds,
+    ">": _more_than_bounds,
+    "<=": _at_most_bounds,
+    "<": _less_than_bounds,
+    "~=": _compatible_bounds,
+    "!=": _exclude_bounds,
+}
+
+
+def _range_bounds(specifier: str, supported: RuntimeRange) -> _Bounds | None:
+    """Tighten the supported range clause by clause; ``None`` means admitting."""
+    bounds: _Bounds = (
+        (_release(supported.lower), True),
+        (_release(supported.upper), False),
+    )
+    for raw in specifier.split(","):
+        clause = raw.strip()
+        if not clause:
+            continue
+        match = _CLAUSE.match(clause)
+        if match is None:
+            return None
+        op, text = match.group("op"), match.group("version")
+        try:
+            if op in ("==", "===") and text.endswith(".*"):
+                prefix = _release(text[:-2])
+                bounds = (
+                    _tighter_lower(bounds[0], (prefix, True)),
+                    _tighter_upper(bounds[1], (_next_after_prefix(prefix), False)),
+                )
+                continue
+            version = _release(text)
+        except ValueError:
+            return None
+        tighten = _RANGE_CLAUSES.get(op)
+        if tighten is None:
+            return None
+        bounds = tighten(bounds, version)
+    return bounds
+
+
 def requirement_admits_range(specifier: str, supported: RuntimeRange) -> bool:
     """Whether some version in ``supported`` satisfies ``specifier``.
 
@@ -190,42 +275,10 @@ def requirement_admits_range(specifier: str, supported: RuntimeRange) -> bool:
     unparsable clause makes the specifier count as admitting, so a syntax the
     arithmetic does not know is never reported as a mismatch.
     """
-    lower: Bound | None = (_release(supported.lower), True)
-    upper: Bound | None = (_release(supported.upper), False)
-    for raw in specifier.split(","):
-        clause = raw.strip()
-        if not clause:
-            continue
-        match = _CLAUSE.match(clause)
-        if match is None:
-            return True
-        op, text = match.group("op"), match.group("version")
-        try:
-            if op in ("==", "===") and text.endswith(".*"):
-                prefix = _release(text[:-2])
-                lower = _tighter_lower(lower, (prefix, True))
-                upper = _tighter_upper(upper, (_next_after_prefix(prefix), False))
-                continue
-            version = _release(text)
-        except ValueError:
-            return True
-        if op in ("==", "==="):
-            lower = _tighter_lower(lower, (version, True))
-            upper = _tighter_upper(upper, (version, True))
-        elif op == ">=":
-            lower = _tighter_lower(lower, (version, True))
-        elif op == ">":
-            lower = _tighter_lower(lower, (version, False))
-        elif op == "<=":
-            upper = _tighter_upper(upper, (version, True))
-        elif op == "<":
-            upper = _tighter_upper(upper, (version, False))
-        elif op == "~=":
-            lower = _tighter_lower(lower, (version, True))
-            if len(version) >= 2:
-                upper = _tighter_upper(upper, (_next_after_prefix(version[:-1]), False))
-        # "!=" is ignored on purpose.
-    return _nonempty(lower, upper)
+    bounds = _range_bounds(specifier, supported)
+    if bounds is None:
+        return True
+    return _nonempty(*bounds)
 
 
 # --- VERSION001: a runtime pin the tools were not tested with ----------------
@@ -251,6 +304,26 @@ def _requirement_strings(data: object) -> Iterator[str]:
                 yield from (r for r in listed if isinstance(r, str))
 
 
+def _runtime_pin_finding(requirement: str, supported: RuntimeRange) -> Diagnostic:
+    """VERSION001: one requirement that cannot meet the supported range."""
+    shown = requirement.split(";", 1)[0].strip()
+    return Diagnostic(
+        rule="VERSION001",
+        path=Path("pyproject.toml"),
+        line=0,
+        column=0,
+        message=(
+            f"pins `{shown}`, outside the runtime range this {TOOLS_DISTRIBUTION} "
+            f"release supports (>={supported.lower},<{supported.upper})"
+        ),
+        remediation=(
+            f"Move the pin into the range (`{supported.as_requirement()}`), "
+            f"or install the {TOOLS_DISTRIBUTION} release that was tested "
+            "with the runtime you pin."
+        ),
+    )
+
+
 def check_runtime_pins(root: Path) -> Iterator[Diagnostic]:
     """Report every runtime (or kit) requirement that cannot meet the supported range."""
     data, _malformed = read_pyproject(root / "pyproject.toml")
@@ -268,22 +341,7 @@ def check_runtime_pins(root: Path) -> Iterator[Diagnostic]:
             continue
         if requirement_admits_range(match.group("spec"), supported):
             continue
-        shown = requirement.split(";", 1)[0].strip()
-        yield Diagnostic(
-            rule="VERSION001",
-            path=Path("pyproject.toml"),
-            line=0,
-            column=0,
-            message=(
-                f"pins `{shown}`, outside the runtime range this {TOOLS_DISTRIBUTION} "
-                f"release supports (>={supported.lower},<{supported.upper})"
-            ),
-            remediation=(
-                f"Move the pin into the range (`{supported.as_requirement()}`), "
-                f"or install the {TOOLS_DISTRIBUTION} release that was tested "
-                "with the runtime you pin."
-            ),
-        )
+        yield _runtime_pin_finding(requirement, supported)
 
 
 # --- VERSION002: a client generated for another contract version -------------
@@ -376,6 +434,50 @@ def requirement_admits_version(specifier: str, version: str) -> bool:
     return _clauses_admit(point, specifier)
 
 
+def _exact_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return _eq(point, wanted)
+
+
+def _excluded_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return not _eq(point, wanted)
+
+
+def _at_least_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return not _lt(point, wanted)
+
+
+def _more_than_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return _lt(wanted, point)
+
+
+def _at_most_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return not _lt(wanted, point)
+
+
+def _less_than_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return _lt(point, wanted)
+
+
+def _compatible_point(point: tuple[int, ...], wanted: tuple[int, ...]) -> bool:
+    return not _lt(point, wanted) and (
+        len(wanted) < 2 or _lt(point, _next_after_prefix(wanted[:-1]))
+    )
+
+
+#: The same operators on a point; ``!=`` is honoured here because a point can
+#: be excluded exactly. Dispatch keeps the clause loop free of a ladder.
+_POINT_CLAUSES: dict[str, Callable[[tuple[int, ...], tuple[int, ...]], bool]] = {
+    "==": _exact_point,
+    "===": _exact_point,
+    "!=": _excluded_point,
+    ">=": _at_least_point,
+    ">": _more_than_point,
+    "<=": _at_most_point,
+    "<": _less_than_point,
+    "~=": _compatible_point,
+}
+
+
 def _clauses_admit(point: tuple[int, ...], specifier: str) -> bool:
     """Whether every clause of ``specifier`` admits the release ``point``."""
     for raw in specifier.split(","):
@@ -396,23 +498,8 @@ def _clauses_admit(point: tuple[int, ...], specifier: str) -> bool:
             wanted = _release(text)
         except ValueError:
             return True
-        if op in ("==", "==="):
-            ok = _eq(point, wanted)
-        elif op == "!=":
-            ok = not _eq(point, wanted)
-        elif op == ">=":
-            ok = not _lt(point, wanted)
-        elif op == ">":
-            ok = _lt(wanted, point)
-        elif op == "<=":
-            ok = not _lt(wanted, point)
-        elif op == "<":
-            ok = _lt(point, wanted)
-        else:  # "~="
-            ok = not _lt(point, wanted) and (
-                len(wanted) < 2 or _lt(point, _next_after_prefix(wanted[:-1]))
-            )
-        if not ok:
+        compare = _POINT_CLAUSES.get(op)
+        if compare is None or not compare(point, wanted):
             return False
     return True
 
@@ -458,33 +545,29 @@ def resolve_runtime(root: Path) -> RuntimeResolution:
     )
 
 
-def check_runtime_requirement(root: Path) -> Iterator[Diagnostic]:
-    """``VERSION003`` without a runtime requirement, ``VERSION004`` when unmet."""
-    if not (Path(root) / "pyproject.toml").is_file():
-        return
-    resolution = resolve_runtime(root)
-    if resolution.requirement is None:
-        installed = resolution.installed or "unknown"
-        yield Diagnostic(
-            rule="VERSION003",
-            path=Path("pyproject.toml"),
-            line=0,
-            column=0,
-            severity="warning",
-            message=(
-                f"declares no requirement on {RUNTIME_DISTRIBUTION}; `build` ships "
-                f"whatever this interpreter imports ({installed})"
-            ),
-            remediation=(
-                "Add it to [project] dependencies, for example "
-                f'`"{RUNTIME_DISTRIBUTION}>={_minor(installed)},<{_next_minor(installed)}"`, '
-                "so the vendored runtime is one the plugin was written for."
-            ),
-        )
-        return
-    if resolution.satisfied:
-        return
-    yield Diagnostic(
+def _missing_runtime_finding(installed: str) -> Diagnostic:
+    """VERSION003: the project declares no requirement on the runtime."""
+    return Diagnostic(
+        rule="VERSION003",
+        path=Path("pyproject.toml"),
+        line=0,
+        column=0,
+        severity="warning",
+        message=(
+            f"declares no requirement on {RUNTIME_DISTRIBUTION}; `build` ships "
+            f"whatever this interpreter imports ({installed})"
+        ),
+        remediation=(
+            "Add it to [project] dependencies, for example "
+            f'`"{RUNTIME_DISTRIBUTION}>={_minor(installed)},<{_next_minor(installed)}"`, '
+            "so the vendored runtime is one the plugin was written for."
+        ),
+    )
+
+
+def _unmet_runtime_finding(resolution: RuntimeResolution) -> Diagnostic:
+    """VERSION004: the importable runtime is outside the declared specifier."""
+    return Diagnostic(
         rule="VERSION004",
         path=Path("pyproject.toml"),
         line=0,
@@ -498,6 +581,19 @@ def check_runtime_requirement(root: Path) -> Iterator[Diagnostic]:
             "or move the requirement; qgis-sdk never installs on your behalf."
         ),
     )
+
+
+def check_runtime_requirement(root: Path) -> Iterator[Diagnostic]:
+    """``VERSION003`` without a runtime requirement, ``VERSION004`` when unmet."""
+    if not (Path(root) / "pyproject.toml").is_file():
+        return
+    resolution = resolve_runtime(root)
+    if resolution.requirement is None:
+        yield _missing_runtime_finding(resolution.installed or "unknown")
+        return
+    if resolution.satisfied:
+        return
+    yield _unmet_runtime_finding(resolution)
 
 
 def _minor(version: str) -> str:

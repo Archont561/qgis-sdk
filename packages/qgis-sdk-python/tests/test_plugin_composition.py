@@ -1,12 +1,10 @@
 """Public plugin composition and surface authoring."""
 
 
-def test_inclusion_rejects_collisions_and_cycles_without_partial_changes() -> None:
-    import pytest
-    from qgis_sdk import QgisSdkDeclarationError, QgisSdkPlugin
+def _decorated_plugins():
+    """A parent and a child that both declare an action named ``same``."""
+    from qgis_sdk import QgisSdkPlugin
     from qgis_sdk.core import PluginContext
-    from qgis_sdk.providers import Provider
-    from qgis_sdk.ui import Dialog
 
     parent = QgisSdkPlugin(id="root", title="Root")
     child = QgisSdkPlugin(id="child", title="Child")
@@ -23,6 +21,18 @@ def test_inclusion_rejects_collisions_and_cycles_without_partial_changes() -> No
     def conflicting(ctx: PluginContext) -> None:
         pass
 
+    return parent, child
+
+
+def _assert_inclusion_collision_refused() -> None:
+    """A duplicate action id aborts the whole snapshot, not part of it."""
+    import pytest
+    from qgis_sdk import QgisSdkDeclarationError
+    from qgis_sdk.providers import Provider
+    from qgis_sdk.ui import Dialog
+
+    parent, child = _decorated_plugins()
+
     @child.surface
     class Report(Dialog):
         pass
@@ -32,6 +42,12 @@ def test_inclusion_rejects_collisions_and_cycles_without_partial_changes() -> No
         parent.include(child)
     assert [item.id for item in parent.describe().actions] == ["same"]
     assert parent.surfaces == () and parent.providers == ()
+
+
+def _assert_inclusion_cycles_refused() -> None:
+    """A cycle and an already-included plugin are both refused."""
+    import pytest
+    from qgis_sdk import QgisSdkDeclarationError, QgisSdkPlugin
 
     one = QgisSdkPlugin(id="one", title="One")
     two = QgisSdkPlugin(id="two", title="Two")
@@ -45,6 +61,12 @@ def test_inclusion_rejects_collisions_and_cycles_without_partial_changes() -> No
     with pytest.raises(QgisSdkDeclarationError, match="already included"):
         one.include(two)
 
+
+def _assert_grandchild_refused() -> None:
+    """Including a branch does not let a grandchild be included twice."""
+    import pytest
+    from qgis_sdk import QgisSdkDeclarationError, QgisSdkPlugin
+
     root = QgisSdkPlugin(id="root2")
     branch = QgisSdkPlugin(id="branch")
     leaf = QgisSdkPlugin(id="leaf")
@@ -52,6 +74,12 @@ def test_inclusion_rejects_collisions_and_cycles_without_partial_changes() -> No
     root.include(branch)
     with pytest.raises(QgisSdkDeclarationError, match="already included"):
         root.include(leaf)
+
+
+def test_inclusion_rejects_collisions_and_cycles_without_partial_changes() -> None:
+    _assert_inclusion_collision_refused()
+    _assert_inclusion_cycles_refused()
+    _assert_grandchild_refused()
 
 
 def test_inclusion_refuses_conflicting_surfaces_providers_and_context() -> None:
@@ -82,10 +110,11 @@ def test_inclusion_refuses_conflicting_surfaces_providers_and_context() -> None:
     assert [provider.id for provider in parent.providers] == ["reports"]
 
 
-def test_including_plugin_composes_owned_declarations_as_a_snapshot() -> None:
+def _snapshot_child():
+    """A child with one action, one stream, one surface and one provider."""
     from collections.abc import Iterator
 
-    from qgis_sdk import QgisSdkPlugin, describe
+    from qgis_sdk import QgisSdkPlugin
     from qgis_sdk.core import PluginContext
     from qgis_sdk.providers import Provider
     from qgis_sdk.ui import Dialog
@@ -106,9 +135,18 @@ def test_including_plugin_composes_owned_declarations_as_a_snapshot() -> None:
 
     provider = Provider(id="reports", title="Reports")
     child.add_provider(provider)
+    return child, Report, provider
+
+
+def test_including_plugin_composes_owned_declarations_as_a_snapshot() -> None:
+    from qgis_sdk import QgisSdkPlugin, describe
+    from qgis_sdk.core import PluginContext
+
+    child, Report, provider = _snapshot_child()
     parent = QgisSdkPlugin(id="root", title="Root")
     parent.include(child)
 
+    # A declaration added after the snapshot belongs to the child alone.
     @child.action(id="later", title="Later")
     def later(ctx: PluginContext) -> None:
         pass
@@ -155,7 +193,6 @@ def test_surface_decorator_preserves_class_and_both_binding_orders() -> None:
     ]
 
 
-# A function with synthetic globals simulates entry points without a module.
 def test_plugin_defaults_follow_declaring_module(tmp_path, monkeypatch) -> None:
     import importlib
 
@@ -172,6 +209,10 @@ def test_plugin_defaults_follow_declaring_module(tmp_path, monkeypatch) -> None:
     assert module.plugin.describe().id == "composition_defaults_fixture.reports"
     assert module.plugin.describe().title == "Reports"
     assert module.overridden.describe().title == "Cadastral survey"
+
+
+# A function with synthetic globals simulates entry points without a module.
+def test_plugin_without_a_declaring_module_needs_an_explicit_id() -> None:
     from types import FunctionType
 
     import pytest

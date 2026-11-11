@@ -24,7 +24,8 @@ from qgis_sdk.declarations._describe import _describe_lowered_plugin
 from qgis_sdk.declarations._plugin import action, plugin, stream
 
 
-def _init_facts1(self):
+def _initial_plugin_fields(self: QgisSdkPlugin) -> None:
+    """The mutable declarations a plugin starts with."""
     self._providers: list[Provider] = []
     self._jobs: Any = None
     self._declared_jobs: dict[str, Callable[..., Any]] = {}
@@ -33,7 +34,14 @@ def _init_facts1(self):
     self.context_factory: Callable[[object | None], PluginContext] | None = None
 
 
-def _include_facts1(child, jobs, members, providers, self):
+def _commit_inclusion(
+    self: QgisSdkPlugin,
+    child: QgisSdkPlugin,
+    jobs: Any,
+    members: set[QgisSdkPlugin],
+    providers: list[Provider],
+) -> None:
+    """Commit the snapshot only after every validation has passed."""
     self._providers = providers
     # The merged mapping already holds this plugin's decorator entries.
     self._jobs = jobs
@@ -69,6 +77,212 @@ def _lower_stream(function: Callable[..., Any]) -> Callable[..., Any]:
     def invoke(self, /, *args, **kwargs):
         yield from function(self.ctx, *args, **kwargs)
 
+    return invoke
+
+
+def _declare_job_function(
+    function: Callable[..., Any], id: str | None, title: str | None
+) -> None:
+    """Apply ``@job`` metadata to a function the author left undecorated."""
+    from qgis_sdk.jobs import job as declare_job
+
+    if id is not None or title is not None:
+        declare_job(id=id, title=title)(function)
+    elif "__qgis_sdk_job__" not in vars(function):
+        declare_job(function)
+
+
+def _job_registry_conflict(
+    self: QgisSdkPlugin, name: str, function: Callable[..., Any]
+) -> None:
+    """One call validates the name, decoration, reserved names and collisions."""
+    from qgis_sdk.jobs import JobRegistry
+
+    path = f"Plugin {self.id!r}"
+    JobRegistry.from_declaration({**self._declared_jobs, name: function}, path=path)
+    if self._jobs is None:
+        return
+    assigned = JobRegistry.from_declaration(self._jobs, path=path)
+    if name in assigned:
+        raise QgisSdkDeclarationError(
+            f"Plugin {self.id!r}: {name!r} is both assigned in `jobs` and "
+            "declared with @app.job; keep one declaration per name"
+        )
+
+
+def _register_declared_job(
+    self: QgisSdkPlugin,
+    function: Callable[..., Any],
+    key: str | None,
+    id: str | None,
+    title: str | None,
+) -> Any:
+    """Validate and record one decorator-declared job."""
+    if not inspect.isfunction(function):
+        raise QgisSdkDeclarationError("@app.job declares a function")
+    from qgis_sdk.declarations import derive_id
+
+    _declare_job_function(function, id, title)
+    name = key if key is not None else derive_id(function.__name__)
+    if name in self._declared_jobs:
+        raise QgisSdkDeclarationError(
+            f"Plugin {self.id!r}: two jobs are named {name!r}; give one of "
+            "them another name with @app.job(key=...)"
+        )
+    _job_registry_conflict(self, name, function)
+    self._declared_jobs = {**self._declared_jobs, name: function}
+    return function
+
+
+def _include_cycle_free(
+    self: QgisSdkPlugin, child: QgisSdkPlugin
+) -> set[QgisSdkPlugin]:
+    """Walk the child's inclusions; refuse a cycle or an already-included member."""
+    if not isinstance(child, QgisSdkPlugin):
+        raise QgisSdkDeclarationError("include requires a QgisSdkPlugin")
+    if child.context_factory is not None:
+        raise QgisSdkDeclarationError("included plugin cannot have a context_factory")
+    pending = [child]
+    seen: set[QgisSdkPlugin] = set()
+    while pending:
+        current = pending.pop()
+        if current is self:
+            raise QgisSdkDeclarationError("plugin inclusion cycle")
+        if current not in seen:
+            seen.add(current)
+            pending.extend(current._included_plugins)
+    members = {child, *child._included_members}
+    if members & self._included_members:
+        raise QgisSdkDeclarationError("duplicate plugin already included")
+    return members
+
+
+def _validated_surfaces(
+    self: QgisSdkPlugin, child: QgisSdkPlugin
+) -> list[type[Surface]]:
+    """Both plugins' surfaces, with no invalid class or duplicate id."""
+    from qgis_sdk.ui.surfaces import describe_surface, is_surface_class
+
+    surfaces = [*self._surfaces, *child._surfaces]
+    surface_ids: set[str] = set()
+    for surface in surfaces:
+        if not is_surface_class(surface):
+            raise QgisSdkDeclarationError("surfaces must be Dialog/Dock subclasses")
+        surface_id = describe_surface(surface).id
+        if surface_id in surface_ids:
+            raise QgisSdkDeclarationError(f"duplicate surface id {surface_id!r}")
+        surface_ids.add(surface_id)
+    return surfaces
+
+
+def _validated_providers(self: QgisSdkPlugin, child: QgisSdkPlugin) -> list[Provider]:
+    """Both plugins' providers, with no wrong type or duplicate id."""
+    from qgis_sdk.providers import Provider
+
+    providers = [*self._providers, *child._providers]
+    provider_ids: set[str] = set()
+    for provider in providers:
+        if not isinstance(provider, Provider):
+            raise QgisSdkDeclarationError("providers must be Provider instances")
+        if provider.id in provider_ids:
+            raise QgisSdkDeclarationError(f"duplicate provider id {provider.id!r}")
+        provider_ids.add(provider.id)
+    return providers
+
+
+def _validate_handler_shape(
+    function: Callable[..., Any], events: dict[str, Any] | None
+) -> None:
+    """The handler's name and callable kind must fit class lowering."""
+    if function.__name__ in {
+        "surfaces",
+        "providers",
+        "jobs",
+        "ctx",
+        "describe",
+    } or (function.__name__.startswith("__")):
+        raise QgisSdkDeclarationError("handler name is reserved by the lowered class")
+    if (
+        not inspect.isfunction(function)
+        or (
+            inspect.iscoroutinefunction(function)
+            or inspect.isasyncgenfunction(function)
+        )
+        or (events is None and inspect.isgeneratorfunction(function))
+    ):
+        raise QgisSdkDeclarationError(
+            "application accepts only synchronous actions or streams"
+        )
+    if events is not None and not inspect.isgeneratorfunction(function):
+        raise QgisSdkDeclarationError("application streams must be generators")
+
+
+def _validate_handler_context(function: Callable[..., Any], id: str) -> None:
+    """The first argument is a positional ``PluginContext`` and no input is self."""
+    signature = inspect.signature(function)
+    parameters = list(signature.parameters.values())
+    hints = resolve_hints(function, f"action {id} ({function.__name__})")
+    if not parameters or hints.get(parameters[0].name) is not PluginContext:
+        raise QgisSdkDeclarationError("first argument must be PluginContext")
+    if parameters[0].kind not in (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    ):
+        raise QgisSdkDeclarationError("context must be positional")
+    if any(parameter.name == "self" for parameter in parameters[1:]):
+        raise QgisSdkDeclarationError("input name self is reserved by class lowering")
+
+
+def _validate_handler(
+    function: Callable[..., Any], events: dict[str, Any] | None, id: str
+) -> None:
+    _validate_handler_shape(function, events)
+    _validate_handler_context(function, id)
+
+
+def _handler_signature(function: Callable[..., Any], id: str) -> inspect.Signature:
+    """The lowered method's signature: ``self`` plus the resolved input hints."""
+    signature = inspect.signature(function)
+    parameters = list(signature.parameters.values())
+    hints = resolve_hints(function, f"action {id} ({function.__name__})")
+    return signature.replace(
+        parameters=[inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+        + [
+            p.replace(annotation=hints.get(p.name, p.annotation))
+            for p in parameters[1:]
+        ],
+        return_annotation=hints.get("return", signature.return_annotation),
+    )
+
+
+def _copy_declaration_attributes(
+    function: Callable[..., Any], invoke: Callable[..., Any]
+) -> None:
+    """Bindings, their order and wires survive the lowering."""
+    for attribute in (BINDINGS_ATTRIBUTE, BINDING_ORDER_ATTRIBUTE, WIRES_ATTRIBUTE):
+        if attribute in vars(function):
+            setattr(invoke, attribute, vars(function)[attribute])
+
+
+def _lowered_handler(
+    id: str,
+    title: str,
+    function: Callable[..., Any],
+    events: dict[str, Any] | None,
+) -> Callable[..., Any]:
+    """One class method, declared as an action or a stream."""
+    invoke = _lower_handler(function) if events is None else _lower_stream(function)
+    invoke.__name__ = function.__name__
+    signature = inspect.signature(function)
+    parameters = list(signature.parameters.values())
+    hints = resolve_hints(function, f"action {id} ({function.__name__})")
+    invoke.__signature__ = _handler_signature(function, id)
+    invoke.__annotations__ = {k: v for k, v in hints.items() if k != parameters[0].name}
+    if events is None:
+        action(id=id, title=title)(invoke)
+    else:
+        stream(id=id, title=title, events=events)(invoke)
+    _copy_declaration_attributes(function, invoke)
     return invoke
 
 
@@ -202,56 +416,15 @@ class _QgisSdkPluginMixin1:
     ) -> Any:
         """Declare one ``@job`` function as ``ctx.jobs.<name>``, decorator style.
 
-        The shape an action already has::
-
-            @app.job(id="demo.sum", title="Sum")
-            def add(ctx: WorkerContext, left: int, right: int) -> SumResult: ...
-
-            @app.job()          # id, title and name all derived from the function
-            def count_features(ctx: WorkerContext, layer_id: str) -> int: ...
-
-            @app.job(key="sum") # a name that differs from the function's own
-            def add(ctx: WorkerContext, ...) -> ...: ...
-
-        The name is the function's, snake_cased, exactly as a sequence entry of
-        ``app.jobs`` derives it; ``key=`` renames it the way a mapping key does.
-        The function keeps its ``@job`` metadata - applying it here when the
-        author did not - so ``describe_job(add)`` works either way.
+        ``@app.job(id="demo.sum", title="Sum")`` and ``@app.job()`` both work;
+        ``key=`` renames the entry the way a mapping key does. The name is the
+        function's, snake_cased, exactly as a sequence entry of ``app.jobs``
+        derives it. The function keeps its ``@job`` metadata - applied here
+        when the author did not - so ``describe_job(add)`` works either way.
         """
         if function is None:
             return lambda target: self.job(target, key=key, id=id, title=title)
-        if not inspect.isfunction(function):
-            raise QgisSdkDeclarationError("@app.job declares a function")
-        from qgis_sdk.declarations import derive_id
-        from qgis_sdk.jobs import JobRegistry
-        from qgis_sdk.jobs import job as declare_job
-
-        if id is not None or title is not None:
-            declare_job(id=id, title=title)(function)
-        elif "__qgis_sdk_job__" not in vars(function):
-            declare_job(function)
-        name = key if key is not None else derive_id(function.__name__)
-        if name in self._declared_jobs:
-            raise QgisSdkDeclarationError(
-                f"Plugin {self.id!r}: two jobs are named {name!r}; give one of "
-                "them another name with @app.job(key=...)"
-            )
-        # One call validates the name, the decoration, the reserved names and a
-        # second name for an id this plugin already declares.
-        JobRegistry.from_declaration(
-            {**self._declared_jobs, name: function}, path=f"Plugin {self.id!r}"
-        )
-        if self._jobs is not None:
-            assigned = JobRegistry.from_declaration(
-                self._jobs, path=f"Plugin {self.id!r}"
-            )
-            if name in assigned:
-                raise QgisSdkDeclarationError(
-                    f"Plugin {self.id!r}: {name!r} is both assigned in `jobs` and "
-                    "declared with @app.job; keep one declaration per name"
-                )
-        self._declared_jobs = {**self._declared_jobs, name: function}
-        return function
+        return _register_declared_job(self, function, key, id, title)
 
     def surface(self, surface: type[S]) -> type[S]:
         """Register a Dialog or Dock class without replacing it."""
@@ -270,50 +443,13 @@ class _QgisSdkPluginMixin1:
 
     def include(self, child: QgisSdkPlugin) -> None:
         """Snapshot another plugin's declarations into this plugin atomically."""
-        from qgis_sdk.providers import Provider
-        from qgis_sdk.ui.surfaces import describe_surface, is_surface_class
-
-        if not isinstance(child, QgisSdkPlugin):
-            raise QgisSdkDeclarationError("include requires a QgisSdkPlugin")
-        if child.context_factory is not None:
-            raise QgisSdkDeclarationError(
-                "included plugin cannot have a context_factory"
-            )
-        pending = [child]
-        seen: set[QgisSdkPlugin] = set()
-        while pending:
-            current = pending.pop()
-            if current is self:
-                raise QgisSdkDeclarationError("plugin inclusion cycle")
-            if current not in seen:
-                seen.add(current)
-                pending.extend(current._included_plugins)
-        members = {child, *child._included_members}
-        if members & self._included_members:
-            raise QgisSdkDeclarationError("duplicate plugin already included")
-
-        surfaces = [*self._surfaces, *child._surfaces]
-        surface_ids: set[str] = set()
-        for surface in surfaces:
-            if not is_surface_class(surface):
-                raise QgisSdkDeclarationError("surfaces must be Dialog/Dock subclasses")
-            surface_id = describe_surface(surface).id
-            if surface_id in surface_ids:
-                raise QgisSdkDeclarationError(f"duplicate surface id {surface_id!r}")
-            surface_ids.add(surface_id)
-        providers = [*self._providers, *child._providers]
-        provider_ids: set[str] = set()
-        for provider in providers:
-            if not isinstance(provider, Provider):
-                raise QgisSdkDeclarationError("providers must be Provider instances")
-            if provider.id in provider_ids:
-                raise QgisSdkDeclarationError(f"duplicate provider id {provider.id!r}")
-            provider_ids.add(provider.id)
-
+        members = _include_cycle_free(self, child)
+        surfaces = _validated_surfaces(self, child)
+        providers = _validated_providers(self, child)
         jobs = _merge_jobs(self.jobs, child.jobs)
         self._extend(child._actions)
         self._surfaces = surfaces
-        _include_facts1(child, jobs, members, providers, self)
+        _commit_inclusion(self, child, jobs, members, providers)
 
     def describe(self) -> PluginDescription:
         return _describe_lowered_plugin(self._plugin_class())
@@ -321,6 +457,7 @@ class _QgisSdkPluginMixin1:
 
 class _QgisSdkPluginMixin2:
     def _plugin_class(self) -> type:
+        """Lower the collected declarations into one SDK plugin class."""
         members: dict[str, Any] = {
             "surfaces": tuple(self._surfaces),
             "providers": tuple(self._providers),
@@ -331,73 +468,8 @@ class _QgisSdkPluginMixin2:
         if jobs is not None:
             members["jobs"] = jobs
         for id, title, function, events in self._actions:
-            if function.__name__ in {
-                "surfaces",
-                "providers",
-                "jobs",
-                "ctx",
-                "describe",
-            } or (function.__name__.startswith("__")):
-                raise QgisSdkDeclarationError(
-                    "handler name is reserved by the lowered class"
-                )
-            if (
-                not inspect.isfunction(function)
-                or (
-                    inspect.iscoroutinefunction(function)
-                    or inspect.isasyncgenfunction(function)
-                )
-                or (events is None and inspect.isgeneratorfunction(function))
-            ):
-                raise QgisSdkDeclarationError(
-                    "application accepts only synchronous actions or streams"
-                )
-            if events is not None and not inspect.isgeneratorfunction(function):
-                raise QgisSdkDeclarationError("application streams must be generators")
-            signature = inspect.signature(function)
-            parameters = list(signature.parameters.values())
-            hints = resolve_hints(function, f"action {id} ({function.__name__})")
-            if not parameters or hints.get(parameters[0].name) is not PluginContext:
-                raise QgisSdkDeclarationError("first argument must be PluginContext")
-            if parameters[0].kind not in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            ):
-                raise QgisSdkDeclarationError("context must be positional")
-            if any(parameter.name == "self" for parameter in parameters[1:]):
-                raise QgisSdkDeclarationError(
-                    "input name self is reserved by class lowering"
-                )
-
-            invoke = (
-                _lower_handler(function) if events is None else _lower_stream(function)
-            )
-            invoke.__name__ = function.__name__
-            invoke.__signature__ = signature.replace(
-                parameters=[
-                    inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
-                ]
-                + [
-                    p.replace(annotation=hints.get(p.name, p.annotation))
-                    for p in parameters[1:]
-                ],
-                return_annotation=hints.get("return", signature.return_annotation),
-            )
-            invoke.__annotations__ = {
-                k: v for k, v in hints.items() if k != parameters[0].name
-            }
-            if events is None:
-                action(id=id, title=title)(invoke)
-            else:
-                stream(id=id, title=title, events=events)(invoke)
-            for attribute in (
-                BINDINGS_ATTRIBUTE,
-                BINDING_ORDER_ATTRIBUTE,
-                WIRES_ATTRIBUTE,
-            ):
-                if attribute in vars(function):
-                    setattr(invoke, attribute, vars(function)[attribute])
-            members[function.__name__] = invoke
+            _validate_handler(function, events, id)
+            members[function.__name__] = _lowered_handler(id, title, function, events)
         return plugin(id=self.id, title=self.title)(
             type("_ApplicationPlugin", (), members)
         )
@@ -432,7 +504,7 @@ class QgisSdkPlugin(_QgisSdkPluginMixin1, _QgisSdkPluginMixin2, _ActionRegistry)
         #: the plugin, not beside the runtime) - `qgis_sdk.app.run` fills it.
         self.module = module if isinstance(module, str) else None
         self._surfaces: list[type[Surface]] = []
-        _init_facts1(self)
+        _initial_plugin_fields(self)
 
 
 def _describe_function(function):
