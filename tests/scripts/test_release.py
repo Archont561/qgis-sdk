@@ -2141,7 +2141,7 @@ def test_the_coverage_config_is_tracked_so_ci_measures_the_same_code():
     assert "adapters/qgis/*" in config.read_text(encoding="utf-8")
 
 
-def test_ci_verifies_the_scoped_versions_and_the_contract_on_every_push():
+def test_ci_verifies_the_scoped_versions_and_the_shared_contract():
     repo_root = Path(__file__).resolve().parents[2]
     text = (repo_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 

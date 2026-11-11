@@ -123,6 +123,10 @@ block left every job at zero steps but still recorded the events:
   gets no `ci.yml` run at all, so a branch-protection rule requiring `checks` can never be satisfied
   by such a pull request - it needs one non-ignored file, or an admin merge.
 
+**Follow-through: one CI run per change (2026-11-11).** Branch protection on `main` now requires `checks`, `Linux checks`, `Linux coverage`, `QGIS 3.44 LTS` and both `cross-platform (...)` jobs on the pull request head, with strict up-to-date branches. The consequence recorded above - a pull request whose entire diff is `backlog/**` or `AGENTS.md` gets no `ci.yml` run and therefore can never satisfy a required check - is fixed by removing the `pull_request` `paths-ignore` filter from `ci.yml`: it now gates every pull request. `ci.yml`, `compat.yml`, `docs-check.yml` and `backlog.yml` also lose their `push: branches: [main]` triggers, because the merged tree is the tested tree; `docs.yml` (Pages deploy), `autorelease.yml` and `publish-sandbox.yml` keep theirs. `backlog.yml` stays as the fast guard alongside the full matrix. `tests/scripts/test_ci.py` asserts the trigger shape so the required contexts cannot silently disappear again.
+
+Cost trade-off: a backlog-only or agent-instructions-only pull request now pays for the full matrix. That is the price of a required check that always exists; a job-level path filter with same-named fallback jobs is the next optimisation if the cost matters. The checks from `compat.yml`, `docs-check.yml`, `backlog.yml` and `docs.yml` are still path-filtered and are not in the required-context list, so a red check from one of them does not currently block a merge - closing that gap means making those workflows always-on too, or adding always-green fallback jobs.
+
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary

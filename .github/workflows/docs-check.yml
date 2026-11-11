@@ -8,20 +8,9 @@ name: Documentation
 # The site's own build, its link check and its deploy are `docs.yml`.
 
 on:
+  # These checks gate the pull request; the merged tree is the tested tree,
+  # so there is no `push` run repeating them. `docs.yml` still deploys.
   pull_request:
-    paths:
-      - "docs/**"
-      - "README.md"
-      - "AGENTS.md"
-      - "package.json"
-      - "scripts/readme/**"
-      - ".markdownlint-cli2.jsonc"
-      - ".vale.ini"
-      - ".lychee.toml"
-      - ".alint.yml"
-      - ".github/workflows/docs-check.yml"
-  push:
-    branches: [main]
     paths:
       - "docs/**"
       - "README.md"

@@ -1,30 +1,22 @@
 name: backlog
 
-# The backlog guards, for the one change CI never sees.
+# The backlog guards, on the paths that change the board.
 #
-# `ci.yml` ignores `backlog/**` on purpose: a task edit does not need the Python,
-# Qt and TypeScript matrices. But `tests/scripts/test_backlog.py` - the guard
-# that keeps the board honest - is a step inside that job, so a backlog-only pull
-# request ran no link check, no `milestone:` against `doc-4` comparison and no id
-# uniqueness check at all. Those passed only when somebody ran them by hand. This
-# workflow runs that one file on the paths the matrix skips.
+# `tests/scripts/test_backlog.py` keeps the board honest - links, `milestone:`
+# against `doc-4`, id uniqueness - in seconds, without the SDK installed. It
+# runs on every pull request that touches the backlog, alongside the full CI
+# matrix: branch protection requires the `ci.yml` checks on every pull request,
+# so `ci.yml` cannot use a `paths-ignore` filter without leaving a required
+# check Pending. This workflow keeps the narrow, cheap guard in its own home.
 #
 # Deliberately narrow, and not a second home for tests: a check that needs the
 # SDK installed, QGIS, or a browser stays in `ci.yml`. This job installs pytest
 # and nothing else, and finishes in seconds.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "backlog/**"
-      - "tests/scripts/test_backlog.py"
-      - "tests/scripts/pyproject.toml"
-      - ".github/workflows/backlog.yml"
   pull_request:
-    # Spelled out per trigger rather than shared through an anchor, as in
-    # `ci.yml`: the trigger filters take no expressions, and one readable list
-    # per event is easier to diff than an alias.
+    # One readable list, spelled out rather than shared through an anchor:
+    # trigger filters take no expressions.
     paths:
       - "backlog/**"
       - "tests/scripts/test_backlog.py"
