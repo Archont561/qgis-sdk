@@ -600,6 +600,10 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     workflow = yaml.safe_load(
         (SCRIPT.parents[1] / ".github/workflows/ci.yml").read_text()
     )
+    # Branch protection requires six contexts from this workflow on every PR,
+    # so it must run on every PR (no path filter) and must not repeat on `main`.
+    assert "push" not in workflow[True]
+    assert not workflow[True]["pull_request"]
     jobs = workflow["jobs"]
     checks = {step.get("name"): step for step in jobs["linux"]["steps"]}
     coverage = {step.get("name"): step for step in jobs["coverage"]["steps"]}
@@ -744,15 +748,18 @@ def test_bun_ui_stops_if_a_build_fails(tmp_path: Path):
     assert not (tmp_path / "bun-ui-tests.log").exists()
 
 
-def test_skill_tests_are_not_run_or_trigger_ci():
+def test_ci_always_gates_pull_requests_and_no_skill_steps_are_run():
     import tomllib
 
     import yaml
 
     root = SCRIPT.parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
-    for event in ("push", "pull_request"):
-        assert ".agents/skills/**" in workflow[True][event]["paths-ignore"]
+    # A required check from a workflow skipped by path filtering stays Pending
+    # and blocks the merge, so `ci.yml` gates every pull request without a
+    # `paths-ignore` filter, and never repeats itself on a post-merge `push`.
+    assert "push" not in workflow[True]
+    assert not workflow[True]["pull_request"]
     steps = [step for job in workflow["jobs"].values() for step in job["steps"]]
     assert not any("skill" in step.get("name", "").lower() for step in steps)
     assert not any(".agents/skills" in step.get("run", "") for step in steps)
@@ -763,6 +770,20 @@ def test_skill_tests_are_not_run_or_trigger_ci():
     )
     assert ".agents/skills" not in python_package["scripts"]["test"]
     assert not (root / ".agents/skills/skill-creator/tests").exists()
+
+
+def test_only_deploy_and_release_workflows_keep_a_main_push_trigger():
+    import yaml
+
+    root = SCRIPT.parents[1]
+    workflows = root / ".github/workflows"
+    for name in ("ci.yml", "compat.yml", "docs-check.yml", "backlog.yml"):
+        triggers = yaml.safe_load((workflows / name).read_text())[True]
+        assert "push" not in triggers, f"{name} repeats a green PR run on main"
+        assert "pull_request" in triggers, f"{name} no longer gates pull requests"
+    for name in ("docs.yml", "autorelease.yml", "publish-sandbox.yml"):
+        triggers = yaml.safe_load((workflows / name).read_text())[True]
+        assert "push" in triggers, f"{name} deploys or releases from main"
 
 
 # -- Gherkin linting ---------------------------------------------------------

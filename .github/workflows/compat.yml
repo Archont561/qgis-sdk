@@ -12,16 +12,9 @@ name: Python compatibility
 # passing quietly.
 
 on:
+  # Branch protection gates the pull request; a post-merge `push` run would
+  # repeat the same tree. Deploy/release workflows keep their push triggers.
   pull_request:
-    paths:
-      - "packages/qgis-sdk-python/**"
-      - "packages/qgis-sdk-runtime/**"
-      - "packages/qgis-sdk-tools/**"
-      - "tox.ini"
-      - "automation/**"
-      - ".github/workflows/compat.yml"
-  push:
-    branches: [main]
     paths:
       - "packages/qgis-sdk-python/**"
       - "packages/qgis-sdk-runtime/**"
