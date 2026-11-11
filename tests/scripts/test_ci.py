@@ -679,6 +679,13 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         # The dev-loop harness starts a real QgsServer, so the row opts it in.
         "QGIS_SDK_SERVER_DEV": "1",
     }
+    install = lts["Install the QGIS 3.44 LTS packages"]["run"]
+    assert "timeout " in install and "ready=false" in install
+    assert "GITHUB_STEP_SUMMARY" in install
+    ready = "${{ steps.s02.outputs.ready == 'true' }}"
+    assert lts["Install the SDK over the system bindings"]["if"] == ready
+    assert lts["Test both hosts on the LTS"]["if"] == ready
+    assert jobs["lts"]["timeout-minutes"] == 20
     assert coverage["Check coverage for all packages"]["id"] == "coverage"
     # The coverage run drives the workspace from the Bun environment, so it is a
     # harness call rather than a task: `run_logged` keeps the output that the

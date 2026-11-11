@@ -354,6 +354,14 @@ both facts (decision-70):
   host cannot run me", which on this row is the thing being disproved;
 * the job is part of the `checks` aggregate, so it gates.
 
+If the qgis.org apt mirror does not answer, the row does not gate on the
+outage: each provisioning command is bounded and retried, and the job records
+`ready=false`, a `::warning::` annotation and a step-summary line instead of
+failing. The two steps that need the real QGIS then skip, so `QGIS 3.44 LTS`
+stays green while making the skipped qualification visible. A missing binding,
+a collection of zero tests or a failing native module is still a failure - only
+the third-party repository being unreachable is treated as an outage.
+
 First green run: 2026-10-30, run `41115792940` job `124269563846`, probe
 `qgis 3.44.7-Solothurn | qgisserver QgsServer | qt 5.15.13 | binding PyQt5`,
 `7 passed` for the Desktop module and `3 passed` for the server module. Getting

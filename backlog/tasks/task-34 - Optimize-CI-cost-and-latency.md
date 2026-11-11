@@ -127,6 +127,8 @@ block left every job at zero steps but still recorded the events:
 
 Cost trade-off: a backlog-only or agent-instructions-only pull request now pays for the full matrix. That is the price of a required check that always exists; a job-level path filter with same-named fallback jobs is the next optimisation if the cost matters. The checks from `compat.yml`, `docs-check.yml`, `backlog.yml` and `docs.yml` are still path-filtered and are not in the required-context list, so a red check from one of them does not currently block a merge - closing that gap means making those workflows always-on too, or adding always-green fallback jobs.
 
+**LTS outage tolerance (2026-11-11).** `QGIS 3.44 LTS` is a required context, but its only external dependency is the qgis.org apt mirror; when that mirror hangs, the job used to sit until its 30-minute timeout and then fail a merge for reasons unrelated to the change. Provisioning now has bounded, retried commands and reports `ready=false` with a `::warning::` annotation and a step-summary line; the two native steps skip and the context stays green. Real native failures are still red. `tests/scripts/test_ci.py` guards the shape and doc-14 records the behaviour.
+
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
