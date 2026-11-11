@@ -385,10 +385,6 @@
 	"packages/qgis-sdk-python/tests/test_webengine_native.py": {
 		"CC101": 3
 	},
-	"packages/qgis-sdk-python/tests/test_zz_plugin_rest_native.py": {
-		"CC101": 6,
-		"CC104": 6
-	},
 	"packages/qgis-sdk-python/tests/ui_catalogue_contract.py": {
 		"CC101": 4
 	},
@@ -409,14 +405,6 @@
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/desktop.py": {
 		"CC101": 3,
 		"CC102": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/algorithms.py": {
-		"CC101": 4,
-		"CC102": 3,
-		"CC104": 2,
-		"CC201": 1,
-		"CC202": 1,
-		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/canvas.py": {
 		"CC102": 1,

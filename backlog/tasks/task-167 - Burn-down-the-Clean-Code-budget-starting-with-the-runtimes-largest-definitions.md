@@ -252,4 +252,16 @@ The refusals are one helper each: `_refusal`, `_foreign_refusal`, `_stale_refusa
 
 **What is left.** 648 findings in 249 files. The next worst files are `test_zz_plugin_rest_native.py` and `adapters/qgis/algorithms.py` (12 each). CC202 and AC 4 remain the two different cuts after the long tail.
 
+**Slice 19 (landed): the two 12-finding files, as records and stages.** 648 -> 624 findings, 249 -> 247 files. `packages/qgis-sdk-python/tests/test_zz_plugin_rest_native.py` (6 CC101, 6 CC104) and `packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/algorithms.py` (4 CC101, 3 CC102, 2 CC104, 1 CC201, 1 CC202, 1 CC303) both have zero now, with no threshold change, no suppression and no finding added anywhere else.
+
+In `algorithms.py`, the six-parameter constructor became `AlgorithmWiring`, a frozen slots record the Desktop context and the contract-test fixture both build; the two call sites moved in the same commit. The 441-line `NativeAlgorithms` class is a facade of twelve methods now: `_RunRequest`, `_NativeParams`, `_PublishRequest` and `_PublishFacts` carry each phase's facts, `_RunStage` owns staging, processing, publishing and cleanup, and `_OUTPUT_CONVERTERS` dispatches each output kind to `_vector_output`, `_layers_output` or `_file_output` instead of an eleven-branch ladder. The 74-line explicit-output publication became seven named checks (`_require_valid_answer`, `_require_independent`, `_vector_driver`, `_require_vector_format`, `_require_no_sidecars`, `_require_still_granted`, `_hardlink`), in the same order, with the same errors. `_processing` stays a module-level name so the native tests' monkeypatch still reaches it.
+
+In `test_zz_plugin_rest_native.py`, `_Rig` and `_ServerSpec` are the shared setup records; `_OwnerProbe`, `_ModalProbe`, `_StreamProbe`, `_ReloadProbe`, `_CloseProbe` and `_OwnerCloseProbe` hold each scenario's mutable observations; `_CloseCase` and `_OwnerCloseCase` are the two client records. The six long tests are short arrange/act/assert bodies over `_owner_app`, `_modal_action`/`_second_action`, `_stream_app`, `_reload_stream`/`_reload_modal`, `_close_action`, `_owner_close_app` and the `_read_stream` / `_reload_request` / `_owner_close_request` client helpers. Every assertion, timer, deadline and cleanup is unchanged.
+
+**Tests.** Combined local suite 3442 passed, 127 skipped, 7 deselected; `tests/scripts` 341; alint policy 20; backlog guards 21; examples 26 passed / 8 skipped; ruff, format, alint and the clean-code gate exactly 624 / 247. The QGIS-gated native suites are skipped locally and run on the CI row with real bindings.
+
+**Documentation impact.** No user-facing documentation changes: the service contract, the HTTP REST behaviour and every assertion are unchanged. This note and decision-81's follow-through record the parameter objects, the stage records and the budget ratchet.
+
+**What is left.** 624 findings in 247 files: CC101 365, CC102 92, CC104 83, CC303 38, CC202 24, CC201 22. The next worst files are `packages/qgis-sdk-tools/src/qgis_sdk_tools/project.py` and `packages/qgis-sdk-runtime/src/qgis_sdk/network/client.py` (10 each), then `layouts.py`, `core/_application.py`, `adapters/surfaces.py` and `qt_scheduler_smoke.py` (9 each). CC202 and AC 4 remain the two different cuts after the long tail.
+
 <!-- SECTION:NOTES:END -->

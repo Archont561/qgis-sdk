@@ -883,6 +883,7 @@ def _native_services() -> Services:
 
     from qgis.core import QgsProject
     from qgis_sdk.adapters.qgis import (
+        AlgorithmWiring,
         NativeAlgorithms,
         NativeCanvas,
         NativeLayers,
@@ -1040,11 +1041,13 @@ def _native_services() -> Services:
 
     algo_workers = FakeWorkers()
     algorithms = NativeAlgorithms(
-        layers,
-        scope,
-        working_directory=work_directory,
-        files=files,
-        workers=algo_workers,
+        AlgorithmWiring(
+            layers=layers,
+            scope=scope,
+            working_directory=work_directory,
+            files=files,
+            workers=algo_workers,
+        )
     )
 
     def model_file():
