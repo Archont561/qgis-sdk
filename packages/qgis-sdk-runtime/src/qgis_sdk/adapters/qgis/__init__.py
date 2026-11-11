@@ -19,7 +19,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
-    from .algorithms import NativeAlgorithms
+    from .algorithms import AlgorithmWiring, NativeAlgorithms
     from .canvas import NativeCanvas
     from .connections import NativeConnections
     from .context import IfaceDesktopAccess, NativeContextOptions, native_plugin_context
@@ -45,6 +45,7 @@ if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
 
 __all__ = [
     "DEFAULT_INTERVAL_MS",
+    "AlgorithmWiring",
     "IfaceDesktopAccess",
     "NativeAlgorithms",
     "NativeCanvas",
@@ -73,6 +74,7 @@ __all__ = [
 
 #: Which module holds each exported name; the import happens on first access.
 _EXPORTS: dict[str, str] = {
+    "AlgorithmWiring": ".algorithms",
     "DEFAULT_INTERVAL_MS": ".jobs",
     "IfaceDesktopAccess": ".context",
     "NativeAlgorithms": ".algorithms",

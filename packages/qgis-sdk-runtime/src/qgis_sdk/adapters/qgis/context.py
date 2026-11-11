@@ -22,7 +22,7 @@ from qgis_sdk.files import FilesService
 from qgis_sdk.network import NetworkClient
 from qgis_sdk.services import Notifications
 
-from .algorithms import NativeAlgorithms
+from .algorithms import AlgorithmWiring, NativeAlgorithms
 from .canvas import NativeCanvas
 from .features import NativeFeatures
 from .layers import NativeLayers
@@ -115,11 +115,13 @@ def native_plugin_context(
     # the task bar.
     workers = QgsTaskWorkers(scope)
     algorithms = NativeAlgorithms(
-        layers,
-        scope,
-        working_directory=options.working_directory,
-        files=files,
-        workers=workers,
+        AlgorithmWiring(
+            layers=layers,
+            scope=scope,
+            working_directory=options.working_directory,
+            files=files,
+            workers=workers,
+        )
     )
     layouts = NativeLayouts(scope, workers=workers, files=files)
     return PluginContext(
