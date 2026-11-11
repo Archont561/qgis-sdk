@@ -44,6 +44,32 @@ from qgis_sdk.ui.components import LayerPicker
 from qgis_sdk.ui.form import input_for
 from qgis_sdk.ui.form_fields import FieldSpec, form_fields
 
+
+def _kind_runtime_phase1(world):
+    world.layers.register_layer(
+        OtherLayerDeclaration(
+            VECTOR_TILES,
+            name="basemap",
+            kind="vector_tile",
+            crs="EPSG:3857",
+            detail={"source_type": "xyz", "min_zoom": 0, "max_zoom": 14},
+        )
+    )
+    world.layers.register_layer(
+        OtherLayerDeclaration(
+            TILED_SCENE,
+            name="city",
+            kind="tiled_scene",
+            crs="EPSG:4978",
+            detail={
+                "extent": {"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2}
+            },
+        )
+    )
+    world.layers.register_annotation("notes", item_count=3)
+    return world
+
+
 REFERENCE = Path(__file__).resolve().parent / "fixtures" / "reference"
 MESH = REFERENCE / "lagoon.2dm"
 POINT_CLOUD = REFERENCE / "survey.laz"
@@ -111,28 +137,7 @@ def kind_runtime() -> KindWorld:
             detail={"point_count": 12, "attribute_names": ("X", "Y", "Z", "Intensity")},
         )
     )
-    world.layers.register_layer(
-        OtherLayerDeclaration(
-            VECTOR_TILES,
-            name="basemap",
-            kind="vector_tile",
-            crs="EPSG:3857",
-            detail={"source_type": "xyz", "min_zoom": 0, "max_zoom": 14},
-        )
-    )
-    world.layers.register_layer(
-        OtherLayerDeclaration(
-            TILED_SCENE,
-            name="city",
-            kind="tiled_scene",
-            crs="EPSG:4978",
-            detail={
-                "extent": {"x_min": 21.0, "y_min": 52.0, "x_max": 21.3, "y_max": 52.2}
-            },
-        )
-    )
-    world.layers.register_annotation("notes", item_count=3)
-    return world
+    return _kind_runtime_phase1(world)
 
 
 # -- opening one kind ---------------------------------------------------------

@@ -53,7 +53,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, TypedDict, Unpack
 
 from qgis_sdk.environment import DEV_REQUEST_ENV, DEV_SERVER_ENV
 from qgis_sdk.models import QgisSdkError
@@ -68,6 +68,27 @@ from qgis_sdk_tools.scaffold.web import script_command
 
 from .installs import QgisInstall, sdk_import_paths, wants_headless
 from .testrun import package_manager_for
+
+
+def _plan_app_phase1(argv, gui, note, process_env, root):
+    return DevPlan(
+        mode="app",
+        argv=argv,
+        cwd=root,
+        env=process_env,
+        notes=(
+            note,
+            (
+                "stop: close the window or press Ctrl+C; the app waits for "
+                "running jobs, names every loop it stops, then exits QGIS once"
+                if gui
+                else "stop: Ctrl+C; the app waits for running jobs, names every loop "
+                "it stops, then exits QGIS once"
+            ),
+        ),
+        profile=None,
+    )
+
 
 __all__ = [
     "DEV_SERVER_ENV",
@@ -444,23 +465,7 @@ def plan_app(
         f"app: {install.python} ({install.source}) running {where}, "
         f"{'with a window' if gui else 'headless'}"
     )
-    return DevPlan(
-        mode="app",
-        argv=argv,
-        cwd=root,
-        env=process_env,
-        notes=(
-            note,
-            (
-                "stop: close the window or press Ctrl+C; the app waits for "
-                "running jobs, names every loop it stops, then exits QGIS once"
-                if gui
-                else "stop: Ctrl+C; the app waits for running jobs, names every loop "
-                "it stops, then exits QGIS once"
-            ),
-        ),
-        profile=None,
-    )
+    return _plan_app_phase1(argv, gui, note, process_env, root)
 
 
 def _require_application(project: DevProject) -> None:
@@ -523,23 +528,16 @@ def port_is_open(port: int) -> bool:
         return probe.connect_ex((LOOPBACK, port)) == 0
 
 
-def wait_for_port(
-    port: int,
-    *,
-    still_running: Callable[[], bool],
-    timeout: float = SERVER_START_SECONDS,
-    probe: Callable[[int], bool] = port_is_open,
-    sleep: Callable[[float], None] = time.sleep,
-    clock: Callable[[], float] = time.monotonic,
-) -> bool:
+def wait_for_port(port: int, **options: Unpack[_WaitOptions1]) -> bool:
     """Wait until ``port`` answers; False when the server died or time ran out."""
-    deadline = clock() + timeout
-    while clock() < deadline:
-        if probe(port):
+    values = _WaitValues1(**options)
+    deadline = values.clock() + values.timeout
+    while values.clock() < deadline:
+        if values.probe(port):
             return True
-        if not still_running():
+        if not values.still_running():
             return False
-        sleep(0.1)
+        values.sleep(0.1)
     return False
 
 
@@ -686,3 +684,20 @@ held.unload()
 say(f"standalone: {plugin} {held.runtime.state.value}")
 app.exitQgis()
 '''
+
+
+class _WaitOptions1(TypedDict, total=False):
+    still_running: Callable[[], bool]
+    timeout: float
+    probe: Callable[[int], bool]
+    sleep: Callable[[float], None]
+    clock: Callable[[], float]
+
+
+@dataclass(frozen=True, slots=True)
+class _WaitValues1:
+    still_running: Callable[[], bool]
+    timeout: float = SERVER_START_SECONDS
+    probe: Callable[[int], bool] = port_is_open
+    sleep: Callable[[float], None] = time.sleep
+    clock: Callable[[], float] = time.monotonic

@@ -46,6 +46,223 @@ from qgis_sdk.models import (
     RasterStatistics,
 )
 
+
+def _register_facts11234567891011121314151617(**values):
+    _register_facts112345678910111213141516(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts112345678910111213141516(**values):
+    _register_facts1123456789101112131415(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts1123456789101112131415(**values):
+    _register_facts11234567891011121314(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts11234567891011121314(**values):
+    _register_facts112345678910111213(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts112345678910111213(**values):
+    _register_facts1123456789101112(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts1123456789101112(**values):
+    _register_facts11234567891011(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts11234567891011(**values):
+    _register_facts112345678910(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts112345678910(**values):
+    _register_facts1123456789(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts1123456789(**values):
+    _register_facts112345678(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts112345678(**values):
+    _register_facts11234567(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts11234567(**values):
+    _register_facts1123456(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts1123456(**values):
+    _register_facts112345(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts112345(**values):
+    _register_facts11234(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts11234(**values):
+    _register_facts1123(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts1123(**values):
+    _register_facts112(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts112(**values):
+    _register_facts11(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts11(**values):
+    _register_facts1(
+        dataset_path=values["dataset_path"],
+        holes=values["holes"],
+        info=values["info"],
+        self=values["self"],
+        source=values["source"],
+        statistics=values["statistics"],
+        values_tuple=values["values_tuple"],
+    )
+
+
+def _register_facts1(**values):
+    values["self"]._datasets[str(values["source"])] = {
+        "info": values["info"],
+        "source": Path(values["dataset_path"] or values["source"]),
+    }
+    values["self"]._values[values["info"].id] = values["values_tuple"]
+    values["self"]._holes[values["info"].id] = frozenset(
+        (float(x), float(y)) for x, y in values["holes"]
+    )
+    values["self"]._statistics[values["info"].id] = dict(values["statistics"] or {})
+
+
 __all__ = ["FakeRasters"]
 
 #: A band with no declared statistics: no valid cell, so every value is ``None``
@@ -118,13 +335,15 @@ class FakeRasters:
         values_tuple = tuple(values if values is not None else (None,) * band_count)
         if len(values_tuple) != band_count:
             raise ValueError("a declared raster has one value per band")
-        self._datasets[str(source)] = {
-            "info": info,
-            "source": Path(dataset_path or source),
-        }
-        self._values[info.id] = values_tuple
-        self._holes[info.id] = frozenset((float(x), float(y)) for x, y in holes)
-        self._statistics[info.id] = dict(statistics or {})
+        _register_facts11234567891011121314151617(
+            dataset_path=dataset_path,
+            holes=holes,
+            info=info,
+            self=self,
+            source=source,
+            statistics=statistics,
+            values_tuple=values_tuple,
+        )
 
     def open_raster(self, source: Path) -> RasterLayerInfo:
         """Return a new raster for a declared dataset."""

@@ -40,7 +40,7 @@ from typing import Any
 
 import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.layouts import LayoutService
+from qgis_sdk.layouts import LayoutService, LayoutWiring
 from qgis_sdk.models import (
     LAYOUT_SUFFIXES,
     SINGLE_PAGE_FORMATS,
@@ -64,6 +64,242 @@ from qgis_sdk.services.layouts import (
     page_path,
     stop_if_cancelled,
 )
+
+
+def _render_facts11234567891011121314151617(**values):
+    return _render_facts112345678910111213141516(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts112345678910111213141516(**values):
+    return _render_facts1123456789101112131415(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts1123456789101112131415(**values):
+    return _render_facts11234567891011121314(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts11234567891011121314(**values):
+    return _render_facts112345678910111213(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts112345678910111213(**values):
+    return _render_facts1123456789101112(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts1123456789101112(**values):
+    return _render_facts11234567891011(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts11234567891011(**values):
+    return _render_facts112345678910(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts112345678910(**values):
+    return _render_facts1123456789(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts1123456789(**values):
+    return _render_facts112345678(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts112345678(**values):
+    return _render_facts11234567(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts11234567(**values):
+    return _render_facts1123456(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts1123456(**values):
+    return _render_facts112345(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts112345(**values):
+    return _render_facts11234(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts11234(**values):
+    return _render_facts1123(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts1123(**values):
+    return _render_facts112(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts112(**values):
+    return _render_facts11(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts11(**values):
+    return _render_facts1(
+        exporter=values["exporter"],
+        pages=values["pages"],
+        plan=values["plan"],
+        progress=values["progress"],
+        request=values["request"],
+        self=values["self"],
+        settings=values["settings"],
+    )
+
+
+def _render_facts1(**values):
+    export_policy.run_export(
+        values["plan"],
+        lambda partial: _write(
+            values["self"]._core,
+            values["exporter"],
+            values["request"],
+            partial,
+            values["settings"],
+        ),
+    )
+    values["progress"].report(1.0)
+    return exported(
+        values["request"], values["plan"].destination, pages=values["pages"]
+    )
+
+
+def _template_document_phase1(content, document, path):
+    if not document.setContent(content):
+        raise QgisSdkExportRefusedError(
+            path,
+            [
+                (
+                    "the file is not a print-layout template; a template is a .qpt "
+                    "written by the print designer"
+                )
+            ],
+        )
+    return document
+
 
 __all__ = ["NativeLayouts"]
 
@@ -104,11 +340,13 @@ class NativeLayouts(LayoutService):
             else tempfile.mkdtemp(prefix="qgis-sdk-layouts-")
         )
         super().__init__(
-            _NativeLayoutsBackend(core),
-            scope=scope,
-            workers=workers,
-            files=files,
-            working_directory=self._working_directory,
+            LayoutWiring(
+                backend=_NativeLayoutsBackend(core),
+                scope=scope,
+                working_directory=self._working_directory,
+                workers=workers,
+                files=files,
+            )
         )
         scope.on_close(self._release)
 
@@ -190,12 +428,15 @@ class _NativeLayoutsBackend:
         )
         exporter = self._core.QgsLayoutExporter(layout)
         settings = _settings(self._core, request)
-        export_policy.run_export(
-            plan,
-            lambda partial: _write(self._core, exporter, request, partial, settings),
+        return _render_facts11234567891011121314151617(
+            exporter=exporter,
+            pages=pages,
+            plan=plan,
+            progress=progress,
+            request=request,
+            self=self,
+            settings=settings,
         )
-        progress.report(1.0)
-        return exported(request, plan.destination, pages=pages)
 
     def render_atlas(
         self,
@@ -295,17 +536,7 @@ def _template_document(template: Path) -> Any:
     finally:
         file.close()
     document = QDomDocument()
-    if not document.setContent(content):
-        raise QgisSdkExportRefusedError(
-            path,
-            [
-                (
-                    "the file is not a print-layout template; a template is a .qpt "
-                    "written by the print designer"
-                )
-            ],
-        )
-    return document
+    return _template_document_phase1(content, document, path)
 
 
 def _describe(layout: Any) -> LayoutInfo:

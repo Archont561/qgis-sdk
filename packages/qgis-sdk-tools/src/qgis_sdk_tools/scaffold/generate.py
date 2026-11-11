@@ -13,6 +13,49 @@ from qgis_sdk_tools.check.versions import installed_runtime_version
 from .options import QgisSdkScaffoldError, ScaffoldOptions
 from .web import install_command, plan_web, script_command
 
+
+def _plan_scaffold_facts11(options, values):
+    if options.algorithm:
+        values.append(
+            GeneratedFile(
+                f"{options.plugin}/algorithms.py", _algorithms_module(options)
+            )
+        )
+    return _plan_scaffold_facts1(options, values)
+
+
+def _plan_scaffold_facts1(options, values):
+    if options.ui == "native":
+        values.append(
+            GeneratedFile(
+                f"{options.plugin}/ui.py", UI_MODULE.format(title=options.title)
+            )
+        )
+    return tuple(sorted(values, key=lambda file: file.path))
+
+
+def _starter_test_facts1(action_ids, options):
+    return STARTER_TEST.format(
+        title=options.title,
+        plugin=options.plugin,
+        action_ids=", ".join(f'"{identifier}"' for identifier in action_ids),
+        algorithm_test=(
+            ALGORITHM_TEST.format(plugin=options.plugin) if options.algorithm else ""
+        ),
+        ui_test=(
+            UI_TEST.format(
+                plugin=options.plugin, class_name=_class_name(options.plugin)
+            )
+            if options.ui
+            else ""
+        ),
+        class_name=_class_name(options.plugin),
+        host_arguments=(
+            "" if options.web is None else f', placement="{options.web.placement}"'
+        ),
+    )
+
+
 LF: Final = "\n"
 
 #: ``<plugin>/__init__.py`` is empty on purpose (decision-43): QGIS's entry,
@@ -614,19 +657,7 @@ def plan_scaffold(options: ScaffoldOptions) -> tuple[GeneratedFile, ...]:
         GeneratedFile("tests/test_plugin.py", _starter_test(options)),
         *(GeneratedFile(path, content) for path, content in plan_web(options)),
     ]
-    if options.algorithm:
-        values.append(
-            GeneratedFile(
-                f"{options.plugin}/algorithms.py", _algorithms_module(options)
-            )
-        )
-    if options.ui == "native":
-        values.append(
-            GeneratedFile(
-                f"{options.plugin}/ui.py", UI_MODULE.format(title=options.title)
-            )
-        )
-    return tuple(sorted(values, key=lambda file: file.path))
+    return _plan_scaffold_facts11(options, values)
 
 
 def write_scaffold(
@@ -751,25 +782,7 @@ def _starter_test(options: ScaffoldOptions) -> str:
             plugin=options.plugin,
             service_name=_service_name(options.plugin),
         )
-    return STARTER_TEST.format(
-        title=options.title,
-        plugin=options.plugin,
-        action_ids=", ".join(f'"{identifier}"' for identifier in action_ids),
-        algorithm_test=(
-            ALGORITHM_TEST.format(plugin=options.plugin) if options.algorithm else ""
-        ),
-        ui_test=(
-            UI_TEST.format(
-                plugin=options.plugin, class_name=_class_name(options.plugin)
-            )
-            if options.ui
-            else ""
-        ),
-        class_name=_class_name(options.plugin),
-        host_arguments=(
-            "" if options.web is None else f', placement="{options.web.placement}"'
-        ),
-    )
+    return _starter_test_facts1(action_ids, options)
 
 
 def _class_name(plugin: str) -> str:

@@ -32,6 +32,16 @@ from qgis_sdk.models import QgisSdkUiError
 
 from .components import Component, Container
 
+
+def _wire_surface_facts1(ctx, disconnects, root, surface, unwire):
+    if disconnects:
+        ctx.scope.on_close(unwire)
+    behaviours = getattr(surface, "_attach_behaviours", None)
+    if callable(behaviours):
+        behaviours(root, ctx)
+    return len(disconnects)
+
+
 if TYPE_CHECKING:
     from qgis_sdk.core.contexts import UiContext
 
@@ -256,12 +266,7 @@ def wire_surface(surface: Any, root: Any, ctx: UiContext) -> int:
         while disconnects:
             disconnects.pop()()
 
-    if disconnects:
-        ctx.scope.on_close(unwire)
-    behaviours = getattr(surface, "_attach_behaviours", None)
-    if callable(behaviours):
-        behaviours(root, ctx)
-    return len(disconnects)
+    return _wire_surface_facts1(ctx, disconnects, root, surface, unwire)
 
 
 def _subscription(

@@ -15,6 +15,26 @@ import layers
 import pytest
 from qgis_sdk_tools.pytest_plugin import TARGET_ENV
 
+
+def _the_desktop_target_imports_phase1(host, plain, tmp_path):
+    assert "WHERE source source" in plain.stdout
+
+    desktop_env = {**os.environ, "QGIS_PLUGINPATH": str(host.parent)}
+    desktop = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", PLUGIN, "-q", "-s", "--no-header"],
+        cwd=tmp_path,
+        env={
+            **{k: v for k, v in desktop_env.items() if k != "PYTEST_ADDOPTS"},
+            "PYTHONPATH": layers.source_path(),
+            TARGET_ENV: "desktop",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert "WHERE host host" in desktop.stdout, desktop.stdout + desktop.stderr
+
+
 PLUGIN = "qgis_sdk_tools.pytest_plugin"
 
 
@@ -278,19 +298,4 @@ def test_the_desktop_target_imports_the_plugin_the_way_qgis_loads_it(
 
     plain = run_pytest(tmp_path, "-s")
     assert plain.returncode == 0, plain.stdout + plain.stderr
-    assert "WHERE source source" in plain.stdout
-
-    desktop_env = {**os.environ, "QGIS_PLUGINPATH": str(host.parent)}
-    desktop = subprocess.run(
-        [sys.executable, "-m", "pytest", "-p", PLUGIN, "-q", "-s", "--no-header"],
-        cwd=tmp_path,
-        env={
-            **{k: v for k, v in desktop_env.items() if k != "PYTEST_ADDOPTS"},
-            "PYTHONPATH": layers.source_path(),
-            TARGET_ENV: "desktop",
-        },
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert "WHERE host host" in desktop.stdout, desktop.stdout + desktop.stderr
+    _the_desktop_target_imports_phase1(host, plain, tmp_path)

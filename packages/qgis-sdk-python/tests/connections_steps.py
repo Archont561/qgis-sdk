@@ -34,6 +34,52 @@ from qgis_sdk.testing import (
 )
 
 
+def _runtime_phase3(connections, layers, scope):
+    connections.declare_connection(
+        ConnectionDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            provider="postgres",
+            schemas=(connection_files.POSTGIS_SCHEMA,),
+        )
+    )
+    connections.declare_table(
+        TableDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            connection_files.POSTGIS_POINTS,
+            provider="postgres",
+            schema=connection_files.POSTGIS_SCHEMA,
+            kind=connection_files.POSTGIS_POINTS_KIND,
+            geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
+            fields=connection_files.POSTGIS_POINTS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
+    )
+    return _runtime_phase2(connections, layers, scope)
+
+
+def _runtime_phase2(connections, layers, scope):
+    connections.declare_connection(
+        ConnectionDeclaration(
+            connection_files.BROKEN_CONNECTION,
+            provider="postgres",
+            valid=False,
+            message="connection refused",
+        )
+    )
+    connections.declare_auth_configuration(connection_files.AUTH_CONFIG_NAME)
+    world = ConnectionsWorld(scope=scope, layers=layers, connections=connections)
+    return _runtime_phase1(world)
+
+
+def _runtime_phase1(world):
+    world.providers = {
+        connection_files.GPKG_CONNECTION: "ogr",
+        connection_files.POSTGIS_CONNECTION: "postgres",
+        connection_files.BROKEN_CONNECTION: "postgres",
+    }
+    return world
+
+
 @dataclass
 class ConnectionsWorld:
     """The fake registry the connections scenarios arrange and observe."""
@@ -80,41 +126,7 @@ def _runtime() -> ConnectionsWorld:
             fields=connection_files.GPKG_NOTES_FIELDS,
         )
     )
-    connections.declare_connection(
-        ConnectionDeclaration(
-            connection_files.POSTGIS_CONNECTION,
-            provider="postgres",
-            schemas=(connection_files.POSTGIS_SCHEMA,),
-        )
-    )
-    connections.declare_table(
-        TableDeclaration(
-            connection_files.POSTGIS_CONNECTION,
-            connection_files.POSTGIS_POINTS,
-            provider="postgres",
-            schema=connection_files.POSTGIS_SCHEMA,
-            kind=connection_files.POSTGIS_POINTS_KIND,
-            geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
-            fields=connection_files.POSTGIS_POINTS_FIELDS,
-            crs=connection_files.FIXTURE_CRS,
-        )
-    )
-    connections.declare_connection(
-        ConnectionDeclaration(
-            connection_files.BROKEN_CONNECTION,
-            provider="postgres",
-            valid=False,
-            message="connection refused",
-        )
-    )
-    connections.declare_auth_configuration(connection_files.AUTH_CONFIG_NAME)
-    world = ConnectionsWorld(scope=scope, layers=layers, connections=connections)
-    world.providers = {
-        connection_files.GPKG_CONNECTION: "ogr",
-        connection_files.POSTGIS_CONNECTION: "postgres",
-        connection_files.BROKEN_CONNECTION: "postgres",
-    }
-    return world
+    return _runtime_phase3(connections, layers, scope)
 
 
 @given("a runtime with connections and auth configurations", target_fixture="world")

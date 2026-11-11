@@ -32,6 +32,19 @@ __all__ = ["CALLING_VIEW", "ActionCall", "ViewActions"]
 CALLING_VIEW: ContextVar[str | None] = ContextVar("qgis_sdk_calling_view", default=None)
 
 
+def _invoke(handler, coerced, scope):
+    """Dispatch the handler inside the view's scope when there is one.
+
+    The handler is the plugin's own method and reads the plugin context; the
+    view's authority travels with the dispatch so a job it submits is this
+    window's work (decision-65 §3).
+    """
+    if scope is None:
+        return handler(**coerced)
+    with invoking(scope):
+        return handler(**coerced)
+
+
 class ActionSource(Protocol):
     """What ``ViewActions`` reads: a started ``PluginRuntime`` fits."""
 
@@ -131,14 +144,7 @@ class ViewActions:
         self._running[action.id] = _RUNNING
         token = CALLING_VIEW.set(self._view_id)
         try:
-            if self._scope is None:
-                result = handler(**coerced)
-            else:
-                # The handler is the plugin's own method and reads the plugin
-                # context; the view's authority travels with the dispatch so a
-                # job it submits is this window's work (decision-65 §3).
-                with invoking(self._scope):
-                    result = handler(**coerced)
+            result = _invoke(handler, coerced, self._scope)
         finally:
             CALLING_VIEW.reset(token)
             del self._running[action.id]

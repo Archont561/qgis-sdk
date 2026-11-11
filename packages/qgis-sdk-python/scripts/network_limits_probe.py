@@ -35,6 +35,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
+
+def _recommend_facts1(ceiling, follows_itself, limit, reasons):
+    return Recommendation(
+        max_redirects=limit,
+        max_body_mib=ceiling,
+        transport_follows_redirects_itself=follows_itself,
+        reasons=tuple(reasons),
+    )
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 GUI_STALL_BUDGET_MS = 40.0
@@ -150,12 +160,7 @@ def recommend(
         )
     else:
         reasons.append("the manager drops credentials on an origin change")
-    return Recommendation(
-        max_redirects=limit,
-        max_body_mib=ceiling,
-        transport_follows_redirects_itself=follows_itself,
-        reasons=tuple(reasons),
-    )
+    return _recommend_facts1(ceiling, follows_itself, limit, reasons)
 
 
 @dataclass(frozen=True)

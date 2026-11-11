@@ -36,13 +36,50 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, TypedDict, Unpack
 from urllib.parse import parse_qsl, urlsplit
 
 from qgis_sdk.core import QuiesceOutcome
 from qgis_sdk.server import ServerHooks
 
 from .reloader import WATCH_INTERVAL_MS, ReloadCoordinator, SourceWatcher
+
+
+def _query_server_facts1(project, request, response, server):
+    server.handleRequest(request, response, project)
+    return Answer(
+        status=int(response.statusCode()),
+        headers={str(name): str(value) for name, value in response.headers().items()},
+        body=bytes(response.body()),
+    )
+
+
+def _init_facts1(poll_seconds, process_events, project, self):
+    self._poll_seconds = poll_seconds
+    self._process_events = process_events
+    self._project_factory = project
+    self._project: Any = None
+    self._httpd: HTTPServer | None = None
+    self._stopping = False
+
+
+def _bootstrap_server_phase2(application, loop, origin, plugin, say):
+    say(f"server: {plugin} answering on {origin}")
+    say(
+        "server: add MAP=/path/to/project.qgs to the query string for a project, "
+        "or a @server.service hook that answers its own SERVICE"
+    )
+    return _bootstrap_server_phase1(application, loop, say)
+
+
+def _bootstrap_server_phase1(application, loop, say):
+    say("server: Ctrl+C stops it; a saved Python change reloads the plugin")
+    try:
+        loop.serve_forever()
+    finally:
+        application.exitQgis()
+    return loop
+
 
 LOOPBACK: Final = "127.0.0.1"
 #: What a request gets while the plugin is disabled after a failed reload.
@@ -226,12 +263,7 @@ def query_server(
     )
     request = bindings.QgsBufferServerRequest(url, verb, dict(headers or {}), body)
     response = bindings.QgsBufferServerResponse()
-    server.handleRequest(request, response, project)
-    return Answer(
-        status=int(response.statusCode()),
-        headers={str(name): str(value) for name, value in response.headers().items()},
-        body=bytes(response.body()),
-    )
+    return _query_server_facts1(project, request, response, server)
 
 
 def _handler_for(loop: ServerLoop) -> type[BaseHTTPRequestHandler]:
@@ -260,37 +292,18 @@ class ServerLoop:
     answered at a time and the watcher is polled between them.
     """
 
-    def __init__(
-        self,
-        *,
-        bindings: Any,
-        server: Any,
-        host: ServerReloadHost,
-        plugin: str,
-        port: int,
-        say: Callable[[str], None],
-        watcher: SourceWatcher | None = None,
-        coordinator: ReloadCoordinator | None = None,
-        clock: Callable[[], float] = time.monotonic,
-        poll_seconds: float = WATCH_INTERVAL_MS / 1000,
-        process_events: Callable[[], None] | None = None,
-        project: Callable[[], Any] | None = None,
-    ) -> None:
-        self._bindings = bindings
-        self._server = server
-        self._host = host
-        self._plugin = plugin
-        self._port = port
-        self._say = say
-        self._watcher = watcher
-        self._coordinator = coordinator
-        self._clock = clock
-        self._poll_seconds = poll_seconds
-        self._process_events = process_events
-        self._project_factory = project
-        self._project: Any = None
-        self._httpd: HTTPServer | None = None
-        self._stopping = False
+    def __init__(self, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        self._bindings = values.bindings
+        self._server = values.server
+        self._host = values.host
+        self._plugin = values.plugin
+        self._port = values.port
+        self._say = values.say
+        self._watcher = values.watcher
+        self._coordinator = values.coordinator
+        self._clock = values.clock
+        _init_facts1(values.poll_seconds, values.process_events, values.project, self)
 
     @property
     def origin(self) -> str:
@@ -484,17 +497,7 @@ def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
         process_events=application.processEvents,
     )
     origin = loop.bind()
-    say(f"server: {plugin} answering on {origin}")
-    say(
-        "server: add MAP=/path/to/project.qgs to the query string for a project, "
-        "or a @server.service hook that answers its own SERVICE"
-    )
-    say("server: Ctrl+C stops it; a saved Python change reloads the plugin")
-    try:
-        loop.serve_forever()
-    finally:
-        application.exitQgis()
-    return loop
+    return _bootstrap_server_phase2(application, loop, origin, plugin, say)
 
 
 def _names_a_map(path: str) -> bool:
@@ -506,3 +509,34 @@ def _names_a_map(path: str) -> bool:
         key.casefold() == "map" and value
         for key, value in parse_qsl(urlsplit(path).query, keep_blank_values=True)
     )
+
+
+class _InitOptions1(TypedDict, total=False):
+    bindings: Any
+    server: Any
+    host: ServerReloadHost
+    plugin: str
+    port: int
+    say: Callable[[str], None]
+    watcher: SourceWatcher | None
+    coordinator: ReloadCoordinator | None
+    clock: Callable[[], float]
+    poll_seconds: float
+    process_events: Callable[[], None] | None
+    project: Callable[[], Any] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    bindings: Any
+    server: Any
+    host: ServerReloadHost
+    plugin: str
+    port: int
+    say: Callable[[str], None]
+    watcher: SourceWatcher | None = None
+    coordinator: ReloadCoordinator | None = None
+    clock: Callable[[], float] = time.monotonic
+    poll_seconds: float = WATCH_INTERVAL_MS / 1000
+    process_events: Callable[[], None] | None = None
+    project: Callable[[], Any] | None = None

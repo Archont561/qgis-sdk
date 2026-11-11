@@ -42,6 +42,15 @@ from qgis_sdk_tools.devtools.serverdev import (
 )
 
 
+def _a_request_that_raises_phase1(body, said):
+    assert b"RuntimeError: the filter raised instead of answering" in body
+    # The notice, then `http.server`'s own access line for the 500 it sent.
+    assert (
+        said[0] == "server: the request failed; the traceback is in the response body"
+    )
+    assert said[-1].endswith('"GET /?SERVICE=SDKDEMO HTTP/1.1" 500 -')
+
+
 @pytest.fixture(autouse=True)
 def wired(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     """``from qgis import server`` resolves to the stand-ins."""
@@ -419,12 +428,7 @@ def test_a_request_that_raises_answers_500_with_the_traceback() -> None:
 
     assert response.status == 500
     assert body.startswith(b"qgis-sdk dev: the request failed")
-    assert b"RuntimeError: the filter raised instead of answering" in body
-    # The notice, then `http.server`'s own access line for the 500 it sent.
-    assert (
-        said[0] == "server: the request failed; the traceback is in the response body"
-    )
-    assert said[-1].endswith('"GET /?SERVICE=SDKDEMO HTTP/1.1" 500 -')
+    _a_request_that_raises_phase1(body, said)
 
 
 class Project:

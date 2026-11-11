@@ -26,7 +26,8 @@ theme list and the active name are one answer read from two places.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypedDict, Unpack
 
 from qgis.core import (
     QgsGeometry,
@@ -92,20 +93,13 @@ class NativeCanvas:
     opened.
     """
 
-    def __init__(
-        self,
-        scope: ResourceScope,
-        *,
-        layers: NativeLayers | None = None,
-        iface: object | None = None,
-        canvas: object | None = None,
-        host: Host | None = None,
-    ) -> None:
+    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
         self._scope = scope
-        self._layers = layers
-        self._iface = iface
-        self._canvas = canvas
-        self._host = host
+        self._layers = values.layers
+        self._iface = values.iface
+        self._canvas = values.canvas
+        self._host = values.host
         #: The tool that was active before a capture installed its own, put back
         #: when the capture ends however it ends.
         self._previous_tool: object | None = None
@@ -428,3 +422,18 @@ def _project_theme_names() -> list[str]:
     """The project's map theme names, in the collection's order."""
     collection = QgsProject.instance().mapThemeCollection()
     return [str(name) for name in collection.mapThemes()]
+
+
+class _InitOptions1(TypedDict, total=False):
+    layers: NativeLayers | None
+    iface: object | None
+    canvas: object | None
+    host: Host | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    layers: NativeLayers | None = None
+    iface: object | None = None
+    canvas: object | None = None
+    host: Host | None = None

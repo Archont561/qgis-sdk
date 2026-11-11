@@ -16,13 +16,24 @@ hot module replacement, and is the one origin granted then.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, TypedDict, Unpack
 
 from qgis_sdk.adapters.palette import palette_theme
 from qgis_sdk.bridge import Dispatcher
 from qgis_sdk.core import PluginContext
 from qgis_sdk.environment import dev_server
+
+
+def _open_view_phase1(QVBoxLayout, dialog, title, view):
+    dialog.setWindowTitle(title)
+    layout = QVBoxLayout(dialog)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(view)
+    dialog.resize(*DIALOG_SIZE)
+    return dialog
+
 
 __all__ = [
     "CHANNEL_OBJECT",
@@ -65,15 +76,7 @@ def remove_toolbar_action(iface: Any, action: Any | None) -> None:
 
 
 def open_view(
-    runtime: Any,
-    context: PluginContext,
-    iface: Any,
-    *,
-    title: str,
-    view_id: str,
-    placement: str,
-    assets: Path,
-    grants: Sequence[str] = (),
+    runtime: Any, context: PluginContext, iface: Any, **options: Unpack[_OpenOptions1]
 ) -> Any:
     """Build the page, its channel and the widget QGIS shows; return the widget.
 
@@ -84,6 +87,7 @@ def open_view(
     the very services ``context`` carries; no grants, no host operation.
     ``assets`` is the directory the built page lives in (``<package>/web``).
     """
+    values = _OpenValues1(**options)
     from qgis.PyQt.QtCore import Qt, QUrl
     from qgis.PyQt.QtWebChannel import QWebChannel
     from qgis.PyQt.QtWidgets import QDialog, QDockWidget, QVBoxLayout
@@ -95,16 +99,18 @@ def open_view(
         create_webengine_view,
     )
 
-    if placement not in PLACEMENTS:
-        raise ValueError(f"placement must be one of {PLACEMENTS}, got {placement!r}")
+    if values.placement not in PLACEMENTS:
+        raise ValueError(
+            f"placement must be one of {PLACEMENTS}, got {values.placement!r}"
+        )
     served_from = dev_server()
-    index = assets / "index.html"
+    index = values.assets / "index.html"
     dispatcher = Dispatcher.from_runtime(
         runtime,
-        authorize=lambda binding, operation: binding.view_id == view_id,
+        authorize=lambda binding, operation: binding.view_id == values.view_id,
         theme=palette_theme,
     )
-    if grants:
+    if values.grants:
         from qgis_sdk.bridge.host import (
             HostServices,
             granted_operations,
@@ -114,12 +120,14 @@ def open_view(
         register_host_operations(
             dispatcher,
             HostServices.from_context(context),
-            only=granted_operations(tuple(grants)),
+            only=granted_operations(tuple(values.grants)),
         )
-    binding = dispatcher.bind(view_id=view_id, origin=served_from or assets.as_uri())
+    binding = dispatcher.bind(
+        view_id=values.view_id, origin=served_from or values.assets.as_uri()
+    )
     policy = BrowserPolicy(
         origins=() if served_from is None else (served_from,),
-        asset_roots=(assets,) if assets.is_dir() else (),
+        asset_roots=(values.assets,) if values.assets.is_dir() else (),
     )
     view = create_webengine_view()
     page = create_restricted_page(policy, parent=view)
@@ -140,20 +148,15 @@ def open_view(
         )
 
     parent = None if iface is None else iface.mainWindow()
-    if placement == "dock":
-        dock = QDockWidget(title, parent)
-        dock.setObjectName(view_id)
+    if values.placement == "dock":
+        dock = QDockWidget(values.title, parent)
+        dock.setObjectName(values.view_id)
         dock.setWidget(view)
         if iface is not None:
             iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         return dock
     dialog = QDialog(parent)
-    dialog.setWindowTitle(title)
-    layout = QVBoxLayout(dialog)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.addWidget(view)
-    dialog.resize(*DIALOG_SIZE)
-    return dialog
+    return _open_view_phase1(QVBoxLayout, dialog, values.title, view)
 
 
 def close_view(widget: Any, iface: Any) -> None:
@@ -164,3 +167,20 @@ def close_view(widget: Any, iface: Any) -> None:
         iface.removeDockWidget(widget)
     widget.close()
     widget.deleteLater()
+
+
+class _OpenOptions1(TypedDict, total=False):
+    title: str
+    view_id: str
+    placement: str
+    assets: Path
+    grants: Sequence[str]
+
+
+@dataclass(frozen=True, slots=True)
+class _OpenValues1:
+    title: str
+    view_id: str
+    placement: str
+    assets: Path
+    grants: Sequence[str] = ()

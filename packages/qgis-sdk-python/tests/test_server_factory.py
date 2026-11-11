@@ -26,6 +26,16 @@ import pytest
 import qgis_server_support as support
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
+
+def _an_access_hook_refusing_phase1(allowed, refused):
+    assert (refused.canRead, refused.canUpdate, refused.canDelete) == (
+        False,
+        False,
+        False,
+    )
+    assert allowed.canRead is True
+
+
 #: The scaffold's own starter hooks, at the priority ``@filter()`` defaults to.
 DEFAULT_PRIORITY = 30
 
@@ -136,12 +146,7 @@ def test_an_access_hook_refusing_a_layer_through_the_same_registration(
     refused = access.layerPermissions(support.Layer("secret"))
     allowed = access.layerPermissions(support.Layer("parcels"))
 
-    assert (refused.canRead, refused.canUpdate, refused.canDelete) == (
-        False,
-        False,
-        False,
-    )
-    assert allowed.canRead is True
+    _an_access_hook_refusing_phase1(allowed, refused)
 
 
 def test_the_registration_answers_capabilities_without_a_cache(

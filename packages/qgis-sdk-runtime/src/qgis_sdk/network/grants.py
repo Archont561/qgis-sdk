@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from math import isfinite
+from typing import TypedDict, Unpack
 from urllib.parse import SplitResult, urlsplit
 
 from qgis_sdk.models import (
@@ -31,6 +32,114 @@ from qgis_sdk.models import (
     QgisSdkError,
     QgisSdkGrantRefusedError,
 )
+
+
+def _init_facts112345678(**values):
+    _init_facts11234567(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts11234567(**values):
+    _init_facts1123456(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts1123456(**values):
+    _init_facts112345(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts112345(**values):
+    _init_facts11234(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts11234(**values):
+    _init_facts1123(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts1123(**values):
+    _init_facts112(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts112(**values):
+    _init_facts11(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts11(**values):
+    _init_facts1(
+        host_auth=values["host_auth"],
+        listed=values["listed"],
+        max_body_bytes=values["max_body_bytes"],
+        max_redirects=values["max_redirects"],
+        self=values["self"],
+        timeout_seconds=values["timeout_seconds"],
+        verbs=values["verbs"],
+    )
+
+
+def _init_facts1(**values):
+    object.__setattr__(values["self"], "origins", values["listed"])
+    object.__setattr__(values["self"], "methods", values["verbs"])
+    object.__setattr__(values["self"], "host_auth", bool(values["host_auth"]))
+    object.__setattr__(values["self"], "max_redirects", int(values["max_redirects"]))
+    object.__setattr__(values["self"], "max_body_bytes", int(values["max_body_bytes"]))
+    object.__setattr__(
+        values["self"], "timeout_seconds", float(values["timeout_seconds"])
+    )
+
 
 GRANT_MAX_BODY_BYTES = 1024 * 1024
 """Default body ceiling for a granted request.
@@ -112,38 +221,35 @@ class NetworkGrant:
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS
 
     def __init__(
-        self,
-        origins: Iterable[str],
-        *,
-        methods: Iterable[str] = ("GET", "HEAD"),
-        host_auth: bool = False,
-        max_redirects: int = DEFAULT_MAX_REDIRECTS,
-        max_body_bytes: int = GRANT_MAX_BODY_BYTES,
-        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        self, origins: Iterable[str], **options: Unpack[_InitOptions1]
     ) -> None:
+        values = _InitValues1(**options)
         listed = frozenset(_check_origin(origin) for origin in origins)
         if not listed:
             raise QgisSdkGrantError("a network grant lists at least one origin")
-        verbs = frozenset(str(method).upper() for method in methods)
+        verbs = frozenset(str(method).upper() for method in values.methods)
         unknown = sorted(verbs - GRANT_METHODS)
         if unknown:
             raise QgisSdkGrantError(f"{unknown[0]!r} is not a method a grant can allow")
-        if not 0 < int(max_body_bytes) <= DEFAULT_MAX_BODY_BYTES:
+        if not 0 < int(values.max_body_bytes) <= DEFAULT_MAX_BODY_BYTES:
             raise QgisSdkGrantError(
                 f"max_body_bytes must be within 1..{DEFAULT_MAX_BODY_BYTES}"
             )
-        if not 0 <= int(max_redirects) <= DEFAULT_MAX_REDIRECTS:
+        if not 0 <= int(values.max_redirects) <= DEFAULT_MAX_REDIRECTS:
             raise QgisSdkGrantError(
                 f"max_redirects must be within 0..{DEFAULT_MAX_REDIRECTS}"
             )
-        if not isfinite(timeout_seconds) or timeout_seconds <= 0:
+        if not isfinite(values.timeout_seconds) or values.timeout_seconds <= 0:
             raise QgisSdkGrantError("timeout_seconds must be a positive number")
-        object.__setattr__(self, "origins", listed)
-        object.__setattr__(self, "methods", verbs)
-        object.__setattr__(self, "host_auth", bool(host_auth))
-        object.__setattr__(self, "max_redirects", int(max_redirects))
-        object.__setattr__(self, "max_body_bytes", int(max_body_bytes))
-        object.__setattr__(self, "timeout_seconds", float(timeout_seconds))
+        _init_facts112345678(
+            host_auth=values.host_auth,
+            listed=listed,
+            max_body_bytes=values.max_body_bytes,
+            max_redirects=values.max_redirects,
+            self=self,
+            timeout_seconds=values.timeout_seconds,
+            verbs=verbs,
+        )
 
     def allows_origin(self, url: str) -> bool:
         """Whether ``url`` sits on one of the granted origins."""
@@ -185,3 +291,20 @@ __all__ = [
     "QgisSdkGrantError",
     "origin_of",
 ]
+
+
+class _InitOptions1(TypedDict, total=False):
+    methods: Iterable[str]
+    host_auth: bool
+    max_redirects: int
+    max_body_bytes: int
+    timeout_seconds: float
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    methods: Iterable[str] = ("GET", "HEAD")
+    host_auth: bool = False
+    max_redirects: int = DEFAULT_MAX_REDIRECTS
+    max_body_bytes: int = GRANT_MAX_BODY_BYTES
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS

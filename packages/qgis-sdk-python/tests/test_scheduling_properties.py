@@ -12,6 +12,17 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from qgis_sdk.core import Handoff, JobState, ResourceScope, StepScheduler
 
+
+def _interleaved_scheduling_actions_never_phase1(resumed, resumed_at_close, scope):
+    if resumed_at_close is not None:
+        assert len(resumed) == resumed_at_close, (
+            "a disposed scope delivered author code"
+        )
+
+    # Dispose so queued coroutines are closed rather than left for the GC to warn about.
+    scope.close()
+
+
 SETTLED = {JobState.COMPLETED, JobState.FAILED, JobState.CANCELLED}
 
 action_strategy = st.sampled_from(["tick", "resolve", "fail", "cancel", "close"])
@@ -64,13 +75,7 @@ def test_interleaved_scheduling_actions_never_resurrect_or_deliver_late_work(
             else:
                 assert job.id not in seen_settled
 
-    if resumed_at_close is not None:
-        assert len(resumed) == resumed_at_close, (
-            "a disposed scope delivered author code"
-        )
-
-    # Dispose so queued coroutines are closed rather than left for the GC to warn about.
-    scope.close()
+    _interleaved_scheduling_actions_never_phase1(resumed, resumed_at_close, scope)
 
 
 @given(pending=st.integers(min_value=1, max_value=6))

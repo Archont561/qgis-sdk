@@ -13,6 +13,22 @@ from pathlib import Path
 
 import pytest
 
+
+def _a_widget_surface_opens_phase1(LegacyDialog, host, opened, runtime, seen):
+    try:
+        opened = host.open(LegacyDialog)
+        assert isinstance(opened, LegacyDialog)
+        assert opened.ctx is seen[0]
+        assert opened.ctx.has("log") is True
+        assert dict(opened.initial) == {}
+        assert host.dialogs[0].widget.windowTitle() == "Legacy"
+        host.dialogs[0].widget.close()
+        assert seen[-1] == "closed"
+    finally:
+        host.close_all()
+        runtime.unload()
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -132,15 +148,4 @@ def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
     )
     host.attach(runtime, context)
     runtime.start()
-    try:
-        opened = host.open(LegacyDialog)
-        assert isinstance(opened, LegacyDialog)
-        assert opened.ctx is seen[0]
-        assert opened.ctx.has("log") is True
-        assert dict(opened.initial) == {}
-        assert host.dialogs[0].widget.windowTitle() == "Legacy"
-        host.dialogs[0].widget.close()
-        assert seen[-1] == "closed"
-    finally:
-        host.close_all()
-        runtime.unload()
+    _a_widget_surface_opens_phase1(LegacyDialog, host, opened, runtime, seen)

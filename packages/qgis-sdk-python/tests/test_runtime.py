@@ -18,6 +18,16 @@ from qgis_sdk.declarations._plugin import action, plugin, stream
 from qgis_sdk.models import QgisSdkScopeClosedError
 
 
+def _partial_startup_failure_disposes_phase1(released, runtime):
+    assert dict(runtime.actions) == {}
+
+    runtime.unload()
+    assert released == ["work", "action"]
+
+    with pytest.raises(QgisSdkPluginLifecycleError):
+        runtime.start()
+
+
 @dataclass
 class RecordingNotifications:
     messages: list[str] = field(default_factory=list)
@@ -231,13 +241,7 @@ def test_partial_startup_failure_disposes_owned_resources_and_reraises() -> None
     assert context.scope.closed
     assert runtime.state is PluginRuntimeState.FAILED
     assert runtime.instance is None
-    assert dict(runtime.actions) == {}
-
-    runtime.unload()
-    assert released == ["work", "action"]
-
-    with pytest.raises(QgisSdkPluginLifecycleError):
-        runtime.start()
+    _partial_startup_failure_disposes_phase1(released, runtime)
 
 
 def test_factory_returning_another_type_fails_binding_and_cleans_up() -> None:

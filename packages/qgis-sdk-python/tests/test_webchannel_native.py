@@ -21,6 +21,19 @@ from typing import Any
 import pytest
 from native_support import LoopbackOrigin, pump, serve, settle
 
+
+def _host_pushed_frames_reach_phase1(sink, view):
+    disposed = view.channel_object.dispose()
+
+    assert disposed == 1
+    assert view.dispatcher.subscriptions() == ()
+    assert view.source.closed == 1
+    assert sink.emit({"index": 3}) is False
+    settle(view.app, 0.2)
+    assert len(view.received()) == 4
+    assert view.channel_object.dispose() == 0
+
+
 pytestmark = pytest.mark.webengine
 
 try:
@@ -222,15 +235,7 @@ def test_host_pushed_frames_reach_the_page_in_order_and_disposal_ends_them(
 
     # The host disposes the view: the subscription is gone, the source behind it
     # was closed exactly once, and a late reply from that source goes nowhere.
-    disposed = view.channel_object.dispose()
-
-    assert disposed == 1
-    assert view.dispatcher.subscriptions() == ()
-    assert view.source.closed == 1
-    assert sink.emit({"index": 3}) is False
-    settle(view.app, 0.2)
-    assert len(view.received()) == 4
-    assert view.channel_object.dispose() == 0
+    _host_pushed_frames_reach_phase1(sink, view)
 
 
 def test_deleting_the_page_takes_the_channel_object_with_it(

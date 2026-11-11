@@ -51,6 +51,34 @@ from qgis_sdk.testing import (
 from sample_algorithms import buffer_layer, centroid_layer, sample_provider
 
 
+def _declared_facts1(algorithms, layers, scope, source):
+    algorithms.declare_output(
+        DeclaredOutput(
+            CentroidRequest,
+            source.with_name("centroid.gpkg"),
+            name="centroid",
+            geometry_type="point",
+            field_names=("id", "value"),
+            crs="EPSG:4326",
+        )
+    )
+    return algorithms, layers, FakeProject(layers, scope), scope
+
+
+def _every_output_kind_describes_phase1(kinds):
+    assert kinds == {
+        "produced": "outputVector",
+        "rendered": "outputRaster",
+        "written": "outputFile",
+        "foldered": "outputFolder",
+        "reported": "outputHtml",
+        "counted": "outputNumber",
+        "titled": "outputString",
+        "flagged": "outputBoolean",
+        "split": "outputMultilayer",
+    }
+
+
 class Clock:
     """A cancellation signal a test can flip, including from inside the function."""
 
@@ -95,17 +123,7 @@ def _declared(
             crs="EPSG:3857",
         )
     )
-    algorithms.declare_output(
-        DeclaredOutput(
-            CentroidRequest,
-            source.with_name("centroid.gpkg"),
-            name="centroid",
-            geometry_type="point",
-            field_names=("id", "value"),
-            crs="EPSG:4326",
-        )
-    )
-    return algorithms, layers, FakeProject(layers, scope), scope
+    return _declared_facts1(algorithms, layers, scope, source)
 
 
 def _plugin_context(
@@ -678,17 +696,7 @@ def test_every_output_kind_describes_its_result_kind() -> None:
         description.id: description.result_kind
         for description in provider.describe().algorithms
     }
-    assert kinds == {
-        "produced": "outputVector",
-        "rendered": "outputRaster",
-        "written": "outputFile",
-        "foldered": "outputFolder",
-        "reported": "outputHtml",
-        "counted": "outputNumber",
-        "titled": "outputString",
-        "flagged": "outputBoolean",
-        "split": "outputMultilayer",
-    }
+    _every_output_kind_describes_phase1(kinds)
 
 
 def test_a_value_result_comes_back_as_the_value_and_leaves_the_project() -> None:

@@ -13,6 +13,18 @@ from qgis_sdk_tools.__main__ import app, main
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from typer.testing import CliRunner
 
+
+def _the_choices_reach_the_phase1(manifest, target):
+    assert manifest["tool"]["qgis-sdk"]["qgis-minimum-version"] == "4.2"
+    assert not (target / "field_tools" / "metadata.txt").exists()
+    assert "# Field Survey Tools" in (target / "README.md").read_text(encoding="utf-8")
+    plugin_module = (target / "field_tools" / "plugin.py").read_text(encoding="utf-8")
+    assert (
+        'app = QgisSdkPlugin(id="field_tools", title="Field Survey Tools")'
+        in plugin_module
+    )
+
+
 runner = CliRunner()
 
 
@@ -115,14 +127,7 @@ def test_the_choices_reach_the_generated_files(tmp_path: Path) -> None:
         {"name": "Ada Lovelace", "email": "ada@example.test"}
     ]
     assert manifest["project"]["version"] == "1.2.3"
-    assert manifest["tool"]["qgis-sdk"]["qgis-minimum-version"] == "4.2"
-    assert not (target / "field_tools" / "metadata.txt").exists()
-    assert "# Field Survey Tools" in (target / "README.md").read_text(encoding="utf-8")
-    plugin_module = (target / "field_tools" / "plugin.py").read_text(encoding="utf-8")
-    assert (
-        'app = QgisSdkPlugin(id="field_tools", title="Field Survey Tools")'
-        in plugin_module
-    )
+    _the_choices_reach_the_phase1(manifest, target)
 
 
 def test_dry_run_prints_the_plan_and_touches_nothing(tmp_path: Path) -> None:

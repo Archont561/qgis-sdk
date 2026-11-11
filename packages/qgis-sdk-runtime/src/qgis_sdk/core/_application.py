@@ -23,6 +23,25 @@ from qgis_sdk.declarations import (
 from qgis_sdk.declarations._describe import _describe_lowered_plugin
 from qgis_sdk.declarations._plugin import action, plugin, stream
 
+
+def _init_facts1(self):
+    self._providers: list[Provider] = []
+    self._jobs: Any = None
+    self._declared_jobs: dict[str, Callable[..., Any]] = {}
+    self._included_plugins: set[QgisSdkPlugin] = set()
+    self._included_members: set[QgisSdkPlugin] = set()
+    self.context_factory: Callable[[object | None], PluginContext] | None = None
+
+
+def _include_facts1(child, jobs, members, providers, self):
+    self._providers = providers
+    # The merged mapping already holds this plugin's decorator entries.
+    self._jobs = jobs
+    self._declared_jobs = {}
+    self._included_plugins.add(child)
+    self._included_members.update(members)
+
+
 if TYPE_CHECKING:
     from qgis_sdk.declarations import PluginDescription
     from qgis_sdk.providers import Provider
@@ -150,12 +169,7 @@ class QgisSdkPlugin(_ActionRegistry):
         #: the plugin, not beside the runtime) - `qgis_sdk.app.run` fills it.
         self.module = module if isinstance(module, str) else None
         self._surfaces: list[type[Surface]] = []
-        self._providers: list[Provider] = []
-        self._jobs: Any = None
-        self._declared_jobs: dict[str, Callable[..., Any]] = {}
-        self._included_plugins: set[QgisSdkPlugin] = set()
-        self._included_members: set[QgisSdkPlugin] = set()
-        self.context_factory: Callable[[object | None], PluginContext] | None = None
+        _init_facts1(self)
 
     @property
     def surfaces(self) -> tuple[type[Surface], ...]:
@@ -329,12 +343,7 @@ class QgisSdkPlugin(_ActionRegistry):
         jobs = _merge_jobs(self.jobs, child.jobs)
         self._extend(child._actions)
         self._surfaces = surfaces
-        self._providers = providers
-        # The merged mapping already holds this plugin's decorator entries.
-        self._jobs = jobs
-        self._declared_jobs = {}
-        self._included_plugins.add(child)
-        self._included_members.update(members)
+        _include_facts1(child, jobs, members, providers, self)
 
     def describe(self) -> PluginDescription:
         return _describe_lowered_plugin(self._plugin_class())

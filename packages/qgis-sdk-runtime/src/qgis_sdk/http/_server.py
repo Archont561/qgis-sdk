@@ -8,8 +8,9 @@ import secrets
 import threading
 import weakref
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, TypedDict, Unpack
 
 from qgis_sdk.bridge import Dispatcher
 from qgis_sdk.bridge.resources import ReleaseLedger
@@ -129,35 +130,24 @@ class PluginHttpServer:
     the runtime; off-owner cleanup is posted and may finish after close returns.
     """
 
-    def __init__(
-        self,
-        runtime: Any,
-        *,
-        post: Callable[[Callable[[], None]], None],
-        token_file: Path,
-        actions: Sequence[str] = (),
-        host: str = "127.0.0.1",
-        port: int = 0,
-        deadline: float = 10,
-        max_connections: int = 128,
-        max_event_streams: int | None = None,
-        request_read_timeout: float = 5,
-        stream_write_timeout: float = 10,
-        close_grace: float = DEFAULT_CLOSE_GRACE,
-        on_cleanup_error: Callable[[Exception], None] | None = None,
-    ) -> None:
-        _refuse_unusable(host, post, on_cleanup_error)
-        limits = timing(request_read_timeout, stream_write_timeout, close_grace)
-        budgets = capacity(max_connections, max_event_streams)
-        _refuse_unknown(actions, runtime)
+    def __init__(self, runtime: Any, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
+        _refuse_unusable(values.host, values.post, values.on_cleanup_error)
+        limits = timing(
+            values.request_read_timeout, values.stream_write_timeout, values.close_grace
+        )
+        budgets = capacity(values.max_connections, values.max_event_streams)
+        _refuse_unknown(values.actions, runtime)
         self._runtime = runtime
-        self._owner = _Owner(post, on_cleanup_error)
-        self._allowed = frozenset(actions)
+        self._owner = _Owner(values.post, values.on_cleanup_error)
+        self._allowed = frozenset(values.actions)
         self._closed = threading.Event()
-        self._queue = GuiQueue(post, positive("deadline", deadline))
+        self._queue = GuiQueue(values.post, positive("deadline", values.deadline))
         self._sessions = _sessions_of(self)
         self._endpoint = _endpoint_of(self, limits, budgets)
-        self._listener = _Listener(self._endpoint, token_file, port, budgets)
+        self._listener = _Listener(
+            self._endpoint, values.token_file, values.port, budgets
+        )
         runtime.instance.ctx.scope.on_close(self.close)
 
     @property
@@ -295,3 +285,34 @@ class PluginHttpServer:
                 self._owner.reserved = False
         if failures:
             raise ExceptionGroup("HTTP listener cleanup failed", failures)
+
+
+class _InitOptions1(TypedDict, total=False):
+    post: Callable[[Callable[[], None]], None]
+    token_file: Path
+    actions: Sequence[str]
+    host: str
+    port: int
+    deadline: float
+    max_connections: int
+    max_event_streams: int | None
+    request_read_timeout: float
+    stream_write_timeout: float
+    close_grace: float
+    on_cleanup_error: Callable[[Exception], None] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    post: Callable[[Callable[[], None]], None]
+    token_file: Path
+    actions: Sequence[str] = ()
+    host: str = "127.0.0.1"
+    port: int = 0
+    deadline: float = 10
+    max_connections: int = 128
+    max_event_streams: int | None = None
+    request_read_timeout: float = 5
+    stream_write_timeout: float = 10
+    close_grace: float = DEFAULT_CLOSE_GRACE
+    on_cleanup_error: Callable[[Exception], None] | None = None

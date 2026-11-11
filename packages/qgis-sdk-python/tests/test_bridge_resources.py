@@ -17,6 +17,19 @@ from qgis_sdk.bridge import BRIDGE_PROTOCOL_VERSION, BridgeOperation, Dispatcher
 from qgis_sdk.bridge.resources import Handle, HandleKind, ReleaseLedger, ReleaseOutcome
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
+
+def _the_dispatcher_tracks_the_phase1(binding, dispatcher, released, subscription_id):
+    assert released["value"]["released"] == [
+        {
+            "kind": "subscription",
+            "id": subscription_id,
+            "outcome": "subscription_disposed",
+        }
+    ]
+    assert dispatcher.subscriptions() == ()
+    assert dispatcher.pump(binding) == []
+
+
 ORIGIN = "qgis://desktop"
 TICKS = BridgeOperation(id="demo.ticks", title="Emit a tick")
 RELEASE = "bridge.release"
@@ -169,15 +182,7 @@ def test_the_dispatcher_tracks_the_subscriptions_a_view_opens() -> None:
         [{"kind": "subscription", "id": subscription_id}],
     )
 
-    assert released["value"]["released"] == [
-        {
-            "kind": "subscription",
-            "id": subscription_id,
-            "outcome": "subscription_disposed",
-        }
-    ]
-    assert dispatcher.subscriptions() == ()
-    assert dispatcher.pump(binding) == []
+    _the_dispatcher_tracks_the_phase1(binding, dispatcher, released, subscription_id)
 
 
 def test_a_view_cannot_release_what_another_view_holds() -> None:

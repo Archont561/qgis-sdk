@@ -10,6 +10,30 @@ from qgis_sdk.models import QgisSdkHttpStatusError, QgisSdkServiceResponseError
 from qgis_sdk.network import CollectionInfo, NetworkClient, OgcApiFeatures
 from qgis_sdk.testing import FakeNetworkTransport, reply
 
+
+def _collections_are_typed_values_facts1(collections, transport):
+    assert collections == (
+        CollectionInfo(
+            id="sites",
+            title="Sites",
+            description="Monitoring sites",
+            crs=("http://www.opengis.net/def/crs/OGC/1.3/CRS84",),
+        ),
+        CollectionInfo(id="roads", title=None, description=None, crs=()),
+    )
+    assert transport.requests[0].headers["accept"] == "application/json"
+    transport.assert_satisfied()
+
+
+def _items_pages_carry_features_phase1(after_last, last, page, second, transport):
+    assert [feature["id"] for feature in page.features] == [1, 2]
+    assert page.next_url == second
+    assert last.number_returned == 1
+    assert last.next_url is None
+    assert after_last is None
+    transport.assert_satisfied()
+
+
 BASE = "https://features.example.test/ogc"
 
 
@@ -56,17 +80,7 @@ def test_collections_are_typed_values_fetched_through_the_shared_client(
 
     collections = run(service.collections())
 
-    assert collections == (
-        CollectionInfo(
-            id="sites",
-            title="Sites",
-            description="Monitoring sites",
-            crs=("http://www.opengis.net/def/crs/OGC/1.3/CRS84",),
-        ),
-        CollectionInfo(id="roads", title=None, description=None, crs=()),
-    )
-    assert transport.requests[0].headers["accept"] == "application/json"
-    transport.assert_satisfied()
+    _collections_are_typed_values_facts1(collections, transport)
 
 
 def test_items_pages_carry_features_and_the_next_link(
@@ -114,12 +128,7 @@ def test_items_pages_carry_features_and_the_next_link(
 
     assert page.number_matched == 3
     assert page.number_returned == 2
-    assert [feature["id"] for feature in page.features] == [1, 2]
-    assert page.next_url == second
-    assert last.number_returned == 1
-    assert last.next_url is None
-    assert after_last is None
-    transport.assert_satisfied()
+    _items_pages_carry_features_phase1(after_last, last, page, second, transport)
 
 
 def test_an_http_failure_surfaces_as_the_status_error(

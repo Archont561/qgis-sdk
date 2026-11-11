@@ -19,6 +19,28 @@ import pytest
 from qgis_sdk.core import UiContext
 from qgis_sdk.models import QgisSdkUiError
 
+
+def _init_gui_places_every_facts11(iface, desktop):
+    assert [action.shortcut().toString() for action in iface.shortcuts] == [
+        "Ctrl+Alt+L",
+        "Ctrl+Alt+K",
+    ]
+    assert iface.toolbar[0].isCheckable() and not iface.toolbar[1].isCheckable()
+
+    desktop.unload()
+    _init_gui_places_every_facts1(iface, desktop)
+
+
+def _init_gui_places_every_facts1(iface, desktop):
+    desktop.unload()
+
+    assert iface.toolbar == []
+    assert iface.menus == {}
+    assert iface.shortcuts == []
+    assert iface.docks == []
+    assert desktop.desktop_bindings.placed == ()
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -315,20 +337,7 @@ def test_init_gui_places_every_binding_in_declaration_order_and_unload_removes_t
         "Plugins/Surface tools": ["Buffer a layer"],
         "Vector/Surface tools": ["Typed"],
     }
-    assert [action.shortcut().toString() for action in iface.shortcuts] == [
-        "Ctrl+Alt+L",
-        "Ctrl+Alt+K",
-    ]
-    assert iface.toolbar[0].isCheckable() and not iface.toolbar[1].isCheckable()
-
-    desktop.unload()
-    desktop.unload()
-
-    assert iface.toolbar == []
-    assert iface.menus == {}
-    assert iface.shortcuts == []
-    assert iface.docks == []
-    assert desktop.desktop_bindings.placed == ()
+    _init_gui_places_every_facts11(iface, desktop)
 
 
 def test_triggering_a_no_input_action_runs_it_on_the_gui_thread(

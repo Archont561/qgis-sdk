@@ -14,6 +14,16 @@ from qgis_sdk.bridge.dispatch import Dispatcher, ViewBinding
 from qgis_sdk.bridge.transport import ChannelTransport
 from qgis_sdk.models.errors import QgisSdkOptionalDependencyError
 
+
+def _create_channel_object_phase1(BridgeChannelObject, transport):
+    channel = BridgeChannelObject(transport)
+    # The signal only exists once Qt has built the class, so the transport is
+    # rebound to it here instead of being handed a callable that does not exist
+    # yet.
+    transport.send = channel.message.emit
+    return channel
+
+
 WEBCHANNEL_DEPENDENCY = "pyqt6-webchannel"
 WEBCHANNEL_INSTALLATION_HINT = (
     "Install the Qt WebChannel Python bindings provided by the QGIS "
@@ -106,12 +116,7 @@ def create_channel_object(
     transport = ChannelTransport(
         dispatcher=dispatcher, binding=binding, send=lambda text: None
     )
-    channel = BridgeChannelObject(transport)
-    # The signal only exists once Qt has built the class, so the transport is
-    # rebound to it here instead of being handed a callable that does not exist
-    # yet.
-    transport.send = channel.message.emit
-    return channel
+    return _create_channel_object_phase1(BridgeChannelObject, transport)
 
 
 __all__ = [

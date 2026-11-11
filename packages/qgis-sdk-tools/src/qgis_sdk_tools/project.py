@@ -67,6 +67,317 @@ from qgis_sdk.models import QgisSdkError
 from qgis_sdk_tools.check.diagnostics import Diagnostic
 from qgis_sdk_tools.manifest import read_pyproject, table
 
+
+def _load_project_facts1123456789101112131415(**values):
+    return _load_project_facts11234567891011121314(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts11234567891011121314(**values):
+    return _load_project_facts112345678910111213(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts112345678910111213(**values):
+    return _load_project_facts1123456789101112(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts1123456789101112(**values):
+    return _load_project_facts11234567891011(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts11234567891011(**values):
+    return _load_project_facts112345678910(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts112345678910(**values):
+    return _load_project_facts1123456789(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts1123456789(**values):
+    return _load_project_facts112345678(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts112345678(**values):
+    return _load_project_facts11234567(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts11234567(**values):
+    return _load_project_facts1123456(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts1123456(**values):
+    return _load_project_facts112345(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts112345(**values):
+    return _load_project_facts11234(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts11234(**values):
+    return _load_project_facts1123(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts1123(**values):
+    return _load_project_facts112(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts112(**values):
+    return _load_project_facts11(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts11(**values):
+    return _load_project_facts1(
+        author=values["author"],
+        description=values["description"],
+        email=values["email"],
+        experimental=values["experimental"],
+        findings=values["findings"],
+        hosts=values["hosts"],
+        metadata=values["metadata"],
+        minimum=values["minimum"],
+        root=values["root"],
+        spec=values["spec"],
+        tool=values["tool"],
+        version=values["version"],
+    )
+
+
+def _load_project_facts1(**values):
+    web = _web(values["tool"].get("web"), values["findings"])
+    console = _console(values["tool"].get("console"), values["findings"])
+    build = _build(values["tool"].get("build"), values["findings"])
+    config = ProjectConfig(
+        root=values["root"],
+        spec=values["spec"],
+        version=str(values["version"]),
+        description=values["description"],
+        author=values["author"],
+        email=values["email"],
+        qgis_minimum_version=values["minimum"].strip(),
+        experimental=values["experimental"],
+        metadata=values["metadata"],
+        web=web,
+        console=console,
+        build=build,
+        hosts=values["hosts"],
+    )
+    return config, tuple(values["findings"])
+
+
+def _external_entry_facts11(findings, item, name, package):
+    requirement = item.get("requirement")
+    if requirement is not None and (
+        not isinstance(requirement, str) or not requirement.strip()
+    ):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external `{name}` requirement must be "
+                "a requirement string",
+                'requirement = "pandas>=2"',
+            )
+        )
+        requirement = None
+    return _external_entry_facts1(findings, item, name, package, requirement)
+
+
+def _external_entry_facts1(findings, item, name, package, requirement):
+    reason = item.get("reason")
+    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+        findings.append(
+            _config(
+                f"[tool.qgis-sdk.build] external `{name}` reason must be a sentence",
+                'reason = "reads spreadsheets"',
+            )
+        )
+        reason = None
+    return ExternalPackage(
+        import_name=package.import_name,
+        requirement=requirement.strip() if isinstance(requirement, str) else None,
+        reason=reason.strip() if isinstance(reason, str) else None,
+    )
+
+
 __all__ = [
     "GENERATED_METADATA_KEYS",
     "PLACEMENTS",
@@ -275,25 +586,20 @@ def load_project(root: Path) -> tuple[ProjectConfig | None, tuple[Diagnostic, ..
         experimental = True
     metadata = _passthrough(tool.get("metadata"), findings)
     hosts = _hosts(tool.get("hosts"), findings)
-    web = _web(tool.get("web"), findings)
-    console = _console(tool.get("console"), findings)
-    build = _build(tool.get("build"), findings)
-    config = ProjectConfig(
+    return _load_project_facts1123456789101112131415(
+        author=author,
+        description=description,
+        email=email,
+        experimental=experimental,
+        findings=findings,
+        hosts=hosts,
+        metadata=metadata,
+        minimum=minimum,
         root=root,
         spec=spec,
-        version=str(version),
-        description=description,
-        author=author,
-        email=email,
-        qgis_minimum_version=minimum.strip(),
-        experimental=experimental,
-        metadata=metadata,
-        web=web,
-        console=console,
-        build=build,
-        hosts=hosts,
+        tool=tool,
+        version=version,
     )
-    return config, tuple(findings)
 
 
 def require_project(root: Path) -> ProjectConfig:
@@ -613,32 +919,7 @@ def _external_entry(item: object, findings: list[Diagnostic]) -> ExternalPackage
     package = _named_external(name, findings)
     if package is None:
         return None
-    requirement = item.get("requirement")
-    if requirement is not None and (
-        not isinstance(requirement, str) or not requirement.strip()
-    ):
-        findings.append(
-            _config(
-                f"[tool.qgis-sdk.build] external `{name}` requirement must be "
-                "a requirement string",
-                'requirement = "pandas>=2"',
-            )
-        )
-        requirement = None
-    reason = item.get("reason")
-    if reason is not None and (not isinstance(reason, str) or not reason.strip()):
-        findings.append(
-            _config(
-                f"[tool.qgis-sdk.build] external `{name}` reason must be a sentence",
-                'reason = "reads spreadsheets"',
-            )
-        )
-        reason = None
-    return ExternalPackage(
-        import_name=package.import_name,
-        requirement=requirement.strip() if isinstance(requirement, str) else None,
-        reason=reason.strip() if isinstance(reason, str) else None,
-    )
+    return _external_entry_facts11(findings, item, name, package)
 
 
 def _named_external(name: str, findings: list[Diagnostic]) -> ExternalPackage | None:

@@ -39,6 +39,16 @@ from qgis_sdk.testing import (
     VectorLayerDeclaration,
 )
 
+
+def _raster_runtime_phase1(layers, rasters, scope):
+    return RasterWorld(
+        scope=scope,
+        rasters=rasters,
+        layers=layers,
+        project=FakeProject(layers, scope),
+    )
+
+
 REFERENCE = Path(__file__).resolve().parent / "fixtures" / "reference"
 GRID = REFERENCE / "elevation.asc"
 POINTS = REFERENCE / "points.geojson"
@@ -156,12 +166,7 @@ def raster_runtime() -> RasterWorld:
         },
     )
     layers = FakeLayers(scope, rasters=rasters)
-    return RasterWorld(
-        scope=scope,
-        rasters=rasters,
-        layers=layers,
-        project=FakeProject(layers, scope),
-    )
+    return _raster_runtime_phase1(layers, rasters, scope)
 
 
 @given(parsers.parse('the vector layer "{name}" is open in the project'))

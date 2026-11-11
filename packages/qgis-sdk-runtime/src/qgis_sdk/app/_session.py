@@ -23,7 +23,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.core import (
     Host,
@@ -37,6 +37,25 @@ from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import QgisSdkAppError
 
 from ._backend import AppBackend, AppSurface
+
+
+def _init_facts1(self):
+    self._loops = LoopRegistry()
+    self._surface: AppSurface | None = None
+    self._runtime: PluginRuntime | None = None
+    self._started = False
+    self._exited = False
+    self._report: ShutdownReport | None = None
+
+
+def _start_facts1(self):
+    self._started = True
+    self._say(
+        f"app: {self._app_id} running"
+        + (" with a window" if self._gui else " headless")
+    )
+    return self._runtime
+
 
 __all__ = [
     "DRAIN_INTERVAL",
@@ -120,40 +139,24 @@ class AppSession:
     builds; ``ctx.host`` is ``app`` either way.
     """
 
-    def __init__(
-        self,
-        app: QgisSdkPlugin,
-        *,
-        backend: AppBackend,
-        gui: bool = False,
-        argv: Sequence[str] | None = None,
-        grace: float = GRACE_SECONDS,
-        title: str | None = None,
-        say: Callable[[str], None] | None = None,
-        clock: Callable[[], float] = time.monotonic,
-        pause: Callable[[float], None] = time.sleep,
-    ) -> None:
+    def __init__(self, app: QgisSdkPlugin, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
         if not isinstance(app, QgisSdkPlugin):
             raise QgisSdkDeclarationError("AppSession requires a QgisSdkPlugin")
-        if grace < 0:
-            raise QgisSdkAppError(f"grace must not be negative, got {grace!r}")
+        if values.grace < 0:
+            raise QgisSdkAppError(f"grace must not be negative, got {values.grace!r}")
         description = app.describe()
         self._app = app
         self._app_id = description.id
-        self._backend = backend
-        self._gui = bool(gui)
-        self._argv = tuple(argv or ())
-        self._grace = float(grace)
-        self._title = title or description.title
-        self._say = say if say is not None else (lambda _message: None)
-        self._clock = clock
-        self._pause = pause
-        self._loops = LoopRegistry()
-        self._surface: AppSurface | None = None
-        self._runtime: PluginRuntime | None = None
-        self._started = False
-        self._exited = False
-        self._report: ShutdownReport | None = None
+        self._backend = values.backend
+        self._gui = bool(values.gui)
+        self._argv = tuple(values.argv or ())
+        self._grace = float(values.grace)
+        self._title = values.title or description.title
+        self._say = values.say if values.say is not None else (lambda _message: None)
+        self._clock = values.clock
+        self._pause = values.pause
+        _init_facts1(self)
 
     # -- what a host reads -------------------------------------------------------------
 
@@ -219,12 +222,7 @@ class AppSession:
         except BaseException:
             self._release()
             raise
-        self._started = True
-        self._say(
-            f"app: {self._app_id} running"
-            + (" with a window" if self._gui else " headless")
-        )
-        return self._runtime
+        return _start_facts1(self)
 
     def run(self, *, once: bool = False) -> int:
         """Start, spin the event loop, stop; return the process exit code.
@@ -347,3 +345,26 @@ class AppSession:
             else "new"
         )
         return f"AppSession({self._app_id!r}, {state})"
+
+
+class _InitOptions1(TypedDict, total=False):
+    backend: AppBackend
+    gui: bool
+    argv: Sequence[str] | None
+    grace: float
+    title: str | None
+    say: Callable[[str], None] | None
+    clock: Callable[[], float]
+    pause: Callable[[float], None]
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    backend: AppBackend
+    gui: bool = False
+    argv: Sequence[str] | None = None
+    grace: float = GRACE_SECONDS
+    title: str | None = None
+    say: Callable[[str], None] | None = None
+    clock: Callable[[], float] = time.monotonic
+    pause: Callable[[float], None] = time.sleep

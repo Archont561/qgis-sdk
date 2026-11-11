@@ -32,6 +32,44 @@ from qgis_sdk.ui import (
 )
 from ui_component_contract import Rendering
 
+
+def _tabs_show_one_page_facts1(rendering, seen, tabs):
+    if rendering.native:
+        assert tabs.widget.currentIndex() == 1
+        assert tabs.widget.tabText(0) == "Input"
+        tabs.widget.setCurrentIndex(0)
+        assert tabs.current() == "input"
+        assert seen == ["output", "input"]
+
+    with pytest.raises(QgisSdkUiError, match="at least one page"):
+        Tabs("empty", [])
+    assert Tabs("t", [Column("a", []), Column("b", [])], current="b").current() == "b"
+
+
+def _a_result_table_lists_facts1(table):
+    with pytest.raises(QgisSdkUiError, match="row 0 must be a mapping"):
+        table.set_rows(["x"])  # type: ignore[list-item]
+    with pytest.raises(QgisSdkUiError, match="unique"):
+        ResultTable("t", ["a", "a"])
+    with pytest.raises(QgisSdkUiError, match="at least one column"):
+        ResultTable("t", [])
+
+
+def _custom_builds_its_widget_facts1(built, custom, rendering):
+    if rendering.native:
+        assert len(built) == 1
+        assert custom.widget is built[0]
+        assert custom.widget.objectName() == "custom/mine"
+        assert custom.snapshot()["widget"] == "QLabel"
+    else:
+        assert built == []
+        with pytest.raises(QgisSdkUiError, match="not mounted"):
+            _ = custom.widget
+
+    with pytest.raises(QgisSdkUiError, match="needs a widget"):
+        Custom("none", None)
+
+
 # -- containers -------------------------------------------------------------------------
 
 
@@ -99,16 +137,7 @@ def test_tabs_show_one_page_at_a_time_and_report_switches(
         tabs.set_current("other")
     assert tabs.current() == "output"
     assert tabs.snapshot()["current"] == "output"
-    if rendering.native:
-        assert tabs.widget.currentIndex() == 1
-        assert tabs.widget.tabText(0) == "Input"
-        tabs.widget.setCurrentIndex(0)
-        assert tabs.current() == "input"
-        assert seen == ["output", "input"]
-
-    with pytest.raises(QgisSdkUiError, match="at least one page"):
-        Tabs("empty", [])
-    assert Tabs("t", [Column("a", []), Column("b", [])], current="b").current() == "b"
+    _tabs_show_one_page_facts1(rendering, seen, tabs)
 
 
 # -- feedback: JobProgress --------------------------------------------------------------
@@ -253,12 +282,7 @@ def test_a_result_table_lists_rows_and_tracks_the_selection(
     table.set_rows([])
     assert table.selected() is None
     assert table.snapshot()["rows"] == []
-    with pytest.raises(QgisSdkUiError, match="row 0 must be a mapping"):
-        table.set_rows(["x"])  # type: ignore[list-item]
-    with pytest.raises(QgisSdkUiError, match="unique"):
-        ResultTable("t", ["a", "a"])
-    with pytest.raises(QgisSdkUiError, match="at least one column"):
-        ResultTable("t", [])
+    _a_result_table_lists_facts1(table)
 
 
 # -- buttons ----------------------------------------------------------------------------
@@ -380,18 +404,7 @@ def test_custom_builds_its_widget_only_when_mounted(rendering: Rendering) -> Non
     }
     rendering.attach(Column("root", [Text("note"), custom]))
 
-    if rendering.native:
-        assert len(built) == 1
-        assert custom.widget is built[0]
-        assert custom.widget.objectName() == "custom/mine"
-        assert custom.snapshot()["widget"] == "QLabel"
-    else:
-        assert built == []
-        with pytest.raises(QgisSdkUiError, match="not mounted"):
-            _ = custom.widget
-
-    with pytest.raises(QgisSdkUiError, match="needs a widget"):
-        Custom("none", None)
+    _custom_builds_its_widget_facts1(built, custom, rendering)
 
 
 # -- snapshots --------------------------------------------------------------------------

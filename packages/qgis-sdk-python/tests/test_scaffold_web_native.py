@@ -28,6 +28,19 @@ from qgis_sdk.adapters.desktop import host
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command, script_command
 
+
+def _assert_page_took_the_phase1(app, page, theme):
+    assert (
+        _evaluate(
+            app,
+            page,
+            "getComputedStyle(document.documentElement)"
+            ".getPropertyValue('--qgis-sdk-fg').trim()",
+        )
+        == theme["palette"]["windowText"]
+    )
+
+
 pytestmark = pytest.mark.webengine
 
 if not os.environ.get("QGIS_SDK_SCAFFOLD_WEB"):
@@ -204,15 +217,7 @@ def _assert_page_took_the_host_palette(app: Any, page: Any) -> None:
         app, page, "document.documentElement.getAttribute('data-qgis-sdk-theme')"
     ) == ("dark" if theme["dark"] else "light")
     # The matching foreground came along: the tokens move as a set.
-    assert (
-        _evaluate(
-            app,
-            page,
-            "getComputedStyle(document.documentElement)"
-            ".getPropertyValue('--qgis-sdk-fg').trim()",
-        )
-        == theme["palette"]["windowText"]
-    )
+    _assert_page_took_the_phase1(app, page, theme)
 
 
 def _forget(package: str) -> None:

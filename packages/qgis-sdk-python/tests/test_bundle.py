@@ -31,6 +31,27 @@ from qgis_sdk_tools.bundle import (
 )
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
+
+def _absolute_sdk_imports_move_phase1(rewritten, source):
+    assert rewritten == (
+        "from __future__ import annotations\n"
+        "from my_plugin._vendor import qgis_sdk\n"
+        "import my_plugin._vendor.qgis_sdk.core.scope as scope_module\n"
+        "import my_plugin._vendor.qgis_sdk.jobs; "
+        "from my_plugin._vendor import qgis_sdk\n"
+        "from my_plugin._vendor.qgis_sdk import QgisSdkPlugin, QgisSdkPlugin\n"
+        "from my_plugin._vendor.qgis_sdk.core import (\n"
+        "    PluginContext,\n"
+        "    ResourceScope,\n"
+        ")\n"
+        "from . import sibling\n"
+        "from .models import X\n"
+        "import qgis_sdk_other\n"
+        "text = 'from qgis_sdk import nothing'\n"
+    )
+    assert rewritten.count("\n") == source.count("\n")  # line numbers survive
+
+
 PLUGIN = "field_tools"
 
 
@@ -509,23 +530,7 @@ class TestRewriteImports:
 
         rewritten = rewrite_imports(source, prefix="my_plugin._vendor")
 
-        assert rewritten == (
-            "from __future__ import annotations\n"
-            "from my_plugin._vendor import qgis_sdk\n"
-            "import my_plugin._vendor.qgis_sdk.core.scope as scope_module\n"
-            "import my_plugin._vendor.qgis_sdk.jobs; "
-            "from my_plugin._vendor import qgis_sdk\n"
-            "from my_plugin._vendor.qgis_sdk import QgisSdkPlugin, QgisSdkPlugin\n"
-            "from my_plugin._vendor.qgis_sdk.core import (\n"
-            "    PluginContext,\n"
-            "    ResourceScope,\n"
-            ")\n"
-            "from . import sibling\n"
-            "from .models import X\n"
-            "import qgis_sdk_other\n"
-            "text = 'from qgis_sdk import nothing'\n"
-        )
-        assert rewritten.count("\n") == source.count("\n")  # line numbers survive
+        _absolute_sdk_imports_move_phase1(rewritten, source)
 
     def test_indented_and_guarded_imports_are_rewritten_too(self) -> None:
         source = (

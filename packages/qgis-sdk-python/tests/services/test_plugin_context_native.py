@@ -15,6 +15,38 @@ import pytest
 from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.models import QgisSdkScopeClosedError
 
+
+def _native_plugin_context_wires_phase3(
+    HostServices, NativeNetworkTransport, context, native_services, scope
+):
+    assert isinstance(context.network.transport, NativeNetworkTransport)
+
+    # The project service reads what the layer service opened: one layer set.
+    info = context.layers.open_vector(native_services.dataset)
+    context.project.add_layer(info.id)
+    _native_plugin_context_wires_phase2(HostServices, context, info, scope)
+
+
+def _native_plugin_context_wires_phase2(HostServices, context, info, scope):
+    assert info.id in context.project.layer_ids()
+
+    # The web view would wrap exactly these instances.
+    services = HostServices.from_context(context)
+    assert services.layers is context.layers
+    assert services.project is context.project
+    assert services.styles is context.styles
+    _native_plugin_context_wires_phase1(context, scope, services)
+
+
+def _native_plugin_context_wires_phase1(context, scope, services):
+    assert services.settings is context.settings
+    assert services.network is context.network.transport
+
+    scope.close()
+    with pytest.raises(QgisSdkScopeClosedError):
+        _ = context.layers
+
+
 pytestmark = pytest.mark.qgis
 
 if TYPE_CHECKING:
@@ -60,24 +92,9 @@ def test_native_plugin_context_wires_every_curated_service(
     assert context.workers.manager is QgsApplication.taskManager()
     assert isinstance(context.network, NetworkClient)
     assert isinstance(context.notifications, NativeNotifications)
-    assert isinstance(context.network.transport, NativeNetworkTransport)
-
-    # The project service reads what the layer service opened: one layer set.
-    info = context.layers.open_vector(native_services.dataset)
-    context.project.add_layer(info.id)
-    assert info.id in context.project.layer_ids()
-
-    # The web view would wrap exactly these instances.
-    services = HostServices.from_context(context)
-    assert services.layers is context.layers
-    assert services.project is context.project
-    assert services.styles is context.styles
-    assert services.settings is context.settings
-    assert services.network is context.network.transport
-
-    scope.close()
-    with pytest.raises(QgisSdkScopeClosedError):
-        _ = context.layers
+    _native_plugin_context_wires_phase3(
+        HostServices, NativeNetworkTransport, context, native_services, scope
+    )
 
 
 def test_native_plugin_context_without_an_iface_has_no_desktop_access(

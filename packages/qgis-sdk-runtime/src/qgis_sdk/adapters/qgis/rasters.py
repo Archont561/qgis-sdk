@@ -60,6 +60,19 @@ from qgis_sdk.models import (
     RasterStatistics,
 )
 
+
+def _statistics_facts1(band, stats, total, valid):
+    return RasterStatistics(
+        band=band,
+        minimum=float(stats.minimumValue),
+        maximum=float(stats.maximumValue),
+        mean=float(stats.mean),
+        std_dev=float(stats.stdDev),
+        valid_count=valid,
+        no_data_count=max(total - valid, 0),
+    )
+
+
 __all__ = ["NativeRasters"]
 
 
@@ -120,15 +133,7 @@ class NativeRasters:
                 valid_count=0,
                 no_data_count=total,
             )
-        return RasterStatistics(
-            band=band,
-            minimum=float(stats.minimumValue),
-            maximum=float(stats.maximumValue),
-            mean=float(stats.mean),
-            std_dev=float(stats.stdDev),
-            valid_count=valid,
-            no_data_count=max(total - valid, 0),
-        )
+        return _statistics_facts1(band, stats, total, valid)
 
     def sample(
         self, layer_id: str, point: CanvasPoint, *, band: int | None = None

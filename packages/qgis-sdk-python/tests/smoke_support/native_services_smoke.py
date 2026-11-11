@@ -30,6 +30,35 @@ from pathlib import Path
 
 from smoke_support.desktop_lifecycle_smoke import headless_environment, qgis_python_path
 
+
+def _unavailable_facts1(cls, error):
+    return cls(
+        platform=platform.platform(),
+        python_version=platform.python_version(),
+        qgis_version=None,
+        qt_version=None,
+        qgis_initialised=False,
+        layer_opened=False,
+        layer_name=None,
+        layer_geometry_type=None,
+        layer_field_names=(),
+        layer_crs=None,
+        selection=(),
+        project_layer_ids=(),
+        scope_closed=False,
+        reads_refused_after_close=False,
+        settings_round_trip=False,
+        settings_refused_after_close=False,
+        notification_delivered=False,
+        notification_refused_after_close=False,
+        style_applied=False,
+        style_incompatible_refused=False,
+        theme_unchanged=False,
+        qgis_exited=False,
+        error=error,
+    )
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # The runtime and the tools are separate distributions (decision-35); both go
 # on the path so the probe imports the trees under test.
@@ -123,31 +152,7 @@ class NativeServicesReport:
         machine-readable report - and one place decides what "did not get that
         far" looks like.
         """
-        return cls(
-            platform=platform.platform(),
-            python_version=platform.python_version(),
-            qgis_version=None,
-            qt_version=None,
-            qgis_initialised=False,
-            layer_opened=False,
-            layer_name=None,
-            layer_geometry_type=None,
-            layer_field_names=(),
-            layer_crs=None,
-            selection=(),
-            project_layer_ids=(),
-            scope_closed=False,
-            reads_refused_after_close=False,
-            settings_round_trip=False,
-            settings_refused_after_close=False,
-            notification_delivered=False,
-            notification_refused_after_close=False,
-            style_applied=False,
-            style_incompatible_refused=False,
-            theme_unchanged=False,
-            qgis_exited=False,
-            error=error,
-        )
+        return _unavailable_facts1(cls, error)
 
     def to_dict(self) -> dict[str, object]:
         """Return the report as a JSON-serialisable mapping."""

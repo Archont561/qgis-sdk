@@ -18,11 +18,145 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.models import QgisSdkUiError
 
 from .components import Component
+
+
+def _surface_snapshot_facts112345678(**values):
+    return _surface_snapshot_facts11234567(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts11234567(**values):
+    return _surface_snapshot_facts1123456(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts1123456(**values):
+    return _surface_snapshot_facts112345(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts112345(**values):
+    return _surface_snapshot_facts11234(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts11234(**values):
+    return _surface_snapshot_facts1123(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts1123(**values):
+    return _surface_snapshot_facts112(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts112(**values):
+    return _surface_snapshot_facts11(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts11(**values):
+    return _surface_snapshot_facts1(
+        findings=values["findings"],
+        kind=values["kind"],
+        nodes=values["nodes"],
+        palette=values["palette"],
+        scale=values["scale"],
+        screenshot=values["screenshot"],
+        surface=values["surface"],
+        surface_id=values["surface_id"],
+        title=values["title"],
+    )
+
+
+def _surface_snapshot_facts1(**values):
+    payload: dict[str, Any] = {
+        "surface": values["surface_id"],
+        "kind": values["kind"],
+        "title": values["title"]
+        if values["title"] is not None
+        else _text(values["surface"]),
+        "size": _size(values["surface"]),
+        "scale": round(float(values["scale"]), 3),
+        "screenshot": values["screenshot"],
+        "nodes": values["nodes"],
+        "findings": values["findings"],
+    }
+    if values["palette"] is not None:
+        payload["palette"] = {
+            str(name): str(value) for name, value in values["palette"].items()
+        }
+    return payload
+
 
 __all__ = ["canonical_json", "snapshot_names", "surface_snapshot", "ui_snapshot"]
 
@@ -191,15 +325,7 @@ def _is_widget(value: Any) -> bool:
 
 
 def surface_snapshot(
-    surface: object,
-    *,
-    surface_id: str,
-    kind: str,
-    title: str | None = None,
-    declared: Sequence[str] = (),
-    screenshot: str | None = None,
-    scale: float = 1.0,
-    palette: Mapping[str, str] | None = None,
+    surface: object, **options: Unpack[_SurfaceOptions1]
 ) -> dict[str, Any]:
     """One opened surface in the decision-51 inspection format.
 
@@ -209,26 +335,25 @@ def surface_snapshot(
     node back to its schema entry. ``screenshot`` is the digest of the PNG the
     caller captured beside this tree.
     """
+    values = _SurfaceValues1(**options)
     if not _is_qobject(surface):
         raise QgisSdkUiError(
             f"surface_snapshot takes an opened Qt surface, got {type(surface).__name__}"
         )
-    fields = tuple(declared)
+    fields = tuple(values.declared)
     labels = _label_map(surface)
     nodes, findings = _surface_nodes(surface, surface, labels, fields, parent="")
-    payload: dict[str, Any] = {
-        "surface": surface_id,
-        "kind": kind,
-        "title": title if title is not None else _text(surface),
-        "size": _size(surface),
-        "scale": round(float(scale), 3),
-        "screenshot": screenshot,
-        "nodes": nodes,
-        "findings": findings,
-    }
-    if palette is not None:
-        payload["palette"] = {str(name): str(value) for name, value in palette.items()}
-    return payload
+    return _surface_snapshot_facts112345678(
+        findings=findings,
+        kind=values.kind,
+        nodes=nodes,
+        palette=values.palette,
+        scale=values.scale,
+        screenshot=values.screenshot,
+        surface=surface,
+        surface_id=values.surface_id,
+        title=values.title,
+    )
 
 
 def canonical_json(payload: Mapping[str, Any]) -> str:
@@ -416,3 +541,24 @@ def _widget_children(widget: Any) -> Iterator[Any]:
     for child in children or ():
         if _is_qobject(child) and _is_widget(child):
             yield child
+
+
+class _SurfaceOptions1(TypedDict, total=False):
+    surface_id: str
+    kind: str
+    title: str | None
+    declared: Sequence[str]
+    screenshot: str | None
+    scale: float
+    palette: Mapping[str, str] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _SurfaceValues1:
+    surface_id: str
+    kind: str
+    title: str | None = None
+    declared: Sequence[str] = ()
+    screenshot: str | None = None
+    scale: float = 1.0
+    palette: Mapping[str, str] | None = None

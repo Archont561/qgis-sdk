@@ -23,6 +23,21 @@ from qgis_sdk.declarations import QgisSdkDeclarationError, refuse_bindings
 
 from ._context import ServerContext
 
+
+def _init_phase1(ordered, self):
+    self._filters = tuple(
+        hook for declaration, hook in ordered if declaration.kind == "filter"
+    )
+    self._services = tuple(
+        (declaration, hook)
+        for declaration, hook in ordered
+        if declaration.kind == "service"
+    )
+    self._access_control = tuple(
+        hook for declaration, hook in ordered if declaration.kind == "access_control"
+    )
+
+
 __all__ = [
     "DEFAULT_PRIORITY",
     "HOOK_SIGNATURES",
@@ -236,19 +251,7 @@ class ServerHooks:
                     f"the second is `{hook.__name__}`"
                 )
             seen.add(key)
-        self._filters = tuple(
-            hook for declaration, hook in ordered if declaration.kind == "filter"
-        )
-        self._services = tuple(
-            (declaration, hook)
-            for declaration, hook in ordered
-            if declaration.kind == "service"
-        )
-        self._access_control = tuple(
-            hook
-            for declaration, hook in ordered
-            if declaration.kind == "access_control"
-        )
+        _init_phase1(ordered, self)
 
     @property
     def filters(self) -> tuple[Callable[..., Any], ...]:

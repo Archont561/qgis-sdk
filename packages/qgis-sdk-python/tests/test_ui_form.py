@@ -60,6 +60,15 @@ from qgis_sdk.ui import (
 )
 
 
+def _for_action_from_schema_phase1(by_action, by_hand, by_schema, expected):
+    assert _shape(by_action) == _shape(by_schema) == _shape(by_hand) == expected
+    assert by_action.snapshot() == by_schema.snapshot() == by_hand.snapshot()
+    assert by_action.attached and not by_schema.attached
+    assert by_action.action_id == "plain"
+    assert by_action.object_name == "form"
+    assert [f.object_name for f in by_action.fields][:2] == ["form/name", "form/count"]
+
+
 @plugin(id="demo.forms", title="Form demo")
 class FormDemo:
     """One action per widget family; the handlers record what they got."""
@@ -174,12 +183,7 @@ def test_for_action_from_schema_and_by_hand_build_the_same_tree(ctx: UiContext) 
         ("Choice", "mode", "choice", True),
         ("Text", "note", "text", False),
     ]
-    assert _shape(by_action) == _shape(by_schema) == _shape(by_hand) == expected
-    assert by_action.snapshot() == by_schema.snapshot() == by_hand.snapshot()
-    assert by_action.attached and not by_schema.attached
-    assert by_action.action_id == "plain"
-    assert by_action.object_name == "form"
-    assert [f.object_name for f in by_action.fields][:2] == ["form/name", "form/count"]
+    _for_action_from_schema_phase1(by_action, by_hand, by_schema, expected)
 
 
 def test_from_schema_accepts_the_action_description_too(ctx: UiContext) -> None:

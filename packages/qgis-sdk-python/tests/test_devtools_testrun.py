@@ -21,6 +21,33 @@ from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from test_devtools_installs import make_prefix, no_which
 
 
+def _runs_the_installs_interpreter_phase1(install, plan, sdk_paths):
+    assert plan.env["PYTHONPATH"].split(os.pathsep)[: 1 + len(sdk_paths)] == [
+        str(install.bindings),
+        *sdk_paths,
+    ]
+    assert plan.env["QGIS_PREFIX_PATH"] == str(install.prefix)
+    assert plan.env["QT_QPA_PLATFORM"] == "offscreen"  # no DISPLAY in env
+    assert "PYTHONHOME" not in plan.env
+    assert plan.notes[0] == (
+        f"target qgis: QGIS {install.prefix} ({install.source}), "
+        f"python {install.python}, offscreen"
+    )
+
+
+def _runs_pytest_inside_the_phase1(plan, project, workspace):
+    assert plan.env["QGIS_PLUGINPATH"] == str(project / ".qgis-sdk" / "dev" / "host")
+    assert plan.env["DISPLAY"] == ":99"
+    request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
+    assert request == {
+        "cwd": str(project),
+        "args": ["-p", PLUGIN, "-m", "desktop", "-k", "iface"],
+    }
+    probe = (workspace / "pytest-probe.py").read_text(encoding="utf-8")
+    assert 'pytest.main(request["args"])' in probe
+    assert "os._exit(" in probe
+
+
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     root = tmp_path / "field_tools"
@@ -90,17 +117,7 @@ class TestQgis:
         # Bindings first; then the SDK itself, so ``-p qgis_sdk_tools.pytest_plugin``
         # resolves in QGIS's interpreter even when the CLI runs under another.
         sdk_paths = [str(path) for path in sdk_import_paths()]
-        assert plan.env["PYTHONPATH"].split(os.pathsep)[: 1 + len(sdk_paths)] == [
-            str(install.bindings),
-            *sdk_paths,
-        ]
-        assert plan.env["QGIS_PREFIX_PATH"] == str(install.prefix)
-        assert plan.env["QT_QPA_PLATFORM"] == "offscreen"  # no DISPLAY in env
-        assert "PYTHONHOME" not in plan.env
-        assert plan.notes[0] == (
-            f"target qgis: QGIS {install.prefix} ({install.source}), "
-            f"python {install.python}, offscreen"
-        )
+        _runs_the_installs_interpreter_phase1(install, plan, sdk_paths)
 
     def test_a_display_keeps_qt_on_screen(
         self, project: Path, install: QgisInstall
@@ -169,18 +186,7 @@ class TestDesktop:
         assert plan.workspace == workspace
         assert plan.env[TARGET_ENV] == "desktop"
         assert plan.env["PYTHONHOME"] == str(install.prefix)  # conda prefix
-        assert plan.env["QGIS_PLUGINPATH"] == str(
-            project / ".qgis-sdk" / "dev" / "host"
-        )
-        assert plan.env["DISPLAY"] == ":99"
-        request = json.loads(Path(plan.env[REQUEST_ENV]).read_text(encoding="utf-8"))
-        assert request == {
-            "cwd": str(project),
-            "args": ["-p", PLUGIN, "-m", "desktop", "-k", "iface"],
-        }
-        probe = (workspace / "pytest-probe.py").read_text(encoding="utf-8")
-        assert 'pytest.main(request["args"])' in probe
-        assert "os._exit(" in probe
+        _runs_pytest_inside_the_phase1(plan, project, workspace)
 
     def test_requires_a_desktop_binary(
         self, project: Path, install: QgisInstall, tmp_path: Path

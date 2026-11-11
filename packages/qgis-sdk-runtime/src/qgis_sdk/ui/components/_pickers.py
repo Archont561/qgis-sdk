@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, Literal
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, Unpack
 
 from qgis_sdk.models import (
     LAYER_KIND_NAMES,
@@ -72,21 +73,18 @@ class LayerPicker(_Picker):
     kind = "layer"
 
     def __init__(
-        self,
-        name: str | None = None,
-        *,
-        kind: LayerKindInput = "vector",
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
+        self, name: str | None = None, **options: Unpack[_InitOptions2]
     ) -> None:
-        if kind not in LAYER_KINDS_FOR_INPUT:
+        values = _InitValues2(**options)
+        if values.kind not in LAYER_KINDS_FOR_INPUT:
             raise QgisSdkUiError(
                 f"LayerPicker {name!r}: kind must be one of "
-                f"{', '.join(LAYER_KINDS_FOR_INPUT)}, got {kind!r}"
+                f"{', '.join(LAYER_KINDS_FOR_INPUT)}, got {values.kind!r}"
             )
-        self.layer_kind = kind
-        super().__init__(name, label=label, value=value, required=required)
+        self.layer_kind = values.kind
+        super().__init__(
+            name, label=values.label, value=values.value, required=values.required
+        )
 
     def _list(self) -> tuple[Option, ...]:
         ctx = self._ctx
@@ -146,19 +144,16 @@ class FieldPicker(_Picker):
     kind = "field"
 
     def __init__(
-        self,
-        name: str | None = None,
-        *,
-        of: LayerPicker,
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
+        self, name: str | None = None, **options: Unpack[_InitOptions1]
     ) -> None:
-        if not isinstance(of, LayerPicker):
+        values = _InitValues1(**options)
+        if not isinstance(values.of, LayerPicker):
             raise QgisSdkUiError(f"FieldPicker {name!r}: of= must be a LayerPicker")
-        self.of = of
-        self._unfollow = of.changed(lambda _layer: self.refresh())
-        super().__init__(name, label=label, value=value, required=required)
+        self.of = values.of
+        self._unfollow = values.of.changed(lambda _layer: self.refresh())
+        super().__init__(
+            name, label=values.label, value=values.value, required=values.required
+        )
 
     def _list(self) -> tuple[Option, ...]:
         ctx = self._ctx
@@ -216,3 +211,33 @@ class CrsPicker(Input):
                 f"such as 'EPSG:4326', got {value!r}"
             )
         return f"{authority.strip().upper()}:{code.strip()}"
+
+
+class _InitOptions1(TypedDict, total=False):
+    of: LayerPicker
+    label: str | None
+    value: object
+    required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    of: LayerPicker
+    label: str | None = None
+    value: object = None
+    required: bool = False
+
+
+class _InitOptions2(TypedDict, total=False):
+    kind: LayerKindInput
+    label: str | None
+    value: object
+    required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues2:
+    kind: LayerKindInput = "vector"
+    label: str | None = None
+    value: object = None
+    required: bool = False

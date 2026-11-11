@@ -10,6 +10,24 @@ from qgis_sdk.testing import RecordingNotifications
 from qgis_sdk_tools.generate import generate_schema_typescript
 
 
+def _fake_contexts_and_dispatch_phase1(call, ctx2, first, runtime, second):
+    assert not call("notify", {"message": 42})["ok"]
+    assert not call("other", {})["ok"]
+    assert first.messages == ["direct"]
+    assert second.messages == ["wire"]
+    runtime.unload()
+    assert ctx2.scope.closed
+
+
+def _multi_module_groups_require_phase1(module):
+    scope = ResourceScope()
+    ctx = PluginContext(RecordingNotifications(scope), scope)
+    runtime = PluginRuntime(module.app, ctx)
+    runtime.start()
+    assert runtime.actions["double"](value=21) == 42
+    runtime.unload()
+
+
 def test_registered_action_preserves_identity_and_matches_class_contract() -> None:
     @plugin(id="survey.plugin", title="Survey")
     class ClassPlugin:
@@ -111,12 +129,7 @@ def test_fake_contexts_and_dispatch_preserve_authority_and_validate_inputs() -> 
         )
 
     assert call("notify", {"message": "wire"})["value"] == "wire"
-    assert not call("notify", {"message": 42})["ok"]
-    assert not call("other", {})["ok"]
-    assert first.messages == ["direct"]
-    assert second.messages == ["wire"]
-    runtime.unload()
-    assert ctx2.scope.closed
+    _fake_contexts_and_dispatch_phase1(call, ctx2, first, runtime, second)
 
 
 def test_stacked_desktop_bindings_survive_lowering_without_wire_changes() -> None:
@@ -286,12 +299,7 @@ def test_multi_module_groups_require_explicit_inclusion(tmp_path, monkeypatch) -
     monkeypatch.syspath_prepend(str(tmp_path))
     module = importlib.import_module("application_survey.plugin")
     assert [item.id for item in describe(module.app).actions] == ["double"]
-    scope = ResourceScope()
-    ctx = PluginContext(RecordingNotifications(scope), scope)
-    runtime = PluginRuntime(module.app, ctx)
-    runtime.start()
-    assert runtime.actions["double"](value=21) == 42
-    runtime.unload()
+    _multi_module_groups_require_phase1(module)
 
 
 def test_unsupported_async_and_generator_handlers_fail_closed() -> None:

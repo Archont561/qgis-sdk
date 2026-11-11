@@ -13,6 +13,23 @@ import sys
 from pathlib import Path
 
 
+def _install_fixture_phase1(files, import_name, metadata, package, site):
+    record = [
+        *files,
+        f"{import_name}-1.0.dist-info/METADATA",
+        f"{import_name}-1.0.dist-info/RECORD",
+        f"{import_name}-1.0.dist-info/licenses/LICENSE",
+    ]
+    (metadata / "RECORD").write_text(
+        "".join(f"{item},,\n" for item in record), encoding="utf-8"
+    )
+    importlib.invalidate_caches()
+    entry = str(site)
+    if entry not in sys.path:
+        sys.path.insert(0, entry)
+    return package
+
+
 def install_fixture(
     site: Path,
     name: str,
@@ -40,17 +57,4 @@ def install_fixture(
     )
     (metadata / "licenses").mkdir()
     (metadata / "licenses" / "LICENSE").write_text("MIT\n", encoding="utf-8")
-    record = [
-        *files,
-        f"{import_name}-1.0.dist-info/METADATA",
-        f"{import_name}-1.0.dist-info/RECORD",
-        f"{import_name}-1.0.dist-info/licenses/LICENSE",
-    ]
-    (metadata / "RECORD").write_text(
-        "".join(f"{item},,\n" for item in record), encoding="utf-8"
-    )
-    importlib.invalidate_caches()
-    entry = str(site)
-    if entry not in sys.path:
-        sys.path.insert(0, entry)
-    return package
+    return _install_fixture_phase1(files, import_name, metadata, package, site)

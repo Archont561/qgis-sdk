@@ -24,6 +24,16 @@ from qgis_sdk_tools.devtools.reloader import (
 )
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
+
+def _a_refused_safe_point_phase1(console, host):
+    assert host.calls.count("quiesce") == 5  # 0, 0.5, 1.0, 1.5, 2.0
+    assert host.resumed == 1
+    assert any("restart `qgis-sdk dev`" in line for line in console.said)
+    assert ("critical", f"{PLUGIN} reload refused: job sum#1 is waiting") in (
+        console.notices
+    )
+
+
 PLUGIN = "field_tools"
 
 
@@ -225,12 +235,7 @@ class TestReload:
         assert report.blockers == ("job sum#1 is waiting",)
         assert report.revision == 1 and report.running is True
         assert "unload" not in host.calls
-        assert host.calls.count("quiesce") == 5  # 0, 0.5, 1.0, 1.5, 2.0
-        assert host.resumed == 1
-        assert any("restart `qgis-sdk dev`" in line for line in console.said)
-        assert ("critical", f"{PLUGIN} reload refused: job sum#1 is waiting") in (
-            console.notices
-        )
+        _a_refused_safe_point_phase1(console, host)
 
     def test_a_safe_point_reached_within_the_bound_proceeds(
         self, project: Path

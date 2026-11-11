@@ -19,6 +19,31 @@ from qgis_sdk.services import Network
 __all__ = ["CollectionInfo", "FeaturesPage", "OgcApiFeatures"]
 
 
+def _collection_entries(entries, response: Response) -> tuple[CollectionInfo, ...]:
+    """Read every collection entry, refusing one without a string id."""
+    parsed: list[CollectionInfo] = []
+    for index, entry in enumerate(entries):
+        identifier = entry.get("id") if isinstance(entry, Mapping) else None
+        if not isinstance(identifier, str):
+            raise QgisSdkServiceResponseError(
+                f"collection {index} has no string 'id'",
+                method=response.method,
+                url=response.url,
+            )
+        crs = entry.get("crs", ())
+        parsed.append(
+            CollectionInfo(
+                id=identifier,
+                title=_text(entry.get("title")),
+                description=_text(entry.get("description")),
+                crs=tuple(item for item in crs if isinstance(item, str))
+                if isinstance(crs, Sequence) and not isinstance(crs, str)
+                else (),
+            )
+        )
+    return tuple(parsed)
+
+
 @dataclass(frozen=True, slots=True)
 class CollectionInfo:
     """One entry of ``/collections``."""
@@ -62,27 +87,7 @@ def parse_collections(response: Response) -> tuple[CollectionInfo, ...]:
             method=response.method,
             url=response.url,
         )
-    parsed: list[CollectionInfo] = []
-    for index, entry in enumerate(entries):
-        identifier = entry.get("id") if isinstance(entry, Mapping) else None
-        if not isinstance(identifier, str):
-            raise QgisSdkServiceResponseError(
-                f"collection {index} has no string 'id'",
-                method=response.method,
-                url=response.url,
-            )
-        crs = entry.get("crs", ())
-        parsed.append(
-            CollectionInfo(
-                id=identifier,
-                title=_text(entry.get("title")),
-                description=_text(entry.get("description")),
-                crs=tuple(item for item in crs if isinstance(item, str))
-                if isinstance(crs, Sequence) and not isinstance(crs, str)
-                else (),
-            )
-        )
-    return tuple(parsed)
+    return _collection_entries(entries, response)
 
 
 def parse_features(response: Response) -> FeaturesPage:

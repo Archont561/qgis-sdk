@@ -19,7 +19,8 @@ request-scoped and abandoned with it (decision-52).
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Protocol, TypedDict, Unpack
 
 from qgis_sdk.core.scope import ResourceScope
 from qgis_sdk.jobs import Jobs, JobService
@@ -293,10 +294,7 @@ class ServerHost:
         scope: ResourceScope,
         request: ServerRequest,
         response: ServerResponse,
-        *,
-        project: Project | None = None,
-        layers: Layers | None = None,
-        log: Log | None = None,
+        **options: Unpack[_ContextOptions1],
     ) -> ServerContext:
         """Build the context one request's hooks receive.
 
@@ -306,6 +304,7 @@ class ServerHost:
         ``context_factory`` builds the context itself and decides the same
         question in its own factory.
         """
+        values = _ContextValues1(**options)
         if self._context_factory is not None:
             return self._context_factory(scope, request, response)
         jobs = None if self._jobs is None else Jobs(self._jobs.request_scoped(scope))
@@ -313,7 +312,9 @@ class ServerHost:
             scope,
             request,
             response,
-            ServerServices(project=project, layers=layers, log=log, jobs=jobs),
+            ServerServices(
+                project=values.project, layers=values.layers, log=values.log, jobs=jobs
+            ),
         )
 
     def __repr__(self) -> str:
@@ -334,3 +335,16 @@ def _declaration_of(hook: Callable[..., Any], kind: str) -> HookDeclaration:
             f"{getattr(hook, '__name__', hook)!r} is not a @server.{kind} hook"
         )
     return declaration
+
+
+class _ContextOptions1(TypedDict, total=False):
+    project: Project | None
+    layers: Layers | None
+    log: Log | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ContextValues1:
+    project: Project | None = None
+    layers: Layers | None = None
+    log: Log | None = None

@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import sys
 import types
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, TypedDict, Unpack
 
 import pytest
 
@@ -51,19 +52,14 @@ class Request:
     POST = 3
 
     def __init__(
-        self,
-        params: dict[str, str] | None = None,
-        *,
-        method: int = GET,
-        url: str = "http://localhost/qgis/qgis_mapserv.fcgi",
-        headers: dict[str, str] | None = None,
-        body: bytes = b"",
+        self, params: dict[str, str] | None = None, **options: Unpack[_InitOptions1]
     ) -> None:
+        values = _InitValues1(**options)
         self._params = dict(params or {})
-        self._method = method
-        self._url = url
-        self._headers = dict(headers or {})
-        self._body = body
+        self._method = values.method
+        self._url = values.url
+        self._headers = dict(values.headers or {})
+        self._body = values.body
 
     @staticmethod
     def methodToString(method: int) -> str:
@@ -283,3 +279,18 @@ def install(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     monkeypatch.setitem(sys.modules, "qgis", package)
     monkeypatch.setitem(sys.modules, "qgis.server", fake)
     return fake
+
+
+class _InitOptions1(TypedDict, total=False):
+    method: int
+    url: str
+    headers: dict[str, str] | None
+    body: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    method: int = Request.GET
+    url: str = "http://localhost/qgis/qgis_mapserv.fcgi"
+    headers: dict[str, str] | None = None
+    body: bytes = b""

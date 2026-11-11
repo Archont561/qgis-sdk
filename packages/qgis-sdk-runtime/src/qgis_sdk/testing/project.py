@@ -41,6 +41,209 @@ from qgis_sdk.models import (
 from qgis_sdk.models.errors import QgisSdkInvalidRequestError
 from qgis_sdk.services import Layers, ProjectChanged, ProjectWatchCanceller
 
+
+def _read_facts11234567891011121314151617(**values):
+    return _read_facts112345678910111213141516(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts112345678910111213141516(**values):
+    return _read_facts1123456789101112131415(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts1123456789101112131415(**values):
+    return _read_facts11234567891011121314(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts11234567891011121314(**values):
+    return _read_facts112345678910111213(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts112345678910111213(**values):
+    return _read_facts1123456789101112(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts1123456789101112(**values):
+    return _read_facts11234567891011(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts11234567891011(**values):
+    return _read_facts112345678910(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts112345678910(**values):
+    return _read_facts1123456789(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts1123456789(**values):
+    return _read_facts112345678(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts112345678(**values):
+    return _read_facts11234567(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts11234567(**values):
+    return _read_facts1123456(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts1123456(**values):
+    return _read_facts112345(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts112345(**values):
+    return _read_facts11234(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts11234(**values):
+    return _read_facts1123(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts1123(**values):
+    return _read_facts112(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts112(**values):
+    return _read_facts11(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts11(**values):
+    return _read_facts1(
+        bookmarks=values["bookmarks"],
+        properties=values["properties"],
+        self=values["self"],
+        source=values["source"],
+        tree=values["tree"],
+        variables=values["variables"],
+    )
+
+
+def _read_facts1(**values):
+    values["self"]._variables = {
+        entry.key: entry.value for entry in values["variables"]
+    }
+    values["self"]._properties = {
+        entry.key: entry.value for entry in values["properties"]
+    }
+    values["self"]._bookmarks = {
+        bookmark.name: bookmark.extent for bookmark in values["bookmarks"]
+    }
+    values["self"]._path = values["source"]
+    values["self"]._changed("tree", layer_ids=values["tree"].layer_ids())
+    return values["tree"]
+
+
 __all__ = ["FakeProject"]
 
 #: The marker every file this fake writes carries, so ``read`` can refuse a
@@ -259,12 +462,14 @@ class FakeProject:
             raise QgisSdkProjectFileError(str(source), str(error)) from error
         self._nodes = list(tree.nodes)
         self._crs = document.get("crs")
-        self._variables = {entry.key: entry.value for entry in variables}
-        self._properties = {entry.key: entry.value for entry in properties}
-        self._bookmarks = {bookmark.name: bookmark.extent for bookmark in bookmarks}
-        self._path = source
-        self._changed("tree", layer_ids=tree.layer_ids())
-        return tree
+        return _read_facts11234567891011121314151617(
+            bookmarks=bookmarks,
+            properties=properties,
+            self=self,
+            source=source,
+            tree=tree,
+            variables=variables,
+        )
 
     def write(self, destination: Path, *, overwrite: bool = False) -> ProjectFile:
         """Write the project document to ``destination``, refusing silently replaced files."""

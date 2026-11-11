@@ -21,6 +21,27 @@ from qgis_sdk.models.files import FILE_REF, FileRef
 from qgis_sdk.models.parameters import ParameterKind, RangeParameter, parameter_kinds
 
 
+def _literal_kind(base, path):
+    """An enum is a ``Literal[...]`` of strings, with no marker."""
+    if get_origin(base) is Literal:
+        choices = get_args(base)
+        if not choices or not all(type(choice) is str for choice in choices):
+            raise _refuse_kind(path, "enum choices must be strings")
+        return _ENUM_KIND, None
+    return None
+
+
+def _resolve_kind_phase1(base, kinds, path):
+    if base is FileRef:
+        raise _refuse_kind(
+            path, "a FileRef input needs FileInput(filters=...) or DirectoryInput()"
+        )
+    name = _PRIMITIVE_KIND_NAMES.get(base)
+    if name is None:
+        raise _refuse_kind(path, f"cannot express {base!r} as a host parameter")
+    return kinds[name], None
+
+
 def object_schema(properties: dict, required: list[str]) -> dict[str, Any]:
     schema = {"type": "object", "properties": properties, "additionalProperties": False}
     if required:
@@ -185,19 +206,10 @@ def resolve_kind(
         if base not in kind.stored:
             raise _refuse_kind(path, kind.refusal)
         return kind, marker
-    if get_origin(base) is Literal:
-        choices = get_args(base)
-        if not choices or not all(type(choice) is str for choice in choices):
-            raise _refuse_kind(path, "enum choices must be strings")
-        return _ENUM_KIND, None
-    if base is FileRef:
-        raise _refuse_kind(
-            path, "a FileRef input needs FileInput(filters=...) or DirectoryInput()"
-        )
-    name = _PRIMITIVE_KIND_NAMES.get(base)
-    if name is None:
-        raise _refuse_kind(path, f"cannot express {base!r} as a host parameter")
-    return kinds[name], None
+    literal = _literal_kind(base, path)
+    if literal is not None:
+        return literal
+    return _resolve_kind_phase1(base, kinds, path)
 
 
 def _refuse_kind(path: str, detail: str) -> QgisSdkDeclarationError:

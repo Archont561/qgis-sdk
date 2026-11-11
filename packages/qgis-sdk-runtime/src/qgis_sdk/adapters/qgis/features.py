@@ -60,6 +60,37 @@ from qgis_sdk.models import (
 
 from .layers import NativeLayers
 
+
+def _encode_phase1(crs, encoding, geometry, value):
+    if encoding == "wkb":
+        value = base64.b64encode(bytes(geometry.asWkb())).decode("ascii")
+    elif encoding == "wkt":
+        value = geometry.asWkt()
+    elif encoding == "geojson":
+        value = geometry.asJson()
+    else:  # pragma: no cover - FeatureQuery refuses it first
+        raise QgisSdkUnsupportedCapabilityError(
+            f"unknown geometry encoding {encoding!r}"
+        )
+    return Geometry(
+        encoding=encoding,
+        value=value,
+        geometry_type=_name(geometry),
+        crs=crs,
+        part_count=_part_count(geometry),
+        vertex_count=_vertex_count(geometry),
+    )
+
+
+def _page_phase1(layer, query, self, truncated, window):
+    items = tuple(
+        self._feature(layer, feature, query.encoding, query.with_geometry)
+        for feature in window
+    )
+    cursor = str(window[-1].id()) if truncated and window else None
+    return FeaturePage(items=items, truncated=truncated, next_cursor=cursor)
+
+
 __all__ = ["NativeFeatureEditing", "NativeFeatures"]
 
 #: Flat WKB type code to the SDK's vocabulary. The single-part and multi-part
@@ -125,24 +156,7 @@ def _encode(geometry: QgsGeometry, encoding: str, crs: str | None) -> Geometry:
             part_count=_part_count(geometry),
             is_empty=abstract is not None,
         )
-    if encoding == "wkb":
-        value = base64.b64encode(bytes(geometry.asWkb())).decode("ascii")
-    elif encoding == "wkt":
-        value = geometry.asWkt()
-    elif encoding == "geojson":
-        value = geometry.asJson()
-    else:  # pragma: no cover - FeatureQuery refuses it first
-        raise QgisSdkUnsupportedCapabilityError(
-            f"unknown geometry encoding {encoding!r}"
-        )
-    return Geometry(
-        encoding=encoding,
-        value=value,
-        geometry_type=_name(geometry),
-        crs=crs,
-        part_count=_part_count(geometry),
-        vertex_count=_vertex_count(geometry),
-    )
+    return _encode_phase1(crs, encoding, geometry, value)
 
 
 def _name(geometry: QgsGeometry) -> str:
@@ -205,12 +219,7 @@ class NativeFeatures:
         rows = list(layer.getFeatures(request))
         truncated = len(rows) > query.limit
         window = rows[: query.limit]
-        items = tuple(
-            self._feature(layer, feature, query.encoding, query.with_geometry)
-            for feature in window
-        )
-        cursor = str(window[-1].id()) if truncated and window else None
-        return FeaturePage(items=items, truncated=truncated, next_cursor=cursor)
+        return _page_phase1(layer, query, self, truncated, window)
 
     def feature(
         self, layer_id: str, feature_id: int, *, encoding: str = "wkb"

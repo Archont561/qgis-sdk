@@ -27,6 +27,22 @@ from qgis_sdk_tools.scaffold import ScaffoldOptions, plan_scaffold
 from qgis_sdk_tools.scaffold.generate import sdk_requirements
 from qgis_sdk_tools.scaffold.web import SDK_NPM_PACKAGE, UI_NPM_PACKAGE
 
+
+def _the_server_variant_answers_phase1(answered, coordinates):
+    assert json.loads(answered.body) == {
+        "service": "SIMPLE_SERVER",
+        # The filter filled the missing VERSION in before the service ran.
+        "version": "1.0.0",
+        "features": len(coordinates),
+        "bbox": [
+            min(point[0] for point in coordinates),
+            min(point[1] for point in coordinates),
+            max(point[0] for point in coordinates),
+            max(point[1] for point in coordinates),
+        ],
+    }
+
+
 EXAMPLE = layers.REPOSITORY_ROOT / "examples" / "simple"
 SERVER_VARIANT = layers.REPOSITORY_ROOT / "examples" / "server"
 WORKSPACE = "workspace:*"
@@ -228,18 +244,7 @@ def test_the_server_variant_answers_its_service_through_the_dispatcher() -> None
     )
 
     assert answered.status == 200
-    assert json.loads(answered.body) == {
-        "service": "SIMPLE_SERVER",
-        # The filter filled the missing VERSION in before the service ran.
-        "version": "1.0.0",
-        "features": len(coordinates),
-        "bbox": [
-            min(point[0] for point in coordinates),
-            min(point[1] for point in coordinates),
-            max(point[0] for point in coordinates),
-            max(point[1] for point in coordinates),
-        ],
-    }
+    _the_server_variant_answers_phase1(answered, coordinates)
 
 
 def test_the_server_variant_refuses_a_private_layer() -> None:

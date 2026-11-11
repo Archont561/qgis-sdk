@@ -29,6 +29,30 @@ from qgis_sdk.models import (
     validate_parameters,
 )
 
+
+def _run_result_discriminates_outputs_phase1(outputs, ref, result, wire):
+    assert outputs["OUTPUT"] == {
+        "name": "OUTPUT",
+        "kind": "vector",
+        "layer": {
+            "kind": "vector",
+            "id": "out-1",
+            "name": "buffer",
+            "geometry_type": "polygon",
+            "field_names": ["id"],
+            "crs": "EPSG:3857",
+        },
+    }
+    assert outputs["OUTPUT_HTML_FILE"] == {
+        "name": "OUTPUT_HTML_FILE",
+        "kind": "file",
+        "file": ref.to_wire(),
+    }
+    assert outputs["COUNT"] == {"name": "COUNT", "kind": "value", "value": 3}
+    assert outputs["EMPTY"] == {"name": "EMPTY", "kind": "value", "value": None}
+    assert RunResult.from_wire(wire) == result
+
+
 BUFFER = AlgorithmInfo(
     id="native:buffer",
     provider="native",
@@ -254,26 +278,7 @@ def test_run_result_discriminates_outputs_on_the_wire() -> None:
     wire = result.to_wire()
     assert wire["algorithm"] == "qgis:basicstatisticsforfields"
     outputs = {entry["name"]: entry for entry in wire["outputs"]}
-    assert outputs["OUTPUT"] == {
-        "name": "OUTPUT",
-        "kind": "vector",
-        "layer": {
-            "kind": "vector",
-            "id": "out-1",
-            "name": "buffer",
-            "geometry_type": "polygon",
-            "field_names": ["id"],
-            "crs": "EPSG:3857",
-        },
-    }
-    assert outputs["OUTPUT_HTML_FILE"] == {
-        "name": "OUTPUT_HTML_FILE",
-        "kind": "file",
-        "file": ref.to_wire(),
-    }
-    assert outputs["COUNT"] == {"name": "COUNT", "kind": "value", "value": 3}
-    assert outputs["EMPTY"] == {"name": "EMPTY", "kind": "value", "value": None}
-    assert RunResult.from_wire(wire) == result
+    _run_result_discriminates_outputs_phase1(outputs, ref, result, wire)
 
 
 def test_a_missing_output_names_what_the_run_answered() -> None:

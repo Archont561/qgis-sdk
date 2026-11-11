@@ -16,6 +16,16 @@ from qgis_sdk_tools.testing import FakeCliRuntime
 from test_devtools_installs import make_prefix
 from typer.testing import CliRunner
 
+
+def _a_web_ui_starts_phase1(listening_port, runtime, vite):
+    assert vite.terminated is True
+    origin = f"http://127.0.0.1:{listening_port}"
+    qgis_env = runtime.environments[-1]
+    assert qgis_env is not None
+    assert qgis_env[DEV_SERVER_ENV] == origin
+    assert f"web: {origin} (hot module replacement)" in runtime.stderr
+
+
 runner = CliRunner()
 
 
@@ -174,12 +184,7 @@ def test_a_web_ui_starts_vite_on_loopback_and_stops_it_afterwards(
         "--strictPort",
     )
     assert vite.cwd == web_project / "web"
-    assert vite.terminated is True
-    origin = f"http://127.0.0.1:{listening_port}"
-    qgis_env = runtime.environments[-1]
-    assert qgis_env is not None
-    assert qgis_env[DEV_SERVER_ENV] == origin
-    assert f"web: {origin} (hot module replacement)" in runtime.stderr
+    _a_web_ui_starts_phase1(listening_port, runtime, vite)
 
 
 def test_no_web_skips_the_dev_server(web_project: Path, prefix: Path) -> None:

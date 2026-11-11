@@ -12,6 +12,19 @@ from qgis_sdk.adapters import webengine
 from qgis_sdk.models.errors import QgisSdkOptionalDependencyError
 
 
+def _webengine_adapter_imports_without_phase1(script, subprocess, tmp_path):
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "native-free"
+
+
 def test_webengine_adapter_imports_without_native_modules(tmp_path: Path) -> None:
     script = textwrap.dedent(
         """
@@ -33,16 +46,7 @@ def test_webengine_adapter_imports_without_native_modules(tmp_path: Path) -> Non
     )
     import subprocess
 
-    result = subprocess.run(
-        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "native-free"
+    _webengine_adapter_imports_without_phase1(script, subprocess, tmp_path)
 
 
 def test_webengine_availability_returns_bool() -> None:

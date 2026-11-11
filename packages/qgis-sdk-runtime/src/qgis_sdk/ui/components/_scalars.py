@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.models import (
     QgisSdkFormError,
@@ -139,16 +140,13 @@ class Colour(Input):
     kind = "colour"
 
     def __init__(
-        self,
-        name: str | None = None,
-        *,
-        alpha: bool = True,
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
+        self, name: str | None = None, **options: Unpack[_InitOptions1]
     ) -> None:
-        self.alpha = alpha
-        super().__init__(name, label=label, value=value, required=required)
+        values = _InitValues1(**options)
+        self.alpha = values.alpha
+        super().__init__(
+            name, label=values.label, value=values.value, required=values.required
+        )
 
     def _default(self) -> object:
         return "#000000ff" if self.alpha else "#000000"
@@ -164,3 +162,18 @@ class Colour(Input):
 
     def _details(self) -> dict[str, Any]:
         return {"alpha": self.alpha}
+
+
+class _InitOptions1(TypedDict, total=False):
+    alpha: bool
+    label: str | None
+    value: object
+    required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    alpha: bool = True
+    label: str | None = None
+    value: object = None
+    required: bool = False

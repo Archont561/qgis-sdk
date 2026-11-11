@@ -28,6 +28,27 @@ from qgis_sdk.models import QgisSdkError, QgisSdkFormError, QgisSdkUiError
 from .actions import CALLING_VIEW
 from .form_fields import coerce_values
 
+
+def _subscribe_facts11(owner, self, source, stream, subscription):
+    if source is not None and not (
+        hasattr(source, "__next__") or isinstance(source, PushSource)
+    ):
+        raise QgisSdkUiError(
+            f"{stream} did not produce an iterator of events or a push source"
+        )
+    self._subscriptions.append(subscription)
+    return _subscribe_facts1(owner, self, source, subscription)
+
+
+def _subscribe_facts1(owner, self, source, subscription):
+    if owner is not None:
+        owner.on_close(subscription.dispose)
+    subscription._attach(source)
+    if subscription.pulling:
+        self._wake()
+    return subscription
+
+
 __all__ = ["StreamEvent", "ViewStreams", "ViewSubscription"]
 
 EventKind = Literal["data", "progress", "state", "complete", "error"]
@@ -283,19 +304,7 @@ class ViewStreams:
             source = method(**coerced)
         except QgisSdkError as error:
             raise QgisSdkUiError(f"{stream}: {error}") from error
-        if source is not None and not (
-            hasattr(source, "__next__") or isinstance(source, PushSource)
-        ):
-            raise QgisSdkUiError(
-                f"{stream} did not produce an iterator of events or a push source"
-            )
-        self._subscriptions.append(subscription)
-        if owner is not None:
-            owner.on_close(subscription.dispose)
-        subscription._attach(source)
-        if subscription.pulling:
-            self._wake()
-        return subscription
+        return _subscribe_facts11(owner, self, source, stream, subscription)
 
     def pump(self, limit: int = MAX_FRAMES_PER_PUMP) -> int:
         """Advance every open subscription; returns how many events were delivered."""

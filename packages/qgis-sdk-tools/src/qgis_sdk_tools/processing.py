@@ -16,6 +16,7 @@ import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict, Unpack
 
 from qgis_sdk.models import Catalogue, QgisSdkError
 from qgis_sdk.processing.codegen import emit_typescript_module, render_package
@@ -39,6 +40,26 @@ __all__ = [
 READER_MODULE = "qgis_sdk.adapters.qgis.catalogue"
 DEFAULT_WEB_PATH = Path("web/src/processing.schema.ts")
 ProcessRunner = Callable[[Sequence[str], Path, Mapping[str, str] | None], int]
+
+
+def _read_catalogue_file(install, run_process, cwd, process_env, providers):
+    """Run the reader in a temporary directory and parse what it wrote."""
+    with tempfile.TemporaryDirectory(prefix="qgis-sdk-catalogue-") as directory:
+        out = Path(directory) / "catalogue.json"
+        argv: list[str] = [str(install.python), "-m", READER_MODULE, "--out", str(out)]
+        for provider in providers or ():
+            argv.extend(["--provider", provider])
+        code = run_process(argv, cwd, process_env)
+        if code != 0:
+            raise QgisSdkProcessingGenerateError(
+                f"reading the Processing registry failed (exit code {code}): "
+                f"{' '.join(argv)}"
+            )
+        if not out.exists():
+            raise QgisSdkProcessingGenerateError(
+                f"the reader exited 0 but wrote no catalogue at {out}"
+            )
+        return Catalogue.from_json(out.read_text(encoding="utf-8"))
 
 
 class QgisSdkProcessingGenerateError(QgisSdkError):
@@ -76,36 +97,20 @@ def read_host_catalogue(
     process_env = install.environment(
         env, extra_paths=sdk_import_paths(), headless=wants_headless(env)
     )
-    with tempfile.TemporaryDirectory(prefix="qgis-sdk-catalogue-") as directory:
-        out = Path(directory) / "catalogue.json"
-        argv: list[str] = [str(install.python), "-m", READER_MODULE, "--out", str(out)]
-        for provider in providers or ():
-            argv.extend(["--provider", provider])
-        code = run_process(argv, cwd, process_env)
-        if code != 0:
-            raise QgisSdkProcessingGenerateError(
-                f"reading the Processing registry failed (exit code {code}): "
-                f"{' '.join(argv)}"
-            )
-        if not out.exists():
-            raise QgisSdkProcessingGenerateError(
-                f"the reader exited 0 but wrote no catalogue at {out}"
-            )
-        return Catalogue.from_json(out.read_text(encoding="utf-8"))
+    return _read_catalogue_file(install, run_process, cwd, process_env, providers)
 
 
 def render_files(
-    catalogue: Catalogue,
-    *,
-    out: Path | None,
-    web_out: Path | None,
-    providers: Sequence[str] | None = None,
-    init: bool = True,
-    package: str = "@archont561/qgis-sdk",
+    catalogue: Catalogue, **options: Unpack[_RenderOptions1]
 ) -> GeneratedFiles:
     """What a generation writes: the Python package under ``out`` and the
     TypeScript module at ``web_out`` (either may be ``None``)."""
-    wanted = tuple(providers) if providers else tuple(p.id for p in catalogue.providers)
+    values = _RenderValues1(**options)
+    wanted = (
+        tuple(values.providers)
+        if values.providers
+        else tuple(p.id for p in catalogue.providers)
+    )
     missing = [p for p in wanted if p not in {q.id for q in catalogue.providers}]
     if missing:
         raise QgisSdkProcessingGenerateError(
@@ -113,11 +118,15 @@ def render_files(
             f"{', '.join(p.id for p in catalogue.providers) or 'none'}"
         )
     files: dict[Path, str] = {}
-    if out is not None:
-        for name, content in render_package(catalogue, wanted, init=init).items():
-            files[out / name] = content
-    if web_out is not None:
-        files[web_out] = emit_typescript_module(catalogue, wanted, package=package)
+    if values.out is not None:
+        for name, content in render_package(
+            catalogue, wanted, init=values.init
+        ).items():
+            files[values.out / name] = content
+    if values.web_out is not None:
+        files[values.web_out] = emit_typescript_module(
+            catalogue, wanted, package=values.package
+        )
     return GeneratedFiles(files)
 
 
@@ -147,3 +156,20 @@ def write_files(generated: GeneratedFiles) -> list[Path]:
         path.write_text(content, encoding="utf-8")
         changed.append(path)
     return changed
+
+
+class _RenderOptions1(TypedDict, total=False):
+    out: Path | None
+    web_out: Path | None
+    providers: Sequence[str] | None
+    init: bool
+    package: str
+
+
+@dataclass(frozen=True, slots=True)
+class _RenderValues1:
+    out: Path | None
+    web_out: Path | None
+    providers: Sequence[str] | None = None
+    init: bool = True
+    package: str = "@archont561/qgis-sdk"

@@ -21,6 +21,208 @@ from pathlib import Path
 import pytest
 from native_support import LoopbackOrigin, pump, serve, settle
 
+
+def _packaged_assets_load_from_facts11234567891011121314151617(**values):
+    _packaged_assets_load_from_facts112345678910111213141516(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts112345678910111213141516(**values):
+    _packaged_assets_load_from_facts1123456789101112131415(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts1123456789101112131415(**values):
+    _packaged_assets_load_from_facts11234567891011121314(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts11234567891011121314(**values):
+    _packaged_assets_load_from_facts112345678910111213(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts112345678910111213(**values):
+    _packaged_assets_load_from_facts1123456789101112(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts1123456789101112(**values):
+    _packaged_assets_load_from_facts11234567891011(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts11234567891011(**values):
+    _packaged_assets_load_from_facts112345678910(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts112345678910(**values):
+    _packaged_assets_load_from_facts1123456789(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts1123456789(**values):
+    _packaged_assets_load_from_facts112345678(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts112345678(**values):
+    _packaged_assets_load_from_facts11234567(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts11234567(**values):
+    _packaged_assets_load_from_facts1123456(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts1123456(**values):
+    _packaged_assets_load_from_facts112345(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts112345(**values):
+    _packaged_assets_load_from_facts11234(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts11234(**values):
+    _packaged_assets_load_from_facts1123(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts1123(**values):
+    _packaged_assets_load_from_facts112(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts112(**values):
+    _packaged_assets_load_from_facts11(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        root=values["root"],
+        secret=values["secret"],
+        secret_script=values["secret_script"],
+    )
+
+
+def _packaged_assets_load_from_facts11(**values):
+    refused = values["page"].refused("resource")
+    assert values["secret_script"].as_uri() in refused
+    assert values["blocked"].url("/from-file.js") in refused
+    _packaged_assets_load_from_facts1(
+        app=values["app"],
+        blocked=values["blocked"],
+        page=values["page"],
+        refused=refused,
+        root=values["root"],
+        secret=values["secret"],
+    )
+
+
+def _packaged_assets_load_from_facts1(**values):
+    assert values["blocked"].url("/from-file") in values["refused"]
+    assert (
+        values["page"].page.url().toString() == (values["root"] / "index.html").as_uri()
+    )
+
+    values["page"].page.runJavaScript(f'location.href = "{values["secret"].as_uri()}"')
+    pump(values["app"], lambda: bool(values["page"].refused("navigation")))
+    assert values["page"].refused("navigation") == [values["secret"].as_uri()]
+
+
 # The webengine layer. The offscreen platform, the Chromium flags and the
 # bindings path are prepared by tests/conftest.py before this module loads.
 pytestmark = pytest.mark.webengine
@@ -305,12 +507,11 @@ def test_packaged_assets_load_from_their_root_and_from_nowhere_else(
     assert "/from-file" in allowed.seen
     assert str(results["remote"]).startswith("error:")
     assert blocked.seen == before
-    refused = page.refused("resource")
-    assert secret_script.as_uri() in refused
-    assert blocked.url("/from-file.js") in refused
-    assert blocked.url("/from-file") in refused
-    assert page.page.url().toString() == (root / "index.html").as_uri()
-
-    page.page.runJavaScript(f'location.href = "{secret.as_uri()}"')
-    pump(app, lambda: bool(page.refused("navigation")))
-    assert page.refused("navigation") == [secret.as_uri()]
+    _packaged_assets_load_from_facts11234567891011121314151617(
+        app=app,
+        blocked=blocked,
+        page=page,
+        root=root,
+        secret=secret,
+        secret_script=secret_script,
+    )

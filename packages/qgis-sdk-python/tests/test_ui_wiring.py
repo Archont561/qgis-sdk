@@ -53,6 +53,58 @@ from qgis_sdk.ui import (
 from qgis_sdk.ui.uifile import FakeUiTree, read_ui, ui_names
 from qgis_sdk.ui.wiring import Wire
 
+
+def _a_failing_or_malformed_facts1(heard, runtime):
+    assert [(event.stream, event.kind) for event in heard] == [
+        ("numbers", "error"),
+        ("explodes", "error"),
+    ]
+    assert "not a mapping" in heard[0].payload
+    assert heard[1].payload == "The stream failed; the host recorded the details"
+    runtime.unload()
+
+
+def _on_wires_to_the_facts1123(built):
+    tree = built.root
+    assert isinstance(tree, FakeUiTree)
+    assert tree.names == ("BufferForm", "distance", "note", "go", "layer", "buttons")
+    distance = built.find("distance")
+    assert distance.widget_class == "QDoubleSpinBox"
+    _on_wires_to_the_facts112(built, distance)
+
+
+def _on_wires_to_the_facts112(built, distance):
+    assert distance.valueChanged.receivers == 1
+
+    distance.valueChanged.emit(2.5)
+    built.find("go").clicked.emit(False)
+    built.find("layer").layerChanged.emit("sites")
+    built.find("buttons").rejected.emit()
+    _on_wires_to_the_facts11(built, distance)
+
+
+def _on_wires_to_the_facts11(built, distance):
+    assert built.surface.seen == [
+        ("distance", 2.5),
+        ("go", "buffered 1.0"),
+        ("layer", "sites"),
+        ("cancel", None),
+    ]
+    with pytest.raises(AttributeError, match="no signal 'exploded'"):
+        getattr(distance, "exploded")  # noqa: B009
+    _on_wires_to_the_facts1(built, distance)
+
+
+def _on_wires_to_the_facts1(built, distance):
+    with pytest.raises(QgisSdkUiError, match="declares no widget 'other'"):
+        built.find("other")
+
+    built.close()
+    assert distance.valueChanged.receivers == 0
+    distance.valueChanged.emit(9)
+    assert len(built.surface.seen) == 4
+
+
 # -- the plugin behind the surfaces -----------------------------------------------------
 
 
@@ -368,13 +420,7 @@ def test_a_failing_or_malformed_stream_ends_with_an_error_event(
     other.on("numbers", heard.append)
     other.on("explodes", heard.append)
     other.streams.pump()
-    assert [(event.stream, event.kind) for event in heard] == [
-        ("numbers", "error"),
-        ("explodes", "error"),
-    ]
-    assert "not a mapping" in heard[0].payload
-    assert heard[1].payload == "The stream failed; the host recorded the details"
-    runtime.unload()
+    _a_failing_or_malformed_facts1(heard, runtime)
 
 
 def test_subscribe_without_streams_or_an_unknown_stream_is_refused(
@@ -489,32 +535,7 @@ def test_on_wires_to_the_fake_tree_of_a_designer_file(
             self.seen.append(("cancel", None))
 
     built = build_surface(FromFile, ctx)
-    tree = built.root
-    assert isinstance(tree, FakeUiTree)
-    assert tree.names == ("BufferForm", "distance", "note", "go", "layer", "buttons")
-    distance = built.find("distance")
-    assert distance.widget_class == "QDoubleSpinBox"
-    assert distance.valueChanged.receivers == 1
-
-    distance.valueChanged.emit(2.5)
-    built.find("go").clicked.emit(False)
-    built.find("layer").layerChanged.emit("sites")
-    built.find("buttons").rejected.emit()
-    assert built.surface.seen == [
-        ("distance", 2.5),
-        ("go", "buffered 1.0"),
-        ("layer", "sites"),
-        ("cancel", None),
-    ]
-    with pytest.raises(AttributeError, match="no signal 'exploded'"):
-        getattr(distance, "exploded")  # noqa: B009
-    with pytest.raises(QgisSdkUiError, match="declares no widget 'other'"):
-        built.find("other")
-
-    built.close()
-    assert distance.valueChanged.receivers == 0
-    distance.valueChanged.emit(9)
-    assert len(built.surface.seen) == 4
+    _on_wires_to_the_facts1123(built)
 
 
 def test_a_designer_name_or_signal_that_does_not_exist_is_refused(

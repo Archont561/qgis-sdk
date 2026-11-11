@@ -35,7 +35,8 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.core._application import QgisSdkPlugin
 from qgis_sdk.core.host import Host
@@ -70,16 +71,7 @@ __all__ = [
 _running: AppSession | None = None
 
 
-def run(
-    app: QgisSdkPlugin,
-    *,
-    gui: bool = False,
-    argv: Sequence[str] | None = None,
-    grace: float = GRACE_SECONDS,
-    once: bool = False,
-    backend: AppBackend | None = None,
-    title: str | None = None,
-) -> int:
+def run(app: QgisSdkPlugin, **options: Unpack[_RunOptions1]) -> int:
     """Run ``app`` as a standalone PyQGIS application; return the exit code.
 
     ``argv`` is what the toolkit sees (``sys.argv[1:]`` from a launcher);
@@ -90,24 +82,25 @@ def run(
     toolkit seam: left out, the Qt one in :mod:`qgis_sdk.adapters.app` is built,
     which is the only import here that needs QGIS.
     """
+    values = _RunValues1(**options)
     global _running
     if _running is not None:
         raise QgisSdkAppError(
             f"{_running!r} is still running; a process hosts one application at "
             "a time (a standalone app is the top level, not a plugin inside one)"
         )
-    chosen = backend if backend is not None else _qt_backend()
+    chosen = values.backend if values.backend is not None else _qt_backend()
     session = AppSession(
         app,
         backend=chosen,
-        gui=gui,
-        argv=argv,
-        grace=grace,
-        title=title,
+        gui=values.gui,
+        argv=values.argv,
+        grace=values.grace,
+        title=values.title,
     )
     _running = session
     try:
-        return session.run(once=once)
+        return session.run(once=values.once)
     finally:
         _running = None
 
@@ -172,3 +165,22 @@ def _qt_backend() -> AppBackend:
 def current() -> Any:
     """The session ``run()`` is driving, for tests and for a host's own tooling."""
     return _running
+
+
+class _RunOptions1(TypedDict, total=False):
+    gui: bool
+    argv: Sequence[str] | None
+    grace: float
+    once: bool
+    backend: AppBackend | None
+    title: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _RunValues1:
+    gui: bool = False
+    argv: Sequence[str] | None = None
+    grace: float = GRACE_SECONDS
+    once: bool = False
+    backend: AppBackend | None = None
+    title: str | None = None

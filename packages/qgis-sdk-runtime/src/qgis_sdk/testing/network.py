@@ -17,6 +17,7 @@ from __future__ import annotations
 import json as json_module
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from typing import TypedDict, Unpack
 
 from qgis_sdk.models import (
     Headers,
@@ -41,27 +42,22 @@ class QgisSdkNetworkFakeError(QgisSdkError):
     code = "network_fake"
 
 
-def reply(
-    status: int = 200,
-    *,
-    body: bytes | str = b"",
-    json: object = None,
-    headers: Mapping[str, str] | None = None,
-    reason: str | None = None,
-    url: str | None = None,
-) -> Responder:
+def reply(status: int = 200, **options: Unpack[_ReplyOptions1]) -> Responder:
     """Script a response; ``url`` overrides the final URL, as after a redirect."""
-    if json is not None:
-        content = json_module.dumps(json).encode("utf-8")
-        merged = Headers({"Content-Type": "application/json"}).merge(headers)
+    values = _ReplyValues1(**options)
+    if values.json is not None:
+        content = json_module.dumps(values.json).encode("utf-8")
+        merged = Headers({"Content-Type": "application/json"}).merge(values.headers)
     else:
-        content = body.encode("utf-8") if isinstance(body, str) else body
-        merged = Headers(headers)
-    phrase = reason if reason is not None else _REASONS.get(status, "")
+        content = (
+            values.body.encode("utf-8") if isinstance(values.body, str) else values.body
+        )
+        merged = Headers(values.headers)
+    phrase = values.reason if values.reason is not None else _REASONS.get(status, "")
 
     def respond(request: NetworkRequest) -> Response:
         return Response(
-            url=url or request.url,
+            url=values.url or request.url,
             status_code=status,
             reason=phrase,
             headers=merged,
@@ -250,3 +246,20 @@ class FakeNetworkTransport:
         raise QgisSdkNetworkFakeError(
             f"no expectation covers {request.method} {request.url}"
         )
+
+
+class _ReplyOptions1(TypedDict, total=False):
+    body: bytes | str
+    json: object
+    headers: Mapping[str, str] | None
+    reason: str | None
+    url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _ReplyValues1:
+    body: bytes | str = b""
+    json: object = None
+    headers: Mapping[str, str] | None = None
+    reason: str | None = None
+    url: str | None = None

@@ -25,6 +25,28 @@ from qgis_sdk.models import QgisSdkError
 
 from qgis_sdk_tools.manifest import read_pyproject, table
 
+
+def _environment_facts1(desktop, env, headless, self):
+    if headless:
+        env.setdefault("QT_QPA_PLATFORM", HEADLESS_PLATFORM)
+        env.setdefault("DISPLAY", PLACEHOLDER_DISPLAY)
+        env.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", HEADLESS_CHROMIUM_FLAGS)
+    if desktop and self.conda:
+        env["PYTHONHOME"] = str(self.prefix)
+    return env
+
+
+def _find_qgis_install_phase1(tried):
+    raise QgisSdkQgisNotFoundError(
+        "no QGIS install found:\n"
+        "  - QGIS_PREFIX_PATH is not set\n"
+        f"{tried}\n"
+        "Pass --qgis-prefix <prefix>, set `[tool.qgis-sdk] qgis-prefix` in "
+        "pyproject.toml, or export QGIS_PREFIX_PATH; the prefix must contain "
+        f"{_layouts(BINDINGS_LAYOUTS)}."
+    )
+
+
 __all__ = [
     "QgisInstall",
     "QgisSdkQgisNotFoundError",
@@ -111,13 +133,7 @@ class QgisInstall:
         proj = self.prefix / "share" / "proj"
         if proj.is_dir():
             env.setdefault("PROJ_LIB", str(proj))
-        if headless:
-            env.setdefault("QT_QPA_PLATFORM", HEADLESS_PLATFORM)
-            env.setdefault("DISPLAY", PLACEHOLDER_DISPLAY)
-            env.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", HEADLESS_CHROMIUM_FLAGS)
-        if desktop and self.conda:
-            env["PYTHONHOME"] = str(self.prefix)
-        return env
+        return _environment_facts1(desktop, env, headless, self)
 
 
 def sdk_import_paths() -> tuple[Path, ...]:
@@ -201,14 +217,7 @@ def find_qgis_install(
     looked.append(f"the current Python environment ({current}) has no bindings")
 
     tried = "\n".join(f"  - {entry}" for entry in looked)
-    raise QgisSdkQgisNotFoundError(
-        "no QGIS install found:\n"
-        "  - QGIS_PREFIX_PATH is not set\n"
-        f"{tried}\n"
-        "Pass --qgis-prefix <prefix>, set `[tool.qgis-sdk] qgis-prefix` in "
-        "pyproject.toml, or export QGIS_PREFIX_PATH; the prefix must contain "
-        f"{_layouts(BINDINGS_LAYOUTS)}."
-    )
+    _find_qgis_install_phase1(tried)
 
 
 def _which(name: str, path: str | None) -> str | None:

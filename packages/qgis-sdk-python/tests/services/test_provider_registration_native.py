@@ -39,6 +39,16 @@ from qgis_sdk.models import (
 from qgis_sdk.providers import Provider
 from sample_algorithms import buffer_layer, sample_provider
 
+
+def _the_new_kinds_become_phase1(seen, tmp_path):
+    assert (seen["table"].kind, seen["table"].name) == ("file", "lookup.csv")
+    assert isinstance(seen["folder"], FileRef)
+    assert (seen["folder"].kind, seen["folder"].name) == ("directory", tmp_path.name)
+    assert seen["weight"] == 0.25
+    assert seen["fill"] == "#ff001080"
+    assert seen["mode"] == "safe"
+
+
 pytestmark = pytest.mark.qgis
 
 if TYPE_CHECKING:
@@ -362,12 +372,7 @@ def test_the_new_kinds_become_their_processing_parameters_and_values(
 
     assert seen["attribute"] == "value"
     assert isinstance(seen["table"], FileRef)
-    assert (seen["table"].kind, seen["table"].name) == ("file", "lookup.csv")
-    assert isinstance(seen["folder"], FileRef)
-    assert (seen["folder"].kind, seen["folder"].name) == ("directory", tmp_path.name)
-    assert seen["weight"] == 0.25
-    assert seen["fill"] == "#ff001080"
-    assert seen["mode"] == "safe"
+    _the_new_kinds_become_phase1(seen, tmp_path)
 
 
 def test_a_plugin_over_a_context_without_processing_registers_nothing(

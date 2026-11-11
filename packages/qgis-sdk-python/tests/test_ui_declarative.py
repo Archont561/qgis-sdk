@@ -44,6 +44,15 @@ from qgis_sdk.ui.declarative import (
 )
 
 
+def _on_with_a_component_phase1(elsewhere):
+    elsewhere.dispose()
+
+    with pytest.raises(QgisSdkUiError, match="name of a node or a component"):
+        on(object())  # type: ignore[arg-type]
+    with pytest.raises(AttributeError, match="@on\\(clear\\) has no signal"):
+        getattr(on(Results.clear), "hovered")  # noqa: B009
+
+
 @pytest.fixture
 def ctx() -> Iterator[UiContext]:
     scope = ResourceScope()
@@ -311,12 +320,7 @@ def test_on_with_a_component_the_class_does_not_declare_is_refused(
     elsewhere.click()
     assert built.surface.hit
     built.close()
-    elsewhere.dispose()
-
-    with pytest.raises(QgisSdkUiError, match="name of a node or a component"):
-        on(object())  # type: ignore[arg-type]
-    with pytest.raises(AttributeError, match="@on\\(clear\\) has no signal"):
-        getattr(on(Results.clear), "hovered")  # noqa: B009
+    _on_with_a_component_phase1(elsewhere)
 
 
 def test_the_methods_stay_plain_methods(ctx: UiContext) -> None:

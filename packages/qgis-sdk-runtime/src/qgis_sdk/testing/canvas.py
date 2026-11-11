@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TypedDict, Unpack
 
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models.canvas import (
@@ -82,21 +83,14 @@ class FakeCanvas:
     produce on both backends.
     """
 
-    def __init__(
-        self,
-        scope: ResourceScope,
-        *,
-        extent: CanvasExtent = DEFAULT_EXTENT,
-        layer_extents: Mapping[str, CanvasExtent] | None = None,
-        themes: tuple[str, ...] = (),
-        active_theme: str | None = None,
-    ) -> None:
+    def __init__(self, scope: ResourceScope, **options: Unpack[_InitOptions1]) -> None:
+        values = _InitValues1(**options)
         self._scope = scope
-        self._extent = extent
-        self._layer_extents = dict(layer_extents or {})
+        self._extent = values.extent
+        self._layer_extents = dict(values.layer_extents or {})
         self._selections: dict[str, CanvasExtent] = {}
-        self._theme_names = list(themes)
-        self._active_theme = active_theme
+        self._theme_names = list(values.themes)
+        self._active_theme = values.active_theme
         self._captures: list[_CaptureSession] = []
         self._subscriptions: list[_ExtentSubscription] = []
         self._drawn: list[Geometry] = []
@@ -315,3 +309,18 @@ def _refuse_unknown_shape(shape: str) -> None:
         raise QgisSdkUnsupportedCapabilityError(
             f"{shape!r} is not a capture shape; draw one of {', '.join(CAPTURE_SHAPES)}"
         )
+
+
+class _InitOptions1(TypedDict, total=False):
+    extent: CanvasExtent
+    layer_extents: Mapping[str, CanvasExtent] | None
+    themes: tuple[str, ...]
+    active_theme: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    extent: CanvasExtent = DEFAULT_EXTENT
+    layer_extents: Mapping[str, CanvasExtent] | None = None
+    themes: tuple[str, ...] = ()
+    active_theme: str | None = None

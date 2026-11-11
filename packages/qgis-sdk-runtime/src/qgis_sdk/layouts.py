@@ -10,13 +10,19 @@ a ref, where a destination-less export lands, what a job is titled, and that a
 blocking render reports nowhere. The fake and the native adapter both subclass
 it, so the contract suite holds one implementation of the policy and two of the
 drawing.
+
+A backend is assembled through one :class:`LayoutWiring` record, and the four
+export forms take one options mapping each (decision-81). Both mappings are
+parsed into frozen value records before a request is built, so the defaults and
+the two request shapes have one owner each.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Unpack
 
 from qgis_sdk.core import WorkerContext
 from qgis_sdk.jobs import JobHandle, JobService, job
@@ -37,6 +43,8 @@ from qgis_sdk.models import (
 from qgis_sdk.services.layouts import (
     ATLAS_JOB_ID,
     EXPORT_JOB_ID,
+    AtlasOptions,
+    ExportOptions,
     LayoutBackend,
     NullCancellation,
     NullProgress,
@@ -44,7 +52,86 @@ from qgis_sdk.services.layouts import (
     _slug,
 )
 
-__all__ = ["ATLAS_JOB_ID", "EXPORT_JOB_ID", "LayoutService"]
+__all__ = [
+    "ATLAS_JOB_ID",
+    "EXPORT_JOB_ID",
+    "LayoutService",
+    "LayoutWiring",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class LayoutWiring:
+    """The host objects one layouts service borrows; one record, one owner."""
+
+    backend: LayoutBackend
+    scope: Any
+    working_directory: Path
+    workers: Any
+    files: Any = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ExportValues:
+    """One export's parsed options, with every omission spelled once."""
+
+    format: str = "pdf"
+    destination: FileRef | None = None
+    settings: LayoutSettings | None = None
+    overwrite: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _AtlasValues:
+    """One atlas run's parsed options, with every omission spelled once."""
+
+    format: str = "pdf"
+    directory: FileRef | None = None
+    pattern: str | None = None
+    settings: LayoutSettings | None = None
+    overwrite: bool = False
+
+
+def _export_values(options: ExportOptions) -> _ExportValues:
+    return _ExportValues(**options)
+
+
+def _atlas_values(options: AtlasOptions) -> _AtlasValues:
+    return _AtlasValues(**options)
+
+
+def _check_format(format: str) -> None:
+    """Refuse a format this SDK does not write, naming the ones it does."""
+    if format in LAYOUT_FORMATS:
+        return
+    reasons = [
+        (
+            "unsupported format "
+            f"{format!r}; a layout exports to {', '.join(sorted(LAYOUT_FORMATS))}"
+        )
+    ]
+    if format in LAYOUT_SUFFIXES:
+        reasons = [
+            (
+                f"{format!r} is a suffix, not a format; name "
+                f"{LAYOUT_SUFFIXES[format]!r} and let the export add the suffix"
+            )
+        ]
+    raise QgisSdkExportRefusedError(format, reasons)
+
+
+def _render(backend: LayoutBackend, request: LayoutRequest) -> LayoutExport:
+    """Render here and now, without a job, a bar or a cancel button."""
+    return backend.render(
+        request, progress=NullProgress(), cancellation=NullCancellation()
+    )
+
+
+def _render_atlas(backend: LayoutBackend, request: AtlasRequest) -> AtlasExport:
+    """Run an atlas here and now, without a job, a bar or a cancel button."""
+    return backend.render_atlas(
+        request, progress=NullProgress(), cancellation=NullCancellation()
+    )
 
 
 class LayoutService:
@@ -58,22 +145,14 @@ class LayoutService:
     drawing.
     """
 
-    def __init__(
-        self,
-        backend: LayoutBackend,
-        *,
-        scope: Any,
-        workers: Any,
-        files: Any = None,
-        working_directory: Path,
-    ) -> None:
-        self._backend = backend
-        self._files = files
-        self._working_directory = Path(working_directory)
+    def __init__(self, wiring: LayoutWiring) -> None:
+        self._backend = wiring.backend
+        self._files = wiring.files
+        self._working_directory = Path(wiring.working_directory)
         # One job service per layouts service, on the plugin's own scope: the
         # host pumps it beside ``ctx.jobs``, and a plugin that declared no jobs
         # of its own still exports with a bar and a cancel button.
-        self._jobs = JobService(scope, workers=workers)
+        self._jobs = JobService(wiring.scope, workers=wiring.workers)
 
     @property
     def jobs(self) -> Any:
@@ -92,157 +171,77 @@ class LayoutService:
 
     # -- exports ----------------------------------------------------------------
 
-    def export(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        destination: FileRef | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> JobHandle:
+    def export(self, layout: str, **options: Unpack[ExportOptions]) -> JobHandle:
         """Export a layout as a job; the outcome is a ``LayoutExport``."""
-        request = self._export_request(
-            layout,
-            format=format,
-            destination=destination,
-            settings=settings,
-            overwrite=overwrite,
-        )
+        request = self._export_request(layout, _export_values(options))
         return self._jobs.bind(_export_body(self._backend, layout)).delay(
             request=request
         )
 
-    def render(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        destination: FileRef | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> LayoutExport:
+    def render(self, layout: str, **options: Unpack[ExportOptions]) -> LayoutExport:
         """Export a layout here and now: no job, no progress bar."""
-        return self._backend.render(
-            self._export_request(
-                layout,
-                format=format,
-                destination=destination,
-                settings=settings,
-                overwrite=overwrite,
-            ),
-            progress=NullProgress(),
-            cancellation=NullCancellation(),
+        return _render(
+            self._backend, self._export_request(layout, _export_values(options))
         )
 
-    def run_atlas(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        directory: FileRef | None = None,
-        pattern: str | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> JobHandle:
+    def run_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> JobHandle:
         """Run a layout's atlas as a job; the outcome is an ``AtlasExport``."""
-        request = self._atlas_request(
-            layout,
-            format=format,
-            directory=directory,
-            pattern=pattern,
-            settings=settings,
-            overwrite=overwrite,
-        )
+        request = self._atlas_request(layout, _atlas_values(options))
         return self._jobs.bind(_atlas_body(self._backend, layout)).delay(
             request=request
         )
 
-    def render_atlas(
-        self,
-        layout: str,
-        *,
-        format: str = "pdf",
-        directory: FileRef | None = None,
-        pattern: str | None = None,
-        settings: LayoutSettings | None = None,
-        overwrite: bool = False,
-    ) -> AtlasExport:
+    def render_atlas(self, layout: str, **options: Unpack[AtlasOptions]) -> AtlasExport:
         """Run a layout's atlas here and now: no job, no progress bar."""
-        return self._backend.render_atlas(
-            self._atlas_request(
-                layout,
-                format=format,
-                directory=directory,
-                pattern=pattern,
-                settings=settings,
-                overwrite=overwrite,
-            ),
-            progress=NullProgress(),
-            cancellation=NullCancellation(),
+        return _render_atlas(
+            self._backend, self._atlas_request(layout, _atlas_values(options))
         )
 
     # -- policy -----------------------------------------------------------------
 
-    def _export_request(
-        self,
-        layout: str,
-        *,
-        format: str,
-        destination: FileRef | None,
-        settings: LayoutSettings | None,
-        overwrite: bool,
-    ) -> LayoutRequest:
+    def _export_request(self, layout: str, values: _ExportValues) -> LayoutRequest:
         """Build the plain request a render needs, refusing here, not on a worker."""
-        self._check_format(format)
+        _check_format(values.format)
         info = self._require(layout)
-        if format in SINGLE_PAGE_FORMATS and info.page_count > 1:
+        if values.format in SINGLE_PAGE_FORMATS and info.page_count > 1:
             raise QgisSdkExportRefusedError(
                 layout,
                 [
                     (
-                        f"a {format} file holds one page and the layout has "
+                        f"a {values.format} file holds one page and the layout has "
                         f"{info.page_count}; export it as pdf or run its atlas"
                     )
                 ],
             )
-        if destination is None:
-            path = self._free_path(f"{_slug(layout)}{LAYOUT_FORMATS[format]}")
+        overwrite = values.overwrite
+        if values.destination is None:
+            path = self._free_path(f"{_slug(layout)}{LAYOUT_FORMATS[values.format]}")
             overwrite = False
         else:
-            path = self._path(destination, "write")
+            path = self._path(values.destination, "write")
         return LayoutRequest(
             layout=layout,
-            format=format,
+            format=values.format,
             destination=str(path),
-            settings=settings or LayoutSettings(),
+            settings=values.settings or LayoutSettings(),
             overwrite=overwrite,
         )
 
-    def _atlas_request(
-        self,
-        layout: str,
-        *,
-        format: str,
-        directory: FileRef | None,
-        pattern: str | None,
-        settings: LayoutSettings | None,
-        overwrite: bool,
-    ) -> AtlasRequest:
+    def _atlas_request(self, layout: str, values: _AtlasValues) -> AtlasRequest:
         """Build the plain atlas request, with the pattern already checked."""
-        self._check_format(format)
-        if directory is None:
+        _check_format(values.format)
+        if values.directory is None:
             target = self._working_directory / _slug(layout)
         else:
-            target = self._path(directory, "write")
+            target = self._path(values.directory, "write")
         target.mkdir(parents=True, exist_ok=True)
         return AtlasRequest(
             layout=layout,
-            format=format,
+            format=values.format,
             directory=str(target),
-            pattern=_check_pattern(pattern or "page-{index:03d}"),
-            settings=settings or LayoutSettings(),
-            overwrite=overwrite,
+            pattern=_check_pattern(values.pattern or "page-{index:03d}"),
+            settings=values.settings or LayoutSettings(),
+            overwrite=values.overwrite,
         )
 
     def _require(self, layout: str) -> LayoutInfo:
@@ -256,25 +255,6 @@ class LayoutService:
             if info.name == layout:
                 return info
         raise QgisSdkLayoutNotFoundError(layout)
-
-    def _check_format(self, format: str) -> None:
-        """Refuse a format this SDK does not write, naming the ones it does."""
-        if format in LAYOUT_FORMATS:
-            return
-        reasons = [
-            (
-                "unsupported format "
-                f"{format!r}; a layout exports to {', '.join(sorted(LAYOUT_FORMATS))}"
-            )
-        ]
-        if format in LAYOUT_SUFFIXES:
-            reasons = [
-                (
-                    f"{format!r} is a suffix, not a format; name "
-                    f"{LAYOUT_SUFFIXES[format]!r} and let the export add the suffix"
-                )
-            ]
-        raise QgisSdkExportRefusedError(format, reasons)
 
     def _free_path(self, name: str) -> Path:
         """A path in the host's output directory that no earlier export holds.

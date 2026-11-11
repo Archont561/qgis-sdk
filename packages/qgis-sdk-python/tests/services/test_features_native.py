@@ -16,6 +16,16 @@ import conftest
 import pytest
 from qgis_sdk.models import FeatureQuery
 
+
+def _a_committed_edit_is_phase1(QgsVectorLayer, native_services, stored):
+    path = native_services.editable_dataset
+    assert path is not None
+    reader = QgsVectorLayer(str(path), "reopened", "ogr")
+    assert reader.isValid(), path
+    assert reader.featureCount() == 4
+    assert reader.getFeature(stored.id).attribute("value") == "committed"
+
+
 pytestmark = pytest.mark.qgis
 
 if TYPE_CHECKING:
@@ -101,9 +111,4 @@ def test_a_committed_edit_is_in_the_file_a_second_reader_opens(
     # provider rather than only the layer's buffer.
     from qgis.core import QgsVectorLayer
 
-    path = native_services.editable_dataset
-    assert path is not None
-    reader = QgsVectorLayer(str(path), "reopened", "ogr")
-    assert reader.isValid(), path
-    assert reader.featureCount() == 4
-    assert reader.getFeature(stored.id).attribute("value") == "committed"
+    _a_committed_edit_is_phase1(QgsVectorLayer, native_services, stored)

@@ -11,6 +11,151 @@ from pathlib import Path
 
 import pytest
 
+
+def _real_generated_gate_detects_facts112345678(**values):
+    _real_generated_gate_detects_facts11234567(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts11234567(**values):
+    _real_generated_gate_detects_facts1123456(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts1123456(**values):
+    _real_generated_gate_detects_facts112345(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts112345(**values):
+    _real_generated_gate_detects_facts11234(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts11234(**values):
+    _real_generated_gate_detects_facts1123(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts1123(**values):
+    _real_generated_gate_detects_facts112(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts112(**values):
+    _real_generated_gate_detects_facts11(
+        contents=values["contents"],
+        entry=values["entry"],
+        generated_repo=values["generated_repo"],
+        generator=values["generator"],
+        old=values["old"],
+        old_bytes=values["old_bytes"],
+        unrelated=values["unrelated"],
+        unrelated_bytes=values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts11(**values):
+    values["generator"].write_text(
+        values["contents"].replace(values["entry"], ""), encoding="utf-8"
+    )
+    stopped = run_real_generated_gate(values["generated_repo"])
+    assert stopped.returncode != 0, stopped.stdout + stopped.stderr
+    _real_generated_gate_detects_facts1(
+        values["old"],
+        values["old_bytes"],
+        stopped,
+        values["unrelated"],
+        values["unrelated_bytes"],
+    )
+
+
+def _real_generated_gate_detects_facts1(
+    old, old_bytes, stopped, unrelated, unrelated_bytes
+):
+    assert "sites.ts" in stopped.stdout + stopped.stderr
+    assert "orphan" in (stopped.stdout + stopped.stderr).lower()
+    assert "::error title=generated client is stale::" in stopped.stdout
+    assert "reference-check-ran" not in stopped.stdout
+    assert old.read_bytes() == old_bytes
+    assert {path: path.read_bytes() for path in unrelated} == unrelated_bytes
+
+
+def _real_generated_gate_rejects_facts1(generated_repo, path, relative):
+    result = run_real_generated_gate(generated_repo)
+    assert result.returncode == 1
+    assert "generated client is stale" in result.stdout
+    assert "generate_bridge_clients.py" in result.stdout
+    assert "reference-check-ran" not in result.stdout
+    assert path.read_bytes() == (SCRIPT.parents[1] / relative).read_bytes()
+
+
+def _ci_workflow_calls_helpers_facts11(checks, jobs, report):
+    assert "GITHUB_STEP_SUMMARY" in report["run"]
+    assert jobs["cross-platform"]["if"] == "${{ github.event_name != 'push' }}"
+    assert "needs" not in jobs["cross-platform"]
+    assert checks["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
+    cross = {step.get("name"): step for step in jobs["cross-platform"]["steps"]}
+    _ci_workflow_calls_helpers_facts1(cross)
+
+
+def _ci_workflow_calls_helpers_facts1(cross):
+    assert "run-log bun-tests.log" in cross["Test TypeScript bridge"]["run"]
+    assert cross["Test qgis-sdk-ui"]["run"] == "python -m automation.ci bun-ui"
+    assert "report-bun bun-tests.log" in cross["Report TypeScript test results"]["run"]
+    assert (
+        "report-bun bun-ui-tests.log" in cross["Report qgis-sdk-ui test results"]["run"]
+    )
+
+
 SCRIPT = Path(__file__).resolve().parents[2] / "automation" / "ci.py"
 
 
@@ -411,15 +556,16 @@ def test_real_generated_gate_detects_a_stopped_artifact_without_deleting_files(
         ),
 """
     assert contents.count(entry) == 1
-    generator.write_text(contents.replace(entry, ""), encoding="utf-8")
-    stopped = run_real_generated_gate(generated_repo)
-    assert stopped.returncode != 0, stopped.stdout + stopped.stderr
-    assert "sites.ts" in stopped.stdout + stopped.stderr
-    assert "orphan" in (stopped.stdout + stopped.stderr).lower()
-    assert "::error title=generated client is stale::" in stopped.stdout
-    assert "reference-check-ran" not in stopped.stdout
-    assert old.read_bytes() == old_bytes
-    assert {path: path.read_bytes() for path in unrelated} == unrelated_bytes
+    _real_generated_gate_detects_facts112345678(
+        contents=contents,
+        entry=entry,
+        generated_repo=generated_repo,
+        generator=generator,
+        old=old,
+        old_bytes=old_bytes,
+        unrelated=unrelated,
+        unrelated_bytes=unrelated_bytes,
+    )
 
 
 @pytest.mark.parametrize(
@@ -485,12 +631,7 @@ def test_real_generated_gate_rejects_committed_drift_and_missing_files(
         cwd=generated_repo,
         check=True,
     )
-    result = run_real_generated_gate(generated_repo)
-    assert result.returncode == 1
-    assert "generated client is stale" in result.stdout
-    assert "generate_bridge_clients.py" in result.stdout
-    assert "reference-check-ran" not in result.stdout
-    assert path.read_bytes() == (SCRIPT.parents[1] / relative).read_bytes()
+    _real_generated_gate_rejects_facts1(generated_repo, path, relative)
 
 
 def test_real_generated_gate_reports_renamed_output_and_leaves_old_file(
@@ -728,17 +869,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
         assert f"steps.{step_id}.outcome == 'failure'" in report["if"]
     assert "::warning" in report["run"]
     assert "title=Codecov upload unavailable" in report["run"]
-    assert "GITHUB_STEP_SUMMARY" in report["run"]
-    assert jobs["cross-platform"]["if"] == "${{ github.event_name != 'push' }}"
-    assert "needs" not in jobs["cross-platform"]
-    assert checks["Report the failed step"]["env"]["STEPS"] == "${{ toJSON(steps) }}"
-    cross = {step.get("name"): step for step in jobs["cross-platform"]["steps"]}
-    assert "run-log bun-tests.log" in cross["Test TypeScript bridge"]["run"]
-    assert cross["Test qgis-sdk-ui"]["run"] == "python -m automation.ci bun-ui"
-    assert "report-bun bun-tests.log" in cross["Report TypeScript test results"]["run"]
-    assert (
-        "report-bun bun-ui-tests.log" in cross["Report qgis-sdk-ui test results"]["run"]
-    )
+    _ci_workflow_calls_helpers_facts11(checks, jobs, report)
 
 
 def test_bun_ui_stops_if_a_build_fails(tmp_path: Path):

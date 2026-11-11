@@ -67,6 +67,277 @@ from .vendor import (
     vendored_roots,
 )
 
+
+def _build_plugin_facts11234567891011121314151617(**values):
+    return _build_plugin_facts112345678910111213141516(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts112345678910111213141516(**values):
+    return _build_plugin_facts1123456789101112131415(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts1123456789101112131415(**values):
+    return _build_plugin_facts11234567891011121314(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts11234567891011121314(**values):
+    return _build_plugin_facts112345678910111213(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts112345678910111213(**values):
+    return _build_plugin_facts1123456789101112(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts1123456789101112(**values):
+    return _build_plugin_facts11234567891011(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts11234567891011(**values):
+    return _build_plugin_facts112345678910(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts112345678910(**values):
+    return _build_plugin_facts1123456789(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts1123456789(**values):
+    return _build_plugin_facts112345678(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts112345678(**values):
+    return _build_plugin_facts11234567(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts11234567(**values):
+    return _build_plugin_facts1123456(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts1123456(**values):
+    return _build_plugin_facts112345(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts112345(**values):
+    return _build_plugin_facts11234(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts11234(**values):
+    return _build_plugin_facts1123(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts1123(**values):
+    return _build_plugin_facts112(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts112(**values):
+    return _build_plugin_facts11(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts11(**values):
+    return _build_plugin_facts1(
+        archive=values["archive"],
+        external=values["external"],
+        files=values["files"],
+        plugin=values["plugin"],
+        records=values["records"],
+        report=values["report"],
+        resolution=values["resolution"],
+        runtime=values["runtime"],
+        version=values["version"],
+        web_outcome=values["web_outcome"],
+    )
+
+
+def _build_plugin_facts1(**values):
+    return BuildResult(
+        archive=values["archive"],
+        plugin=values["plugin"],
+        version=values["version"],
+        files=values["files"],
+        report=values["report"],
+        runtime_version=values["runtime"],
+        web=values["web_outcome"],
+        external=values["external"],
+        runtime_requirement=values["resolution"].requirement,
+        vendored=tuple(name for name, _version in values["records"]),
+    )
+
+
 __all__ = [
     "VENDOR_PACKAGE",
     "BuildResult",
@@ -223,17 +494,17 @@ def build_plugin(
             newline="\n",
         )
         files = _write_archive(archive, Path(staging), plugin)
-    return BuildResult(
+    return _build_plugin_facts11234567891011121314151617(
         archive=archive,
-        plugin=plugin,
-        version=version,
-        files=files,
-        report=report,
-        runtime_version=runtime,
-        web=web_outcome,
         external=external,
-        runtime_requirement=resolution.requirement,
-        vendored=tuple(name for name, _version in records),
+        files=files,
+        plugin=plugin,
+        records=records,
+        report=report,
+        resolution=resolution,
+        runtime=runtime,
+        version=version,
+        web_outcome=web_outcome,
     )
 
 

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, Unpack
 
 from qgis_sdk.models import (
     FileRef,
@@ -76,16 +77,13 @@ class FileInput(_RefInput):
     kind = "file"
 
     def __init__(
-        self,
-        name: str | None = None,
-        *,
-        filters: Sequence[str] = (),
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
+        self, name: str | None = None, **options: Unpack[_InitOptions1]
     ) -> None:
-        self.filters = tuple(filters)
-        super().__init__(name, label=label, value=value, required=required)
+        values = _InitValues1(**options)
+        self.filters = tuple(values.filters)
+        super().__init__(
+            name, label=values.label, value=values.value, required=values.required
+        )
 
     def _grant(self, files: Any, path: Path) -> FileRef:
         return files.grant_file(path)
@@ -101,3 +99,18 @@ class DirectoryInput(_RefInput):
 
     def _grant(self, files: Any, path: Path) -> FileRef:
         return files.grant_directory(path)
+
+
+class _InitOptions1(TypedDict, total=False):
+    filters: Sequence[str]
+    label: str | None
+    value: object
+    required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _InitValues1:
+    filters: Sequence[str] = ()
+    label: str | None = None
+    value: object = None
+    required: bool = False

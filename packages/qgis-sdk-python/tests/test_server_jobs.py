@@ -45,6 +45,38 @@ from qgis_sdk.server import (
 from qgis_sdk.testing import FakeServerInterface, FakeWorkers
 
 
+def _the_response_abandons_a_phase1(handle, recorder, service, workers):
+    with pytest.raises(QgisSdkJobCancelledError):
+        handle.get(timeout=0)
+    with pytest.raises(QgisSdkJobCancelledError):
+        _ = handle.result
+    # Nothing is left for a later request to tick, and a late worker report
+    # reaches nobody.
+    assert service.active == ()
+    assert service.tick() == 0
+    assert workers.run_all() == 0
+    assert recorder.events == []
+
+
+def _a_plugin_owned_job_phase1(handle, host, recorder, workers):
+    host.tick()  # the next request's tick starts it
+    assert workers.run_all() == 1
+    host.tick()
+    assert handle.status is JobStatus.SUCCEEDED
+    assert handle.owner_closed is False
+    assert recorder.events == [("success", SumResult(total=5))]
+
+
+def _the_host_ticks_the_phase1(handle, host, second):
+    assert handle.status is JobStatus.RUNNING  # the report is not delivered yet
+
+    third = ResourceScope()
+    host.handle(wms(SERVICE="WMS"), scope=third)
+    assert handle.status is JobStatus.SUCCEEDED
+    second.close()
+    third.close()
+
+
 @dataclass(frozen=True)
 class SumResult:
     total: int
@@ -186,16 +218,7 @@ def test_the_response_abandons_a_request_job_without_pretending_it_finished(
     assert handle.owner_closed is True
     assert handle.cancel_requested is True
     assert recorder.events == []
-    with pytest.raises(QgisSdkJobCancelledError):
-        handle.get(timeout=0)
-    with pytest.raises(QgisSdkJobCancelledError):
-        _ = handle.result
-    # Nothing is left for a later request to tick, and a late worker report
-    # reaches nobody.
-    assert service.active == ()
-    assert service.tick() == 0
-    assert workers.run_all() == 0
-    assert recorder.events == []
+    _the_response_abandons_a_phase1(handle, recorder, service, workers)
 
 
 def test_an_abandoned_job_leaves_the_plugin_scheduler(service: JobService) -> None:
@@ -246,12 +269,7 @@ def test_a_plugin_owned_job_outlives_the_request(
 
     assert handle.status is JobStatus.QUEUED
     assert handle.owner_closed is False
-    host.tick()  # the next request's tick starts it
-    assert workers.run_all() == 1
-    host.tick()
-    assert handle.status is JobStatus.SUCCEEDED
-    assert handle.owner_closed is False
-    assert recorder.events == [("success", SumResult(total=5))]
+    _a_plugin_owned_job_phase1(handle, host, recorder, workers)
 
 
 def test_the_host_ticks_the_service_when_a_request_starts(
@@ -278,13 +296,7 @@ def test_the_host_ticks_the_service_when_a_request_starts(
     host.handle(wms(SERVICE="WMS"), scope=second)
     assert workers.pending == 1  # request 2's tick handed it to the worker
     workers.run_all()
-    assert handle.status is JobStatus.RUNNING  # the report is not delivered yet
-
-    third = ResourceScope()
-    host.handle(wms(SERVICE="WMS"), scope=third)
-    assert handle.status is JobStatus.SUCCEEDED
-    second.close()
-    third.close()
+    _the_host_ticks_the_phase1(handle, host, second)
 
 
 def test_a_request_job_is_refused_once_its_request_is_over(service: JobService) -> None:

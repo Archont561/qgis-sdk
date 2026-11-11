@@ -60,6 +60,19 @@ trees; a child interpreter that should see the SDK from source puts both on
 """
 
 
+def _new_application(QApplication):
+    """Start a QGIS application, or a plain Qt one without the bindings."""
+    if qgis_available():
+        from qgis.core import QgsApplication
+
+        QgsApplication.setPrefixPath(os.environ["QGIS_PREFIX_PATH"], True)
+        application = QgsApplication([b"qgis-sdk-tests"], True)
+        application.initQgis()
+    else:
+        application = QApplication([sys.argv[0]])
+    return application
+
+
 def source_path(*extra: Path | str) -> str:
     """``PYTHONPATH`` value: ``extra`` first, then the two source roots."""
     return os.pathsep.join(str(item) for item in (*extra, *SOURCE_ROOTS))
@@ -239,14 +252,7 @@ def start_application() -> Any:
     if existing is not None:
         _application = existing
         return existing
-    if qgis_available():
-        from qgis.core import QgsApplication
-
-        QgsApplication.setPrefixPath(os.environ["QGIS_PREFIX_PATH"], True)
-        application = QgsApplication([b"qgis-sdk-tests"], True)
-        application.initQgis()
-    else:
-        application = QApplication([sys.argv[0]])
+    application = _new_application(QApplication)
     _application = application
     _owned = True
     return application

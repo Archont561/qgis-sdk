@@ -17,6 +17,242 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.testing import VectorLayerDeclaration
 
+
+def _export_rechecks_a_retargeted_facts21234567891011121314151617(**values):
+    _export_rechecks_a_retargeted_facts212345678910111213141516(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts212345678910111213141516(**values):
+    _export_rechecks_a_retargeted_facts2123456789101112131415(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts2123456789101112131415(**values):
+    _export_rechecks_a_retargeted_facts21234567891011121314(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts21234567891011121314(**values):
+    _export_rechecks_a_retargeted_facts212345678910111213(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts212345678910111213(**values):
+    _export_rechecks_a_retargeted_facts2123456789101112(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts2123456789101112(**values):
+    _export_rechecks_a_retargeted_facts21234567891011(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts21234567891011(**values):
+    _export_rechecks_a_retargeted_facts212345678910(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts212345678910(**values):
+    _export_rechecks_a_retargeted_facts2123456789(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts2123456789(**values):
+    _export_rechecks_a_retargeted_facts212345678(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts212345678(**values):
+    _export_rechecks_a_retargeted_facts21234567(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts21234567(**values):
+    _export_rechecks_a_retargeted_facts2123456(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts2123456(**values):
+    _export_rechecks_a_retargeted_facts212345(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts212345(**values):
+    _export_rechecks_a_retargeted_facts21234(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts21234(**values):
+    _export_rechecks_a_retargeted_facts2123(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts2123(**values):
+    _export_rechecks_a_retargeted_facts212(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts212(**values):
+    _export_rechecks_a_retargeted_facts21(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts21(**values):
+    _export_rechecks_a_retargeted_facts2(
+        before=values["before"],
+        info=values["info"],
+        inode=values["inode"],
+        second=values["second"],
+        services=values["services"],
+        source=values["source"],
+        tmp_path=values["tmp_path"],
+    )
+
+
+def _export_rechecks_a_retargeted_facts2(**values):
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        values["services"].layers.export_vector(
+            values["info"].id, values["second"], overwrite=True
+        )
+
+    assert values["second"].read_bytes() == values["before"]
+    assert values["second"].stat().st_ino == values["inode"]
+    _export_rechecks_a_retargeted_phase1(values["source"], values["tmp_path"])
+
+
+def _export_rechecks_a_retargeted_phase1(source, tmp_path):
+    assert source.is_symlink()
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "first.geojson",
+        "second.geojson",
+        "source.geojson",
+    ]
+
+
+def _export_refuses_to_replace_phase1(info, services, source):
+    before = source.read_bytes()
+    inode = source.stat().st_ino
+
+    with pytest.raises(QgisSdkExportRefusedError, match="source"):
+        services.layers.export_vector(info.id, source, overwrite=True)
+
+    assert source.read_bytes() == before
+    assert source.stat().st_ino == inode
+
+
 if TYPE_CHECKING:
     Services = conftest.Services
 
@@ -346,17 +582,15 @@ def test_export_rechecks_a_retargeted_source_symlink_before_commit(
         run_export(plan, write_then_retarget)
 
     monkeypatch.setattr(exports, "run_export", retarget_during_write)
-    with pytest.raises(QgisSdkExportRefusedError, match="source"):
-        services.layers.export_vector(info.id, second, overwrite=True)
-
-    assert second.read_bytes() == before
-    assert second.stat().st_ino == inode
-    assert source.is_symlink()
-    assert sorted(p.name for p in tmp_path.iterdir()) == [
-        "first.geojson",
-        "second.geojson",
-        "source.geojson",
-    ]
+    _export_rechecks_a_retargeted_facts21234567891011121314151617(
+        before=before,
+        info=info,
+        inode=inode,
+        second=second,
+        services=services,
+        source=source,
+        tmp_path=tmp_path,
+    )
 
 
 def test_export_refuses_a_hard_link_to_its_source(
@@ -514,14 +748,7 @@ def test_export_refuses_to_replace_a_geopackage_container(
             )
         )
     info = services.layers.open_vector(uri)
-    before = source.read_bytes()
-    inode = source.stat().st_ino
-
-    with pytest.raises(QgisSdkExportRefusedError, match="source"):
-        services.layers.export_vector(info.id, source, overwrite=True)
-
-    assert source.read_bytes() == before
-    assert source.stat().st_ino == inode
+    _export_refuses_to_replace_phase1(info, services, source)
 
 
 def test_export_refuses_a_symbolic_link_to_its_source(

@@ -28,7 +28,7 @@ from typing import Any
 
 import qgis_sdk.exports as export_policy
 from qgis_sdk.core import ResourceScope
-from qgis_sdk.layouts import LayoutService
+from qgis_sdk.layouts import LayoutService, LayoutWiring
 from qgis_sdk.models import (
     LAYOUT_SUFFIXES,
     SINGLE_PAGE_FORMATS,
@@ -84,11 +84,13 @@ class FakeLayouts(LayoutService):
         self._layouts: dict[str, LayoutInfo] = {}
         self._coverage: dict[str, tuple[int, ...]] = {}
         super().__init__(
-            _FakeBackend(self),
-            scope=scope,
-            workers=workers,
-            files=files,
-            working_directory=self._directory,
+            LayoutWiring(
+                backend=_FakeBackend(self),
+                scope=scope,
+                working_directory=self._directory,
+                workers=workers,
+                files=files,
+            )
         )
         scope.on_close(self._release)
 

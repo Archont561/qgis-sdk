@@ -19,6 +19,17 @@ from dataclasses import dataclass
 
 import pytest
 
+
+def _a_finished_task_outlives_facts1(app, deadline, workers):
+    while workers.retired and time.monotonic() < deadline:
+        app.processEvents()
+        # ``0`` also flushes the DeferredDelete events ``deleteLater`` posts;
+        # the enum name for that differs between PyQt5 and PyQt6.
+        app.sendPostedEvents(None, 0)
+        time.sleep(0.001)
+    assert workers.retired == 0
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -197,13 +208,7 @@ def test_a_finished_task_outlives_its_own_completion_callback(
     # Deferred deletion: the task is still referenced when ``finished()``
     # returns, and Qt's deleteLater is what ends it.
     deadline = time.monotonic() + DEADLINE_SECONDS
-    while workers.retired and time.monotonic() < deadline:
-        app.processEvents()
-        # ``0`` also flushes the DeferredDelete events ``deleteLater`` posts;
-        # the enum name for that differs between PyQt5 and PyQt6.
-        app.sendPostedEvents(None, 0)
-        time.sleep(0.001)
-    assert workers.retired == 0
+    _a_finished_task_outlives_facts1(app, deadline, workers)
 
 
 def test_cancelling_the_task_asks_the_job_to_stop_without_killing_it(

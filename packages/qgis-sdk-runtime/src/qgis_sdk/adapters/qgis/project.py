@@ -58,6 +58,14 @@ from qgis_sdk.services import ProjectChanged, ProjectWatchCanceller
 from .layers import NativeLayers
 from .rasters import NativeRasters
 
+
+def _write_facts1(destination, partial):
+    if not partial.is_file():
+        raise QgisSdkProjectFileError(str(destination), "the writer produced no file")
+    partial.replace(destination)
+    return ProjectFile(path=str(destination))
+
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from qgis.core import QgsLayerTreeGroup, QgsLayerTreeNode
 
@@ -357,12 +365,7 @@ class NativeProject:
             raise QgisSdkProjectFileError(
                 str(destination), "QGIS could not write this project"
             )
-        if not partial.is_file():
-            raise QgisSdkProjectFileError(
-                str(destination), "the writer produced no file"
-            )
-        partial.replace(destination)
-        return ProjectFile(path=str(destination))
+        return _write_facts1(destination, partial)
 
     def save(self) -> ProjectFile:
         """Save to the file the project was opened from."""

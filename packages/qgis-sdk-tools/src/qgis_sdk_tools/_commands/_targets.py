@@ -18,6 +18,26 @@ from qgis_sdk_tools.devtools import (
 )
 
 
+def _print_json(runtime, host, target, status) -> None:
+    """Print the support matrix, the host and its verdict as one document."""
+    payload = {
+        "targets": [row.to_json() for row in targets_module.SUPPORT_MATRIX],
+        "host": host.to_json(),
+        "target": target.to_json() if target is not None else None,
+        "status": status,
+    }
+    typer.echo(json.dumps(payload, indent=2), file=runtime.out)
+
+
+def _targets_phase1(host, runtime, status, target):
+    typer.echo(targets_module.render_markdown(), file=runtime.out)
+    typer.echo("", file=runtime.out)
+    reason = (
+        f" ({target.evidence})" if target is not None else " (no row in the matrix)"
+    )
+    typer.echo(f"this host: {host.describe()} -> {status}{reason}", file=runtime.out)
+
+
 @app.command("targets")
 def targets(
     ctx: typer.Context,
@@ -43,20 +63,8 @@ def targets(
     target = targets_module.qualified_target(host)
     status = target.status if target is not None else "unqualified"
     if as_json:
-        payload = {
-            "targets": [row.to_json() for row in targets_module.SUPPORT_MATRIX],
-            "host": host.to_json(),
-            "target": target.to_json() if target is not None else None,
-            "status": status,
-        }
-        typer.echo(json.dumps(payload, indent=2), file=runtime.out)
-        return
-    typer.echo(targets_module.render_markdown(), file=runtime.out)
-    typer.echo("", file=runtime.out)
-    reason = (
-        f" ({target.evidence})" if target is not None else " (no row in the matrix)"
-    )
-    typer.echo(f"this host: {host.describe()} -> {status}{reason}", file=runtime.out)
+        return _print_json(runtime, host, target, status)
+    _targets_phase1(host, runtime, status, target)
 
 
 def _host_probe(

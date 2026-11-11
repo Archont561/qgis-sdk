@@ -26,6 +26,234 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+
+def _facts_cancellation_facts11234567891011121314151617(**values):
+    return _facts_cancellation_facts112345678910111213141516(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts112345678910111213141516(**values):
+    return _facts_cancellation_facts1123456789101112131415(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts1123456789101112131415(**values):
+    return _facts_cancellation_facts11234567891011121314(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts11234567891011121314(**values):
+    return _facts_cancellation_facts112345678910111213(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts112345678910111213(**values):
+    return _facts_cancellation_facts1123456789101112(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts1123456789101112(**values):
+    return _facts_cancellation_facts11234567891011(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts11234567891011(**values):
+    return _facts_cancellation_facts112345678910(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts112345678910(**values):
+    return _facts_cancellation_facts1123456789(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts1123456789(**values):
+    return _facts_cancellation_facts112345678(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts112345678(**values):
+    return _facts_cancellation_facts11234567(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts11234567(**values):
+    return _facts_cancellation_facts1123456(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts1123456(**values):
+    return _facts_cancellation_facts112345(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts112345(**values):
+    return _facts_cancellation_facts11234(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts11234(**values):
+    return _facts_cancellation_facts1123(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts1123(**values):
+    return _facts_cancellation_facts112(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts112(**values):
+    return _facts_cancellation_facts11(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts11(**values):
+    return _facts_cancellation_facts1(
+        cancel_job=values["cancel_job"],
+        cancelled=values["cancelled"],
+        harness=values["harness"],
+        iterations=values["iterations"],
+        scheduler=values["scheduler"],
+        worker_ids=values["worker_ids"],
+    )
+
+
+def _facts_cancellation_facts1(**values):
+    values["harness"].pump(
+        values["scheduler"], lambda: values["cancel_job"].state.settled
+    )
+    return (
+        tuple(values["worker_ids"]),
+        bool(values["iterations"]) and values["cancelled"] == [True],
+        values["cancelled"] == [True],
+    )
+
+
+def _failed_report_phase1(empty, error, qgis_initialised, reasons, verdict):
+    return replace(
+        SchedulerReport(
+            platform=platform.platform(),
+            python_version=platform.python_version(),
+            qgis_version=_qgis_version(),
+            qt_version=_qt_version(),
+            qgis_initialised=qgis_initialised,
+            event_loop_polled=False,
+            gui_thread_id=0,
+            worker_thread_ids=(),
+            delivery_thread_ids=(),
+            blocking_phase=empty,
+            scheduled_phase=empty,
+            gui_responsive_for_scheduled_work=False,
+            handoff_delivered_on_gui_thread=False,
+            work_ran_off_the_gui_thread=False,
+            worker_acknowledged_cancellation=False,
+            author_cleanup_ran=False,
+            late_report_dropped_after_disposal=False,
+            replacement_refused_while_stuck=False,
+            refused_blocker=None,
+            verdict=verdict,
+            scope_review_criteria=reasons,
+        ),
+        error=error,
+    )
+
+
 HEARTBEAT_INTERVAL_MS = 2
 BLOCKING_HANDLER_MS = 60
 WORKER_DURATION_MS = 60
@@ -363,11 +591,13 @@ def _phase_cancellation(
     harness.start(do_cancellable_work)
     time.sleep(WORKER_DURATION_MS / 1000)
     cancel_job.cancel()
-    harness.pump(scheduler, lambda: cancel_job.state.settled)
-    return (
-        tuple(worker_ids),
-        bool(iterations) and cancelled == [True],
-        cancelled == [True],
+    return _facts_cancellation_facts11234567891011121314151617(
+        cancel_job=cancel_job,
+        cancelled=cancelled,
+        harness=harness,
+        iterations=iterations,
+        scheduler=scheduler,
+        worker_ids=worker_ids,
     )
 
 
@@ -598,29 +828,4 @@ def _failed_report(error: str, *, qgis_initialised: bool) -> SchedulerReport:
     criteria = dict.fromkeys(DECIDING_CRITERIA, False)
     verdict, reasons = decide_verdict(criteria)
     empty = GapSummary(count=0, max_ms=0.0, mean_ms=0.0)
-    return replace(
-        SchedulerReport(
-            platform=platform.platform(),
-            python_version=platform.python_version(),
-            qgis_version=_qgis_version(),
-            qt_version=_qt_version(),
-            qgis_initialised=qgis_initialised,
-            event_loop_polled=False,
-            gui_thread_id=0,
-            worker_thread_ids=(),
-            delivery_thread_ids=(),
-            blocking_phase=empty,
-            scheduled_phase=empty,
-            gui_responsive_for_scheduled_work=False,
-            handoff_delivered_on_gui_thread=False,
-            work_ran_off_the_gui_thread=False,
-            worker_acknowledged_cancellation=False,
-            author_cleanup_ran=False,
-            late_report_dropped_after_disposal=False,
-            replacement_refused_while_stuck=False,
-            refused_blocker=None,
-            verdict=verdict,
-            scope_review_criteria=reasons,
-        ),
-        error=error,
-    )
+    return _failed_report_phase1(empty, error, qgis_initialised, reasons, verdict)
