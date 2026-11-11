@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 
-def _a_widget_surface_opens_phase1(LegacyDialog, host, opened, runtime, seen):
+def _a_widget_surface_opens_phase1(LegacyDialog, host, runtime, seen):
     try:
         opened = host.open(LegacyDialog)
         assert isinstance(opened, LegacyDialog)
@@ -148,4 +148,4 @@ def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
     )
     host.attach(runtime, context)
     runtime.start()
-    _a_widget_surface_opens_phase1(LegacyDialog, host, opened, runtime, seen)
+    _a_widget_surface_opens_phase1(LegacyDialog, host, runtime, seen)

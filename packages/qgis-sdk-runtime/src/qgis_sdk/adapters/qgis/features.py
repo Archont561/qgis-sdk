@@ -61,7 +61,7 @@ from qgis_sdk.models import (
 from .layers import NativeLayers
 
 
-def _encode_phase1(crs, encoding, geometry, value):
+def _encode_phase1(crs, encoding, geometry):
     if encoding == "wkb":
         value = base64.b64encode(bytes(geometry.asWkb())).decode("ascii")
     elif encoding == "wkt":
@@ -156,7 +156,7 @@ def _encode(geometry: QgsGeometry, encoding: str, crs: str | None) -> Geometry:
             part_count=_part_count(geometry),
             is_empty=abstract is not None,
         )
-    return _encode_phase1(crs, encoding, geometry, value)
+    return _encode_phase1(crs, encoding, geometry)
 
 
 def _name(geometry: QgsGeometry) -> str:
