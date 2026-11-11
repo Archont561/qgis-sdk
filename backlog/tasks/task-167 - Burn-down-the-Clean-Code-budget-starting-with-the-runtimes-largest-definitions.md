@@ -240,4 +240,16 @@ The rest is one owner per job. `_imported_applications` delegates local module r
 
 **What is left.** 660 findings in 250 files: CC101 383, CC104 95, CC102 95, CC303 39, CC201 23, CC202 25. The next worst files are `test_bridge_host.py`, `test_zz_plugin_rest_native.py` and `adapters/qgis/algorithms.py` (12 each). CC202 and AC 4 remain the two different cuts after the long tail.
 
+**Slice 18 (landed): the host bridge inventory, as records.** 660 -> 648 findings, 250 -> 249 files. `packages/qgis-sdk-python/tests/test_bridge_host.py` carried 12 (8 CC101, 4 CC104) and has zero now, with no threshold change, no suppression and no finding added anywhere else. Its 61 tests still pass and every assertion is unchanged.
+
+The grant vocabulary became `EXPECTED_HOST_GRANTS`, and the manifest's three assertions are `_assert_manifest_ids`, `_assert_manifest_actions` / `_assert_action_result` and `_assert_manifest_streams`. Three frozen slots records carry the scenarios that used to keep eleven or more locals alive: `_ContextRig` (one plugin context and the eight service objects it must hand the host), `_AlgorithmRunCase` (a view's scripted algorithm runs and the files they may mint) and `_AlgorithmContext` (algorithms and files a host must keep). `_algorithm_run_case` and `_algorithm_context` build them; `_registered_layers` and `_algorithm_files` own the repeated fixture setup.
+
+The refusals are one helper each: `_refusal`, `_foreign_refusal`, `_stale_refusal` and `_assert_grant_refusal` / `_assert_all_grant_refusals`. The network stream has `_fetch_expectation`, `_fetch_payload`, `_assert_fetch_request` and `_assert_fetch_delivery`; the canvas stream has `_assert_extent_frames` and `_unsubscribe`. The long algorithm test is two named phases (`_assert_translated` and `_assert_statistics`) rather than one 65-line body.
+
+**Tests.** `test_bridge_host.py` 61 passed; combined local suite 3438 passed, 130 skipped, 7 deselected; `tests/scripts` 340; alint policy 20; backlog guards 21; examples 26 passed / 8 skipped; ruff, format, alint and the clean-code gate clean.
+
+**Documentation impact.** No user-facing documentation changes: the bridge inventory, the wire payloads and every assertion are unchanged. This note and decision-81's follow-through record the context records and the budget ratchet.
+
+**What is left.** 648 findings in 249 files. The next worst files are `test_zz_plugin_rest_native.py` and `adapters/qgis/algorithms.py` (12 each). CC202 and AC 4 remain the two different cuts after the long tail.
+
 <!-- SECTION:NOTES:END -->
