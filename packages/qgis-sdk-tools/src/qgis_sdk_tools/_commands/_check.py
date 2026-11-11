@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
@@ -14,68 +15,96 @@ from qgis_sdk_tools.cli import CliRuntime
 from qgis_sdk_tools.grants import grants_matrix
 from qgis_sdk_tools.project import load_project
 
+_PathArg = Annotated[
+    Path | None,
+    typer.Argument(help="Plugin project root; defaults to the working directory."),
+]
+_NativeOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--native",
+        help="Module glob allowed to import QGIS at load time (repeatable).",
+    ),
+]
+_JsonOpt = Annotated[bool, typer.Option("--json", help="Print the report as JSON.")]
+_ImportsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--imports",
+        help="Print every import root with the bucket it sorts into.",
+    ),
+]
+_GrantsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--grants",
+        help="Print the client x host operation matrix of the grant vocabulary.",
+    ),
+]
 
-@app.command("check")
-def check(
-    ctx: typer.Context,
-    path: Annotated[
-        Path | None,
-        typer.Argument(help="Plugin project root; defaults to the working directory."),
-    ] = None,
-    native: Annotated[
-        list[str] | None,
-        typer.Option(
-            "--native",
-            help="Module glob allowed to import QGIS at load time (repeatable).",
-        ),
-    ] = None,
-    as_json: Annotated[
-        bool, typer.Option("--json", help="Print the report as JSON.")
-    ] = False,
-    imports: Annotated[
-        bool,
-        typer.Option(
-            "--imports",
-            help="Print every import root with the bucket it sorts into.",
-        ),
-    ] = False,
-    grants: Annotated[
-        bool,
-        typer.Option(
-            "--grants",
-            help="Print the client x host operation matrix of the grant vocabulary.",
-        ),
-    ] = False,
-) -> None:
-    """Read a plugin project and report problems; import, install and change nothing."""
-    runtime: CliRuntime = ctx.obj
-    root = runtime.resolve(path or Path())
+
+@dataclass(frozen=True, slots=True)
+class _CheckOptions:
+    """The resolved ``check`` options, as one record."""
+
+    root: Path
+    native: tuple[str, ...]
+    as_json: bool
+    imports: bool
+    grants: bool
+
+
+def _checked_report(runtime: CliRuntime, options: _CheckOptions):
+    """Read the project, translating a check error into a CLI exit."""
     try:
-        report = check_project(root, native_modules=tuple(native or ()))
+        return check_project(options.root, native_modules=options.native)
     except QgisSdkCheckError as error:
         typer.echo(str(error), file=runtime.err)
         raise typer.Exit(code=2) from error
-    if as_json:
+
+
+def _render_report(runtime: CliRuntime, report, options: _CheckOptions) -> None:
+    """Print the diagnostics, the optional listings and the summary line."""
+    if options.as_json:
         typer.echo(json.dumps(report.to_json(), indent=2), file=runtime.out)
-    else:
-        for diagnostic in report.diagnostics:
-            typer.echo(diagnostic.render(), file=runtime.out)
-        if imports and report.imports is not None:
-            listing = report.imports.render()
-            if listing:
-                typer.echo(listing, file=runtime.out)
-        if grants:
-            config, _ = load_project(root)
-            if config is not None:
-                typer.echo(grants_matrix(config).render(), file=runtime.out)
-        count = len(report.diagnostics)
-        problems = (
-            "no problems"
-            if count == 0
-            else f"{count} problem{'s' if count != 1 else ''}"
-        )
-        typer.echo(
-            f"checked {report.files_checked} files: {problems}", file=runtime.out
-        )
+        return
+    for diagnostic in report.diagnostics:
+        typer.echo(diagnostic.render(), file=runtime.out)
+    if options.imports and report.imports is not None:
+        listing = report.imports.render()
+        if listing:
+            typer.echo(listing, file=runtime.out)
+    if options.grants:
+        config, _ = load_project(options.root)
+        if config is not None:
+            typer.echo(grants_matrix(config).render(), file=runtime.out)
+    count = len(report.diagnostics)
+    problems = (
+        "no problems" if count == 0 else f"{count} problem{'s' if count != 1 else ''}"
+    )
+    typer.echo(f"checked {report.files_checked} files: {problems}", file=runtime.out)
+
+
+@app.command("check")
+@app.command("check")
+def check(
+    ctx: typer.Context,
+    path: _PathArg = None,
+    native: _NativeOpt = None,
+    as_json: _JsonOpt = False,
+    imports: _ImportsOpt = False,
+    grants: _GrantsOpt = False,
+) -> None:
+    """Read a plugin project and report problems; import, install and change nothing."""
+    runtime: CliRuntime = ctx.obj
+    options = _CheckOptions(
+        runtime.resolve(path or Path()),
+        tuple(native or ()),
+        as_json,
+        imports,
+        grants,
+    )
+    report = _checked_report(runtime, options)
+    _render_report(runtime, report, options)
     if not report.ok:
         raise typer.Exit(code=1)

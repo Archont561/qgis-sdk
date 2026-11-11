@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -332,7 +333,8 @@ def test_add_to_project_false_leaves_presentation_to_the_caller() -> None:
     assert project.layer_ids() == ()
 
 
-def test_invoke_runs_from_a_job_context() -> None:
+def _job_observe_rig():
+    """An algorithm that records its context, and the job context that runs it."""
     algorithms, _, project, scope = _declared()
     seen: list[AlgorithmContext] = []
     provider = _provider()
@@ -349,9 +351,114 @@ def test_invoke_runs_from_a_job_context() -> None:
         scope=scope,
         services=JobServices(algorithms=algorithms, project=project),
     )
+    return seen, observe, ctx, progress, clock, project, scope
 
+
+def _output_kind_provider():
+    """One provider declaring every result kind the SDK can describe."""
+    provider = _provider()
+
+    @provider.algorithm
+    def produced(ctx: AlgorithmContext) -> VectorLayerInfo: ...
+    @provider.algorithm
+    def rendered(ctx: AlgorithmContext) -> RasterLayerInfo: ...
+    @provider.algorithm
+    def written(ctx: AlgorithmContext) -> FileRef: ...
+    @provider.algorithm
+    def foldered(ctx: AlgorithmContext) -> FolderOutput: ...
+    @provider.algorithm
+    def reported(ctx: AlgorithmContext) -> HtmlOutput: ...
+    @provider.algorithm
+    def counted(ctx: AlgorithmContext) -> float: ...
+    @provider.algorithm
+    def titled(ctx: AlgorithmContext) -> str: ...
+    @provider.algorithm
+    def flagged(ctx: AlgorithmContext) -> bool: ...
+    @provider.algorithm
+    def split(ctx: AlgorithmContext) -> MultipleLayers: ...
+
+    return provider
+
+
+@dataclass(frozen=True)
+class _FileRefRig:
+    """The three ref handlers, their expected values and one plugin context."""
+
+    written: object
+    foldered: object
+    reported: object
+    ref: FileRef
+    folder: FileRef
+    report: FileRef
+    context: PluginContext
+    project: FakeProject
+
+
+def _file_refs():
+    """The three ref values the handlers return unchanged."""
+    return (
+        FileRef(id="file-1", name="out.csv", operations=("read",)),
+        FileRef(id="dir-1", name="export", operations=("read",), kind="directory"),
+        FileRef(id="html-1", name="report.html", operations=("read",)),
+    )
+
+
+def _file_ref_handlers():
+    """Three handlers returning the three ref kinds a result can declare."""
+    provider = _provider()
+    ref, folder, report = _file_refs()
+
+    @provider.algorithm
+    def written(ctx: AlgorithmContext) -> FileRef:
+        return ref
+
+    @provider.algorithm
+    def foldered(ctx: AlgorithmContext) -> FolderOutput:
+        return folder
+
+    @provider.algorithm
+    def reported(ctx: AlgorithmContext) -> HtmlOutput:
+        return report
+
+    return written, foldered, reported, ref, folder, report
+
+
+def _plugin_rig():
+    """A fake plugin context and the project it owns."""
+    algorithms, _, project, scope = _declared()
+    return _plugin_context(algorithms, project, scope), project
+
+
+def _file_ref_rig() -> _FileRefRig:
+    """Everything the file-result test asserts against, as one record."""
+    context, project = _plugin_rig()
+    return _FileRefRig(*_file_ref_handlers(), context, project)
+
+
+def _raster_result_rig():
+    """A raster/layers pair of handlers over a project that owns the layers."""
+    rasters, layers, project, scope = _raster_rig()
+    layers.register(_source_layer_declaration())
+    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
+    provider = _provider()
+
+    @provider.algorithm
+    def rendered(ctx: AlgorithmContext) -> RasterLayerInfo:
+        return rasters.open_raster(Path("dem.tif"))
+
+    @provider.algorithm
+    def split(ctx: AlgorithmContext) -> MultipleLayers:
+        return (
+            layers.open_vector(Path("source.gpkg")),
+            layers.open_vector(Path("source.gpkg")),
+        )
+
+    return rendered, split, _plugin_context(algorithms, project, scope), project
+
+
+def test_invoke_runs_from_a_job_context() -> None:
+    seen, observe, ctx, progress, clock, project, scope = _job_observe_rig()
     output = invoke(observe, ctx, layer_id="layer-1")
-
     assert project.layer_ids() == (output.id,)
     # Left out, progress and cancellation are the job's own.
     assert (seen[0].progress, seen[0].cancellation) == (progress, clock)
@@ -663,30 +770,9 @@ def _raster_rig() -> tuple[FakeRasters, FakeLayers, FakeProject, ResourceScope]:
 
 
 def test_every_output_kind_describes_its_result_kind() -> None:
-    provider = _provider()
-
-    @provider.algorithm
-    def produced(ctx: AlgorithmContext) -> VectorLayerInfo: ...
-    @provider.algorithm
-    def rendered(ctx: AlgorithmContext) -> RasterLayerInfo: ...
-    @provider.algorithm
-    def written(ctx: AlgorithmContext) -> FileRef: ...
-    @provider.algorithm
-    def foldered(ctx: AlgorithmContext) -> FolderOutput: ...
-    @provider.algorithm
-    def reported(ctx: AlgorithmContext) -> HtmlOutput: ...
-    @provider.algorithm
-    def counted(ctx: AlgorithmContext) -> float: ...
-    @provider.algorithm
-    def titled(ctx: AlgorithmContext) -> str: ...
-    @provider.algorithm
-    def flagged(ctx: AlgorithmContext) -> bool: ...
-    @provider.algorithm
-    def split(ctx: AlgorithmContext) -> MultipleLayers: ...
-
     kinds = {
         description.id: description.result_kind
-        for description in provider.describe().algorithms
+        for description in _output_kind_provider().describe().algorithms
     }
     _every_output_kind_describes_phase1(kinds)
 
@@ -715,29 +801,11 @@ def test_a_value_result_comes_back_as_the_value_and_leaves_the_project() -> None
 
 
 def test_a_file_result_comes_back_as_the_ref_the_handler_made() -> None:
-    algorithms, _, project, scope = _declared()
-    provider = _provider()
-    ref = FileRef(id="file-1", name="out.csv", operations=("read",))
-    folder = FileRef(id="dir-1", name="export", operations=("read",), kind="directory")
-    report = FileRef(id="html-1", name="report.html", operations=("read",))
-
-    @provider.algorithm
-    def written(ctx: AlgorithmContext) -> FileRef:
-        return ref
-
-    @provider.algorithm
-    def foldered(ctx: AlgorithmContext) -> FolderOutput:
-        return folder
-
-    @provider.algorithm
-    def reported(ctx: AlgorithmContext) -> HtmlOutput:
-        return report
-
-    context = _plugin_context(algorithms, project, scope)
-    assert invoke(written, context) is ref
-    assert invoke(foldered, context) is folder
-    assert invoke(reported, context) is report
-    assert project.layer_ids() == ()
+    rig = _file_ref_rig()
+    assert invoke(rig.written, rig.context) is rig.ref
+    assert invoke(rig.foldered, rig.context) is rig.folder
+    assert invoke(rig.reported, rig.context) is rig.report
+    assert rig.project.layer_ids() == ()
 
 
 def _source_layer_declaration() -> VectorLayerDeclaration:
@@ -751,26 +819,9 @@ def _source_layer_declaration() -> VectorLayerDeclaration:
 
 
 def test_a_raster_or_layers_result_adds_every_produced_layer() -> None:
-    rasters, layers, project, scope = _raster_rig()
-    layers.register(_source_layer_declaration())
-    algorithms = FakeAlgorithms(FakeAlgorithmSetup(layers, scope))
-    provider = _provider()
-
-    @provider.algorithm
-    def rendered(ctx: AlgorithmContext) -> RasterLayerInfo:
-        return rasters.open_raster(Path("dem.tif"))
-
-    @provider.algorithm
-    def split(ctx: AlgorithmContext) -> MultipleLayers:
-        return (
-            layers.open_vector(Path("source.gpkg")),
-            layers.open_vector(Path("source.gpkg")),
-        )
-
-    context = _plugin_context(algorithms, project, scope)
+    rendered, split, context, project = _raster_result_rig()
     produced = invoke(rendered, context)
     parts = invoke(split, context)
-
     assert produced.kind == "raster"
     assert len(parts) == 2
     assert project.layer_ids() == (produced.id, parts[0].id, parts[1].id)

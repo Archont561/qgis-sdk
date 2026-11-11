@@ -42,59 +42,6 @@ from .versions import (
     check_runtime_requirement,
 )
 
-
-def _requirement_findings_tail1(**values):
-    available = values["available"]
-    distributions = values["distributions"]
-    available.update(normalize(name) for name in HOST_ROOTS)
-    available.update(names for names in sys.stdlib_module_names)
-    findings: list[Diagnostic] = []
-    for distribution in distributions:
-        for requirement in distribution.requires:
-            if normalize(requirement) in available:
-                continue
-            findings.append(
-                Diagnostic(
-                    rule="DEP004",
-                    path=Path("pyproject.toml"),
-                    line=0,
-                    column=0,
-                    message=(
-                        f"vendored `{distribution.name}` requires "
-                        f"`{requirement}`, which is neither vendored nor "
-                        "declared external"
-                    ),
-                    remediation=(
-                        f"Add `{requirement}` to `[tool.qgis-sdk.build] vendor` "
-                        "when it is pure Python, or to `external` when every "
-                        "QGIS you target ships it."
-                    ),
-                )
-            )
-    return tuple(findings)
-
-
-def _check_project_facts1(diagnostics, files, imports, root):
-    return CheckReport(
-        root=root,
-        diagnostics=tuple(diagnostics),
-        files_checked=files,
-        imports=imports,
-    )
-
-
-def _buckets_facts1(config, findings, package, root, vendored):
-    report = bucket_imports(
-        root,
-        config.plugin,
-        tuple(_python_files(package)),
-        external=config.build.external_roots,
-        vendored=vendored,
-    )
-    findings.extend(import_findings(report))
-    return report, tuple(findings)
-
-
 if TYPE_CHECKING:  # imported by the caller: this module is imported by it
     from qgis_sdk_tools.project import ProjectConfig
 
@@ -143,6 +90,15 @@ def _is_package(child: Path) -> bool:
     return child.name != "tests" and (child / "__init__.py").is_file()
 
 
+def _static_diagnostics(root: Path, diagnostics: list[Diagnostic]) -> None:
+    """Rules that read files only, independent of the plugin's declarations."""
+    # What the project pins against what this release supports (decision-35),
+    # and whether the runtime this interpreter would ship is one it declares.
+    diagnostics.extend(check_runtime_pins(root))
+    diagnostics.extend(check_runtime_requirement(root))
+    diagnostics.extend(check_generated_clients(root))
+
+
 def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckReport:
     """Check the project at ``root`` and return every finding.
 
@@ -158,51 +114,45 @@ def check_project(root: Path, *, native_modules: Sequence[str] = ()) -> CheckRep
     configured, config_diagnostics = _configured_native_modules(root)
     diagnostics.extend(config_diagnostics)
     native = (*configured, *native_modules)
-
     packages = list(_check_packages(root))
     diagnostics.extend(packages)
-    imports = None
-    declared_hosts: tuple[str, ...] | None = None
-    if not any(d.rule == "PROJECT001" for d in packages):
-        # The plugin application, the metadata.txt values and the page (decision-43).
-        from qgis_sdk_tools.project import load_project
+    imports, declared_hosts = _project_declarations(root, diagnostics, packages)
+    _static_diagnostics(root, diagnostics)
+    files = _source_diagnostics(root, diagnostics, native, declared_hosts)
+    diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
+    return CheckReport(
+        root=root,
+        diagnostics=tuple(diagnostics),
+        files_checked=files,
+        imports=imports,
+    )
 
-        config, findings = load_project(root)
-        diagnostics.extend(findings)
-        if config is not None:
-            imports, bucket_findings = _buckets(root, config)
-            diagnostics.extend(bucket_findings)
-            # Which hosts the project declares, and whether this QGIS has them
-            # (decision-52 point 1; TASK-80).
-            declared_hosts = config.hosts
-            diagnostics.extend(check_declared_hosts(config))
-    # What the project pins against what this release supports (decision-35),
-    # and whether the runtime this interpreter would ship is one it declares.
-    diagnostics.extend(check_runtime_pins(root))
-    diagnostics.extend(check_runtime_requirement(root))
-    diagnostics.extend(check_generated_clients(root))
 
-    files = 0
-    for path in _python_files(root):
-        files += 1
-        relative = path.relative_to(root)
-        source = path.read_text(encoding="utf-8")
-        diagnostics.extend(check_source(source, path=relative, native_modules=native))
-        diagnostics.extend(check_jobs(source, path=relative))
-        if declared_hosts is not None:
-            diagnostics.extend(check_hosts(source, path=relative, hosts=declared_hosts))
-        package = root / relative.parts[0] if len(relative.parts) > 1 else None
-        diagnostics.extend(
-            check_bindings(
-                source,
-                path=relative,
-                package_directory=package,
-                directory=path.parent,
+def _read_vendor(
+    name: str,
+    distributions: list[Distribution],
+    vendored: list[str],
+    findings: list[Diagnostic],
+) -> None:
+    """Read one declared vendored distribution, reporting a missing or compiled one."""
+    try:
+        distribution = read_distribution(name)
+    except QGisSdkDistributionError as error:
+        findings.append(_declared("DEP004", str(error), name, vendored=False))
+        return
+    distributions.append(distribution)
+    if not distribution.is_pure:
+        findings.append(
+            _declared(
+                "DEP003",
+                f"`{distribution.name}` ships compiled extensions "
+                f"(`{distribution.compiled[0].as_posix()}` is one); it "
+                "cannot be vendored",
+                name,
+                vendored=True,
             )
         )
-
-    diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
-    return _check_project_facts1(diagnostics, files, imports, root)
+    vendored.extend(distribution.roots)
 
 
 def _buckets(
@@ -219,29 +169,51 @@ def _buckets(
     if not package.is_dir():
         return None, ()
     vendored: list[str] = []
-    distributions = []
+    distributions: list[Distribution] = []
     findings: list[Diagnostic] = []
     for name in config.build.vendor:
-        try:
-            distribution = read_distribution(name)
-        except QGisSdkDistributionError as error:
-            findings.append(_declared("DEP004", str(error), name, vendored=False))
-            continue
-        distributions.append(distribution)
-        if not distribution.is_pure:
-            findings.append(
-                _declared(
-                    "DEP003",
-                    f"`{distribution.name}` ships compiled extensions "
-                    f"(`{distribution.compiled[0].as_posix()}` is one); it "
-                    "cannot be vendored",
-                    name,
-                    vendored=True,
-                )
-            )
-        vendored.extend(distribution.roots)
+        _read_vendor(name, distributions, vendored, findings)
     findings.extend(_requirement_findings(distributions, config))
-    return _buckets_facts1(config, findings, package, root, vendored)
+    report = bucket_imports(
+        root,
+        config.plugin,
+        tuple(_python_files(package)),
+        external=config.build.external_roots,
+        vendored=vendored,
+    )
+    findings.extend(import_findings(report))
+    return report, tuple(findings)
+
+
+def _available_roots(
+    distributions: Sequence[Distribution], config: ProjectConfig
+) -> set[str]:
+    """Every root a vendored package may import without another declaration."""
+    available = {normalize(item.name) for item in distributions}
+    available.update(normalize(root) for root in config.build.external_roots)
+    available.update(normalize(name) for name in HOST_ROOTS)
+    available.update(names for names in sys.stdlib_module_names)
+    return available
+
+
+def _missing_requirement(distribution: Distribution, requirement: str) -> Diagnostic:
+    """``DEP004`` for one vendored requirement nothing declares."""
+    return Diagnostic(
+        rule="DEP004",
+        path=Path("pyproject.toml"),
+        line=0,
+        column=0,
+        message=(
+            f"vendored `{distribution.name}` requires "
+            f"`{requirement}`, which is neither vendored nor "
+            "declared external"
+        ),
+        remediation=(
+            f"Add `{requirement}` to `[tool.qgis-sdk.build] vendor` "
+            "when it is pure Python, or to `external` when every "
+            "QGIS you target ships it."
+        ),
+    )
 
 
 def _requirement_findings(
@@ -254,9 +226,13 @@ def _requirement_findings(
     with an ``ImportError`` from inside the copy, which is exactly what the
     author has to decide about here.
     """
-    available = {normalize(item.name) for item in distributions}
-    available.update(normalize(root) for root in config.build.external_roots)
-    return _requirement_findings_tail1(**{**globals(), **locals()})
+    available = _available_roots(distributions, config)
+    return tuple(
+        _missing_requirement(distribution, requirement)
+        for distribution in distributions
+        for requirement in distribution.requires
+        if normalize(requirement) not in available
+    )
 
 
 def _declared(rule: str, message: str, name: str, *, vendored: bool) -> Diagnostic:
@@ -301,26 +277,99 @@ def _check_packages(root: Path) -> Iterator[Diagnostic]:
         yield from _check_host_artifacts(root, package)
 
 
+def _metadata_finding(root: Path, package: Path, metadata: Path) -> Diagnostic:
+    """``META001``: ``build`` and ``dev`` generate metadata.txt themselves."""
+    return Diagnostic(
+        rule="META001",
+        path=metadata.relative_to(root),
+        line=0,
+        column=0,
+        message=(
+            f"`{package.name}` carries a hand-written metadata.txt; `build` and "
+            "`dev` generate it from pyproject.toml"
+        ),
+        remediation=(
+            "Delete the file. Move `version`, `description` and the author to "
+            "[project], `qgisMinimumVersion` to [tool.qgis-sdk] "
+            "qgis-minimum-version, and any other key to [tool.qgis-sdk.metadata] "
+            "(decision-43)."
+        ),
+    )
+
+
+def _class_factory_finding(root: Path, init: Path, bound: ast.AST) -> Diagnostic:
+    """``ENTRY002``: ``host()`` binds classFactory, not the author."""
+    return Diagnostic(
+        rule="ENTRY002",
+        path=init.relative_to(root),
+        line=bound.lineno,
+        column=bound.col_offset + 1,
+        message=(
+            "__init__.py binds `classFactory`; `build` and `dev` bind it through "
+            "`qgis_sdk.adapters.desktop.host()`"
+        ),
+        remediation=(
+            "Delete the definition or import (and the Desktop wrapper it "
+            "points at); name the class in `[tool.qgis-sdk] plugin` instead."
+        ),
+    )
+
+
+def _project_declarations(
+    root: Path, diagnostics: list[Diagnostic], packages: Sequence[Diagnostic]
+) -> tuple[BucketReport | None, tuple[str, ...] | None]:
+    """Read the declarations only when the project has a plugin package."""
+    imports = None
+    declared_hosts = None
+    if not any(d.rule == "PROJECT001" for d in packages):
+        # The plugin application, the metadata.txt values and the page (decision-43).
+        from qgis_sdk_tools.project import load_project
+
+        config, findings = load_project(root)
+        diagnostics.extend(findings)
+        if config is not None:
+            imports, bucket_findings = _buckets(root, config)
+            diagnostics.extend(bucket_findings)
+            # Which hosts the project declares, and whether this QGIS has them
+            # (decision-52 point 1; TASK-80).
+            declared_hosts = config.hosts
+            diagnostics.extend(check_declared_hosts(config))
+    return imports, declared_hosts
+
+
+def _source_diagnostics(
+    root: Path,
+    diagnostics: list[Diagnostic],
+    native: tuple[str, ...],
+    declared_hosts: tuple[str, ...] | None,
+) -> int:
+    """Read every Python file once and return how many were checked."""
+    files = 0
+    for path in _python_files(root):
+        files += 1
+        relative = path.relative_to(root)
+        source = path.read_text(encoding="utf-8")
+        diagnostics.extend(check_source(source, path=relative, native_modules=native))
+        diagnostics.extend(check_jobs(source, path=relative))
+        if declared_hosts is not None:
+            diagnostics.extend(check_hosts(source, path=relative, hosts=declared_hosts))
+        package = root / relative.parts[0] if len(relative.parts) > 1 else None
+        diagnostics.extend(
+            check_bindings(
+                source,
+                path=relative,
+                package_directory=package,
+                directory=path.parent,
+            )
+        )
+    return files
+
+
 def _check_host_artifacts(root: Path, package: Path) -> Iterator[Diagnostic]:
     """``META001``/``ENTRY002``: files ``build`` and ``dev`` generate, authored by hand."""
     metadata = package / "metadata.txt"
     if metadata.is_file():
-        yield Diagnostic(
-            rule="META001",
-            path=metadata.relative_to(root),
-            line=0,
-            column=0,
-            message=(
-                f"`{package.name}` carries a hand-written metadata.txt; `build` and "
-                "`dev` generate it from pyproject.toml"
-            ),
-            remediation=(
-                "Delete the file. Move `version`, `description` and the author to "
-                "[project], `qgisMinimumVersion` to [tool.qgis-sdk] "
-                "qgis-minimum-version, and any other key to [tool.qgis-sdk.metadata] "
-                "(decision-43)."
-            ),
-        )
+        yield _metadata_finding(root, package, metadata)
     init = package / "__init__.py"
     try:
         tree = ast.parse(init.read_text(encoding="utf-8"))
@@ -328,20 +377,7 @@ def _check_host_artifacts(root: Path, package: Path) -> Iterator[Diagnostic]:
         return  # the import rules report the file itself
     bound = _class_factory_binding(tree)
     if bound is not None:
-        yield Diagnostic(
-            rule="ENTRY002",
-            path=init.relative_to(root),
-            line=bound.lineno,
-            column=bound.col_offset + 1,
-            message=(
-                "__init__.py binds `classFactory`; `build` and `dev` bind it through "
-                "`qgis_sdk.adapters.desktop.host()`"
-            ),
-            remediation=(
-                "Delete the definition or import (and the Desktop wrapper it "
-                "points at); name the class in `[tool.qgis-sdk] plugin` instead."
-            ),
-        )
+        yield _class_factory_finding(root, init, bound)
 
 
 def _class_factory_binding(tree: ast.Module) -> ast.stmt | None:

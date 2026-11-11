@@ -67,277 +67,6 @@ from .vendor import (
     vendored_roots,
 )
 
-
-def _build_plugin_facts11234567891011121314151617(**values):
-    return _build_plugin_facts112345678910111213141516(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts112345678910111213141516(**values):
-    return _build_plugin_facts1123456789101112131415(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts1123456789101112131415(**values):
-    return _build_plugin_facts11234567891011121314(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts11234567891011121314(**values):
-    return _build_plugin_facts112345678910111213(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts112345678910111213(**values):
-    return _build_plugin_facts1123456789101112(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts1123456789101112(**values):
-    return _build_plugin_facts11234567891011(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts11234567891011(**values):
-    return _build_plugin_facts112345678910(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts112345678910(**values):
-    return _build_plugin_facts1123456789(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts1123456789(**values):
-    return _build_plugin_facts112345678(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts112345678(**values):
-    return _build_plugin_facts11234567(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts11234567(**values):
-    return _build_plugin_facts1123456(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts1123456(**values):
-    return _build_plugin_facts112345(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts112345(**values):
-    return _build_plugin_facts11234(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts11234(**values):
-    return _build_plugin_facts1123(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts1123(**values):
-    return _build_plugin_facts112(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts112(**values):
-    return _build_plugin_facts11(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts11(**values):
-    return _build_plugin_facts1(
-        archive=values["archive"],
-        external=values["external"],
-        files=values["files"],
-        plugin=values["plugin"],
-        records=values["records"],
-        report=values["report"],
-        resolution=values["resolution"],
-        runtime=values["runtime"],
-        version=values["version"],
-        web_outcome=values["web_outcome"],
-    )
-
-
-def _build_plugin_facts1(**values):
-    return BuildResult(
-        archive=values["archive"],
-        plugin=values["plugin"],
-        version=values["version"],
-        files=values["files"],
-        report=values["report"],
-        runtime_version=values["runtime"],
-        web=values["web_outcome"],
-        external=values["external"],
-        runtime_requirement=values["resolution"].requirement,
-        vendored=tuple(name for name, _version in values["records"]),
-    )
-
-
 __all__ = [
     "VENDOR_PACKAGE",
     "BuildResult",
@@ -416,6 +145,134 @@ class BuildResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class _BuildPlan:
+    """Everything staging and the final result need, resolved once."""
+
+    project: object
+    report: CheckReport
+    web_outcome: WebOutcome
+    vendored: Sequence[Distribution]
+    plugin: str
+    version: str
+    archive: Path
+    resolution: object
+    runtime: str
+    prefix: str
+    roots: tuple[str, ...]
+    external: Sequence[str]
+    facts: object
+
+
+def _load_project(root: Path):
+    """Read the project, translating a dev error into a build error."""
+    try:
+        return inspect_project(root)
+    except QgisSdkDevError as error:
+        raise QgisSdkBuildError(str(error)) from error
+
+
+def _build_report(project, plugin, assets, web, run) -> tuple[CheckReport, WebOutcome]:
+    """Run ``check`` plus the build-only rules; refuse on any error."""
+    report = check_project(project.root)
+    diagnostics = list(report.diagnostics)
+    web_outcome: WebOutcome = "none"
+    if project.web is not None:
+        if web:
+            _build_web(project.web, run)
+            web_outcome = "built"
+        else:
+            web_outcome = "prebuilt"
+        diagnostics.extend(check_web_assets(assets, plugin))
+    diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
+    report = CheckReport(
+        root=project.root,
+        diagnostics=tuple(diagnostics),
+        files_checked=report.files_checked,
+    )
+    if not report.ok:
+        raise QgisSdkBuildRefusedError(report.diagnostics)
+    return report, web_outcome
+
+
+def _build_plan(root, out, web, run) -> _BuildPlan:
+    """Validate the project and resolve the runtime, versions and archive."""
+    project = _load_project(root)
+    config = project.config
+    plugin = project.plugin
+    report, web_outcome = _build_report(
+        project, plugin, project.root / plugin / "web", web, run
+    )
+    vendored = _read_vendored(config.build.vendor)
+    facts = _introspect(config)
+    version = config.version
+    out = Path(out) if out is not None else project.root / OUTPUT_DIRECTORY
+    out.mkdir(parents=True, exist_ok=True)
+    resolution = resolve_runtime(project.root)
+    prefix = f"{plugin}.{VENDOR_PACKAGE}"
+    return _BuildPlan(
+        project=project,
+        report=report,
+        web_outcome=web_outcome,
+        vendored=vendored,
+        plugin=plugin,
+        version=version,
+        archive=out / f"{plugin}-{version}.zip",
+        resolution=resolution,
+        runtime=resolution.installed or runtime_version(),
+        prefix=prefix,
+        roots=(RUNTIME_PACKAGE, *vendored_roots(vendored)),
+        external=config.build.external_roots,
+        facts=facts,
+    )
+
+
+def _introspect(config: ProjectConfig):
+    """Introspect the plugin's host artifacts, translating its error."""
+    try:
+        return introspect_plugin(config)
+    except QgisSdkArtifactError as error:
+        raise QgisSdkBuildError(str(error)) from error
+
+
+def _write_build_artifacts(plan: _BuildPlan, staged: Path, package: Path):
+    """Render metadata, stage runtime/vendored trees, write NOTICE and ZIP."""
+    config = plan.project.config
+    (staged / METADATA_FILE).write_text(
+        render_metadata(config, plan.facts), encoding="utf-8", newline="\n"
+    )
+    _stage_runtime(
+        staged / VENDOR_PACKAGE,
+        prefix=plan.prefix,
+        include_http=_imports_optional(_plugin_sources(package), "http"),
+    )
+    records = stage_vendored(staged / VENDOR_PACKAGE, plan.vendored, prefix=plan.prefix)
+    (staged / VENDOR_PACKAGE / "NOTICE").write_text(
+        notice(plan.runtime, requirement=plan.resolution.requirement, vendored=records),
+        encoding="utf-8",
+        newline="\n",
+    )
+    return _write_archive(plan.archive, staged.parent, plan.plugin), records
+
+
+def _stage_build(plan: _BuildPlan):
+    """Stage the plugin, runtime and vendored packages into the archive."""
+    config = plan.project.config
+    package = plan.project.root / plan.plugin
+    with tempfile.TemporaryDirectory(prefix="qgis-sdk-build-") as staging:
+        staged = Path(staging) / plan.plugin
+        _stage_plugin(
+            package,
+            staged,
+            prefix=plan.prefix,
+            roots=plan.roots,
+            append=_entry_points(
+                config, runtime_package=f"{plan.prefix}.{RUNTIME_PACKAGE}"
+            ),
+        )
+        return _write_build_artifacts(plan, staged, package)
+
+
 def build_plugin(
     root: Path,
     *,
@@ -429,82 +286,23 @@ def build_plugin(
     passes its runtime's ``run_process``. ``web=False`` skips it and ships
     whatever is already under ``<plugin>/web``.
     """
-    try:
-        project = inspect_project(root)
-    except QgisSdkDevError as error:
-        raise QgisSdkBuildError(str(error)) from error
-    root = project.root
-    config = project.config
-    plugin = project.plugin
-    package = root / plugin
-    assets = package / "web"
+    plan = _build_plan(root, out, web, run)
+    files, records = _stage_build(plan)
+    return _build_result(plan, files, records)
 
-    report = check_project(root)
-    diagnostics = list(report.diagnostics)
-    external = config.build.external_roots
-    vendored = _read_vendored(config.build.vendor)
-    web_outcome: WebOutcome = "none"
-    if project.web is not None:
-        if web:
-            _build_web(project.web, run)
-            web_outcome = "built"
-        else:
-            web_outcome = "prebuilt"
-        diagnostics.extend(check_web_assets(assets, plugin))
-    diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
-    report = CheckReport(
-        root=root, diagnostics=tuple(diagnostics), files_checked=report.files_checked
-    )
-    if not report.ok:
-        raise QgisSdkBuildRefusedError(report.diagnostics)
 
-    try:
-        facts = introspect_plugin(config)
-    except QgisSdkArtifactError as error:
-        raise QgisSdkBuildError(str(error)) from error
-    version = config.version
-    out = Path(out) if out is not None else root / OUTPUT_DIRECTORY
-    out.mkdir(parents=True, exist_ok=True)
-    archive = out / f"{plugin}-{version}.zip"
-    resolution = resolve_runtime(root)
-    runtime = resolution.installed or runtime_version()
-    prefix = f"{plugin}.{VENDOR_PACKAGE}"
-    roots = (RUNTIME_PACKAGE, *vendored_roots(vendored))
-    with tempfile.TemporaryDirectory(prefix="qgis-sdk-build-") as staging:
-        staged = Path(staging) / plugin
-        _stage_plugin(
-            package,
-            staged,
-            prefix=prefix,
-            roots=roots,
-            append=_entry_points(config, runtime_package=f"{prefix}.{RUNTIME_PACKAGE}"),
-        )
-        (staged / METADATA_FILE).write_text(
-            render_metadata(config, facts), encoding="utf-8", newline="\n"
-        )
-        _stage_runtime(
-            staged / VENDOR_PACKAGE,
-            prefix=prefix,
-            include_http=_imports_optional(_plugin_sources(package), "http"),
-        )
-        records = stage_vendored(staged / VENDOR_PACKAGE, vendored, prefix=prefix)
-        (staged / VENDOR_PACKAGE / "NOTICE").write_text(
-            notice(runtime, requirement=resolution.requirement, vendored=records),
-            encoding="utf-8",
-            newline="\n",
-        )
-        files = _write_archive(archive, Path(staging), plugin)
-    return _build_plugin_facts11234567891011121314151617(
-        archive=archive,
-        external=external,
+def _build_result(plan, files, records):
+    return BuildResult(
+        archive=plan.archive,
+        plugin=plan.plugin,
+        version=plan.version,
         files=files,
-        plugin=plugin,
-        records=records,
-        report=report,
-        resolution=resolution,
-        runtime=runtime,
-        version=version,
-        web_outcome=web_outcome,
+        report=plan.report,
+        runtime_version=plan.runtime,
+        web=plan.web_outcome,
+        external=plan.external,
+        runtime_requirement=plan.resolution.requirement,
+        vendored=tuple(name for name, _version in records),
     )
 
 
@@ -524,12 +322,34 @@ def _read_vendored(names: Sequence[str]) -> tuple[Distribution, ...]:
     return tuple(declared)
 
 
-# -- steps ----------------------------------------------------------------------
-
-
 def _plugin_sources(package: Path) -> list[Path]:
     """The plugin's own ``.py`` files, excluding what the archive excludes."""
     return list(walk_files(package, skip=EXCLUDED_DIRECTORIES, suffix=".py"))
+
+
+def _qualified_import(node: ast.Import, qualified: str, module: str) -> bool:
+    """Whether one ``import`` names the optional module or a child of it."""
+    return any(
+        alias.name == qualified or alias.name.startswith(qualified + ".")
+        for alias in node.names
+    )
+
+
+def _qualified_import_from(node: ast.ImportFrom, qualified: str, module: str) -> bool:
+    """Whether one ``from`` import names the optional module or the package."""
+    if node.level:
+        return False
+    if node.module == qualified or (node.module or "").startswith(qualified + "."):
+        return True
+    return node.module == "qgis_sdk" and any(
+        alias.name == module for alias in node.names
+    )
+
+
+_IMPORT_CHECKS: Final[dict[type, Callable[[object, str, str], bool]]] = {
+    ast.Import: _qualified_import,
+    ast.ImportFrom: _qualified_import_from,
+}
 
 
 def _imports_optional(sources: Sequence[Path], module: str) -> bool:
@@ -538,21 +358,9 @@ def _imports_optional(sources: Sequence[Path], module: str) -> bool:
     for source in sources:
         tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                if any(
-                    alias.name == qualified or alias.name.startswith(qualified + ".")
-                    for alias in node.names
-                ):
-                    return True
-            elif isinstance(node, ast.ImportFrom) and not node.level:
-                if node.module == qualified or (node.module or "").startswith(
-                    qualified + "."
-                ):
-                    return True
-                if node.module == "qgis_sdk" and any(
-                    alias.name == module for alias in node.names
-                ):
-                    return True
+            check = _IMPORT_CHECKS.get(type(node))
+            if check is not None and check(node, qualified, module):
+                return True
     return False
 
 
@@ -591,6 +399,36 @@ def _entry_points(config: ProjectConfig, *, runtime_package: str) -> dict[str, s
     }
 
 
+@dataclass(frozen=True, slots=True)
+class _StageFiles:
+    """The shared state one plugin package's file staging needs."""
+
+    staged: Path
+    package: Path
+    prefix: str
+    roots: Sequence[str]
+    extra: dict[str, str]
+
+
+def _stage_source_file(source: Path, files: _StageFiles) -> None:
+    """Copy one source file, rewriting Python imports and appending host text."""
+    relative = source.parent.relative_to(files.package)
+    target = files.staged / relative / source.name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if source.suffix != ".py":
+        shutil.copyfile(source, target)
+        return
+    text = source.read_text(encoding="utf-8")
+    if not relative.parts and source.name in files.extra:
+        body = text.rstrip("\n")
+        text = (body + "\n\n\n" if body else "") + files.extra.pop(source.name)
+    target.write_text(
+        rewrite_imports(text, prefix=files.prefix, roots=files.roots),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def _stage_plugin(
     package: Path,
     staged: Path,
@@ -610,21 +448,7 @@ def _stage_plugin(
     for source in walk_files(package, skip=EXCLUDED_DIRECTORIES):
         if source.suffix in EXCLUDED_SUFFIXES or source.name in EXCLUDED_FILES:
             continue
-        relative = source.parent.relative_to(package)
-        target = staged / relative / source.name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if source.suffix == ".py":
-            text = source.read_text(encoding="utf-8")
-            if not relative.parts and source.name in extra:
-                body = text.rstrip("\n")
-                text = (body + "\n\n\n" if body else "") + extra.pop(source.name)
-            target.write_text(
-                rewrite_imports(text, prefix=prefix, roots=roots),
-                encoding="utf-8",
-                newline="\n",
-            )
-        else:
-            shutil.copyfile(source, target)
+        _stage_source_file(source, _StageFiles(staged, package, prefix, roots, extra))
     for filename, text in extra.items():  # a package without the file at all
         (staged / filename).write_text(
             rewrite_imports(text, prefix=prefix, roots=roots),

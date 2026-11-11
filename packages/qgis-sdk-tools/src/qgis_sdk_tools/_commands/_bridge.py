@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
@@ -26,75 +27,113 @@ from qgis_sdk_tools.scaffold import (
     QgisSdkScaffoldError,
 )
 
+_PluginOpt = Annotated[
+    str | None,
+    typer.Option(
+        help="Plugin application as module:app, described without QGIS; "
+        "defaults to [tool.qgis-sdk] plugin in ./pyproject.toml."
+    ),
+]
+_DescriptionOpt = Annotated[
+    Path | None,
+    typer.Option(help="Plugin description JSON a host already produced."),
+]
+_HostOpt = Annotated[
+    bool,
+    typer.Option("--host", help="Render the curated host surface instead of a plugin."),
+]
+_OutOpt = Annotated[
+    Path | None,
+    typer.Option(
+        help="TypeScript module to write or check; a plugin defaults to "
+        "web/src/bridge.schema.ts."
+    ),
+]
+_CheckOpt = Annotated[
+    bool, typer.Option(help="Fail when OUT differs from a fresh generation.")
+]
+_ShowOpt = Annotated[
+    bool, typer.Option("--print", help="Write the module to stdout instead.")
+]
 
-@bridge_app.command("generate")
-def bridge_generate(
-    plugin: Annotated[
-        str | None,
-        typer.Option(
-            help="Plugin application as module:app, described without QGIS; "
-            "defaults to [tool.qgis-sdk] plugin in ./pyproject.toml."
-        ),
-    ] = None,
-    description: Annotated[
-        Path | None,
-        typer.Option(help="Plugin description JSON a host already produced."),
-    ] = None,
-    host: Annotated[
-        bool,
-        typer.Option(
-            "--host", help="Render the curated host surface instead of a plugin."
-        ),
-    ] = False,
-    out: Annotated[
-        Path | None,
-        typer.Option(
-            help="TypeScript module to write or check; a plugin defaults to "
-            "web/src/bridge.schema.ts."
-        ),
-    ] = None,
-    check: Annotated[
-        bool, typer.Option(help="Fail when OUT differs from a fresh generation.")
-    ] = False,
-    show: Annotated[
-        bool, typer.Option("--print", help="Write the module to stdout instead.")
-    ] = False,
-) -> None:
-    """Turn one plugin description into its typed bridge.schema.ts module.
 
-    The module carries the declaration and its types; ``QgisSdk.fromBridgeSchema``
-    gives a page the typed calls and the runtime checks (decision-44). An ``--out``
-    whose name does not end in ``.schema.ts`` still renders the legacy
-    self-contained client, with a note, for one minor release.
-    """
+@dataclass(frozen=True, slots=True)
+class _BridgeOptions:
+    """The resolved ``bridge generate`` options, as one record."""
+
+    plugin: str | None
+    description: Path | None
+    host: bool
+    out: Path | None
+    check: bool
+    show: bool
+
+
+def _bridge_output(options: _BridgeOptions, generator):
+    """Choose the output path and generator, warning for a legacy name."""
+    out = options.out
+    if out is None and not options.show and not options.host:
+        out = DEFAULT_SCHEMA_PATH
+    if out is not None and not options.host and not out.name.endswith(SCHEMA_SUFFIX):
+        typer.echo(
+            f"note: {out} is the legacy client module, kept for one minor "
+            f"release; name the output *{SCHEMA_SUFFIX} to generate the "
+            "schema module QgisSdk.fromBridgeSchema reads",
+            err=True,
+        )
+        return out, generate_typescript
+    return out, generator
+
+
+def _emit_bridge(options: _BridgeOptions, described, out, generator) -> None:
+    """Print, check or write the generated module, as the options ask."""
+    if options.show:
+        typer.echo(generator(described), nl=False)
+        return
+    if out is None:
+        raise QgisSdkBridgeError("give --out or --print")
+    if options.check:
+        message = check_generated(out, described, generate=generator)
+        if message is not None:
+            typer.echo(message, err=True)
+            raise typer.Exit(code=1)
+        typer.echo(f"{out} is up to date")
+        return
+    changed = write_generated(out, described, generate=generator)
+    typer.echo(f"{'wrote' if changed else 'unchanged'} {out}")
+
+
+def _generate_bridge(options: _BridgeOptions) -> None:
+    """Describe the plugin and emit its bridge module, translating errors."""
     try:
-        described, generator = _describe(plugin, description, host)
-        if out is None and not show and not host:
-            out = DEFAULT_SCHEMA_PATH
-        if out is not None and not host and not out.name.endswith(SCHEMA_SUFFIX):
-            generator = generate_typescript
-            typer.echo(
-                f"note: {out} is the legacy client module, kept for one minor "
-                f"release; name the output *{SCHEMA_SUFFIX} to generate the "
-                "schema module QgisSdk.fromBridgeSchema reads",
-                err=True,
-            )
-        if show:
-            typer.echo(generator(described), nl=False)
-        elif out is None:
-            raise QgisSdkBridgeError("give --out or --print")
-        elif check:
-            message = check_generated(out, described, generate=generator)
-            if message is not None:
-                typer.echo(message, err=True)
-                raise typer.Exit(code=1)
-            typer.echo(f"{out} is up to date")
-        else:
-            changed = write_generated(out, described, generate=generator)
-            typer.echo(f"{'wrote' if changed else 'unchanged'} {out}")
+        described, generator = _describe(
+            options.plugin, options.description, options.host
+        )
+        out, generator = _bridge_output(options, generator)
+        _emit_bridge(options, described, out, generator)
     except (QgisSdkBridgeError, QgisSdkScaffoldError) as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(code=1) from error
+
+
+@bridge_app.command("generate")
+@bridge_app.command("generate")
+def bridge_generate(
+    plugin: _PluginOpt = None,
+    description: _DescriptionOpt = None,
+    host: _HostOpt = False,
+    out: _OutOpt = None,
+    check: _CheckOpt = False,
+    show: _ShowOpt = False,
+) -> None:
+    """Turn one plugin description into its typed bridge.schema.ts module.
+
+    ``QgisSdk.fromBridgeSchema`` gives a page the typed calls and runtime checks
+    (decision-44). An ``--out`` not ending in ``.schema.ts`` still renders the
+    legacy self-contained client, with a note, for one minor release.
+    """
+    options = _BridgeOptions(plugin, description, host, out, check, show)
+    _generate_bridge(options)
 
 
 def _describe(

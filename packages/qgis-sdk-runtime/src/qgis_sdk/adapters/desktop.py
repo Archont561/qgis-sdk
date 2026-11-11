@@ -18,6 +18,7 @@ import functools
 import importlib
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -136,6 +137,24 @@ class DesktopLifecycleAdapter:
         self._runtime.start()
         self._start_job_pump()
 
+    def _pump_services(self) -> list[tuple[str, object, str | None]]:
+        """The three services a pump may tick, with their pump attribute and name."""
+        context = self._context
+        jobs = self._runtime.jobs
+        layouts = context.layouts if context.has("layouts") else None
+        algorithms = context.algorithms if context.has("algorithms") else None
+        specs: list[tuple[str, object, str | None]] = []
+        if jobs is not None:
+            specs.append(("_job_pump", jobs, None))
+        if layouts is not None:
+            specs.append(("_layout_pump", layouts.jobs, "layouts-job-pump"))
+        if algorithms is not None:
+            # A batch submits to the algorithms service's own job service,
+            # which needs its own tick whether or not the plugin declares jobs
+            # of its own (TASK-94).
+            specs.append(("_algorithms_pump", algorithms.jobs, "algorithms-job-pump"))
+        return specs
+
     def _start_job_pump(self) -> None:
         """Tick the plugin's jobs on the GUI thread while it runs (TASK-116).
 
@@ -144,34 +163,20 @@ class DesktopLifecycleAdapter:
         task in the task bar whether or not the plugin declares jobs of its
         own (TASK-89). One pump each, both stopped on unload.
         """
-        service = self._runtime.jobs
-        context = self._context
-        layouts = context.layouts if context.has("layouts") else None
-        algorithms = context.algorithms if context.has("algorithms") else None
-        if service is None and layouts is None and algorithms is None:
-            return
-        if not _qt_running():
+        specs = self._pump_services()
+        if not specs or not _qt_running():
             # A host without the Qt bindings - the reference workflow's own pure
             # tests, a fake-backed runtime - has no event loop to tick on: the
-            # test drives its jobs by hand, so there is nothing to pump and no
-            # pump to import.
+            # test drives its jobs by hand, so there is nothing to pump.
             return
         from qgis_sdk.adapters.qgis.jobs import QgsJobPump
 
-        if service is not None:
-            self._job_pump = QgsJobPump(service)
-            self._job_pump.start()
-        if layouts is not None:
-            self._layout_pump = QgsJobPump(layouts.jobs, name="layouts-job-pump")
-            self._layout_pump.start()
-        if algorithms is not None:
-            # A batch submits to the algorithms service's own job service,
-            # which needs its own tick whether or not the plugin declares jobs
-            # of its own (TASK-94).
-            self._algorithms_pump = QgsJobPump(
-                algorithms.jobs, name="algorithms-job-pump"
+        for attribute, service, name in specs:
+            pump = (
+                QgsJobPump(service) if name is None else QgsJobPump(service, name=name)
             )
-            self._algorithms_pump.start()
+            pump.start()
+            setattr(self, attribute, pump)
 
     def unload(self) -> None:
         """Dispose owned resources; repeated calls are safe."""
@@ -322,6 +327,49 @@ def resolve_plugin_spec(spec: str) -> QgisSdkPlugin:
     return target
 
 
+@dataclass(frozen=True, slots=True)
+class DesktopHostOptions:
+    """The keyword half of a :class:`DesktopHost` construction.
+
+    The generated ``classFactory`` passes one record rather than positional
+    field after field, so the page, placement and grant declarations stay
+    together (decision-81).
+    """
+
+    context_factory: ContextFactory
+    title: str
+    view_id: str
+    placement: str | None
+    grants: tuple[str, ...]
+    assets: Path
+    bindings: BindingsDescription | None = None
+    package_directory: Path | None = None
+
+
+def _desktop_surfaces(
+    iface: object | None,
+    bindings: BindingsDescription,
+    title: str,
+    package_directory: Path,
+) -> tuple[SurfaceHost | None, DesktopBindings | None]:
+    """Build the Desktop bindings only inside a running QGIS."""
+    if not qgis_is_running():
+        return None, None
+    from qgis_sdk.adapters.surfaces import DesktopBindings, SurfaceHost
+
+    plugin_id = bindings.plugin_id
+    surfaces = SurfaceHost(iface, plugin_id=plugin_id, title=title, bindings=bindings)
+    desktop = DesktopBindings(
+        iface,
+        plugin_id=plugin_id,
+        title=title,
+        bindings=bindings,
+        surfaces=surfaces,
+        package_directory=package_directory,
+    )
+    return surfaces, desktop
+
+
 class DesktopHost:
     """What ``host()``'s ``classFactory`` hands QGIS: lifecycle, bindings, page.
 
@@ -338,47 +386,28 @@ class DesktopHost:
         self,
         app: QgisSdkPlugin,
         iface: object | None,
-        *,
-        context_factory: ContextFactory,
-        title: str,
-        view_id: str,
-        placement: str | None,
-        grants: tuple[str, ...],
-        assets: Path,
-        bindings: BindingsDescription | None = None,
-        package_directory: Path | None = None,
+        options: DesktopHostOptions,
     ) -> None:
         self._iface = iface
-        self._title = title
-        self._view_id = view_id
-        self._placement = placement
-        self._grants = grants
-        self._assets = assets
-        self._package_directory = package_directory or assets.parent
+        self._title = options.title
+        self._view_id = options.view_id
+        self._placement = options.placement
+        self._grants = options.grants
+        self._assets = options.assets
+        self._package_directory = options.package_directory or options.assets.parent
+        self._options = options
         self._action: Any | None = None
         self._view: Any | None = None
-        self._bindings = bindings if bindings is not None else describe_bindings(app)
-        self._surfaces: SurfaceHost | None = None
-        self._desktop_bindings: DesktopBindings | None = None
-        if qgis_is_running():
-            from qgis_sdk.adapters.surfaces import DesktopBindings, SurfaceHost
-
-            plugin_id = self._bindings.plugin_id
-            self._surfaces = SurfaceHost(
-                iface, plugin_id=plugin_id, title=title, bindings=self._bindings
-            )
-            self._desktop_bindings = DesktopBindings(
-                iface,
-                plugin_id=plugin_id,
-                title=title,
-                bindings=self._bindings,
-                surfaces=self._surfaces,
-                package_directory=self._package_directory,
-            )
-            context_factory = _with_ui(context_factory, self._surfaces)
-        self._adapter = DesktopLifecycleAdapter(
-            app, iface, context_factory=context_factory
+        self._bindings = (
+            options.bindings if options.bindings is not None else describe_bindings(app)
         )
+        self._surfaces, self._desktop_bindings = _desktop_surfaces(
+            iface, self._bindings, options.title, self._package_directory
+        )
+        factory = options.context_factory
+        if self._surfaces is not None:
+            factory = _with_ui(factory, self._surfaces)
+        self._adapter = DesktopLifecycleAdapter(app, iface, context_factory=factory)
 
     @property
     def iface(self) -> object | None:
@@ -513,6 +542,60 @@ def _with_ui(factory: ContextFactory, surfaces: SurfaceHost) -> ContextFactory:
     return with_ui
 
 
+def _host_grants(grants: Sequence[str], placement: str | None) -> tuple[str, ...]:
+    """Resolve the declared grants; a page is required when any are given."""
+    if not grants:
+        return ()
+    from qgis_sdk.bridge.host import granted_operations
+
+    try:
+        granted = granted_operations(tuple(grants))
+    except QgisSdkError as error:
+        raise QgisSdkHostError(str(error)) from error
+    if granted and placement is None:
+        raise QgisSdkHostError("grants need a page; set placement as well")
+    return granted
+
+
+def _host_context_factory(app: QgisSdkPlugin, description: Any) -> ContextFactory:
+    """Use the application's own factory, else the default context factory."""
+    factory: ContextFactory | None = getattr(app, CONTEXT_FACTORY_ATTRIBUTE, None)
+    if factory is None:
+        factory = functools.partial(
+            default_context, plugin_id=description.id, title=description.title
+        )
+    return factory
+
+
+def _validate_placement(placement: str | None) -> None:
+    if placement is not None and placement not in PLACEMENTS:
+        raise QgisSdkHostError(
+            f"placement must be one of {', '.join(PLACEMENTS)}, got {placement!r}"
+        )
+
+
+def _host_application(
+    spec: str, placement: str | None, grants: Sequence[str]
+) -> tuple[QgisSdkPlugin, DesktopHostOptions]:
+    """Resolve the application and build the one record its host needs."""
+    _validate_placement(placement)
+    granted = _host_grants(grants, placement)
+    app = resolve_plugin_spec(spec)
+    description = app.describe()
+    package_directory = _package_directory(spec.partition(":")[0])
+    options = DesktopHostOptions(
+        context_factory=_host_context_factory(app, description),
+        title=description.title,
+        view_id=f"{description.id}.main",
+        placement=placement,
+        grants=granted,
+        assets=package_directory / ASSETS_DIRECTORY,
+        bindings=description.bindings,
+        package_directory=package_directory,
+    )
+    return app, options
+
+
 def host(
     spec: str,
     *,
@@ -521,52 +604,15 @@ def host(
 ) -> Callable[[object | None], DesktopHost]:
     """Return the ``classFactory`` for the application ``spec`` names.
 
-    ``qgis-sdk build`` and ``qgis-sdk dev`` write the one line that calls
-    this; an author never does. ``placement`` (``dock`` or ``dialog``) comes
-    from ``[tool.qgis-sdk.web]`` and turns the page on; ``grants`` names the
-    curated host operations the page may call - grants such as
-    ``layers.read`` or single operation ids - none by default; the host
-    keeps the operation ids they select. A callable
-    ``context_factory`` on the application replaces :func:`default_context`.
+    ``build``/``dev`` write the one line that calls this; an author never does.
+    ``placement`` (``dock``/``dialog``) turns the page on; ``grants`` names the
+    curated host operations the page may call, none by default. An application's
+    ``context_factory`` replaces :func:`default_context`.
     """
-    app = resolve_plugin_spec(spec)
-    description = app.describe()
-    bindings = description.bindings
-    if placement is not None and placement not in PLACEMENTS:
-        raise QgisSdkHostError(
-            f"placement must be one of {', '.join(PLACEMENTS)}, got {placement!r}"
-        )
-    granted: tuple[str, ...] = ()
-    if grants:
-        from qgis_sdk.bridge.host import granted_operations
-
-        try:
-            granted = granted_operations(tuple(grants))
-        except QgisSdkError as error:
-            raise QgisSdkHostError(str(error)) from error
-    if granted and placement is None:
-        raise QgisSdkHostError("grants need a page; set placement as well")
-    factory: ContextFactory | None = getattr(app, CONTEXT_FACTORY_ATTRIBUTE, None)
-    if factory is None:
-        factory = functools.partial(
-            default_context, plugin_id=description.id, title=description.title
-        )
-    package_directory = _package_directory(spec.partition(":")[0])
-    assets = package_directory / ASSETS_DIRECTORY
+    app, options = _host_application(spec, placement, grants)
 
     def classFactory(iface: object | None) -> DesktopHost:
-        return DesktopHost(
-            app,
-            iface,
-            context_factory=factory,
-            title=description.title,
-            view_id=f"{description.id}.main",
-            placement=placement,
-            grants=granted,
-            assets=assets,
-            bindings=bindings,
-            package_directory=package_directory,
-        )
+        return DesktopHost(app, iface, options)
 
     return classFactory
 

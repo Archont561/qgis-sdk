@@ -36,7 +36,7 @@ from qgis_sdk_tools.ui_diff import diff_snapshots
 from qgis_sdk_tools.ui_yaml import to_yaml
 
 
-def _capture_facts112(install, report_path, request_path, root, runtime):
+def _run_capture_probe(install, report_path, request_path, root, runtime):
     if install.python is None:
         typer.echo(
             f"{install.prefix} has no Python interpreter to run the capture; "
@@ -45,19 +45,21 @@ def _capture_facts112(install, report_path, request_path, root, runtime):
         )
         raise typer.Exit(code=2)
     report_path.unlink(missing_ok=True)
-    return _capture_facts11(install, report_path, request_path, root, runtime)
+    return _capture_process_environment(
+        install, report_path, request_path, root, runtime
+    )
 
 
-def _capture_facts11(install, report_path, request_path, root, runtime):
+def _capture_process_environment(install, report_path, request_path, root, runtime):
     env = install.environment(
         runtime.env, extra_paths=(root, *sdk_import_paths()), headless=True
     )
     env[REQUEST_ENV] = str(request_path)
     code = runtime.run_process((str(install.python), "-m", PROBE_ENTRYPOINT), root, env)
-    return _capture_facts1(code, report_path, runtime)
+    return _read_capture_report(code, report_path, runtime)
 
 
-def _capture_facts1(code, report_path, runtime):
+def _read_capture_report(code, report_path, runtime):
     if not report_path.exists():
         typer.echo("the QGIS capture wrote no report", file=runtime.err)
         raise typer.Exit(code=code or 1)
@@ -124,11 +126,9 @@ def _steps(raw: list[str]) -> list[ActStep]:
     return steps
 
 
-def _capture(
-    runtime: CliRuntime, **options: Unpack[_CaptureOptions1]
-) -> dict[str, Any]:
+def _capture(runtime: CliRuntime, **options: Unpack[_CaptureOptions]) -> dict[str, Any]:
     """Run the probe in a QGIS interpreter and return the report it wrote."""
-    values = _CaptureValues1(**options)
+    values = _CaptureValues(**options)
     root = runtime.resolve(values.project)
     plugin = inspect_project(root).plugin
     workspace = root / STATE_DIRECTORY / "ui"
@@ -150,7 +150,7 @@ def _capture(
         json.dumps(request.to_mapping(), indent=2), encoding="utf-8"
     )
     install = find_qgis_install(runtime.env, prefix=values.qgis_prefix, project=root)
-    return _capture_facts112(install, report_path, request_path, root, runtime)
+    return _run_capture_probe(install, report_path, request_path, root, runtime)
 
 
 def _print_captures(runtime: CliRuntime, report: dict[str, Any], fmt: str) -> None:
@@ -245,6 +245,55 @@ def snapshot_surface(
     _print_captures(runtime, report, chosen)
 
 
+def _print_step_values(
+    runtime: CliRuntime, report: dict[str, Any], chosen: str
+) -> None:
+    """Echo what each widget held after the steps, unless YAML was requested."""
+    if chosen == "yaml":
+        return
+    for applied in report["steps"]:
+        # What the widget holds afterwards is the point of acting; the
+        # requested value is only what was asked for.
+        after = applied.get("value_after", applied.get("value"))
+        typer.echo(
+            f"{applied['node']} {applied['verb']} -> {after!r}", file=runtime.out
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _SurfaceAction:
+    """Everything ``ui act`` needs from the CLI, as one record."""
+
+    project: Path
+    surface: str
+    out: Path | None
+    screenshot: bool
+    steps: list[ActStep]
+    qgis_prefix: Path | None
+    fmt: str
+
+
+def _drive_surface(runtime: CliRuntime, action: _SurfaceAction) -> None:
+    """Drive a surface through Qt, then capture and report what it became."""
+    chosen = _format(action.fmt)
+    if not action.steps:
+        typer.echo(
+            "ui act needs at least one --step NODE:VERB[:VALUE]", file=runtime.err
+        )
+        raise typer.Exit(code=2)
+    report = _capture(
+        runtime,
+        project=action.project,
+        surface=action.surface,
+        output=action.out,
+        screenshot=action.screenshot,
+        steps=action.steps,
+        qgis_prefix=action.qgis_prefix,
+    )
+    _print_captures(runtime, report, chosen)
+    _print_step_values(runtime, report, chosen)
+
+
 @ui_app.command("act")
 def act_on_surface(
     ctx: typer.Context,
@@ -262,35 +311,34 @@ def act_on_surface(
 ) -> None:
     """Drive a surface through Qt, then capture what it became.
 
-    This is `ui snapshot` with the interactions made mandatory: a capture of a
-    surface nobody touched is what `snapshot` is for.
+    `ui snapshot` with interactions made mandatory: a capture of an untouched
+    surface is what `snapshot` is for.
     """
-    runtime: CliRuntime = ctx.obj
-    chosen = _format(fmt)
-    steps = _steps(step)
-    if not steps:
-        typer.echo(
-            "ui act needs at least one --step NODE:VERB[:VALUE]", file=runtime.err
-        )
-        raise typer.Exit(code=2)
-    report = _capture(
-        runtime,
-        project=project,
-        surface=surface,
-        output=out,
-        screenshot=screenshot,
-        steps=steps,
-        qgis_prefix=qgis_prefix,
+    action = _SurfaceAction(
+        project, surface, out, screenshot, _steps(step), qgis_prefix, fmt
     )
-    _print_captures(runtime, report, chosen)
-    if chosen != "yaml":
-        for applied in report["steps"]:
-            # What the widget holds afterwards is the point of acting; the
-            # requested value is only what was asked for.
-            after = applied.get("value_after", applied.get("value"))
-            typer.echo(
-                f"{applied['node']} {applied['verb']} -> {after!r}", file=runtime.out
-            )
+    _drive_surface(ctx.obj, action)
+
+
+def _diff_payload(difference) -> dict[str, Any]:
+    """The JSON form of one structural diff, including its pixel-only changes."""
+    return {
+        "structural": bool(difference),
+        "identical": difference.identical,
+        "changes": [
+            {
+                "where": change.where,
+                "field": change.field,
+                "before": change.before,
+                "after": change.after,
+            }
+            for change in difference.changes
+        ],
+        "pixels": [
+            {"where": change.where, "field": change.field}
+            for change in difference.pixels
+        ],
+    }
 
 
 @ui_app.command("diff")
@@ -310,31 +358,14 @@ def diff_captures(
     new = json.loads(runtime.resolve(after).read_text(encoding="utf-8"))
     difference = diff_snapshots(old, new)
     if as_json:
-        payload = {
-            "structural": bool(difference),
-            "identical": difference.identical,
-            "changes": [
-                {
-                    "where": change.where,
-                    "field": change.field,
-                    "before": change.before,
-                    "after": change.after,
-                }
-                for change in difference.changes
-            ],
-            "pixels": [
-                {"where": change.where, "field": change.field}
-                for change in difference.pixels
-            ],
-        }
-        typer.echo(_render(payload, chosen), file=runtime.out)
+        typer.echo(_render(_diff_payload(difference), chosen), file=runtime.out)
     else:
         typer.echo(difference.render(), file=runtime.out)
     if difference:
         raise typer.Exit(code=1)
 
 
-class _CaptureOptions1(TypedDict, total=False):
+class _CaptureOptions(TypedDict, total=False):
     project: Path
     surface: str
     output: Path | None
@@ -345,7 +376,7 @@ class _CaptureOptions1(TypedDict, total=False):
 
 
 @dataclass(frozen=True, slots=True)
-class _CaptureValues1:
+class _CaptureValues:
     project: Path
     surface: str
     output: Path | None

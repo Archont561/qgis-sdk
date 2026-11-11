@@ -51,7 +51,7 @@ from qgis_sdk.services import (
 )
 
 
-def _declare_layouts_phase1(
+def _write_layout_template(
     QgsPrintLayout, QgsProject, QgsReadWriteContext, manager, template_file
 ):
     existing = manager.layoutByName(TEMPLATE_LAYOUT)
@@ -419,27 +419,27 @@ def _layout_work_directory() -> Path:
 _GEOTIFF: list[Path] = []
 
 
-def _geotiff_fixture() -> Path:
-    """Convert ``elevation.asc`` to a GeoTIFF, once per session."""
-    if _GEOTIFF:
-        return _GEOTIFF[0]
-    from qgis.core import (
-        QgsCoordinateReferenceSystem,
-        QgsCoordinateTransformContext,
-        QgsRasterFileWriter,
-        QgsRasterLayer,
-        QgsRasterPipe,
-    )
+def _geotiff_source():
+    """Open the fixture grid, and give it the CRS its sidecar may not carry."""
+    from qgis.core import QgsCoordinateReferenceSystem, QgsRasterLayer
 
     source = QgsRasterLayer(str(RASTER_DATASET), RASTER_NAME, "gdal")
     if not source.isValid():
         pytest.fail(f"the raster fixture {RASTER_DATASET} is not readable")
-    # The grid's own ``.prj`` is a sidecar the driver may or may not load, and
-    # the contract is about a raster that knows its CRS: the conversion declares
-    # it outright so the GeoTIFF carries EPSG:4326 either way.
     crs = source.crs()
     if not crs.isValid():
         crs = QgsCoordinateReferenceSystem(FIXTURE_CRS)
+    return source, crs
+
+
+def _write_geotiff(source, crs) -> Path:
+    """Convert the grid with the same GDAL a plugin ships with."""
+    from qgis.core import (
+        QgsCoordinateTransformContext,
+        QgsRasterFileWriter,
+        QgsRasterPipe,
+    )
+
     destination = _WORK_ROOT / "elevation.tif"
     pipe = QgsRasterPipe()
     if not pipe.set(source.dataProvider().clone()):
@@ -456,6 +456,15 @@ def _geotiff_fixture() -> Path:
     )
     if written != QgsRasterFileWriter.NoError:
         pytest.fail(f"the raster fixture could not be written: {written}")
+    return destination
+
+
+def _geotiff_fixture() -> Path:
+    """Convert ``elevation.asc`` to a GeoTIFF, once per session."""
+    if _GEOTIFF:
+        return _GEOTIFF[0]
+    source, crs = _geotiff_source()
+    destination = _write_geotiff(source, crs)
     _GEOTIFF.append(destination)
     return destination
 
@@ -891,6 +900,57 @@ def _fake_services() -> Services:
     )
 
 
+def _native_layout_coverage(project):
+    """Open the coverage layer the way a user opens one, and add it to the project."""
+    from qgis.core import QgsVectorLayer
+
+    layer = QgsVectorLayer(str(FIXTURE_DATASET), FIXTURE_NAME, "ogr")
+    if not layer.isValid():
+        pytest.fail(f"the layout coverage layer {FIXTURE_DATASET} is not readable")
+    project.addMapLayer(layer)
+    return layer
+
+
+def _native_layout_pages(manager, project) -> None:
+    """Add the three named layouts with the page counts the contract declares."""
+    from qgis.core import QgsLayoutItemPage, QgsPrintLayout
+
+    for name, pages in (
+        (LAYOUT_NAME, LAYOUT_PAGES),
+        (SINGLE_PAGE_LAYOUT, 1),
+        (ATLAS_NAME, 1),
+    ):
+        if manager.layoutByName(name) is not None:
+            continue
+        layout = QgsPrintLayout(project)
+        layout.initializeDefaults()
+        layout.setName(name)
+        for _ in range(pages - 1):
+            page = QgsLayoutItemPage(layout)
+            page.setPageSize("A4")
+            layout.pageCollection().addPage(page)
+        manager.addLayout(layout)
+
+
+def _native_atlas(manager, layer) -> None:
+    """Point the atlas at the coverage layer and give it its filename expression."""
+    atlas = manager.layoutByName(ATLAS_NAME).atlas()
+    atlas.setCoverageLayer(layer)
+    # The template's own expression: the SDK's runs name the files itself,
+    # so this is only what the layout manager stores.
+    atlas.setFilenameExpression("'sheet-' || @atlas_featureid")
+    atlas.setEnabled(True)
+
+
+def _save_native_template(manager, template_file) -> None:
+    """Save the template from a layout of its own name, then remove that layout."""
+    from qgis.core import QgsPrintLayout, QgsProject, QgsReadWriteContext
+
+    _write_layout_template(
+        QgsPrintLayout, QgsProject, QgsReadWriteContext, manager, template_file
+    )
+
+
 def _native_services() -> Services:
     # The session's application, started here if no module asked before.
     test_layers.start_application()
@@ -1093,48 +1153,19 @@ def _native_services() -> Services:
 
     def declare_layouts() -> None:
         """Put the contract's layouts in the project, and save the template."""
-        from qgis.core import (
-            QgsLayoutItemPage,
-            QgsPrintLayout,
-            QgsProject,
-            QgsReadWriteContext,
-            QgsVectorLayer,
-        )
+        from qgis.core import QgsProject
 
-        manager = QgsProject.instance().layoutManager()
-        # The coverage layer is opened the way a user opens one, and added to the
-        # project, because an atlas reads its features from a layer the project
-        # holds rather than from a file on its own.
-        layer = QgsVectorLayer(str(FIXTURE_DATASET), FIXTURE_NAME, "ogr")
-        if not layer.isValid():
-            pytest.fail(f"the layout coverage layer {FIXTURE_DATASET} is not readable")
-        QgsProject.instance().addMapLayer(layer)
-        for name, pages in (
-            (LAYOUT_NAME, LAYOUT_PAGES),
-            (SINGLE_PAGE_LAYOUT, 1),
-            (ATLAS_NAME, 1),
-        ):
-            if manager.layoutByName(name) is not None:
-                continue
-            layout = QgsPrintLayout(QgsProject.instance())
-            layout.initializeDefaults()
-            layout.setName(name)
-            for _ in range(pages - 1):
-                page = QgsLayoutItemPage(layout)
-                page.setPageSize("A4")
-                layout.pageCollection().addPage(page)
-            manager.addLayout(layout)
-        atlas = manager.layoutByName(ATLAS_NAME).atlas()
-        atlas.setCoverageLayer(layer)
-        # The template's own expression: the SDK's runs name the files itself,
-        # so this is only what the layout manager stores.
-        atlas.setFilenameExpression("'sheet-' || @atlas_featureid")
-        atlas.setEnabled(True)
+        project = QgsProject.instance()
+        manager = project.layoutManager()
+        # The coverage layer is opened the way a user opens one, and added to
+        # the project, because an atlas reads its features from a layer the
+        # project holds rather than from a file on its own.
+        layer = _native_layout_coverage(project)
+        _native_layout_pages(manager, project)
+        _native_atlas(manager, layer)
         # The template is saved from a layout of its own name and the layout is
         # removed again, so loading the file adds that name to the project.
-        _declare_layouts_phase1(
-            QgsPrintLayout, QgsProject, QgsReadWriteContext, manager, template_file
-        )
+        _save_native_template(manager, template_file)
 
     def drive_layouts() -> None:
         service = layouts.jobs

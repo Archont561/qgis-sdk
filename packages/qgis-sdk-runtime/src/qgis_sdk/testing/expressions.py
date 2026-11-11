@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import operator as _operator
 import re
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -168,9 +168,99 @@ def _compare(row: Mapping[str, Any], field: str, op: str, value: Any) -> bool:
         return False
 
 
+class _ExpressionReader:
+    """The mutable cursor while one expression is read clause by clause."""
+
+    def __init__(self, tokens: Sequence[_Token], known: tuple[str, ...]) -> None:
+        self.tokens = tokens
+        self.known = known
+        self.index = 0
+        self.clauses: list[tuple[str, str, Any]] = []
+        self.joins: list[str] = []
+
+    def need(self, kind: str) -> _Token:
+        """Read one token of ``kind``, or refuse naming what was read."""
+        if self.index >= len(self.tokens) or self.tokens[self.index].kind != kind:
+            found = (
+                self.tokens[self.index].value
+                if self.index < len(self.tokens)
+                else "the end"
+            )
+            raise QgisSdkUnsupportedCapabilityError(
+                f"the fake expression subset expected {kind} and read {found!r}"
+            )
+        self.index += 1
+        return self.tokens[self.index - 1]
+
+    def field(self) -> str:
+        """Read and validate the field name one comparison starts with."""
+        if self.index < len(self.tokens) and self.tokens[self.index].kind == "paren":
+            raise QgisSdkUnsupportedCapabilityError(
+                "the fake expression subset has no parentheses; "
+                "use QGIS for a nested expression"
+            )
+        token = self.tokens[self.index] if self.index < len(self.tokens) else None
+        if token is None or token.kind not in ("name", "string"):
+            raise QgisSdkUnsupportedCapabilityError(
+                "the fake expression subset compares a field with a value"
+            )
+        self.index += 1
+        name = token.value if token.kind == "name" else token.value[1:-1]
+        if name.lower() in ("and", "or", "not"):
+            raise QgisSdkUnsupportedCapabilityError(
+                f"the fake expression subset has no function call {name!r}"
+            )
+        if name not in self.known:
+            raise QgisSdkUnsupportedCapabilityError(
+                f"the layer has no field {name!r}; fields are {list(self.known)}"
+            )
+        return name
+
+    def clause(self, field: str) -> None:
+        """Read one ``IS NULL`` or comparison clause for ``field``."""
+        if self.index < len(self.tokens) and self.tokens[self.index].kind == "isnull":
+            self.clauses.append((field, self.tokens[self.index].value.upper(), None))
+            self.index += 1
+            return
+        operator = self.need("op").value.upper()
+        if self.index >= len(self.tokens) or self.tokens[self.index].kind not in (
+            "number",
+            "string",
+            "name",
+        ):
+            raise QgisSdkUnsupportedCapabilityError(
+                "the fake expression subset compares a field with a literal"
+            )
+        self.clauses.append((field, operator, _literal(self.tokens[self.index])))
+        self.index += 1
+
+    def join(self) -> None:
+        """Read the and/or joining this clause to the next one."""
+        value = self.need("logic").value.upper()
+        if value not in ("AND", "OR"):
+            raise QgisSdkUnsupportedCapabilityError(
+                f"the fake expression subset joins with and/or, not {value!r}"
+            )
+        self.joins.append(value)
+
+    def expression(self) -> ParsedExpression:
+        """Read clauses and joins until the tokens run out."""
+        while True:
+            self.clause(self.field())
+            if self.index >= len(self.tokens):
+                break
+            self.join()
+        return ParsedExpression(
+            clauses=tuple(self.clauses),
+            joins=tuple(self.joins),
+            columns=tuple(self.known),
+        )
+
+
 class ExpressionSubset:
     """Parse and run the subset; one instance, no state between calls."""
 
+    @staticmethod
     @staticmethod
     def parse(text: str, fields: Iterable[str]) -> ParsedExpression:
         """Parse ``text``, refusing anything outside the subset by name."""
@@ -178,71 +268,4 @@ class ExpressionSubset:
             raise QgisSdkUnsupportedCapabilityError(
                 "an expression is a non-empty string"
             )
-        tokens = _tokenize(text)
-        known = tuple(fields)
-        clauses: list[tuple[str, str, Any]] = []
-        joins: list[str] = []
-        index = 0
-
-        def need(kind: str) -> _Token:
-            nonlocal index
-            if index >= len(tokens) or tokens[index].kind != kind:
-                found = tokens[index].value if index < len(tokens) else "the end"
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"the fake expression subset expected {kind} and read {found!r}"
-                )
-            index += 1
-            return tokens[index - 1]
-
-        while True:
-            if index < len(tokens) and tokens[index].kind == "paren":
-                raise QgisSdkUnsupportedCapabilityError(
-                    "the fake expression subset has no parentheses; "
-                    "use QGIS for a nested expression"
-                )
-            field_token = tokens[index] if index < len(tokens) else None
-            if field_token is None or field_token.kind not in ("name", "string"):
-                raise QgisSdkUnsupportedCapabilityError(
-                    "the fake expression subset compares a field with a value"
-                )
-            index += 1
-            field = (
-                field_token.value
-                if field_token.kind == "name"
-                else field_token.value[1:-1]
-            )
-            if field.lower() in ("and", "or", "not"):
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"the fake expression subset has no function call {field!r}"
-                )
-            if field not in known:
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"the layer has no field {field!r}; fields are {list(known)}"
-                )
-            if index < len(tokens) and tokens[index].kind == "isnull":
-                clauses.append((field, tokens[index].value.upper(), None))
-                index += 1
-            else:
-                operator = need("op").value.upper()
-                if index >= len(tokens) or tokens[index].kind not in (
-                    "number",
-                    "string",
-                    "name",
-                ):
-                    raise QgisSdkUnsupportedCapabilityError(
-                        "the fake expression subset compares a field with a literal"
-                    )
-                value = _literal(tokens[index])
-                index += 1
-                clauses.append((field, operator, value))
-            if index >= len(tokens):
-                break
-            join = need("logic").value.upper()
-            if join not in ("AND", "OR"):
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"the fake expression subset joins with and/or, not {join!r}"
-                )
-            joins.append(join)
-        return ParsedExpression(
-            clauses=tuple(clauses), joins=tuple(joins), columns=tuple(known)
-        )
+        return _ExpressionReader(_tokenize(text), tuple(fields)).expression()
