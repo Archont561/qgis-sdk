@@ -26,9 +26,8 @@ from qgis_sdk.models import (
 )
 
 
-def _destination_name_tail1(**values):
-    name = values["name"]
-    parameter = values["parameter"]
+def _destination_name_tail(name: str, parameter: ParameterInfo) -> str:
+    """Attach the extension a destination kind answers under."""
     extension = parameter.extension or DEFAULT_EXTENSIONS.get(parameter.kind, "out")
     if (
         not name
@@ -104,6 +103,23 @@ def _is_local_destination(value: object) -> bool:
     return "://" not in value and "|" not in value
 
 
+def _declare_model_output(declared: dict[str, str], entry: ElementTree.Element) -> None:
+    """Record one exposed model output under both names it may be answered by."""
+    name = entry.get("name") or ""
+    fields = {
+        option.get("name"): option.get("value") or ""
+        for option in entry.findall("Option")
+    }
+    description = fields.get("description") or ""
+    if not name or not description:
+        return
+    declared[name] = description
+    child = fields.get("child_id") or ""
+    output = fields.get("output_name") or name
+    if child:
+        declared[f"{child}:{output}"] = description
+
+
 def declared_model_outputs(model_file: Path) -> dict[str, str]:
     """What a ``.model3`` document says each exposed output is, by description.
 
@@ -128,20 +144,78 @@ def declared_model_outputs(model_file: Path) -> dict[str, str]:
         if section.get("name") != "outputs" or section.get("type") != "Map":
             continue
         for entry in section.findall("Option"):
-            name = entry.get("name") or ""
-            fields = {
-                option.get("name"): option.get("value") or ""
-                for option in entry.findall("Option")
-            }
-            description = fields.get("description") or ""
-            if not name or not description:
-                continue
-            declared[name] = description
-            child = fields.get("child_id") or ""
-            output = fields.get("output_name") or name
-            if child:
-                declared[f"{child}:{output}"] = description
+            _declare_model_output(declared, entry)
     return declared
+
+
+def _derived_name(label: str) -> str:
+    """A designer's description as a version-2 output name."""
+    return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+
+
+def _name_tail(name: str) -> str:
+    """The child's own name, when no description survives."""
+    return name.rsplit(":", 1)[-1].lower()
+
+
+def _candidate_names(
+    info: AlgorithmInfo, declared_text: Mapping[str, str]
+) -> dict[str, str]:
+    """One name per output definition and per destination parameter."""
+    names: dict[str, str] = {}
+    for output in info.outputs:
+        text = declared_text.get(output.name, output.label)
+        names[output.name] = _derived_name(text) or _name_tail(output.name)
+    # The destination parameter is the same output seen from the run's side,
+    # and its description is the one the designer wrote, so it wins.
+    for parameter in info.parameters:
+        if not parameter.destination:
+            continue
+        text = declared_text.get(parameter.name, parameter.label)
+        names[parameter.name] = (
+            _derived_name(text)
+            or names.get(parameter.name)
+            or _name_tail(parameter.name)
+        )
+    return names
+
+
+def _unique_names(names: Mapping[str, str]) -> dict[str, str]:
+    """Disambiguate equal derived names with an ascending numeric suffix."""
+    taken: set[str] = set()
+    unique: dict[str, str] = {}
+    for key, candidate in names.items():
+        base = candidate
+        suffix = 2
+        while candidate in taken:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        taken.add(candidate)
+        unique[key] = candidate
+    return unique
+
+
+def _described_outputs(
+    info: AlgorithmInfo, names: Mapping[str, str]
+) -> tuple[OutputInfo, ...]:
+    """Rename definitions and add destinations the definitions omit."""
+    described = [replace(output, name=names[output.name]) for output in info.outputs]
+    declared = {output.name for output in described}
+    for parameter in info.parameters:
+        if not parameter.destination:
+            continue
+        candidate = names[parameter.name]
+        if candidate in declared:
+            continue
+        described.append(
+            OutputInfo(
+                name=candidate,
+                kind=DESTINATION_OUTPUT_KINDS.get(parameter.kind, "outputFile"),
+                label=parameter.label,
+            )
+        )
+        declared.add(candidate)
+    return tuple(described)
 
 
 def model_output_names(
@@ -168,52 +242,8 @@ def model_output_names(
     parameter definitions. It wins over both.
     """
     declared_text = dict(descriptions or {})
-
-    def derived(label: str) -> str:
-        return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
-
-    def tail(name: str) -> str:
-        return name.rsplit(":", 1)[-1].lower()
-
-    names: dict[str, str] = {}
-    for output in info.outputs:
-        text = declared_text.get(output.name, output.label)
-        names[output.name] = derived(text) or tail(output.name)
-    # The destination parameter is the same output seen from the run's side,
-    # and its description is the one the designer wrote, so it wins.
-    for parameter in info.parameters:
-        if not parameter.destination:
-            continue
-        text = declared_text.get(parameter.name, parameter.label)
-        names[parameter.name] = (
-            derived(text) or names.get(parameter.name) or tail(parameter.name)
-        )
-    taken: set[str] = set()
-    for key, candidate in list(names.items()):
-        base = candidate
-        suffix = 2
-        while candidate in taken:
-            candidate = f"{base}_{suffix}"
-            suffix += 1
-        taken.add(candidate)
-        names[key] = candidate
-    declared = {output.name for output in info.outputs}
-    described = [replace(output, name=names[output.name]) for output in info.outputs]
-    for parameter in info.parameters:
-        if not parameter.destination:
-            continue
-        candidate = names[parameter.name]
-        if candidate in {output.name for output in described}:
-            continue
-        described.append(
-            OutputInfo(
-                name=candidate,
-                kind=DESTINATION_OUTPUT_KINDS.get(parameter.kind, "outputFile"),
-                label=parameter.label,
-            )
-        )
-        declared.add(candidate)
-    return replace(info, outputs=tuple(described)), names
+    names = _unique_names(_candidate_names(info, declared_text))
+    return replace(info, outputs=_described_outputs(info, names)), names
 
 
 def coerce_run(
@@ -240,12 +270,8 @@ def coerce_run(
     )
 
 
-def plan_destinations(
-    info: AlgorithmInfo,
-    params: Mapping[str, object],
-    resolve_file: Callable[[FileRef], Path],
-) -> dict[str, Path]:
-    """Validate allocated names and plan at most one new local vector file."""
+def _allocated_names(info: AlgorithmInfo, params: Mapping[str, object]) -> None:
+    """Refuse two implicit destinations that translate to the same file name."""
     allocated: set[str] = set()
     for parameter in info.parameters:
         if not parameter.destination or params.get(parameter.name) is not None:
@@ -259,6 +285,12 @@ def plan_destinations(
                 info.id, ["allocated destination names collide"]
             )
         allocated.add(relative)
+
+
+def _explicit_destinations(
+    info: AlgorithmInfo, params: Mapping[str, object]
+) -> list[tuple[ParameterInfo, object]]:
+    """At most one destination may be published safely in a single run."""
     supplied = [
         (parameter, params[parameter.name])
         for parameter in info.parameters
@@ -268,46 +300,73 @@ def plan_destinations(
         raise QgisSdkAlgorithmRejectedError(
             info.id, ["at most one explicit destination can be published safely"]
         )
-    result: dict[str, Path] = {}
-    for parameter, value in supplied:
-        if isinstance(value, FileRef):
-            path = resolve_file(value)
-        elif _is_local_destination(value):
-            path = Path(value)
-        else:
-            raise QgisSdkAlgorithmRejectedError(
-                info.id, [f"{parameter.name} must be a new local file destination"]
-            )
-        if parameter.kind not in {
-            "sink",
-            "vectorDestination",
-        } or path.suffix.lower() not in {".geojson", ".gpkg"}:
-            raise QgisSdkAlgorithmRejectedError(
-                info.id,
-                [
-                    f"{parameter.name} supports only new GeoJSON or GeoPackage vector files"
-                ],
-            )
+    return supplied
+
+
+def _destination_file(
+    value: object,
+    parameter: ParameterInfo,
+    resolve_file: Callable[[FileRef], Path],
+    info: AlgorithmInfo,
+) -> Path:
+    """A FileRef or a local string path; never a URI or a pipe."""
+    if isinstance(value, FileRef):
+        return resolve_file(value)
+    if _is_local_destination(value):
+        return Path(value)
+    raise QgisSdkAlgorithmRejectedError(
+        info.id, [f"{parameter.name} must be a new local file destination"]
+    )
+
+
+def _check_vector_file(parameter: ParameterInfo, path: Path, algorithm_id: str) -> None:
+    """Only new GeoJSON and GeoPackage vector files are publishable."""
+    if parameter.kind not in {
+        "sink",
+        "vectorDestination",
+    } or path.suffix.lower() not in {".geojson", ".gpkg"}:
+        raise QgisSdkAlgorithmRejectedError(
+            algorithm_id,
+            [f"{parameter.name} supports only new GeoJSON or GeoPackage vector files"],
+        )
+
+
+def _new_vector_path(path: Path, parameter: ParameterInfo, algorithm_id: str) -> Path:
+    """Resolve an existing parent and refuse a path that is already taken."""
+    try:
+        parent = path.parent.resolve(strict=True)
+        path = parent / path.name
+        if not parent.is_dir():
+            raise ValueError("the destination directory is not a directory")
         try:
-            parent = path.parent.resolve(strict=True)
-            path = parent / path.name
-            if not parent.is_dir():
-                raise ValueError("the destination directory is not a directory")
-            try:
-                os.lstat(path)
-            except FileNotFoundError:
-                pass
-            else:
-                raise ValueError("the destination already exists")
-        except ValueError as error:
-            raise QgisSdkAlgorithmRejectedError(
-                info.id, [f"{parameter.name} cannot be published safely: {error}"]
-            ) from error
-        except (OSError, RuntimeError) as error:
-            raise QgisSdkAlgorithmRejectedError(
-                info.id, [f"{parameter.name} destination cannot be verified"]
-            ) from error
-        result[parameter.name] = path
+            os.lstat(path)
+        except FileNotFoundError:
+            pass
+        else:
+            raise ValueError("the destination already exists")
+    except ValueError as error:
+        raise QgisSdkAlgorithmRejectedError(
+            algorithm_id, [f"{parameter.name} cannot be published safely: {error}"]
+        ) from error
+    except (OSError, RuntimeError) as error:
+        raise QgisSdkAlgorithmRejectedError(
+            algorithm_id, [f"{parameter.name} destination cannot be verified"]
+        ) from error
+    return path
+
+
+def plan_destinations(
+    info: AlgorithmInfo,
+    params: Mapping[str, object],
+    resolve_file: Callable[[FileRef], Path],
+) -> dict[str, Path]:
+    """Validate allocated names and plan at most one new local vector file."""
+    _allocated_names(info, params)
+    result: dict[str, Path] = {}
+    for parameter, value in _explicit_destinations(info, params):
+        path = _destination_file(value, parameter, resolve_file, info)
+        _check_vector_file(parameter, path, info.id)
+        result[parameter.name] = _new_vector_path(path, parameter, info.id)
     return result
 
 
@@ -348,7 +407,7 @@ def _destination_name(parameter: ParameterInfo) -> str:
             "an allocated destination has an unsafe provider-defined name or extension"
         )
     name = _UNSAFE_IN_NAME.sub("_", parameter.name.lower()).strip("_")[:128]
-    return _destination_name_tail1(**{**globals(), **locals()})
+    return _destination_name_tail(name, parameter)
 
 
 def destination_path(run_directory: Path, parameter: ParameterInfo) -> Path:
