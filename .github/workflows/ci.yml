@@ -235,9 +235,16 @@ jobs:
         if: failure() && steps.coverage.outcome == 'failure'
         run: python -m automation.ci annotate-coverage coverage-output.log
 
+      # Codecov is a reporting destination, not a gate: the 90% coverage checks
+      # above already ran. A deactivated Codecov repository or an upload outage
+      # must not turn a green pull request red (see doc-14). Keep
+      # `fail_ci_if_error: true` inside the action so the error is annotated,
+      # but do not let it fail the required `Linux coverage` context. The
+      # follow-up step turns the rejection into a warning and a job summary.
       - name: Upload Python coverage
         id: s16
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        continue-on-error: true
         # v6+ is the first codecov major whose embedded github-script targets
         # node24; v5 makes fresh runs emit Node 20 deprecation warnings.
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -250,6 +257,7 @@ jobs:
       - name: Upload TypeScript coverage
         id: s17
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        continue-on-error: true
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage/qgis-sdk-typescript/lcov.info
@@ -260,12 +268,24 @@ jobs:
       - name: Upload UI coverage
         id: s24
         if: ${{ !cancelled() && steps.coverage.outcome == 'success' }}
+        continue-on-error: true
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage/qgis-sdk-ui/lcov.info
           flags: qgis-sdk-ui
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Report unavailable Codecov uploads
+        id: s29
+        if: ${{ !cancelled() && steps.coverage.outcome == 'success' && (steps.s16.outcome == 'failure' || steps.s17.outcome == 'failure' || steps.s24.outcome == 'failure') }}
+        run: |
+          set -euo pipefail
+          echo "::warning title=Codecov upload unavailable::The coverage checks passed, but Codecov did not accept one or more LCOV reports; the pull request is not at fault"
+          {
+            echo "### Codecov uploads unavailable"
+            echo "The Python, TypeScript and UI 90% coverage checks passed. Codecov did not accept one or more LCOV reports, so the external dashboard may be stale; the CI gate is unaffected."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # A red job whose report is only "exit code 1" costs a rerun to diagnose,
       # and the log archive is not reachable from every client. Every step above
