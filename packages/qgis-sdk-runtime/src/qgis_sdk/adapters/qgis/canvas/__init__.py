@@ -26,5 +26,6 @@ theme list and the active name are one answer read from two places.
 from __future__ import annotations
 
 from ._canvas import NativeCanvas
+from ._tool import CaptureTool as _CaptureTool  # noqa: F401
 
 __all__ = ["NativeCanvas"]
