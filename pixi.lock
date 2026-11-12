@@ -102,7 +102,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/urllib3-2.8.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
       - pypi: https://files.pythonhosted.org/packages/04/07/5c578992b965e9c5101c7ad377440ca250769b34542a1781ab06b25c56fc/parse-1.22.3-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/17/ee/02e1a36063b7d135086c474cd204c5ee8fda92f01ee4a90c27e2da127708/rude_clean_code-0.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/57/50/a8c020dc7c6ef768b1daf4fbfb78ea23031dfda47728eb8e26f9b233506a/rude_clean_code-0.3.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/22/9d/d08a1128ab199b2f0cf25bfeb0639bd05119fff4b7c47bec24ef9a8ec23f/rpds_py-2026.9.1-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl
@@ -597,7 +597,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/wayland-protocols-1.49-hd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.1-pyh5ded981_0.conda
       - pypi: https://files.pythonhosted.org/packages/04/07/5c578992b965e9c5101c7ad377440ca250769b34542a1781ab06b25c56fc/parse-1.22.3-py2.py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/17/ee/02e1a36063b7d135086c474cd204c5ee8fda92f01ee4a90c27e2da127708/rude_clean_code-0.1.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/57/50/a8c020dc7c6ef768b1daf4fbfb78ea23031dfda47728eb8e26f9b233506a/rude_clean_code-0.3.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/22/9d/d08a1128ab199b2f0cf25bfeb0639bd05119fff4b7c47bec24ef9a8ec23f/rpds_py-2026.9.1-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl
@@ -8735,10 +8735,10 @@ packages:
   name: parse
   version: 1.22.3
   sha256: 2cd33a301b5a4b400ee79952f42364fe486e5f10701fbf819fbbab1eab478139
-- pypi: https://files.pythonhosted.org/packages/17/ee/02e1a36063b7d135086c474cd204c5ee8fda92f01ee4a90c27e2da127708/rude_clean_code-0.1.0-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/57/50/a8c020dc7c6ef768b1daf4fbfb78ea23031dfda47728eb8e26f9b233506a/rude_clean_code-0.3.1-py3-none-any.whl
   name: rude-clean-code
-  version: 0.1.0
-  sha256: 1bd6645d9801e932c6d96bd19462c08a3ef816bcfec78fbda04c44b3283a6f4e
+  version: 0.3.1
+  sha256: a1b2dcad757fa4bebdc466e428b28ec74357e01275880c0bcba5b4bc4676c11d
   requires_dist:
   - rude>=0.1a4,<0.2
   requires_python: '>=3.11'

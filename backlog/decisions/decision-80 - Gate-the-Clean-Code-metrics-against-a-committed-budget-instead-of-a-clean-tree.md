@@ -103,3 +103,12 @@ Two facts decide how far that can be enforced today:
   it is missing - a task for the burn-down tracks that.
 - Biome formats `clean_code_budget.json`, so the writer emits tabs; a budget
   written with spaces fails the JavaScript gate.
+
+
+## Follow-through: a version bump creates a new budget
+
+The ratchet reached literal zero in slice 27 (`clean_code_budget.json` = `{}`). The next change is not a refactor but a *measurement* change: `rude-clean-code` 0.1.0 (9 rules) was replaced by 0.3.1 (59 rules) from PyPI, via the equivalent of `pixi add --feature python --pypi "rude-clean-code==0.3.1"` (manifest + lock with the exact wheel URL and SHA-256; the sandbox has no pixi binary, so the state was applied by hand and verified with pip). `rude` stays at `==0.1a4`, still accepted by the new plugin.
+
+The obvious failure mode is that `rude check --select CC` - the gate's safety net against Rude's own F/E/W rules - now selects all 59 CC rules. Left alone that would have produced 5,750 findings, 3,943 of them `CC403` repeated magic literals, and a budget nobody could ratchet. The config therefore states the intent explicitly: `select = ["CC0", "CC1", "CC2", "CC3"]` plus an `ignore` list that removes the INFO-severity smell indicators in those families and every `CC4`-`CC9` prefix. Only deterministic structural WARNING rules are measured, with their defaults written into `[tool.rude.rules.*]` as this decision requires for readability. A guard test asserts the pin, the lock record and the curated set stay in sync.
+
+The budget was re-baselined from `{}` to 355 findings in 176 files in the same change. That is a legitimate upward re-baseline, not the red flag this decision warns about: no code regressed, the rule set grew. The consequences above still hold - the budget is generated, regenerating it is a commit, and the diff is the review surface - but the review question changes from "why did numbers grow?" to "are these the rules we agreed to measure?". The new 355 findings are the starting point of the next burn-down; the deferred `CC4`-`CC9` families are separate campaigns, not hidden headroom.

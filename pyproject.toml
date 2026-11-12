@@ -11,12 +11,36 @@
 # `lint_python` already runs them and `ruff.toml` is where those limits live.
 # Running them twice would report every finding twice.
 #
+# `rude-clean-code` 0.3.1 ships 59 rules. This gate measures the deterministic,
+# structural WARNING rules in the module (CC0xx), function (CC1xx), class
+# (CC2xx) and control-flow / error-handling (CC3xx) families - the ones whose
+# findings are thresholds a refactor can close. The subjective INFO heuristics,
+# same-file DRY / SOLID indicators (CC4xx-CC6xx), opt-in architecture and
+# pattern boundaries (CC7xx-CC8xx), and documentation/comment hygiene (CC9xx)
+# are deliberately not part of this budget: CC403's repeated magic literals and
+# CC901's public docstrings alone would add ~4,300 findings and swamp the
+# ratchet. Those families are separate campaigns with their own judgement calls.
+#
 # The thresholds below are the plugin's defaults, written out because the number
-# a function may reach should be readable, not a default of an installed package.
-# Changing one moves the budget: `pixi run automation clean_code` fails until
-# `clean_code_budget.json` is re-baselined in the same change.
+# a definition may reach should be readable, not a default of an installed
+# package. Changing one moves the budget: `pixi run automation clean_code` fails
+# until `clean_code_budget.json` is re-baselined in the same change.
 [tool.rude]
-select = ["CC1", "CC2", "CC3"]
+select = ["CC0", "CC1", "CC2", "CC3"]
+ignore = [
+    # INFO-severity smell indicators inside the four structural families.
+    "CC002", "CC105", "CC106", "CC108", "CC204", "CC205", "CC206",
+    "CC304", "CC305", "CC307",
+    # Heuristics, opt-in architecture/pattern rules, doc/comment hygiene.
+    "CC4", "CC5", "CC6", "CC7", "CC8", "CC9",
+]
+
+# Modules.
+[tool.rude.rules.CC001]
+max_lines = 400
+
+[tool.rude.rules.CC004]
+max_relative_depth = 2
 
 # Functions.
 [tool.rude.rules.CC101]
@@ -38,7 +62,11 @@ max_lines = 200
 [tool.rude.rules.CC202]
 max_methods = 15
 
-# Control flow.
+[tool.rude.rules.CC207]
+max_bases = 3
+ignore_bases = ["Generic", "Protocol"]
+
+# Control flow and error handling.
 [tool.rude.rules.CC301]
 max_depth = 4
 
@@ -47,3 +75,6 @@ max_operands = 3
 
 [tool.rude.rules.CC303]
 max_branches = 10
+
+[tool.rude.rules.CC311]
+max_lines = 20
