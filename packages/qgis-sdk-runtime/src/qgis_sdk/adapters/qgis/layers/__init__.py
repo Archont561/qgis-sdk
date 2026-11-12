@@ -10,6 +10,8 @@ this module opens itself, or, when a sibling ``NativeRasters`` opened it, a
 
 from __future__ import annotations
 
+from ._describe import GEOMETRY_TYPES, NO_GEOMETRY
+from ._describe import vector_tile_source as _vector_tile_source  # noqa: F401
 from ._layers import NativeLayers
 
-__all__ = ["NativeLayers"]
+__all__ = ["GEOMETRY_TYPES", "NO_GEOMETRY", "NativeLayers"]
