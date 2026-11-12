@@ -9,7 +9,7 @@ from pathlib import Path
 import layers
 import pytest
 from qgis_sdk.adapters import webengine
-from qgis_sdk.adapters.webengine import _view
+from qgis_sdk.adapters.webengine import _page, _view
 from qgis_sdk.models.errors import QgisSdkOptionalDependencyError
 
 
@@ -119,7 +119,7 @@ def test_create_webengine_view_uses_resolved_class(
 def test_create_restricted_page_raises_when_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(webengine, "_import_webengine_core", lambda: None)
+    monkeypatch.setattr(_page, "_import_webengine_core", lambda: None)
     with pytest.raises(QgisSdkOptionalDependencyError) as exc_info:
         webengine.create_restricted_page(webengine.BrowserPolicy())
     assert exc_info.value.dependency == "pyqt6-webengine"

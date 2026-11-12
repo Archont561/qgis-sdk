@@ -96,6 +96,13 @@ jobs:
         id: s10
         run: pixi run -e default automation -- release_verify_versions
 
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the bridge
+      # generator and the suites import them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        id: s31
+        run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_providers.py
+
       # Regenerate bridge artifacts and reject orphaned sample/host outputs with
       # their generator/source headers in the two owned directories (TASK-142).
       # The Git status sweep catches other TypeScript tree changes; the reference
@@ -113,13 +120,6 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check
-
-      # The Processing provider modules are generated from catalogue.json
-      # (pure Python, no QGIS needed) and never committed; the native suite
-      # imports them, so they are generated here first.
-      - name: Generate the Processing provider modules
-        id: s31
-        run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_providers.py
 
       # The default environment carries the QGIS feature, so this is the only
       # place the native layers actually execute against real Qt and QGIS: the
