@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from qgis_sdk_tools.generate._context import _Rendering
+from qgis_sdk_tools.generate._context import Rendering
 from qgis_sdk_tools.generate._contract import (
     _EVENT_KINDS,
     _TERMINAL_KINDS,
@@ -12,13 +12,13 @@ from qgis_sdk_tools.generate._contract import (
 )
 from qgis_sdk_tools.generate._emit import (
     _member_validator,
-    _pascal,
     _quote,
+    pascal,
 )
-from qgis_sdk_tools.generate._names import _Stream
+from qgis_sdk_tools.generate._names import Stream
 
 
-class _Frames:
+class Frames:
     """Everything the generated module carries besides its operation members.
 
     The error class, the stream support types, the ``Operations``/``Streams``
@@ -26,7 +26,7 @@ class _Frames:
     surface and the declared operations, never of the render order.
     """
 
-    def __init__(self, rendering: _Rendering) -> None:
+    def __init__(self, rendering: Rendering) -> None:
         self._surface = rendering.surface
         self._actions = rendering.actions
         self._streams = rendering.streams
@@ -63,14 +63,14 @@ class _Frames:
             ]
         return [*head, *body, "}"]
 
-    def event_union_lines(self, stream: _Stream) -> list[str]:
+    def event_union_lines(self, stream: Stream) -> list[str]:
         """Render the event union of one stream, without a predicate."""
         lines = [
             f"/** One event of `{stream.id}`, narrowed by its kind. */",
             f"export type {stream.event_type} =",
         ]
         for kind, schema in stream.events:
-            payload = self._names.type_name(schema, f"{stream.base}{_pascal(kind)}")
+            payload = self._names.type_name(schema, f"{stream.base}{pascal(kind)}")
             lines.append(
                 f"\t| {{ readonly kind: {json.dumps(kind)}; readonly payload: {payload} }}"
             )
@@ -162,7 +162,7 @@ class _Frames:
             "",
         ]
 
-    def event_lines(self, stream: _Stream) -> list[str]:
+    def event_lines(self, stream: Stream) -> list[str]:
         """Render the event union of one stream and the predicate that narrows it."""
         name = stream.event_type
         lines = [
@@ -170,7 +170,7 @@ class _Frames:
             f"export type {name} =",
         ]
         for kind, schema in stream.events:
-            payload = self._names.type_name(schema, f"{stream.base}{_pascal(kind)}")
+            payload = self._names.type_name(schema, f"{stream.base}{pascal(kind)}")
             lines.append(
                 f"\t| {{ readonly kind: {json.dumps(kind)}; readonly payload: {payload} }}"
             )

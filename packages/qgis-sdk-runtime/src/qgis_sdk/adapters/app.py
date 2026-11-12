@@ -51,14 +51,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_init_p1_1(_s1):
     _s1.description = _s1.app.describe()
     _s1.self._gui = _s1.gui
@@ -127,14 +119,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_init_p1(_s):

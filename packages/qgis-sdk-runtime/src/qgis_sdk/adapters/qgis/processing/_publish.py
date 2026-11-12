@@ -28,7 +28,7 @@ from qgis.core import (
 
 from qgis_sdk.models import output_kinds
 
-from ._services import _files_of, _rasters_of
+from ._services import files_of, rasters_of
 from ._tables import MULTI_OUTPUT_NAME, OUTPUT_PARAMETER
 
 
@@ -85,7 +85,7 @@ def _publish_vector(run: _Run) -> str:
 
 def _publish_raster(run: _Run) -> str:
     """Copy the produced raster file to the destination the dialog chose."""
-    owned = _rasters_of(run.bridge)._qgs_raster(run.result.id)
+    owned = rasters_of(run.bridge)._qgs_raster(run.result.id)
     return _copy_file(run, Path(owned.source()))
 
 
@@ -95,7 +95,7 @@ def _publish_ref(run: _Run, *, folder: bool) -> str:
     Never the ref's own borrowed path: decision-19 says the destination is
     explicit, so a produced file is copied to where the dialog pointed.
     """
-    files = _files_of(run.bridge)
+    files = files_of(run.bridge)
     if files is None:
         raise QgsProcessingException(
             "this host has no files service, so a produced ref cannot be published"

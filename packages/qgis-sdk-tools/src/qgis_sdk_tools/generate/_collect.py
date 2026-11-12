@@ -8,11 +8,11 @@ from typing import Any
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
 from qgis_sdk_tools.generate._contract import _EVENT_KINDS
-from qgis_sdk_tools.generate._emit import _pascal
+from qgis_sdk_tools.generate._emit import pascal
 from qgis_sdk_tools.generate._names import (
-    _Action,
-    _declared_name,
-    _Stream,
+    Action,
+    Stream,
+    declared_name,
 )
 
 
@@ -25,7 +25,7 @@ def _declared_name_of(
     raw: Mapping[str, Any], field: str, fallback: str, kind: str, operation_id: str
 ) -> str:
     """The name an operation declared for its request or its result."""
-    return _declared_name(raw.get(field), fallback, kind=kind, action=operation_id)
+    return declared_name(raw.get(field), fallback, kind=kind, action=operation_id)
 
 
 def _declared_str(raw: Mapping[str, Any], field: str) -> str | None:
@@ -88,7 +88,7 @@ def _stream_schemas(
     return request, events
 
 
-class _Collector:
+class Collector:
     """Turn one declared description into the operations the generator renders.
 
     The description is data a plugin already has; this checks it and gives every
@@ -106,14 +106,14 @@ class _Collector:
         self._ids = ids
         self._names = names
 
-    def actions(self) -> tuple[_Action, ...]:
+    def actions(self) -> tuple[Action, ...]:
         """The declared actions, in id order, with their schemas named."""
         return tuple(
             self._action(raw)
             for raw in sorted(self._description["actions"], key=_by_id)
         )
 
-    def streams(self) -> tuple[_Stream, ...]:
+    def streams(self) -> tuple[Stream, ...]:
         """The declared streams, in id order, with their schemas named."""
         return tuple(
             self._stream(raw)
@@ -126,11 +126,11 @@ class _Collector:
             raise QgisSdkBridgeError(f"duplicate operation id {operation_id!r}")
         self._ids.add(operation_id)
 
-    def _action(self, raw: Mapping[str, Any]) -> _Action:
+    def _action(self, raw: Mapping[str, Any]) -> Action:
         action_id = str(raw["id"])
         self._claim(action_id)
         request, result = _action_schemas(raw, action_id)
-        base = _pascal(action_id)
+        base = pascal(action_id)
         self._names.declare(
             request,
             _declared_name_of(
@@ -141,7 +141,7 @@ class _Collector:
             result,
             _declared_name_of(raw, "result_name", f"{base}Result", "result", action_id),
         )
-        return _Action(
+        return Action(
             id=action_id,
             base=base,
             request=request,
@@ -151,11 +151,11 @@ class _Collector:
             result_name=_declared_str(raw, "result_name"),
         )
 
-    def _stream(self, raw: Mapping[str, Any]) -> _Stream:
+    def _stream(self, raw: Mapping[str, Any]) -> Stream:
         stream_id = str(raw["id"])
         self._claim(stream_id)
         request, events = _stream_schemas(raw, stream_id)
-        base = _pascal(stream_id)
+        base = pascal(stream_id)
         self._names.declare(
             request,
             _declared_name_of(
@@ -166,8 +166,8 @@ class _Collector:
             (kind, events[kind]) for kind in _EVENT_KINDS if kind in events
         )
         for kind, schema in declared:
-            self._names.declare(schema, f"{base}{_pascal(kind)}")
-        return _Stream(
+            self._names.declare(schema, f"{base}{pascal(kind)}")
+        return Stream(
             id=stream_id,
             base=base,
             request=request,

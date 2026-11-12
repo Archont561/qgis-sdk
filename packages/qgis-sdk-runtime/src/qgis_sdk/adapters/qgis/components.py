@@ -98,14 +98,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_result_table_p1(_s1):
     _s1.table = QTableWidget(0, len(_s1.component.columns), _s1.parent)
     _s1.table.setHorizontalHeaderLabels(list(_s1.component.headings))
@@ -178,14 +170,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_job_progress_p1(_s):
     _s.widget = QWidget(_s.parent)
     _s.layout = QHBoxLayout(_s.widget)
@@ -221,7 +205,12 @@ def _cc_job_progress_p3(_s):
         else:
             _s.bar.setRange(0, 100)
             _s.bar.setValue(round(float(fraction) * 100))
-        _s.message.setText(text if text else ("" if status == "idle" else str(status)))
+        if text:
+            _s.message.setText(text)
+        elif status == "idle":
+            _s.message.setText("")
+        else:
+            _s.message.setText(str(status))
         if _s.cancel is not None:
             _s.cancel.setEnabled(status in ("queued", "running"))
 

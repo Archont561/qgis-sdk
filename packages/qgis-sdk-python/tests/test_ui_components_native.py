@@ -30,14 +30,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_every_layer_p1(_s):
     for kind in _cc_fresh_1():
         _s.kind = kind

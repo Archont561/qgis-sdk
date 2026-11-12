@@ -12,7 +12,7 @@ from qgis_sdk.bridge.authority import FileOperation, HostAuthority
 from qgis_sdk.bridge.host._schemas import (
     DEFAULT_PAGE,
     MAX_FEATURE_PAGE,
-    _page,
+    page,
 )
 from qgis_sdk.bridge.host._services import HostServices
 from qgis_sdk.models import (
@@ -44,7 +44,7 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def _wire(value: Any) -> Any:
+def wire(value: Any) -> Any:
     """Return a model's declared wire shape, falling back to a plain DTO.
 
     A renderer or a labelling has a ``to_wire`` for the same reason a layer
@@ -60,20 +60,20 @@ def _offset(cursor: Any) -> int:
     return 0 if cursor is None else int(cursor)
 
 
-def _page_of(items: Sequence[Any], payload: Mapping[str, Any]) -> dict:
+def page_of(items: Sequence[Any], payload: Mapping[str, Any]) -> dict:
     """Slice a sequence by the cursor a page sent back."""
     limit = payload.get("limit", DEFAULT_PAGE)
     start = _offset(payload.get("cursor"))
     window = list(items[start : start + limit])
     truncated = start + limit < len(items)
-    return _page(
+    return page(
         [_plain(item) for item in window],
         str(start + limit) if truncated else None,
         truncated,
     )
 
 
-def _layout_settings(payload: Mapping[str, Any]) -> LayoutSettings:
+def layout_settings(payload: Mapping[str, Any]) -> LayoutSettings:
     """Build the render settings a page declared, defaulting what it left out."""
     return LayoutSettings(
         dpi=int(payload.get("dpi", LayoutSettings().dpi)),
@@ -93,7 +93,7 @@ def _summary(info: AlgorithmInfo) -> dict[str, Any]:
     }
 
 
-def _algorithm_wire(info: AlgorithmInfo) -> dict[str, Any]:
+def algorithm_wire(info: AlgorithmInfo) -> dict[str, Any]:
     """Spell one description with every declared field present.
 
     A page validates the reply against the generated type, so nothing is left
@@ -138,7 +138,7 @@ def _parameter_wire(parameter: Any) -> dict[str, Any]:
     }
 
 
-def _resolve_input(authority: HostAuthority, binding: ViewBinding, value: Any) -> Any:
+def resolve_input(authority: HostAuthority, binding: ViewBinding, value: Any) -> Any:
     """Turn a ref the view holds into the path the algorithm reads.
 
     Only a ref-shaped value is touched; the authority resolves it against the
@@ -151,7 +151,7 @@ def _resolve_input(authority: HostAuthority, binding: ViewBinding, value: Any) -
     return value
 
 
-def _result_for_view(
+def result_for_view(
     services: HostServices, binding: ViewBinding, result: RunResult
 ) -> dict[str, Any]:
     """Re-mint the refs a run produced so the calling view holds them, not the plugin."""
@@ -171,7 +171,7 @@ def _result_for_view(
     return RunResult(algorithm=result.algorithm, outputs=outputs).to_wire()
 
 
-def _fetch_request(payload: Mapping[str, Any]) -> NetworkRequest:
+def fetch_request(payload: Mapping[str, Any]) -> NetworkRequest:
     """Turn the declared fetch payload into the request the grant constrains.
 
     The client's own validation applies (absolute http(s) URL, no user-info);
@@ -197,7 +197,7 @@ def _fetch_request(payload: Mapping[str, Any]) -> NetworkRequest:
     return request
 
 
-def _response_event(response: Response) -> dict[str, Any]:
+def response_event(response: Response) -> dict[str, Any]:
     text: str | None
     encoded: str | None
     try:
@@ -214,7 +214,7 @@ def _response_event(response: Response) -> dict[str, Any]:
     }
 
 
-def _feature_query(payload: Mapping[str, Any]) -> FeatureQuery:
+def feature_query(payload: Mapping[str, Any]) -> FeatureQuery:
     """Turn a wire request into the bounded query the service takes.
 
     The bounds are checked here, by name, rather than left to the layer: a page
@@ -246,10 +246,10 @@ def _feature_query(payload: Mapping[str, Any]) -> FeatureQuery:
     )
 
 
-def _optional_int(value: Any) -> int | None:
+def optional_int(value: Any) -> int | None:
     return None if value is None else int(value)
 
 
-def _geometry(value: Any) -> Geometry | None:
+def geometry(value: Any) -> Geometry | None:
     """Read a geometry a page sent back, or ``None`` when it sent none."""
     return None if value is None else Geometry.from_wire(value)

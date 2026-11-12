@@ -114,6 +114,13 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_snapshot.py --check
 
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the native suite
+      # imports them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        id: s31
+        run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_providers.py
+
       # The default environment carries the QGIS feature, so this is the only
       # place the native layers actually execute against real Qt and QGIS: the
       # native form path, the QGIS network transport, the restricted WebEngine
@@ -221,6 +228,13 @@ jobs:
       - name: Install JavaScript dependencies
         id: s03
         run: pixi run -e default automation -- install_js
+
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the coverage suite
+      # imports them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        id: s31
+        run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_providers.py
 
       - name: Check coverage for all packages
         id: coverage
@@ -373,6 +387,14 @@ jobs:
           .venv-lts/bin/python -m pip install --quiet pytest pytest-bdd \
             -e packages/qgis-sdk-runtime -e packages/qgis-sdk-tools
 
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the LTS suite
+      # imports them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        id: s05
+        if: ${{ steps.s02.outputs.ready == 'true' }}
+        run: .venv-lts/bin/python packages/qgis-sdk-python/scripts/generate_processing_providers.py
+
       # QGIS_SDK_SERVER_DEV opts the dev-loop harness in: it starts a real
       # QgsServer on loopback and proves that a saved filter edit is what the
       # next request runs (TASK-80 AC 4).
@@ -490,6 +512,12 @@ jobs:
 
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
+
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the suite imports
+      # them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        run: python packages/qgis-sdk-python/scripts/generate_processing_providers.py
 
       - name: Test Python SDK
         shell: bash

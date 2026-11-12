@@ -15,17 +15,17 @@ from typing import TYPE_CHECKING, Any, Self, TypedDict, Unpack
 from qgis_sdk.bridge import Dispatcher
 from qgis_sdk.bridge.resources import ReleaseLedger
 
-from ._endpoint import _Endpoint
+from ._endpoint import Endpoint
 from ._errors import QgisSdkHttpError, error_status
-from ._listener import _Listener
+from ._listener import Listener
 from ._options import DEFAULT_CLOSE_GRACE, capacity, positive, timing
 from ._queue import GuiQueue
-from ._sessions import _FrameBuffer, _Sessions
+from ._sessions import FrameBuffer, Sessions
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ._options import _Capacity, _Timing
 
-__all__ = ["PluginHttpServer", "QgisSdkHttpError", "_FrameBuffer"]
+__all__ = ["FrameBuffer", "PluginHttpServer", "QgisSdkHttpError"]
 
 _RUNTIME_LOCK = threading.Lock()
 _ACTIVE_RUNTIMES: weakref.WeakSet[Any] = weakref.WeakSet()
@@ -71,7 +71,7 @@ class _Owner:
             logging.getLogger(__name__).exception("HTTP cleanup error observer failed")
 
 
-def _sessions_of(server: PluginHttpServer) -> _Sessions:
+def _sessions_of(server: PluginHttpServer) -> Sessions:
     """Build the session book over the dispatcher and ledger this server mints."""
     ledger = ReleaseLedger()
     dispatcher = Dispatcher.from_runtime(
@@ -79,16 +79,16 @@ def _sessions_of(server: PluginHttpServer) -> _Sessions:
         authorize=lambda binding, operation: operation in server._allowed,
         ledger=ledger,
     )
-    return _Sessions(
+    return Sessions(
         dispatcher, ledger, queue=server._queue, on_error=server._owner.report
     )
 
 
 def _endpoint_of(
     server: PluginHttpServer, limits: _Timing, budgets: _Capacity
-) -> _Endpoint:
+) -> Endpoint:
     """Assemble the frozen view one request handler works from."""
-    return _Endpoint(
+    return Endpoint(
         runtime=server._runtime,
         allowed=server._allowed,
         queue=server._queue,
@@ -145,7 +145,7 @@ class PluginHttpServer:
         self._queue = GuiQueue(values.post, positive("deadline", values.deadline))
         self._sessions = _sessions_of(self)
         self._endpoint = _endpoint_of(self, limits, budgets)
-        self._listener = _Listener(
+        self._listener = Listener(
             self._endpoint, values.token_file, values.port, budgets
         )
         runtime.instance.ctx.scope.on_close(self.close)

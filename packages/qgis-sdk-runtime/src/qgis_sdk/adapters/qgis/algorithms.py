@@ -73,7 +73,16 @@ if TYPE_CHECKING:
 __all__ = ["AlgorithmWiring", "NativeAlgorithms"]
 
 METRES_ONLY: str = "metres"
-_PROCESSING_READY = False
+
+
+class _ProcessingReady:
+    """Whether the Processing framework was initialised in this process."""
+
+    def __init__(self) -> None:
+        self.ready = False
+
+
+_processing_ready = _ProcessingReady()
 
 
 def _processing():
@@ -85,7 +94,6 @@ def _processing():
     plugin directory appended here once, which is the same path QGIS's own
     startup uses.
     """
-    global _PROCESSING_READY
     try:
         from processing.core.Processing import Processing
     except ImportError:
@@ -97,9 +105,9 @@ def _processing():
             from processing.core.Processing import Processing
         except ImportError as error:
             raise QgisSdkUnsupportedCapabilityError("processing") from error
-    if not _PROCESSING_READY:
+    if not _processing_ready.ready:
         Processing.initialize()
-        _PROCESSING_READY = True
+        _processing_ready.ready = True
     from qgis import processing
 
     return processing

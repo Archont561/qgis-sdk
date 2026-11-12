@@ -40,14 +40,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_find_qgis_instal_p1(_s):
     _s.looked: list[str] = []
     _s.which = _which if _s.which is None else _s.which

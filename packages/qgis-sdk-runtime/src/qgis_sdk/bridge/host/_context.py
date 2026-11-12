@@ -26,11 +26,11 @@ if TYPE_CHECKING:  # pragma: no cover - typing only; the peers import at runtime
 #: the payload the request schema already validated. A handler for a streaming
 #: id returns the source the dispatcher pumps instead of a result dict, which is
 #: why the return type is the one place ``Any`` is honest here.
-HostHandler = Callable[["_Host", "ViewBinding", Mapping[str, Any]], Any]
+HostHandler = Callable[["Host", "ViewBinding", Mapping[str, Any]], Any]
 
 
 @dataclass(frozen=True)
-class _Host:
+class Host:
     """The services, the view's authority and the open edit sessions, in one place.
 
     A handler reaches a service through this object rather than through its own

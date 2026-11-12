@@ -15,8 +15,9 @@ against one set of tests.
 
 from __future__ import annotations
 
-from importlib import import_module
-from typing import TYPE_CHECKING, Any
+from importlib import import_module as _import_module
+from typing import TYPE_CHECKING
+from typing import Any as _Any
 
 if TYPE_CHECKING:  # the names, for readers and type checkers; not imported
     from .algorithms import AlgorithmWiring, NativeAlgorithms
@@ -103,12 +104,12 @@ _EXPORTS: dict[str, str] = {
 }
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> _Any:
     """Import the adapter behind ``name`` the first time it is asked for."""
     module_name = _EXPORTS.get(name)
     if module_name is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    value = getattr(import_module(module_name, __name__), name)
+    value = getattr(_import_module(module_name, __name__), name)
     globals()[name] = value
     return value
 

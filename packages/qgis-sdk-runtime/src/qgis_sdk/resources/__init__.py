@@ -13,27 +13,31 @@ used; a style that needed a projected CRS would have to state it on its
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
-from types import MappingProxyType
+from collections.abc import Mapping as _Mapping
+from pathlib import Path as _Path
+from types import MappingProxyType as _MappingProxyType
 
 from qgis_sdk.models import (
-    QgisSdkPackagedResourceError,
-    QgisSdkStyleNotFoundError,
-    StyleSpec,
+    QgisSdkPackagedResourceError as _QgisSdkPackagedResourceError,
+)
+from qgis_sdk.models import (
+    QgisSdkStyleNotFoundError as _QgisSdkStyleNotFoundError,
+)
+from qgis_sdk.models import (
+    StyleSpec as _StyleSpec,
 )
 
-STYLE_DIRECTORY = Path(__file__).resolve().parent / "styles"
+STYLE_DIRECTORY = _Path(__file__).resolve().parent / "styles"
 
-STYLE_CATALOG: Mapping[str, StyleSpec] = MappingProxyType(
+STYLE_CATALOG: _Mapping[str, _StyleSpec] = _MappingProxyType(
     {
-        "reference/point-output": StyleSpec(
+        "reference/point-output": _StyleSpec(
             id="reference/point-output",
             resource="reference-point-output.qml",
             geometry_type="point",
             required_fields=("id", "value"),
         ),
-        "reference/line-output": StyleSpec(
+        "reference/line-output": _StyleSpec(
             id="reference/line-output",
             resource="reference-line-output.qml",
             geometry_type="line",
@@ -41,7 +45,7 @@ STYLE_CATALOG: Mapping[str, StyleSpec] = MappingProxyType(
         ),
         # What the reference workflow's buffer step applies to its output: a
         # polygon fill that needs only the identifier the source carried.
-        "reference/polygon-output": StyleSpec(
+        "reference/polygon-output": _StyleSpec(
             id="reference/polygon-output",
             resource="reference-polygon-output.qml",
             geometry_type="polygon",
@@ -63,24 +67,24 @@ __all__ = [
 ]
 
 
-def require_style(style: str) -> StyleSpec:
+def require_style(style: str) -> _StyleSpec:
     """Return the reviewed specification for a style identifier."""
     try:
         return STYLE_CATALOG[style]
     except KeyError:
-        raise QgisSdkStyleNotFoundError(style) from None
+        raise _QgisSdkStyleNotFoundError(style) from None
 
 
-def style_path(style: str) -> Path:
+def style_path(style: str) -> _Path:
     """Resolve a reviewed style to the file shipped inside the package."""
     spec = require_style(style)
     path = STYLE_DIRECTORY / spec.resource
     if not path.is_file():
-        raise QgisSdkPackagedResourceError(style, f"{spec.resource} is not packaged")
+        raise _QgisSdkPackagedResourceError(style, f"{spec.resource} is not packaged")
     return path
 
 
-def icon_path(package_directory: Path, icon: str) -> Path:
+def icon_path(package_directory: _Path, icon: str) -> _Path:
     """Resolve ``@toolbar(icon="buffer.svg")`` inside ``<package>/icons/``.
 
     The name is a file name, not a path: a separator or a parent reference
@@ -88,13 +92,13 @@ def icon_path(package_directory: Path, icon: str) -> Path:
     A missing file is the same packaging defect a missing style is - and the
     one ``qgis-sdk check`` reports before the plugin ever loads.
     """
-    if not icon or Path(icon).name != icon or icon in (".", ".."):
-        raise QgisSdkPackagedResourceError(
+    if not icon or _Path(icon).name != icon or icon in (".", ".."):
+        raise _QgisSdkPackagedResourceError(
             icon, "an icon is a file name under the package's icons/ directory"
         )
     path = package_directory / ICON_DIRECTORY_NAME / icon
     if not path.is_file():
-        raise QgisSdkPackagedResourceError(
+        raise _QgisSdkPackagedResourceError(
             icon, f"{ICON_DIRECTORY_NAME}/{icon} is not in {package_directory.name}"
         )
     return path

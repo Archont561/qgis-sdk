@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from qgis_sdk.bridge.host._context import HostHandler, _Host
+from qgis_sdk.bridge.host._context import Host, HostHandler
 from qgis_sdk.bridge.host._support import (
-    _page_of,
-    _wire,
+    page_of,
+    wire,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
@@ -16,21 +16,21 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
 
 
 def connections_list(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
-    return _page_of(ctx.connections.list_connections(), payload)
+    return page_of(ctx.connections.list_connections(), payload)
 
 
 def connections_describe(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> Any:
-    return _wire(ctx.connections.connection(payload["provider"], payload["connection"]))
+    return wire(ctx.connections.connection(payload["provider"], payload["connection"]))
 
 
 def connections_browse(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
-    return _page_of(
+    return page_of(
         ctx.connections.browse(
             payload["provider"], payload["connection"], payload.get("schema")
         ),
@@ -39,9 +39,9 @@ def connections_browse(
 
 
 def connections_open_layer(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> Any:
-    return _wire(
+    return wire(
         ctx.connections.open_layer(
             payload["provider"],
             payload["connection"],
@@ -52,18 +52,18 @@ def connections_open_layer(
 
 
 def connections_test(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> Any:
-    return _wire(ctx.connections.test(payload["provider"], payload["connection"]))
+    return wire(ctx.connections.test(payload["provider"], payload["connection"]))
 
 
 def auth_configurations(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
-    return _page_of(ctx.connections.auth_configurations(), payload)
+    return page_of(ctx.connections.auth_configurations(), payload)
 
 
-def auth_attach(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> None:
+def auth_attach(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> None:
     ctx.connections.attach_auth_config(
         payload["provider"], payload["connection"], payload["auth_config"]
     )

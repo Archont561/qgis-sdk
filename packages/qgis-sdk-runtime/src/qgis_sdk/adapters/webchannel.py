@@ -29,14 +29,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_create_channel_o_p1(_s):
     _s.classes = _import_webchannel()
     if _s.classes is None:

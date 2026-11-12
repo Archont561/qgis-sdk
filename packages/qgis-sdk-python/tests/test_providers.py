@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 import pytest
 from qgis_sdk.algorithms import describe_algorithm, parameter_kind
 from qgis_sdk.core import AlgorithmContext, WorkerContext
+from qgis_sdk.core.runtime import _declared_providers as declared_providers
 from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.declarations._plugin import plugin
 from qgis_sdk.models import (
@@ -19,7 +20,6 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 from qgis_sdk.providers import Provider, ProviderDescription
-from qgis_sdk.providers import _declared_providers as declared_providers
 from sample_algorithms import buffer_layer, sample_provider
 
 

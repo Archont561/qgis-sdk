@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qgis_sdk_tools.generate._contract import _Surface
-from qgis_sdk_tools.generate._names import _Action, _Stream
-from qgis_sdk_tools.generate._naming import _Naming
+from qgis_sdk_tools.generate._names import Action, Stream
+from qgis_sdk_tools.generate._naming import Naming
 
 
 @dataclass(frozen=True)
-class _Rendering:
+class Rendering:
     """The surface, the declared operations, and the names they were given.
 
     Rendering is a function of these four things once collection is done, so
@@ -19,6 +19,6 @@ class _Rendering:
     """
 
     surface: _Surface
-    actions: tuple[_Action, ...]
-    streams: tuple[_Stream, ...]
-    names: _Naming
+    actions: tuple[Action, ...]
+    streams: tuple[Stream, ...]
+    names: Naming

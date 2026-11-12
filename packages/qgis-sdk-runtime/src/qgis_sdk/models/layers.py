@@ -54,14 +54,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_post_init___tail_p1(_s):
     _s.self = _s.values["self"]
     for name in ("data_types", "no_data"):

@@ -80,9 +80,10 @@ def _render_report(runtime: CliRuntime, report, options: _CheckOptions) -> None:
         if config is not None:
             typer.echo(grants_matrix(config).render(), file=runtime.out)
     count = len(report.diagnostics)
-    problems = (
-        "no problems" if count == 0 else f"{count} problem{'s' if count != 1 else ''}"
-    )
+    if count == 0:
+        problems = "no problems"
+    else:
+        problems = f"{count} problem{'s' if count != 1 else ''}"
     typer.echo(f"checked {report.files_checked} files: {problems}", file=runtime.out)
 
 

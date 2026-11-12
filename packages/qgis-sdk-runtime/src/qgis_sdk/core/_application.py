@@ -20,7 +20,7 @@ from qgis_sdk.declarations import (
     resolve_hints,
     validate_given,
 )
-from qgis_sdk.declarations._describe import _describe_lowered_plugin
+from qgis_sdk.declarations._describe import describe_lowered_plugin
 from qgis_sdk.declarations._plugin import action, plugin, stream
 
 
@@ -452,7 +452,7 @@ class _QgisSdkPluginMixin1:
         _commit_inclusion(self, child, jobs, members, providers)
 
     def describe(self) -> PluginDescription:
-        return _describe_lowered_plugin(self._plugin_class())
+        return describe_lowered_plugin(self._plugin_class())
 
 
 class _QgisSdkPluginMixin2:

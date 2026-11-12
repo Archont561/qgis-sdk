@@ -10,9 +10,9 @@ from qgis_sdk.bridge.endpoint._refusals import (
     handled,
     refuse,
 )
-from qgis_sdk.bridge.endpoint._registry import _Registry
+from qgis_sdk.bridge.endpoint._registry import Registry
 from qgis_sdk.bridge.endpoint._types import ViewBinding
-from qgis_sdk.bridge.endpoint._views import _Views
+from qgis_sdk.bridge.endpoint._views import Views
 from qgis_sdk.bridge.endpoint._wire import (
     checked_result,
     payload_of,
@@ -32,7 +32,7 @@ _RELEASE = "bridge.release"
 _NOT_AUTHORIZED = "This view is not authorized to release resources"
 
 
-class _Calls:
+class Calls:
     """One invocation, from envelope to reply, and the release call beside it.
 
     The order is the contract: parse, authorize, allowlist, cancellation,
@@ -43,7 +43,7 @@ class _Calls:
     """
 
     def __init__(
-        self, *, registry: _Registry, views: _Views, ledger: ReleaseLedger
+        self, *, registry: Registry, views: Views, ledger: ReleaseLedger
     ) -> None:
         self._registry = registry
         self._views = views

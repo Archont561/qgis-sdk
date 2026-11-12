@@ -10,7 +10,7 @@ from typing import Annotated, TypedDict, Unpack
 import typer
 from qgis_sdk._published import REQUIRED, published
 
-from qgis_sdk_tools._commands._app import _install, app
+from qgis_sdk_tools._commands._app import app, install
 from qgis_sdk_tools.cli import CliRuntime
 from qgis_sdk_tools.scaffold import (
     QgisSdkScaffoldError,
@@ -119,26 +119,11 @@ _CcAnn18 = Annotated[bool, typer.Option(help="Print the file plan and write noth
 _CcAnn19 = Annotated[bool, typer.Option(help="Regenerate files that already exist.")]
 
 
-class _CcState:
-    """A mutable record shared by the phases of one long function."""
-
-    def __init__(_cc_self, **values):
-        _cc_self.__dict__.update(values)
-
-
 class _CcReturn:
     """An early return travelling out of a phase."""
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_new_p1(_s):
@@ -201,7 +186,7 @@ def _cc_new_p5(_s):
 
 def _cc_new_p6(_s):
     if _s.answers.install and not _s.dry_run and _s.options.web is not None:
-        _install(_s.runtime, _s.options, _s.target, _s.root)
+        install(_s.runtime, _s.options, _s.target, _s.root)
 
 
 _CC_SPECS_new_1 = (

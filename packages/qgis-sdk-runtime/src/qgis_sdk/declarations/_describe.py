@@ -15,11 +15,11 @@ from qgis_sdk.declarations._descriptions import (
 from qgis_sdk.declarations._metadata import WIRES_ATTRIBUTE, Metadata, declared_metadata
 from qgis_sdk.declarations._plugin import PLUGIN_ATTRIBUTE, _StreamMetadata, bindings_of
 from qgis_sdk.declarations._schemas import (
-    _require_plain_method,
-    _require_self_first,
     _schema,
     keyword_inputs,
     object_schema,
+    require_plain_method,
+    require_self_first,
     resolve_hints,
 )
 
@@ -133,9 +133,9 @@ def _describe_action(
     name: str, method: Any, declaration: Metadata
 ) -> ActionDescription:
     path = f"action {declaration.id} ({name})"
-    _require_plain_method(method, path)
+    require_plain_method(method, path)
     parameters = list(inspect.signature(method).parameters.values())
-    _require_self_first(parameters, path)
+    require_self_first(parameters, path)
     hints = resolve_hints(method, path)
     properties, required = keyword_inputs(parameters[1:], hints, path)
     result = _schema(
@@ -156,9 +156,9 @@ def _describe_stream(
     name: str, method: Any, declaration: _StreamMetadata
 ) -> StreamDescription:
     path = f"stream {declaration.id} ({name})"
-    _require_plain_method(method, path, generator=True)
+    require_plain_method(method, path, generator=True)
     parameters = list(inspect.signature(method).parameters.values())
-    _require_self_first(parameters, path)
+    require_self_first(parameters, path)
     hints = resolve_hints(method, path)
     properties, required = keyword_inputs(parameters[1:], hints, path)
     events = {
@@ -253,7 +253,7 @@ def describe_plugin(cls: type) -> PluginDescription:
     return None
 
 
-def _describe_lowered_plugin(cls: type) -> PluginDescription:
+def describe_lowered_plugin(cls: type) -> PluginDescription:
     """Describe and enrich an internally lowered application class."""
     result = describe_plugin(cls)
     enrich = _DESCRIBER_ENRICHERS.get(PLUGIN_ATTRIBUTE)

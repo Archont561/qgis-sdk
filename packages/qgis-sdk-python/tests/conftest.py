@@ -155,7 +155,7 @@ def workspace_ui(tmp_path_factory: pytest.TempPathFactory) -> str:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _stop_the_application_after_the_session() -> Iterator[None]:
+def stop_the_application_after_the_session() -> Iterator[None]:
     """Exit QGIS exactly once, after the last test, if this session started it."""
     yield
     layers.stop_application()

@@ -45,14 +45,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_parameter_info_p1(_s1):
     from qgis.core import Qgis
 
@@ -123,14 +115,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_read_catalogue_p1(_s):

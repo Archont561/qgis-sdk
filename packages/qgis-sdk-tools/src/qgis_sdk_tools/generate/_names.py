@@ -30,7 +30,7 @@ def _check_prefixes(ordered: list[str]) -> None:
             )
 
 
-def _declared_name(preferred: Any, fallback: str, *, kind: str, action: str) -> str:
+def declared_name(preferred: Any, fallback: str, *, kind: str, action: str) -> str:
     """Use the manifest's name, refusing one the emitter cannot declare.
 
     A declared name becomes an exported type, so it has to be an identifier this
@@ -103,7 +103,7 @@ SDK_MEMBERS = frozenset({"client", "host", "schema", "ready", "close"})
 """Names ``QgisSdk`` keeps for itself; an operation id cannot start with one."""
 
 
-def _check_sdk_tree(ids: Iterable[str]) -> None:
+def check_sdk_tree(ids: Iterable[str]) -> None:
     """Refuse ids ``QgisSdk.fromBridgeSchema`` would refuse, at generation time.
 
     The SDK nests methods under the segments of their ids (``sites.summary``
@@ -128,7 +128,7 @@ def _check_sdk_tree(ids: Iterable[str]) -> None:
 
 
 @dataclass(frozen=True, slots=True)
-class _Action:
+class Action:
     """One action, with the names its generated pieces are given."""
 
     id: str
@@ -141,7 +141,7 @@ class _Action:
 
 
 @dataclass(frozen=True, slots=True)
-class _Stream:
+class Stream:
     """One declared stream: a request in, one payload schema per event kind out."""
 
     id: str

@@ -34,14 +34,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_run_smoke_p1(_s):
     _s.root = profile_plugin_dir(_s.executable, _s.prefix, _s.workspace)
     _s.names = ("application_app_one", "application_app_two")

@@ -99,6 +99,7 @@ __all__ = [
     "TYPESCRIPT_TYPES",
     "class_name",
     "emit_python_module",
+    "emit_python_package",
     "emit_python_package_init",
     "emit_typescript_module",
     "field_name",
@@ -412,6 +413,122 @@ def emit_python_module(
     return "\n".join(header) + text
 
 
+#: The most lines one generated file may hold before its provider is chunked
+#: into a package (CC001): a chunk stays comfortably under the limit.
+_MAX_GENERATED_LINES = 300
+
+#: Lines a chunk reserves for its header, registry and ``__all__`` beyond the
+#: algorithm blocks themselves.
+_CHUNK_OVERHEAD = 40
+
+
+def _python_blocks(
+    catalogue: Catalogue, provider: str
+) -> list[tuple[str, str, list[str]]]:
+    """Per-algorithm ``(id, name, lines)`` for one provider, in catalogue order."""
+    algorithms = catalogue.by_provider(provider)
+    taken: set[str] = set()
+    blocks: list[tuple[str, str, list[str]]] = []
+    for algorithm in algorithms:
+        name = class_name(algorithm, taken)
+        taken.add(name)
+        blocks.append((algorithm.id, name, _python_algorithm(algorithm, name)))
+    return blocks
+
+
+def _python_chunk_body(blocks: Sequence[tuple[str, str, list[str]]]) -> list[str]:
+    """The registry and ``__all__`` for a run of algorithm blocks."""
+    body = ["#: Every request class of this provider by algorithm id."]
+    body.append("REGISTRY: dict[str, type[TypedRun]] = {")
+    body.extend(f"    {_q(algorithm_id)}: {name}," for algorithm_id, name, _ in blocks)
+    body.append("}")
+    body.append("")
+    exported = sorted(
+        {f"{n}{suffix}" for _, n, _ in blocks for suffix in ("", "Params", "Result")}
+    )
+    body.append("__all__ = [")
+    body.extend(f'    "{name}",' for name in exported)
+    body.extend(["]", ""])
+    return body
+
+
+def _python_chunks(
+    blocks: Sequence[tuple[str, str, list[str]]],
+) -> list[list[tuple[str, str, list[str]]]]:
+    """Group blocks so each chunk's file stays under the generated-line limit."""
+    chunks: list[list[tuple[str, str, list[str]]]] = []
+    current: list[tuple[str, str, list[str]]] = []
+    cost = _CHUNK_OVERHEAD
+    for block in blocks:
+        block_cost = len(block[2]) + 4  # the block, its registry and ``__all__`` lines
+        if current and cost + block_cost > _MAX_GENERATED_LINES:
+            chunks.append(current)
+            current = []
+            cost = _CHUNK_OVERHEAD
+        current.append(block)
+        cost += block_cost
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def emit_python_package(catalogue: Catalogue, provider: str) -> dict[str, str]:
+    """The files of a provider too large for one module: chunked submodules.
+
+    ``<provider>/__init__.py`` re-exports every request class, ``REGISTRY`` and
+    ``ALGORITHM_IDS`` from ``<provider>/_<n>.py`` chunks, so
+    ``qgis_sdk.processing.<provider>`` keeps the one-module shape a caller
+    imports while no single file carries the whole catalogue.
+    """
+    blocks = _python_blocks(catalogue, provider)
+    chunks = _python_chunks(blocks)
+    files = {
+        f"_{index}.py": _python_chunk_file(catalogue, provider, chunk)
+        for index, chunk in enumerate(chunks)
+    }
+    files["__init__.py"] = _python_package_init(catalogue, provider, len(chunks))
+    return files
+
+
+def _python_chunk_file(
+    catalogue: Catalogue, provider: str, chunk: Sequence[tuple[str, str, list[str]]]
+) -> str:
+    """One chunk submodule: its algorithm blocks, registry and ``__all__``."""
+    body: list[str] = []
+    for _algorithm_id, _name, lines in chunk:
+        body.extend(lines)
+    body.extend(_python_chunk_body(chunk))
+    text = "\n".join(body)
+    return "\n".join(_python_header(catalogue, provider, text)) + text
+
+
+def _python_package_init(catalogue: Catalogue, provider: str, chunks: int) -> str:
+    """The aggregating ``__init__`` of a chunked provider package."""
+    names = ", ".join(f"_{index}" for index in range(chunks))
+    lines = _python_docstring(catalogue, provider)
+    lines.extend(["from __future__ import annotations", "", f"from . import {names}"])
+    lines.extend(f"from ._{index} import *" for index in range(chunks))
+    lines.extend(
+        [
+            "",
+            f"PROVIDER = {_q(provider)}",
+            "",
+            f"_chunks = ({names},)",
+            "REGISTRY: dict[str, type[TypedRun]] = {}",
+            "for _chunk in _chunks:",
+            "    REGISTRY.update(_chunk.REGISTRY)",
+            "",
+            "ALGORITHM_IDS: tuple[str, ...] = tuple(REGISTRY)",
+            "",
+            '__all__ = ["ALGORITHM_IDS", "PROVIDER", "REGISTRY"] + [',
+            "    name for _chunk in _chunks for name in _chunk.__all__",
+            "]",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _python_algorithm(algorithm: AlgorithmInfo, name: str) -> list[str]:
     lines: list[str] = []
     # Params TypedDict with the QGIS names (functional form: GRASS flags are
@@ -698,10 +815,22 @@ def render_package(
     )
     files: dict[str, str] = {"catalogue.json": restricted.to_json()}
     for provider in wanted:
-        files[f"{_module_name(provider)}.py"] = emit_python_module(restricted, provider)
+        files.update(_provider_files(restricted, provider))
     if init:
         files["__init__.py"] = emit_python_package_init(restricted, wanted)
     return files
+
+
+def _provider_files(catalogue: Catalogue, provider: str) -> dict[str, str]:
+    """One provider's files: a module, or a chunked package when it is large."""
+    module = emit_python_module(catalogue, provider)
+    if len(module.splitlines()) <= _MAX_GENERATED_LINES:
+        return {f"{_module_name(provider)}.py": module}
+    package = _module_name(provider)
+    return {
+        f"{package}/{name}": text
+        for name, text in emit_python_package(catalogue, provider).items()
+    }
 
 
 def _module_name(provider: str) -> str:

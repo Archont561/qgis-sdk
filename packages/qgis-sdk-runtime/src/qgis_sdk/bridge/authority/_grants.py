@@ -29,7 +29,7 @@ class _Grant(Protocol):
 
 
 @dataclass(slots=True)
-class _FileGrant:
+class FileGrant:
     """The host's side of a ref; never serialised, never shown."""
 
     ref: FileRef
@@ -45,7 +45,7 @@ class _FileGrant:
 
 
 @dataclass(slots=True)
-class _BlobGrant:
+class BlobGrant:
     """The host's side of one blob: the bytes, and who may ask for them."""
 
     ref: BlobRef
@@ -56,7 +56,7 @@ class _BlobGrant:
 
 
 @dataclass(slots=True)
-class _NetworkGrant:
+class NetworkGrantBinding:
     """One view's network grant, and the generation it was given in."""
 
     grant: NetworkGrant
@@ -64,7 +64,7 @@ class _NetworkGrant:
 
 
 @dataclass
-class _Table:
+class Table:
     """The grants of one kind, keyed by the opaque id the host minted for them.
 
     Ownership, generation and expiry are what every kind of grant is checked
@@ -127,7 +127,7 @@ class _Table:
         return len(stale)
 
 
-def _identity(path: Path) -> tuple[int, int] | None:
+def identity(path: Path) -> tuple[int, int] | None:
     """The device and inode that name one file, or ``None`` when it is gone."""
     try:
         stat = path.stat()

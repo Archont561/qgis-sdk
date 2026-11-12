@@ -54,7 +54,7 @@ _SUBSCRIPTION_ID = st.text("0123456789", min_size=1, max_size=3).map(
 )
 
 
-def _allow(binding: ViewBinding, operation: str) -> bool:
+def allow(binding: ViewBinding, operation: str) -> bool:
     """An authorizer that grants everything the allowlist holds."""
     return True
 
@@ -96,7 +96,7 @@ def _invocations(draw: st.DrawFn) -> dict[str, Any]:
     }
 
 
-def _host(*, authorize: Any = _allow) -> tuple[Dispatcher, list[str]]:
+def _host(*, authorize: Any = allow) -> tuple[Dispatcher, list[str]]:
     """A dispatcher holding one handler, and the log of what it was asked to run."""
     seen: list[str] = []
 

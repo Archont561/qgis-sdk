@@ -568,30 +568,34 @@ def test_style_text_that_is_not_a_document_is_refused() -> None:
         scope.close()
 
 
+def _lists_by_kind(scope: ResourceScope) -> None:
+    layers = FakeLayers(scope)
+    styles = FakeStyles(
+        layers,
+        scope,
+        styles=(
+            StyleEntry("circle", "symbol"),
+            StyleEntry("square", "symbol"),
+            StyleEntry("Blues", "color_ramp"),
+        ),
+    )
+    assert [entry.name for entry in styles.list_styles("symbol")] == [
+        "circle",
+        "square",
+    ]
+    assert [entry.name for entry in styles.list_styles()] == [
+        "circle",
+        "square",
+        "Blues",
+    ]
+    with pytest.raises(ValueError, match="style manager kind"):
+        styles.list_styles("gradient")
+
+
 def test_the_style_manager_lists_by_kind() -> None:
     scope = ResourceScope()
     try:
-        layers = FakeLayers(scope)
-        styles = FakeStyles(
-            layers,
-            scope,
-            styles=(
-                StyleEntry("circle", "symbol"),
-                StyleEntry("square", "symbol"),
-                StyleEntry("Blues", "color_ramp"),
-            ),
-        )
-        assert [entry.name for entry in styles.list_styles("symbol")] == [
-            "circle",
-            "square",
-        ]
-        assert [entry.name for entry in styles.list_styles()] == [
-            "circle",
-            "square",
-            "Blues",
-        ]
-        with pytest.raises(ValueError, match="style manager kind"):
-            styles.list_styles("gradient")
+        _lists_by_kind(scope)
     finally:
         scope.close()
 
@@ -715,31 +719,37 @@ def _call(dispatcher: Dispatcher, operation: str, payload: dict) -> dict:
     )
 
 
+def _round_trips_renderer(
+    scope: ResourceScope, layers: FakeLayers, styles: FakeStyles
+) -> None:
+    info = layers.open_vector(POINTS)
+    dispatcher, _ = _bridge(layers, styles, scope)
+    renderer = CategorizedRenderer(
+        field="value",
+        categories=(
+            Category("a", "A", _marker("#ff0000")),
+            Category("b", "B", _marker("#0000ff")),
+        ),
+    )
+
+    answered = _call(
+        dispatcher,
+        "symbology.set",
+        {"layer_id": info.id, "renderer": renderer.to_wire()},
+    )
+    assert answered["ok"] is True, answered
+
+    read = _call(dispatcher, "symbology.get", {"layer_id": info.id})
+    assert read["ok"] is True, read
+    assert read["value"]["kind"] == "categorized"
+    assert read["value"]["field"] == "value"
+    assert renderer_from_wire(read["value"]) == renderer
+
+
 def test_a_page_round_trips_a_renderer_across_the_wire() -> None:
     scope, layers, styles = _scope()
     try:
-        info = layers.open_vector(POINTS)
-        dispatcher, _ = _bridge(layers, styles, scope)
-        renderer = CategorizedRenderer(
-            field="value",
-            categories=(
-                Category("a", "A", _marker("#ff0000")),
-                Category("b", "B", _marker("#0000ff")),
-            ),
-        )
-
-        answered = _call(
-            dispatcher,
-            "symbology.set",
-            {"layer_id": info.id, "renderer": renderer.to_wire()},
-        )
-        assert answered["ok"] is True, answered
-
-        read = _call(dispatcher, "symbology.get", {"layer_id": info.id})
-        assert read["ok"] is True, read
-        assert read["value"]["kind"] == "categorized"
-        assert read["value"]["field"] == "value"
-        assert renderer_from_wire(read["value"]) == renderer
+        _round_trips_renderer(scope, layers, styles)
     finally:
         scope.close()
 

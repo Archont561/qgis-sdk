@@ -47,26 +47,11 @@ _CcAnn4 = Annotated[
 _CcAnn5 = Annotated[bool, typer.Option("--json", help="Print the result as JSON.")]
 
 
-class _CcState:
-    """A mutable record shared by the phases of one long function."""
-
-    def __init__(_cc_self, **values):
-        _cc_self.__dict__.update(values)
-
-
 class _CcReturn:
     """An early return travelling out of a phase."""
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_build_p1(_s):

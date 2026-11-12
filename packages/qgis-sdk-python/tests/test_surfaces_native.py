@@ -34,14 +34,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_a_dock_is_o_p1(_s1):
     _s1.plugin_module, _s1.ui_module = _s1.modules
     _s1.toggle = next(
@@ -94,14 +86,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_test_a_dialog_is_p1(_s):

@@ -28,7 +28,7 @@ from qgis_sdk.declarations import QgisSdkDeclarationError
 from qgis_sdk.models import ColourParameter, LayerParameter, RangeParameter
 
 from ._parameters import _marker
-from ._services import _rasters_of
+from ._services import rasters_of
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +145,7 @@ def _opened_raster(picked: _Picked) -> str:
     )
     if raster is None:
         raise QgsProcessingException(f"{picked.name} requires a raster layer")
-    return _rasters_of(picked.bridge).open_raster(Path(raster.source())).id
+    return rasters_of(picked.bridge).open_raster(Path(raster.source())).id
 
 
 def _opened_vector(picked: _Picked) -> str:
@@ -165,7 +165,7 @@ def _opened_either(picked: _Picked) -> str:
     if layer is None:
         raise QgsProcessingException(f"{picked.name} requires a map layer")
     if layer.type() == Qgis.LayerType.Raster:
-        return _rasters_of(picked.bridge).open_raster(Path(layer.source())).id
+        return rasters_of(picked.bridge).open_raster(Path(layer.source())).id
     return picked.bridge.layers.open_vector(Path(layer.source())).id
 
 

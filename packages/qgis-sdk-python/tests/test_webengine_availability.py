@@ -9,6 +9,7 @@ from pathlib import Path
 import layers
 import pytest
 from qgis_sdk.adapters import webengine
+from qgis_sdk.adapters.webengine import _view
 from qgis_sdk.models.errors import QgisSdkOptionalDependencyError
 
 
@@ -65,7 +66,7 @@ def test_require_webengine_matches_availability() -> None:
 def test_create_webengine_view_raises_when_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(webengine, "_import_webengine_view", lambda: None)
+    monkeypatch.setattr(_view, "import_webengine_view", lambda: None)
     with pytest.raises(QgisSdkOptionalDependencyError) as exc_info:
         webengine.create_webengine_view()
     assert exc_info.value.dependency == "pyqt6-webengine"
@@ -108,7 +109,7 @@ def test_create_webengine_view_uses_resolved_class(
             self.args = args
             self.kwargs = kwargs
 
-    monkeypatch.setattr(webengine, "_import_webengine_view", lambda: FakeView)
+    monkeypatch.setattr(_view, "import_webengine_view", lambda: FakeView)
     view = webengine.create_webengine_view(1, value=2)
     assert isinstance(view, FakeView)
     assert view.args == (1,)

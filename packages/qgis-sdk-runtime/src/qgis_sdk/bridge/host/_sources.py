@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from qgis_sdk.bridge.host._support import _response_event
+from qgis_sdk.bridge.host._support import response_event
 from qgis_sdk.bridge.streams import StreamSink
 from qgis_sdk.models import (
     CanvasExtent,
@@ -25,7 +25,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
     from qgis_sdk.bridge.dispatch import ViewBinding
 
 
-class _WatchProject:
+class WatchProject:
     """The push source behind ``project.changed``.
 
     The project calls back whenever it changes, and the sink turns each frame
@@ -54,7 +54,7 @@ class _WatchProject:
         self._cancel()
 
 
-class _WatchExtent:
+class WatchExtent:
     """The push source behind ``canvas.extent_changed``.
 
     The canvas calls back whenever the user moves it, and the sink turns each
@@ -83,7 +83,7 @@ class _WatchExtent:
         self._cancel()
 
 
-class _Capture:
+class Capture:
     """The push source behind ``canvas.capture``: one drawing, one geometry.
 
     The tool takes as long as the user takes, so the frame arrives on a later
@@ -157,7 +157,7 @@ class EditingSessions:
                 self.close(session_id)
 
 
-class _Fetch:
+class Fetch:
     """The push source behind ``network.fetch``: one request, one event, done.
 
     The transport delivers on a later event-loop turn; the sink wakes the
@@ -186,7 +186,7 @@ class _Fetch:
                         )
                     )
                     return
-                if sink.emit(_response_event(outcome)):
+                if sink.emit(response_event(outcome)):
                     sink.complete()
                 return
             sink.fail(outcome)

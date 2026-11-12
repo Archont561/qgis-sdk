@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from qgis_sdk_tools.generate._context import _Rendering
+from qgis_sdk_tools.generate._context import Rendering
 from qgis_sdk_tools.generate._emit import (
-    _call_helper,
-    _open_helper,
     _quote,
-    _tree_body_lines,
-    _tree_lines,
+    call_helper,
+    open_helper,
+    tree_body_lines,
+    tree_lines,
 )
-from qgis_sdk_tools.generate._names import _Action, _Stream
+from qgis_sdk_tools.generate._names import Action, Stream
 
 
-class _Members:
+class Members:
     """The typed surface of the generated client: one member per operation.
 
     An action is a ``call`` and a stream is an ``open``, so both the interface
@@ -21,7 +21,7 @@ class _Members:
     member name is the id's last segment, quoted because an id may carry dots.
     """
 
-    def __init__(self, rendering: _Rendering) -> None:
+    def __init__(self, rendering: Rendering) -> None:
         self._surface = rendering.surface
         self._actions = rendering.actions
         self._streams = rendering.streams
@@ -34,7 +34,7 @@ class _Members:
             f"export interface {surface.operations_type} {{",
         ]
         members = (*self._actions, *self._streams)
-        lines.extend(_tree_lines(members, self.member_type))
+        lines.extend(tree_lines(members, self.member_type))
         lines.extend(["}", ""])
         lines.extend(
             [
@@ -45,17 +45,17 @@ class _Members:
                 "\treturn {",
             ]
         )
-        lines.extend(_tree_body_lines(members, self.member_body))
+        lines.extend(tree_body_lines(members, self.member_body))
         lines.extend(["\t};", "}", ""])
-        lines.append(_call_helper(surface).rstrip("\n"))
+        lines.append(call_helper(surface).rstrip("\n"))
         lines.append("")
         if self._streams:
-            lines.append(_open_helper(surface).rstrip("\n"))
+            lines.append(open_helper(surface).rstrip("\n"))
             lines.append("")
         return lines
 
-    def member_type(self, action: _Action | _Stream) -> str:
-        if isinstance(action, _Stream):
+    def member_type(self, action: Action | Stream) -> str:
+        if isinstance(action, Stream):
             return self.stream_member_type(action)
         input_name = self._names.type_name(action.request, f"{action.base}Request")
         output_name = self._names.type_name(action.result, f"{action.base}Result")
@@ -66,7 +66,7 @@ class _Members:
             f"options?: {self._surface.options_type}) => Promise<{output_name}>;"
         )
 
-    def stream_member_type(self, stream: _Stream) -> str:
+    def stream_member_type(self, stream: Stream) -> str:
         """A stream member takes its request, the handlers and the options.
 
         The request is never optional here: a required parameter cannot follow
@@ -82,7 +82,7 @@ class _Members:
             f"Promise<{surface.stream_handle_type}>;"
         )
 
-    def stream_member_body(self, stream: _Stream) -> str:
+    def stream_member_body(self, stream: Stream) -> str:
         surface = self._surface
         input_name = self._names.type_name(stream.request, f"{stream.base}Request")
         tail = stream.id.rsplit(".", 1)[-1]
@@ -97,8 +97,8 @@ class _Members:
             f"\t\t\t\t),"
         )
 
-    def member_body(self, action: _Action | _Stream) -> str:
-        if isinstance(action, _Stream):
+    def member_body(self, action: Action | Stream) -> str:
+        if isinstance(action, Stream):
             return self.stream_member_body(action)
         input_name = self._names.type_name(action.request, f"{action.base}Request")
         output_name = self._names.type_name(action.result, f"{action.base}Result")

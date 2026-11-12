@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from functools import partial
 from typing import TYPE_CHECKING
 
-from qgis_sdk.bridge.host._context import HostHandler, _Host
+from qgis_sdk.bridge.host._context import Host, HostHandler
 from qgis_sdk.bridge.host._operations import HOST_OPERATIONS, HostOperation
 from qgis_sdk.bridge.host._sources import EditingSessions
 from qgis_sdk.bridge.host.handlers import HANDLERS
@@ -39,7 +39,7 @@ def register_host_operations(
     failed.
     """
     editing = EditingSessions()
-    host = _Host(services=services, editing=editing)
+    host = Host(services=services, editing=editing)
     wanted = _selected(only)
     operations = _operations(wanted)
     _refuse_taken(dispatcher, operations)
@@ -78,7 +78,7 @@ def _register(
     dispatcher: Dispatcher,
     wanted: Sequence[HostOperation],
     operations: Sequence[BridgeOperation],
-    host: _Host,
+    host: Host,
 ) -> None:
     """Allowlist each operation against the handler its id names.
 

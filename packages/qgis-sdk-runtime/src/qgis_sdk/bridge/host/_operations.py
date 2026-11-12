@@ -50,7 +50,7 @@ from qgis_sdk.bridge.host._schemas import (
     VECTOR_TILE_LAYER_INFO,
     _array,
     _object,
-    _page_result,
+    page_result,
 )
 from qgis_sdk.bridge.protocol import HOST_SCHEMA_VERSION
 from qgis_sdk.models.canvas import (
@@ -101,11 +101,11 @@ _BOOKMARKS = _array(BOOKMARK)
 
 #: The project's print layouts, paged like every other list: a project file
 #: bounds how many it can hold, but "bounded" is not "small enough to inline".
-_LAYOUTS = _page_result(LAYOUT_INFO)
+_LAYOUTS = page_result(LAYOUT_INFO)
 
 #: The style manager's entries, paged for the same reason: a style database is a
 #: user's library, and a page cannot carry an unbounded one.
-_STYLE_ENTRIES = _page_result(STYLE_ENTRY)
+_STYLE_ENTRIES = page_result(STYLE_ENTRY)
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,7 +174,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="layers.read",
         affinity=GUI,
         request=PAGE_REQUEST,
-        result=_page_result(LAYER_INFO),
+        result=page_result(LAYER_INFO),
         request_name="PageRequest",
         result_name="LayerPage",
     ),
@@ -196,7 +196,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="project.read",
         affinity=GUI,
         request=PAGE_REQUEST,
-        result=_page_result({"type": "string"}),
+        result=page_result({"type": "string"}),
         result_name="IdPage",
     ),
     HostOperation(
@@ -341,7 +341,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="connections.read",
         affinity=GUI,
         request=PAGE_REQUEST,
-        result=_page_result(CONNECTION_INFO),
+        result=page_result(CONNECTION_INFO),
         request_name="PageRequest",
         result_name="ConnectionPage",
     ),
@@ -376,7 +376,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
             },
             required=("provider", "connection"),
         ),
-        result=_page_result(CONNECTION_ITEM),
+        result=page_result(CONNECTION_ITEM),
         request_name="ConnectionBrowseRequest",
         result_name="ConnectionItemPage",
         # A browse queries the database with the authentication the connection
@@ -431,7 +431,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="auth.read",
         affinity=GUI,
         request=PAGE_REQUEST,
-        result=_page_result(AUTH_CONFIGURATION),
+        result=page_result(AUTH_CONFIGURATION),
         request_name="PageRequest",
         result_name="AuthConfigurationPage",
         # Reading the credential registry is a credential act even though the
@@ -609,7 +609,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         grant="algorithms.read",
         affinity=GUI,
         request=PAGE_REQUEST,
-        result=_page_result(PROVIDER_INFO),
+        result=page_result(PROVIDER_INFO),
         request_name="PageRequest",
         result_name="ProviderPage",
     ),
@@ -622,7 +622,7 @@ HOST_OPERATIONS: tuple[HostOperation, ...] = (
         request=_object(
             {**PAGE_REQUEST["properties"], "provider": {"type": "string"}},
         ),
-        result=_page_result(ALGORITHM_SUMMARY),
+        result=page_result(ALGORITHM_SUMMARY),
         request_name="AlgorithmListRequest",
         result_name="AlgorithmPage",
     ),

@@ -42,14 +42,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_check_p1(_s):
     if not isinstance(_s.schema, Mapping):
         raise QgisSdkBridgeError(f"{_s.path}: a schema must be an object")
@@ -189,7 +181,9 @@ def _check_string(
     try:
         matched = re.fullmatch(pattern, value)
     except re.error as error:
-        raise QgisSdkBridgeError(f"{path}: pattern {pattern!r} is unusable: {error}")
+        raise QgisSdkBridgeError(
+            f"{path}: pattern {pattern!r} is unusable: {error}"
+        ) from error
     if matched is None:
         raise QgisSdkBridgeError(
             f"{path}: {value!r} does not match the declared pattern {pattern!r}"

@@ -38,7 +38,7 @@ JobEvent = Literal["progress", "success", "failure", "cancelled"]
 _EVENTS: tuple[JobEvent, ...] = ("progress", "success", "failure", "cancelled")
 
 
-def _main_thread() -> bool:
+def main_thread() -> bool:
     """The default notion of "the GUI thread": the interpreter's main thread."""
     return threading.current_thread() is threading.main_thread()
 
@@ -324,7 +324,7 @@ def _describe_annotation(annotation: Any) -> str:
     return type_name(annotation)
 
 
-def _check_arguments(
+def check_arguments(
     description: JobDescription, arguments: dict[str, Any]
 ) -> list[str]:
     """Name every way ``arguments`` fails the signature, without the values."""

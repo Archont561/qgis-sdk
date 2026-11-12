@@ -13,12 +13,12 @@ from qgis_sdk.jobs._attempt import (
     _NOT_THE_DRIVING_THREAD,
     _TICK_IN_PROGRESS,
     _Attempt,
-    _run_attempt,
+    run_attempt,
 )
 from qgis_sdk.jobs._authoring import (
-    _check_arguments,
-    _main_thread,
+    check_arguments,
     describe_job,
+    main_thread,
 )
 from qgis_sdk.jobs._handles import BoundJob, JobHandle, as_handles
 from qgis_sdk.jobs._ownership import INVOKING_SCOPE
@@ -170,7 +170,7 @@ def _init_facts2(**values):
         project=values["project"],
         gui_thread=values["gui_thread"]
         if values["gui_thread"] is not None
-        else _main_thread,
+        else main_thread,
         on_fault=values["on_fault"],
         registry=values["registry"]
         if values["registry"] is not None
@@ -199,7 +199,7 @@ def _submit_phase1(arguments, bound, description, runtime, self):
         logical_id=f"{description.id}#{number}",
         prerequisites=bound.prerequisites,
     )
-    coroutine = _run_attempt(attempt, bound.function, dict(arguments))
+    coroutine = run_attempt(attempt, bound.function, dict(arguments))
     try:
         attempt._job = runtime.scheduler.submit(coroutine)
     except BaseException:
@@ -477,7 +477,7 @@ class _JobServiceMixin2:
     def _submit(self, bound: BoundJob, arguments: dict[str, Any]) -> JobHandle:
         self._scope.ensure_open()
         description = bound.description
-        problems = _check_arguments(description, arguments)
+        problems = check_arguments(description, arguments)
         if problems:
             raise QgisSdkJobRejectedError(description.id, problems)
         runtime = self._runtime

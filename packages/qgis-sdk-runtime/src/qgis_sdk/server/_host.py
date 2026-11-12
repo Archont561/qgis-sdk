@@ -48,14 +48,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_serve_p1(_s):
     _s.rewritten = _s.self.rewrite(_s.context, _s.request, _s.response)
     if isinstance(_s.rewritten, ServerResponse):

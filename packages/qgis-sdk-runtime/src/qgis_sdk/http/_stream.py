@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Any
 from ._queue import QgisSdkHostBusyError, QgisSdkHostReloadedError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; the routes call this
-    from ._endpoint import _Endpoint
-    from ._handler import _RequestHandler
+    from ._endpoint import Endpoint
+    from ._handler import RequestHandler
     from ._rest import _Subscription
     from ._sessions import _Session
 
 
-def pump(handler: _RequestHandler, subscription: _Subscription) -> None:
+def pump(handler: RequestHandler, subscription: _Subscription) -> None:
     """Write the subscription's frames as events until it ends or the page goes away."""
     session = subscription.session
     try:
@@ -26,7 +26,7 @@ def pump(handler: _RequestHandler, subscription: _Subscription) -> None:
         pass  # The page went away; the subscription is disposed either way.
 
 
-def _open(handler: _RequestHandler) -> None:
+def _open(handler: RequestHandler) -> None:
     """Answer 200 with the event-stream headers the browser's EventSource expects."""
     handler.connection.settimeout(handler.endpoint.write_timeout)
     handler.send_response(200)
@@ -37,7 +37,7 @@ def _open(handler: _RequestHandler) -> None:
 
 
 def _step(
-    handler: _RequestHandler, subscription: _Subscription, session: _Session
+    handler: RequestHandler, subscription: _Subscription, session: _Session
 ) -> bool:
     """Write one frame or keepalive and acknowledge it; ``False`` ends the stream."""
     if session.frames.empty() and not _flushed(handler.endpoint, session):
@@ -67,7 +67,7 @@ def _taken(session: _Session) -> str | None:
         return None
 
 
-def _flushed(endpoint: _Endpoint, session: _Session) -> bool:
+def _flushed(endpoint: Endpoint, session: _Session) -> bool:
     """Ask the owner to push one more frame into the session; ``False`` when it cannot."""
     try:
         endpoint.queue.call(lambda: session.channel.flush(limit=1))
@@ -77,7 +77,7 @@ def _flushed(endpoint: _Endpoint, session: _Session) -> bool:
 
 
 def _acknowledged(
-    endpoint: _Endpoint, session: _Session, decoded: dict[str, Any]
+    endpoint: Endpoint, session: _Session, decoded: dict[str, Any]
 ) -> bool:
     """Tell the host a frame was delivered, so a bounded in-flight window reopens.
 

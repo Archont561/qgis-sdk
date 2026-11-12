@@ -7,19 +7,19 @@ from collections.abc import Iterator, Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from qgis_sdk.bridge.host._context import HostHandler, _Host
+from qgis_sdk.bridge.host._context import Host, HostHandler
 from qgis_sdk.bridge.host._schemas import BLOB_CHUNK_BYTES
 from qgis_sdk.bridge.host._support import (
-    _feature_query,
-    _geometry,
-    _optional_int,
+    feature_query,
+    geometry,
+    optional_int,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
     from qgis_sdk.bridge.dispatch import ViewBinding
 
 
-def blob_get(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def blob_get(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     offset = int(payload.get("offset", 0))
     length = int(payload.get("length", BLOB_CHUNK_BYTES))
     ref = ctx.authority.blob_info(binding, payload["blob"])
@@ -39,7 +39,7 @@ def blob_get(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> di
 
 
 def features_page(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> Iterator[dict[str, Any]]:
     """Stream pages until the layer runs out, one bounded page per event.
 
@@ -49,7 +49,7 @@ def features_page(
     """
     service = ctx.features
     layer_id = payload["layer_id"]
-    query = _feature_query(payload)
+    query = feature_query(payload)
 
     def pages() -> Iterator[dict[str, Any]]:
         cursor = query.cursor
@@ -63,7 +63,7 @@ def features_page(
     return pages()
 
 
-def features_get(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def features_get(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     service = ctx.features
     feature = service.feature(
         payload["layer_id"],
@@ -74,68 +74,62 @@ def features_get(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -
 
 
 def expressions_evaluate(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     service = ctx.features
     outcome = service.evaluate(
         payload["text"],
         layer_id=payload.get("layer_id"),
-        feature_id=_optional_int(payload.get("feature_id")),
+        feature_id=optional_int(payload.get("feature_id")),
     )
     return outcome.to_wire()
 
 
 def expressions_validate(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     service = ctx.features
     return service.check(payload["text"], layer_id=payload.get("layer_id")).to_wire()
 
 
-def editing_begin(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def editing_begin(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     service = ctx.features
     session = ctx.editing.begin(binding, service, payload["layer_id"])
     return {"session_id": session.id, "layer_id": session.layer_id}
 
 
-def editing_add(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def editing_add(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     session = ctx.editing.require(binding, payload["session_id"])
     feature_id = session.add(
         dict(payload["attributes"]),
-        _geometry(payload.get("geometry")),
+        geometry(payload.get("geometry")),
     )
     return {"feature_id": feature_id, "pending": session.pending}
 
 
-def editing_update(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> dict:
+def editing_update(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     session = ctx.editing.require(binding, payload["session_id"])
     session.update(
         int(payload["feature_id"]),
         dict(payload["attributes"]) if payload.get("attributes") else None,
-        _geometry(payload.get("geometry")),
+        geometry(payload.get("geometry")),
     )
     return {"session_id": session.id, "pending": session.pending}
 
 
-def editing_delete(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> dict:
+def editing_delete(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     session = ctx.editing.require(binding, payload["session_id"])
     session.delete(int(payload["feature_id"]))
     return {"session_id": session.id, "pending": session.pending}
 
 
-def editing_commit(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> dict:
+def editing_commit(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     session = ctx.editing.require(binding, payload["session_id"])
     return session.commit().to_wire()
 
 
 def editing_rollback(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     session = ctx.editing.require(binding, payload["session_id"])
     session.rollback()

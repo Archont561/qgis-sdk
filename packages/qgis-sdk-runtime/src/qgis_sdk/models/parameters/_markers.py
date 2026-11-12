@@ -1,0 +1,226 @@
+"""The markers that say what an input *means* to a host, not what it stores.
+
+An annotation already carries a type, and the type is enough to render a text
+box or a spin box. It is not enough to render the right *widget*: a ``str`` may
+be free text or a vector layer the user picks from the canvas, and a ``float``
+may be an arbitrary number or a distance whose unit the host should show. The
+markers ride along in ``Annotated`` metadata so the wire schema keeps describing
+the stored value while the host learns the intent.
+
+The usual spelling is the alias (decision-42): ``layer: LayerInput``,
+``crs: CrsInput``, ``distance: Metres``, ``source: FileInput(filters=(\"*.gpkg\",))``,
+``folder: DirectoryInput()``, ``attribute: FieldInput(of=\"layer\")``,
+``weight: Range(0.0, 1.0)``, ``fill: Colour()``, ``mode: Literal[\"fast\", \"safe\"]``.
+The explicit form stays available for a reader who wants to see the stored
+type - ``Annotated[float, MetresParameter(minimum=1.0)]`` - and describes
+identically.
+
+The markers are plain frozen values: equality is by type and attributes, so a
+test can assert which marker a parameter carries without importing QGIS.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Annotated, Any
+
+from qgis_sdk.models.files import FileRef
+from qgis_sdk.models.layers import LAYER_KIND_NAMES, LayerKind
+
+__all__ = [
+    "COLOUR_PATTERN",
+    "LAYER_KINDS_FOR_INPUT",
+    "AnnotationInput",
+    "AnyLayerInput",
+    "Colour",
+    "ColourParameter",
+    "CrsInput",
+    "CrsParameter",
+    "DirectoryInput",
+    "DirectoryParameter",
+    "FieldInput",
+    "FieldParameter",
+    "FileInput",
+    "FileParameter",
+    "LayerInput",
+    "LayerParameter",
+    "MeshInput",
+    "Metres",
+    "MetresParameter",
+    "PointCloudInput",
+    "Range",
+    "RangeParameter",
+    "RasterInput",
+    "TiledSceneInput",
+    "VectorTileInput",
+]
+
+#: ``#RRGGBB`` or ``#RRGGBBAA``, the one colour spelling every host reads back.
+COLOUR_PATTERN = re.compile(r"\A#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\Z")
+
+#: The kinds a :class:`LayerParameter` may name: every layer kind, in the order
+#: :data:`qgis_sdk.models.layers.LAYER_KIND_NAMES` states them, plus ``any``,
+#: the picker that lists all of them. ``any`` is not a layer kind, so it is
+#: spelled here and not there; the rest is derived, so a kind cannot be described
+#: and yet refused as an input.
+LAYER_KINDS_FOR_INPUT: tuple[str, ...] = (*LAYER_KIND_NAMES, "any")
+
+
+@dataclass(frozen=True, slots=True)
+class LayerParameter:
+    """The input receives a layer chosen by the user, of one kind.
+
+    ``kind`` narrows what the picker offers and what the host accepts: the
+    default ``"vector"`` keeps every existing declaration's meaning, every other
+    layer kind names a picker that offers that kind alone, and ``"any"`` lists all
+    of them. The kind
+    travels on the wire as ``layer_kind`` so a page renders the same control the
+    native form does, and the host refuses a value of the wrong kind by name
+    rather than letting the handler discover it.
+    """
+
+    kind: LayerKind = "vector"
+
+    def __post_init__(self) -> None:
+        if self.kind not in LAYER_KINDS_FOR_INPUT:
+            raise ValueError(
+                f"a layer input is {', '.join(LAYER_KINDS_FOR_INPUT)}; "
+                f"not {self.kind!r}"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class CrsParameter:
+    """The input receives a coordinate reference system chosen by the user."""
+
+
+@dataclass(frozen=True, slots=True)
+class MetresParameter:
+    """The input is a distance in metres, so the host may label and bound it."""
+
+    minimum: float = 0.0
+    maximum: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FileParameter:
+    """The input is one existing file the user picked; the handler gets a ref.
+
+    ``filters`` are globs (``*.gpkg``) in the order the picker offers them.
+    """
+
+    filters: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        filters = tuple(self.filters)
+        for pattern in filters:
+            if not isinstance(pattern, str) or "*" not in pattern:
+                raise ValueError(
+                    f"a file filter is a glob such as '*.gpkg', not {pattern!r}"
+                )
+        object.__setattr__(self, "filters", filters)
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryParameter:
+    """The input is an existing directory the user picked; the handler gets a ref."""
+
+
+@dataclass(frozen=True, slots=True)
+class FieldParameter:
+    """The input is an attribute field of the layer input named by ``of``."""
+
+    of: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.of, str) or not self.of.isidentifier():
+            raise ValueError(
+                "a field input names the layer input it belongs to: of='layer'"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class RangeParameter:
+    """The input is a number the host bounds between ``minimum`` and ``maximum``."""
+
+    minimum: float
+    maximum: float
+    step: float | None = None
+
+    def __post_init__(self) -> None:
+        if not (self.minimum < self.maximum):
+            raise ValueError(
+                f"a range puts its minimum {self.minimum!r} below its maximum "
+                f"{self.maximum!r}"
+            )
+        if self.step is not None and not (self.step > 0):
+            raise ValueError("a step is positive")
+
+
+@dataclass(frozen=True, slots=True)
+class ColourParameter:
+    """The input is a colour, stored as ``#RRGGBB`` or ``#RRGGBBAA``."""
+
+    alpha: bool = True
+
+
+LayerInput = Annotated[str, LayerParameter()]
+"""A vector layer id the host fills from a layer picker."""
+
+
+RasterInput = Annotated[str, LayerParameter(kind="raster")]
+"""A raster layer id the host fills from a raster-only picker (TASK-87)."""
+
+MeshInput = Annotated[str, LayerParameter(kind="mesh")]
+"""A mesh layer id the host fills from a mesh-only picker (TASK-91)."""
+
+PointCloudInput = Annotated[str, LayerParameter(kind="point_cloud")]
+"""A point cloud layer id, from a point-cloud-only picker (TASK-91)."""
+
+VectorTileInput = Annotated[str, LayerParameter(kind="vector_tile")]
+"""A vector tile layer id, from a vector-tile-only picker (TASK-91)."""
+
+AnnotationInput = Annotated[str, LayerParameter(kind="annotation")]
+"""An annotation layer id, from an annotation-only picker (TASK-91)."""
+
+TiledSceneInput = Annotated[str, LayerParameter(kind="tiled_scene")]
+"""A tiled scene id, from a tiled-scene-only picker (TASK-91)."""
+
+AnyLayerInput = Annotated[str, LayerParameter(kind="any")]
+"""A layer id of any kind: one picker lists every kind together."""
+
+CrsInput = Annotated[str, CrsParameter()]
+"""An authority code (``EPSG:3857``) the host fills from a CRS picker."""
+
+Metres = Annotated[float, MetresParameter()]
+"""A distance in metres, labelled as such and bounded at zero by the host."""
+
+
+def FileInput(*, filters: Iterable[str] = ()) -> Any:
+    """One existing file, offered through ``filters``; the handler gets a FileRef."""
+    return Annotated[FileRef, FileParameter(filters=tuple(filters))]
+
+
+def DirectoryInput() -> Any:
+    """One existing directory; the handler gets a directory FileRef."""
+    return Annotated[FileRef, DirectoryParameter()]
+
+
+def FieldInput(*, of: str) -> Any:
+    """An attribute field name of the layer input called ``of``."""
+    return Annotated[str, FieldParameter(of=of)]
+
+
+def Range(minimum: float, maximum: float, *, step: float | None = None) -> Any:
+    """A number between ``minimum`` and ``maximum``; ints stay ints."""
+    stored = int if isinstance(minimum, int) and isinstance(maximum, int) else float
+    return Annotated[
+        stored, RangeParameter(minimum=minimum, maximum=maximum, step=step)
+    ]
+
+
+def Colour(*, alpha: bool = True) -> Any:
+    """A colour the host picks with its colour button, stored as hex."""
+    return Annotated[str, ColourParameter(alpha=alpha)]

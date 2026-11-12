@@ -5,65 +5,61 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from qgis_sdk.bridge.host._context import HostHandler, _Host
-from qgis_sdk.bridge.host._sources import _Capture, _WatchExtent
+from qgis_sdk.bridge.host._context import Host, HostHandler
+from qgis_sdk.bridge.host._sources import Capture, WatchExtent
 from qgis_sdk.models import ZoomTarget
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
     from qgis_sdk.bridge.dispatch import ViewBinding
 
 
-def canvas_extent(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def canvas_extent(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     return ctx.canvas.extent().to_wire()
 
 
-def canvas_scale(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> float:
+def canvas_scale(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> float:
     return ctx.canvas.scale()
 
 
 def canvas_crs(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> str | None:
     return ctx.canvas.crs()
 
 
-def canvas_center(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def canvas_center(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     return ctx.canvas.center().to_wire()
 
 
-def canvas_zoom_to(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> dict:
+def canvas_zoom_to(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     target = ZoomTarget.from_wire(payload)
     return ctx.canvas.zoom_to(target).to_wire()
 
 
-def canvas_refresh(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> None:
+def canvas_refresh(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> None:
     ctx.canvas.refresh()
 
 
-def canvas_themes(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def canvas_themes(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     return ctx.canvas.themes().to_wire()
 
 
 def canvas_apply_theme(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     return ctx.canvas.apply_theme(payload["name"]).to_wire()
 
 
 def canvas_extent_changed(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> _WatchExtent:
-    return _WatchExtent(ctx.canvas)
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
+) -> WatchExtent:
+    return WatchExtent(ctx.canvas)
 
 
 def canvas_capture(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> _Capture:
-    return _Capture(ctx.canvas, payload["shape"])
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
+) -> Capture:
+    return Capture(ctx.canvas, payload["shape"])
 
 
 HANDLERS: dict[str, HostHandler] = {

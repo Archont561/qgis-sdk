@@ -48,7 +48,8 @@ def implemented() -> set[str]:
     """Every public function the automation package offers as a task action."""
     return {
         node.name
-        for node in _tree(AUTOMATION / "tasks.py").body
+        for path in (AUTOMATION / "tasks").glob("*.py")
+        for node in _tree(path).body
         if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
     }
 

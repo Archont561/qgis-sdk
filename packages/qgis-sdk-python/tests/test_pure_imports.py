@@ -245,7 +245,9 @@ def test_the_tools_tree_imports_the_runtime_the_stdlib_and_its_declared_deps() -
             allowed = allowed or top in TOOLS_DEPENDENCIES
             # The optional MCP SDK is confined to its lazy entrypoint/adapter.
             optional_mcp_files = {
-                TOOLS_ROOT / "mcp.py",
+                TOOLS_ROOT / "mcp" / "__init__.py",
+                TOOLS_ROOT / "mcp" / "_serve.py",
+                TOOLS_ROOT / "mcp" / "_types.py",
                 TOOLS_ROOT / "_commands" / "_mcp.py",
             }
             allowed = allowed or (
@@ -302,7 +304,13 @@ def test_only_the_testing_package_imports_the_test_doubles() -> None:
             if isinstance(node, ast.ImportFrom):
                 if node.module == "qgis_sdk.testing":
                     imported.append("qgis_sdk.testing")
-                if node.level and node.module in (None, "testing"):
+                if node.level and (
+                    node.module == "testing"
+                    or (
+                        node.module is None
+                        and any(alias.name == "testing" for alias in node.names)
+                    )
+                ):
                     imported.append("relative testing")
             elif isinstance(node, ast.Import):
                 imported.extend(

@@ -32,14 +32,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_stream_p1(_s):
     validate_given(_s.id, _s.title)
     _s.label = _s.id if _s.id is not None else "stream"

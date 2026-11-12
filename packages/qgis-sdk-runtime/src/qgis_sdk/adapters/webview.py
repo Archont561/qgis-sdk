@@ -40,14 +40,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_open_view_p1(_s):
     _s.values = _OpenValues1(**_s.options)
     from qgis.PyQt.QtCore import Qt, QUrl

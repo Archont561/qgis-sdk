@@ -16,10 +16,10 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from qgis_sdk.models import QgisSdkUiError
+from qgis_sdk.ui.wiring._connect import _find, _qt_signal
 
 from .buttons import AcceptCancel
 from .feedback import JobProgress
-from .wiring import _find, _qt_signal
 
 if TYPE_CHECKING:
     from qgis_sdk.core.contexts import UiContext

@@ -34,14 +34,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_from_wire_p1(_s):
     if isinstance(_s.value, _s.cls):
         return _CcReturn(_s.value)
