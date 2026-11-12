@@ -140,6 +140,13 @@ jobs:
         if: steps.plan.outputs.action == 'tag' && steps.plan.outputs.typescript == 'true'
         run: pixi run -e default automation -- install_js
 
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the quality gate
+      # imports them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        if: steps.plan.outputs.action == 'tag'
+        run: pixi run -e default python packages/qgis-sdk-python/scripts/generate_processing_providers.py
+
       - name: Run quality gate
         if: steps.plan.outputs.action == 'tag'
         run: |
