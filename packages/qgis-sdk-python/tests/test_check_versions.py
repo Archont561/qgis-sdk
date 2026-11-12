@@ -16,6 +16,8 @@ from qgis_sdk_tools.check import check_project
 from qgis_sdk_tools.check import versions as versions_module
 from qgis_sdk_tools.check.versions import (
     RuntimeRange,
+    _ranges,
+    _specifiers,
     requirement_admits_range,
     supported_runtime_range,
 )
@@ -74,7 +76,7 @@ def oracle_admits(specifier: str, version: str) -> bool:
 def supported(monkeypatch: pytest.MonkeyPatch) -> RuntimeRange:
     """Pin what "this tools release supports" so the tests do not track the tree."""
     rng = RuntimeRange(lower="0.5.0", upper="0.6")
-    monkeypatch.setattr(versions_module, "supported_runtime_range", lambda: rng)
+    monkeypatch.setattr(_ranges, "supported_runtime_range", lambda: rng)
     return rng
 
 
@@ -92,8 +94,7 @@ def test_installed_metadata_normalizes_the_clause_order(
 ) -> None:
     """``importlib.metadata`` hands back ``<0.5,>=0.4.0``; both orders must read."""
     monkeypatch.setattr(
-        versions_module.importlib.metadata,
-        "requires",
+        "importlib.metadata.requires",
         lambda name: ["qgis-sdk-runtime<0.5,>=0.4.0", "typer==0.27.3"],
     )
 
@@ -195,7 +196,7 @@ def test_a_pin_inside_the_range_and_no_pin_at_all_pass(
 def test_an_unknown_range_skips_the_rule_rather_than_guessing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(versions_module, "supported_runtime_range", lambda: None)
+    monkeypatch.setattr(_ranges, "supported_runtime_range", lambda: None)
     root = project(tmp_path)
     declare(root, 'dependencies = ["qgis-sdk-runtime==0.0.1"]\n')
 
@@ -207,7 +208,7 @@ def test_an_unknown_range_skips_the_rule_rather_than_guessing(
 
 @pytest.fixture
 def installed(monkeypatch: pytest.MonkeyPatch) -> str:
-    monkeypatch.setattr(versions_module, "installed_runtime_version", lambda: "0.5.2")
+    monkeypatch.setattr(_specifiers, "installed_runtime_version", lambda: "0.5.2")
     return "0.5.2"
 
 

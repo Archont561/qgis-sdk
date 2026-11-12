@@ -153,7 +153,7 @@ def session(monkeypatch: pytest.MonkeyPatch, adapter_and_runtime: Any) -> Any:
     """A plugin-bound session whose ``qgis.utils.plugins`` holds the adapter."""
     adapter, _runtime = adapter_and_runtime
     monkeypatch.setattr(
-        "qgis_sdk.console._loaded_plugins", lambda: {"field_tools": adapter}
+        "qgis_sdk.console._session._loaded_plugins", lambda: {"field_tools": adapter}
     )
     return bind(adapter)
 
@@ -170,7 +170,7 @@ def bare_interpreter(monkeypatch: pytest.MonkeyPatch) -> None:
     host" is a property of the branch, so it is pinned rather than assumed.
     """
     monkeypatch.setattr("qgis_sdk.adapters.desktop.qgis_is_running", lambda: False)
-    monkeypatch.setattr("qgis_sdk.console._desktop_iface", lambda: None)
+    monkeypatch.setattr("qgis_sdk.console._session._desktop_iface", lambda: None)
 
 
 def test_connect_without_a_desktop_gives_a_context_that_refuses_desktop_by_name(
@@ -250,7 +250,7 @@ def test_plugins_lists_what_qgis_loaded_and_names_the_one_it_lacks(
 ) -> None:
     adapter, _runtime = adapter_and_runtime
     monkeypatch.setattr(
-        "qgis_sdk.console._loaded_plugins",
+        "qgis_sdk.console._session._loaded_plugins",
         lambda: {"field_tools": adapter, "zzz_other": object()},
     )
     session = connect()

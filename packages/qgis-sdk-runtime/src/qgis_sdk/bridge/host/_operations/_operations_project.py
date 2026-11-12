@@ -1,0 +1,220 @@
+"""The declared operation table, the grants that select from it and the description."""
+
+from __future__ import annotations
+
+from qgis_sdk.bridge.authority import FILE_REF
+from qgis_sdk.bridge.host._schemas import (
+    ATLAS_EXPORT_RESULT,
+    ATLAS_LAYOUT_REQUEST,
+    EXPORT_LAYOUT_REQUEST,
+    FETCH_REQUEST,
+    FETCH_RESPONSE,
+    GUI,
+    LAYOUT_EXPORT_RESULT,
+    LOAD_LAYOUT_TEMPLATE_REQUEST,
+    object,
+)
+from qgis_sdk.models.canvas import (
+    CANVAS_EXTENT,
+)
+from qgis_sdk.models.layouts import LAYOUT_INFO
+from qgis_sdk.models.project import (
+    BOOKMARK,
+    LAYER_TREE,
+    PROJECT_CHANGE,
+    PROJECT_FILE,
+)
+
+from ._operation import (
+    BOOKMARKS,
+    LAYOUTS,
+    PROJECT_ENTRIES,
+    HostOperation,
+)
+
+HOST_OPERATIONS_E = (
+    HostOperation(
+        id="project.properties",
+        title="Read the project's custom properties",
+        source="Project.custom_properties",
+        grant="project.read",
+        affinity=GUI,
+        request=object({}),
+        result=PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+    ),
+    HostOperation(
+        id="project.set_property",
+        title="Set one project custom property",
+        source="Project.set_custom_property",
+        grant="project.write",
+        affinity=GUI,
+        request=object(
+            {"name": {"type": "string"}, "value": {"type": "string"}},
+            required=("name", "value"),
+        ),
+        result=PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+    ),
+    HostOperation(
+        id="project.unset_property",
+        title="Remove one project custom property",
+        source="Project.unset_custom_property",
+        grant="project.write",
+        affinity=GUI,
+        request=object({"name": {"type": "string"}}, required=("name",)),
+        result=PROJECT_ENTRIES,
+        result_name="ProjectEntries",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.bookmarks",
+        title="Read the project's bookmarks",
+        source="Project.bookmarks",
+        grant="project.read",
+        affinity=GUI,
+        request=object({}),
+        result=BOOKMARKS,
+        result_name="Bookmarks",
+    ),
+    HostOperation(
+        id="project.bookmark",
+        title="Read one bookmark by name",
+        source="Project.bookmark",
+        grant="project.read",
+        affinity=GUI,
+        request=object({"name": {"type": "string"}}, required=("name",)),
+        result=BOOKMARK,
+        result_name="Bookmark",
+    ),
+    HostOperation(
+        id="project.add_bookmark",
+        title="Bookmark an extent",
+        source="Project.add_bookmark",
+        grant="project.write",
+        affinity=GUI,
+        request=object(
+            {"name": {"type": "string"}, "extent": CANVAS_EXTENT},
+            required=("name", "extent"),
+        ),
+        result=BOOKMARKS,
+        result_name="Bookmarks",
+    ),
+    HostOperation(
+        id="project.remove_bookmark",
+        title="Remove one bookmark by name",
+        source="Project.remove_bookmark",
+        grant="project.write",
+        affinity=GUI,
+        request=object({"name": {"type": "string"}}, required=("name",)),
+        result=BOOKMARKS,
+        result_name="Bookmarks",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.read",
+        title="Open the project file a read ref names",
+        source="Project.read",
+        grant="project.write",
+        affinity=GUI,
+        request=object({"file": FILE_REF}, required=("file",)),
+        result=LAYER_TREE,
+        request_name="ReadProjectRequest",
+        result_name="LayerTree",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.write",
+        title="Write the project to the file a write ref names",
+        source="Project.write",
+        grant="project.write",
+        affinity=GUI,
+        request=object(
+            {"file": FILE_REF, "overwrite": {"type": "boolean"}}, required=("file",)
+        ),
+        result=PROJECT_FILE,
+        request_name="WriteProjectRequest",
+        result_name="ProjectFile",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.save",
+        title="Save the project to the file it was opened from",
+        source="Project.save",
+        grant="project.write",
+        affinity=GUI,
+        request=object({}),
+        result=PROJECT_FILE,
+        result_name="ProjectFile",
+        destructive=True,
+    ),
+    HostOperation(
+        id="project.changed",
+        title="Follow the project as it changes",
+        source="Project.watch_changes",
+        grant="project.read",
+        affinity=GUI,
+        request=object({}),
+        events={"data": PROJECT_CHANGE},
+    ),
+    HostOperation(
+        id="layouts.list",
+        title="List the project's print layouts",
+        source="Layouts.list",
+        grant="layouts.read",
+        affinity=GUI,
+        request=object({}),
+        result=LAYOUTS,
+        result_name="Layouts",
+    ),
+    HostOperation(
+        id="layouts.load_template",
+        title="Load a print-layout template into the project",
+        source="Layouts.load_template",
+        grant="layouts.write",
+        affinity=GUI,
+        request=LOAD_LAYOUT_TEMPLATE_REQUEST,
+        result=LAYOUT_INFO,
+        result_name="LayoutInfo",
+    ),
+    HostOperation(
+        id="layouts.export",
+        title="Export one layout to a PDF, PNG or SVG file",
+        source="Layouts.render",
+        grant="layouts.export",
+        affinity=GUI,
+        request=EXPORT_LAYOUT_REQUEST,
+        result=LAYOUT_EXPORT_RESULT,
+        request_name="ExportLayoutRequest",
+        result_name="LayoutExport",
+        # Overwrite is the reason: the export replaces a file the page's own
+        # write ref already names, and the annotation is what the agent consent
+        # list reads to ask first (decision-49 point 4).
+        destructive=True,
+    ),
+    HostOperation(
+        id="layouts.atlas",
+        title="Run one layout's atlas, one file per coverage feature",
+        source="Layouts.render_atlas",
+        grant="layouts.export",
+        affinity=GUI,
+        request=ATLAS_LAYOUT_REQUEST,
+        result=ATLAS_EXPORT_RESULT,
+        request_name="AtlasLayoutRequest",
+        result_name="AtlasExport",
+        destructive=True,
+    ),
+    HostOperation(
+        id="network.fetch",
+        title="Perform one HTTP request through the view's network grant",
+        source="NetworkTransport.send",
+        grant="network.fetch",
+        affinity=GUI,
+        request=FETCH_REQUEST,
+        events={"data": FETCH_RESPONSE},
+        request_name="FetchRequest",
+        # The request may name an ``auth_config``: the fetch then spends an
+        # authentication configuration the caller never sees the secret of.
+        credential=True,
+    ),
+)

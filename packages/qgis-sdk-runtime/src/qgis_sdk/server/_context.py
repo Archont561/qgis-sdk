@@ -25,7 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from qgis_sdk.core.contexts import Capability, _Context
+from qgis_sdk.core.contexts import Capability, Context
 from qgis_sdk.core.host import Host
 from qgis_sdk.core.scope import ResourceScope
 from qgis_sdk.jobs import Jobs
@@ -52,7 +52,7 @@ class ServerServices:
     jobs: Jobs | None = None
 
 
-class ServerContext(_Context):
+class ServerContext(Context):
     """One request's context: the request, its response and the request project.
 
     Assembled once by the host for a single request and never reused; its scope

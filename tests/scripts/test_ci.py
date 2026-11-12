@@ -59,7 +59,7 @@ class _GateTree:
 
     def run(self) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(self.script), "check-generated"],
+            [sys.executable, "-m", "automation.ci._main", "check-generated"],
             cwd=self.root,
             env=self.env,
             capture_output=True,
@@ -119,9 +119,12 @@ def _install_fake_pixi(root: Path) -> Path:
 
 def _generated_gate_tree(tmp_path: Path) -> _GateTree:
     """A committed checkout whose generator and reference check are stubs."""
-    script = tmp_path / "automation/ci.py"
-    script.parent.mkdir()
-    script.write_bytes(SCRIPT.read_bytes())
+    script = tmp_path / "automation/ci/_main.py"
+    shutil.copytree(
+        SCRIPT_DIR,
+        tmp_path / "automation/ci",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     generator = tmp_path / "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
     generator.parent.mkdir(parents=True)
     generator.write_text("print('generator ran')\n", encoding="utf-8")
@@ -137,7 +140,7 @@ def _generated_gate_tree(tmp_path: Path) -> _GateTree:
 
 def _copy_repo_sources(tmp_path: Path) -> None:
     """The real generator and the source trees it imports."""
-    root = SCRIPT.parents[1]
+    root = SCRIPT.parents[2]
     for directory in (
         "packages/qgis-sdk-runtime/src",
         "packages/qgis-sdk-tools/src",
@@ -148,8 +151,12 @@ def _copy_repo_sources(tmp_path: Path) -> None:
             tmp_path / directory,
             ignore=shutil.ignore_patterns("__pycache__"),
         )
+    shutil.copytree(
+        root / "automation/ci",
+        tmp_path / "automation/ci",
+        ignore=shutil.ignore_patterns("__pycache__"),
+    )
     for filename in (
-        "automation/ci.py",
         "packages/qgis-sdk-python/scripts/generate_bridge_clients.py",
         "packages/qgis-sdk-typescript/src/generated/host.ts",
         "packages/qgis-sdk-typescript/tests/contracts/generated/clients/sites.ts",
@@ -237,7 +244,7 @@ def _assert_drift_rejected(generated_repo: Path, path: Path, relative: str) -> N
     assert "generated client is stale" in result.stdout
     assert "generate_bridge_clients.py" in result.stdout
     assert "reference-check-ran" not in result.stdout
-    assert path.read_bytes() == (SCRIPT.parents[1] / relative).read_bytes()
+    assert path.read_bytes() == (SCRIPT.parents[2] / relative).read_bytes()
 
 
 def _assert_ci_triggers(workflow: dict) -> None:
@@ -398,14 +405,16 @@ def _assert_cross_platform(jobs: dict, checks: dict, report: dict) -> None:
     )
 
 
-SCRIPT = Path(__file__).resolve().parents[2] / "automation" / "ci.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "automation" / "ci" / "_main.py"
+SCRIPT_DIR = Path(__file__).resolve().parents[2] / "automation" / "ci"
 
 
 def run_ci(*args: str, cwd: Path, env: dict[str, str] | None = None):
+    repo_root = Path(__file__).resolve().parents[2]
     return subprocess.run(
-        [sys.executable, str(SCRIPT), *args],
+        [sys.executable, "-m", "automation.ci._main", *args],
         cwd=cwd,
-        env={**os.environ, **(env or {})},
+        env={**os.environ, "PYTHONPATH": str(repo_root), **(env or {})},
         capture_output=True,
         text=True,
         check=False,
@@ -655,7 +664,7 @@ def generated_repo(tmp_path: Path) -> Path:
 def run_real_generated_gate(root: Path) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"}
     return subprocess.run(
-        [sys.executable, str(root / "automation/ci.py"), "check-generated"],
+        [sys.executable, "-m", "automation.ci._main", "check-generated"],
         cwd=root,
         env=env,
         capture_output=True,
@@ -839,7 +848,7 @@ def test_ci_workflow_calls_helpers_and_keeps_gates():
     import yaml
 
     workflow = yaml.safe_load(
-        (SCRIPT.parents[1] / ".github/workflows/ci.yml").read_text()
+        (SCRIPT.parents[2] / ".github/workflows/ci.yml").read_text()
     )
     # Branch protection requires six contexts from this workflow on every PR,
     # so it must run on every PR (no path filter) and must not repeat on `main`.
@@ -887,7 +896,7 @@ def test_ci_always_gates_pull_requests_and_no_skill_steps_are_run():
 
     import yaml
 
-    root = SCRIPT.parents[1]
+    root = SCRIPT.parents[2]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     # A required check from a workflow skipped by path filtering stays Pending
     # and blocks the merge, so `ci.yml` gates every pull request without a
@@ -909,7 +918,7 @@ def test_ci_always_gates_pull_requests_and_no_skill_steps_are_run():
 def test_only_deploy_and_release_workflows_keep_a_main_push_trigger():
     import yaml
 
-    root = SCRIPT.parents[1]
+    root = SCRIPT.parents[2]
     workflows = root / ".github/workflows"
     for name in ("ci.yml", "compat.yml", "docs-check.yml", "backlog.yml"):
         triggers = yaml.safe_load((workflows / name).read_text())[True]
@@ -1030,7 +1039,7 @@ def test_every_feature_file_in_the_checkout_is_linted():
     """The invariant behind the checks: no scenario escapes the linted tree."""
     from automation import ci
 
-    root = SCRIPT.parents[1]
+    root = SCRIPT.parents[2]
     files = ci.feature_files(root)
     assert files, "the checkout has no feature file; the lint would pass vacuously"
     assert ci.unlinted_features(root) == []
@@ -1041,7 +1050,7 @@ def test_every_feature_file_in_the_checkout_is_linted():
 
 def test_the_linter_policy_file_is_where_the_linter_reads_it():
     """`gherlint` reads `gherlint.toml` from the working directory it is run in."""
-    root = SCRIPT.parents[1]
+    root = SCRIPT.parents[2]
     policy = root / "gherlint.toml"
     assert policy.is_file()
     import tomllib

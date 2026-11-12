@@ -2,7 +2,7 @@ name: autorelease
 
 # Conventional-commit and milestone release train (TASK-35, TASK-37). On every
 # landed push to main or milestone tag push (milestone-v*, milestone/*, m-v*),
-# the stdlib-only automation/release.py tool decides whether a release is due; when
+# the stdlib-only automation/release package decides whether a release is due; when
 # one is, it runs pre-release quality gates and pushes an annotated release tag
 # that release.yml turns into artifacts.
 #

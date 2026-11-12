@@ -1,6 +1,6 @@
 """The LTS CI row resolves to a verdict, not to a log line.
 
-`automation/ci.py lts` is what `.github/workflows/ci.yml` runs to prove this
+`automation/ci/_checks.py lts` is what `.github/workflows/ci.yml` runs to prove this
 interpreter has QGIS 3.44 with a Desktop *and* server bindings, on the PyQt
 binding that LTS ships. Three ways it could lie are worth a test: reporting
 success because pytest skipped everything, reporting success because only one
@@ -11,26 +11,25 @@ without QGIS, without pytest-in-pytest and without a real subprocess.
 
 from __future__ import annotations
 
-import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-CI_SCRIPT = ROOT / "automation" / "ci.py"
+CI_MODULE = ROOT / "automation" / "ci" / "_checks.py"
+sys.path.insert(0, str(ROOT))
 
 PROBE_OUTPUT = "qgis 3.44.7\nqgisserver QgsServer\nqt 5.15.13\nbinding PyQt5\n"
 
 
 def load_ci() -> ModuleType:
-    """Import ``automation/ci.py`` by path, without the package around it."""
-    spec = importlib.util.spec_from_file_location("ci_script", CI_SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """Import the CI checks module the ``lts`` row is decided in."""
+    from automation.ci import _checks
+
+    return _checks
 
 
 @pytest.fixture

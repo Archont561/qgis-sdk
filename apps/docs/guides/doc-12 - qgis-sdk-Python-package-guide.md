@@ -4443,7 +4443,7 @@ See [decision-67](../../../backlog/decisions/decision-67%20-%20Retire-the-option
   stability promise is made. Breaking changes during `0.x` require a documented minor
   version bump (`0.Y.0`) with migration notes; compatible bug fixes and additive
   changes use patch releases (`0.Y.Z`).
-- **Scoped manifests, independent versions:** `automation/release.py`
+- **Scoped manifests, independent versions:** `automation/release/`
   (`python -m automation.release stamp --scope python|typescript|all`) updates only the manifests
   in the selected scope. `qgis-sdk` and `@archont561/qgis-sdk` both shipped
   `0.1.0`/`0.1.1` because they were built together; they version independently from
@@ -4460,7 +4460,7 @@ See [decision-67](../../../backlog/decisions/decision-67%20-%20Retire-the-option
   (`PLUGIN_DESCRIPTION_SCHEMA_VERSION` in `qgis_sdk.declarations`) and future
   WebEngine IPC protocol versions are versioned independently of the package
   versions. The bridge declares the same
-  `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, and `automation/release.py verify-versions`
+  `PLUGIN_DESCRIPTION_SCHEMA_VERSION`, and `automation/release verify-versions`
   refuses a workspace where the two declarations disagree.
 - **0.1.0 surface & migration note:** The placeholder `qgis_sdk.hello()` and bridge
   `hello()` smoke functions were removed prior to the first release (PR #23); the
@@ -4487,7 +4487,7 @@ published for the bridge, and no `ts-v*` tag exists.
 - **`PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`.** The wire description is
   unchanged, so a web view using bridge `0.1.1` reads a `0.2.0` plugin
   description without any change. This is what
-  `automation/release.py verify-versions` checks across the two languages.
+  `automation/release verify-versions` checks across the two languages.
 - **Additive:** curated native services with QGIS-free protocols and in-memory
   fakes (`qgis_sdk.services`, `qgis_sdk.testing`), schema-driven native forms
   (`qgis_sdk.ui`, `adapters.qgis.NativeForms`, `DeclaredFormDialog`,

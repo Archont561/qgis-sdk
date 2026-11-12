@@ -323,7 +323,7 @@ jobs:
   #   this is the one place the binding-agnostic adapters
   #   (qgis_sdk.adapters._qt) are proven on Qt 5 (decision-70).
   #
-  # A row that collected nothing is a failure, not a pass: automation/ci.py lts
+  # A row that collected nothing is a failure, not a pass: automation/ci lts
   # probes the modules before pytest starts.
   lts:
     name: QGIS 3.44 LTS

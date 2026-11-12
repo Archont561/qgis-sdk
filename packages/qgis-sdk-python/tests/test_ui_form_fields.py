@@ -17,7 +17,7 @@ from qgis_sdk.declarations import ActionDescription
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import QgisSdkFormError
-from qgis_sdk.ui.form_fields import FieldSpec, _coerce, coerce_values, form_fields
+from qgis_sdk.ui.form_fields import FieldSpec, coerce, coerce_values, form_fields
 
 
 def _action(properties, required=(), action_id="demo.run"):
@@ -270,7 +270,7 @@ def test_a_field_family_with_no_coercion_is_refused() -> None:
     spec = FieldSpec(name="name", label="Name", widget="canvas", required=True)
 
     with pytest.raises(QgisSdkFormError, match="renderable value"):
-        _coerce("demo:run", spec, "x")
+        coerce("demo:run", spec, "x")
 
 
 def test_a_field_spec_serializes_for_a_host() -> None:

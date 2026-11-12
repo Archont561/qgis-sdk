@@ -1584,7 +1584,7 @@ own tag (`ts-v0.2.0`); the Python SDK it pairs with is `0.3.0`.
   `0.3.0` description carries. New root exports: `StreamDescription`,
   `StreamEventKind`, `isPlainRecord`.
 - **`PLUGIN_DESCRIPTION_SCHEMA_VERSION` stays `1`**, matching the Python
-  declarations; `automation/release.py verify-versions` refuses a pair that
+  declarations; `automation/release verify-versions` refuses a pair that
   disagrees. The transport speaks `protocol: 1`.
 - **New entry points**, each an optional import: `./bridge` (the transport
   client, frames and refusal codes), `./host` (the generated host namespaces),

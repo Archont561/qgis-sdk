@@ -156,7 +156,7 @@ imply that a check, probe, or task creation ran when it did not.
 
 ## 7. Evaluation prompts
 
-- "Audit `packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch.py` for maintainability problems" — expects a
+- "Audit `packages/qgis-sdk-runtime/src/qgis_sdk/bridge/dispatch/` for maintainability problems" — expects a
   read-only scan, `path:line` evidence, rule ids, and tasks filed only for validated follow-ups.
 - "Audit the last commit before I merge it" — expects the diff to be checked against
   `git status`, the accepted decisions, and both halves of the bridge contract.

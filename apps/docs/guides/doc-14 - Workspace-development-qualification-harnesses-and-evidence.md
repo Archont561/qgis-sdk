@@ -349,7 +349,7 @@ both facts (decision-70):
 * it installs `qgis`, `qgis-server` and `python3-qgis` from the qgis.org Debian
   repository on `ubuntu-24.04`, creates a virtual environment over the system
   interpreter (`--system-site-packages`, which is what makes the apt bindings
-  importable next to pytest), and calls `automation/ci.py lts`;
+  importable next to pytest), and calls `automation/ci lts`;
 * that helper probes the build first and prints `::notice::LTS host: qgis
   3.44.x | qgisserver QgsServer | qt 5.15.x | binding PyQt5`, then runs
   `tests/test_server_native.py` (the server layer), `tests/test_lts_native.py`
@@ -466,8 +466,8 @@ release whose manifests disagree.
 | :-- | :-- | :-- | :-- |
 | `python` | `python-v` | the kit, runtime and tools `pyproject.toml`, the recipe contexts, the kit pins, the example's windows | three wheels (PyPI), three Conda outputs (prefix.dev) |
 | `runtime`, `tools` | `runtime-v`, `tools-v` | that distribution alone (the tools' runtime range follows the runtime at HEAD) | its wheel and Conda output |
-| `typescript` | `ts-v` | `packages/qgis-sdk-typescript/package.json`, the `qgis-sdk` alias and its exact pin, `SDK_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk` and `qgis-sdk` (npm, GitHub Packages for the scoped name) |
-| `ui` | `ui-v` | `packages/qgis-sdk-ui/package.json`, the `qgis-sdk-ui` alias (`packages/qgis-sdk-ui-alias`) and its exact pin, `UI_NPM_VERSION` in `scaffold/web.py` | `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (npm, GitHub Packages for the scoped name) |
+| `typescript` | `ts-v` | `packages/qgis-sdk-typescript/package.json`, the `qgis-sdk` alias and its exact pin, `SDK_NPM_VERSION` in `scaffold/web/_plan.py` | `@archont561/qgis-sdk` and `qgis-sdk` (npm, GitHub Packages for the scoped name) |
+| `ui` | `ui-v` | `packages/qgis-sdk-ui/package.json`, the `qgis-sdk-ui` alias (`packages/qgis-sdk-ui-alias`) and its exact pin, `UI_NPM_VERSION` in `scaffold/web/_plan.py` | `@archont561/qgis-sdk-ui` and `qgis-sdk-ui` (npm, GitHub Packages for the scoped name) |
 | `all` | `v` | everything the `python` and `typescript` scopes stamp; never the `ui` train | both |
 
 The `ui` train (decision-47, TASK-110) is deliberate: `plan` never picks it
@@ -795,7 +795,7 @@ on Linux, `"passed": true`. The same kit backs the adapter evidence in
 
 `qgis-sdk new --web vanilla|react` writes a Vite app whose dependencies are
 pinned to the versions the release was qualified with (`WEB_TEMPLATE_VERSIONS`
-in `qgis_sdk_tools/scaffold/web.py`, `@archont561/qgis-sdk` by exact version). The
+in `qgis_sdk_tools/scaffold/web/_plan.py`, `@archont561/qgis-sdk` by exact version). The
 unit tests prove the plan - file list, pins, `bridge generate --check` finding
 no drift in the checked-in client, `check` passing with no native exemption,
 the starter pytest passing - without a network. What they cannot prove is that
@@ -1780,7 +1780,7 @@ Stamping, tagging and publishing wait for an explicit "Release 0.8.0".
   names): `stamp --scope python --version 0.8.0` and `stamp --scope
   typescript --version 0.6.0` move eight files - the three pyprojects,
   `recipe.yaml`, `examples/simple/pyproject.toml`, the TypeScript
-  `package.json`, the alias and `scaffold/web.py` - and the kit's pins
+  `package.json`, the alias and `scaffold/web/_plan.py` - and the kit's pins
   read `qgis-sdk-runtime==0.8.0`, `qgis-sdk-tools==0.8.0` and
   `qgis-sdk-tools[mcp]==0.8.0`, the tools' range `>=0.8.0,<0.9`, the
   example's windows `>=0.8,<0.9`. `verify-versions` then fails on
