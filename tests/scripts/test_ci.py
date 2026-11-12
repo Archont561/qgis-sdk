@@ -59,7 +59,7 @@ class _GateTree:
 
     def run(self) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, "-m", "automation.ci._main", "check-generated"],
+            [sys.executable, "-m", "automation.ci", "check-generated"],
             cwd=self.root,
             env=self.env,
             capture_output=True,
@@ -412,7 +412,7 @@ SCRIPT_DIR = Path(__file__).resolve().parents[2] / "automation" / "ci"
 def run_ci(*args: str, cwd: Path, env: dict[str, str] | None = None):
     repo_root = Path(__file__).resolve().parents[2]
     return subprocess.run(
-        [sys.executable, "-m", "automation.ci._main", *args],
+        [sys.executable, "-m", "automation.ci", *args],
         cwd=cwd,
         env={**os.environ, "PYTHONPATH": str(repo_root), **(env or {})},
         capture_output=True,
@@ -664,7 +664,7 @@ def generated_repo(tmp_path: Path) -> Path:
 def run_real_generated_gate(root: Path) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "PATH": f"{root / 'bin'}{os.pathsep}{os.environ['PATH']}"}
     return subprocess.run(
-        [sys.executable, "-m", "automation.ci._main", "check-generated"],
+        [sys.executable, "-m", "automation.ci", "check-generated"],
         cwd=root,
         env=env,
         capture_output=True,

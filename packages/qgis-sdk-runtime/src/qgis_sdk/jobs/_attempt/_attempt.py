@@ -31,7 +31,8 @@ from ._progress import Cancellation, Progress
 
 if TYPE_CHECKING:
     from qgis_sdk.jobs._handles import JobHandle
-    from qgis_sdk.jobs._service import JobService, _Runtime
+    from qgis_sdk.jobs._service import JobService
+    from qgis_sdk.jobs._service._init_state import Runtime
 
 __all__ = ["run_attempt"]
 
@@ -358,7 +359,7 @@ async def run_attempt(
 
 
 class _InitOptions1(TypedDict, total=False):
-    runtime: _Runtime
+    runtime: Runtime
     owner: JobService
     description: JobDescription
     logical_id: str
@@ -367,7 +368,7 @@ class _InitOptions1(TypedDict, total=False):
 
 @dataclass(frozen=True, slots=True)
 class _InitValues1:
-    runtime: _Runtime
+    runtime: Runtime
     owner: JobService
     description: JobDescription
     logical_id: str

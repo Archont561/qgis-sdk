@@ -10,10 +10,12 @@ from qgis_sdk.models import (
     CanvasExtent,
 )
 
-from ._connect_state import GROUP_ID_PREFIX
-
 if TYPE_CHECKING:
     from qgis.core import QgsLayerTreeNode
+
+
+#: The prefix a layer-tree group's derived id carries (``group:a/b``).
+GROUP_ID_PREFIX = "group:"
 
 
 def is_layer(node: QgsLayerTreeNode) -> bool:

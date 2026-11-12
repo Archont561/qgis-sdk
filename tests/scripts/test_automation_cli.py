@@ -163,3 +163,43 @@ def test_no_workflow_still_calls_a_pixi_task_the_registry_replaced() -> None:
         if re.search(rf"pixi run -e \w+ {re.escape(name)}\b", run)
     ]
     assert offenders == [], f"workflows still call the replaced tasks: {offenders}"
+
+
+# `python -m automation.<tool>` is how every workflow step and the LTS harness
+# calls a tool: there is no installed console script to call. A plain module is
+# runnable; a package is not, and needs `__main__.py` beside its chunks. Missing
+# one fails at the first step that uses it, on a runner, as "No module named
+# automation.ci.__main__" - which is what this test exists to catch at review.
+MODULE_PATH = re.compile(r"-m (?P<module>automation(?:\.[a-z_][a-z0-9_]*)+)")
+
+
+def module_path_entry_points() -> set[str]:
+    """Every dotted `automation.*` target the workflows run with `-m`."""
+    return {
+        match.group("module")
+        for _, run in workflow_commands()
+        for match in MODULE_PATH.finditer(run)
+    }
+
+
+def runnable_module_path(module: str) -> Path:
+    """The file `python -m <module>` executes, whether or not it exists."""
+    base = ROOT.joinpath(*module.split("."))
+    return (
+        base / "__main__.py"
+        if (base / "__init__.py").is_file()
+        else base.with_suffix(".py")
+    )
+
+
+def test_every_automation_module_the_workflows_run_is_runnable() -> None:
+    """`python -m automation.x` needs a module, or a `__main__` inside a package."""
+    missing = sorted(
+        module
+        for module in module_path_entry_points()
+        if not runnable_module_path(module).is_file()
+    )
+    assert missing == [], (
+        "workflows run `python -m <module>` for targets that are not runnable: "
+        f"{missing} - a package needs a `__main__.py`"
+    )

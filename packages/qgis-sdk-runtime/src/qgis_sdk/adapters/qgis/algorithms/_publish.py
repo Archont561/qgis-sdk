@@ -1,8 +1,26 @@
+"""Turning a Processing answer into an SDK result: validation and publishing.
+
+A provider's answer is not trusted: the staged vector is re-checked (independent
+file, expected driver, no sidecars), the write grant is re-checked, and only then
+is the destination hard-linked into place, so a destination that already exists
+is refused rather than overwritten. ``convert_outputs`` is the other half - the
+answer's values as layers, refs or plain scalars.
+
+``buffer`` and ``centroid`` live here because they are the two algorithms the
+adapter runs itself rather than through a declared provider, and both go through
+the same staging the publishing half verifies.
+
+This module is a leaf: the only thing it needs from its siblings is the shape of
+``NativeAlgorithms`` in an annotation, and that is imported for the type checker
+alone so the two do not import each other.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from qgis.core import QgsVectorLayer
 
@@ -16,8 +34,10 @@ from qgis_sdk.processing.runs import (
     output_class,
 )
 
-from ._native import NativeAlgorithms, plain, require_metric_projected_crs
-from ._wiring import PublishFacts, PublishRequest, staged_vector_is_sound
+from ._values import plain, require_metric_projected_crs
+
+if TYPE_CHECKING:
+    from ._native import NativeAlgorithms
 
 
 def _publish_facts(request: PublishRequest) -> PublishFacts:
@@ -235,3 +255,38 @@ def centroid(
     output = run_directory / "centroid.gpkg"
     processing.run("native:centroids", {"INPUT": source, "OUTPUT": str(output)})
     return output
+
+
+def staged_vector_is_sound(stage: object, value: object, partial: Path) -> bool:
+    """Whether the provider's answer is the staged vector file the graph expects.
+
+    Four things have to hold: the run was staged, the provider answered a path,
+    that path is the staged one, and it is a real file rather than a link to
+    somebody else's.
+    """
+    if stage is None or not isinstance(value, str):
+        return False
+    if Path(value) != partial:
+        return False
+    return not partial.is_symlink() and partial.is_file()
+
+
+@dataclass(frozen=True, slots=True)
+class PublishRequest:
+    algorithm: str
+    raw: Mapping[str, Any]
+    params: Mapping[str, object]
+    explicit: Mapping[str, Path]
+    staged: Mapping[str, Path]
+    stage: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class PublishFacts:
+    algorithm: str
+    raw: Mapping[str, Any]
+    params: Mapping[str, object]
+    stage: Path | None
+    name: str
+    destination: Path
+    partial: Path

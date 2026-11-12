@@ -1,12 +1,20 @@
+"""``NativeAlgorithms``: the Algorithms backend that runs QGIS Processing.
+
+A run is described by ``AlgorithmWiring`` and the helpers in ``_wiring``; the
+published and converted outputs come from ``_publish``; the scalar shaping and
+the working-CRS rule both paths share come from ``_values``. This module is the
+adapter object itself - the methods the host calls and the run lifecycle they
+drive - and holds no mapping of its own.
+"""
+
 from __future__ import annotations
 
 import shutil
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
 
-from qgis.core import Qgis, QgsApplication, QgsCoordinateReferenceSystem
+from qgis.core import QgsApplication
 
 from qgis_sdk.batch import batch_body, batch_items
 from qgis_sdk.jobs import JobHandle, JobService
@@ -30,7 +38,6 @@ from qgis_sdk.processing.runs import (
 
 from ._publish import buffer, centroid
 from ._wiring import (
-    METRES_ONLY,
     AlgorithmWiring,
     RunRequest,
     load_model,
@@ -183,38 +190,3 @@ class NativeAlgorithms:
         """Remove this runtime's temporary tree; a caller's directory stays."""
         if self._owns_root:
             shutil.rmtree(self._root, ignore_errors=True)
-
-
-def plain(value: Any) -> object:
-    """A scalar output as Python: QGIS hands numbers, strings and booleans
-    over already; anything else is kept only by its text."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, (list, tuple)):
-        return [plain(item) for item in value]
-    if isinstance(value, dict):
-        return {str(k): plain(v) for k, v in value.items()}
-    return str(value)
-
-
-def require_metric_projected_crs(authid: str, request: str) -> None:
-    """Refuse a working CRS a distance cannot honestly be measured in."""
-    crs = QgsCoordinateReferenceSystem(authid)
-    if not crs.isValid():
-        raise QgisSdkAlgorithmRejectedError(
-            request, [f"working_crs {authid!r} is not a known CRS"]
-        )
-    if crs.isGeographic():
-        raise QgisSdkAlgorithmRejectedError(
-            request,
-            [
-                f"working_crs {authid!r} is geographic; a distance there would be degrees"
-            ],
-        )
-    if crs.mapUnits() != Qgis.DistanceUnit.Meters:
-        raise QgisSdkAlgorithmRejectedError(
-            request,
-            [
-                f"working_crs {authid!r} is not in {METRES_ONLY}; distance_metres would be wrong"
-            ],
-        )

@@ -108,7 +108,6 @@ def write_facts1(destination, partial):
     return ProjectFile(path=str(destination))
 
 
-GROUP_ID_PREFIX = "group:"
 PROPERTY_SCOPE = "qgis-sdk"
 
 
