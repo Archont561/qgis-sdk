@@ -89,6 +89,98 @@ def _qt_area(name: str) -> Any:
     return qt_enum(Qt, "DockWidgetArea", f"{name.capitalize()}DockWidgetArea")
 
 
+@dataclass(frozen=True, slots=True)
+class _EntryRig:
+    """The Qt classes and parent window one action is placed against."""
+
+    parent: Any
+    action_class: Any
+    icon_class: Any
+    keys_class: Any
+
+
+@dataclass(slots=True)
+class _Placement:
+    """Everything placing one toolbar/menu/shortcut binding needs."""
+
+    host: Any
+    binding: Any
+    action: Any
+    parent: Any
+    placed: _Placed
+    icon_class: Any
+    keys_class: Any
+
+
+def _action_text(entry) -> str:
+    """The toolbar label when one is declared, else the entry's title."""
+    return next(
+        (
+            binding.text
+            for binding in entry.bindings
+            if isinstance(binding, ToolbarBinding) and binding.text
+        ),
+        entry.title,
+    )
+
+
+def _place_toolbar(p: _Placement) -> None:
+    """Put the action on a toolbar, with its declared icon if it has one."""
+    if p.binding.icon is not None:
+        p.action.setIcon(
+            p.icon_class(str(icon_path(p.host._package_directory, p.binding.icon)))
+        )
+    if not p.placed.toolbar:
+        p.host._iface.addToolBarIcon(p.action)
+        p.placed.toolbar = True
+
+
+def _place_menu(p: _Placement) -> None:
+    """Add the action to the menu its path names (Plugins by default)."""
+    top, _, rest = p.binding.path.partition("/")
+    hooks = MENU_HOOKS.get(top.strip().lower())
+    if hooks is None:
+        hooks, rest = MENU_HOOKS["plugins"], p.binding.path
+    name = rest.strip() or p.host._title
+    getattr(p.host._iface, hooks[0])(name, p.action)
+    p.placed.menus.append((hooks[1], name))
+
+
+def _place_shortcut(p: _Placement) -> None:
+    """Register the shortcut once, so unload can undo exactly one."""
+    p.action.setShortcut(p.keys_class(p.binding.keys))
+    if not p.placed.shortcut:
+        p.host._iface.registerMainWindowAction(p.action, p.binding.keys)
+        p.parent.addAction(p.action)
+        p.placed.shortcut = True
+
+
+_BINDING_HANDLERS: Final[tuple[tuple[type, Any], ...]] = (
+    (ToolbarBinding, _place_toolbar),
+    (MenuBinding, _place_menu),
+    (ShortcutBinding, _place_shortcut),
+)
+
+
+def _placement_handler(binding) -> Any | None:
+    """The first handler whose binding type matches, or nothing."""
+    for kind, handler in _BINDING_HANDLERS:
+        if isinstance(binding, kind):
+            return handler
+    return None
+
+
+def _chosen_surfaces(opened, surface_id):
+    """One named surface, or all of them; refuse a name nothing opened."""
+    if surface_id is None:
+        return opened
+    chosen = [entry for entry in opened if entry[0] == surface_id]
+    if not chosen:
+        known = ", ".join(entry[0] for entry in opened) or "none"
+        raise QgisSdkUiError(f"no open surface named {surface_id!r} (open: {known})")
+    return chosen
+
+
 class _WidgetControl:
     """``ctx.view`` for a surface: closing is a request the host honours."""
 
@@ -208,16 +300,7 @@ class _SurfaceHostMixin1:
         """
         from qgis_sdk.adapters.snapshot import capture_surface
 
-        opened = self._opened_surfaces()
-        if surface_id is not None:
-            chosen = [entry for entry in opened if entry[0] == surface_id]
-            if not chosen:
-                known = ", ".join(entry[0] for entry in opened) or "none"
-                raise QgisSdkUiError(
-                    f"no open surface named {surface_id!r} (open: {known})"
-                )
-        else:
-            chosen = opened
+        chosen = _chosen_surfaces(self._opened_surfaces(), surface_id)
         theme = palette_theme()
         palette = theme["palette"] if theme is not None else None
         return tuple(
@@ -378,45 +461,54 @@ class _SurfaceHostMixin2:
         initial: Mapping[str, object] | None,
         close: Callable[[], None],
     ) -> tuple[Surface, Any, Any, str]:
+        """Construct one surface, wire its tree, and hand back its child scope."""
         self._openings += 1
         view_id = f"{self._plugin_id}.{bound.id}#{self._openings}"
         ui, scope = self._ui_context(view_id, close)
         values = MappingProxyType(dict(initial or {}))
         try:
-            if issubclass(bound.cls, Surface):
-                instance = bound.cls()
-                # Components declared on the class become this window's own
-                # copies before ``build()`` can read them (declarative form).
-                materialise(instance)
-                instance.ctx = ui
-                instance.initial = values
-                widget = instance.build()
-            else:
-                # The widget form (decision-55): the class is the widget and
-                # takes the context; ``initial`` is set when it can be.
-                instance = bound.cls(ui)
-                try:
-                    instance.initial = values
-                except AttributeError:  # pragma: no cover - a slotted widget
-                    pass
-                widget = instance
-            root = widget
-            if isinstance(widget, Component):
-                # A catalogue component is state until mounted: bind it to
-                # this opening's context (unless build() already did) and
-                # let it build the widget that mirrors it.
-                if not widget.attached:
-                    widget.attach(ui)
-                widget = widget.mount()
-            if widget is None:
-                raise QgisSdkUiError(f"{bound.cls.__name__}.build() returned no widget")
-            # ``@on``/``@subscribe`` and the behaviour mixins connect once
-            # the tree exists; the scope undoes it all.
-            wire_surface(instance, root, ui)
+            instance, widget = self._build_instance(bound, ui, values)
+            widget = self._mount_surface(instance, widget, ui, bound)
         except BaseException:
             scope.close()
             raise
         return instance, widget, scope, view_id
+
+    def _build_instance(self, bound, ui, values):
+        """Build a declarative Surface, or instantiate the widget form."""
+        if issubclass(bound.cls, Surface):
+            instance = bound.cls()
+            # Components declared on the class become this window's own
+            # copies before ``build()`` can read them (declarative form).
+            materialise(instance)
+            instance.ctx = ui
+            instance.initial = values
+            return instance, instance.build()
+        # The widget form (decision-55): the class is the widget and takes the
+        # context; ``initial`` is set when it can be.
+        instance = bound.cls(ui)
+        try:
+            instance.initial = values
+        except AttributeError:  # pragma: no cover - a slotted widget
+            pass
+        return instance, instance
+
+    def _mount_surface(self, instance, widget, ui, bound):
+        """Mount a catalogue component, then wire the finished tree."""
+        root = widget
+        if isinstance(widget, Component):
+            # A catalogue component is state until mounted: bind it to this
+            # opening's context (unless build() already did) and let it build
+            # the widget that mirrors it.
+            if not widget.attached:
+                widget.attach(ui)
+            widget = widget.mount()
+        if widget is None:
+            raise QgisSdkUiError(f"{bound.cls.__name__}.build() returned no widget")
+        # ``@on``/``@subscribe`` and the behaviour mixins connect once the
+        # tree exists; the scope undoes it all.
+        wire_surface(instance, root, ui)
+        return widget
 
     def _open_dialog(
         self, bound: BoundSurface, initial: Mapping[str, object] | None
@@ -563,60 +655,42 @@ class DesktopBindings:
             return
         from qgis.PyQt.QtGui import QIcon, QKeySequence
 
-        QAction = action_class()
-
-        parent = self._iface.mainWindow()
+        rig = _EntryRig(self._iface.mainWindow(), action_class(), QIcon, QKeySequence)
         for entry in self._bindings.entries:
-            text = next(
-                (
-                    binding.text
-                    for binding in entry.bindings
-                    if isinstance(binding, ToolbarBinding) and binding.text
-                ),
-                entry.title,
-            )
-            action = QAction(text, parent)
-            action.setObjectName(f"{self._plugin_id}.{entry.id}")
-            placed = _Placed(action, entry)
-            is_dock = isinstance(entry, BoundSurface) and entry.surface.kind == "dock"
-            if is_dock:
-                action.setCheckable(True)
-                action.toggled.connect(
-                    lambda checked, cls=entry.cls: self._surfaces.toggle(
-                        cls, bool(checked)
-                    )
-                )
-                self._toggles[entry.cls] = action
-            else:
-                action.triggered.connect(
-                    lambda _checked=False, item=entry: self.trigger(item)
-                )
-            for binding in entry.bindings:
-                if isinstance(binding, ToolbarBinding):
-                    if binding.icon is not None:
-                        action.setIcon(
-                            QIcon(str(icon_path(self._package_directory, binding.icon)))
-                        )
-                    if not placed.toolbar:
-                        self._iface.addToolBarIcon(action)
-                        placed.toolbar = True
-                elif isinstance(binding, MenuBinding):
-                    top, _, rest = binding.path.partition("/")
-                    hooks = MENU_HOOKS.get(top.strip().lower())
-                    if hooks is None:
-                        hooks, rest = MENU_HOOKS["plugins"], binding.path
-                    name = rest.strip() or self._title
-                    getattr(self._iface, hooks[0])(name, action)
-                    placed.menus.append((hooks[1], name))
-                elif isinstance(binding, ShortcutBinding):
-                    action.setShortcut(QKeySequence(binding.keys))
-                    if not placed.shortcut:
-                        self._iface.registerMainWindowAction(action, binding.keys)
-                        parent.addAction(action)
-                        placed.shortcut = True
-            self._placed.append(placed)
+            self._install_entry(entry, rig)
         for cls, toggle in self._toggles.items():
             self._surfaces.bind_toggle(cls, toggle)
+
+    def _install_entry(self, entry, rig: _EntryRig) -> None:
+        """One action: its label, dock/trigger connection and every placement."""
+        action = rig.action_class(_action_text(entry), rig.parent)
+        action.setObjectName(f"{self._plugin_id}.{entry.id}")
+        placed = _Placed(action, entry)
+        if isinstance(entry, BoundSurface) and entry.surface.kind == "dock":
+            action.setCheckable(True)
+            action.toggled.connect(
+                lambda checked, cls=entry.cls: self._surfaces.toggle(cls, bool(checked))
+            )
+            self._toggles[entry.cls] = action
+        else:
+            action.triggered.connect(
+                lambda _checked=False, item=entry: self.trigger(item)
+            )
+        for binding in entry.bindings:
+            handler = _placement_handler(binding)
+            if handler is not None:
+                handler(
+                    _Placement(
+                        self,
+                        binding,
+                        action,
+                        rig.parent,
+                        placed,
+                        rig.icon_class,
+                        rig.keys_class,
+                    )
+                )
+        self._placed.append(placed)
 
     def sync_toggles(self) -> None:
         """After ``restore_docks``: check the toggles of the docks now visible."""

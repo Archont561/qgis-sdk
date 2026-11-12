@@ -279,7 +279,11 @@ def _ref(kind: str = "file") -> FileRef:
     return FileRef(id="a" * 16, name="x", operations=("read",), kind=kind)
 
 
-def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
+def _rejection_rig():
+    """An algorithm with every new kind, and a plugin context that would run it."""
+    from qgis_sdk.core import PluginContext, ResourceScope
+    from qgis_sdk.testing import RecordingNotifications
+
     provider = _provider()
     calls = []
 
@@ -295,11 +299,13 @@ def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
         calls.append(1)
         raise AssertionError("never reached")
 
-    from qgis_sdk.core import PluginContext, ResourceScope
-    from qgis_sdk.testing import RecordingNotifications
-
     scope = ResourceScope()
     ctx = PluginContext(RecordingNotifications(scope), scope)
+    return classify, ctx, calls
+
+
+def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
+    classify, ctx, calls = _rejection_rig()
     with pytest.raises(QgisSdkAlgorithmRejectedError) as refused:
         invoke(
             classify,
@@ -310,8 +316,7 @@ def test_invoke_checks_the_new_kinds_before_running_anything() -> None:
             fill="red",
             mode="slow",
         )
-    reasons = refused.value.reasons
-    _invoke_checks_the_new_facts1(calls, reasons)
+    _invoke_checks_the_new_facts1(calls, refused.value.reasons)
 
 
 # -- the form rule reads the annotation from the schema ----------------------

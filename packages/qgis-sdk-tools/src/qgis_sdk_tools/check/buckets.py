@@ -120,6 +120,80 @@ class BucketReport:
         }
 
 
+def _import_entries(root: Path, files: Sequence[Path]):
+    """Yield every import with its root-relative file and AST node."""
+    for path in files:
+        relative = path.relative_to(root)
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except (OSError, SyntaxError):
+            continue  # SYNTAX001 already names an unparsable file
+        for node, name in _imports(tree):
+            yield relative, node, name
+
+
+@dataclass(frozen=True, slots=True)
+class _BucketContext:
+    """The resolved plugin and roots every import is bucketed against."""
+
+    plugin: str
+    external_roots: set[str]
+    vendored_roots: set[str]
+
+
+def _entry_for(
+    entry_root: str,
+    context: _BucketContext,
+    relative: Path,
+    node: ast.AST,
+) -> ImportEntry:
+    """Build one first-seen import entry with its resolved bucket."""
+    return ImportEntry(
+        root=entry_root,
+        bucket=_bucket(
+            entry_root,
+            plugin=context.plugin,
+            external=context.external_roots,
+            vendored=context.vendored_roots,
+        ),
+        path=relative,
+        line=node.lineno,
+        column=node.col_offset + 1,
+    )
+
+
+def _tools_finding(entry: ImportEntry) -> Diagnostic:
+    return _finding(
+        "DEP001",
+        entry,
+        f"`{TOOLS_PACKAGE}` is the developer tooling and never ships in a built plugin",
+        "A plugin imports the runtime (`qgis_sdk.*`) only; move "
+        "tooling calls to scripts or tests.",
+    )
+
+
+def _testing_finding(entry: ImportEntry) -> Diagnostic:
+    return _finding(
+        "DEP002",
+        entry,
+        f"`{TESTING_PACKAGE}` is not shipped in a built plugin",
+        "The fakes are for tests; import them from the project's tests only.",
+    )
+
+
+def _unknown_finding(entry: ImportEntry) -> Diagnostic:
+    return _finding(
+        "DEP001",
+        entry,
+        f"`{entry.root}` is imported but neither the standard "
+        "library, QGIS, the SDK runtime nor the plugin provides it",
+        "Two exits: vendor it - a pure-Python distribution under "
+        "`[tool.qgis-sdk.build] vendor` - or declare it under "
+        f'`external = ["{entry.root}"]` when every QGIS you target '
+        "ships it; the build then probes it at startup.",
+    )
+
+
 def bucket_imports(
     root: Path,
     plugin: str,
@@ -129,31 +203,13 @@ def bucket_imports(
     vendored: Iterable[str] = (),
 ) -> BucketReport:
     """Bucket every import of ``files`` (paths under ``root``), first seen first."""
-    external_roots = set(external)
-    vendored_roots = set(vendored)
+    context = _BucketContext(plugin, set(external), set(vendored))
     seen: dict[str, ImportEntry] = {}
-    for path in files:
-        relative = path.relative_to(root)
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        except (OSError, SyntaxError):
-            continue  # SYNTAX001 already names an unparsable file
-        for node, name in _imports(tree):
-            entry_root = _entry_root(name)
-            if entry_root in seen:
-                continue
-            seen[entry_root] = ImportEntry(
-                root=entry_root,
-                bucket=_bucket(
-                    entry_root,
-                    plugin=plugin,
-                    external=external_roots,
-                    vendored=vendored_roots,
-                ),
-                path=relative,
-                line=node.lineno,
-                column=node.col_offset + 1,
-            )
+    for relative, node, name in _import_entries(root, files):
+        entry_root = _entry_root(name)
+        if entry_root in seen:
+            continue
+        seen[entry_root] = _entry_for(entry_root, context, relative, node)
 
     def order(name: str) -> tuple[str, int, str]:
         entry = seen[name]
@@ -162,44 +218,24 @@ def bucket_imports(
     return BucketReport(entries=tuple(seen[name] for name in sorted(seen, key=order)))
 
 
+def _finding_for(entry: ImportEntry) -> Diagnostic | None:
+    """The one finding this entry earns, if any."""
+    if entry.root == TOOLS_PACKAGE:
+        return _tools_finding(entry)
+    if entry.root == TESTING_PACKAGE:
+        return _testing_finding(entry)
+    if entry.bucket == UNKNOWN:
+        return _unknown_finding(entry)
+    return None
+
+
 def import_findings(report: BucketReport) -> tuple[Diagnostic, ...]:
     """``DEP001``/``DEP002`` for the roots a clean QGIS cannot resolve."""
-    findings: list[Diagnostic] = []
-    for entry in report.entries:
-        if entry.root == TOOLS_PACKAGE:
-            findings.append(
-                _finding(
-                    "DEP001",
-                    entry,
-                    f"`{TOOLS_PACKAGE}` is the developer tooling and never ships "
-                    "in a built plugin",
-                    "A plugin imports the runtime (`qgis_sdk.*`) only; move "
-                    "tooling calls to scripts or tests.",
-                )
-            )
-        elif entry.root == TESTING_PACKAGE:
-            findings.append(
-                _finding(
-                    "DEP002",
-                    entry,
-                    f"`{TESTING_PACKAGE}` is not shipped in a built plugin",
-                    "The fakes are for tests; import them from the project's "
-                    "tests only.",
-                )
-            )
-        elif entry.bucket == UNKNOWN:
-            findings.append(
-                _finding(
-                    "DEP001",
-                    entry,
-                    f"`{entry.root}` is imported but neither the standard "
-                    "library, QGIS, the SDK runtime nor the plugin provides it",
-                    "Two exits: vendor it - a pure-Python distribution under "
-                    "`[tool.qgis-sdk.build] vendor` - or declare it under "
-                    f'`external = ["{entry.root}"]` when every QGIS you target '
-                    "ships it; the build then probes it at startup.",
-                )
-            )
+    findings = [
+        finding
+        for entry in report.entries
+        if (finding := _finding_for(entry)) is not None
+    ]
     return tuple(findings)
 
 

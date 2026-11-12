@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, TypedDict, Unpack
@@ -148,6 +148,69 @@ class TestPlan:
     workspace: Path | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _TestFacts:
+    """Everything one target's planner needs, resolved once."""
+
+    root: Path
+    args: Sequence[str]
+    env: Mapping[str, str]
+    install: QgisInstall | None
+    headless: bool
+    workspace: Path | None
+
+
+def _validate_plan(root: Path, target: str, values) -> None:
+    """Refuse a bad root, target or missing native prerequisite by name."""
+    if not root.is_dir():
+        raise QgisSdkTestRunError(f"{root} is not a directory; give a project root")
+    if target not in TARGETS:
+        raise QgisSdkTestRunError(
+            f"unknown target {target!r}; choose one of {', '.join(TARGETS)}"
+        )
+    if target in ("qgis", "server", "desktop") and values.install is None:
+        raise QgisSdkTestRunError(f"target {target} needs a QGIS install")
+    if target == "desktop" and values.workspace is None:
+        raise QgisSdkTestRunError("target desktop needs a workspace directory")
+
+
+def _pure_plan(facts: _TestFacts) -> TestPlan:
+    """The pure target runs in this interpreter with native imports refused."""
+    argv = (sys.executable, "-m", "pytest", *_pytest_args("pure", facts.args))
+    return TestPlan(
+        target="pure",
+        argv=argv,
+        cwd=facts.root,
+        env={**facts.env, TARGET_ENV: "pure"},
+        notes=("target pure: this interpreter, native imports refused",),
+    )
+
+
+def _web_plan(facts: _TestFacts) -> TestPlan:
+    return _plan_web(facts.root, facts.args, facts.env)
+
+
+def _qgis_plan(facts: _TestFacts) -> TestPlan:
+    return _plan_qgis(facts.root, facts.args, facts.env, facts.install, facts.headless)
+
+
+def _server_plan(facts: _TestFacts) -> TestPlan:
+    return _plan_server(facts.root, facts.args, facts.env, facts.install)
+
+
+def _desktop_plan(facts: _TestFacts) -> TestPlan:
+    return _plan_desktop(facts)
+
+
+_TARGET_PLANNERS: Final[dict[str, Callable[[_TestFacts], TestPlan]]] = {
+    "web": _web_plan,
+    "pure": _pure_plan,
+    "qgis": _qgis_plan,
+    "server": _server_plan,
+    "desktop": _desktop_plan,
+}
+
+
 def plan_tests(
     root: Path,
     target: str,
@@ -162,35 +225,16 @@ def plan_tests(
     """
     values = _PlanValues1(**options)
     root = Path(root).resolve()
-    if not root.is_dir():
-        raise QgisSdkTestRunError(f"{root} is not a directory; give a project root")
-    if target not in TARGETS:
-        raise QgisSdkTestRunError(
-            f"unknown target {target!r}; choose one of {', '.join(TARGETS)}"
-        )
-    if target == "web":
-        return _plan_web(root, pytest_args, values.env)
-    if target == "pure":
-        argv = (values.python, "-m", "pytest", *_pytest_args("pure", pytest_args))
-        return TestPlan(
-            target="pure",
-            argv=argv,
-            cwd=root,
-            env={**values.env, TARGET_ENV: "pure"},
-            notes=("target pure: this interpreter, native imports refused",),
-        )
-    if values.install is None:
-        raise QgisSdkTestRunError(f"target {target} needs a QGIS install")
-    headless = wants_headless(values.env, platform=values.platform)
-    if target == "qgis":
-        return _plan_qgis(root, pytest_args, values.env, values.install, headless)
-    if target == "server":
-        return _plan_server(root, pytest_args, values.env, values.install)
-    if values.workspace is None:
-        raise QgisSdkTestRunError("target desktop needs a workspace directory")
-    return _plan_desktop(
-        root, pytest_args, values.env, values.install, headless, values.workspace
+    _validate_plan(root, target, values)
+    facts = _TestFacts(
+        root=root,
+        args=pytest_args,
+        env=values.env,
+        install=values.install,
+        headless=wants_headless(values.env, platform=values.platform),
+        workspace=values.workspace,
     )
+    return _TARGET_PLANNERS[target](facts)
 
 
 def _pytest_args(target: str, pytest_args: Sequence[str]) -> tuple[str, ...]:
@@ -255,58 +299,82 @@ def _plan_server(
     return _plan_server_facts1(install, process_env, pytest_args, root)
 
 
-def _plan_desktop(
-    root: Path,
-    pytest_args: Sequence[str],
-    env: Mapping[str, str],
-    install: QgisInstall,
-    headless: bool,
-    workspace: Path,
-) -> TestPlan:
+def _desktop_argv(
+    install: QgisInstall, workspace: Path, probe: Path
+) -> tuple[str, ...]:
+    """The QGIS Desktop invocation with its isolated profile and probe."""
+    return (
+        str(install.executable),
+        "--noplugins",
+        "--profiles-path",
+        str(workspace / "profiles"),
+        "--profile",
+        PROFILE_NAME,
+        "--code",
+        str(probe),
+    )
+
+
+def _desktop_notes(
+    install: QgisInstall, workspace: Path, headless: bool
+) -> tuple[str, ...]:
+    """The one console line the desktop target prints."""
+    return (
+        (
+            f"target desktop: QGIS Desktop {install.executable} "
+            f"({install.source}), profile {workspace / 'profiles'}, "
+            f"{'offscreen' if headless else 'on screen'}"
+        ),
+    )
+
+
+def _desktop_environment(
+    facts: _TestFacts, install: QgisInstall, request: Path, plugin_path: Path
+) -> dict[str, str]:
+    """Build the QGIS process environment and point it at the written request."""
+    process_env = install.environment(
+        facts.env,
+        extra_paths=(facts.root, *sdk_import_paths()),
+        headless=facts.headless,
+        desktop=True,
+    )
+    process_env[TARGET_ENV] = "desktop"
+    process_env[REQUEST_ENV] = str(request)
+    process_env["QGIS_PLUGINPATH"] = str(plugin_path)
+    return process_env
+
+
+def _desktop_probe(workspace: Path, root: Path, args: Sequence[str]) -> Path:
+    """Write the request and the probe the desktop target runs; return the request."""
+    request = workspace / REQUEST_NAME
+    request.write_text(
+        json.dumps({"cwd": str(root), "args": list(_pytest_args("desktop", args))}),
+        encoding="utf-8",
+    )
+    probe = workspace / PROBE_NAME
+    probe.write_text(DESKTOP_PROBE, encoding="utf-8", newline="\n")
+    return request
+
+
+def _plan_desktop(facts: _TestFacts) -> TestPlan:
+    """The real Desktop GUI, with a generated host and an isolated profile."""
+    install = facts.install
     if install.executable is None:
         raise QgisSdkTestRunError(
             f"{install.prefix} has no QGIS Desktop binary (bin/qgis or "
             "bin/qgis-bin.exe); install QGIS Desktop there or run "
             "`qgis-sdk test --target qgis` for tests that need no Desktop"
         )
-    workspace = Path(workspace)
-    request = workspace / REQUEST_NAME
-    request.write_text(
-        json.dumps(
-            {"cwd": str(root), "args": list(_pytest_args("desktop", pytest_args))}
-        ),
-        encoding="utf-8",
-    )
-    probe = workspace / PROBE_NAME
-    probe.write_text(DESKTOP_PROBE, encoding="utf-8", newline="\n")
-    plugin_path = _stage_host_for_tests(root)
-    process_env = install.environment(
-        env, extra_paths=(root, *sdk_import_paths()), headless=headless, desktop=True
-    )
-    process_env[TARGET_ENV] = "desktop"
-    process_env[REQUEST_ENV] = str(request)
-    process_env["QGIS_PLUGINPATH"] = str(plugin_path)
+    workspace = Path(facts.workspace)
+    request = _desktop_probe(workspace, facts.root, facts.args)
+    plugin_path = _stage_host_for_tests(facts.root)
+    process_env = _desktop_environment(facts, install, request, plugin_path)
     return TestPlan(
         target="desktop",
-        argv=(
-            str(install.executable),
-            "--noplugins",
-            "--profiles-path",
-            str(workspace / "profiles"),
-            "--profile",
-            PROFILE_NAME,
-            "--code",
-            str(probe),
-        ),
-        cwd=root,
+        argv=_desktop_argv(install, workspace, workspace / PROBE_NAME),
+        cwd=facts.root,
         env=process_env,
-        notes=(
-            (
-                f"target desktop: QGIS Desktop {install.executable} "
-                f"({install.source}), profile {workspace / 'profiles'}, "
-                f"{'offscreen' if headless else 'on screen'}"
-            ),
-        ),
+        notes=_desktop_notes(install, workspace, facts.headless),
         workspace=workspace,
     )
 

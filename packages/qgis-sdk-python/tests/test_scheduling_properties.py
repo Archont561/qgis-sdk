@@ -8,6 +8,8 @@ and draining a reported job always settles it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from qgis_sdk.core import Handoff, JobState, ResourceScope, StepScheduler
@@ -28,14 +30,64 @@ SETTLED = {JobState.COMPLETED, JobState.FAILED, JobState.CANCELLED}
 action_strategy = st.sampled_from(["tick", "resolve", "fail", "cancel", "close"])
 
 
-@given(
-    actions=st.lists(action_strategy, min_size=0, max_size=24),
-    job_count=st.integers(min_value=1, max_value=3),
-)
-@settings(max_examples=120, deadline=None)
-def test_interleaved_scheduling_actions_never_resurrect_or_deliver_late_work(
-    actions: list[str], job_count: int
-) -> None:
+@dataclass
+class _Interleaved:
+    """The mutable state one interleaved scheduling property drives."""
+
+    scheduler: StepScheduler
+    scope: ResourceScope
+    jobs: list
+    handoffs: list[Handoff]
+    resumed: list[int]
+    seen_settled: dict[int, JobState]
+    resumed_at_close: int | None = None
+
+
+def _close_action(state: _Interleaved) -> None:
+    state.scope.close()
+    state.resumed_at_close = len(state.resumed)
+
+
+def _tick_action(state: _Interleaved) -> None:
+    state.scheduler.tick()
+
+
+def _resolve_action(state: _Interleaved) -> None:
+    for handoff in state.handoffs:
+        handoff.resolve("report")
+
+
+def _fail_action(state: _Interleaved) -> None:
+    for handoff in state.handoffs:
+        handoff.fail(RuntimeError("worker failed"))
+
+
+def _cancel_action(state: _Interleaved) -> None:
+    for job in state.jobs:
+        job.cancel()
+
+
+_ACTION_HANDLERS = {
+    "close": _close_action,
+    "tick": _tick_action,
+    "resolve": _resolve_action,
+    "fail": _fail_action,
+    "cancel": _cancel_action,
+}
+
+
+def _assert_settled_stays(state: _Interleaved) -> None:
+    """No job leaves a settled state, however the actions are interleaved."""
+    for job in state.jobs:
+        if job.state in SETTLED:
+            previous = state.seen_settled.setdefault(job.id, job.state)
+            assert previous is job.state, f"job {job.id} left its settled state"
+        else:
+            assert job.id not in state.seen_settled
+
+
+def _interleaved_state(job_count: int) -> _Interleaved:
+    """Submit ``job_count`` suspended bodies over one owner scope."""
     scope = ResourceScope()
     scheduler = StepScheduler(scope)
     resumed: list[int] = []
@@ -49,33 +101,24 @@ def test_interleaved_scheduling_actions_never_resurrect_or_deliver_late_work(
     jobs = [
         scheduler.submit(body(index, handoffs[index])) for index in range(job_count)
     ]
-    seen_settled: dict[int, JobState] = {}
-    resumed_at_close: int | None = None
+    return _Interleaved(scheduler, scope, jobs, handoffs, resumed, {})
 
+
+@given(
+    actions=st.lists(action_strategy, min_size=0, max_size=24),
+    job_count=st.integers(min_value=1, max_value=3),
+)
+@settings(max_examples=120, deadline=None)
+def test_interleaved_scheduling_actions_never_resurrect_or_deliver_late_work(
+    actions: list[str], job_count: int
+) -> None:
+    state = _interleaved_state(job_count)
     for action in actions:
-        if action == "close":
-            scope.close()
-            resumed_at_close = len(resumed)
-        elif action == "tick":
-            scheduler.tick()
-        elif action == "resolve":
-            for handoff in handoffs:
-                handoff.resolve("report")
-        elif action == "fail":
-            for handoff in handoffs:
-                handoff.fail(RuntimeError("worker failed"))
-        elif action == "cancel":
-            for job in jobs:
-                job.cancel()
-
-        for job in jobs:
-            if job.state in SETTLED:
-                previous = seen_settled.setdefault(job.id, job.state)
-                assert previous is job.state, f"job {job.id} left its settled state"
-            else:
-                assert job.id not in seen_settled
-
-    _interleaved_scheduling_actions_never_phase1(resumed, resumed_at_close, scope)
+        _ACTION_HANDLERS[action](state)
+        _assert_settled_stays(state)
+    _interleaved_scheduling_actions_never_phase1(
+        state.resumed, state.resumed_at_close, state.scope
+    )
 
 
 @given(pending=st.integers(min_value=1, max_value=6))

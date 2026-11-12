@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -60,6 +61,92 @@ def _writes(report: dict[str, object], out: Path, stems: Sequence[str]) -> None:
         (out / f"{stem}.json").write_text(json.dumps(_tree()), encoding="utf-8")
 
 
+@dataclass
+class _ProbeAnswers:
+    """The requests the fake probe saw, and the runtime it answers through."""
+
+    requests: list[CaptureRequest] = field(default_factory=list)
+    runtime: FakeCliRuntime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ProbeOptions:
+    """How one fake probe run should answer."""
+
+    stems: Sequence[str]
+    exit_code: int
+    write_report: bool
+    payload: dict[str, object] | None
+
+
+def _probe_surfaces() -> list[dict[str, object]]:
+    return [{"id": "buffer_dialog", "kind": "dialog", "title": "Buffer"}]
+
+
+def _probe_opened() -> dict[str, object]:
+    return {
+        "surface": "buffer_dialog",
+        "kind": "dialog",
+        "title": "Buffer",
+        "widget": "QDialog",
+        "size": [400, 300],
+        "nodes": 7,
+        "findings": [],
+    }
+
+
+def _probe_steps() -> list[dict[str, object]]:
+    return [
+        {
+            "node": "form/distance",
+            "verb": "set",
+            "value": 5,
+            "value_after": 5.0,
+        }
+    ]
+
+
+def _probe_files(request, stems: Sequence[str]) -> dict[str, str]:
+    return {
+        kind: str(Path(request["out"]) / f"{stem}.{kind}")
+        for stem in stems
+        for kind in ("json",)
+    }
+
+
+def _probe_report(request, options: _ProbeOptions) -> dict[str, object]:
+    """The report the QGIS probe would have written for this request."""
+    report: dict[str, object] = {
+        "ok": options.exit_code == 0,
+        "plugin": "probe_demo",
+        "surfaces": _probe_surfaces(),
+        "surface": request["surface"],
+        "opened": _probe_opened(),
+        "steps": _probe_steps(),
+        "files": _probe_files(request, options.stems),
+        "error": None if options.exit_code == 0 else "the action refused",
+    }
+    if options.payload:
+        report.update(options.payload)
+    return report
+
+
+def _fake_run_process(answers: _ProbeAnswers, options: _ProbeOptions) -> int:
+    """Read the request the command wrote, then answer as the probe would."""
+    assert answers.runtime is not None
+    env = answers.runtime.environments[-1]
+    assert env is not None
+    request = json.loads(Path(env[REQUEST_ENV]).read_text(encoding="utf-8"))
+    answers.requests.append(CaptureRequest.from_mapping(request))
+    if options.stems:
+        _writes({}, Path(request["out"]), options.stems)
+    if options.write_report:
+        Path(request["report"]).write_text(
+            json.dumps(_probe_report(request, options)), encoding="utf-8"
+        )
+    return options.exit_code
+
+
 @pytest.fixture
 def answering(project: Path, prefix: Path):
     """A fake runtime whose ``run_process`` answers as the probe would."""
@@ -71,58 +158,15 @@ def answering(project: Path, prefix: Path):
         exit_code: int = 0,
         write_report: bool = True,
     ) -> tuple[FakeCliRuntime, list[CaptureRequest]]:
-        requests: list[CaptureRequest] = []
-        opened: dict[str, FakeCliRuntime] = {}
-
-        def run_process(argv: Sequence[str], cwd: Path) -> int:
-            # The fake records the environment it was given; the request file
-            # the command pointed the probe at is the one to answer.
-            env = opened["runtime"].environments[-1]
-            assert env is not None
-            request = json.loads(Path(env[REQUEST_ENV]).read_text(encoding="utf-8"))
-            requests.append(CaptureRequest.from_mapping(request))
-            if stems:
-                _writes({}, Path(request["out"]), stems)
-            if write_report:
-                report = {
-                    "ok": exit_code == 0,
-                    "plugin": "probe_demo",
-                    "surfaces": [
-                        {"id": "buffer_dialog", "kind": "dialog", "title": "Buffer"}
-                    ],
-                    "surface": request["surface"],
-                    "opened": {
-                        "surface": "buffer_dialog",
-                        "kind": "dialog",
-                        "title": "Buffer",
-                        "widget": "QDialog",
-                        "size": [400, 300],
-                        "nodes": 7,
-                        "findings": [],
-                    },
-                    "steps": [
-                        {
-                            "node": "form/distance",
-                            "verb": "set",
-                            "value": 5,
-                            "value_after": 5.0,
-                        }
-                    ],
-                    "files": {
-                        kind: str(Path(request["out"]) / f"{stem}.{kind}")
-                        for stem in stems
-                        for kind in ("json",)
-                    },
-                    "error": None if exit_code == 0 else "the action refused",
-                }
-                if payload:
-                    report.update(payload)
-                Path(request["report"]).write_text(json.dumps(report), encoding="utf-8")
-            return exit_code
-
-        runtime = FakeCliRuntime(project, {"PATH": "/nowhere"}, run_process=run_process)
-        opened["runtime"] = runtime
-        return runtime, requests
+        answers = _ProbeAnswers()
+        options = _ProbeOptions(stems, exit_code, write_report, payload)
+        runtime = FakeCliRuntime(
+            project,
+            {"PATH": "/nowhere"},
+            run_process=lambda argv, cwd: _fake_run_process(answers, options),
+        )
+        answers.runtime = runtime
+        return runtime, answers.requests
 
     return build
 

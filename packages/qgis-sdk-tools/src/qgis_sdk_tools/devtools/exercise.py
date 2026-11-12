@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -30,153 +31,193 @@ STUCK_SECONDS = 2.0  # the coordinator's bound; the gate stays shut longer
 SETTLE_SECONDS = 4.0  # generous for a debounce + reload on a slow runner
 
 
+@dataclass
+class _Exercise:
+    """The one running session and the helpers every acceptance check shares."""
+
+    session: DevSession
+    coordinator: Any
+    plugin: str
+    package: Path
+    report: dict[str, Any]
+    qgis_utils: Any
+
+    def active(self) -> bool:
+        return (
+            self.coordinator.running and self.plugin in self.qgis_utils.active_plugins
+        )
+
+    def actions(self) -> Any:
+        return self.qgis_utils.plugins[self.plugin].runtime.actions
+
+    def held(self) -> Any:
+        return self.qgis_utils.plugins[self.plugin]
+
+    def ping(self, value: int) -> object:
+        return self.actions()["ping"](value)
+
+    def edit(self, source: Path, old: str, new: str) -> str:
+        original = source.read_text(encoding="utf-8")
+        source.write_text(original.replace(old, new, 1), encoding="utf-8")
+        return original
+
+
+def _exercise_syntax_error(ex: _Exercise) -> None:
+    """AC1: a syntax error is refused before anything is unloaded."""
+    broken = ex.package / "zz_broken_by_qgis_sdk_dev.py"
+    broken.write_text("def (\n", encoding="utf-8")
+    try:
+        refused = ex.coordinator.reload()
+        ex.report["reload_refused"] = refused.outcome == "refused"
+        ex.report["kept_running"] = ex.active()
+    finally:
+        broken.unlink()
+
+
+def _exercise_edit_between_reloads(ex: _Exercise, source: Path) -> None:
+    """AC2: an edit between reloads is what runs afterwards."""
+    original = ex.edit(source, "return value\n", "return value + 1000\n")
+    try:
+        ex.report["reload_after_fix"] = ex.coordinator.reload().outcome == "reloaded"
+        ex.report["ping_after_edit"] = ex.ping(1)
+    finally:
+        source.write_text(original, encoding="utf-8")
+
+
+def _exercise_stuck(ex: _Exercise) -> None:
+    """AC3: work with no safe point refuses the reload, then recovers."""
+    gate = threading.Event()
+    stuck = _stuck_job(ex.held().runtime, gate)
+    try:
+        refused = ex.coordinator.reload()
+        ex.report["stuck_refused"] = refused.outcome == "refused"
+        ex.report["stuck_blockers"] = list(refused.blockers)
+        ex.report["kept_running_stuck"] = (
+            ex.active() and stuck.status.value == "running"
+        )
+    finally:
+        gate.set()
+    released = ex.coordinator.reload()
+    ex.report["reload_after_release"] = released.outcome == "reloaded"
+
+
+def _exercise_start_failure(ex: _Exercise, source: Path) -> None:
+    """AC1: a failure after teardown disables visibly; the next fix recovers."""
+    original = ex.edit(
+        source,
+        "from __future__ import annotations\n",
+        "from __future__ import annotations\n"
+        'raise RuntimeError("broken on import by the qgis-sdk exercise")\n',
+    )
+    try:
+        disabled = ex.coordinator.reload()
+        ex.report["start_failure_disabled"] = (
+            disabled.outcome == "disabled"
+            and not ex.coordinator.running
+            and ex.plugin not in ex.qgis_utils.active_plugins
+        )
+    finally:
+        source.write_text(original, encoding="utf-8")
+    ex.report["reload_after_start_failure"] = (
+        ex.coordinator.reload().outcome == "reloaded"
+    )
+
+
+def _exercise_coalescing(ex: _Exercise) -> None:
+    """AC2: back-to-back requests become one reload."""
+    before = ex.coordinator.revision
+    ex.coordinator.request()
+    ex.coordinator.request()
+    ex.coordinator.request()
+    ex.session.pump_until(
+        lambda: ex.coordinator.revision > before, timeout=SETTLE_SECONDS
+    )
+    ex.session.pump(0.5)  # a second fire would land here
+    ex.report["coalesced"] = ex.coordinator.revision - before == 1
+
+
+def _exercise_watcher(ex: _Exercise, source: Path) -> None:
+    """AC2 (decision-15): the watcher reloads on a saved edit, once."""
+    ex.report["watch_reloaded"] = None
+    if ex.session.watcher is None:
+        return
+    ticker = ex.session.timers[1]
+    ex.session.watcher.resync()
+    ticker.start()  # type: ignore[attr-defined]
+    before = ex.coordinator.revision
+    original = ex.edit(source, "return value\n", "return value + 2000\n")
+    try:
+        reloaded = ex.session.pump_until(
+            lambda: ex.coordinator.revision > before, timeout=SETTLE_SECONDS
+        )
+        ex.session.pump(0.5)
+        ex.report["watch_reloaded"] = reloaded and ex.coordinator.revision - before == 1
+        ex.report["ping_after_watched_edit"] = ex.ping(1)
+    finally:
+        source.write_text(original, encoding="utf-8")
+        before = ex.coordinator.revision
+        ex.session.pump_until(
+            lambda: ex.coordinator.revision > before, timeout=SETTLE_SECONDS
+        )
+        ticker.stop()  # type: ignore[attr-defined]
+
+
+def _exercise_surface(ex: _Exercise) -> None:
+    """A surface edited between reloads is what the next opening builds."""
+    ui_source = ex.package / "ui.py"
+    ex.report["surface"] = None
+    if not (ui_source.is_file() and "open_ping" in ex.actions()):
+        return
+    before_edit = _surface_round(ex.held(), ex.session, ex.plugin)
+    original = ex.edit(ui_source, 'LogView(label="Answers")', 'LogView(label="Edited")')
+    try:
+        reloaded = ex.coordinator.reload().outcome == "reloaded"
+        after_edit = _surface_round(ex.held(), ex.session, ex.plugin)
+    finally:
+        ui_source.write_text(original, encoding="utf-8")
+    ex.report["surface"] = {
+        "before": before_edit,
+        "reloaded": reloaded,
+        "after": after_edit,
+    }
+
+
+def _run_exercise_steps(ex: _Exercise) -> None:
+    """Every acceptance check in order, each recorded under a stable key."""
+    source = ex.package / "plugin.py"
+    coordinator = ex.coordinator
+    # AC2: a plain reload replaces the revision.
+    ex.report["reload_ok"] = coordinator.reload().outcome == "reloaded"
+    _exercise_syntax_error(ex)
+    _exercise_edit_between_reloads(ex, source)
+    _exercise_stuck(ex)
+    _exercise_start_failure(ex, source)
+    _exercise_coalescing(ex)
+    _exercise_watcher(ex, source)
+    _exercise_surface(ex)
+    ex.report["revision"] = coordinator.revision
+    if ex.session.request.get("web"):
+        held = ex.held()
+        held.show_view()
+        ex.report["view_shown"] = held._view is not None
+        ex.session.pump(0.1)
+    ex.report["unloaded"] = bool(ex.qgis_utils.unloadPlugin(ex.plugin))
+
+
 def run_exercise(session: DevSession, path: Path) -> None:
+    """Drive the reload policy end to end and write the report QGIS quits with."""
     import qgis.utils
 
     coordinator = session.coordinator
     plugin = coordinator.plugin
     root = Path(str(session.request["root"]))
-    package = root / plugin
     report: dict[str, Any] = {"started": coordinator.running, "error": None}
-
-    def active() -> bool:
-        return coordinator.running and plugin in qgis.utils.active_plugins
-
-    def ping(value: int) -> object:
-        return qgis.utils.plugins[plugin].runtime.actions["ping"](value)
-
-    def edit(source: Path, old: str, new: str) -> str:
-        original = source.read_text(encoding="utf-8")
-        source.write_text(original.replace(old, new, 1), encoding="utf-8")
-        return original
-
-    if coordinator.running and "ping" not in qgis.utils.plugins[plugin].runtime.actions:
+    ex = _Exercise(session, coordinator, plugin, root / plugin, report, qgis.utils)
+    if coordinator.running and "ping" not in ex.actions():
         run_smoke(session, path)
         return
-
     try:
-        # AC2: a plain reload replaces the revision.
-        report["reload_ok"] = coordinator.reload().outcome == "reloaded"
-
-        # AC1: a syntax error is refused before anything is unloaded.
-        broken = package / "zz_broken_by_qgis_sdk_dev.py"
-        broken.write_text("def (\n", encoding="utf-8")
-        try:
-            refused = coordinator.reload()
-            report["reload_refused"] = refused.outcome == "refused"
-            report["kept_running"] = active()
-        finally:
-            broken.unlink()
-
-        # AC2: an edit between reloads is what runs afterwards.
-        source = package / "plugin.py"
-        original = edit(source, "return value\n", "return value + 1000\n")
-        try:
-            report["reload_after_fix"] = coordinator.reload().outcome == "reloaded"
-            report["ping_after_edit"] = ping(1)
-        finally:
-            source.write_text(original, encoding="utf-8")
-
-        # AC3: work that cannot reach a safe point refuses the reload, names
-        # itself, and keeps running; once it finishes the reload goes through.
-        gate = threading.Event()
-        stuck = _stuck_job(qgis.utils.plugins[plugin].runtime, gate)
-        try:
-            refused = coordinator.reload()
-            report["stuck_refused"] = refused.outcome == "refused"
-            report["stuck_blockers"] = list(refused.blockers)
-            report["kept_running_stuck"] = active() and stuck.status.value == "running"
-        finally:
-            gate.set()
-        released = coordinator.reload()
-        report["reload_after_release"] = released.outcome == "reloaded"
-
-        # AC1: a failure after teardown disables visibly; the next fix recovers.
-        original = edit(
-            source,
-            "from __future__ import annotations\n",
-            "from __future__ import annotations\n"
-            'raise RuntimeError("broken on import by the qgis-sdk exercise")\n',
-        )
-        try:
-            disabled = coordinator.reload()
-            report["start_failure_disabled"] = (
-                disabled.outcome == "disabled"
-                and not coordinator.running
-                and plugin not in qgis.utils.active_plugins
-            )
-        finally:
-            source.write_text(original, encoding="utf-8")
-        report["reload_after_start_failure"] = (
-            coordinator.reload().outcome == "reloaded"
-        )
-
-        # AC2: back-to-back requests become one reload.
-        before = coordinator.revision
-        coordinator.request()
-        coordinator.request()
-        coordinator.request()
-        session.pump_until(
-            lambda: coordinator.revision > before, timeout=SETTLE_SECONDS
-        )
-        session.pump(0.5)  # a second fire would land here
-        report["coalesced"] = coordinator.revision - before == 1
-
-        # AC2 (decision-15): the watcher reloads on a saved edit, once.
-        report["watch_reloaded"] = None
-        if session.watcher is not None:
-            ticker = session.timers[1]
-            session.watcher.resync()
-            ticker.start()  # type: ignore[attr-defined]
-            before = coordinator.revision
-            original = edit(source, "return value\n", "return value + 2000\n")
-            try:
-                report["watch_reloaded"] = session.pump_until(
-                    lambda: coordinator.revision > before, timeout=SETTLE_SECONDS
-                )
-                session.pump(0.5)
-                report["watch_reloaded"] = (
-                    report["watch_reloaded"] and coordinator.revision - before == 1
-                )
-                report["ping_after_watched_edit"] = ping(1)
-            finally:
-                source.write_text(original, encoding="utf-8")
-                before = coordinator.revision
-                session.pump_until(
-                    lambda: coordinator.revision > before, timeout=SETTLE_SECONDS
-                )
-                ticker.stop()  # type: ignore[attr-defined]
-
-        # A surface edited between reloads is what the next opening
-        # builds; the bound action stays on the toolbar across revisions.
-        ui_source = package / "ui.py"
-        report["surface"] = None
-        if (
-            ui_source.is_file()
-            and "open_ping" in qgis.utils.plugins[plugin].runtime.actions
-        ):
-            before_edit = _surface_round(qgis.utils.plugins[plugin], session, plugin)
-            original = edit(
-                ui_source, 'LogView(label="Answers")', 'LogView(label="Edited")'
-            )
-            try:
-                reloaded = coordinator.reload().outcome == "reloaded"
-                after_edit = _surface_round(qgis.utils.plugins[plugin], session, plugin)
-            finally:
-                ui_source.write_text(original, encoding="utf-8")
-            report["surface"] = {
-                "before": before_edit,
-                "reloaded": reloaded,
-                "after": after_edit,
-            }
-
-        report["revision"] = coordinator.revision
-        if session.request.get("web"):
-            held = qgis.utils.plugins[plugin]
-            held.show_view()
-            report["view_shown"] = held._view is not None
-            session.pump(0.1)
-        report["unloaded"] = bool(qgis.utils.unloadPlugin(plugin))
+        _run_exercise_steps(ex)
     except BaseException as error:  # noqa: BLE001 - the report is the only way out
         report["error"] = "".join(traceback.format_exception(error))
         say(report["error"])

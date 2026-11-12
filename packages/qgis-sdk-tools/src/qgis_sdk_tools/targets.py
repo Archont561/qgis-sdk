@@ -242,6 +242,30 @@ def describe_host(probe: Callable[[str], str | None] = probe_installed) -> Host:
     )
 
 
+def _qgis_free_row(rows):
+    """The QGIS-free row, or any qualified row for the same interpreter."""
+    for target in rows:
+        if target.qgis is None:
+            return target
+    for target in rows:
+        if target.status == "qualified":
+            return target
+    return None
+
+
+def _qgis_row(rows, host: Host):
+    """The row whose QGIS series, Qt and Chromium match this host."""
+    for target in rows:
+        if target.qgis != host.qgis:
+            continue
+        if target.qt is not None and target.qt != host.qt:
+            continue
+        if target.chromium is not None and target.chromium != host.chromium:
+            continue
+        return target
+    return None
+
+
 def qualified_target(
     host: Host, matrix: Iterable[Target] = SUPPORT_MATRIX
 ) -> Target | None:
@@ -259,22 +283,8 @@ def qualified_target(
         if (target.os, target.arch, target.python) == (host.os, host.arch, host.python)
     ]
     if host.qgis is None:
-        for target in rows:
-            if target.qgis is None:
-                return target
-        for target in rows:
-            if target.status == "qualified":
-                return target
-        return None
-    for target in rows:
-        if target.qgis != host.qgis:
-            continue
-        if target.qt is not None and target.qt != host.qt:
-            continue
-        if target.chromium is not None and target.chromium != host.chromium:
-            continue
-        return target
-    return None
+        return _qgis_free_row(rows)
+    return _qgis_row(rows, host)
 
 
 def render_markdown(matrix: Iterable[Target] = SUPPORT_MATRIX) -> str:

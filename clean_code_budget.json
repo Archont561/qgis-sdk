@@ -20,10 +20,6 @@
 		"CC101": 1,
 		"CC104": 1
 	},
-	"packages/qgis-sdk-python/scripts/generate_bridge_cases.py": {
-		"CC101": 2,
-		"CC104": 1
-	},
 	"packages/qgis-sdk-python/scripts/generate_processing_snapshot.py": {
 		"CC101": 1,
 		"CC104": 1
@@ -133,10 +129,6 @@
 		"CC101": 1,
 		"CC104": 1
 	},
-	"packages/qgis-sdk-python/tests/test_mcp_cli.py": {
-		"CC101": 2,
-		"CC104": 1
-	},
 	"packages/qgis-sdk-python/tests/test_network_native.py": {
 		"CC101": 3,
 		"CC102": 1,
@@ -146,7 +138,6 @@
 		"CC101": 1
 	},
 	"packages/qgis-sdk-python/tests/test_parameter_kinds.py": {
-		"CC101": 1,
 		"CC102": 4
 	},
 	"packages/qgis-sdk-python/tests/test_plugin_app_host.py": {
@@ -177,15 +168,6 @@
 		"CC101": 2,
 		"CC104": 1
 	},
-	"packages/qgis-sdk-python/tests/test_scheduling_properties.py": {
-		"CC101": 1,
-		"CC104": 1,
-		"CC303": 1
-	},
-	"packages/qgis-sdk-python/tests/test_server_devtools.py": {
-		"CC101": 1,
-		"CC104": 2
-	},
 	"packages/qgis-sdk-python/tests/test_server_devtools_native.py": {
 		"CC101": 1
 	},
@@ -198,9 +180,6 @@
 	"packages/qgis-sdk-python/tests/test_ui_catalogue_native.py": {
 		"CC101": 1,
 		"CC104": 1
-	},
-	"packages/qgis-sdk-python/tests/test_ui_cli.py": {
-		"CC101": 3
 	},
 	"packages/qgis-sdk-python/tests/test_ui_components_native.py": {
 		"CC101": 1
@@ -267,11 +246,6 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/tasks.py": {
 		"CC102": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/surfaces.py": {
-		"CC101": 3,
-		"CC104": 1,
-		"CC303": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/webchannel.py": {
 		"CC101": 1
@@ -385,20 +359,14 @@
 		"CC102": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/_commands/_dev.py": {
-		"CC101": 1,
-		"CC102": 1,
-		"CC104": 1,
-		"CC303": 1
+		"CC102": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/_commands/_new.py": {
 		"CC101": 1,
 		"CC102": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/_commands/_processing.py": {
-		"CC101": 1,
-		"CC102": 1,
-		"CC104": 1,
-		"CC303": 1
+		"CC102": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/_commands/_run.py": {
 		"CC101": 1,
@@ -417,15 +385,9 @@
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/bundle/vendor.py": {
 		"CC101": 1
 	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/buckets.py": {
-		"CC101": 2
-	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/hosts.py": {
 		"CC101": 1,
 		"CC303": 1
-	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/imports.py": {
-		"CC101": 2
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/check/names.py": {
 		"CC303": 1
@@ -434,25 +396,11 @@
 		"CC101": 1,
 		"CC104": 1
 	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/exercise.py": {
-		"CC101": 1,
-		"CC104": 1,
-		"CC303": 1
-	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/installs.py": {
 		"CC101": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/reloader.py": {
 		"CC101": 1
-	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/serverdev.py": {
-		"CC101": 1,
-		"CC102": 1,
-		"CC104": 1
-	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/devtools/testrun.py": {
-		"CC101": 2,
-		"CC102": 1
 	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/generate/_emit.py": {
 		"CC101": 1
@@ -464,18 +412,7 @@
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/pytest_plugin.py": {
 		"CC101": 1
 	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/generate.py": {
-		"CC101": 3
-	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/targets.py": {
-		"CC101": 1,
-		"CC303": 1
-	},
 	"packages/qgis-sdk-tools/src/qgis_sdk_tools/testing.py": {
 		"CC101": 1
-	},
-	"packages/qgis-sdk-tools/src/qgis_sdk_tools/ui_diff.py": {
-		"CC101": 1,
-		"CC303": 1
 	}
 }

@@ -56,6 +56,57 @@ def is_native_module(name: str, native_modules: Sequence[str]) -> bool:
     )
 
 
+def _syntax_diagnostic(error: SyntaxError, *, path: Path, module: str) -> Diagnostic:
+    """``SYNTAX001`` for a file that cannot be parsed at all."""
+    return Diagnostic(
+        rule="SYNTAX001",
+        path=path,
+        line=error.lineno or 1,
+        column=error.offset or 1,
+        message=f"cannot parse `{module}`: {error.msg}",
+        remediation="Fix the syntax error; check reads the file without importing it.",
+    )
+
+
+def _qgis001(name: str, node: ast.stmt, *, path: Path, module: str) -> Diagnostic:
+    """A QGIS or Qt root imported at load time in a pure module."""
+    return Diagnostic(
+        rule="QGIS001",
+        path=path,
+        line=node.lineno,
+        column=node.col_offset + 1,
+        message=(
+            f"`{name}` is imported when the module loads, so `{module}` "
+            "cannot be imported or inspected without QGIS"
+        ),
+        remediation=(
+            "Move the import inside the function that uses it, put it under "
+            "`if TYPE_CHECKING:` when it only types annotations, or declare the "
+            "module native under [tool.qgis-sdk.check] native-modules (or "
+            "--native) if it must import QGIS at load time."
+        ),
+    )
+
+
+def _arch001(name: str, node: ast.stmt, *, path: Path, module: str) -> Diagnostic:
+    """The SDK's native adapter package imported at load time."""
+    return Diagnostic(
+        rule="ARCH001",
+        path=path,
+        line=node.lineno,
+        column=node.col_offset + 1,
+        message=(
+            f"`{name}` is the SDK's native adapter package and is imported "
+            f"when `{module}` loads"
+        ),
+        remediation=(
+            "Let `host()` build the context (decision-43), import the adapter "
+            "inside the function that runs in QGIS, or declare the module "
+            "native under [tool.qgis-sdk.check] native-modules."
+        ),
+    )
+
+
 def check_source(
     source: str, *, path: Path, native_modules: Sequence[str] = ()
 ) -> Iterator[Diagnostic]:
@@ -68,14 +119,7 @@ def check_source(
     try:
         tree = ast.parse(source, filename=str(path))
     except SyntaxError as error:
-        yield Diagnostic(
-            rule="SYNTAX001",
-            path=path,
-            line=error.lineno or 1,
-            column=error.offset or 1,
-            message=f"cannot parse `{module}`: {error.msg}",
-            remediation="Fix the syntax error; check reads the file without importing it.",
-        )
+        yield _syntax_diagnostic(error, path=path, module=module)
         return
     native = is_native_module(module, native_modules)
     if native and (len(path.parts) < 2 or path.parts[0] == "tests"):
@@ -126,38 +170,9 @@ def _classify(
 ) -> Diagnostic | None:
     root = name.split(".", 1)[0]
     if root in NATIVE_ROOTS:
-        return Diagnostic(
-            rule="QGIS001",
-            path=path,
-            line=node.lineno,
-            column=node.col_offset + 1,
-            message=(
-                f"`{name}` is imported when the module loads, so `{module}` "
-                "cannot be imported or inspected without QGIS"
-            ),
-            remediation=(
-                "Move the import inside the function that uses it, put it under "
-                "`if TYPE_CHECKING:` when it only types annotations, or declare the "
-                "module native under [tool.qgis-sdk.check] native-modules (or "
-                "--native) if it must import QGIS at load time."
-            ),
-        )
+        return _qgis001(name, node, path=path, module=module)
     if name == NATIVE_ADAPTER_PACKAGE or name.startswith(NATIVE_ADAPTER_PACKAGE + "."):
-        return Diagnostic(
-            rule="ARCH001",
-            path=path,
-            line=node.lineno,
-            column=node.col_offset + 1,
-            message=(
-                f"`{name}` is the SDK's native adapter package and is imported "
-                f"when `{module}` loads"
-            ),
-            remediation=(
-                "Let `host()` build the context (decision-43), import the adapter "
-                "inside the function that runs in QGIS, or declare the module "
-                "native under [tool.qgis-sdk.check] native-modules."
-            ),
-        )
+        return _arch001(name, node, path=path, module=module)
     return None
 
 
