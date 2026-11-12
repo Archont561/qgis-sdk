@@ -163,7 +163,7 @@ _CC_SPECS_snapshot_surface_2 = (
 def snapshot_surface(_published_values):
     """Capture one surface as canonical JSON plus a PNG, optionally after acting."""
     runtime: _CliRuntime = _published_values.ctx.obj
-    chosen = format(_published_values.fmt)
+    chosen = _format(_published_values.fmt)
     report = _capture(
         runtime,
         project=_published_values.project,
