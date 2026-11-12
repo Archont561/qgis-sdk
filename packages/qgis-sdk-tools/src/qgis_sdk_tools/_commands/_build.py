@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import app
 from qgis_sdk_tools.bundle import (
@@ -138,19 +139,21 @@ def _build_phase1(result, runtime):
 TARGETS = ("plugin", "app")
 
 
+_CC_SPECS_build_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    ("path", _CcAnn1, None, "positional"),
+    ("target", _CcAnn2, "plugin", "positional"),
+    ("out", _CcAnn3, None, "positional"),
+    ("no_web", _CcAnn4, False, "positional"),
+    ("as_json", _CcAnn5, False, "positional"),
+)
+
+
 @app.command("build")
-def build(
-    ctx: typer.Context,
-    path: _CcAnn1 = None,
-    target: _CcAnn2 = "plugin",
-    out: _CcAnn3 = None,
-    no_web: _CcAnn4 = False,
-    as_json: _CcAnn5 = False,
-) -> None:
+@published(_CC_SPECS_build_1, returns=type(None))
+def build(_published_values):
     """Check the project and write what QGIS, or a launcher, installs and runs."""
-    _s = _CcState(
-        ctx=ctx, path=path, target=target, out=out, no_web=no_web, as_json=as_json
-    )
+    _s = _published_values
     for _p in (_cc_build_p1, _cc_build_p2, _cc_build_p3, _cc_build_p4):
         _r = _p(_s)
         if isinstance(_r, _CcReturn):

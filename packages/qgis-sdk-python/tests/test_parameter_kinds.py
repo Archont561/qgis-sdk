@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 import pytest
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.algorithms import describe_algorithm, invoke, parameter_kind
 from qgis_sdk.core import AlgorithmContext
 from qgis_sdk.declarations import QgisSdkDeclarationError
@@ -38,6 +39,47 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.providers import Provider
 from qgis_sdk.ui.form_fields import coerce_values, form_fields
+
+_CC_SPECS_classify_1 = (
+    ("ctx", AlgorithmContext, REQUIRED, "positional"),
+    ("layer", LayerInput, REQUIRED, "positional"),
+    ("attribute", FieldInput(of="layer"), REQUIRED, "positional"),
+    ("source", FileInput(filters=("*.csv",)), REQUIRED, "positional"),
+    ("folder", DirectoryInput(), REQUIRED, "positional"),
+    ("weight", Range(0.0, 1.0), REQUIRED, "positional"),
+    ("fill", Colour(), REQUIRED, "positional"),
+    ("mode", Literal["fast", "safe"], REQUIRED, "positional"),
+)
+
+_CC_SPECS_classify_2 = (
+    ("ctx", AlgorithmContext, REQUIRED, "positional"),
+    ("source", FileInput(), REQUIRED, "positional"),
+    ("folder", DirectoryInput(), REQUIRED, "positional"),
+    ("weight", Range(0.0, 1.0), REQUIRED, "positional"),
+    ("fill", Colour(), REQUIRED, "positional"),
+    ("mode", Literal["fast", "safe"], REQUIRED, "positional"),
+)
+
+_CC_SPECS_paint_3 = (
+    ("self", REQUIRED, REQUIRED, "positional"),
+    ("layer", LayerInput, REQUIRED, "positional"),
+    ("attribute", FieldInput(of="layer"), REQUIRED, "positional"),
+    ("source", FileInput(filters=("*.csv",)), REQUIRED, "positional"),
+    ("folder", DirectoryInput(), REQUIRED, "positional"),
+    ("weight", Range(0, 5), REQUIRED, "positional"),
+    ("fill", Colour(), REQUIRED, "positional"),
+    ("mode", Literal["fast", "safe"], REQUIRED, "positional"),
+)
+
+_CC_SPECS_paint_4 = (
+    ("self", REQUIRED, REQUIRED, "positional"),
+    ("source", FileInput(), REQUIRED, "positional"),
+    ("folder", DirectoryInput(), REQUIRED, "positional"),
+    ("weight", Range(0, 5), REQUIRED, "positional"),
+    ("fill", Colour(), REQUIRED, "positional"),
+    ("layer", LayerInput, REQUIRED, "positional"),
+    ("attribute", FieldInput(of="layer"), REQUIRED, "positional"),
+)
 
 
 def _the_describer_reports_the_facts11(properties):
@@ -204,16 +246,8 @@ def test_the_describer_reports_the_new_kinds() -> None:
     provider = _provider()
 
     @provider.algorithm
-    def classify(
-        ctx: AlgorithmContext,
-        layer: LayerInput,
-        attribute: FieldInput(of="layer"),
-        source: FileInput(filters=("*.csv",)),
-        folder: DirectoryInput(),
-        weight: Range(0.0, 1.0),
-        fill: Colour(),
-        mode: Literal["fast", "safe"],
-    ) -> VectorLayerInfo: ...
+    @published(_CC_SPECS_classify_1, returns=VectorLayerInfo)
+    def classify(_published_values): ...
 
     description = describe_algorithm(classify)
 
@@ -288,14 +322,8 @@ def _rejection_rig():
     calls = []
 
     @provider.algorithm
-    def classify(
-        ctx: AlgorithmContext,
-        source: FileInput(),
-        folder: DirectoryInput(),
-        weight: Range(0.0, 1.0),
-        fill: Colour(),
-        mode: Literal["fast", "safe"],
-    ) -> VectorLayerInfo:
+    @published(_CC_SPECS_classify_2, returns=VectorLayerInfo)
+    def classify(_published_values):
         calls.append(1)
         raise AssertionError("never reached")
 
@@ -326,16 +354,8 @@ def test_form_fields_derive_the_widget_from_the_wire_annotation() -> None:
     @plugin(id="kinds", title="Kinds")
     class Kinds:
         @action
-        def paint(
-            self,
-            layer: LayerInput,
-            attribute: FieldInput(of="layer"),
-            source: FileInput(filters=("*.csv",)),
-            folder: DirectoryInput(),
-            weight: Range(0, 5),
-            fill: Colour(),
-            mode: Literal["fast", "safe"],
-        ) -> None: ...
+        @published(_CC_SPECS_paint_3, returns=type(None))
+        def paint(_published_values): ...
 
     (paint,) = describe_plugin(Kinds).actions
 
@@ -357,15 +377,8 @@ def test_coercion_returns_the_models_the_handler_declared() -> None:
     @plugin(id="kinds", title="Kinds")
     class Kinds:
         @action
-        def paint(
-            self,
-            source: FileInput(),
-            folder: DirectoryInput(),
-            weight: Range(0, 5),
-            fill: Colour(),
-            layer: LayerInput,
-            attribute: FieldInput(of="layer"),
-        ) -> None: ...
+        @published(_CC_SPECS_paint_4, returns=type(None))
+        def paint(_published_values): ...
 
     (paint,) = describe_plugin(Kinds).actions
     directory = _ref("directory")

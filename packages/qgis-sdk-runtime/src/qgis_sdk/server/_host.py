@@ -22,6 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, TypedDict, Unpack
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core.scope import ResourceScope
 from qgis_sdk.jobs import Jobs, JobService
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
@@ -165,15 +166,17 @@ class _ServerHostMixin1:
             )
         self._registered = True
 
-    def handle(
-        self,
-        request: ServerRequest,
-        *,
-        scope: ResourceScope | None = None,
-        project: Project | None = None,
-        layers: Layers | None = None,
-        log: Log | None = None,
-    ) -> ServerResponse:
+    _CC_SPECS_handle_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("request", ServerRequest, REQUIRED, "positional"),
+        ("scope", ResourceScope | None, None, "keyword"),
+        ("project", Project | None, None, "keyword"),
+        ("layers", Layers | None, None, "keyword"),
+        ("log", Log | None, None, "keyword"),
+    )
+
+    @published(_CC_SPECS_handle_1, returns=ServerResponse)
+    def handle(_published_values):
         """Serve one request and return the response the host will send.
 
         ``scope`` is the request scope; the caller owns it and closes it when the
@@ -181,19 +184,26 @@ class _ServerHostMixin1:
         same moment (decision-52). A host that passes none gets a scope opened
         and closed inside this call.
         """
-        owned = scope is None
-        if scope is None:
-            scope = ResourceScope()
+        owned = _published_values.scope is None
+        if _published_values.scope is None:
+            _published_values.scope = ResourceScope()
         try:
-            self.tick()
+            _published_values.self.tick()
             response = ServerResponse()
-            context = self.context(
-                scope, request, response, project=project, layers=layers, log=log
+            context = _published_values.self.context(
+                _published_values.scope,
+                _published_values.request,
+                response,
+                project=_published_values.project,
+                layers=_published_values.layers,
+                log=_published_values.log,
             )
-            return self.serve(context, request, response)
+            return _published_values.self.serve(
+                context, _published_values.request, response
+            )
         finally:
             if owned:
-                scope.close()
+                _published_values.scope.close()
 
     # -- serving -----------------------------------------------------------------
 

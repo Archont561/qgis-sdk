@@ -33,6 +33,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, get_args, get_origin
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import (
     AlgorithmContext,
     AlgorithmServices,
@@ -474,16 +475,18 @@ def _execute(request: _InvokeRequest) -> AlgorithmResult:
     return _run(_Run(request, description, context, scope, project, cancellation))
 
 
-def invoke(
-    function: Callable[..., Any],
-    ctx: PluginContext | JobContext | AlgorithmContext,
-    /,
-    *,
-    progress: Progress | None = None,
-    cancellation: Cancellation | None = None,
-    add_to_project: bool = True,
-    **inputs: Any,
-) -> AlgorithmResult:
+_CC_SPECS_invoke_1 = (
+    ("function", Callable[..., Any], REQUIRED, "positional_only"),
+    ("ctx", PluginContext | JobContext | AlgorithmContext, REQUIRED, "positional_only"),
+    ("progress", Progress | None, None, "keyword"),
+    ("cancellation", Cancellation | None, None, "keyword"),
+    ("add_to_project", bool, True, "keyword"),
+    ("inputs", Any, REQUIRED, "var_keyword"),
+)
+
+
+@published(_CC_SPECS_invoke_1, returns=AlgorithmResult)
+def invoke(_published_values):
     """Run one declared algorithm once from the context the caller already holds.
 
     ``ctx`` is a PluginContext, JobContext or AlgorithmContext; ``invoke``
@@ -495,7 +498,12 @@ def invoke(
     """
     return _execute(
         _InvokeRequest(
-            function, ctx, dict(inputs), progress, cancellation, add_to_project
+            _published_values.function,
+            _published_values.ctx,
+            dict(_published_values.inputs),
+            _published_values.progress,
+            _published_values.cancellation,
+            _published_values.add_to_project,
         )
     )
 

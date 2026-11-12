@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.models import QgisSdkFormError, QgisSdkUiError
 
 from .components import Button, Component
@@ -34,25 +35,35 @@ class RunButton(Button):
     latest call returned; ``finished(listener)`` hears it.
     """
 
-    def __init__(
-        self,
-        name: str | None = None,
-        action_id: str | None = None,
-        *,
-        values: Values = None,
-        progress: JobProgress | None = None,
-        text: str | None = None,
-        label: str | None = None,
-    ) -> None:
-        super().__init__(name, text, label=label)
-        if not action_id or not isinstance(action_id, str):
-            raise QgisSdkUiError(f"{self._describe()} needs an action id")
-        self.action_id = action_id
-        self._values = values
-        self._progress = progress
-        self._last: object = None
-        self._finished: list[Callable[[object], None]] = []
-        self.clicked(self.run)
+    _CC_SPECS_init_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("name", str | None, None, "positional"),
+        ("action_id", str | None, None, "positional"),
+        ("values", Values, None, "keyword"),
+        ("progress", JobProgress | None, None, "keyword"),
+        ("text", str | None, None, "keyword"),
+        ("label", str | None, None, "keyword"),
+    )
+
+    @published(_CC_SPECS_init_1, returns=type(None))
+    def __init__(_published_values):
+        super(RunButton, _published_values.self).__init__(
+            _published_values.name,
+            _published_values.text,
+            label=_published_values.label,
+        )
+        if not _published_values.action_id or not isinstance(
+            _published_values.action_id, str
+        ):
+            raise QgisSdkUiError(
+                f"{_published_values.self._describe()} needs an action id"
+            )
+        _published_values.self.action_id = _published_values.action_id
+        _published_values.self._values = _published_values.values
+        _published_values.self._progress = _published_values.progress
+        _published_values.self._last: object = None
+        _published_values.self._finished: list[Callable[[object], None]] = []
+        _published_values.self.clicked(_published_values.self.run)
 
     @property
     def progress(self) -> JobProgress | None:

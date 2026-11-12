@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import processing_app
 from qgis_sdk_tools.cli import CliRuntime
@@ -171,32 +172,36 @@ def _generate(runtime: CliRuntime, options: _GenerateOptions) -> None:
         raise typer.Exit(code=2) from error
 
 
+_CC_SPECS_processing_generate_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    ("project", _ProjectOpt, None, "positional"),
+    ("provider", _ProviderOpt, None, "positional"),
+    ("out", _OutOpt, None, "positional"),
+    ("no_python", _NoPythonOpt, False, "positional"),
+    ("web_out", _WebOutOpt, None, "positional"),
+    ("no_web", _NoWebOpt, False, "positional"),
+    ("catalogue", _CatalogueOpt, None, "positional"),
+    ("check", _CheckOpt, False, "positional"),
+    ("qgis_prefix", _PrefixOpt, None, "positional"),
+)
+
+
 @processing_app.command("generate")
-def processing_generate(
-    ctx: typer.Context,
-    project: _ProjectOpt = None,
-    provider: _ProviderOpt = None,
-    out: _OutOpt = None,
-    no_python: _NoPythonOpt = False,
-    web_out: _WebOutOpt = None,
-    no_web: _NoWebOpt = False,
-    catalogue: _CatalogueOpt = None,
-    check: _CheckOpt = False,
-    qgis_prefix: _PrefixOpt = None,
-) -> None:
+@published(_CC_SPECS_processing_generate_1, returns=type(None))
+def processing_generate(_published_values):
     """Read the QGIS Processing registry; write typed Python and TypeScript."""
     options = _GenerateOptions(
-        project,
-        provider,
-        out,
-        no_python,
-        web_out,
-        no_web,
-        catalogue,
-        check,
-        qgis_prefix,
+        _published_values.project,
+        _published_values.provider,
+        _published_values.out,
+        _published_values.no_python,
+        _published_values.web_out,
+        _published_values.no_web,
+        _published_values.catalogue,
+        _published_values.check,
+        _published_values.qgis_prefix,
     )
-    _generate(ctx.obj, options)
+    _generate(_published_values.ctx.obj, options)
 
 
 def _processing_package(root: Path, out: Path | None) -> Path | None:

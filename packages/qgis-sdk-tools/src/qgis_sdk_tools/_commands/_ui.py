@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Annotated, Any, TypedDict, Unpack
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import app
 from qgis_sdk_tools.cli import CliRuntime
@@ -212,35 +213,69 @@ def open_surface(
     typer.echo(_render(report["opened"], chosen), file=runtime.out)
 
 
+_CC_SPECS_snapshot_surface_2 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    (
+        "surface",
+        Annotated[str, typer.Argument(help=_SURFACE_HELP)],
+        REQUIRED,
+        "positional",
+    ),
+    (
+        "project",
+        Annotated[Path, typer.Option(help=_PROJECT_HELP)],
+        Path(),
+        "positional",
+    ),
+    (
+        "out",
+        Annotated[
+            Path | None,
+            typer.Option(
+                help=f"Where to write the capture (default: {STATE_DIRECTORY}/ui)."
+            ),
+        ],
+        None,
+        "positional",
+    ),
+    (
+        "screenshot",
+        Annotated[
+            bool, typer.Option("--screenshot/--no-screenshot", help="Grab the PNG too.")
+        ],
+        True,
+        "positional",
+    ),
+    ("act", Annotated[list[str], typer.Option(help=_STEP_HELP)], [], "positional"),
+    (
+        "qgis_prefix",
+        Annotated[Path | None, typer.Option(help=_PREFIX_HELP)],
+        None,
+        "positional",
+    ),
+    (
+        "fmt",
+        Annotated[str, typer.Option("--format", help=_FORMAT_HELP)],
+        "json",
+        "positional",
+    ),
+)
+
+
 @ui_app.command("snapshot")
-def snapshot_surface(
-    ctx: typer.Context,
-    surface: Annotated[str, typer.Argument(help=_SURFACE_HELP)],
-    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path(),
-    out: Annotated[
-        Path | None,
-        typer.Option(
-            help=f"Where to write the capture (default: {STATE_DIRECTORY}/ui)."
-        ),
-    ] = None,
-    screenshot: Annotated[
-        bool, typer.Option("--screenshot/--no-screenshot", help="Grab the PNG too.")
-    ] = True,
-    act: Annotated[list[str], typer.Option(help=_STEP_HELP)] = [],  # noqa: B006
-    qgis_prefix: Annotated[Path | None, typer.Option(help=_PREFIX_HELP)] = None,
-    fmt: Annotated[str, typer.Option("--format", help=_FORMAT_HELP)] = "json",
-) -> None:
+@published(_CC_SPECS_snapshot_surface_2, returns=type(None))
+def snapshot_surface(_published_values):
     """Capture one surface as canonical JSON plus a PNG, optionally after acting."""
-    runtime: CliRuntime = ctx.obj
-    chosen = _format(fmt)
+    runtime: CliRuntime = _published_values.ctx.obj
+    chosen = _format(_published_values.fmt)
     report = _capture(
         runtime,
-        project=project,
-        surface=surface,
-        output=out,
-        screenshot=screenshot,
-        steps=_steps(act),
-        qgis_prefix=qgis_prefix,
+        project=_published_values.project,
+        surface=_published_values.surface,
+        output=_published_values.out,
+        screenshot=_published_values.screenshot,
+        steps=_steps(_published_values.act),
+        qgis_prefix=_published_values.qgis_prefix,
     )
     _print_captures(runtime, report, chosen)
 
@@ -294,30 +329,73 @@ def _drive_surface(runtime: CliRuntime, action: _SurfaceAction) -> None:
     _print_step_values(runtime, report, chosen)
 
 
+_CC_SPECS_act_on_surface_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    (
+        "surface",
+        Annotated[str, typer.Argument(help=_SURFACE_HELP)],
+        REQUIRED,
+        "positional",
+    ),
+    (
+        "step",
+        Annotated[list[str], typer.Option("--step", help=_STEP_HELP)],
+        [],
+        "positional",
+    ),
+    (
+        "project",
+        Annotated[Path, typer.Option(help=_PROJECT_HELP)],
+        Path(),
+        "positional",
+    ),
+    (
+        "out",
+        Annotated[Path | None, typer.Option(help="Where to write the captures.")],
+        None,
+        "positional",
+    ),
+    (
+        "screenshot",
+        Annotated[
+            bool, typer.Option("--screenshot/--no-screenshot", help="Grab the PNG too.")
+        ],
+        True,
+        "positional",
+    ),
+    (
+        "qgis_prefix",
+        Annotated[Path | None, typer.Option(help=_PREFIX_HELP)],
+        None,
+        "positional",
+    ),
+    (
+        "fmt",
+        Annotated[str, typer.Option("--format", help=_FORMAT_HELP)],
+        "json",
+        "positional",
+    ),
+)
+
+
 @ui_app.command("act")
-def act_on_surface(
-    ctx: typer.Context,
-    surface: Annotated[str, typer.Argument(help=_SURFACE_HELP)],
-    step: Annotated[list[str], typer.Option("--step", help=_STEP_HELP)] = [],  # noqa: B006
-    project: Annotated[Path, typer.Option(help=_PROJECT_HELP)] = Path(),
-    out: Annotated[
-        Path | None, typer.Option(help="Where to write the captures.")
-    ] = None,
-    screenshot: Annotated[
-        bool, typer.Option("--screenshot/--no-screenshot", help="Grab the PNG too.")
-    ] = True,
-    qgis_prefix: Annotated[Path | None, typer.Option(help=_PREFIX_HELP)] = None,
-    fmt: Annotated[str, typer.Option("--format", help=_FORMAT_HELP)] = "json",
-) -> None:
+@published(_CC_SPECS_act_on_surface_1, returns=type(None))
+def act_on_surface(_published_values):
     """Drive a surface through Qt, then capture what it became.
 
     `ui snapshot` with interactions made mandatory: a capture of an untouched
     surface is what `snapshot` is for.
     """
     action = _SurfaceAction(
-        project, surface, out, screenshot, _steps(step), qgis_prefix, fmt
+        _published_values.project,
+        _published_values.surface,
+        _published_values.out,
+        _published_values.screenshot,
+        _steps(_published_values.step),
+        _published_values.qgis_prefix,
+        _published_values.fmt,
     )
-    _drive_surface(ctx.obj, action)
+    _drive_surface(_published_values.ctx.obj, action)
 
 
 def _diff_payload(difference) -> dict[str, Any]:

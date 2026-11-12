@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import app
 from qgis_sdk_tools.cli import CliRuntime
@@ -129,16 +130,20 @@ def _cc_run_p5(_s):
     raise typer.Exit(code=_s.exit_code)
 
 
+_CC_SPECS_run_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    ("path", _CcAnn1, None, "positional"),
+    ("headless", _CcAnn2, False, "positional"),
+    ("once", _CcAnn3, False, "positional"),
+    ("grace", _CcAnn4, None, "positional"),
+    ("title", _CcAnn5, None, "positional"),
+    ("qgis_prefix", _CcAnn6, None, "positional"),
+)
+
+
 @app.command("run")
-def run(
-    ctx: typer.Context,
-    path: _CcAnn1 = None,
-    headless: _CcAnn2 = False,
-    once: _CcAnn3 = False,
-    grace: _CcAnn4 = None,
-    title: _CcAnn5 = None,
-    qgis_prefix: _CcAnn6 = None,
-) -> None:
+@published(_CC_SPECS_run_1, returns=type(None))
+def run(_published_values):
     """Run the plugin as a standalone PyQGIS app instead of inside QGIS.
 
     The app host owns the ``QgsApplication`` (decision-52 point 3): it starts the
@@ -147,7 +152,7 @@ def run(
     and nothing is written into the project; a project without an app entry runs
     through a generated probe, so a Desktop plugin can be tried as an app.
     """
-    _s = _CcState(**locals())
+    _s = _published_values
     for _p in (_cc_run_p4, _cc_run_p5):
         _r = _p(_s)
         if isinstance(_r, _CcReturn):

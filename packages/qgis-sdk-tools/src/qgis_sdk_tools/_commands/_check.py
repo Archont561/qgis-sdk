@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import app
 from qgis_sdk_tools.check import QgisSdkCheckError, check_project
@@ -85,24 +86,28 @@ def _render_report(runtime: CliRuntime, report, options: _CheckOptions) -> None:
     typer.echo(f"checked {report.files_checked} files: {problems}", file=runtime.out)
 
 
+_CC_SPECS_check_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    ("path", _PathArg, None, "positional"),
+    ("native", _NativeOpt, None, "positional"),
+    ("as_json", _JsonOpt, False, "positional"),
+    ("imports", _ImportsOpt, False, "positional"),
+    ("grants", _GrantsOpt, False, "positional"),
+)
+
+
 @app.command("check")
 @app.command("check")
-def check(
-    ctx: typer.Context,
-    path: _PathArg = None,
-    native: _NativeOpt = None,
-    as_json: _JsonOpt = False,
-    imports: _ImportsOpt = False,
-    grants: _GrantsOpt = False,
-) -> None:
+@published(_CC_SPECS_check_1, returns=type(None))
+def check(_published_values):
     """Read a plugin project and report problems; import, install and change nothing."""
-    runtime: CliRuntime = ctx.obj
+    runtime: CliRuntime = _published_values.ctx.obj
     options = _CheckOptions(
-        runtime.resolve(path or Path()),
-        tuple(native or ()),
-        as_json,
-        imports,
-        grants,
+        runtime.resolve(_published_values.path or Path()),
+        tuple(_published_values.native or ()),
+        _published_values.as_json,
+        _published_values.imports,
+        _published_values.grants,
     )
     report = _checked_report(runtime, options)
     _render_report(runtime, report, options)

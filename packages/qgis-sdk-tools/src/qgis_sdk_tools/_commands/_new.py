@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated, TypedDict, Unpack
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import _install, app
 from qgis_sdk_tools.cli import CliRuntime
@@ -203,31 +204,35 @@ def _cc_new_p6(_s):
         _install(_s.runtime, _s.options, _s.target, _s.root)
 
 
+_CC_SPECS_new_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    ("target", _CcAnn1, REQUIRED, "positional"),
+    ("plugin", _CcAnn2, None, "positional"),
+    ("title", _CcAnn3, None, "positional"),
+    ("author", _CcAnn4, None, "positional"),
+    ("email", _CcAnn5, None, "positional"),
+    ("version", _CcAnn6, None, "positional"),
+    ("qgis_minimum_version", _CcAnn7, None, "positional"),
+    ("algorithm", _CcAnn8, False, "positional"),
+    ("ui", _CcAnn9, None, "positional"),
+    ("host", _CcAnn10, "desktop", "positional"),
+    ("web", _CcAnn11, None, "positional"),
+    ("placement", _CcAnn12, None, "positional"),
+    ("package_manager", _CcAnn13, None, "positional"),
+    ("sdk_dependency", _CcAnn14, None, "positional"),
+    ("ui_dependency", _CcAnn15, None, "positional"),
+    ("install", _CcAnn16, None, "positional"),
+    ("no_input", _CcAnn17, False, "positional"),
+    ("dry_run", _CcAnn18, False, "positional"),
+    ("force", _CcAnn19, False, "positional"),
+)
+
+
 @app.command("new")
-def new(
-    ctx: typer.Context,
-    target: _CcAnn1,
-    plugin: _CcAnn2 = None,
-    title: _CcAnn3 = None,
-    author: _CcAnn4 = None,
-    email: _CcAnn5 = None,
-    version: _CcAnn6 = None,
-    qgis_minimum_version: _CcAnn7 = None,
-    algorithm: _CcAnn8 = False,
-    ui: _CcAnn9 = None,
-    host: _CcAnn10 = "desktop",
-    web: _CcAnn11 = None,
-    placement: _CcAnn12 = None,
-    package_manager: _CcAnn13 = None,
-    sdk_dependency: _CcAnn14 = None,
-    ui_dependency: _CcAnn15 = None,
-    install: _CcAnn16 = None,
-    no_input: _CcAnn17 = False,
-    dry_run: _CcAnn18 = False,
-    force: _CcAnn19 = False,
-) -> None:
+@published(_CC_SPECS_new_1, returns=type(None))
+def new(_published_values):
     """Write a minimal, loadable plugin project at TARGET, with a web UI if asked."""
-    _s = _CcState(**locals())
+    _s = _published_values
     for _p in (_cc_new_p5, _cc_new_p6):
         _r = _p(_s)
         if isinstance(_r, _CcReturn):

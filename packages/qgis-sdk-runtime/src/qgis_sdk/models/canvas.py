@@ -35,6 +35,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.models.features import GEOMETRY
 
 __all__ = [
@@ -118,17 +119,26 @@ class CanvasExtent:
         """The box's height in CRS units."""
         return self.y_max - self.y_min
 
+    _CC_SPECS_from_bounds_1 = (
+        ("cls", REQUIRED, REQUIRED, "positional"),
+        ("x_min", float, REQUIRED, "positional"),
+        ("y_min", float, REQUIRED, "positional"),
+        ("x_max", float, REQUIRED, "positional"),
+        ("y_max", float, REQUIRED, "positional"),
+        ("crs", str | None, None, "positional"),
+    )
+
     @classmethod
-    def from_bounds(
-        cls,
-        x_min: float,
-        y_min: float,
-        x_max: float,
-        y_max: float,
-        crs: str | None = None,
-    ) -> CanvasExtent:
+    @published(_CC_SPECS_from_bounds_1, returns=None)
+    def from_bounds(_published_values):
         """Build the box from the order a rectangle is usually written in."""
-        return cls(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max, crs=crs)
+        return _published_values.cls(
+            x_min=_published_values.x_min,
+            y_min=_published_values.y_min,
+            x_max=_published_values.x_max,
+            y_max=_published_values.y_max,
+            crs=_published_values.crs,
+        )
 
     def to_wire(self) -> dict[str, Any]:
         return {

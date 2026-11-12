@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Literal
 
 import pytest
 from qgis_sdk import QgisSdkPlugin
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.algorithms import describe_algorithm
 from qgis_sdk.core import (
     AlgorithmContext,
@@ -38,6 +39,17 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.providers import Provider
 from sample_algorithms import buffer_layer, sample_provider
+
+_CC_SPECS_classify_1 = (
+    ("ctx", AlgorithmContext, REQUIRED, "positional"),
+    ("layer_id", LayerInput, REQUIRED, "positional"),
+    ("attribute", FieldInput(of="layer_id"), REQUIRED, "positional"),
+    ("table", FileInput(filters=("*.csv",)), REQUIRED, "positional"),
+    ("folder", DirectoryInput(), REQUIRED, "positional"),
+    ("weight", Range(0.0, 1.0), REQUIRED, "positional"),
+    ("fill", Colour(), REQUIRED, "positional"),
+    ("mode", Literal["fast", "safe"], REQUIRED, "positional"),
+)
 
 
 def _the_new_kinds_become_phase1(seen, tmp_path):
@@ -259,25 +271,19 @@ def _kinds_algorithm(seen: dict[str, object]) -> Provider:
     provider = Provider(id="kinds", title="Kinds provider")
 
     @provider.algorithm(id="classify", title="Classify")
-    def classify(
-        ctx: AlgorithmContext,
-        layer_id: LayerInput,
-        attribute: FieldInput(of="layer_id"),
-        table: FileInput(filters=("*.csv",)),
-        folder: DirectoryInput(),
-        weight: Range(0.0, 1.0),
-        fill: Colour(),
-        mode: Literal["fast", "safe"],
-    ) -> VectorLayerInfo:
+    @published(_CC_SPECS_classify_1, returns=VectorLayerInfo)
+    def classify(_published_values):
         seen.update(
-            attribute=attribute,
-            table=table,
-            folder=folder,
-            weight=weight,
-            fill=fill,
-            mode=mode,
+            attribute=_published_values.attribute,
+            table=_published_values.table,
+            folder=_published_values.folder,
+            weight=_published_values.weight,
+            fill=_published_values.fill,
+            mode=_published_values.mode,
         )
-        return ctx.algorithms.execute(CentroidRequest(layer_id))
+        return _published_values.ctx.algorithms.execute(
+            CentroidRequest(_published_values.layer_id)
+        )
 
     return provider
 

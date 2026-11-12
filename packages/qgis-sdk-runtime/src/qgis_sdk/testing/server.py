@@ -13,13 +13,12 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core.scope import ResourceScope
+from qgis_sdk.jobs import JobService
 from qgis_sdk.server import ServerHooks, ServerHost, ServerRequest, ServerResponse
-
-if TYPE_CHECKING:
-    from qgis_sdk.jobs import JobService
 
 __all__ = ["FakeServerInterface", "RegisteredFilter"]
 
@@ -99,24 +98,32 @@ class FakeServerInterface:
 
     # -- serving -----------------------------------------------------------------
 
-    def serve(
-        self,
-        hooks: ServerHooks,
-        request: ServerRequest,
-        *,
-        scope: ResourceScope | None = None,
-        jobs: JobService | None = None,
-        **services: Any,
-    ) -> ServerResponse:
+    _CC_SPECS_serve_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("hooks", ServerHooks, REQUIRED, "positional"),
+        ("request", ServerRequest, REQUIRED, "positional"),
+        ("scope", ResourceScope | None, None, "keyword"),
+        ("jobs", JobService | None, None, "keyword"),
+        ("services", Any, REQUIRED, "var_keyword"),
+    )
+
+    @published(_CC_SPECS_serve_1, returns=ServerResponse)
+    def serve(_published_values):
         """Register ``hooks`` here and serve one request through them.
 
         ``jobs`` is the plugin's job service, when the test has one: the host
         derives a request-scoped service from it exactly as a deployed server
         does, which is what makes ``ctx.jobs`` reachable from a hook here.
         """
-        host = ServerHost(hooks, self, jobs=jobs)
+        host = ServerHost(
+            _published_values.hooks, _published_values.self, jobs=_published_values.jobs
+        )
         host.register()
-        return host.handle(request, scope=scope, **services)
+        return host.handle(
+            _published_values.request,
+            scope=_published_values.scope,
+            **_published_values.services,
+        )
 
     def __repr__(self) -> str:
         return (

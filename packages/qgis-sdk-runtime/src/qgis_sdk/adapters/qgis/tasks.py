@@ -37,6 +37,7 @@ from typing import Any
 
 from qgis.core import QgsApplication, QgsTask, QgsTaskManager
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.core.scheduling import Handoff
 from qgis_sdk.models import QgisSdkJobCancelledError, QgisSdkUnsupportedCapabilityError
@@ -48,25 +49,30 @@ __all__ = ["QgsTaskWorkers"]
 class _JobTask(QgsTask):
     """One job body as a native task; it reports, and never raises."""
 
-    def __init__(
-        self,
-        fn: Callable[[], Any],
-        handoff: Handoff,
-        cancelled: threading.Event,
-        item: WorkItem | None,
-        on_finished: Callable[[], None],
-    ) -> None:
-        super().__init__(
-            item.title if item is not None else "QGIS SDK job",
+    _CC_SPECS_init_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("fn", Callable[[], Any], REQUIRED, "positional"),
+        ("handoff", Handoff, REQUIRED, "positional"),
+        ("cancelled", threading.Event, REQUIRED, "positional"),
+        ("item", WorkItem | None, REQUIRED, "positional"),
+        ("on_finished", Callable[[], None], REQUIRED, "positional"),
+    )
+
+    @published(_CC_SPECS_init_1, returns=type(None))
+    def __init__(_published_values):
+        super(_JobTask, _published_values.self).__init__(
+            _published_values.item.title
+            if _published_values.item is not None
+            else "QGIS SDK job",
             QgsTask.Flag.CanCancel,
         )
-        self._fn = fn
-        self._handoff = handoff
-        self._cancelled = cancelled
-        self._item = item
-        self._on_finished = on_finished
-        self._observed = False
-        self._retired = False
+        _published_values.self._fn = _published_values.fn
+        _published_values.self._handoff = _published_values.handoff
+        _published_values.self._cancelled = _published_values.cancelled
+        _published_values.self._item = _published_values.item
+        _published_values.self._on_finished = _published_values.on_finished
+        _published_values.self._observed = False
+        _published_values.self._retired = False
 
     # -- Qt's side
 

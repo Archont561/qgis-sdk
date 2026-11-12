@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 import qgis_sdk.exports as export_policy
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
     RASTER_EXPORT_DRIVERS,
@@ -335,24 +336,26 @@ _EMPTY_STATISTICS = (None, None, None, None)
 
 
 class _FakeRastersMixin1:
-    def register(
-        self,
-        source: Path,
-        *,
-        name: str,
-        extent: CanvasExtent,
-        band_count: int = 1,
-        data_types: Sequence[str] | None = None,
-        no_data: Sequence[float | None] | None = None,
-        resolution: tuple[float, float] = (1.0, 1.0),
-        crs: str | None = None,
-        values: Sequence[float | None] | None = None,
-        holes: Sequence[tuple[float, float]] = (),
-        statistics: Mapping[int, RasterStatistics] | None = None,
-        dataset_path: Path | None = None,
-    ) -> None:
+    _CC_SPECS_register_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("source", Path, REQUIRED, "positional"),
+        ("name", str, REQUIRED, "keyword"),
+        ("extent", CanvasExtent, REQUIRED, "keyword"),
+        ("band_count", int, 1, "keyword"),
+        ("data_types", Sequence[str] | None, None, "keyword"),
+        ("no_data", Sequence[float | None] | None, None, "keyword"),
+        ("resolution", tuple[float, float], (1.0, 1.0), "keyword"),
+        ("crs", str | None, None, "keyword"),
+        ("values", Sequence[float | None] | None, None, "keyword"),
+        ("holes", Sequence[tuple[float, float]], (), "keyword"),
+        ("statistics", Mapping[int, RasterStatistics] | None, None, "keyword"),
+        ("dataset_path", Path | None, None, "keyword"),
+    )
+
+    @published(_CC_SPECS_register_1, returns=type(None))
+    def register(_published_values):
         "Declare a raster dataset, and what reading it answers.\n\n        ``values`` is one sampled value per band, returned for a point inside\n        ``extent``; ``holes`` names the points a band is empty at, standing in\n        for the pixel grid this fake does not have. ``statistics`` is declared\n        by band number, and a band left out answers :data:`_EMPTY_STATISTICS`.\n        ``dataset_path`` models a container: the file the export copies, when it\n        differs from ``source``.\n"
-        _s = _CcState(**locals())
+        _s = _published_values
         for _p in (_cc_register_p1, _cc_register_p2, _cc_register_p3):
             _r = _p(_s)
             if isinstance(_r, _CcReturn):
