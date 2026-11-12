@@ -66,9 +66,11 @@ Budget = Mapping[str, Mapping[str, int]]
 def command(scope: Iterable[str] = SCOPE) -> list[str]:
     """The Rude invocation, machine-readable and limited to the plugin's rules.
 
-    ``--select`` repeats ``[tool.rude] select`` on purpose: the config states the
-    intent for anyone running Rude by hand, and the flag keeps this gate from
-    widening to the F/E/W sets if that table is ever dropped.
+    ``--select CC`` keeps the gate inside the clean-code plugin even if the
+    config table is ever dropped, so Rude's own F/E/W sets can never leak in.
+    ``[tool.rude] ignore`` is applied after ``select`` (including this CLI
+    ``--select``), so the config still decides which of the plugin's rules this
+    gate measures; the two must stay in sync.
     """
     return ["rude", "check", "--select", RULES, "--format", "json", *scope]
 
