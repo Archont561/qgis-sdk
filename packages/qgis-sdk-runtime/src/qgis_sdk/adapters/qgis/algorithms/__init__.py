@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from ._native import (
+    NativeAlgorithms,
+)
 from ._wiring import (
     AlgorithmWiring,
-    NativeAlgorithms,
     processing,
 )
 

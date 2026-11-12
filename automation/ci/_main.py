@@ -1,7 +1,14 @@
+"""Command dispatch for ``python -m automation.ci``.
+
+One subparser per verb, and no behaviour of its own: the verbs that gate live in
+``_checks``, the ones that shell out live in ``_commands``, and this module only
+parses arguments and hands the namespace over. ``__main__.py`` is the entry
+point that turns :func:`main` into an exit status.
+"""
+
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from ._checks import annotate_coverage, annotate_log, lts, report_bun, report_steps
@@ -16,7 +23,7 @@ from ._commands import (
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="automation.ci", description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
     log = commands.add_parser("run-log")
     log.add_argument("log", type=Path)
@@ -70,7 +77,3 @@ def report(args: argparse.Namespace) -> None:
         report_bun(args.log, args.title)
     elif args.action == "report-steps":
         report_steps()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

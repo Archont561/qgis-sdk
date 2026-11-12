@@ -54,12 +54,16 @@ from qgis_sdk.processing.runs import (
     plan_destinations,
 )
 
-from ._native import NativeAlgorithms
-from ._publish import convert_outputs, publish_explicit
+from ._publish import (
+    PublishRequest,
+    convert_outputs,
+    publish_explicit,
+)
 
 if TYPE_CHECKING:
     from qgis_sdk.files import FilesService
-METRES_ONLY: str = "metres"
+
+    from ._native import NativeAlgorithms
 
 
 class _ProcessingReady:
@@ -128,20 +132,6 @@ def _declared_outputs(model: Any) -> dict[str, str]:
     return declared
 
 
-def staged_vector_is_sound(stage: object, value: object, partial: Path) -> bool:
-    """Whether the provider's answer is the staged vector file the graph expects.
-
-    Four things have to hold: the run was staged, the provider answered a path,
-    that path is the staged one, and it is a real file rather than a link to
-    somebody else's.
-    """
-    if stage is None or not isinstance(value, str):
-        return False
-    if Path(value) != partial:
-        return False
-    return not partial.is_symlink() and partial.is_file()
-
-
 @dataclass(frozen=True, slots=True)
 class AlgorithmWiring:
     """The host objects one ``NativeAlgorithms`` backend borrows.
@@ -174,27 +164,6 @@ class _NativeParams:
     params: Mapping[str, object]
     run_directory: Path
     staged: Mapping[str, Path]
-
-
-@dataclass(frozen=True, slots=True)
-class PublishRequest:
-    algorithm: str
-    raw: Mapping[str, Any]
-    params: Mapping[str, object]
-    explicit: Mapping[str, Path]
-    staged: Mapping[str, Path]
-    stage: Path | None
-
-
-@dataclass(frozen=True, slots=True)
-class PublishFacts:
-    algorithm: str
-    raw: Mapping[str, Any]
-    params: Mapping[str, object]
-    stage: Path | None
-    name: str
-    destination: Path
-    partial: Path
 
 
 @dataclass(slots=True)

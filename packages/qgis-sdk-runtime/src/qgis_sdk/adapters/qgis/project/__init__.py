@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._connect_state import (
+from ._helpers import (
     GROUP_ID_PREFIX,
 )
 from ._native import (

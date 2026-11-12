@@ -58,8 +58,6 @@ from qgis_sdk.ui.components import (
     Toggle,
 )
 
-from ._widgets import BUILDERS
-
 
 class CcState1:
     """A mutable record shared by the phases of one long function."""
@@ -248,7 +246,14 @@ class Rendering:
 def mount(
     component: Component, parent: QWidget | None, *, on_change: OnChange
 ) -> Rendering:
-    """Build the widget for ``component`` and connect it both ways."""
+    """Build the widget for ``component`` and connect it both ways.
+
+    The builder table is imported here rather than at module scope: the builders
+    need the widget base class in this module, so importing them eagerly would
+    make the two modules import each other.
+    """
+    from ._widgets import BUILDERS
+
     for cls, builder in BUILDERS:
         if isinstance(component, cls):
             return builder(component, parent, on_change)
