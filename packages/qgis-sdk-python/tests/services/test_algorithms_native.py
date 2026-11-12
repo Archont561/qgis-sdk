@@ -37,6 +37,23 @@ if TYPE_CHECKING:
 FEET_CRS = "EPSG:2227"
 
 
+def _substitute_processing(monkeypatch: pytest.MonkeyPatch, framework: object) -> None:
+    """Make every module of the adapter resolve ``processing`` to ``framework``.
+
+    The adapter is split across modules, so each one holds its own binding of
+    the ``processing`` helper: patching the package facade would leave the real
+    framework in place and the run would go to QGIS instead of the stand-in.
+    """
+
+    def factory() -> object:
+        return framework
+
+    from qgis_sdk.adapters.qgis.algorithms import _native, _wiring
+
+    monkeypatch.setattr(_native, "processing", factory)
+    monkeypatch.setattr(_wiring, "processing", factory)
+
+
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -159,7 +176,9 @@ def test_a_successful_run_keeps_only_its_output(native_services: Services) -> No
     assert names == ["buffer.gpkg"]
 
 
-def test_nothing_partial_survives_a_failure(native_services: Services) -> None:
+def test_nothing_partial_survives_a_failure(
+    native_services: Services, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A simulated mid-operation write followed by a failure leaves no file.
 
     QGIS raising after it had written part of an output could not be reproduced
@@ -174,17 +193,9 @@ def test_nothing_partial_survives_a_failure(native_services: Services) -> None:
             Path(parameters["OUTPUT"]).write_bytes(b"partial output")
             raise RuntimeError("Processing failed after writing")
 
-    # Imported here, not at module scope: the bindings path exists only after
-    # the native fixture has started the application.
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
-    original = adapter_module.processing
-    adapter_module.processing = lambda: FailingProcessing()
-    try:
-        with pytest.raises(RuntimeError, match="after writing"):
-            _buffer(native_services, source.id)
-    finally:
-        adapter_module.processing = original
+    _substitute_processing(monkeypatch, FailingProcessing())
+    with pytest.raises(RuntimeError, match="after writing"):
+        _buffer(native_services, source.id)
 
     assert list(native_services.work_directory.rglob("*")) == []
 
@@ -292,8 +303,6 @@ def test_a_failed_generic_run_leaves_no_output_behind(
 def test_failed_processing_cleans_an_allocated_destination(
     native_services: Services, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
 
@@ -302,7 +311,7 @@ def test_failed_processing_cleans_an_allocated_destination(
             Path(parameters["OUTPUT"]).write_bytes(b"partial output")
             raise RuntimeError("Processing failed after writing")
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: FailingProcessing())
+    _substitute_processing(monkeypatch, FailingProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="after writing"):
         native_services.algorithms.run("native:centroids", {"INPUT": source.id})
 
@@ -312,8 +321,6 @@ def test_failed_processing_cleans_an_allocated_destination(
 def test_failed_processing_does_not_leave_a_partial_named_destination(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.gpkg"
@@ -324,7 +331,7 @@ def test_failed_processing_does_not_leave_a_partial_named_destination(
             Path(parameters["OUTPUT"]).write_bytes(b"partial output")
             raise RuntimeError("Processing failed after writing")
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: FailingProcessing())
+    _substitute_processing(monkeypatch, FailingProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="after writing"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
@@ -359,8 +366,6 @@ def test_an_existing_run_directory_is_not_deleted(
 def test_a_destination_created_during_processing_is_not_overwritten(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.geojson"
@@ -372,7 +377,7 @@ def test_a_destination_created_during_processing_is_not_overwritten(
             chosen.write_text("another process", encoding="utf-8")
             return {"OUTPUT": str(partial)}
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: RacingProcessing())
+    _substitute_processing(monkeypatch, RacingProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="destination already exists"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
@@ -386,8 +391,6 @@ def test_a_destination_created_during_processing_is_not_overwritten(
 def test_a_write_grant_revoked_during_processing_is_not_used(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.geojson"
@@ -400,7 +403,7 @@ def test_a_write_grant_revoked_during_processing_is_not_used(
             native_services.files.authority.revoke(ref.id)
             return {"OUTPUT": str(partial)}
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: RevokingProcessing())
+    _substitute_processing(monkeypatch, RevokingProcessing())
     with pytest.raises(QgisSdkStaleHandleError):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": ref}
@@ -414,8 +417,6 @@ def test_a_write_grant_revoked_during_processing_is_not_used(
 def test_unavailable_hard_links_fail_without_publishing(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.geojson"
@@ -429,7 +430,7 @@ def test_unavailable_hard_links_fail_without_publishing(
     def refuse_link(self: Path, *args: object, **kwargs: object) -> None:
         raise OSError("hard links unavailable")
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: SuccessfulProcessing())
+    _substitute_processing(monkeypatch, SuccessfulProcessing())
     monkeypatch.setattr(Path, "hardlink_to", refuse_link)
     with pytest.raises(QgisSdkAlgorithmFailedError, match="hard-link support"):
         native_services.algorithms.run(
@@ -444,8 +445,6 @@ def test_unavailable_hard_links_fail_without_publishing(
 def test_an_unexpected_provider_output_is_not_published_or_deleted(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.geojson"
@@ -456,7 +455,7 @@ def test_an_unexpected_provider_output_is_not_published_or_deleted(
         def run(self, name: str, parameters: dict) -> dict:
             return {"OUTPUT": str(unrelated)}
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: UnexpectedProcessing())
+    _substitute_processing(monkeypatch, UnexpectedProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="staged vector"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
@@ -470,8 +469,6 @@ def test_an_unexpected_provider_output_is_not_published_or_deleted(
 def test_a_virtual_output_disguised_as_geojson_is_not_published(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.geojson"
@@ -487,7 +484,7 @@ def test_a_virtual_output_disguised_as_geojson_is_not_published(
             )
             return {"OUTPUT": str(partial)}
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: VirtualProcessing())
+    _substitute_processing(monkeypatch, VirtualProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="format"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
@@ -500,8 +497,6 @@ def test_a_virtual_output_disguised_as_geojson_is_not_published(
 def test_a_staged_hardlink_to_an_input_is_not_published(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     dataset = tmp_path / "source.geojson"
     dataset.write_bytes(native_services.dataset.read_bytes())
     source = native_services.layers.open_vector(dataset)
@@ -515,7 +510,7 @@ def test_a_staged_hardlink_to_an_input_is_not_published(
             partial.hardlink_to(dataset)
             return {"OUTPUT": str(partial)}
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: LinkingProcessing())
+    _substitute_processing(monkeypatch, LinkingProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="independent"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
@@ -529,8 +524,6 @@ def test_a_staged_hardlink_to_an_input_is_not_published(
 def test_an_output_with_sidecars_is_not_published(
     native_services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis_sdk.adapters.qgis import algorithms as adapter_module
-
     source = native_services.layers.open_vector(native_services.dataset)
     native_services.algorithms.describe("native:centroids")
     chosen = tmp_path / "chosen.geojson"
@@ -542,7 +535,7 @@ def test_an_output_with_sidecars_is_not_published(
             partial.with_suffix(".aux.xml").write_text("sidecar", encoding="utf-8")
             return {"OUTPUT": str(partial)}
 
-    monkeypatch.setattr(adapter_module, "_processing", lambda: SidecarProcessing())
+    _substitute_processing(monkeypatch, SidecarProcessing())
     with pytest.raises(QgisSdkAlgorithmFailedError, match="sidecars"):
         native_services.algorithms.run(
             "native:centroids", {"INPUT": source.id, "OUTPUT": str(chosen)}
