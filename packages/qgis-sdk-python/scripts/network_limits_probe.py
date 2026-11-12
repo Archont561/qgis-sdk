@@ -113,6 +113,56 @@ class Recommendation:
     reasons: tuple[str, ...]
 
 
+def _body_ceiling(
+    bodies: tuple[BodyFinding, ...], stall_budget_ms: float, reasons: list[str]
+) -> int:
+    """The largest measured body whose finish stall fits the GUI budget."""
+    within = [body for body in bodies if body.finish_stall_ms <= stall_budget_ms]
+    if within:
+        ceiling = max(body.size_mib for body in within)
+        reasons.append(
+            f"largest measured body whose finish stall is within {stall_budget_ms:g} ms"
+            f" is {ceiling} MiB"
+        )
+    else:
+        ceiling = min(body.size_mib for body in bodies) if bodies else 1
+        reasons.append("no measured body stayed inside the stall budget")
+    return ceiling
+
+
+def _redirect_limit(
+    redirects: RedirectFindings, stall_budget_ms: float, reasons: list[str]
+) -> int:
+    """Browser limit if the measured hops fit the budget, budget over cost if not."""
+    hop_ms = redirects.manual_hop_mean_ms
+    if hop_ms <= 0 or hop_ms * BROWSER_REDIRECT_LIMIT <= stall_budget_ms:
+        limit = BROWSER_REDIRECT_LIMIT
+        reasons.append(
+            f"{BROWSER_REDIRECT_LIMIT} hops at {hop_ms:.2f} ms each stay within"
+            f" {stall_budget_ms:g} ms, so the browser limit applies"
+        )
+    else:
+        limit = max(1, int(stall_budget_ms // hop_ms))
+        reasons.append(
+            f"{hop_ms:.2f} ms per hop allows {limit} hops within {stall_budget_ms:g} ms"
+        )
+    return limit
+
+
+def _forwarding_reason(redirects: RedirectFindings, reasons: list[str]) -> bool:
+    """Whether the transport must follow redirects itself, and why."""
+    follows_itself = bool(redirects.headers_forwarded_cross_origin)
+    if follows_itself:
+        listed = ", ".join(redirects.headers_forwarded_cross_origin)
+        reasons.append(
+            f"the manager forwards {listed} to another origin, so the transport"
+            " follows redirects itself and drops credentials on an origin change"
+        )
+    else:
+        reasons.append("the manager drops credentials on an origin change")
+    return follows_itself
+
+
 def recommend(
     redirects: RedirectFindings,
     bodies: tuple[BodyFinding, ...],
@@ -129,37 +179,9 @@ def recommend(
     across origins means the transport must follow redirects itself.
     """
     reasons: list[str] = []
-    within = [body for body in bodies if body.finish_stall_ms <= stall_budget_ms]
-    if within:
-        ceiling = max(body.size_mib for body in within)
-        reasons.append(
-            f"largest measured body whose finish stall is within {stall_budget_ms:g} ms"
-            f" is {ceiling} MiB"
-        )
-    else:
-        ceiling = min(body.size_mib for body in bodies) if bodies else 1
-        reasons.append("no measured body stayed inside the stall budget")
-    hop_ms = redirects.manual_hop_mean_ms
-    if hop_ms <= 0 or hop_ms * BROWSER_REDIRECT_LIMIT <= stall_budget_ms:
-        limit = BROWSER_REDIRECT_LIMIT
-        reasons.append(
-            f"{BROWSER_REDIRECT_LIMIT} hops at {hop_ms:.2f} ms each stay within"
-            f" {stall_budget_ms:g} ms, so the browser limit applies"
-        )
-    else:
-        limit = max(1, int(stall_budget_ms // hop_ms))
-        reasons.append(
-            f"{hop_ms:.2f} ms per hop allows {limit} hops within {stall_budget_ms:g} ms"
-        )
-    follows_itself = bool(redirects.headers_forwarded_cross_origin)
-    if follows_itself:
-        listed = ", ".join(redirects.headers_forwarded_cross_origin)
-        reasons.append(
-            f"the manager forwards {listed} to another origin, so the transport"
-            " follows redirects itself and drops credentials on an origin change"
-        )
-    else:
-        reasons.append("the manager drops credentials on an origin change")
+    ceiling = _body_ceiling(bodies, stall_budget_ms, reasons)
+    limit = _redirect_limit(redirects, stall_budget_ms, reasons)
+    follows_itself = _forwarding_reason(redirects, reasons)
     return _recommend_facts1(ceiling, follows_itself, limit, reasons)
 
 
@@ -249,117 +271,213 @@ def _headless_environment(prefix: Path) -> None:
         sys.path.insert(0, bindings)
 
 
-def _run(prefix: Path) -> ProbeReport:
-    import platform
+@dataclass(frozen=True, slots=True)
+class _Fetcher:
+    """One QGIS network manager with the Qt classes its requests need."""
 
-    from PyQt6.QtCore import QT_VERSION_STR, QEventLoop, QUrl
-    from PyQt6.QtNetwork import QNetworkRequest
-    from qgis.core import Qgis, QgsApplication, QgsNetworkAccessManager
+    manager: object
+    request_cls: object
+    url_cls: object
+    loop_cls: object
 
-    QgsApplication.setPrefixPath(str(prefix), True)
-    application = QgsApplication([b"qgis-sdk-network-limits-probe"], True)
-    application.initQgis()
-    manager = QgsNetworkAccessManager.instance()
-    origin_a = _serve()
-    origin_b = _serve()
-    _Handler.partner_port = origin_b.server_port
-    base = f"http://127.0.0.1:{origin_a.server_port}"
-
-    def fetch(url: str, headers: dict[str, str] | None = None, *, manual: bool = False):
-        request = QNetworkRequest(QUrl(url))
+    def _request(self, url: str, headers: dict[str, str] | None, manual: bool):
+        request = self.request_cls(self.url_cls(url))
         for name, value in (headers or {}).items():
             request.setRawHeader(name.encode(), value.encode())
         if manual:
             request.setAttribute(
-                QNetworkRequest.Attribute.RedirectPolicyAttribute,
-                QNetworkRequest.RedirectPolicy.ManualRedirectPolicy,
+                self.request_cls.Attribute.RedirectPolicyAttribute,
+                self.request_cls.RedirectPolicy.ManualRedirectPolicy,
             )
-        loop = QEventLoop()
-        reply = manager.get(request)
+        return request
+
+    def fetch(self, url: str, headers: dict[str, str] | None = None, *, manual=False):
+        request = self._request(url, headers, manual)
+        loop = self.loop_cls()
+        reply = self.manager.get(request)
         reply.finished.connect(loop.quit)
-        started = time.perf_counter()
-        loop.exec()
-        transfer = time.perf_counter() - started
-        stall_started = time.perf_counter()
-        payload = bytes(reply.readAll())
-        stall = time.perf_counter() - stall_started
-        location = reply.header(QNetworkRequest.KnownHeaders.LocationHeader)
+        transfer, payload, stall = _read_reply(reply, loop)
+        location = reply.header(self.request_cls.KnownHeaders.LocationHeader)
         reply.deleteLater()
         return payload, transfer, stall, location
 
+
+def _read_reply(reply, loop):
+    """Wait for the reply, then time both the transfer and the Python copy."""
+    started = time.perf_counter()
+    loop.exec()
+    transfer = time.perf_counter() - started
+    stall_started = time.perf_counter()
+    payload = bytes(reply.readAll())
+    stall = time.perf_counter() - stall_started
+    return transfer, payload, stall
+
+
+@dataclass(frozen=True, slots=True)
+class _ProbeRig:
+    """Everything one measurement run owns: Qt bindings, origins and versions."""
+
+    fetcher: _Fetcher
+    application: object
+    origin_a: ThreadingHTTPServer
+    origin_b: ThreadingHTTPServer
+    base: str
+    platform: object
+    qgis_version: object
+    qt_version: str
+
+
+@dataclass(frozen=True, slots=True)
+class _Bindings:
+    """The Qt and QGIS classes a probe needs, imported only where QGIS exists."""
+
+    qt_version: str
+    loop_cls: object
+    url_cls: object
+    request_cls: object
+    qgis_cls: object
+    application_cls: object
+    manager_cls: object
+
+
+def _qt_bindings() -> _Bindings:
+    from PyQt6.QtCore import QT_VERSION_STR, QEventLoop, QUrl
+    from PyQt6.QtNetwork import QNetworkRequest
+    from qgis.core import Qgis, QgsApplication, QgsNetworkAccessManager
+
+    return _Bindings(
+        qt_version=QT_VERSION_STR,
+        loop_cls=QEventLoop,
+        url_cls=QUrl,
+        request_cls=QNetworkRequest,
+        qgis_cls=Qgis,
+        application_cls=QgsApplication,
+        manager_cls=QgsNetworkAccessManager,
+    )
+
+
+def _start_probe(prefix: Path) -> _ProbeRig:
+    import platform
+
+    bindings = _qt_bindings()
+    bindings.application_cls.setPrefixPath(str(prefix), True)
+    application = bindings.application_cls([b"qgis-sdk-network-limits-probe"], True)
+    application.initQgis()
+    origin_a = _serve()
+    origin_b = _serve()
+    _Handler.partner_port = origin_b.server_port
+    return _ProbeRig(
+        fetcher=_Fetcher(
+            bindings.manager_cls.instance(),
+            bindings.request_cls,
+            bindings.url_cls,
+            bindings.loop_cls,
+        ),
+        application=application,
+        origin_a=origin_a,
+        origin_b=origin_b,
+        base=f"http://127.0.0.1:{origin_a.server_port}",
+        platform=platform,
+        qgis_version=bindings.qgis_cls.version,
+        qt_version=bindings.qt_version,
+    )
+
+
+def _unaided_and_forwarded(rig: _ProbeRig) -> tuple[int, tuple[str, ...]]:
+    """How many hops the manager follows alone, and what it sends cross-origin."""
+    _Handler.seen.clear()
+    rig.fetcher.fetch(f"{rig.base}/redirect/{PROBE_REDIRECT_CEILING}")
+    unaided = len(_Handler.seen) - 1
+    _Handler.seen.clear()
+    sent = {name: "probe" for name in _CREDENTIAL_HEADERS}
+    rig.fetcher.fetch(f"{rig.base}/cross", headers=sent)
+    final_hop = next(
+        h for p, _path, h in _Handler.seen if p == rig.origin_b.server_port
+    )
+    forwarded = tuple(
+        name
+        for name in _CREDENTIAL_HEADERS
+        if any(key.lower() == name.lower() for key in final_hop)
+    )
+    return unaided, forwarded
+
+
+def _manual_hop_ms(rig: _ProbeRig) -> float:
+    """The mean cost of one redirect the SDK follows itself."""
+    started = time.perf_counter()
+    url = f"{rig.base}/redirect/{REDIRECT_CHAIN}"
+    hops = 0
+    while True:
+        _payload, _transfer, _stall, location = rig.fetcher.fetch(url, manual=True)
+        if location is None:
+            break
+        resolved = rig.fetcher.url_cls(url).resolved(rig.fetcher.url_cls(location))
+        url = resolved.toString()
+        hops += 1
+    return (time.perf_counter() - started) * 1000 / max(hops, 1)
+
+
+def _measure_redirects(rig: _ProbeRig) -> RedirectFindings:
+    unaided, forwarded = _unaided_and_forwarded(rig)
+    hop_ms = _manual_hop_ms(rig)
+    return RedirectFindings(
+        policy=rig.fetcher.manager.redirectPolicy().name,
+        unaided_hops_followed=unaided,
+        headers_forwarded_cross_origin=forwarded,
+        manual_hop_mean_ms=round(hop_ms, 3),
+    )
+
+
+def _measure_body(rig: _ProbeRig, size_mib: int) -> BodyFinding:
+    stalls: list[float] = []
+    transfers: list[float] = []
+    before = _resident_kib()
+    for _ in range(BODY_SAMPLES):
+        payload, transfer, stall, _location = rig.fetcher.fetch(
+            f"{rig.base}/bytes/{size_mib << 20}"
+        )
+        assert len(payload) == size_mib << 20
+        del payload
+        stalls.append(stall * 1000)
+        transfers.append(transfer * 1000)
+    after = _resident_kib()
+    return BodyFinding(
+        size_mib=size_mib,
+        finish_stall_ms=round(statistics.median(stalls), 2),
+        worst_stall_ms=round(max(stalls), 2),
+        transfer_ms=round(statistics.median(transfers), 1),
+        resident_delta_mib=round((after - before) / 1024, 1),
+    )
+
+
+def _measure_bodies(rig: _ProbeRig) -> tuple[BodyFinding, ...]:
+    return tuple(_measure_body(rig, size_mib) for size_mib in BODY_SIZES_MIB)
+
+
+def _report(
+    rig: _ProbeRig, redirects: RedirectFindings, bodies: tuple[BodyFinding, ...]
+) -> ProbeReport:
+    return ProbeReport(
+        platform=rig.platform.platform(),
+        python_version=rig.platform.python_version(),
+        qgis_version=rig.qgis_version(),
+        qt_version=rig.qt_version,
+        redirects=redirects,
+        bodies=bodies,
+        recommended=recommend(redirects, bodies),
+    )
+
+
+def _run(prefix: Path) -> ProbeReport:
+    rig = _start_probe(prefix)
     try:
-        # Redirects the manager follows on its own.
-        _Handler.seen.clear()
-        fetch(f"{base}/redirect/{PROBE_REDIRECT_CEILING}")
-        unaided = len(_Handler.seen) - 1
-
-        _Handler.seen.clear()
-        sent = {name: "probe" for name in _CREDENTIAL_HEADERS}
-        fetch(f"{base}/cross", headers=sent)
-        final_hop = next(
-            h for p, _path, h in _Handler.seen if p == origin_b.server_port
-        )
-        forwarded = tuple(
-            name
-            for name in _CREDENTIAL_HEADERS
-            if any(key.lower() == name.lower() for key in final_hop)
-        )
-
-        # Redirects followed from Python, one request per hop.
-        started = time.perf_counter()
-        url = f"{base}/redirect/{REDIRECT_CHAIN}"
-        hops = 0
-        while True:
-            _payload, _transfer, _stall, location = fetch(url, manual=True)
-            if location is None:
-                break
-            url = QUrl(url).resolved(QUrl(location)).toString()
-            hops += 1
-        manual_hop_ms = (time.perf_counter() - started) * 1000 / max(hops, 1)
-        redirects = RedirectFindings(
-            policy=manager.redirectPolicy().name,
-            unaided_hops_followed=unaided,
-            headers_forwarded_cross_origin=forwarded,
-            manual_hop_mean_ms=round(manual_hop_ms, 3),
-        )
-
-        bodies: list[BodyFinding] = []
-        for size_mib in BODY_SIZES_MIB:
-            stalls: list[float] = []
-            transfers: list[float] = []
-            before = _resident_kib()
-            for _ in range(BODY_SAMPLES):
-                payload, transfer, stall, _location = fetch(
-                    f"{base}/bytes/{size_mib << 20}"
-                )
-                assert len(payload) == size_mib << 20
-                del payload
-                stalls.append(stall * 1000)
-                transfers.append(transfer * 1000)
-            after = _resident_kib()
-            bodies.append(
-                BodyFinding(
-                    size_mib=size_mib,
-                    finish_stall_ms=round(statistics.median(stalls), 2),
-                    worst_stall_ms=round(max(stalls), 2),
-                    transfer_ms=round(statistics.median(transfers), 1),
-                    resident_delta_mib=round((after - before) / 1024, 1),
-                )
-            )
-        found = tuple(bodies)
-        return ProbeReport(
-            platform=platform.platform(),
-            python_version=platform.python_version(),
-            qgis_version=Qgis.version(),
-            qt_version=QT_VERSION_STR,
-            redirects=redirects,
-            bodies=found,
-            recommended=recommend(redirects, found),
-        )
+        redirects = _measure_redirects(rig)
+        bodies = _measure_bodies(rig)
+        return _report(rig, redirects, bodies)
     finally:
-        origin_a.shutdown()
-        origin_b.shutdown()
-        application.exitQgis()
+        rig.origin_a.shutdown()
+        rig.origin_b.shutdown()
+        rig.application.exitQgis()
 
 
 def run_probe(prefix: Path | None = None) -> ProbeReport:

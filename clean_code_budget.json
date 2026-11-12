@@ -1,38 +1,12 @@
 {
-	"automation/ci.py": {
-		"CC101": 2
-	},
 	"automation/commits.py": {
 		"CC101": 1
-	},
-	"automation/results.py": {
-		"CC101": 1,
-		"CC104": 1
 	},
 	"automation/tasks.py": {
 		"CC102": 1
 	},
-	"examples/simple/tests/conftest.py": {
-		"CC101": 1,
-		"CC104": 1
-	},
-	"examples/simple/tests/test_workflow_ordering.py": {
-		"CC101": 1,
-		"CC104": 1
-	},
-	"packages/qgis-sdk-python/scripts/generate_processing_snapshot.py": {
-		"CC101": 1,
-		"CC104": 1
-	},
-	"packages/qgis-sdk-python/scripts/network_limits_probe.py": {
-		"CC101": 2,
-		"CC104": 2
-	},
 	"packages/qgis-sdk-python/tests/connection_fixtures.py": {
 		"CC101": 1
-	},
-	"packages/qgis-sdk-python/tests/layer_kind_fixtures.py": {
-		"CC101": 2
 	},
 	"packages/qgis-sdk-python/tests/service_steps.py": {
 		"CC102": 1
@@ -58,9 +32,7 @@
 		"CC104": 1
 	},
 	"packages/qgis-sdk-python/tests/services/test_provider_registration_native.py": {
-		"CC101": 2,
-		"CC102": 1,
-		"CC104": 1
+		"CC102": 1
 	},
 	"packages/qgis-sdk-python/tests/smoke_support/desktop_lifecycle_smoke.py": {
 		"CC101": 1,
@@ -107,17 +79,11 @@
 	"packages/qgis-sdk-python/tests/test_first_plugin_guide.py": {
 		"CC104": 1
 	},
-	"packages/qgis-sdk-python/tests/test_jobs.py": {
-		"CC101": 2
-	},
 	"packages/qgis-sdk-python/tests/test_jobs_functions.py": {
 		"CC102": 1
 	},
 	"packages/qgis-sdk-python/tests/test_jobs_pump_native.py": {
 		"CC101": 1
-	},
-	"packages/qgis-sdk-python/tests/test_jobs_tasks_native.py": {
-		"CC101": 4
 	},
 	"packages/qgis-sdk-python/tests/test_layer_kinds.py": {
 		"CC104": 2
@@ -130,9 +96,7 @@
 		"CC104": 1
 	},
 	"packages/qgis-sdk-python/tests/test_network_native.py": {
-		"CC101": 3,
-		"CC102": 1,
-		"CC303": 1
+		"CC102": 1
 	},
 	"packages/qgis-sdk-python/tests/test_network_ogc.py": {
 		"CC101": 1
@@ -226,10 +190,6 @@
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/context.py": {
 		"CC101": 1,
-		"CC104": 1
-	},
-	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/layouts.py": {
-		"CC101": 2,
 		"CC104": 1
 	},
 	"packages/qgis-sdk-runtime/src/qgis_sdk/adapters/qgis/network.py": {

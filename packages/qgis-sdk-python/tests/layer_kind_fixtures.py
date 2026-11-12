@@ -82,35 +82,36 @@ VECTOR_TILE_MAX_ZOOM = 2
 TILED_SCENE_REGION = (21.0, 52.0, 21.2, 52.2, 0.0, 60.0)
 
 
-def write_point_cloud(
-    path: Path, *, points: tuple[tuple[float, float, float], ...] = POINT_CLOUD_POINTS
-) -> Path:
-    """Write a LAS 1.2 point cloud of ``points`` and answer the path.
+_LAS_LAYOUT = "<4sHHIHH8sBB32s32sHHHIIBHI5I3d3d6d"
+_LAS_IDENTITY = (
+    b"LASF",
+    0,  # file source id
+    0,  # global encoding
+    0,  # project id, GUID data 1
+    0,  # GUID data 2
+    0,  # GUID data 3
+    bytes(8),  # GUID data 4
+    1,  # version major
+    2,  # version minor
+    b"qgis-sdk".ljust(32, b"\0"),
+    b"qgis-sdk fixtures".ljust(32, b"\0"),
+    1,  # file creation day of year
+    2026,  # file creation year
+)
 
-    ``global_encoding`` is 0 and there are no variable length records, because
-    a CRS would live in one: the point cloud this fixture models has none, and a
-    description that invented one would be wrong about a layer a page draws.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+
+def _las_extent(points: tuple[tuple[float, float, float], ...]) -> tuple[float, ...]:
+    """The six bounding coordinates the LAS header stores."""
     xs = [x for x, _y, _z in points]
     ys = [y for _x, y, _z in points]
     zs = [z for _x, _y, z in points]
-    header = struct.pack(
-        "<4sHHIHH8sBB32s32sHHHIIBHI5I3d3d6d",
-        b"LASF",
-        0,  # file source id
-        0,  # global encoding
-        0,  # project id, GUID data 1
-        0,  # GUID data 2
-        0,  # GUID data 3
-        bytes(8),  # GUID data 4
-        1,  # version major
-        2,  # version minor
-        b"qgis-sdk".ljust(32, b"\0"),
-        b"qgis-sdk fixtures".ljust(32, b"\0"),
-        1,  # file creation day of year
-        2026,  # file creation year
+    return (max(xs), min(xs), max(ys), min(ys), max(zs), min(zs))
+
+
+def _las_header(points: tuple[tuple[float, float, float], ...]) -> bytes:
+    """Pack the LAS 1.2 header from the identity data and the points' extent."""
+    fields = (
+        *_LAS_IDENTITY,
         LAS_HEADER_SIZE,
         LAS_HEADER_SIZE,  # offset to point data: no VLRs
         0,  # number of variable length records
@@ -128,15 +129,60 @@ def write_point_cloud(
         0.0,
         0.0,
         0.0,  # x, y and z offsets
-        max(xs),
-        min(xs),
-        max(ys),
-        min(ys),
-        max(zs),
-        min(zs),
+        *_las_extent(points),
     )
+    return struct.pack(_LAS_LAYOUT, *fields)
+
+
+def write_point_cloud(
+    path: Path, *, points: tuple[tuple[float, float, float], ...] = POINT_CLOUD_POINTS
+) -> Path:
+    """Write a LAS 1.2 point cloud of ``points`` and answer the path.
+
+    ``global_encoding`` is 0 and there are no variable length records, because
+    a CRS would live in one: the point cloud this fixture models has none, and a
+    description that invented one would be wrong about a layer a page draws.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = _las_header(points)
     assert len(header) == LAS_HEADER_SIZE, "the LAS header layout moved"
     return _write_point_cloud_facts1(header, path, points)
+
+
+def _mbtiles_schema(database) -> None:
+    """The metadata table, the tiles table and its unique index."""
+    database.execute("CREATE TABLE metadata (name TEXT, value TEXT)")
+    database.execute(
+        "CREATE TABLE tiles ("
+        "zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, "
+        "tile_data BLOB)"
+    )
+    database.execute(
+        "CREATE UNIQUE INDEX tile_index ON tiles (zoom_level, tile_column, tile_row)"
+    )
+
+
+def _mbtiles_rows(database, name: str, min_zoom: int, max_zoom: int) -> None:
+    """One metadata row per key and one empty vector tile per zoom level."""
+    database.executemany(
+        "INSERT INTO metadata (name, value) VALUES (?, ?)",
+        (
+            ("name", name),
+            ("format", "pbf"),
+            ("type", "baselayer"),
+            ("version", "1"),
+            ("description", "qgis-sdk layer-kind fixture"),
+            ("bounds", "-180,-85.05112877980659,180,85.05112877980659"),
+            ("center", "0,0,0"),
+            ("minzoom", str(min_zoom)),
+            ("maxzoom", str(max_zoom)),
+        ),
+    )
+    database.executemany(
+        "INSERT INTO tiles VALUES (?, ?, ?, ?)",
+        ((zoom, 0, 0, EMPTY_VECTOR_TILE) for zoom in range(min_zoom, max_zoom + 1)),
+    )
 
 
 def write_vector_tiles(
@@ -157,34 +203,8 @@ def write_vector_tiles(
     if path.exists():
         path.unlink()
     with sqlite3.connect(path) as database:
-        database.execute("CREATE TABLE metadata (name TEXT, value TEXT)")
-        database.execute(
-            "CREATE TABLE tiles ("
-            "zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, "
-            "tile_data BLOB)"
-        )
-        database.execute(
-            "CREATE UNIQUE INDEX tile_index ON tiles "
-            "(zoom_level, tile_column, tile_row)"
-        )
-        database.executemany(
-            "INSERT INTO metadata (name, value) VALUES (?, ?)",
-            (
-                ("name", name),
-                ("format", "pbf"),
-                ("type", "baselayer"),
-                ("version", "1"),
-                ("description", "qgis-sdk layer-kind fixture"),
-                ("bounds", "-180,-85.05112877980659,180,85.05112877980659"),
-                ("center", "0,0,0"),
-                ("minzoom", str(min_zoom)),
-                ("maxzoom", str(max_zoom)),
-            ),
-        )
-        database.executemany(
-            "INSERT INTO tiles VALUES (?, ?, ?, ?)",
-            ((zoom, 0, 0, EMPTY_VECTOR_TILE) for zoom in range(min_zoom, max_zoom + 1)),
-        )
+        _mbtiles_schema(database)
+        _mbtiles_rows(database, name, min_zoom, max_zoom)
     return path
 
 

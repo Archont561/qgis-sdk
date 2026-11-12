@@ -339,19 +339,8 @@ def lts_command(module: str) -> list[str]:
     ]
 
 
-def lts(command: list[str] | None = None) -> int:
-    """Prove this QGIS has both hosts, then run each LTS module on its own.
-
-    QGIS 3.44 LTS is what Debian and Ubuntu install and it is a Qt 5 build: a
-    missing ``qgis.server`` means the row installed a QGIS without server
-    bindings - conda-forge has none - and a failed ``qgis.core`` import means
-    the packages are not there at all. Both are reported before pytest runs,
-    because a suite that skips every test would otherwise read as a pass
-    (TASK-80, decision-70).
-
-    A module that reports skipped tests fails the row: on this build nothing
-    may skip, or the host it was meant to prove was not proven.
-    """
+def _lts_probe() -> tuple[str | None, int]:
+    """Prove the QGIS Server bindings and return the host facts line."""
     probe = subprocess.run(
         [sys.executable, "-c", LTS_PROBE],
         stdout=subprocess.PIPE,
@@ -370,8 +359,26 @@ def lts(command: list[str] | None = None) -> int:
             "qgis, qgis-server and python3-qgis from a repository that builds "
             "WITH_SERVER=ON; conda-forge builds QGIS without it."
         )
-        return status_code(probe.returncode) or 1
-    facts = " | ".join(line for line in probe.stdout.splitlines() if line)
+        return None, status_code(probe.returncode) or 1
+    return " | ".join(line for line in probe.stdout.splitlines() if line), 0
+
+
+def lts(command: list[str] | None = None) -> int:
+    """Prove this QGIS has both hosts, then run each LTS module on its own.
+
+    QGIS 3.44 LTS is what Debian and Ubuntu install and it is a Qt 5 build: a
+    missing ``qgis.server`` means the row installed a QGIS without server
+    bindings - conda-forge has none - and a failed ``qgis.core`` import means
+    the packages are not there at all. Both are reported before pytest runs,
+    because a suite that skips every test would otherwise read as a pass
+    (TASK-80, decision-70).
+
+    A module that reports skipped tests fails the row: on this build nothing
+    may skip, or the host it was meant to prove was not proven.
+    """
+    facts, refused = _lts_probe()
+    if facts is None:
+        return refused
     print(f"::notice::LTS host: {facts}")
     if command:  # an explicit command replaces the module loop
         return _lts_run(command, Path("lts-host.log"))
@@ -411,7 +418,8 @@ def _lts_run(command: list[str], log: Path) -> int:
     return status
 
 
-def check_generated() -> int:
+def _generate_bridge_clients() -> int:
+    """Regenerate the TypeScript bridge clients; explain a failed generator."""
     generator = "packages/qgis-sdk-python/scripts/generate_bridge_clients.py"
     code = subprocess.run([sys.executable, generator], cwd=ROOT, check=False).returncode
     if code:
@@ -420,7 +428,13 @@ def check_generated() -> int:
             "Review the generator output, remove any reported orphan or restore it "
             "to artifacts(), and commit regenerated files."
         )
-        return status_code(code)
+    return status_code(code)
+
+
+def check_generated() -> int:
+    code = _generate_bridge_clients()
+    if code:
+        return code
     status = subprocess.run(
         ["git", "status", "--porcelain", "--", "packages/qgis-sdk-typescript"],
         cwd=ROOT,

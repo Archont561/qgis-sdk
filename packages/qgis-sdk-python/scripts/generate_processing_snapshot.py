@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -46,16 +47,19 @@ def _run(argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None) -> int:
     return subprocess.run(list(argv), cwd=cwd, env=env, check=False).returncode
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument(
-        "--check", action="store_true", help="report drift, write nothing"
-    )
-    parser.add_argument("--qgis-prefix", type=Path, default=None)
-    args = parser.parse_args(argv)
+@dataclass(frozen=True, slots=True)
+class _Snapshot:
+    """What one QGIS registry produced, with the files it should contain."""
+
+    catalogue: object
+    generated: object
+
+
+def _read_registry(prefix: Path | None) -> _Snapshot | None:
+    """Read the host catalogue, refusing a QGIS without the core providers."""
     env = dict(os.environ)
     env.setdefault("QT_QPA_PLATFORM", "offscreen")
-    install = find_qgis_install(env, prefix=args.qgis_prefix)
+    install = find_qgis_install(env, prefix=prefix)
     print(f"reading the Processing registry of {install.prefix} ({install.source})")
     catalogue = read_host_catalogue(
         install, env, _run, cwd=REPOSITORY_ROOT, providers=CORE_PROVIDERS
@@ -66,32 +70,56 @@ def main(argv: Sequence[str] | None = None) -> int:
     if present != CORE_PROVIDERS:
         missing = sorted(set(CORE_PROVIDERS) - set(present))
         print(f"error: this QGIS lacks the core providers {', '.join(missing)}")
-        return 2
+        return None
     generated = render_files(
         catalogue, out=SNAPSHOT_DIR, web_out=None, providers=CORE_PROVIDERS, init=False
     )
-    if args.check:
-        messages = check_files(generated)
-        for message in messages:
-            print(message)
-        if messages:
-            print(
-                "run `pixi run -e default python "
-                "packages/qgis-sdk-python/scripts/generate_processing_snapshot.py`"
-            )
-            return 1
+    return _Snapshot(catalogue, generated)
+
+
+def _check(snapshot: _Snapshot) -> int:
+    """Report drift without writing; the generator's own messages are the diff."""
+    messages = check_files(snapshot.generated)
+    for message in messages:
+        print(message)
+    if messages:
         print(
-            f"{len(generated.files)} snapshot files are up to date ({catalogue.qgis_version})"
+            "run `pixi run -e default python "
+            "packages/qgis-sdk-python/scripts/generate_processing_snapshot.py`"
         )
-        return 0
-    changed = write_files(generated)
+        return 1
+    print(
+        f"{len(snapshot.generated.files)} snapshot files are up to date "
+        f"({snapshot.catalogue.qgis_version})"
+    )
+    return 0
+
+
+def _write(snapshot: _Snapshot) -> int:
+    """Write the generated files and name each one that changed."""
+    changed = write_files(snapshot.generated)
     for path in changed:
         print(f"wrote {path.relative_to(REPOSITORY_ROOT)}")
     print(
-        f"{len(catalogue.algorithms)} algorithms from {len(catalogue.providers)} providers "
-        f"({catalogue.qgis_version}); {len(changed)} of {len(generated.files)} files changed"
+        f"{len(snapshot.catalogue.algorithms)} algorithms from "
+        f"{len(snapshot.catalogue.providers)} providers "
+        f"({snapshot.catalogue.qgis_version}); "
+        f"{len(changed)} of {len(snapshot.generated.files)} files changed"
     )
     return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument(
+        "--check", action="store_true", help="report drift, write nothing"
+    )
+    parser.add_argument("--qgis-prefix", type=Path, default=None)
+    args = parser.parse_args(argv)
+    snapshot = _read_registry(args.qgis_prefix)
+    if snapshot is None:
+        return 2
+    return _check(snapshot) if args.check else _write(snapshot)
 
 
 if __name__ == "__main__":

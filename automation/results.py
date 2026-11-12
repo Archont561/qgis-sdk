@@ -25,6 +25,34 @@ def find_problem(case):
     return case.find("error") if problem is None else problem
 
 
+def _cases(report: Path) -> list[ET.Element] | None:
+    """Read the test cases, or report a broken XML file as an error."""
+    try:
+        return list(ET.parse(report).iter("testcase"))
+    except ET.ParseError as exc:
+        print(f"::error::failed to parse {report}: {exc}")
+        return None
+
+
+def _annotate(cases: list[ET.Element], title: str) -> int:
+    """Print the notice and one annotation per failing case."""
+    failures = [case for case in cases if find_problem(case) is not None]
+    skipped = [case for case in cases if case.find("skipped") is not None]
+    print(
+        f"::notice::{title}: {len(cases)} collected, "
+        f"{len(failures)} failed, {len(skipped)} skipped"
+    )
+    for case in failures:
+        problem = find_problem(case)
+        detail = (problem.get("message") or problem.text or "failed").strip()
+        first = detail.splitlines()[0][:600]
+        print(
+            f"::error file={case.get('file')}::"
+            f"{case.get('classname')}::{case.get('name')}: {first}"
+        )
+    return 1 if failures else 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Report JUnit test results as GitHub annotations."
@@ -36,36 +64,12 @@ def main(argv=None) -> int:
         help="Test suite name used in the step-summary notice.",
     )
     args = parser.parse_args(argv)
-
     report = Path(args.report)
     if not report.exists():
         print(f"::error::{args.title} did not write {report}")
         return 0
-
-    try:
-        cases = list(ET.parse(report).iter("testcase"))
-    except ET.ParseError as exc:
-        print(f"::error::failed to parse {report}: {exc}")
-        return 1
-
-    failures = [case for case in cases if find_problem(case) is not None]
-    skipped = [case for case in cases if case.find("skipped") is not None]
-
-    print(
-        f"::notice::{args.title}: {len(cases)} collected, "
-        f"{len(failures)} failed, {len(skipped)} skipped"
-    )
-
-    for case in failures:
-        problem = find_problem(case)
-        detail = (problem.get("message") or problem.text or "failed").strip()
-        first = detail.splitlines()[0][:600]
-        print(
-            f"::error file={case.get('file')}::"
-            f"{case.get('classname')}::{case.get('name')}: {first}"
-        )
-
-    return 1 if failures else 0
+    cases = _cases(report)
+    return 1 if cases is None else _annotate(cases, args.title)
 
 
 if __name__ == "__main__":
