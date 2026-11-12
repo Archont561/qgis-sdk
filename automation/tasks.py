@@ -25,6 +25,7 @@ from pathlib import Path
 
 from automation import ci, commits, release, results
 from automation import clean_code as clean_code_rules
+from automation import pr as pr_module
 from automation.lib import pixi, run
 
 __all__ = [
@@ -47,6 +48,7 @@ __all__ = [
     "lint_python",
     "lint_repository",
     "native",
+    "pr_watch",
     "release_build_python",
     "release_checksums",
     "release_classify",
@@ -109,6 +111,11 @@ def lint_repository() -> int:
 def check_commits() -> int:
     """Check the commits in the range against the conventional-commit rules."""
     return run(["convco", "check"])
+
+
+def pr_watch(pr: int = 0, interval: int = 15, timeout: int = 0, repo: str = "") -> int:
+    """Watch a pull request's CI, breaking on the first error."""
+    return pr_module.watch(pr=pr, interval=interval, timeout=timeout, repo=repo)
 
 
 def test_scripts() -> int:
