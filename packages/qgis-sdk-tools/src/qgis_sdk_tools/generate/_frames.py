@@ -12,8 +12,8 @@ from qgis_sdk_tools.generate._contract import (
 )
 from qgis_sdk_tools.generate._emit import (
     _member_validator,
-    _quote,
     pascal,
+    quote,
 )
 from qgis_sdk_tools.generate._names import Stream
 
@@ -96,7 +96,7 @@ class Frames:
             request = self._names.type_name(action.request, f"{action.base}Request")
             result = self._names.type_name(action.result, f"{action.base}Result")
             lines.append(
-                f"\treadonly {_quote(action.id)}: {{ readonly request: {request}; "
+                f"\treadonly {quote(action.id)}: {{ readonly request: {request}; "
                 f"readonly result: {result} }};"
             )
         lines.append("}")
@@ -109,7 +109,7 @@ class Frames:
         for stream in self._streams:
             request = self._names.type_name(stream.request, f"{stream.base}Request")
             lines.append(
-                f"\treadonly {_quote(stream.id)}: {{ readonly request: {request}; "
+                f"\treadonly {quote(stream.id)}: {{ readonly request: {request}; "
                 f"readonly event: {stream.event_type} }};"
             )
         lines.append("}")

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from qgis_sdk_tools.generate._context import Rendering
 from qgis_sdk_tools.generate._emit import (
-    _quote,
     call_helper,
     open_helper,
+    quote,
     tree_body_lines,
     tree_lines,
 )
@@ -60,7 +60,7 @@ class Members:
         input_name = self._names.type_name(action.request, f"{action.base}Request")
         output_name = self._names.type_name(action.result, f"{action.base}Result")
         optional = "" if action.takes_input else "?"
-        tail = _quote(action.id.rsplit(".", 1)[-1])
+        tail = quote(action.id.rsplit(".", 1)[-1])
         return (
             f"readonly {tail}: (input{optional}: {input_name}, "
             f"options?: {self._surface.options_type}) => Promise<{output_name}>;"
@@ -74,7 +74,7 @@ class Members:
         """
         surface = self._surface
         input_name = self._names.type_name(stream.request, f"{stream.base}Request")
-        tail = _quote(stream.id.rsplit(".", 1)[-1])
+        tail = quote(stream.id.rsplit(".", 1)[-1])
         return (
             f"readonly {tail}: (input: {input_name}, "
             f"handlers: {surface.stream_handlers_type}<{stream.event_type}>, "
@@ -87,7 +87,7 @@ class Members:
         input_name = self._names.type_name(stream.request, f"{stream.base}Request")
         tail = stream.id.rsplit(".", 1)[-1]
         return (
-            f"{_quote(tail)}: (input: {input_name}, "
+            f"{quote(tail)}: (input: {input_name}, "
             f"handlers: {surface.stream_handlers_type}<{stream.event_type}>, "
             f"options?: {surface.options_type}) =>\n"
             f"\t\t\t\topen<{stream.event_type}>(\n"
@@ -107,7 +107,7 @@ class Members:
         accepts_output = self._names.accepts(action.result)
         optional = "" if action.takes_input else "?"
         return (
-            f"{_quote(tail)}: (input{optional}: {input_name}, "
+            f"{quote(tail)}: (input{optional}: {input_name}, "
             f"options?: {self._surface.options_type}) =>\n"
             f"\t\t\t\tcall<{output_name}>(\n"
             f'\t\t\t\t\tclient, "{action.id}", input, options,\n'

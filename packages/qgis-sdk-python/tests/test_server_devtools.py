@@ -37,9 +37,9 @@ from qgis_sdk_tools.devtools.serverdev import (
     DISABLED_BODY,
     DISABLED_STATUS,
     Answer,
+    QueryOptions,
     ServerLoop,
     ServerReloadHost,
-    _QueryOptions,
     hooks_of,
     query_server,
 )
@@ -291,7 +291,7 @@ def test_a_request_is_buffered_in_and_out() -> None:
         server,
         "POST",
         "http://127.0.0.1:8080/?SERVICE=WMS",
-        options=_QueryOptions(body=b"x=1"),
+        options=QueryOptions(body=b"x=1"),
     )
 
     assert answer.status == 200

@@ -1,4 +1,4 @@
-"""Tests for the standalone automation/release.py CLI.
+"""Tests for the standalone ``automation.release`` CLI package.
 
 Migrated from packages/qgis-sdk-release/tests. All functions are imported
 directly from the ``release`` module (scripts/ is on the pytest pythonpath).
@@ -28,6 +28,11 @@ from automation.release import (
     QgisSdkReleaseVersionError,
     ReleaseDraft,
     Version,
+    _build,
+    _contracts,
+    _stamp,
+    _verify,
+    _version,
     checksums,
     classify,
     commit_packages,
@@ -95,18 +100,18 @@ TOOLS_PYPROJECT = (
 @pytest.fixture(autouse=True)
 def the_real_manifests_stay_untouched():
     """A stamp test that forgot to redirect a manifest must not edit the repo."""
-    from automation import release
+    from automation.release import _history
 
     paths = (
-        release._PYPROJECT,
-        release._RUNTIME_PYPROJECT,
-        release._TOOLS_PYPROJECT,
-        release._RECIPE,
-        release._BRIDGE_PACKAGE,
-        release._ALIAS_PACKAGE,
-        release._UI_PACKAGE,
-        release._UI_ALIAS_PACKAGE,
-        *release._EXAMPLE_PYPROJECTS,
+        _history.PYPROJECT,
+        _history.RUNTIME_PYPROJECT,
+        _history.TOOLS_PYPROJECT,
+        _history.RECIPE,
+        _history.BRIDGE_PACKAGE,
+        _history.ALIAS_PACKAGE,
+        _history.UI_PACKAGE,
+        _history.UI_ALIAS_PACKAGE,
+        *_history.EXAMPLE_PYPROJECTS,
     )
     before = {
         path: path.read_text(encoding="utf-8") for path in paths if path.is_file()
@@ -163,11 +168,13 @@ def _plan_range_recorder(tmp_path, monkeypatch):
     ranges: list[str | None] = []
     log = "a" * 40 + "\x1f" + "feat(python): x" + "\x1f" + "\x1e\n"
     monkeypatch.setattr(
-        "automation.release.list_tags",
+        _stamp,
+        "list_tags",
         lambda runner=None: ("python-v0.4.0", "python-v0.5.0-rc.1"),
     )
     monkeypatch.setattr(
-        "automation.release.log_commits_with_files",
+        _contracts,
+        "log_commits_with_files",
         lambda rng=None, runner=None: (ranges.append(rng), _with_files(log))[1],
     )
     return config, ranges
@@ -200,10 +207,9 @@ def _raise_already_exists(*args, **kwargs):
 
 
 def _patch_upload_asset(monkeypatch, uploaded):
-    from automation import release
 
     monkeypatch.setattr(
-        release,
+        _verify,
         "upload_asset",
         lambda url, token, path, opener=None: uploaded.append(path),
     )
@@ -211,10 +217,9 @@ def _patch_upload_asset(monkeypatch, uploaded):
 
 def _patch_new_release_api(monkeypatch, created, uploaded):
     """A release that does not exist yet: one create call, then uploads."""
-    from automation import release
 
     monkeypatch.setattr(
-        release,
+        _verify,
         "create_release",
         lambda draft, opener=None: (
             created.append((draft.slug, draft.tag, draft.body, draft.prerelease))
@@ -226,11 +231,10 @@ def _patch_new_release_api(monkeypatch, created, uploaded):
 
 def _patch_existing_release_api(monkeypatch, deleted, uploaded):
     """A release that already exists: replace its assets instead of creating it."""
-    from automation import release
 
-    monkeypatch.setattr(release, "create_release", _raise_already_exists)
+    monkeypatch.setattr(_verify, "create_release", _raise_already_exists)
     monkeypatch.setattr(
-        release,
+        _verify,
         "get_release_by_tag",
         lambda slug, token, tag, opener=None: {
             "upload_url": "https://u{?name}",
@@ -239,7 +243,7 @@ def _patch_existing_release_api(monkeypatch, deleted, uploaded):
         },
     )
     monkeypatch.setattr(
-        release,
+        _verify,
         "delete_release_asset",
         lambda slug, token, asset_id, opener=None: deleted.append(asset_id),
     )
@@ -461,29 +465,29 @@ def _write_python_manifests(files, versions: _PythonManifestVersions) -> None:
 
 def _patch_release_manifests(tmp_path, monkeypatch, files) -> None:
     """Point release.py at the temporary manifests, with every optional file absent."""
-    from automation import release
+    from automation.release import _stamp
 
     for attribute, key in (
-        ("_PYPROJECT", "pyproject"),
-        ("_RUNTIME_PYPROJECT", "runtime"),
-        ("_TOOLS_PYPROJECT", "tools"),
-        ("_RECIPE", "recipe"),
-        ("_BRIDGE_PACKAGE", "package"),
+        ("PYPROJECT", "pyproject"),
+        ("RUNTIME_PYPROJECT", "runtime"),
+        ("TOOLS_PYPROJECT", "tools"),
+        ("RECIPE", "recipe"),
+        ("BRIDGE_PACKAGE", "package"),
     ):
-        monkeypatch.setattr(release, attribute, files[key])
+        monkeypatch.setattr(_stamp, attribute, files[key])
     for attribute, name in (
-        ("_ALIAS_PACKAGE", "no-alias.json"),
-        ("_SCAFFOLD_WEB", "no-web.py"),
-        ("_EXAMPLE_PYPROJECTS", "no-example.toml"),
-        ("_UI_PACKAGE", "no-ui.json"),
-        ("_UI_ALIAS_PACKAGE", "no-ui-alias.json"),
+        ("ALIAS_PACKAGE", "no-alias.json"),
+        ("SCAFFOLD_WEB", "no-web.py"),
+        ("EXAMPLE_PYPROJECTS", "no-example.toml"),
+        ("UI_PACKAGE", "no-ui.json"),
+        ("UI_ALIAS_PACKAGE", "no-ui-alias.json"),
     ):
         value = (
             (tmp_path / "no-example.toml",)
-            if attribute == "_EXAMPLE_PYPROJECTS"
+            if attribute == "EXAMPLE_PYPROJECTS"
             else tmp_path / name
         )
-        monkeypatch.setattr(release, attribute, value)
+        monkeypatch.setattr(_stamp, attribute, value)
 
 
 def _python_manifests(tmp_path, monkeypatch, versions=None) -> dict[str, Path]:
@@ -533,7 +537,7 @@ release_versions = versions.filter(lambda v: v.pre is None)
 scope_aliases = st.sampled_from(
     sorted(
         alias
-        for alias in release_module._SCOPE_ALIASES
+        for alias in _version._SCOPE_ALIASES
         if re.fullmatch(r"[A-Za-z0-9_+-]+", alias)
     )
 )
@@ -702,7 +706,7 @@ def test_parse_release_tag_accepts_every_alias_separator_and_version(
 
 @given(
     scope=st.from_regex(r"\A[a-z][a-z0-9]{0,8}\Z").filter(
-        lambda s: s not in release_module._SCOPE_ALIASES
+        lambda s: s not in _version._SCOPE_ALIASES
     ),
     version=versions,
 )
@@ -1296,9 +1300,7 @@ def test_build_python_builds_every_distribution_by_default(tmp_path, monkeypatch
     """One `python-v*` release ships the runtime, the tools and the kit together."""
     outdir = tmp_path / "pypi"
     calls = []
-    monkeypatch.setattr(
-        release_module, "_default_artifact_runner", _fake_build_runner(calls)
-    )
+    monkeypatch.setattr(_build, "_default_artifact_runner", _fake_build_runner(calls))
 
     assert _cli("build-python", "--outdir", str(outdir)) == 0
 
@@ -1331,7 +1333,7 @@ def test_build_python_builds_only_the_distribution_a_scope_ships(tmp_path, monke
             target.mkdir(parents=True, exist_ok=True)
             (target / "qgis_sdk_tools-0.1.0-py3-none-any.whl").write_bytes(b"w")
 
-    monkeypatch.setattr(release_module, "_default_artifact_runner", fake_runner)
+    monkeypatch.setattr(_build, "_default_artifact_runner", fake_runner)
 
     assert main(["build-python", "--scope", "tools", "--outdir", str(outdir)]) == 0
 
@@ -1353,7 +1355,7 @@ def test_build_python_accepts_an_explicit_package_list(tmp_path, monkeypatch):
             target.mkdir(parents=True, exist_ok=True)
             (target / "only-0.1.0-py3-none-any.whl").write_bytes(b"w")
 
-    monkeypatch.setattr(release_module, "_default_artifact_runner", fake_runner)
+    monkeypatch.setattr(_build, "_default_artifact_runner", fake_runner)
 
     assert main(["build-python", "--package", "pkg/only", "--outdir", str(outdir)]) == 0
 
@@ -1563,12 +1565,11 @@ def _with_files(raw):
 
 
 def _fake_git(monkeypatch, tags=(), log=""):
-    monkeypatch.setattr("automation.release.list_tags", lambda runner=None: tuple(tags))
     monkeypatch.setattr(
-        "automation.release.log_commits", lambda rng=None, runner=None: log
+        "automation.release._stamp.list_tags", lambda runner=None: tuple(tags)
     )
     monkeypatch.setattr(
-        "automation.release.log_commits_with_files",
+        "automation.release._contracts.log_commits_with_files",
         lambda rng=None, runner=None: _with_files(log),
     )
 
@@ -1756,9 +1757,7 @@ def test_tag_creates_and_pushes_with_message_file(tmp_path, monkeypatch):
     message = tmp_path / "changelog.md"
     message.write_text("# Changelog\n", encoding="utf-8")
     calls = []
-    monkeypatch.setattr(
-        "automation.release.create_tag", lambda *a, **k: calls.append((a, k))
-    )
+    monkeypatch.setattr(_verify, "create_tag", lambda *a, **k: calls.append((a, k)))
     from automation.release import main
 
     assert (
@@ -2618,9 +2617,8 @@ def _alias_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", alias_text=N
     )
     alias = tmp_path / "alias.json"
     alias.write_text(alias_text or ALIAS_PACKAGE_JSON, encoding="utf-8")
-    from automation import release
 
-    monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
+    monkeypatch.setattr(_stamp, "ALIAS_PACKAGE", alias)
     return files["package"], alias
 
 
@@ -2706,9 +2704,8 @@ def _scaffold_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", web_text=
     )
     web = tmp_path / "web.py"
     web.write_text(web_text or SCAFFOLD_WEB_PY, encoding="utf-8")
-    from automation import release
 
-    monkeypatch.setattr(release, "_SCAFFOLD_WEB", web)
+    monkeypatch.setattr(_stamp, "SCAFFOLD_WEB", web)
     return files["package"], web
 
 
@@ -2753,10 +2750,10 @@ def test_the_repository_scaffold_pins_the_bridge_at_head(monkeypatch):
     """The committed pin, not a fixture: `qgis-sdk new` offers the latest release."""
     from automation import release
 
-    root = Path(release.__file__).resolve().parent.parent
+    root = Path(release.__file__).resolve().parent.parent.parent
     bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
-    web = root / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
-    monkeypatch.setattr(release, "_SCAFFOLD_WEB", web)
+    web = root / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web/_plan.py"
+    monkeypatch.setattr(_stamp, "SCAFFOLD_WEB", web)
 
     bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
     assert read_scaffold_pin(web.read_text()) == bridge_version
@@ -2790,10 +2787,10 @@ def test_the_repository_alias_agrees_with_the_bridge(monkeypatch):
     """The committed manifests, not fixtures: the alias must track the bridge."""
     from automation import release
 
-    root = Path(release.__file__).resolve().parent.parent
+    root = Path(release.__file__).resolve().parent.parent.parent
     bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
     alias = root / "packages" / "qgis-sdk-alias" / "package.json"
-    monkeypatch.setattr(release, "_ALIAS_PACKAGE", alias)
+    monkeypatch.setattr(_stamp, "ALIAS_PACKAGE", alias)
 
     bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
     assert read_alias_versions(alias.read_text()) == (bridge_version, bridge_version)
@@ -2851,9 +2848,8 @@ def _example_manifests(tmp_path, monkeypatch, text=None, versions=None):
     files = _python_manifests(tmp_path, monkeypatch, versions)
     example = tmp_path / "example-pyproject.toml"
     example.write_text(text or EXAMPLE_PYPROJECT, encoding="utf-8")
-    from automation import release
 
-    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (example,))
+    monkeypatch.setattr(_stamp, "EXAMPLE_PYPROJECTS", (example,))
     files["example"] = example
     return files
 
@@ -2893,9 +2889,8 @@ def test_every_reference_example_follows_the_kit_stamp(tmp_path, monkeypatch):
     files = _example_manifests(tmp_path, monkeypatch)
     second = tmp_path / "server-example-pyproject.toml"
     second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")
-    from automation import release
 
-    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (files["example"], second))
+    monkeypatch.setattr(_stamp, "EXAMPLE_PYPROJECTS", (files["example"], second))
 
     assert main(["stamp", "--version", "0.6.0", "--scope", "python"]) == 0
 
@@ -2913,9 +2908,8 @@ def test_verify_versions_refuses_a_second_example_left_on_the_old_window(
     files = _example_manifests(tmp_path, monkeypatch)
     second = tmp_path / "server-example-pyproject.toml"
     second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")
-    from automation import release
 
-    monkeypatch.setattr(release, "_EXAMPLE_PYPROJECTS", (files["example"], second))
+    monkeypatch.setattr(_stamp, "EXAMPLE_PYPROJECTS", (files["example"], second))
     assert main(["stamp", "--version", "0.6.0", "--scope", "python"]) == 0
     second.write_text(EXAMPLE_PYPROJECT, encoding="utf-8")  # it missed the stamp
 
@@ -2982,7 +2976,7 @@ def _ui_manifests(tmp_path, monkeypatch, bridge_version="0.1.0", ui_text=None):
     )
     ui = tmp_path / "ui.json"
     ui.write_text(ui_text or UI_PACKAGE_JSON, encoding="utf-8")
-    monkeypatch.setattr(release_module, "_UI_PACKAGE", ui)
+    monkeypatch.setattr(_stamp, "UI_PACKAGE", ui)
     return files["package"], ui
 
 
@@ -3123,7 +3117,7 @@ def test_verify_versions_for_all_leaves_the_ui_train_out(tmp_path, monkeypatch):
 
 def test_the_repository_ui_package_accepts_the_bridge_at_head():
     """The committed manifests, not a fixture: a ui release is possible today."""
-    root = Path(release_module.__file__).resolve().parent.parent
+    root = Path(release_module.__file__).resolve().parent.parent.parent
     bridge = root / "packages" / "qgis-sdk-typescript" / "package.json"
     ui = root / "packages" / "qgis-sdk-ui" / "package.json"
     bridge_version = Version.parse(json.loads(bridge.read_text())["version"])
@@ -3189,10 +3183,10 @@ def _ui_train_manifests(tmp_path, monkeypatch, options=None):
     )
     web = tmp_path / "web.py"
     web.write_text(options.web_text or SCAFFOLD_WEB_PY_WITH_UI, encoding="utf-8")
-    monkeypatch.setattr(release_module, "_SCAFFOLD_WEB", web)
+    monkeypatch.setattr(_stamp, "SCAFFOLD_WEB", web)
     alias = tmp_path / "ui-alias.json"
     alias.write_text(options.alias_text or UI_ALIAS_PACKAGE_JSON, encoding="utf-8")
-    monkeypatch.setattr(release_module, "_UI_ALIAS_PACKAGE", alias)
+    monkeypatch.setattr(_stamp, "UI_ALIAS_PACKAGE", alias)
     return package, ui, web, alias
 
 
@@ -3303,12 +3297,12 @@ def test_ui_alias_changes_count_as_ui():
 
 def test_the_repository_ui_train_agrees_at_head(monkeypatch):
     """The committed manifests: the scaffold UI pin and the alias follow the package."""
-    root = Path(release_module.__file__).resolve().parent.parent
+    root = Path(release_module.__file__).resolve().parent.parent.parent
     ui = root / "packages" / "qgis-sdk-ui" / "package.json"
     alias = root / "packages" / "qgis-sdk-ui-alias" / "package.json"
-    web = root / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web.py"
-    monkeypatch.setattr(release_module, "_SCAFFOLD_WEB", web)
-    monkeypatch.setattr(release_module, "_UI_ALIAS_PACKAGE", alias)
+    web = root / "packages/qgis-sdk-tools/src/qgis_sdk_tools/scaffold/web/_plan.py"
+    monkeypatch.setattr(_stamp, "SCAFFOLD_WEB", web)
+    monkeypatch.setattr(_stamp, "UI_ALIAS_PACKAGE", alias)
     ui_version = Version.parse(json.loads(ui.read_text())["version"])
 
     assert release_module.read_scaffold_ui_pin(web.read_text()) == ui_version

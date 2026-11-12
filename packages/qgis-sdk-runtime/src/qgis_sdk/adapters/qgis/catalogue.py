@@ -123,9 +123,9 @@ def _cc_read_catalogue_p1(_s):
     _s.Qgis = Qgis
     _s.QgsApplication = QgsApplication
 
-    from .algorithms import _processing
+    from .algorithms import processing
 
-    _s._processing = _processing
+    _s._processing = processing
 
     _s._processing()
     if _s.registry is None:

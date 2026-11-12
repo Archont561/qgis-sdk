@@ -99,10 +99,31 @@ def _imported_from_packages() -> list[tuple[str, str, str]]:
     return found
 
 
+def _star_targets(tree: ast.Module) -> list[str]:
+    """Relative module names an ``__init__`` star-imports (``from ._x import *``)."""
+    return [
+        node.module or ""
+        for node in tree.body
+        if isinstance(node, ast.ImportFrom)
+        and node.level
+        and any(alias.name == "*" for alias in node.names)
+    ]
+
+
+def _exports_for(path: Path) -> set[str]:
+    """Bound names plus star-import expansion for one ``__init__.py``."""
+    tree = ast.parse(path.read_text("utf-8"))
+    names = _bound(tree) | _submodules(path.parent)
+    for target in _star_targets(tree):
+        candidate = path.parent / f"{target}.py"
+        if candidate.exists():
+            names |= _bound(ast.parse(candidate.read_text("utf-8")))
+    return names
+
+
 _IMPORTS = _imported_from_packages()
 _EXPORTS = {
-    str(path.parent.relative_to(ROOT)): _bound(ast.parse(path.read_text("utf-8")))
-    | _submodules(path.parent)
+    str(path.parent.relative_to(ROOT)): _exports_for(path)
     for path in _sources()
     if path.name == "__init__.py"
 }

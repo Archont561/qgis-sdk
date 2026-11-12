@@ -9,9 +9,9 @@ from qgis_sdk.models.errors import QgisSdkBridgeError
 
 from qgis_sdk_tools.generate._contract import _shape, is_open_map
 from qgis_sdk_tools.generate._emit import (
-    _check_supported,
-    _inline_type,
-    _inline_validator,
+    check_supported,
+    inline_type,
+    inline_validator,
     pascal,
 )
 from qgis_sdk_tools.generate._names import declared_name
@@ -52,7 +52,7 @@ class Naming:
         Naming has to finish first: a parent's field type is the child's name, so
         rendering as we descend would point the parent at a name not yet chosen.
         """
-        _check_supported(schema, path=name)
+        check_supported(schema, path=name)
         self.register(schema, name)
         return name
 
@@ -124,7 +124,7 @@ class Naming:
         # render so a union of titled objects keeps its interfaces - without it
         # ``layers.get`` answered ``Record<string, unknown> | Record<string, unknown>``
         # and a page could not read a field off the reply it just validated.
-        return self.name_for(schema) or _inline_type(schema, self)
+        return self.name_for(schema) or inline_type(schema, self)
 
     def accepts(self, schema: Mapping[str, Any]) -> str:
         """Return the predicate ``call`` should use for this value.
@@ -142,5 +142,5 @@ class Naming:
         # The lambda carries ``strict`` itself, with the same default a named
         # validator has, because `call` hands it the flag for a request and
         # nothing for a response.
-        predicate = _inline_validator(schema, "candidate", self)
+        predicate = inline_validator(schema, "candidate", self)
         return f"(candidate: unknown, strict = false) => {predicate}"

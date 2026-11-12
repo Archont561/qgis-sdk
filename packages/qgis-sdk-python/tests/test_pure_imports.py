@@ -136,7 +136,7 @@ LAYER_ORDER = {
 LAYER_PATHS = {
     "_published": SOURCE_ROOT / "_published.py",
     "http": SOURCE_ROOT / "http",
-    "algorithms": SOURCE_ROOT / "algorithms.py",
+    "algorithms": SOURCE_ROOT / "algorithms",
     "batch": SOURCE_ROOT / "batch.py",
     "bindings": SOURCE_ROOT / "bindings.py",
     "bridge": SOURCE_ROOT / "bridge",
@@ -357,7 +357,7 @@ def test_the_catalogue_reaches_qt_only_by_name_at_mount_time() -> None:
     from qgis_sdk.ui import components
 
     assert components.NATIVE_CATALOGUE == "qgis_sdk.adapters.qgis.components"
-    assert (SOURCE_ROOT / "adapters" / "qgis" / "components.py").is_file()
+    assert (SOURCE_ROOT / "adapters" / "qgis" / "components" / "__init__.py").is_file()
     declared = {
         module
         for file in sorted((SOURCE_ROOT / "ui" / "components").glob("*.py"))

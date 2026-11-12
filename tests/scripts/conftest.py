@@ -14,8 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import pytest
 
-from automation import release
-from automation.release import parse_versionrc
+from automation.release import _stamp, parse_versionrc
 
 
 @pytest.fixture(autouse=True)
@@ -26,9 +25,9 @@ def no_repository_alias_manifest(tmp_path, monkeypatch):
     not be compared against the repository's real ``qgis-sdk`` alias or the
     scaffold's bridge pin at another.
     """
-    monkeypatch.setattr(release, "_ALIAS_PACKAGE", tmp_path / "absent-alias.json")
-    monkeypatch.setattr(release, "_SCAFFOLD_WEB", tmp_path / "absent-web.py")
-    monkeypatch.setattr(release, "_UI_ALIAS_PACKAGE", tmp_path / "absent-ui-alias.json")
+    monkeypatch.setattr(_stamp, "ALIAS_PACKAGE", tmp_path / "absent-alias.json")
+    monkeypatch.setattr(_stamp, "SCAFFOLD_WEB", tmp_path / "absent-web.py")
+    monkeypatch.setattr(_stamp, "UI_ALIAS_PACKAGE", tmp_path / "absent-ui-alias.json")
 
 
 SAMPLE_VERSIONRC = """\

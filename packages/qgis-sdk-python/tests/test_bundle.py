@@ -122,7 +122,7 @@ class TestArchiveLayout:
         assert f"{PLUGIN}/{VENDOR_PACKAGE}/__init__.py" in entries
         assert f"{vendor}/__init__.py" in entries
         assert f"{vendor}/core/runtime/__init__.py" in entries
-        assert f"{vendor}/adapters/desktop.py" in entries
+        assert f"{vendor}/adapters/desktop/__init__.py" in entries
         assert f"{vendor}/resources/styles/reference-line-output.qml" in entries
         assert f"{PLUGIN}/{VENDOR_PACKAGE}/NOTICE" in entries
         with zipfile.ZipFile(result.archive) as zf:

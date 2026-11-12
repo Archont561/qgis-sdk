@@ -1,4 +1,6 @@
 """PyQGIS-backed service adapters for the curated pure contracts.
+from .context import NativeContextOptions, native_plugin_context
+from .context import NativeContextOptions, native_plugin_context
 
 Importing a *name* from this package imports the adapter behind it and needs a
 QGIS installation; importing the package itself does not. That split matters for

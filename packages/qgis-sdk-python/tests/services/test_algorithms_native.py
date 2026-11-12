@@ -178,13 +178,13 @@ def test_nothing_partial_survives_a_failure(native_services: Services) -> None:
     # the native fixture has started the application.
     from qgis_sdk.adapters.qgis import algorithms as adapter_module
 
-    original = adapter_module._processing
-    adapter_module._processing = lambda: FailingProcessing()
+    original = adapter_module.processing
+    adapter_module.processing = lambda: FailingProcessing()
     try:
         with pytest.raises(RuntimeError, match="after writing"):
             _buffer(native_services, source.id)
     finally:
-        adapter_module._processing = original
+        adapter_module.processing = original
 
     assert list(native_services.work_directory.rglob("*")) == []
 

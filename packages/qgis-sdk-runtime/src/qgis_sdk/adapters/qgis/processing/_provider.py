@@ -6,7 +6,7 @@ from typing import Any
 
 from qgis.core import QgsApplication, QgsProcessingProvider
 
-from qgis_sdk.adapters.qgis.algorithms import _processing
+from qgis_sdk.adapters.qgis.algorithms import processing as _processing
 from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.bridge.dispatch import ViewBinding
 from qgis_sdk.declarations import QgisSdkDeclarationError
