@@ -342,6 +342,46 @@ def task_test_results():
     }
 
 
+# --- pull requests --------------------------------------------------------
+
+
+def task_pr_watch():
+    """Watch a pull request's CI, breaking on the first error."""
+    return {
+        "actions": [action(tasks.pr_watch)],
+        "params": [
+            {
+                "name": "pr",
+                "long": "pr",
+                "default": 0,
+                "type": int,
+                "help": "pull request number; 0 is the current branch's",
+            },
+            {
+                "name": "interval",
+                "long": "interval",
+                "default": 15,
+                "type": int,
+                "help": "seconds between polls",
+            },
+            {
+                "name": "timeout",
+                "long": "timeout",
+                "default": 0,
+                "type": int,
+                "help": "give up after this many seconds; 0 waits forever",
+            },
+            {
+                "name": "repo",
+                "long": "repo",
+                "default": "",
+                "type": str,
+                "help": "owner/name; defaults to this checkout",
+            },
+        ],
+    }
+
+
 # --- release train --------------------------------------------------------
 
 _PLAN_PARAMS = [
