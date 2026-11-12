@@ -75,14 +75,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_export_raster_p1(_s):
     _s.self._scope.ensure_open()
     _s.layer = _s.self._require(_s.layer_id)

@@ -121,14 +121,14 @@ class TestArchiveLayout:
         vendor = f"{PLUGIN}/{VENDOR_PACKAGE}/qgis_sdk"
         assert f"{PLUGIN}/{VENDOR_PACKAGE}/__init__.py" in entries
         assert f"{vendor}/__init__.py" in entries
-        assert f"{vendor}/core/runtime.py" in entries
+        assert f"{vendor}/core/runtime/__init__.py" in entries
         assert f"{vendor}/adapters/desktop.py" in entries
         assert f"{vendor}/resources/styles/reference-line-output.qml" in entries
         assert f"{PLUGIN}/{VENDOR_PACKAGE}/NOTICE" in entries
         with zipfile.ZipFile(result.archive) as zf:
             notice = zf.read(f"{PLUGIN}/{VENDOR_PACKAGE}/NOTICE").decode()
             plugin_source = zf.read(f"{PLUGIN}/plugin.py").decode()
-            runtime_source = zf.read(f"{vendor}/core/runtime.py").decode()
+            runtime_source = zf.read(f"{vendor}/core/runtime/_runtime.py").decode()
             vendored_init = zf.read(f"{vendor}/__init__.py").decode()
         assert "qgis-sdk" in notice and "MIT" in notice
         assert result.runtime_version in notice

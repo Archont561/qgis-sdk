@@ -55,14 +55,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_shape_of_p1(_s):
     if isinstance(_s.renderer, GraduatedRenderer):
         return _CcReturn(
@@ -189,16 +181,6 @@ RENDERERS = (
 
 def _points(native_services: Services) -> str:
     return native_services.layers.open_vector(native_services.dataset).id
-
-
-def _colours(renderer) -> tuple[str, ...]:
-    if isinstance(renderer, SingleSymbolRenderer):
-        return (renderer.symbol.color,)
-    if isinstance(renderer, CategorizedRenderer):
-        return tuple(category.symbol.color for category in renderer.categories)
-    if isinstance(renderer, GraduatedRenderer):
-        return tuple(band.symbol.color for band in renderer.classes)
-    return tuple(rule.symbol.color for rule in renderer.rules)
 
 
 def _shape_of(renderer) -> tuple[object, ...]:

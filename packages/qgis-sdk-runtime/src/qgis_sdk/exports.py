@@ -47,14 +47,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_run_export_p1(_s1):
     try:
         _s1.write(_s1.partial)
@@ -129,14 +121,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_refuse_source_de_p1(_s):

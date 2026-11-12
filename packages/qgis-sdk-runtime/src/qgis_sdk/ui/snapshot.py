@@ -40,14 +40,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_surface_node_p1(_s):
     _s.name = _object_name(_s.widget)
     _s.role = _role(_s.widget)

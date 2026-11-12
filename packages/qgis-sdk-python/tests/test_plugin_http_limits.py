@@ -818,7 +818,7 @@ def _raw(port, method, path, headers, body):
 def _drain(response, chunk: int = 4096):
     """Read a stream to keep its frame buffer from overflowing, and discard it.
 
-    A session that nobody reads fills ``_FrameBuffer`` (256 frames / 2 MB),
+    A session that nobody reads fills ``FrameBuffer`` (256 frames / 2 MB),
     overflows, and is disposed - which is correct behaviour, and it frees the
     session budget. This test is about the *budget*, so its sessions have to
     stay alive: an unread stream made the 65th opening succeed whenever one of
@@ -864,9 +864,9 @@ def socket_connection(port):
 def test_the_frame_buffer_bounds_aggregate_bytes_not_just_one_frame():
     from queue import Full
 
-    from qgis_sdk.http._server import _FrameBuffer
+    from qgis_sdk.http._server import FrameBuffer
 
-    buffer = _FrameBuffer()
+    buffer = FrameBuffer()
     frame = "x" * (512 * 1024 - 8)  # under the per-frame cap
     for _ in range(4):
         buffer.put_nowait(frame)

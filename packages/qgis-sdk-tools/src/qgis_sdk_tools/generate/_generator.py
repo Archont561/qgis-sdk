@@ -6,8 +6,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from qgis_sdk_tools.generate._collect import _Collector
-from qgis_sdk_tools.generate._context import _Rendering
+from qgis_sdk_tools.generate._collect import Collector
+from qgis_sdk_tools.generate._context import Rendering
 from qgis_sdk_tools.generate._contract import (
     GENERATED_MARKER,
     PLUGIN_SURFACE,
@@ -15,24 +15,24 @@ from qgis_sdk_tools.generate._contract import (
     contract_fingerprint,
 )
 from qgis_sdk_tools.generate._emit import (
-    _interface_lines,
-    _json_lines,
-    _sorted_declaration,
-    _validator_lines,
+    interface_lines,
+    json_lines,
+    sorted_declaration,
+    validator_lines,
 )
-from qgis_sdk_tools.generate._frames import _Frames
-from qgis_sdk_tools.generate._members import _Members
-from qgis_sdk_tools.generate._names import _Action, _check_sdk_tree, _Stream
-from qgis_sdk_tools.generate._naming import _Naming
+from qgis_sdk_tools.generate._frames import Frames
+from qgis_sdk_tools.generate._members import Members
+from qgis_sdk_tools.generate._names import Action, Stream, check_sdk_tree
+from qgis_sdk_tools.generate._naming import Naming
 
 
-class _Generator:
+class Generator:
     """One plugin description in, one TypeScript module out.
 
     The work is split by when it may happen, because the order is the contract:
-    ``_Naming`` decides every exported type name, ``_Collector`` reads the
+    ``Naming`` decides every exported type name, ``Collector`` reads the
     declared operations and asks it for those names, and only then do
-    ``_Frames`` and ``_Members`` render - a parent's field type has to be a name
+    ``Frames`` and ``Members`` render - a parent's field type has to be a name
     already chosen, never one still on its way out of the walk.
     """
 
@@ -42,18 +42,18 @@ class _Generator:
         self._description = description
         self._surface = surface
         self._ids: set[str] = set()
-        self._naming = _Naming()
-        collector = _Collector(description, self._ids, self._naming)
-        self._actions: tuple[_Action, ...] = collector.actions()
-        self._streams: tuple[_Stream, ...] = collector.streams()
-        rendering = _Rendering(
+        self._naming = Naming()
+        collector = Collector(description, self._ids, self._naming)
+        self._actions: tuple[Action, ...] = collector.actions()
+        self._streams: tuple[Stream, ...] = collector.streams()
+        rendering = Rendering(
             surface=surface,
             actions=self._actions,
             streams=self._streams,
             names=self._naming,
         )
-        self._frames = _Frames(rendering)
-        self._members = _Members(rendering)
+        self._frames = Frames(rendering)
+        self._members = Members(rendering)
 
     def name_for(self, schema: Mapping[str, Any]) -> str | None:
         """Return the registered name of an object schema, if it has one."""
@@ -67,8 +67,8 @@ class _Generator:
             *self._header_lines(),
             *self._client_lines(),
             *self._guard_lines(),
-            *self._object_blocks(_interface_lines),
-            *self._object_blocks(_validator_lines),
+            *self._object_blocks(interface_lines),
+            *self._object_blocks(validator_lines),
             *self._stream_blocks(self._frames.event_lines),
             *self._members.operations(),
         ]
@@ -76,10 +76,10 @@ class _Generator:
 
     def render_schema(self, *, sdk_import: str) -> str:
         """Render the schema module: types plus the declaration, no code."""
-        _check_sdk_tree(self._ids)
+        check_sdk_tree(self._ids)
         lines = [
             *self._schema_header(sdk_import),
-            *self._object_blocks(_interface_lines),
+            *self._object_blocks(interface_lines),
             *self._stream_blocks(self._frames.event_union_lines),
             *self._frames.schema_map_lines(),
             *self._declaration_lines(),
@@ -220,7 +220,7 @@ class _Generator:
                 "const schema: BridgeSchema<Operations, Streams> = "
                 "defineBridgeSchema<Operations, Streams>({"
             ),
-            *_json_lines(_sorted_declaration(self._description)),
+            *json_lines(sorted_declaration(self._description)),
             "});",
             "",
             "export default schema;",

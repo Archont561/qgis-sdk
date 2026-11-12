@@ -6,15 +6,15 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from qgis_sdk.bridge.authority import FileOperation
-from qgis_sdk.bridge.host._context import HostHandler, _Host
+from qgis_sdk.bridge.host._context import Host, HostHandler
 from qgis_sdk.bridge.host._support import (
-    _algorithm_wire,
-    _layout_settings,
-    _page_of,
     _plain,
-    _resolve_input,
-    _result_for_view,
     _summary,
+    algorithm_wire,
+    layout_settings,
+    page_of,
+    resolve_input,
+    result_for_view,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
@@ -22,77 +22,73 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters for typing
 
 
 def algorithms_providers(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
-    return _page_of(ctx.algorithms.providers(), payload)
+    return page_of(ctx.algorithms.providers(), payload)
 
 
 def algorithms_list(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     found = ctx.algorithms.list(payload.get("provider"))
-    return _page_of([_summary(info) for info in found], payload)
+    return page_of([_summary(info) for info in found], payload)
 
 
 def algorithms_describe(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
-    return _algorithm_wire(ctx.algorithms.describe(payload["algorithm_id"]))
+    return algorithm_wire(ctx.algorithms.describe(payload["algorithm_id"]))
 
 
-def algorithms_run(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> dict:
+def algorithms_run(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     params = {
-        str(name): _resolve_input(ctx.authority, binding, value)
+        str(name): resolve_input(ctx.authority, binding, value)
         for name, value in payload["params"].items()
     }
     result = ctx.algorithms.run(payload["algorithm_id"], params)
-    return _result_for_view(ctx.services, binding, result)
+    return result_for_view(ctx.services, binding, result)
 
 
 def algorithms_run_model(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     model = ctx.plugin_file(
         ctx.authority.resolve_file(binding, payload["model"], FileOperation.READ),
     )
     params = {
-        str(name): _resolve_input(ctx.authority, binding, value)
+        str(name): resolve_input(ctx.authority, binding, value)
         for name, value in payload.get("params", {}).items()
     }
     result = ctx.algorithms.run_model(model, params)
-    return _result_for_view(ctx.services, binding, result)
+    return result_for_view(ctx.services, binding, result)
 
 
 def algorithms_batch(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     results = []
     for item in payload["runs"]:
         params = {
-            str(name): _resolve_input(ctx.authority, binding, value)
+            str(name): resolve_input(ctx.authority, binding, value)
             for name, value in item.get("params", {}).items()
         }
         result = ctx.algorithms.run(item["algorithm_id"], params)
-        results.append(_result_for_view(ctx.services, binding, result))
+        results.append(result_for_view(ctx.services, binding, result))
     return {"results": results}
 
 
-def layouts_list(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
-    return _page_of(ctx.layouts.list(), payload)
+def layouts_list(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+    return page_of(ctx.layouts.list(), payload)
 
 
 def layouts_load_template(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
+    ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]
 ) -> dict:
     path = ctx.authority.resolve_file(binding, payload["file"], FileOperation.READ)
     return _plain(ctx.layouts.load_template(ctx.plugin_file(path)))
 
 
-def layouts_export(
-    ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]
-) -> dict:
+def layouts_export(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     overwrite = bool(payload.get("overwrite", False))
     destination = None
     if payload.get("destination") is not None:
@@ -104,7 +100,7 @@ def layouts_export(
         payload["layout"],
         format=payload.get("format", "pdf"),
         destination=destination,
-        settings=_layout_settings(payload),
+        settings=layout_settings(payload),
         overwrite=overwrite,
     )
     return {
@@ -115,12 +111,12 @@ def layouts_export(
     }
 
 
-def layouts_atlas(ctx: _Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
+def layouts_atlas(ctx: Host, binding: ViewBinding, payload: Mapping[str, Any]) -> dict:
     run = ctx.layouts.render_atlas(
         payload["layout"],
         format=payload.get("format", "pdf"),
         pattern=payload.get("pattern"),
-        settings=_layout_settings(payload),
+        settings=layout_settings(payload),
         overwrite=bool(payload.get("overwrite", False)),
     )
     return {

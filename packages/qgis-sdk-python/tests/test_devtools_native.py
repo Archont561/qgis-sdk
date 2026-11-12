@@ -58,14 +58,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_the_page_se_p1(_s):
     _s.page = _s.widget.layout().itemAt(0).widget().page()
     _s.loads: list[bool] = []

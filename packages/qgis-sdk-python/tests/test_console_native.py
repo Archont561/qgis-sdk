@@ -38,14 +38,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_a_handle_dr_p1(_s):
     assert _s.session.plugins() == (PACKAGE,)
     _s.handle = _s.session.plugin(PACKAGE)

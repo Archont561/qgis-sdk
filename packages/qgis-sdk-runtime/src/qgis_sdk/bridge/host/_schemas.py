@@ -306,15 +306,15 @@ BATCH_RESULT = _object({"results": _array(RUN_RESULT)}, required=("results",))
 BATCH_RESULT["title"] = "BatchResult"
 
 
-def _page(items: Sequence[Any], cursor: str | None, truncated: bool) -> dict:
+def page(items: Sequence[Any], cursor: str | None, truncated: bool) -> dict:
     """Shape one page, with the cursor only when something is left."""
-    page: dict[str, Any] = {"items": list(items), "truncated": truncated}
+    body: dict[str, Any] = {"items": list(items), "truncated": truncated}
     if truncated:
-        page["next_cursor"] = cursor
-    return page
+        body["next_cursor"] = cursor
+    return body
 
 
-def _page_result(items: Mapping[str, Any]) -> dict:
+def page_result(items: Mapping[str, Any]) -> dict:
     return _object(
         {
             "items": _array(items),

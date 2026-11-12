@@ -266,7 +266,7 @@ class Layouts(Protocol):
         ...
 
 
-def _slug(name: str) -> str:
+def slug(name: str) -> str:
     """A file-name-safe form of a layout name, for a host-chosen output."""
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._")
     return cleaned or "layout"
@@ -289,7 +289,7 @@ def free_layout_name(taken: Iterable[str], name: str) -> str:
     return f"{name} ({number})"
 
 
-def _check_pattern(pattern: str) -> str:
+def check_pattern(pattern: str) -> str:
     """Refuse an atlas pattern naming a placeholder the render cannot fill."""
     unknown = sorted(
         {

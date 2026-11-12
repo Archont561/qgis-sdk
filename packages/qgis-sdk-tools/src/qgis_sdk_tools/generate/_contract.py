@@ -266,7 +266,7 @@ def contract_fingerprint(description: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _is_open_map(schema: Mapping[str, Any]) -> bool:
+def is_open_map(schema: Mapping[str, Any]) -> bool:
     """Whether an object schema declares no shape at all.
 
     ``{"type": "object"}`` with no properties and no closed

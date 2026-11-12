@@ -8,18 +8,18 @@ from qgis_sdk.bridge.dispatch import ViewBinding
 from qgis_sdk.models import QgisSdkGrantRefusedError
 from qgis_sdk.network.grants import NetworkGrant
 
-from ._grants import _NetworkGrant
+from ._grants import NetworkGrantBinding
 
 
 @dataclass
-class _NetworkGrants:
+class NetworkGrants:
     """What each view may reach, keyed by the view, replaced when it is granted again."""
 
-    items: dict[str, _NetworkGrant] = field(default_factory=dict)
+    items: dict[str, NetworkGrantBinding] = field(default_factory=dict)
 
     def grant(self, binding: ViewBinding, grant: NetworkGrant) -> None:
         """Give ``binding``'s view ``grant``, replacing any earlier one."""
-        self.items[binding.view_id] = _NetworkGrant(grant, binding.generation)
+        self.items[binding.view_id] = NetworkGrantBinding(grant, binding.generation)
 
     def get(self, binding: ViewBinding) -> NetworkGrant | None:
         """The view's grant in this generation, or ``None``."""

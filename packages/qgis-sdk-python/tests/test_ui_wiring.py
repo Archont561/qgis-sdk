@@ -68,14 +68,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_a_designer__p1(_s):
     class Missing(Dialog):
         ui = str(_s.ui_file)
@@ -631,7 +623,11 @@ def test_a_designer_name_or_signal_that_does_not_exist_is_refused(
 # -- the behaviour mixins ---------------------------------------------------------------
 
 
-class SumDialog(RunsJobs, HasAcceptCancel, SubscribesStreams, Dialog):
+class _SumBehaviours(RunsJobs, HasAcceptCancel, SubscribesStreams):
+    """Every behaviour a full dialog carries."""
+
+
+class SumDialog(_SumBehaviours, Dialog):
     accept_result: Any = None
 
     def build(self) -> Column:

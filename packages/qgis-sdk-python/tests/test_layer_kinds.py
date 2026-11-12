@@ -150,14 +150,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_a_picker_na_p1(_s):
     _s.kind = _s.values["kind"]
     _s.layers = _s.values["layers"]

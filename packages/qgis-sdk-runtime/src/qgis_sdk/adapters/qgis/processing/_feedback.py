@@ -5,7 +5,7 @@ from __future__ import annotations
 from qgis.core import QgsProcessingFeedback
 
 
-class _FeedbackProgress:
+class FeedbackProgress:
     """Forward an execution's fraction to the dialog's progress bar."""
 
     def __init__(self, feedback: QgsProcessingFeedback) -> None:
@@ -15,7 +15,7 @@ class _FeedbackProgress:
         self._feedback.setProgress(int(fraction * 100))
 
 
-class _FeedbackCancellation:
+class FeedbackCancellation:
     """Read cancellation from the Processing feedback, not from a second source."""
 
     def __init__(self, feedback: QgsProcessingFeedback) -> None:

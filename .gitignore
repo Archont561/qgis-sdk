@@ -33,3 +33,18 @@ __pycache__/
 .config/turborepo/
 # Storybook static build of packages/qgis-sdk-ui
 storybook-static/
+
+# Generated Processing provider modules: generated from catalogue.json by
+# `codegen.py` (pure Python, no QGIS needed) and never committed. They are
+# generated in CI before tests run, and locally by
+# `packages/qgis-sdk-python/scripts/generate_processing_snapshot.py`.
+# catalogue.json itself is source (the pinned QGIS registry snapshot).
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/native.py
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/native/
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/gdal.py
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/gdal/
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/qgis.py
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/qgis/
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/pdal.py
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/pdal/
+packages/qgis-sdk-runtime/src/qgis_sdk/processing/p3d.py

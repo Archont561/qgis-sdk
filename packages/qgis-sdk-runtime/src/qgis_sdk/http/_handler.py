@@ -13,7 +13,7 @@ from ._options import MAX_BODY_BYTES
 from ._rest import call_action, open_stream
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; the listener constructs this class
-    from ._endpoint import _Endpoint
+    from ._endpoint import Endpoint
     from ._listener import _BoundedHTTPServer
 
 
@@ -28,7 +28,7 @@ def _decoded(raw: bytes, size: int) -> dict[str, Any] | None:
     return payload
 
 
-class _RequestHandler(BaseHTTPRequestHandler):
+class RequestHandler(BaseHTTPRequestHandler):
     """One request, read under a deadline and answered as JSON or an event stream.
 
     The handler owns framing and authorization only: what an ``/actions/`` or
@@ -39,7 +39,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
     server: _BoundedHTTPServer
 
     @property
-    def endpoint(self) -> _Endpoint:
+    def endpoint(self) -> Endpoint:
         """What this request may reach: the listener's queue, sessions and limits."""
         return self.server.endpoint
 

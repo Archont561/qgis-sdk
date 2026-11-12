@@ -352,13 +352,12 @@ class AppSession(_AppSessionMixin1, _AppSessionMixin2):
         _init_facts1(self)
 
     def __repr__(self) -> str:
-        state = (
-            "stopped"
-            if self._report is not None
-            else "running"
-            if self._started
-            else "new"
-        )
+        if self._report is not None:
+            state = "stopped"
+        elif self._started:
+            state = "running"
+        else:
+            state = "new"
         return f"AppSession({self._app_id!r}, {state})"
 
 

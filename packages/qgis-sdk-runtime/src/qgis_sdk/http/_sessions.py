@@ -21,7 +21,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only; the dispatcher imports at r
     from ._queue import GuiQueue
 
 
-class _FrameBuffer:
+class FrameBuffer:
     """A session's outgoing frames, bounded by count and encoded byte size."""
 
     _MAX_FRAME_BYTES = 512 * 1024
@@ -60,7 +60,7 @@ class _Session:
     channel: ChannelTransport
     closed: bool = False
     replies: list[str] = field(default_factory=list)
-    frames: _FrameBuffer = field(default_factory=_FrameBuffer)
+    frames: FrameBuffer = field(default_factory=FrameBuffer)
     on_overflow: Callable[[], None] = lambda: None
 
     def send(self, text: str) -> None:
@@ -77,7 +77,7 @@ class _Session:
                 self.on_overflow()
 
 
-class _Sessions:
+class Sessions:
     """Every session this listener has open, keyed by the id it bound the view to.
 
     One object owns the book because every path through it is the same three

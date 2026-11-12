@@ -28,14 +28,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_a_widget_su_p1(_s):
     from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
 

@@ -15,10 +15,10 @@ from qgis_sdk_tools.generate._contract import (
     _KNOWN_KEYWORDS,
     _SIMPLE_TYPES,
     KIND_KEYWORD,
-    _is_open_map,
     _Surface,
+    is_open_map,
 )
-from qgis_sdk_tools.generate._names import _Action, _Stream
+from qgis_sdk_tools.generate._names import Action, Stream
 
 
 class _CcState:
@@ -33,14 +33,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_inline_validator_p1(_s):
@@ -180,12 +172,12 @@ _CALL_HELPER = _CC_TEXT_1
 _OPEN_HELPER = _CC_TEXT_2
 
 
-def _call_helper(surface: _Surface) -> str:
+def call_helper(surface: _Surface) -> str:
     """Render the call helper with this surface's identifiers."""
     return _with_surface_names(_CALL_HELPER, surface)
 
 
-def _open_helper(surface: _Surface) -> str:
+def open_helper(surface: _Surface) -> str:
     """Render the stream helper with this surface's identifiers."""
     return _with_surface_names(_OPEN_HELPER, surface)
 
@@ -208,18 +200,18 @@ def _with_surface_names(template: str, surface: _Surface) -> str:
     return template
 
 
-def _tree_lines(actions: tuple[_Action | _Stream, ...], render: Any) -> list[str]:
+def tree_lines(actions: tuple[Action | Stream, ...], render: Any) -> list[str]:
     """Render the nested interface, grouping ids by their leading segments."""
     tree = _group(actions)
     return _emit_tree(tree, render, depth=1)
 
 
-def _tree_body_lines(actions: tuple[_Action | _Stream, ...], render: Any) -> list[str]:
+def tree_body_lines(actions: tuple[Action | Stream, ...], render: Any) -> list[str]:
     tree = _group(actions)
     return _emit_tree_body(tree, render, depth=2)
 
 
-def _group(actions: tuple[_Action | _Stream, ...]) -> dict[str, Any]:
+def _group(actions: tuple[Action | Stream, ...]) -> dict[str, Any]:
     root: dict[str, Any] = {}
     for action in sorted(actions, key=lambda item: item.id):
         segments = action.id.split(".")
@@ -266,7 +258,7 @@ def _emit_tree_body(tree: dict[str, Any], render: Any, *, depth: int) -> list[st
     return lines
 
 
-def _interface_lines(
+def interface_lines(
     schema: Mapping[str, Any], name: str, generator: _Namer
 ) -> list[str]:
     required = set(schema.get("required", []) or [])
@@ -287,7 +279,7 @@ def _interface_lines(
     return lines
 
 
-def _validator_lines(
+def validator_lines(
     schema: Mapping[str, Any], name: str, generator: _Namer
 ) -> list[str]:
     required = list(schema.get("required", []) or [])
@@ -357,7 +349,7 @@ def _array_type(schema: Mapping[str, Any], generator: _Namer | None) -> str:
 
 def _object_type(schema: Mapping[str, Any], generator: _Namer | None) -> str:
     """A titled object is its own declaration; an untitled one is an open map."""
-    if _is_open_map(schema):
+    if is_open_map(schema):
         return "Record<string, unknown>"
     named = None if generator is None else generator.name_for(schema)
     return named if named is not None else "Record<string, unknown>"
@@ -448,7 +440,7 @@ def _validate_null(
 def _validate_object(
     schema: Mapping[str, Any], expression: str, generator: _Namer | None
 ) -> str:
-    if _is_open_map(schema):
+    if is_open_map(schema):
         return f"isRecord({expression})"
     named = None if generator is None else generator.name_for(schema)
     if named is not None:
@@ -524,7 +516,7 @@ def _check_supported(schema: Any, *, path: str) -> None:
         _check_supported(branch, path=path)
 
 
-def _sorted_declaration(described: Mapping[str, Any]) -> dict[str, Any]:
+def sorted_declaration(described: Mapping[str, Any]) -> dict[str, Any]:
     """Return the declaration with its actions and streams in id order.
 
     The embedded JSON is what ``QgisSdk`` validates against, so it is the
@@ -538,14 +530,14 @@ def _sorted_declaration(described: Mapping[str, Any]) -> dict[str, Any]:
     return ordered
 
 
-def _json_lines(value: Mapping[str, Any]) -> list[str]:
+def json_lines(value: Mapping[str, Any]) -> list[str]:
     """Render the body of ``value`` as tab-indented JSON, braces left to the caller."""
     text = json.dumps(value, indent="\t", ensure_ascii=False, allow_nan=False)
     inner = text.splitlines()[1:-1]
     return list(inner)
 
 
-def _pascal(value: str) -> str:
+def pascal(value: str) -> str:
     parts = [part for part in value.replace("-", ".").split(".") if part]
     name = "".join(part[:1].upper() + part[1:] for part in parts)
     if not name:

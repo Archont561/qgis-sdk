@@ -93,7 +93,7 @@ TOOLS_PYPROJECT = (
 
 
 @pytest.fixture(autouse=True)
-def _the_real_manifests_stay_untouched():
+def the_real_manifests_stay_untouched():
     """A stamp test that forgot to redirect a manifest must not edit the repo."""
     from automation import release
 

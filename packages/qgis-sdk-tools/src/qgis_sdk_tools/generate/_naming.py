@@ -7,14 +7,14 @@ from typing import Any
 
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
-from qgis_sdk_tools.generate._contract import _is_open_map, _shape
+from qgis_sdk_tools.generate._contract import _shape, is_open_map
 from qgis_sdk_tools.generate._emit import (
     _check_supported,
     _inline_type,
     _inline_validator,
-    _pascal,
+    pascal,
 )
-from qgis_sdk_tools.generate._names import _declared_name
+from qgis_sdk_tools.generate._names import declared_name
 
 
 def _titled(schema: Mapping[str, Any], name: str) -> str:
@@ -25,10 +25,10 @@ def _titled(schema: Mapping[str, Any], name: str) -> str:
     """
     if "title" not in schema:
         return name
-    return _declared_name(schema["title"], name, kind="title", action=name)
+    return declared_name(schema["title"], name, kind="title", action=name)
 
 
-class _Naming:
+class Naming:
     """One name per object schema, walked out before the first line is rendered.
 
     Naming has to finish first: a parent's field type is the child's name, so
@@ -60,7 +60,7 @@ class _Naming:
         """Name ``schema`` itself, then everything declared inside it."""
         self._name_object(schema, name)
         for key, item in (schema.get("properties") or {}).items():
-            self.register(item, f"{name}{_pascal(str(key))}")
+            self.register(item, f"{name}{pascal(str(key))}")
         if isinstance(schema.get("items"), Mapping):
             self.register(schema["items"], f"{name}Item")
         for position, branch in enumerate(schema.get("anyOf", []) or []):
@@ -68,7 +68,7 @@ class _Naming:
 
     def _name_object(self, schema: Mapping[str, Any], name: str) -> None:
         """Give one object schema its exported name, unless it already has one."""
-        if schema.get("type") != "object" or _is_open_map(schema):
+        if schema.get("type") != "object" or is_open_map(schema):
             return
         if id(schema) in self._names:
             return
@@ -97,7 +97,7 @@ class _Naming:
 
     def _name_branch(self, branch: Mapping[str, Any], name: str, *, union: str) -> None:
         """Name one object branch of a union, or explain why it has no name."""
-        if branch.get("type") != "object" or _is_open_map(branch):
+        if branch.get("type") != "object" or is_open_map(branch):
             # A non-object branch, or an open map, renders inline.
             return
         if "title" in branch:

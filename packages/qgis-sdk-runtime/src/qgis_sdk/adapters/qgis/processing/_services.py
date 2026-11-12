@@ -7,13 +7,12 @@ from typing import Any
 
 from qgis.core import QgsProcessingException
 
+from qgis_sdk.adapters.qgis.algorithms import NativeAlgorithms
+from qgis_sdk.adapters.qgis.layers import NativeLayers
+from qgis_sdk.adapters.qgis.project import NativeProject
+from qgis_sdk.adapters.qgis.rasters import NativeRasters
 from qgis_sdk.bridge.authority import HostAuthority
 from qgis_sdk.core import ResourceScope
-
-from ..algorithms import NativeAlgorithms
-from ..layers import NativeLayers
-from ..project import NativeProject
-from ..rasters import NativeRasters
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +50,7 @@ class ProcessingServices:
         return replace(self, authority=HostAuthority())
 
 
-def _rasters_of(bridge: Any) -> Any:
+def rasters_of(bridge: Any) -> Any:
     """Return the provider's raster service, or refuse a raster input by name."""
     rasters = getattr(bridge, "rasters", None)
     if rasters is None:
@@ -61,7 +60,7 @@ def _rasters_of(bridge: Any) -> Any:
     return rasters
 
 
-def _files_of(bridge: Any) -> Any:
+def files_of(bridge: Any) -> Any:
     """Return the files service that resolves a produced ref, or ``None``.
 
     The bridge resolves a handler's ``FileRef`` result through the same files

@@ -78,15 +78,15 @@ def _build_layer(cls: type, name: str, annotation: Any) -> Any:
 def _build_metres(cls: type, name: str, annotation: Any) -> Any:
     """A metre input is a double that says so, bounded by what the marker allows."""
     metres = _marker(annotation, MetresParameter) or MetresParameter()
-    parameter = cls(
+    param = cls(
         name,
         f"{name} (metres)",
         type=QgsProcessingParameterNumber.Double,
         minValue=metres.minimum,
     )
     if metres.maximum is not None:
-        parameter.setMaximum(metres.maximum)
-    return parameter
+        param.setMaximum(metres.maximum)
+    return param
 
 
 def _build_file(cls: type, name: str, annotation: Any) -> Any:
@@ -162,7 +162,7 @@ _BUILDERS: dict[str, Callable[[type, str, Any], Any]] = {
 }
 
 
-def _parameter(kind: str, name: str, annotation: Any = None) -> Any:
+def parameter(kind: str, name: str, annotation: Any = None) -> Any:
     """Build the Processing parameter a declared kind deserves."""
     build = _BUILDERS.get(kind)
     if build is None:

@@ -15,7 +15,7 @@ from qgis_sdk.bridge.streams import StreamSource
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
 
-class _Registry:
+class Registry:
     """The operations a plugin exposes, and what answers each one.
 
     Nothing about an operation is reachable from the wire: a view names an id,

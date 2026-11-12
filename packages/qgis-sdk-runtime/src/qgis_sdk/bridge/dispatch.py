@@ -41,10 +41,10 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from qgis_sdk.bridge.endpoint._calls import _Calls
+from qgis_sdk.bridge.endpoint._calls import Calls
 from qgis_sdk.bridge.endpoint._refusals import QgisSdkRefusal
-from qgis_sdk.bridge.endpoint._registry import _Registry
-from qgis_sdk.bridge.endpoint._streams import _Book, _Streams
+from qgis_sdk.bridge.endpoint._registry import Registry
+from qgis_sdk.bridge.endpoint._streams import Book, Streams
 from qgis_sdk.bridge.endpoint._types import (
     Authorizer,
     BoundHandler,
@@ -54,7 +54,7 @@ from qgis_sdk.bridge.endpoint._types import (
     ViewBinding,
     Waker,
 )
-from qgis_sdk.bridge.endpoint._views import _Views
+from qgis_sdk.bridge.endpoint._views import Views
 from qgis_sdk.bridge.endpoint._wire import wire_result
 from qgis_sdk.bridge.protocol import (
     BridgeErrorCode,
@@ -310,15 +310,15 @@ def _assembled(
     authorize: Authorizer | None,
     ledger: ReleaseLedger,
     theme: ThemeProvider | None,
-) -> tuple[_Registry, _Views, _Streams, _Calls]:
+) -> tuple[Registry, Views, Streams, Calls]:
     """Wire the four roles around one ledger, in the order they depend on it."""
-    registry = _Registry()
-    views = _Views(
+    registry = Registry()
+    views = Views(
         description=description, authorize=authorize, theme=theme, registry=registry
     )
-    book = _Book(registry=registry, views=views, ledger=ledger)
-    streams = _Streams(book=book, registry=registry, views=views, ledger=ledger)
-    calls = _Calls(registry=registry, views=views, ledger=ledger)
+    book = Book(registry=registry, views=views, ledger=ledger)
+    streams = Streams(book=book, registry=registry, views=views, ledger=ledger)
+    calls = Calls(registry=registry, views=views, ledger=ledger)
     ledger.dispose_subscription = book.close_id
     return registry, views, streams, calls
 

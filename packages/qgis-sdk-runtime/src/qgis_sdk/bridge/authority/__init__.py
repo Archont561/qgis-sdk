@@ -24,31 +24,34 @@ involved - a blob is never a file - and the bytes are dropped when the view is
 released, so a page cannot keep a copy of the host's memory alive by holding an
 id. Nothing here imports Qt.
 
-The three kinds are kept by three collaborators - :class:`~._files._FileGrants`,
-:class:`~._blobs._BlobGrants` and :class:`~._networks._NetworkGrants` - over the
+The three kinds are kept by three collaborators - :class:`~._files.FileGrants`,
+:class:`~._blobs.BlobGrants` and :class:`~._networks.NetworkGrants` - over the
 same table shape, and :class:`HostAuthority` is the one object a host calls.
 """
 
 from __future__ import annotations
 
-import os
-import secrets
-import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any
+import os as _os
+import secrets as _secrets
+import time as _time
+from collections.abc import Callable as _Callable
+from dataclasses import dataclass as _dataclass
+from dataclasses import field as _field
+from pathlib import Path as _Path
+from typing import Any as _Any
 
-from qgis_sdk.bridge.dispatch import ViewBinding
-from qgis_sdk.models.blobs import BlobRef
+from qgis_sdk.bridge.dispatch import ViewBinding as _ViewBinding
+from qgis_sdk.models.blobs import BlobRef as _BlobRef
 from qgis_sdk.models.files import FILE_REF, FileRef
-from qgis_sdk.network.grants import NetworkGrant
+from qgis_sdk.network.grants import NetworkGrant as _NetworkGrant
 
 from ._blobs import (
     BLOB_TTL_SECONDS,
     MAX_BLOB_BYTES,
     MAX_BLOBS_PER_VIEW,
-    _BlobGrants,
+)
+from ._blobs import (
+    BlobGrants as _BlobGrants,
 )
 from ._files import (
     _DEFAULT_FILE_POLICY,
@@ -56,10 +59,12 @@ from ._files import (
     FILE_SOURCES,
     MAX_FILE_REFS_PER_VIEW,
     FilePolicy,
-    _FileGrants,
+)
+from ._files import (
+    FileGrants as _FileGrants,
 )
 from ._grants import FileOperation
-from ._networks import _NetworkGrants
+from ._networks import NetworkGrants as _NetworkGrants
 
 __all__ = [
     "BLOB_TTL_SECONDS",
@@ -79,8 +84,8 @@ __all__ = [
 class _HostAuthorityMixin1:
     def grant_file(
         self,
-        binding: ViewBinding,
-        path: str | os.PathLike[str],
+        binding: _ViewBinding,
+        path: str | _os.PathLike[str],
         policy: FilePolicy = _DEFAULT_FILE_POLICY,
     ) -> FileRef:
         """Mint a ref for ``path`` that only ``binding``'s view can use.
@@ -97,8 +102,8 @@ class _HostAuthorityMixin1:
 
     def grant_directory(
         self,
-        binding: ViewBinding,
-        path: str | os.PathLike[str],
+        binding: _ViewBinding,
+        path: str | _os.PathLike[str],
         *,
         source: str = "plugin",
         ttl_seconds: float | None = None,
@@ -113,16 +118,18 @@ class _HostAuthorityMixin1:
         )
 
     def resolve_file(
-        self, binding: ViewBinding, raw: Any, operation: FileOperation
-    ) -> Path:
+        self, binding: _ViewBinding, raw: _Any, operation: FileOperation
+    ) -> _Path:
         """Return the canonical path behind ``raw`` for ``operation``, or refuse."""
         return self._files.resolve(binding, raw, operation)
 
-    def export_file(self, binding: ViewBinding, raw: Any, content: str | bytes) -> int:
+    def export_file(
+        self, binding: _ViewBinding, raw: _Any, content: str | bytes
+    ) -> int:
         """Write ``content`` to the file a write ref names; return the byte count."""
         return self._files.export(binding, raw, content)
 
-    def refs(self, binding: ViewBinding) -> tuple[FileRef, ...]:
+    def refs(self, binding: _ViewBinding) -> tuple[FileRef, ...]:
         """The live refs of ``binding``'s view in its generation, oldest first."""
         return self._files.refs(binding)
 
@@ -130,7 +137,7 @@ class _HostAuthorityMixin1:
         """Withdraw one ref; the view is told ``stale_handle`` from now on."""
         return self._files.revoke(ref_id)
 
-    def release_view(self, binding: ViewBinding) -> int:
+    def release_view(self, binding: _ViewBinding) -> int:
         """Forget everything minted for ``binding``'s view; files are untouched.
 
         Returns how many file refs were dropped. Revocation tombstones go too:
@@ -150,12 +157,12 @@ class _HostAuthorityMixin1:
 
     def mint_blob(
         self,
-        binding: ViewBinding,
+        binding: _ViewBinding,
         data: bytes | bytearray | memoryview,
         *,
         media_type: str = "application/octet-stream",
         ttl_seconds: float | None = BLOB_TTL_SECONDS,
-    ) -> BlobRef:
+    ) -> _BlobRef:
         """Keep ``data`` for ``binding``'s view and return the ref that names it."""
         return self._blobs.mint(
             binding, data, media_type=media_type, ttl_seconds=ttl_seconds
@@ -163,19 +170,19 @@ class _HostAuthorityMixin1:
 
     def inline_or_blob(
         self,
-        binding: ViewBinding,
+        binding: _ViewBinding,
         data: bytes | bytearray | memoryview,
         *,
         media_type: str = "application/octet-stream",
         cap: int = 256 * 1024,
-    ) -> dict[str, Any]:
+    ) -> dict[str, _Any]:
         """Return a payload inline when it fits ``cap``, and as a blob when it does not."""
         return self._blobs.inline_or_blob(binding, data, media_type=media_type, cap=cap)
 
     def read_blob(
         self,
-        binding: ViewBinding,
-        raw: Any,
+        binding: _ViewBinding,
+        raw: _Any,
         *,
         offset: int = 0,
         length: int | None = None,
@@ -183,34 +190,34 @@ class _HostAuthorityMixin1:
         """Return ``length`` bytes of ``raw`` from ``offset``, or refuse."""
         return self._blobs.read(binding, raw, offset=offset, length=length)
 
-    def blob_size(self, binding: ViewBinding, raw: Any) -> int:
+    def blob_size(self, binding: _ViewBinding, raw: _Any) -> int:
         """Return the size of ``raw`` without reading it."""
         return self._blobs.size(binding, raw)
 
-    def blob_info(self, binding: ViewBinding, raw: Any) -> BlobRef:
+    def blob_info(self, binding: _ViewBinding, raw: _Any) -> _BlobRef:
         """Return the stored ref (size, media type, checksum) without the bytes."""
         return self._blobs.info(binding, raw)
 
 
 class _HostAuthorityMixin2:
-    def grant_network(self, binding: ViewBinding, grant: NetworkGrant) -> None:
+    def grant_network(self, binding: _ViewBinding, grant: _NetworkGrant) -> None:
         """Give ``binding``'s view ``grant``, replacing any earlier one."""
         self._networks.grant(binding, grant)
 
-    def network_grant(self, binding: ViewBinding) -> NetworkGrant | None:
+    def network_grant(self, binding: _ViewBinding) -> _NetworkGrant | None:
         """The view's grant in this generation, or ``None``."""
         return self._networks.get(binding)
 
-    def require_network(self, binding: ViewBinding) -> NetworkGrant:
+    def require_network(self, binding: _ViewBinding) -> _NetworkGrant:
         """The view's grant, or the refusal a network operation reports."""
         return self._networks.require(binding)
 
-    def revoke_network(self, binding: ViewBinding) -> bool:
+    def revoke_network(self, binding: _ViewBinding) -> bool:
         """Withdraw the view's network grant."""
         return self._networks.revoke(binding)
 
 
-@dataclass
+@_dataclass
 class HostAuthority(_HostAuthorityMixin1, _HostAuthorityMixin2):
     """Mint, resolve and revoke the refs and grants of every view of one host.
 
@@ -220,11 +227,11 @@ class HostAuthority(_HostAuthorityMixin1, _HostAuthorityMixin2):
     blobs, network - and this object is where a host reaches all three.
     """
 
-    clock: Callable[[], float] = time.monotonic
-    token: Callable[[], str] = field(default=lambda: secrets.token_hex(16))
-    _files: _FileGrants = field(init=False, repr=False)
-    _blobs: _BlobGrants = field(init=False, repr=False)
-    _networks: _NetworkGrants = field(init=False, repr=False)
+    clock: _Callable[[], float] = _time.monotonic
+    token: _Callable[[], str] = _field(default=lambda: _secrets.token_hex(16))
+    _files: _FileGrants = _field(init=False, repr=False)
+    _blobs: _BlobGrants = _field(init=False, repr=False)
+    _networks: _NetworkGrants = _field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._files = _FileGrants(self.clock, self.token)

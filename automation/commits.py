@@ -33,14 +33,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_main_p1(_s):
     _s.base_sha = os.environ.get("BASE_SHA", "").strip()
     _s.default_branch = os.environ.get("DEFAULT_BRANCH", "main").strip()

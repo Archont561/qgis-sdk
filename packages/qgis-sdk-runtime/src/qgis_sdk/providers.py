@@ -70,14 +70,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_algorithm_p1(_s):
     validate_given(_s.id, _s.title)
     if _s.group is not None and (not isinstance(_s.group, str) or not _s.group.strip()):
@@ -138,9 +130,6 @@ __all__ = [
 ]
 
 T = TypeVar("T", bound=Callable[..., Any])
-
-_PROVIDERS_ATTRIBUTE = "providers"
-"""Private attribute on a lowered application class."""
 
 
 @dataclass(frozen=True)
@@ -250,35 +239,6 @@ class Provider:
         return ProviderDescription(
             id=self._id, title=self._title, algorithms=tuple(self._described.values())
         )
-
-
-def _declared_providers(plugin_class: type) -> tuple[Provider, ...]:
-    """Return the providers a lowered application class lists, validated.
-
-    ``providers`` is optional; when present it is a list or tuple of
-    :class:`Provider` instances with distinct ids. Anything else is refused
-    naming the class, so a typo (``providers = tools``) fails when the runtime
-    is built rather than registering nothing in silence.
-    """
-    listed = getattr(plugin_class, _PROVIDERS_ATTRIBUTE, None)
-    if listed is None:
-        return ()
-    name = getattr(plugin_class, "__name__", repr(plugin_class))
-    if not isinstance(listed, (list, tuple)) or not all(
-        isinstance(provider, Provider) for provider in listed
-    ):
-        raise QgisSdkDeclarationError(
-            f"{name}.{_PROVIDERS_ATTRIBUTE} must be a list of Provider instances"
-        )
-    seen: dict[str, Provider] = {}
-    for provider in listed:
-        if provider.id in seen:
-            raise QgisSdkDeclarationError(
-                f"{name}.{_PROVIDERS_ATTRIBUTE}: provider id {provider.id!r} is "
-                "listed twice"
-            )
-        seen[provider.id] = provider
-    return tuple(listed)
 
 
 register_predicate_describer(

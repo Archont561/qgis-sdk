@@ -26,14 +26,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_items_pages_p1(_s):
     _s.first = f"{BASE}/collections/sites/items?limit=2&bbox=1%2C2%2C3%2C4"
     _s.second = f"{BASE}/collections/sites/items?limit=2&offset=2"

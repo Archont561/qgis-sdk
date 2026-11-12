@@ -12,11 +12,15 @@ there.
 
 from __future__ import annotations
 
-from qgis_sdk.server import ServerHooks
+from qgis_sdk.server import ServerHooks as _ServerHooks
 
-from .plugin import answer, default_version, no_private_layers
+from .plugin import answer as _answer
+from .plugin import default_version as _default_version
+from .plugin import no_private_layers as _no_private_layers
 
-HOOKS = ServerHooks((default_version, answer, no_private_layers))
+HOOKS = _ServerHooks((_default_version, _answer, _no_private_layers))
+
+__all__ = ["HOOKS", "serverClassFactory"]
 
 
 def serverClassFactory(serverIface):

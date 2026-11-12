@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ._errors import QgisSdkHttpError
-from ._handler import _RequestHandler
+from ._handler import RequestHandler
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from ._endpoint import _Endpoint
+    from ._endpoint import Endpoint
     from ._options import _Capacity
 
 
@@ -21,7 +21,7 @@ class _BoundedHTTPServer(ThreadingHTTPServer):
     """Limit concurrently accepted HTTP handlers without blocking the accept loop."""
 
     def __init__(
-        self, address: tuple[str, int], limit: int, endpoint: _Endpoint
+        self, address: tuple[str, int], limit: int, endpoint: Endpoint
     ) -> None:
         self.endpoint = endpoint
         self._slots = threading.BoundedSemaphore(limit)
@@ -30,7 +30,7 @@ class _BoundedHTTPServer(ThreadingHTTPServer):
         self._idle = threading.Condition(self._connections_lock)
         self._handlers = 0
         self._closing = False
-        super().__init__(address, _RequestHandler)
+        super().__init__(address, RequestHandler)
 
     def process_request(self, request: Any, client_address: Any) -> None:
         if not self._slots.acquire(blocking=False):
@@ -95,11 +95,11 @@ class _BoundedHTTPServer(ThreadingHTTPServer):
         super().server_close()
 
 
-class _Listener:
+class Listener:
     """One bound socket, its accept thread, and the private file that carries the token."""
 
     def __init__(
-        self, endpoint: _Endpoint, token_file: Path, port: int, capacity: _Capacity
+        self, endpoint: Endpoint, token_file: Path, port: int, capacity: _Capacity
     ) -> None:
         self._endpoint = endpoint
         self._path = Path(token_file)

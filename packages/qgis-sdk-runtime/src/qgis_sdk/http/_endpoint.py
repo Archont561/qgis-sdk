@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ._queue import GuiQueue
-    from ._sessions import _Sessions
+    from ._sessions import Sessions
 
 
 @dataclass(frozen=True)
-class _Endpoint:
+class Endpoint:
     """The listener's state as a request handler sees it.
 
     Frozen and built once: a handler reads the queue, the session book, the
@@ -24,7 +24,7 @@ class _Endpoint:
     runtime: Any
     allowed: frozenset[str]
     queue: GuiQueue
-    sessions: _Sessions
+    sessions: Sessions
     token: str
     read_timeout: float
     write_timeout: float

@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from qgis_sdk_tools.generate._contract import HOST_SURFACE, _as_mapping
-from qgis_sdk_tools.generate._generator import _Generator
+from qgis_sdk_tools.generate._generator import Generator
 
 
 def generate_typescript(description: Any) -> str:
     """Render a plugin's module for ``description``."""
     described = _as_mapping(description)
-    generator = _Generator(described)
+    generator = Generator(described)
     return generator.render()
 
 
@@ -38,7 +38,7 @@ def generate_schema_typescript(
     from one file that is only ever regenerated.
     """
     described = _as_mapping(description)
-    return _Generator(described).render_schema(sdk_import=sdk_import)
+    return Generator(described).render_schema(sdk_import=sdk_import)
 
 
 def generate_host_typescript(description: Any = None) -> str:
@@ -48,7 +48,7 @@ def generate_host_typescript(description: Any = None) -> str:
 
         description = host_description()
     described = _as_mapping(description)
-    return _Generator(described, surface=HOST_SURFACE).render()
+    return Generator(described, surface=HOST_SURFACE).render()
 
 
 def check_generated(

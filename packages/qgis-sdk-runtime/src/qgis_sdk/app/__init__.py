@@ -33,12 +33,14 @@ same session with no Qt at all.
 
 from __future__ import annotations
 
-import sys
-from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Any, TypedDict, Unpack
+import sys as _sys
+from collections.abc import Sequence as _Sequence
+from dataclasses import dataclass as _dataclass
+from typing import Any as _Any
+from typing import TypedDict as _TypedDict
+from typing import Unpack as _Unpack
 
-from qgis_sdk.core._application import QgisSdkPlugin
+from qgis_sdk.core._application import QgisSdkPlugin as _QgisSdkPlugin
 from qgis_sdk.core.host import Host
 
 from ._backend import AppBackend, AppSurface
@@ -66,20 +68,12 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_main_p1(_s):
     try:
         _s.options = parse_argv(_s.argv)
     except QgisSdkAppError as error:
         _s.error = error
-        print(f"qgis-sdk app: {_s.error}", file=sys.stderr)
+        print(f"qgis-sdk app: {_s.error}", file=_sys.stderr)
         return _CcReturn(2)
 
 
@@ -99,7 +93,7 @@ def _cc_main_p2(_s):
     except QgisSdkAppError as error:
         _s.error = error
         # A launcher has no traceback to show: the refusal is the whole message.
-        print(f"qgis-sdk app: {_s.error}", file=sys.stderr)
+        print(f"qgis-sdk app: {_s.error}", file=_sys.stderr)
         return _CcReturn(2)
 
 
@@ -119,18 +113,25 @@ __all__ = [
     "run",
 ]
 
-#: The host that is running right now, so ``quit()`` can reach its backend.
-_running: AppSession | None = None
+
+class _RunningSession:
+    """The session running right now, so ``quit()`` can reach its backend."""
+
+    def __init__(self) -> None:
+        self.session: AppSession | None = None
 
 
-def run(app: QgisSdkPlugin, **options: Unpack[_RunOptions1]) -> int:
+_running = _RunningSession()
+
+
+def run(app: _QgisSdkPlugin, **options: _Unpack[_RunOptions1]) -> int:
     "Run ``app`` as a standalone PyQGIS application; return the exit code.\n\n    ``argv`` is what the toolkit sees (``sys.argv[1:]`` from a launcher);\n    ``gui`` opens the window and with it ``ctx.ui`` and the Desktop-style\n    bindings; ``grace`` bounds the wait for running jobs at shutdown;\n    ``once`` starts the app, delivers what is already queued and stops instead\n    of running the event loop (``qgis-sdk run --once``). ``backend`` is the\n    toolkit seam: left out, the Qt one in :mod:`qgis_sdk.adapters.app` is built,\n    which is the only import here that needs QGIS.\n"
     values = _RunValues1(**options)
-    global _running
-    if _running is not None:
+    if _running.session is not None:
         raise QgisSdkAppError(
-            f"{_running!r} is still running; a process hosts one application at "
-            "a time (a standalone app is the top level, not a plugin inside one)"
+            f"{_running.session!r} is still running; a process hosts one "
+            "application at a time (a standalone app is the top level, not a "
+            "plugin inside one)"
         )
     chosen = values.backend if values.backend is not None else _qt_backend()
     session = AppSession(
@@ -141,16 +142,16 @@ def run(app: QgisSdkPlugin, **options: Unpack[_RunOptions1]) -> int:
         grace=values.grace,
         title=values.title,
     )
-    _running = session
+    _running.session = session
     try:
         return session.run(once=values.once)
     finally:
-        _running = None
+        _running.session = None
 
 
 def main(
-    app: QgisSdkPlugin,
-    argv: Sequence[str] | None = None,
+    app: _QgisSdkPlugin,
+    argv: _Sequence[str] | None = None,
     *,
     backend: AppBackend | None = None,
 ) -> int:
@@ -177,12 +178,12 @@ def quit() -> None:
     batch that has nothing left to do. Called with no app running it refuses by
     name rather than reaching for a Qt singleton that may belong to someone else.
     """
-    if _running is None:
+    if _running.session is None:
         raise QgisSdkAppError(
             "no application host is running; `qgis_sdk.app.quit()` is for a "
             "plugin inside `qgis_sdk.app.run()`, not for a QGIS Desktop session"
         )
-    _running.quit()
+    _running.session.quit()
 
 
 def _qt_backend() -> AppBackend:
@@ -192,24 +193,24 @@ def _qt_backend() -> AppBackend:
     return QtAppBackend()
 
 
-def current() -> Any:
+def current() -> _Any:
     """The session ``run()`` is driving, for tests and for a host's own tooling."""
-    return _running
+    return _running.session
 
 
-class _RunOptions1(TypedDict, total=False):
+class _RunOptions1(_TypedDict, total=False):
     gui: bool
-    argv: Sequence[str] | None
+    argv: _Sequence[str] | None
     grace: float
     once: bool
     backend: AppBackend | None
     title: str | None
 
 
-@dataclass(frozen=True, slots=True)
+@_dataclass(frozen=True, slots=True)
 class _RunValues1:
     gui: bool = False
-    argv: Sequence[str] | None = None
+    argv: _Sequence[str] | None = None
     grace: float = GRACE_SECONDS
     once: bool = False
     backend: AppBackend | None = None

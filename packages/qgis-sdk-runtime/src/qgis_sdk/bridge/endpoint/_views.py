@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from qgis_sdk.bridge.endpoint._refusals import refuse
-from qgis_sdk.bridge.endpoint._registry import _Registry
+from qgis_sdk.bridge.endpoint._registry import Registry
 from qgis_sdk.bridge.endpoint._types import (
     Authorizer,
     ThemeProvider,
@@ -27,7 +27,7 @@ _STALE = "This view belongs to a runtime generation that no longer exists"
 _NOT_AUTHORIZED = "This view is not authorized for that operation"
 
 
-class _Views:
+class Views:
     """Every view the host has bound, and what each of them may do.
 
     A binding is minted here and never read from a payload; the generation it
@@ -44,7 +44,7 @@ class _Views:
         description: Mapping[str, Any] | None,
         authorize: Authorizer | None,
         theme: ThemeProvider | None,
-        registry: _Registry,
+        registry: Registry,
     ) -> None:
         self._description = None if description is None else to_wire(description)
         self._authorize = authorize

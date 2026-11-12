@@ -15,9 +15,9 @@ from ._queue import QgisSdkHostBusyError, QgisSdkHostReloadedError
 from ._stream import pump
 
 if TYPE_CHECKING:  # pragma: no cover - typing only; the handler imports these routes
-    from ._endpoint import _Endpoint
-    from ._handler import _RequestHandler
-    from ._sessions import _Session, _Sessions
+    from ._endpoint import Endpoint
+    from ._handler import RequestHandler
+    from ._sessions import Sessions, _Session
 
 
 class QgisSdkRefusal(Exception):
@@ -32,7 +32,7 @@ class QgisSdkRefusal(Exception):
 class _Subscription:
     """One open event stream: the session it writes into, and the id that disposes it."""
 
-    sessions: _Sessions
+    sessions: Sessions
     session_id: str
     session: _Session
 
@@ -42,7 +42,7 @@ class _Subscription:
         self.sessions.dispose_later(self.session_id)
 
 
-def call_action(handler: _RequestHandler) -> None:
+def call_action(handler: RequestHandler) -> None:
     """Answer one ``/actions/<id>`` request with the operation's result."""
     endpoint = handler.endpoint
     action = _named(handler.path, endpoint.runtime.actions, endpoint.allowed)
@@ -60,7 +60,7 @@ def call_action(handler: _RequestHandler) -> None:
     handler.answer(200 if "value" in result else error_status(result), result)
 
 
-def open_stream(handler: _RequestHandler) -> None:
+def open_stream(handler: RequestHandler) -> None:
     """Answer one ``/streams/<id>`` request by following the stream until it ends."""
     endpoint = handler.endpoint
     stream_id = _named(handler.path, endpoint.runtime.streams, endpoint.allowed)
@@ -79,7 +79,7 @@ def open_stream(handler: _RequestHandler) -> None:
         endpoint.event_slots.release()
 
 
-def _served(handler: _RequestHandler, stream_id: str, payload: dict[str, Any]) -> None:
+def _served(handler: RequestHandler, stream_id: str, payload: dict[str, Any]) -> None:
     """Subscribe the stream and pump it, or answer with why it could not start."""
     try:
         _follow(handler, _subscribed(handler.endpoint, stream_id, payload))
@@ -91,7 +91,7 @@ def _served(handler: _RequestHandler, stream_id: str, payload: dict[str, Any]) -
         pass  # the page went away; the session is disposed either way
 
 
-def _follow(handler: _RequestHandler, subscription: _Subscription) -> None:
+def _follow(handler: RequestHandler, subscription: _Subscription) -> None:
     """Pump one subscription and dispose it whichever way the pump ends."""
     try:
         pump(handler, subscription)
@@ -100,7 +100,7 @@ def _follow(handler: _RequestHandler, subscription: _Subscription) -> None:
 
 
 def _dispatched(
-    endpoint: _Endpoint, action: str, payload: dict[str, Any]
+    endpoint: Endpoint, action: str, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Run one call on the owner thread, disposing its session whichever way it ends."""
     capacity = endpoint.sessions.capacity_error()
@@ -132,14 +132,14 @@ def _reply(session: _Session, action: str, payload: dict[str, Any]) -> dict[str,
 
 
 def _subscribed(
-    endpoint: _Endpoint, stream_id: str, payload: dict[str, Any]
+    endpoint: Endpoint, stream_id: str, payload: dict[str, Any]
 ) -> _Subscription:
     """Start one subscription in the owner's turn, or refuse it there."""
     return endpoint.queue.call(lambda: _started(endpoint, stream_id, payload))
 
 
 def _started(
-    endpoint: _Endpoint, stream_id: str, payload: dict[str, Any]
+    endpoint: Endpoint, stream_id: str, payload: dict[str, Any]
 ) -> _Subscription:
     """Open the session and subscribe it; a refusal disposes the session it opened."""
     capacity = endpoint.sessions.capacity_error()

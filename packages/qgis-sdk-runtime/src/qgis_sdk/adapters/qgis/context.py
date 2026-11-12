@@ -138,14 +138,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_native_plugin_co_p1(_s):
     _s.scope.ensure_open()
     # The raster adapter is built first and the vector one holds it: a raster is

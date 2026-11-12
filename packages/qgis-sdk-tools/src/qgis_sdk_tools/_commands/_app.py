@@ -31,13 +31,13 @@ app.add_typer(processing_app, name="processing")
 
 
 @app.callback()
-def _callback(ctx: typer.Context) -> None:
+def callback(ctx: typer.Context) -> None:
     """Keep ``new`` a subcommand, and give every command its runtime."""
     if ctx.obj is None:
         ctx.obj = CliRuntime.for_process()
 
 
-def _install(
+def install(
     runtime: CliRuntime, options: ScaffoldOptions, target: Path, root: Path
 ) -> None:
     """Run the manager's install in web/; on failure keep every file and say how to retry."""

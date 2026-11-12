@@ -20,8 +20,8 @@ from qgis_sdk.algorithms import AlgorithmDescription, invoke
 from qgis_sdk.core import AlgorithmContext, AlgorithmServices, ResourceScope
 from qgis_sdk.models import output_kinds
 
-from ._feedback import _FeedbackCancellation, _FeedbackProgress
-from ._parameters import _parameter
+from ._feedback import FeedbackCancellation, FeedbackProgress
+from ._parameters import parameter
 from ._publish import _Run, published
 from ._tables import (
     _DESTINATION_CLASSES,
@@ -70,7 +70,7 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
     def _add_inputs(self) -> None:
         for name, kind in self._description.kinds.items():
             self.addParameter(
-                _parameter(kind, name, self._description.annotations[name])
+                parameter(kind, name, self._description.annotations[name])
             )
 
     def _add_output(self) -> None:
@@ -131,8 +131,8 @@ class _BridgeAlgorithm(QgsProcessingAlgorithm):
         return invoke(
             self._bridge.function_for(self._description.id),
             AlgorithmContext(
-                progress=_FeedbackProgress(feedback),
-                cancellation=_FeedbackCancellation(feedback),
+                progress=FeedbackProgress(feedback),
+                cancellation=FeedbackCancellation(feedback),
                 scope=scope,
                 services=AlgorithmServices(
                     algorithms=self._bridge.algorithm_service,

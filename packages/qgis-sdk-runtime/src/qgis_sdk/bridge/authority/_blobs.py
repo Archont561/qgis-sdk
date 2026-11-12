@@ -18,7 +18,7 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.models.blobs import BLOB_REF_KIND, BlobRef
 
-from ._grants import _BlobGrant, _Table
+from ._grants import BlobGrant, Table
 
 #: How many blobs one view may hold at once. A page that keeps minting them is
 #: a page that is not releasing them, and the host's memory is not its to fill.
@@ -39,15 +39,15 @@ DEFAULT_MEDIA_TYPE = "application/octet-stream"
 
 
 @dataclass
-class _BlobGrants:
+class BlobGrants:
     """Keep, describe and hand out the blobs of every view of one host."""
 
     clock: Callable[[], float]
     token: Callable[[], str]
-    table: _Table = field(init=False)
+    table: Table = field(init=False)
 
     def __post_init__(self) -> None:
-        self.table = _Table(self.clock)
+        self.table = Table(self.clock)
 
     def mint(
         self,
@@ -157,7 +157,7 @@ class _BlobGrants:
                 "blobs; they are released with the view"
             )
 
-    def _lookup(self, binding: ViewBinding, raw: Any) -> _BlobGrant:
+    def _lookup(self, binding: ViewBinding, raw: Any) -> BlobGrant:
         """The blob ``raw`` names for ``binding``, or the refusal it deserves."""
         ref_id = raw.get("id") if isinstance(raw, Mapping) else None
         if not isinstance(raw, Mapping) or raw.get("kind") != BLOB_REF_KIND:
@@ -174,7 +174,7 @@ class _BlobGrants:
         self._refuse_expired(grant, ref_id)
         return grant
 
-    def _refuse_expired(self, grant: _BlobGrant, ref_id: str) -> None:
+    def _refuse_expired(self, grant: BlobGrant, ref_id: str) -> None:
         """Drop and refuse a blob whose lifetime has run out."""
         if grant.expires_at is not None and self.clock() >= grant.expires_at:
             self.table.drop(ref_id)
@@ -212,9 +212,9 @@ def _grant_for(
     payload: bytes,
     ttl_seconds: float | None,
     clock: Callable[[], float],
-) -> _BlobGrant:
+) -> BlobGrant:
     """The host's side of ``ref``: the bytes, and when they stop being servable."""
-    return _BlobGrant(
+    return BlobGrant(
         ref=ref,
         view_id=binding.view_id,
         generation=binding.generation,

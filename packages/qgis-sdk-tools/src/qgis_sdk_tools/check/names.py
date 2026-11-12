@@ -26,14 +26,6 @@ class _CcReturn:
         _cc_self.value = value
 
 
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_bind_p1(_s):
     for alias in _s.node.names:
         _s.alias = alias

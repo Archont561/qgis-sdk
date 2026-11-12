@@ -384,14 +384,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_native_services_p1(_s1):
     # The session's application, started here if no module asked before.
     test_layers.start_application()
@@ -799,14 +791,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_fake_services_p1(_s):
@@ -1906,7 +1890,7 @@ def services(request: pytest.FixtureRequest) -> Services:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _remove_native_outputs_after_the_session() -> object:
+def remove_native_outputs_after_the_session() -> object:
     """Remove the native backend's temporary outputs; QGIS itself is stopped
     by the session fixture in ``tests/conftest.py``."""
     yield

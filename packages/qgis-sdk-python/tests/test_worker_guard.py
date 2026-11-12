@@ -58,7 +58,7 @@ class ControlledCancellation:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_reports() -> Any:
+def fresh_reports() -> Any:
     """Start every test with no capability reported as read off its thread."""
     _reported_cross_thread.clear()
     yield

@@ -36,14 +36,6 @@ class _CcReturn2:
         _cc_self.value = value
 
 
-class _CcBreak2:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue2:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_packaged_as_p1(_s2):
     _s2.root = _s2.tmp_path / "assets"
     _s2.root.mkdir()
@@ -126,14 +118,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_test_a_navigatio_p1(_s1):
     _s1.allowed.page("/start", "<html><body>start</body></html>")
     _s1.allowed.page("/second", "<html><body>second</body></html>")
@@ -189,14 +173,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_test_a_page_cann_p1(_s):

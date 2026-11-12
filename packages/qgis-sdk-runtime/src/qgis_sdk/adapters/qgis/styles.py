@@ -97,14 +97,6 @@ class _CcReturn1:
         _cc_self.value = value
 
 
-class _CcBreak1:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue1:
-    """A loop continue travelling out of a phase."""
-
-
 def _cc_build_renderer_p1(_s1):
     if isinstance(_s1.renderer, SingleSymbolRenderer):
         return _CcReturn1(QgsSingleSymbolRenderer(_build_symbol(_s1.renderer.symbol)))
@@ -161,14 +153,6 @@ class _CcReturn:
 
     def __init__(_cc_self, value):
         _cc_self.value = value
-
-
-class _CcBreak:
-    """A loop break travelling out of a phase."""
-
-
-class _CcContinue:
-    """A loop continue travelling out of a phase."""
 
 
 def _cc_describe_rendere_p1(_s):

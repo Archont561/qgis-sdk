@@ -48,8 +48,8 @@ from qgis_sdk.services.layouts import (
     LayoutBackend,
     NullCancellation,
     NullProgress,
-    _check_pattern,
-    _slug,
+    check_pattern,
+    slug,
 )
 
 __all__ = [
@@ -215,7 +215,7 @@ class LayoutService:
             )
         overwrite = values.overwrite
         if values.destination is None:
-            path = self._free_path(f"{_slug(layout)}{LAYOUT_FORMATS[values.format]}")
+            path = self._free_path(f"{slug(layout)}{LAYOUT_FORMATS[values.format]}")
             overwrite = False
         else:
             path = self._path(values.destination, "write")
@@ -231,7 +231,7 @@ class LayoutService:
         """Build the plain atlas request, with the pattern already checked."""
         _check_format(values.format)
         if values.directory is None:
-            target = self._working_directory / _slug(layout)
+            target = self._working_directory / slug(layout)
         else:
             target = self._path(values.directory, "write")
         target.mkdir(parents=True, exist_ok=True)
@@ -239,7 +239,7 @@ class LayoutService:
             layout=layout,
             format=values.format,
             directory=str(target),
-            pattern=_check_pattern(values.pattern or "page-{index:03d}"),
+            pattern=check_pattern(values.pattern or "page-{index:03d}"),
             settings=values.settings or LayoutSettings(),
             overwrite=values.overwrite,
         )
