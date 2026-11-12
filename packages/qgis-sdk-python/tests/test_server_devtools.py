@@ -15,6 +15,8 @@ and hands the objects QGIS holds the new hook set.
 
 from __future__ import annotations
 
+import http.client
+import threading
 import types
 from pathlib import Path
 from typing import Any
@@ -37,6 +39,7 @@ from qgis_sdk_tools.devtools.serverdev import (
     Answer,
     ServerLoop,
     ServerReloadHost,
+    _QueryOptions,
     hooks_of,
     query_server,
 )
@@ -284,7 +287,11 @@ def test_a_request_is_buffered_in_and_out() -> None:
     server = FakeServer()
 
     answer = query_server(
-        bindings(), server, "POST", "http://127.0.0.1:8080/?SERVICE=WMS", None, b"x=1"
+        bindings(),
+        server,
+        "POST",
+        "http://127.0.0.1:8080/?SERVICE=WMS",
+        options=_QueryOptions(body=b"x=1"),
     )
 
     assert answer.status == 200
@@ -353,20 +360,8 @@ def test_the_tick_gives_the_event_loop_and_the_watcher_a_turn() -> None:
     assert polled == [1]
 
 
-def test_the_origin_is_the_loopback_address_it_bound() -> None:
-    host, _interface = host_over(plugin_module(chain("first")))
-
-    assert loop_over(host).origin == "http://127.0.0.1:8080"
-
-
-def test_a_bound_loop_answers_one_real_http_request() -> None:
-    """The `http.server` wrapper: a real socket, the buffered answer written out."""
-    import http.client
-    import threading
-
-    host, _interface = host_over(plugin_module(chain("first")))
-    host.load("demo")
-    loop = loop_over(host)
+def _http_roundtrip(loop):
+    """Serve exactly one request on a real socket; return its status and body."""
     origin = loop.bind()
     port = int(origin.rsplit(":", 1)[1])
     serving = threading.Thread(
@@ -382,8 +377,21 @@ def test_a_bound_loop_answers_one_real_http_request() -> None:
     finally:
         serving.join(timeout=10)
         loop.close()
+    return response.status, body
 
-    assert response.status == 200
+
+def test_the_origin_is_the_loopback_address_it_bound() -> None:
+    host, _interface = host_over(plugin_module(chain("first")))
+
+    assert loop_over(host).origin == "http://127.0.0.1:8080"
+
+
+def test_a_bound_loop_answers_one_real_http_request() -> None:
+    """The `http.server` wrapper: a real socket, the buffered answer written out."""
+    host, _interface = host_over(plugin_module(chain("first")))
+    host.load("demo")
+    status, body = _http_roundtrip(loop_over(host))
+    assert status == 200
     assert body == b"served GET http://127.0.0.1:8080/?SERVICE=SDKDEMO"
 
 
@@ -396,9 +404,6 @@ class RaisingServer(FakeServer):
 
 def test_a_request_that_raises_answers_500_with_the_traceback() -> None:
     """A plugin bug is reported, not turned into a bare ``500`` by ``http.server``."""
-    import http.client
-    import threading
-
     host, _interface = host_over(plugin_module(chain("first")))
     host.load("demo")
     said: list[str] = []
@@ -410,23 +415,8 @@ def test_a_request_that_raises_answers_500_with_the_traceback() -> None:
         port=0,
         say=said.append,
     )
-    origin = loop.bind()
-    port = int(origin.rsplit(":", 1)[1])
-    serving = threading.Thread(
-        target=loop.serve_forever, kwargs={"max_requests": 1}, daemon=True
-    )
-    serving.start()
-    try:
-        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-        connection.request("GET", "/?SERVICE=SDKDEMO")
-        response = connection.getresponse()
-        body = response.read()
-        connection.close()
-    finally:
-        serving.join(timeout=10)
-        loop.close()
-
-    assert response.status == 500
+    status, body = _http_roundtrip(loop)
+    assert status == 500
     assert body.startswith(b"qgis-sdk dev: the request failed")
     _a_request_that_raises_phase1(body, said)
 

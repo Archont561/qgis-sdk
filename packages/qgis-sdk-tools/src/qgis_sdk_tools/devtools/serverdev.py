@@ -45,7 +45,7 @@ from qgis_sdk.server import ServerHooks
 from .reloader import WATCH_INTERVAL_MS, ReloadCoordinator, SourceWatcher
 
 
-def _query_server_facts1(project, request, response, server):
+def _buffer_answer(project, request, response, server):
     server.handleRequest(request, response, project)
     return Answer(
         status=int(response.statusCode()),
@@ -54,7 +54,7 @@ def _query_server_facts1(project, request, response, server):
     )
 
 
-def _init_facts1(poll_seconds, process_events, project, self):
+def _init_loop(poll_seconds, process_events, project, self):
     self._poll_seconds = poll_seconds
     self._process_events = process_events
     self._project_factory = project
@@ -63,16 +63,16 @@ def _init_facts1(poll_seconds, process_events, project, self):
     self._stopping = False
 
 
-def _bootstrap_server_phase2(application, loop, origin, plugin, say):
+def _announce_server(application, loop, origin, plugin, say):
     say(f"server: {plugin} answering on {origin}")
     say(
         "server: add MAP=/path/to/project.qgs to the query string for a project, "
         "or a @server.service hook that answers its own SERVICE"
     )
-    return _bootstrap_server_phase1(application, loop, say)
+    return _serve(application, loop, say)
 
 
-def _bootstrap_server_phase1(application, loop, say):
+def _serve(application, loop, say):
     say("server: Ctrl+C stops it; a saved Python change reloads the plugin")
     try:
         loop.serve_forever()
@@ -235,35 +235,43 @@ class ServerReloadHost:
         self._say(f"{reason}")
 
 
+@dataclass(frozen=True, slots=True)
+class _QueryOptions:
+    """The optional parts of one buffered server request."""
+
+    headers: Mapping[str, str] | None = None
+    body: bytes = b""
+    project: Any = None
+
+
 def query_server(
     bindings: Any,
     server: Any,
     method: str,
     url: str,
-    headers: Mapping[str, str] | None = None,
-    body: bytes = b"",
-    project: Any = None,
+    *,
+    options: _QueryOptions | None = None,
 ) -> Answer:
     """One request through ``QgsServer.handleRequest``: buffer in, buffer out.
 
     ``bindings`` is the ``qgis.server`` module and ``server`` a ``QgsServer``
     instance; both are parameters so the translation can be checked with the
-    stand-ins ``tests/qgis_server_support.py`` provides.
-
-    ``project`` is QGIS's own split: ``None`` makes the server load the file the
-    request names in ``MAP``, and a project object is served as it stands. The
-    dispatcher refuses every ``SERVICE`` without one, a plugin's own service
-    included, which is why the loop passes an empty project when a request names
-    no ``MAP``.
+    stand-ins ``tests/qgis_server_support.py`` provides. ``options.project`` is
+    QGIS's own split: ``None`` loads the file the request names in ``MAP``, and
+    a project object is served as it stands. The dispatcher refuses every
+    ``SERVICE`` without one, a plugin's own service included.
     """
+    values = options or _QueryOptions()
     verb = (
         bindings.QgsServerRequest.PostMethod
         if method.upper() == "POST"
         else bindings.QgsServerRequest.GetMethod
     )
-    request = bindings.QgsBufferServerRequest(url, verb, dict(headers or {}), body)
+    request = bindings.QgsBufferServerRequest(
+        url, verb, dict(values.headers or {}), values.body
+    )
     response = bindings.QgsBufferServerResponse()
-    return _query_server_facts1(project, request, response, server)
+    return _buffer_answer(values.project, request, response, server)
 
 
 def _handler_for(loop: ServerLoop) -> type[BaseHTTPRequestHandler]:
@@ -303,13 +311,22 @@ class ServerLoop:
         self._watcher = values.watcher
         self._coordinator = values.coordinator
         self._clock = values.clock
-        _init_facts1(values.poll_seconds, values.process_events, values.project, self)
+        _init_loop(values.poll_seconds, values.process_events, values.project, self)
 
     @property
     def origin(self) -> str:
         return f"http://{LOOPBACK}:{self._port}"
 
     # -- one request ---------------------------------------------------------------
+
+    def _disabled_answer(self) -> Answer:
+        """The 503 a disabled plugin answers, with the refusal reason."""
+        reason = f"reason: {self._host.reason}\n".encode() if self._host.reason else b""
+        return Answer(
+            DISABLED_STATUS,
+            {"Content-Type": "text/plain; charset=utf-8"},
+            DISABLED_BODY + reason,
+        )
 
     def answer_request(
         self,
@@ -320,24 +337,18 @@ class ServerLoop:
     ) -> Answer:
         """Answer one request, or say the plugin is disabled."""
         if not self._host.running(self._plugin):
-            return Answer(
-                DISABLED_STATUS,
-                {"Content-Type": "text/plain; charset=utf-8"},
-                DISABLED_BODY
-                + (
-                    f"reason: {self._host.reason}\n".encode()
-                    if self._host.reason
-                    else b""
-                ),
-            )
+            return self._disabled_answer()
+        options = _QueryOptions(
+            headers=headers,
+            body=body,
+            project=None if _names_a_map(path) else self.empty_project(),
+        )
         return query_server(
             self._bindings,
             self._server,
             method,
             f"{self.origin}{path}",
-            headers,
-            body,
-            None if _names_a_map(path) else self.empty_project(),
+            options=options,
         )
 
     def empty_project(self) -> Any:
@@ -441,63 +452,120 @@ class ServerLoop:
         self._say(f"server: {message}")
 
 
-def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
-    """Start a real QGIS Server in this process and serve the source plugin.
+@dataclass(frozen=True, slots=True)
+class _ServerFacts:
+    """The request's root, plugin, host path, port and reload policy."""
 
-    Called by the probe ``plan_dev`` writes, with the request it wrote: a
-    headless ``QgsApplication``, one ``QgsServer``, the plugin loaded through its
-    generated package, and the reload watcher armed unless ``watch`` is off.
-    """
+    root: Path
+    plugin: str
+    host_root: Path
+    port: int
+    watch: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _ServerWiring:
+    """Everything the running loop is assembled from."""
+
+    facts: _ServerFacts
+    application: Any
+    bindings: Any
+    server: Any
+    host: Any
+    coordinator: Any
+    watcher: Any
+    say: Any
+
+
+def _server_facts(request: Mapping[str, object]) -> _ServerFacts:
+    """Read the four fields the probe wrote, plus the optional watch flag."""
+    return _ServerFacts(
+        root=Path(str(request["root"])),
+        plugin=str(request["plugin"]),
+        host_root=Path(str(request["host"])),
+        port=int(str(request["port"])),
+        watch=bool(request.get("watch", True)),
+    )
+
+
+def _qgis_application():
+    """Start a headless QgsApplication with the prefix the probe declared."""
     import os
 
     from qgis.core import QgsApplication
 
-    from .bootstrap import say
-
-    root = Path(str(request["root"]))
-    plugin = str(request["plugin"])
-    host_root = Path(str(request["host"]))
-    port = int(str(request["port"]))
-    sys.path.insert(0, str(host_root))
     prefix = os.environ.get("QGIS_PREFIX_PATH")
     if prefix:
         QgsApplication.setPrefixPath(prefix, True)
     application = QgsApplication([b"qgis-sdk-dev"], False)
     application.initQgis()
-    bindings = importlib.import_module("qgis.server")
-    server = bindings.QgsServer()
-    host = ServerReloadHost(server.serverInterface(), say=say)
-    coordinator = ReloadCoordinator(
-        root=root,
-        plugin=plugin,
+    return application
+
+
+def _server_coordinator(facts: _ServerFacts, host, say, application):
+    """The reload coordinator; one change, one reload, no editor bursts."""
+    return ReloadCoordinator(
+        root=facts.root,
+        plugin=facts.plugin,
         host=host,
         say=say,
         notify=lambda _level, text: say(text),
-        schedule=None,  # one change, one reload: no editor bursts on a server
+        schedule=None,
         pump=application.processEvents,
     )
+
+
+def _start_server(request: Mapping[str, object], say) -> _ServerWiring:
+    """Build the application, server, reload host, coordinator and watcher."""
+    facts = _server_facts(request)
+    sys.path.insert(0, str(facts.host_root))
+    application = _qgis_application()
+    bindings = importlib.import_module("qgis.server")
+    server = bindings.QgsServer()
+    host = ServerReloadHost(server.serverInterface(), say=say)
+    coordinator = _server_coordinator(facts, host, say, application)
     started = coordinator.start()
-    watcher = None
-    if started and request.get("watch", True):
-        # The coordinator's `request()` reloads at once when it has no timer:
-        # a server has no editor to debounce, and the watcher already polls.
-        watcher = SourceWatcher(root, plugin, on_change=coordinator.request)
+    watcher = (
+        SourceWatcher(facts.root, facts.plugin, on_change=coordinator.request)
+        if started and facts.watch
+        else None
+    )
+    return _ServerWiring(
+        facts, application, bindings, server, host, coordinator, watcher, say
+    )
+
+
+def _server_loop(wiring: _ServerWiring) -> ServerLoop:
+    """Assemble the HTTP loop over a real QgsServer."""
     from qgis.core import QgsProject
 
-    loop = ServerLoop(
-        bindings=bindings,
-        server=server,
-        host=host,
-        plugin=plugin,
-        port=port,
+    say = wiring.say
+    return ServerLoop(
+        bindings=wiring.bindings,
+        server=wiring.server,
+        host=wiring.host,
+        plugin=wiring.facts.plugin,
+        port=wiring.facts.port,
         project=QgsProject,
         say=lambda message: say(f"server: {message}"),
-        watcher=watcher,
-        coordinator=coordinator,
-        process_events=application.processEvents,
+        watcher=wiring.watcher,
+        coordinator=wiring.coordinator,
+        process_events=wiring.application.processEvents,
     )
-    origin = loop.bind()
-    return _bootstrap_server_phase2(application, loop, origin, plugin, say)
+
+
+def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
+    """Start a real QGIS Server in this process and serve the source plugin.
+
+    Called by the probe ``plan_dev`` writes, with the request it wrote: a
+    headless ``QgsApplication``, one ``QgsServer``, the plugin loaded through
+    its generated package, and the reload watcher armed unless ``watch`` is off.
+    """
+    from .bootstrap import say
+
+    wiring = _start_server(request, say)
+    loop = _server_loop(wiring)
+    return _serve(wiring.application, loop, wiring.facts.plugin, say)
 
 
 def _names_a_map(path: str) -> bool:

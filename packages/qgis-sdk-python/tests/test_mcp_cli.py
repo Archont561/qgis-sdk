@@ -47,13 +47,118 @@ def test_regular_cli_import_does_not_eagerly_import_mcp(tmp_path: Path):
     assert result.returncode == 0, result.stderr
 
 
+EXPECTED_TOOLS = {
+    "qgis_sdk_new",
+    "qgis_sdk_scaffold",
+    "qgis_sdk_bridge_generate",
+    "qgis_sdk_processing_generate",
+    "qgis_sdk_check",
+    "qgis_sdk_build",
+    "qgis_sdk_test",
+    "qgis_sdk_dev",
+    "qgis_sdk_run",
+    "qgis_sdk_targets",
+    "qgis_sdk_ui_list",
+    "qgis_sdk_ui_open",
+    "qgis_sdk_ui_snapshot",
+    "qgis_sdk_ui_act",
+    "qgis_sdk_ui_diff",
+}
+
+
+def _mcp_command(env, tmp_path: Path):
+    """The stdio server parameters: the installed CLI, else the module entry."""
+    import os
+
+    from mcp.client.stdio import StdioServerParameters
+
+    executable = Path(sys.executable).parent / (
+        "qgis-sdk.exe" if os.name == "nt" else "qgis-sdk"
+    )
+    command = str(executable) if executable.is_file() else sys.executable
+    prefix = [] if executable.is_file() else ["-m", "qgis_sdk_tools"]
+    return StdioServerParameters(
+        command=command,
+        args=[*prefix, "mcp", "--project", str(tmp_path)],
+        env=env,
+    )
+
+
+def _cli_tool_names() -> set[str]:
+    """Every CLI command adapted to MCP, minus the two intentionally not."""
+    import typer
+
+    cli = typer.main.get_command(app)
+    names = set()
+    for name, item in cli.commands.items():
+        # Plugin REST access is intentionally not adapted to MCP.
+        if name in {"mcp", "plugin"}:
+            continue
+        if hasattr(item, "commands"):
+            names.update(f"qgis_sdk_{name}_{child}" for child in item.commands)
+        else:
+            names.add(f"qgis_sdk_{name}")
+    return names
+
+
+async def _assert_tool_inventory(client, tools) -> None:
+    """The tool inventory stays aligned when the CLI adds a command."""
+    assert EXPECTED_TOOLS == _cli_tool_names()
+    assert EXPECTED_TOOLS <= tools
+    for command in EXPECTED_TOOLS - {"qgis_sdk_dev"}:
+        result = await client.call_tool(command, {"args": ["--help"]})
+        assert not result.is_error, (command, result)
+        assert result.structured_content["exit_code"] == 0
+
+
+async def _exercise_cli_commands(client, tmp_path: Path) -> None:
+    """Scaffold, refuse a bad check, and read the targets as JSON."""
+    result = await client.call_tool("qgis_sdk_new", {"args": ["demo", "--no-input"]})
+    assert not result.is_error
+    assert result.structured_content["exit_code"] == 0
+    assert (tmp_path / "demo" / "pyproject.toml").is_file()
+    result = await client.call_tool("qgis_sdk_check", {"args": ["missing"]})
+    assert result.structured_content["exit_code"] != 0
+    result = await client.call_tool("qgis_sdk_targets", {"args": ["--json"]})
+    assert result.structured_content["exit_code"] == 0
+    assert '"targets"' in result.structured_content["stdout"]
+
+
+async def _exercise_dev_session(client, anyio) -> str:
+    """Start a dev session, wait for it, and return its id."""
+    started = await client.call_tool("qgis_sdk_dev", {"args": ["--help"]})
+    assert not started.is_error
+    session_id = started.structured_content["session_id"]
+    with anyio.fail_after(10):
+        while True:
+            status = await client.call_tool(
+                "qgis_sdk_dev_status", {"session_id": session_id}
+            )
+            if not status.structured_content["running"]:
+                break
+            await anyio.sleep(0.05)
+    assert status.structured_content["exit_code"] == 0
+    # Help rendering varies with terminal width; the session lifecycle is what
+    # this test verifies, so only require captured output.
+    assert status.structured_content["stdout"]
+    return session_id
+
+
+async def _stop_dev_session(client, session_id: str) -> None:
+    """Stop the session; asking for its status afterwards is an error."""
+    stopped = await client.call_tool("qgis_sdk_dev_stop", {"session_id": session_id})
+    assert not stopped.is_error
+    missing = await client.call_tool("qgis_sdk_dev_status", {"session_id": session_id})
+    assert missing.is_error
+
+
 def test_stdio_server_exposes_and_runs_cli_commands(tmp_path: Path):
     import os
 
     pytest.importorskip("mcp")
     import anyio
     from mcp import ClientSession
-    from mcp.client.stdio import StdioServerParameters, stdio_client
+    from mcp.client.stdio import stdio_client
     from qgis_sdk import __file__ as runtime_file
     from qgis_sdk_tools import __file__ as tools_file
 
@@ -63,94 +168,17 @@ def test_stdio_server_exposes_and_runs_cli_commands(tmp_path: Path):
     )
 
     async def exercise():
-        executable = Path(sys.executable).parent / (
-            "qgis-sdk.exe" if os.name == "nt" else "qgis-sdk"
-        )
-        command = str(executable) if executable.is_file() else sys.executable
-        prefix = [] if executable.is_file() else ["-m", "qgis_sdk_tools"]
-        params = StdioServerParameters(
-            command=command,
-            args=[*prefix, "mcp", "--project", str(tmp_path)],
-            env=env,
-        )
+        params = _mcp_command(env, tmp_path)
         async with (
             stdio_client(params) as (read, write),
             ClientSession(read, write) as client,
         ):
             await client.initialize()
             tools = {tool.name for tool in (await client.list_tools()).tools}
-            commands = {
-                "qgis_sdk_new",
-                "qgis_sdk_scaffold",
-                "qgis_sdk_bridge_generate",
-                "qgis_sdk_processing_generate",
-                "qgis_sdk_check",
-                "qgis_sdk_build",
-                "qgis_sdk_test",
-                "qgis_sdk_dev",
-                "qgis_sdk_run",
-                "qgis_sdk_targets",
-                "qgis_sdk_ui_list",
-                "qgis_sdk_ui_open",
-                "qgis_sdk_ui_snapshot",
-                "qgis_sdk_ui_act",
-                "qgis_sdk_ui_diff",
-            }
-            # The tool inventory stays aligned when the CLI adds a command.
-            import typer
-
-            cli = typer.main.get_command(app)
-            cli_commands = set()
-            for name, item in cli.commands.items():
-                # Plugin REST access is intentionally not adapted to MCP.
-                if name in {"mcp", "plugin"}:
-                    continue
-                if hasattr(item, "commands"):
-                    cli_commands.update(
-                        f"qgis_sdk_{name}_{child}" for child in item.commands
-                    )
-                else:
-                    cli_commands.add(f"qgis_sdk_{name}")
-            assert commands == cli_commands
-            assert commands <= tools
-            for command in commands - {"qgis_sdk_dev"}:
-                result = await client.call_tool(command, {"args": ["--help"]})
-                assert not result.is_error, (command, result)
-                assert result.structured_content["exit_code"] == 0
-            result = await client.call_tool(
-                "qgis_sdk_new", {"args": ["demo", "--no-input"]}
-            )
-            assert not result.is_error
-            assert result.structured_content["exit_code"] == 0
-            assert (tmp_path / "demo" / "pyproject.toml").is_file()
-            result = await client.call_tool("qgis_sdk_check", {"args": ["missing"]})
-            assert result.structured_content["exit_code"] != 0
-            result = await client.call_tool("qgis_sdk_targets", {"args": ["--json"]})
-            assert result.structured_content["exit_code"] == 0
-            assert '"targets"' in result.structured_content["stdout"]
-            started = await client.call_tool("qgis_sdk_dev", {"args": ["--help"]})
-            assert not started.is_error
-            session_id = started.structured_content["session_id"]
-            with anyio.fail_after(10):
-                while True:
-                    status = await client.call_tool(
-                        "qgis_sdk_dev_status", {"session_id": session_id}
-                    )
-                    if not status.structured_content["running"]:
-                        break
-                    await anyio.sleep(0.05)
-            assert status.structured_content["exit_code"] == 0
-            # Help rendering varies with terminal width; the session lifecycle
-            # below is what this test verifies, so only require captured output.
-            assert status.structured_content["stdout"]
-            stopped = await client.call_tool(
-                "qgis_sdk_dev_stop", {"session_id": session_id}
-            )
-            assert not stopped.is_error
-            missing = await client.call_tool(
-                "qgis_sdk_dev_status", {"session_id": session_id}
-            )
-            assert missing.is_error
+            await _assert_tool_inventory(client, tools)
+            await _exercise_cli_commands(client, tmp_path)
+            session_id = await _exercise_dev_session(client, anyio)
+            await _stop_dev_session(client, session_id)
 
     anyio.run(exercise)
 

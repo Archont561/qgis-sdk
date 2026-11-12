@@ -117,15 +117,8 @@ def structural_change(before: Mapping[str, Any], after: Mapping[str, Any]) -> bo
     return bool(diff_snapshots(before, after))
 
 
-def _diff_nodes(
-    changes: list[Change],
-    before: Sequence[Mapping[str, Any]],
-    after: Sequence[Mapping[str, Any]],
-    *,
-    where: str,
-) -> None:
-    before_by_id = {_id(node): node for node in before}
-    after_by_id = {_id(node): node for node in after}
+def _missing_nodes(changes, before_by_id, after_by_id) -> None:
+    """Record nodes present on one side and absent on the other."""
     for node_id in before_by_id:
         if node_id not in after_by_id:
             changes.append(
@@ -136,6 +129,10 @@ def _diff_nodes(
             changes.append(
                 Change(where=node_id, field="node", before="absent", after="present")
             )
+
+
+def _child_order_change(changes, before, after, where: str) -> None:
+    """Record a child reorder when both sides have the same children."""
     before_order = [_id(node) for node in before]
     after_order = [_id(node) for node in after]
     if set(before_order) == set(after_order) and before_order != after_order:
@@ -144,6 +141,10 @@ def _diff_nodes(
                 where=where, field="child order", before=before_order, after=after_order
             )
         )
+
+
+def _shared_nodes(changes, before_by_id, after_by_id) -> None:
+    """Compare the fields of shared nodes and recurse into their children."""
     for node_id, old in before_by_id.items():
         new = after_by_id.get(node_id)
         if new is None:
@@ -156,6 +157,20 @@ def _diff_nodes(
             new.get("children") or (),
             where=node_id,
         )
+
+
+def _diff_nodes(
+    changes: list[Change],
+    before: Sequence[Mapping[str, Any]],
+    after: Sequence[Mapping[str, Any]],
+    *,
+    where: str,
+) -> None:
+    before_by_id = {_id(node): node for node in before}
+    after_by_id = {_id(node): node for node in after}
+    _missing_nodes(changes, before_by_id, after_by_id)
+    _child_order_change(changes, before, after, where)
+    _shared_nodes(changes, before_by_id, after_by_id)
 
 
 def _compare(

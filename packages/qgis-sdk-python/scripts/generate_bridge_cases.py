@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _build_cases_facts11(binding, cases, releasing):
+def _releasing_case(binding, cases, releasing):
     request = {
         "protocol": BRIDGE_PROTOCOL_VERSION,
         "kind": "release",
@@ -35,10 +35,10 @@ def _build_cases_facts11(binding, cases, releasing):
         },
     }
     reply = releasing.dispatch(binding, request)
-    return _build_cases_facts1(cases, reply, request)
+    return _case_result(cases, reply, request)
 
 
-def _build_cases_facts1(cases, reply, request):
+def _case_result(cases, reply, request):
     cases.append(
         {
             "name": "release-borrowed",
@@ -232,38 +232,57 @@ def _deep(root: int) -> list:
     return payload
 
 
-def build_cases() -> dict[str, Any]:
-    """Return every case, built by running the real dispatcher."""
-    cases: list[dict[str, Any]] = []
+def _record(
+    cases: list[dict[str, Any]],
+    name: str,
+    dispatcher: Dispatcher,
+    request: dict,
+    *,
+    advance: bool = False,
+) -> None:
+    """Run one request through a real dispatcher and keep the whole exchange."""
+    binding = dispatcher.bind(view_id="view-1", origin="qgis://desktop")
+    if advance:
+        dispatcher.advance_generation()
+    reply = dispatcher.dispatch(binding, request)
+    expect: dict[str, Any] = {"ok": reply["ok"]}
+    if reply["ok"]:
+        expect["value"] = reply["value"]
+    else:
+        expect["code"] = reply["error"]["code"]
+    cases.append({"name": name, "request": request, "reply": reply, "expect": expect})
 
-    def record(
-        name: str, dispatcher: Dispatcher, request: dict, *, advance: bool = False
-    ) -> None:
-        binding = dispatcher.bind(view_id="view-1", origin="qgis://desktop")
-        if advance:
-            dispatcher.advance_generation()
-        reply = dispatcher.dispatch(binding, request)
-        expect: dict[str, Any] = {"ok": reply["ok"]}
-        if reply["ok"]:
-            expect["value"] = reply["value"]
-        else:
-            expect["code"] = reply["error"]["code"]
-        cases.append(
-            {"name": name, "request": request, "reply": reply, "expect": expect}
-        )
 
-    record("success", _host(), _request("demo.echo", {"name": "A"}, "case-success"))
-    record("unknown-operation", _host(), _request("demo.missing", None, "case-unknown"))
-    record(
-        "not-authorized", _host(allow=False), _request("demo.echo", None, "case-denied")
+def _basic_cases(cases: list[dict[str, Any]]) -> None:
+    """The success, authorization and generation cases."""
+    _record(
+        cases, "success", _host(), _request("demo.echo", {"name": "A"}, "case-success")
     )
-    record(
+    _record(
+        cases,
+        "unknown-operation",
+        _host(),
+        _request("demo.missing", None, "case-unknown"),
+    )
+    _record(
+        cases,
+        "not-authorized",
+        _host(allow=False),
+        _request("demo.echo", None, "case-denied"),
+    )
+    _record(
+        cases,
         "stale-generation",
         _host(),
         _request("demo.echo", None, "case-stale"),
         advance=True,
     )
-    record(
+
+
+def _malformed_cases(cases: list[dict[str, Any]]) -> None:
+    """A bad protocol or a payload nested past the decoder's depth."""
+    _record(
+        cases,
         "invalid-protocol",
         _host(),
         {
@@ -273,19 +292,45 @@ def build_cases() -> dict[str, Any]:
             "payload": {},
         },
     )
-    record(
+    _record(
+        cases,
         "invalid-payload",
         _host(),
         _request("demo.echo", {"nested": _deep(40)}, "case-payload"),
     )
-    record("not-serializable", _host(), _request("demo.native", None, "case-native"))
-    record("operation-failed", _host(), _request("demo.fails", None, "case-failed"))
-    record(
+
+
+def _refusal_cases(cases: list[dict[str, Any]]) -> None:
+    """Result kinds the dispatcher refuses, and a handler that fails."""
+    _record(
+        cases,
+        "not-serializable",
+        _host(),
+        _request("demo.native", None, "case-native"),
+    )
+    _record(
+        cases,
+        "operation-failed",
+        _host(),
+        _request("demo.fails", None, "case-failed"),
+    )
+    _record(
+        cases,
         "invalid-result",
         _host(),
         _request("demo.malformed", None, "case-invalid-result"),
     )
 
+
+def _standard_cases(cases: list[dict[str, Any]]) -> None:
+    """Every request shape that needs only the standard host."""
+    _basic_cases(cases)
+    _malformed_cases(cases)
+    _refusal_cases(cases)
+
+
+def _cancelled_case(cases: list[dict[str, Any]]) -> None:
+    """A cancellation callback stops the dispatch before the handler runs."""
     cancelled = _host()
     binding = cancelled.bind(view_id="view-1", origin="qgis://desktop")
     reply = cancelled.dispatch(
@@ -300,13 +345,17 @@ def build_cases() -> dict[str, Any]:
         }
     )
 
-    # A page claiming to be another view, in the envelope and in the payload:
-    # the host-minted binding answers and the claim is not even an error.
+
+def _forged_case(cases: list[dict[str, Any]]) -> None:
+    """A page claiming another view never gets that view's identity."""
     forged = _request("demo.whoami", {"view_id": "view-2"}, "case-forged")
     forged["view_id"] = "view-2"
     forged["generation"] = 99
-    record("forged-identity", _identity_host(), forged)
+    _record(cases, "forged-identity", _identity_host(), forged)
 
+
+def _expired_handle_case(cases: list[dict[str, Any]]) -> None:
+    """A file handle whose TTL elapsed is refused before the file is opened."""
     with tempfile.TemporaryDirectory() as directory:
         dataset = Path(directory) / "sites.geojson"
         dataset.write_text('{"type": "FeatureCollection", "features": []}')
@@ -328,13 +377,38 @@ def build_cases() -> dict[str, Any]:
             }
         )
 
-    # Releasing names kinds and ids, never a callable: a borrowed handle is
-    # retained by construction and a handle the view does not hold is reported,
-    # not acted on. Nothing a page sends here can turn into a delete.
+
+def _releasing_rig():
+    """A host tracking one borrowed handle, ready for the release request."""
     releasing = _host()
     binding = releasing.bind(view_id="view-1", origin="qgis://desktop")
     releasing.track(binding, HandleKind.BORROWED, "layer-1")
-    return _build_cases_facts11(binding, cases, releasing)
+    return binding, releasing
+
+
+def build_cases() -> dict[str, Any]:
+    """Return every case, built by running the real dispatcher."""
+    cases: list[dict[str, Any]] = []
+    _standard_cases(cases)
+    _cancelled_case(cases)
+    _forged_case(cases)
+    _expired_handle_case(cases)
+    binding, releasing = _releasing_rig()
+    return _releasing_case(binding, cases, releasing)
+
+
+def _ack_frame(host: Any, binding: Any, subscription_id: str, frame: dict) -> None:
+    """Acknowledge one delivered frame through the dispatcher."""
+    host.dispatch(
+        binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "call_id": f"ack-{frame['seq']}",
+            "kind": "ack",
+            "subscription_id": subscription_id,
+            "seq": frame["seq"],
+        },
+    )
 
 
 def _drain(
@@ -361,16 +435,7 @@ def _drain(
         for frame in batch:
             if "terminal" in frame:
                 continue
-            host.dispatch(
-                binding,
-                {
-                    "protocol": BRIDGE_PROTOCOL_VERSION,
-                    "call_id": f"ack-{frame['seq']}",
-                    "kind": "ack",
-                    "subscription_id": subscription_id,
-                    "seq": frame["seq"],
-                },
-            )
+            _ack_frame(host, binding, subscription_id, frame)
         if any("terminal" in frame for frame in batch):
             break
     return frames
