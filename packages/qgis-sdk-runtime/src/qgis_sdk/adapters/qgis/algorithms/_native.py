@@ -90,7 +90,7 @@ class NativeAlgorithms:
         """Describe one algorithm straight from the live registry."""
         self._scope.ensure_open()
         processing()
-        from .catalogue import algorithm_info
+        from ..catalogue import algorithm_info
 
         algorithm = QgsApplication.processingRegistry().algorithmById(algorithm_id)
         if algorithm is None:
@@ -99,7 +99,7 @@ class NativeAlgorithms:
 
     def _catalogue(self):
         """The registry read in full; cheap enough to read per call."""
-        from .catalogue import read_catalogue
+        from ..catalogue import read_catalogue
 
         return read_catalogue()
 

@@ -253,7 +253,7 @@ def model_run_request(
     model: FileRef,
     params: Mapping[str, object] | None,
 ) -> RunRequest:
-    from .catalogue import algorithm_info
+    from ..catalogue import algorithm_info
 
     declared = {
         **declared_model_outputs(owner._resolve(model, "read")),
