@@ -68,6 +68,13 @@ jobs:
         id: s03
         run: python -m pip install --disable-pip-version-check tox==4.67.13
 
+      # The Processing provider modules are generated from catalogue.json
+      # (pure Python, no QGIS needed) and never committed; the suite imports
+      # them, so they are generated here first.
+      - name: Generate the Processing provider modules
+        id: s06
+        run: python packages/qgis-sdk-python/scripts/generate_processing_providers.py
+
       # The log is captured so a failure can name its cause: a job log is not
       # always reachable, and "exit code 1" names nothing.
       - name: Run the suite on Python ${{ matrix.python }}
