@@ -565,7 +565,8 @@ def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
 
     wiring = _start_server(request, say)
     loop = _server_loop(wiring)
-    return _serve(wiring.application, loop, wiring.facts.plugin, say)
+    origin = loop.bind()
+    return _announce_server(wiring.application, loop, origin, wiring.facts.plugin, say)
 
 
 def _names_a_map(path: str) -> bool:
