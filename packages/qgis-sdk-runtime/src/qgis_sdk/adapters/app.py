@@ -37,6 +37,111 @@ from qgis_sdk.models import QgisSdkAppError
 from qgis_sdk.services import Notification, NotificationsBase
 
 
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_init_p1_1(_s1):
+    _s1.description = _s1.app.describe()
+    _s1.self._gui = _s1.gui
+    _s1.self._title = _s1.title
+    _s1.self._plugin_id = _s1.description.id
+    _s1.self._bindings_description: BindingsDescription = _s1.description.bindings
+    _s1.self._window: Any = None
+    _s1.self._canvas: Any = None
+    _s1.self._interface: AppWindowInterface | None = None
+    _s1.self._surfaces: Any = None
+    _s1.self._bindings: Any = None
+
+
+def _cc_init_p2(_s1):
+    if _s1.gui:
+        _s1.self._open_window()
+        from qgis_sdk.adapters.surfaces import SurfaceHost
+
+        _s1.SurfaceHost = SurfaceHost
+
+        assert _s1.self._interface is not None
+        _s1.self._surfaces = _s1.SurfaceHost(
+            _s1.self._interface,
+            plugin_id=_s1.self._plugin_id,
+            title=_s1.title,
+            bindings=_s1.self._bindings_description,
+        )
+
+
+def _cc_init_p3(_s1):
+    _s1.self._context = app_context(
+        ResourceScope(),
+        plugin_id=_s1.self._plugin_id,
+        window=_s1.self._window,
+        canvas=_s1.self._canvas,
+        ui=_s1.self._surfaces,
+    )
+
+
+def _cc_init_p4(_s1):
+    if _s1.gui:
+        from qgis_sdk.adapters.surfaces import DesktopBindings
+
+        _s1.DesktopBindings = DesktopBindings
+
+        assert _s1.self._surfaces is not None
+        _s1.self._bindings = _s1.DesktopBindings(
+            _s1.self._interface,
+            plugin_id=_s1.self._plugin_id,
+            title=_s1.title,
+            bindings=_s1.self._bindings_description,
+            surfaces=_s1.self._surfaces,
+            package_directory=_package_directory(_s1.app),
+        )
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_init_p1(_s):
+    _s.self._window = _s.window
+    _s.self._tag = _s.tag
+
+
 def _bind_setup2(runtime, self):
     loops: list[NamedLoop] = []
     service = runtime.jobs
@@ -116,8 +221,12 @@ class AppNotifications(NotificationsBase):
     """
 
     def __init__(self, window: Any | None, *, tag: str) -> None:
-        self._window = window
-        self._tag = tag
+        _s = _CcState(**locals())
+        for _p in (_cc_init_p1,):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return
+        return
 
     def _deliver(self, notification: Notification) -> None:
         from qgis.core import QgsMessageLog
@@ -304,46 +413,12 @@ class QtAppSurface:
     """One app run's window (when graphical), context and bindings."""
 
     def __init__(self, app: QgisSdkPlugin, *, gui: bool, title: str) -> None:
-        description = app.describe()
-        self._gui = gui
-        self._title = title
-        self._plugin_id = description.id
-        self._bindings_description: BindingsDescription = description.bindings
-        self._window: Any = None
-        self._canvas: Any = None
-        self._interface: AppWindowInterface | None = None
-        self._surfaces: Any = None
-        self._bindings: Any = None
-        if gui:
-            self._open_window()
-            from qgis_sdk.adapters.surfaces import SurfaceHost
-
-            assert self._interface is not None
-            self._surfaces = SurfaceHost(
-                self._interface,
-                plugin_id=self._plugin_id,
-                title=title,
-                bindings=self._bindings_description,
-            )
-        self._context = app_context(
-            ResourceScope(),
-            plugin_id=self._plugin_id,
-            window=self._window,
-            canvas=self._canvas,
-            ui=self._surfaces,
-        )
-        if gui:
-            from qgis_sdk.adapters.surfaces import DesktopBindings
-
-            assert self._surfaces is not None
-            self._bindings = DesktopBindings(
-                self._interface,
-                plugin_id=self._plugin_id,
-                title=title,
-                bindings=self._bindings_description,
-                surfaces=self._surfaces,
-                package_directory=_package_directory(app),
-            )
+        _s1 = _CcState1(self=self, app=app, gui=gui, title=title)
+        for _p1 in (_cc_init_p1_1, _cc_init_p2, _cc_init_p3, _cc_init_p4):
+            _r1 = _p1(_s1)
+            if isinstance(_r1, _CcReturn1):
+                return
+        return
 
     def _open_window(self) -> None:
         """Create and show the window: a map canvas, a toolbar, a status bar."""

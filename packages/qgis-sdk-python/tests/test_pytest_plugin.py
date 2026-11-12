@@ -16,6 +16,67 @@ import pytest
 from qgis_sdk_tools.pytest_plugin import TARGET_ENV
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_run_pytest_p1(_s):
+    _s.env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {TARGET_ENV, "PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST"}
+    }
+    _s.env["PYTHONPATH"] = os.pathsep.join(
+        [str(_s.bindings), layers.source_path()]
+        if _s.bindings is not None
+        else [layers.source_path()]
+    )
+    if _s.target is not None:
+        _s.env[TARGET_ENV] = _s.target
+
+
+def _cc_run_pytest_p2(_s):
+    return _CcReturn(
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-p",
+                PLUGIN,
+                "-p",
+                "no:cacheprovider",
+                "-q",
+                "--no-header",
+                *_s.args,
+            ],
+            cwd=_s.project,
+            env=_s.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    )
+
+
 def _the_desktop_target_imports_phase1(host, plain, tmp_path):
     assert "WHERE source source" in plain.stdout
 
@@ -41,44 +102,13 @@ PLUGIN = "qgis_sdk_tools.pytest_plugin"
 def run_pytest(
     project: Path, *args: str, target: str | None = None, bindings: Path | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """Run pytest the way the command does; ``bindings`` fakes a QGIS prefix.
-
-    A machine with no QGIS at all would otherwise make every native case reach
-    the bindings gate instead of the behaviour under test; a directory holding
-    an importable ``qgis.server`` is enough for the plugin, which only asks
-    whether the import succeeds.
-    """
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in {TARGET_ENV, "PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST"}
-    }
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(bindings), layers.source_path()]
-        if bindings is not None
-        else [layers.source_path()]
-    )
-    if target is not None:
-        env[TARGET_ENV] = target
-    return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-p",
-            PLUGIN,
-            "-p",
-            "no:cacheprovider",
-            "-q",
-            "--no-header",
-            *args,
-        ],
-        cwd=project,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    "Run pytest the way the command does; ``bindings`` fakes a QGIS prefix.\n\n    A machine with no QGIS at all would otherwise make every native case reach\n    the bindings gate instead of the behaviour under test; a directory holding\n    an importable ``qgis.server`` is enough for the plugin, which only asks\n    whether the import succeeds.\n"
+    _s = _CcState(project=project, target=target, bindings=bindings, args=args)
+    for _p in (_cc_run_pytest_p1, _cc_run_pytest_p2):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def write_tests(project: Path, source: str) -> None:

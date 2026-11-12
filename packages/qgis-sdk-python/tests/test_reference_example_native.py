@@ -41,6 +41,253 @@ from qgis_sdk.adapters.desktop import host
 from qgis_sdk_tools.bundle import VENDOR_PACKAGE
 from qgis_sdk_tools.scaffold.web import install_command, script_command
 
+
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_project_p1(_s1):
+    _s1.root = _s1.tmp_path_factory.mktemp("reference") / PLUGIN
+
+
+def _cc_project_p2(_s1):
+    _s1.created = _cli(
+        "new",
+        str(_s1.root),
+        "--title",
+        "Simple",
+        "--author",
+        "qgis-sdk",
+        "--email",
+        "qgis-sdk@example.invalid",
+        "--web",
+        "vanilla",
+        "--placement",
+        "dock",
+        "--package-manager",
+        "bun",
+        "--sdk-dependency",
+        _s1.workspace_bridge,
+        "--ui-dependency",
+        _s1.workspace_ui,
+        "--no-input",
+        "--no-install",
+        cwd=_s1.root.parent,
+    )
+
+
+def _cc_project_p3(_s1):
+    assert _s1.created.returncode == 0, _s1.created.stdout + _s1.created.stderr
+    _s1.scaffolded = sorted(
+        p.relative_to(_s1.root).as_posix() for p in _s1.root.rglob("*") if p.is_file()
+    )
+    (_s1.root / "tests" / "test_plugin.py").unlink()
+    _copy_tree(EXAMPLE, _s1.root)
+    assert {"README.md", "pyproject.toml", f"{PLUGIN}/plugin.py"} <= set(_s1.scaffolded)
+    assert (
+        f"{PLUGIN}/metadata.txt" not in _s1.scaffolded
+    )  # rendered by build (decision-43)
+    _bun_run(install_command("bun"), _s1.root / "web")
+    for script in ("test", "typecheck", "build"):
+        _s1.script = script
+        _bun_run(script_command("bun", _s1.script), _s1.root / "web")
+    return _CcReturn1(_s1.root)
+
+
+def _CcPhases1():
+    return (
+        _cc_test_the_page_an_p2,
+        _cc_test_the_page_an_p3,
+        _cc_test_the_page_an_p4,
+        _cc_test_the_page_an_p5,
+        _cc_test_the_page_an_p6,
+        _cc_test_the_page_an_p7,
+    )
+
+
+def _CcPhases2():
+    return (
+        _cc_test_the_page_an_p1,
+        _cc_test_the_page_an_p9,
+        _cc_test_the_page_an_p10,
+        _cc_test_the_page_an_p11,
+    )
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_the_page_an_p1(_s):
+    from qgis.core import QgsProject
+
+    _s.QgsProject = QgsProject
+    from qgis.PyQt.QtWidgets import QPushButton
+
+    _s.QPushButton = QPushButton
+
+    _s.monkeypatch.syspath_prepend(str(_s.project))
+    _forget(PLUGIN)
+    _s.plugin_module = importlib.import_module(f"{PLUGIN}.plugin")
+    _s.fixture = _s.plugin_module.FIXTURE
+    _s.before = hashlib.sha256(_s.fixture.read_bytes()).hexdigest()
+    _s.exports = _s.tmp_path / "exports"
+    _s.exports.mkdir()
+    _s.QgsProject.instance().removeAllMapLayers()
+
+
+def _cc_test_the_page_an_p2(_s):
+    _s.page = _s.widget.widget().page()
+    _s.loaded: list[bool] = []
+    _s.page.loadFinished.connect(_s.loaded.append)
+    _pump(_s.qgis_app, lambda: bool(_s.loaded))
+    assert _s.loaded == [True], _s.page.url().toString()
+    assert _s.page.url().toLocalFile() == str(
+        _s.project / PLUGIN / "web" / "index.html"
+    )
+
+    # The page: open, buffer, export - every step a declared action.
+    _click(_s.qgis_app, _s.page, "#open")
+    _s.source_text = _text_when(_s.qgis_app, _s.page, "#source")
+    assert _s.source_text == "points (point, EPSG:4326)"
+    _click(_s.qgis_app, _s.page, "#buffer")
+
+
+def _cc_test_the_page_an_p3(_s):
+    _s.buffer_text = _text_when(_s.qgis_app, _s.page, "#buffer-result")
+    assert _s.buffer_text.endswith(f"(polygon, {WORKING_CRS})")
+    _click(_s.qgis_app, _s.page, "#export")
+    _s.export_text = _text_when(_s.qgis_app, _s.page, "#export-result")
+    assert _s.export_text == f"GPKG: {_s.exports / 'buffer.gpkg'}"
+    assert (
+        _evaluate(_s.qgis_app, _s.page, "document.querySelector('#error').textContent")
+        == ""
+    )
+
+    _s.layer_ids = list(_s.QgsProject.instance().mapLayers())
+    assert len(_s.layer_ids) == 2
+
+
+def _cc_test_the_page_an_p4(_s):
+    _s.web_output = next(
+        layer
+        for layer in _s.QgsProject.instance().mapLayers().values()
+        if layer.geometryType().name.lower().startswith("polygon")
+    )
+    _s.source_layer = next(
+        layer
+        for layer in _s.QgsProject.instance().mapLayers().values()
+        if layer is not _s.web_output
+    )
+    assert _s.web_output.renderer().symbol().symbolLayer(0).layerType() == "SimpleFill"
+
+
+def _cc_test_the_page_an_p5(_s):
+
+    # The native dialog for the same action, dispatched to the same handler.
+    _s.surfaces_module = importlib.import_module(f"{PLUGIN}.surfaces")
+    _s.dialog = _s.desktop.context.ui.open(_s.surfaces_module.BufferDialog)
+    _s.dialog.form.field("layer_id").widget.setLayer(_s.source_layer)
+    _s.dialog.form.field("distance_metres").widget.setValue(500.0)
+    _s.dialog.form.field("working_crs").widget.setCrs(_s.web_output.crs())
+    _s.dialog.form.widget.window().findChild(_s.QPushButton, "buttons/run").click()
+    _s.qgis_app.processEvents()
+
+
+def _cc_test_the_page_an_p6(_s):
+    _s.native_output = next(
+        layer
+        for layer in _s.QgsProject.instance().mapLayers().values()
+        if layer not in (_s.source_layer, _s.web_output)
+    )
+    _s.native_output = _s.desktop.context.layers.layer(_s.native_output.id())
+
+    _s.native_layer = _s.QgsProject.instance().mapLayer(_s.native_output.id)
+    assert _s.native_output.geometry_type == "polygon"
+    assert _s.native_output.crs == WORKING_CRS
+    assert _s.native_layer.featureCount() == _s.web_output.featureCount() == 3
+
+
+def _cc_test_the_page_an_p7(_s):
+    assert (
+        _s.native_layer.renderer().symbol().symbolLayer(0).layerType() == "SimpleFill"
+    )
+    assert len(_s.QgsProject.instance().mapLayers()) == 3
+    assert _s.source_layer.featureCount() == 3
+
+
+def _cc_test_the_page_an_p8(_s):
+    _s.desktop.unload()
+    _s.qgis_app.processEvents()
+    _s.QgsProject.instance().removeAllMapLayers()
+    _forget(PLUGIN)
+
+
+def _cc_test_the_page_an_p9(_s):
+
+    _s.desktop = host(f"{PLUGIN}.plugin:app", placement="dock")(None)
+    _s.desktop.initGui()
+    _s.desktop.context.settings.set(
+        _s.plugin_module.EXPORT_DIRECTORY_KEY, str(_s.exports)
+    )
+    _s.widget = _s.desktop.show_view()
+
+
+def _cc_test_the_page_an_p10(_s):
+    try:
+        for _p in _CcPhases1():
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    finally:
+        for _p in (_cc_test_the_page_an_p8,):
+            _p(_s)
+    assert _s.desktop.view is None
+
+    assert _s.desktop.runtime.state.value == "stopped"
+    assert hashlib.sha256(_s.fixture.read_bytes()).hexdigest() == _s.before
+
+
+def _cc_test_the_page_an_p11(_s):
+    assert sorted(p.name for p in _s.exports.iterdir()) == ["buffer.gpkg"]
+
+
 pytestmark = pytest.mark.webengine
 
 if not os.environ.get("QGIS_SDK_REFERENCE"):
@@ -131,42 +378,16 @@ def project(
     tmp_path_factory: pytest.TempPathFactory, workspace_bridge: str, workspace_ui: str
 ) -> Path:
     """``qgis-sdk new`` with the example's options, the example copied on top."""
-    root = tmp_path_factory.mktemp("reference") / PLUGIN
-    created = _cli(
-        "new",
-        str(root),
-        "--title",
-        "Simple",
-        "--author",
-        "qgis-sdk",
-        "--email",
-        "qgis-sdk@example.invalid",
-        "--web",
-        "vanilla",
-        "--placement",
-        "dock",
-        "--package-manager",
-        "bun",
-        "--sdk-dependency",
-        workspace_bridge,
-        "--ui-dependency",
-        workspace_ui,
-        "--no-input",
-        "--no-install",
-        cwd=root.parent,
+    _s1 = _CcState1(
+        tmp_path_factory=tmp_path_factory,
+        workspace_bridge=workspace_bridge,
+        workspace_ui=workspace_ui,
     )
-    assert created.returncode == 0, created.stdout + created.stderr
-    scaffolded = sorted(
-        p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
-    )
-    (root / "tests" / "test_plugin.py").unlink()
-    _copy_tree(EXAMPLE, root)
-    assert {"README.md", "pyproject.toml", f"{PLUGIN}/plugin.py"} <= set(scaffolded)
-    assert f"{PLUGIN}/metadata.txt" not in scaffolded  # rendered by build (decision-43)
-    _bun_run(install_command("bun"), root / "web")
-    for script in ("test", "typecheck", "build"):
-        _bun_run(script_command("bun", script), root / "web")
-    return root
+    for _p1 in (_cc_project_p1, _cc_project_p2, _cc_project_p3):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 def test_the_example_keeps_the_scaffold_layout(project: Path) -> None:
@@ -251,93 +472,12 @@ def test_dev_starts_reloads_shows_and_unloads_inside_desktop(
 def test_the_page_and_the_native_dialog_share_one_workflow(
     qgis_app: Any, project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from qgis.core import QgsProject
-    from qgis.PyQt.QtWidgets import QPushButton
-
-    monkeypatch.syspath_prepend(str(project))
-    _forget(PLUGIN)
-    plugin_module = importlib.import_module(f"{PLUGIN}.plugin")
-    fixture = plugin_module.FIXTURE
-    before = hashlib.sha256(fixture.read_bytes()).hexdigest()
-    exports = tmp_path / "exports"
-    exports.mkdir()
-    QgsProject.instance().removeAllMapLayers()
-
-    desktop = host(f"{PLUGIN}.plugin:app", placement="dock")(None)
-    desktop.initGui()
-    desktop.context.settings.set(plugin_module.EXPORT_DIRECTORY_KEY, str(exports))
-    widget = desktop.show_view()
-    try:
-        page = widget.widget().page()
-        loaded: list[bool] = []
-        page.loadFinished.connect(loaded.append)
-        _pump(qgis_app, lambda: bool(loaded))
-        assert loaded == [True], page.url().toString()
-        assert page.url().toLocalFile() == str(project / PLUGIN / "web" / "index.html")
-
-        # The page: open, buffer, export - every step a declared action.
-        _click(qgis_app, page, "#open")
-        source_text = _text_when(qgis_app, page, "#source")
-        assert source_text == "points (point, EPSG:4326)"
-        _click(qgis_app, page, "#buffer")
-        buffer_text = _text_when(qgis_app, page, "#buffer-result")
-        assert buffer_text.endswith(f"(polygon, {WORKING_CRS})")
-        _click(qgis_app, page, "#export")
-        export_text = _text_when(qgis_app, page, "#export-result")
-        assert export_text == f"GPKG: {exports / 'buffer.gpkg'}"
-        assert (
-            _evaluate(qgis_app, page, "document.querySelector('#error').textContent")
-            == ""
-        )
-
-        layer_ids = list(QgsProject.instance().mapLayers())
-        assert len(layer_ids) == 2
-        web_output = next(
-            layer
-            for layer in QgsProject.instance().mapLayers().values()
-            if layer.geometryType().name.lower().startswith("polygon")
-        )
-        source_layer = next(
-            layer
-            for layer in QgsProject.instance().mapLayers().values()
-            if layer is not web_output
-        )
-        assert web_output.renderer().symbol().symbolLayer(0).layerType() == "SimpleFill"
-
-        # The native dialog for the same action, dispatched to the same handler.
-        surfaces_module = importlib.import_module(f"{PLUGIN}.surfaces")
-        dialog = desktop.context.ui.open(surfaces_module.BufferDialog)
-        dialog.form.field("layer_id").widget.setLayer(source_layer)
-        dialog.form.field("distance_metres").widget.setValue(500.0)
-        dialog.form.field("working_crs").widget.setCrs(web_output.crs())
-        dialog.form.widget.window().findChild(QPushButton, "buttons/run").click()
-        qgis_app.processEvents()
-        native_output = next(
-            layer
-            for layer in QgsProject.instance().mapLayers().values()
-            if layer not in (source_layer, web_output)
-        )
-        native_output = desktop.context.layers.layer(native_output.id())
-
-        native_layer = QgsProject.instance().mapLayer(native_output.id)
-        assert native_output.geometry_type == "polygon"
-        assert native_output.crs == WORKING_CRS
-        assert native_layer.featureCount() == web_output.featureCount() == 3
-        assert (
-            native_layer.renderer().symbol().symbolLayer(0).layerType() == "SimpleFill"
-        )
-        assert len(QgsProject.instance().mapLayers()) == 3
-        assert source_layer.featureCount() == 3
-    finally:
-        desktop.unload()
-        qgis_app.processEvents()
-        QgsProject.instance().removeAllMapLayers()
-        _forget(PLUGIN)
-    assert desktop.view is None
-
-    assert desktop.runtime.state.value == "stopped"
-    assert hashlib.sha256(fixture.read_bytes()).hexdigest() == before
-    assert sorted(p.name for p in exports.iterdir()) == ["buffer.gpkg"]
+    _s = _CcState(**locals())
+    for _p in _CcPhases2():
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _forget(package: str) -> None:

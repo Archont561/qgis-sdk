@@ -22,6 +22,105 @@ from qgis_sdk.models import (
 from qgis_sdk.processing.runs import destination_path, plan_destinations
 
 
+def _cc_expr1_tuple1(_s):
+    return (
+        ParameterInfo(name="FEATS", kind="source", label="Features"),
+        ParameterInfo(
+            name="native:centroids_1:CENTROIDS",
+            kind="sink",
+            label="Centroids",
+            destination=True,
+            extension="gpkg",
+        ),
+    )
+
+
+def _cc_expr1_tuple2(_s):
+    return (
+        ParameterInfo(
+            name="native:basicstatisticsforfields_1:OUTPUT_HTML_FILE",
+            kind="fileDestination",
+            label="Report",
+            destination=True,
+            extension="html",
+        ),
+    )
+
+
+def _cc_expr1_value3(_s):
+    value = ()
+    value = value + tuple(_cc_expr1_tuple1(_s))
+    value = value + tuple(_cc_expr1_tuple2(_s))
+    return value
+
+
+def _cc_expr1_kw4(_s):
+    return {
+        "id": "model:report",
+        "provider": "model",
+        "name": "report",
+        "label": "Report model",
+        "group": "",
+        "group_id": "",
+        "help": "",
+        "parameters": _cc_expr1_value3(_s),
+        "outputs": (),
+    }
+
+
+def _cc_expr1_call5(_s):
+    args = []
+    kwargs = {}
+    kwargs.update(_cc_expr1_kw4(_s))
+    return AlgorithmInfo(*args, **kwargs)
+
+
+def _cc_expr1_apply(_s):
+    return _cc_expr1_call5(_s)
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_model_tha_p1(_s):
+    from qgis_sdk.processing.runs import model_output_names
+
+    _s.model_output_names = model_output_names
+
+
+def _cc_test_a_model_tha_p2(_s):
+
+    # The shape a loaded model answers with: no declared outputs, and one
+    # destination parameter per child output, named after the child.
+    _s.info = _cc_expr1_apply(_s)
+
+
+def _cc_test_a_model_tha_p3(_s):
+
+    _s.renamed, _s.names = _s.model_output_names(_s.info)
+
+    _a_model_that_exposes_facts1(_s.names, _s.renamed)
+
+
 def _a_model_that_exposes_facts1(names, renamed):
     assert names == {
         "native:centroids_1:CENTROIDS": "centroids",
@@ -200,41 +299,16 @@ def test_an_output_with_no_description_keeps_its_own_name() -> None:
 
 
 def test_a_model_that_exposes_destinations_names_them_by_description() -> None:
-    from qgis_sdk.processing.runs import model_output_names
-
-    # The shape a loaded model answers with: no declared outputs, and one
-    # destination parameter per child output, named after the child.
-    info = AlgorithmInfo(
-        id="model:report",
-        provider="model",
-        name="report",
-        label="Report model",
-        group="",
-        group_id="",
-        help="",
-        parameters=(
-            ParameterInfo(name="FEATS", kind="source", label="Features"),
-            ParameterInfo(
-                name="native:centroids_1:CENTROIDS",
-                kind="sink",
-                label="Centroids",
-                destination=True,
-                extension="gpkg",
-            ),
-            ParameterInfo(
-                name="native:basicstatisticsforfields_1:OUTPUT_HTML_FILE",
-                kind="fileDestination",
-                label="Report",
-                destination=True,
-                extension="html",
-            ),
-        ),
-        outputs=(),
-    )
-
-    renamed, names = model_output_names(info)
-
-    _a_model_that_exposes_facts1(names, renamed)
+    _s = _CcState()
+    for _p in (
+        _cc_test_a_model_tha_p1,
+        _cc_test_a_model_tha_p2,
+        _cc_test_a_model_tha_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_the_answer_is_matched_whatever_case_the_file_declares() -> None:

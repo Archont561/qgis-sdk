@@ -22,6 +22,270 @@ import pytest
 from native_support import LoopbackOrigin, pump, serve, settle
 
 
+class _CcState2:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn2:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak2:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue2:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_packaged_as_p1(_s2):
+    _s2.root = _s2.tmp_path / "assets"
+    _s2.root.mkdir()
+    _s2.secret = _s2.tmp_path / "secret.txt"
+    _s2.secret.write_text("secret", encoding="utf-8")
+    _s2.secret_script = _s2.tmp_path / "secret.js"
+    _s2.secret_script.write_text('window.results.outside = "leaked";', encoding="utf-8")
+    (_s2.root / "ok.js").write_text('window.results.inside = "ok";', encoding="utf-8")
+
+
+def _cc_test_packaged_as_p2(_s2):
+    (_s2.root / "index.html").write_text(
+        f"""<html><body><script>window.results = {{}};</script>
+        <script src="ok.js"></script>
+        <script src="{_s2.secret_script.as_uri()}"></script>
+        <script src="{_s2.blocked.url("/from-file.js")}"></script>
+        <script>
+        fetch("{_s2.allowed.url("/from-file")}").then(r => r.text())
+          .then(t => {{ window.results.granted = t; }})
+          .catch(e => {{ window.results.granted = "error:" + e.message; }});
+        fetch("{_s2.blocked.url("/from-file")}").then(r => r.text())
+          .then(t => {{ window.results.remote = t; }})
+          .catch(e => {{ window.results.remote = "error:" + e.message; }});
+        </script></body></html>""",
+        encoding="utf-8",
+    )
+
+
+def _cc_test_packaged_as_p3(_s2):
+    _s2.page = _s2.make_page(
+        BrowserPolicy(origins=(_s2.allowed.origin,), asset_roots=(_s2.root,))
+    )
+    _s2.before = list(_s2.blocked.seen)
+
+    _s2.page.page.load(QUrl.fromLocalFile(str(_s2.root / "index.html")))
+    _s2.page.wait_loaded(_s2.app)
+    pump(
+        _s2.app,
+        lambda: (
+            {"inside", "granted", "remote"}
+            <= set(_s2.page.evaluate(_s2.app, "Object.keys(window.results)"))
+        ),
+    )
+
+
+def _cc_test_packaged_as_p4(_s2):
+    settle(_s2.app, 0.3)
+
+    _s2.results = _s2.page.evaluate(_s2.app, "window.results")
+    assert _s2.results["inside"] == "ok"
+    assert "outside" not in _s2.results
+    assert _s2.results["granted"] == "hello"
+    assert "/from-file" in _s2.allowed.seen
+    assert str(_s2.results["remote"]).startswith("error:")
+    assert _s2.blocked.seen == _s2.before
+
+
+def _cc_test_packaged_as_p5(_s2):
+    _packaged_assets_load_from_facts11234567891011121314151617(
+        app=_s2.app,
+        blocked=_s2.blocked,
+        page=_s2.page,
+        root=_s2.root,
+        secret=_s2.secret,
+        secret_script=_s2.secret_script,
+    )
+
+
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_navigatio_p1(_s1):
+    _s1.allowed.page("/start", "<html><body>start</body></html>")
+    _s1.allowed.page("/second", "<html><body>second</body></html>")
+    _s1.page = _s1.make_page(BrowserPolicy(origins=(_s1.allowed.origin,)))
+    _s1.page.page.load(QUrl(_s1.allowed.url("/start")))
+    _s1.page.wait_loaded(_s1.app)
+    _s1.before = list(_s1.blocked.seen)
+
+    _s1.page.page.runJavaScript(f'location.href = "{_s1.blocked.url("/nav")}"')
+    pump(_s1.app, lambda: bool(_s1.page.refused("navigation")))
+    settle(_s1.app, 0.3)
+
+    assert _s1.page.page.url().toString() == _s1.allowed.url("/start")
+
+
+def _cc_test_a_navigatio_p2(_s1):
+    assert _s1.blocked.seen == _s1.before
+    assert _s1.page.refused("navigation") == [_s1.blocked.url("/nav")]
+
+    _s1.loads = len(_s1.page.loads)
+    _s1.page.page.runJavaScript(f'location.href = "{_s1.allowed.url("/second")}"')
+    _s1.page.wait_loaded(_s1.app, count=_s1.loads + 1)
+    assert _s1.page.page.url().toString() == _s1.allowed.url("/second")
+    assert _s1.page.loads[-1] is True
+
+    # A data: navigation is the host's: setHtml works, the page's own is refused.
+    _s1.loads = len(_s1.page.loads)
+    _s1.page.page.setHtml("<html><body>host</body></html>", QUrl(_s1.allowed.url("/")))
+
+
+def _cc_test_a_navigatio_p3(_s1):
+    _s1.page.wait_loaded(_s1.app, count=_s1.loads + 1)
+    assert _s1.page.loads[-1] is True
+    # Chromium itself refuses a top-frame data: navigation from script, so the
+    # policy's own rule is the second lock here; either way the page stays.
+    _s1.loads = len(_s1.page.loads)
+    _s1.page.page.runJavaScript('location.href = "data:text/html,<b>page</b>"')
+    settle(_s1.app, 0.5)
+    assert _s1.page.page.url().toString() == _s1.allowed.url("/")
+    assert len(_s1.page.loads) == _s1.loads
+    assert all(url != _s1.allowed.url("/") for url in _s1.page.refused("navigation"))
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_page_cann_p1(_s):
+    _s.allowed.page(
+        "/",
+        ESCAPE_HTML.format(
+            allowed=_s.allowed.origin,
+            blocked=_s.blocked.origin,
+            blocked_ws=_s.blocked.origin.replace("http://", "ws://"),
+        ),
+    )
+    _s.allowed.page("/frame", "<html><body>frame</body></html>")
+    _s.page = _s.make_page(BrowserPolicy(origins=(_s.allowed.origin,)))
+
+    _s.page.page.load(QUrl(_s.allowed.url("/")))
+
+
+def _cc_test_a_page_cann_p2(_s):
+    _s.page.wait_loaded(_s.app)
+    pump(
+        _s.app,
+        lambda: (
+            {"allowed", "blocked", "xhr"}
+            <= set(_s.page.evaluate(_s.app, "Object.keys(window.results)"))
+        ),
+    )
+    settle(_s.app, 0.5)
+
+    _s.results = _s.page.evaluate(_s.app, "window.results")
+    assert _s.results["allowed"] == "hello"
+
+
+def _cc_test_a_page_cann_p3(_s):
+    assert str(_s.results["blocked"]).startswith("error:")
+    assert _s.results["xhr"] == 0
+    assert _s.results["opened"] == "null"
+    assert _s.results.get("socket", "error") != "open"
+    # The granted origin served the page, the frame and the fetch - and the
+    # other one was never asked for anything, by any means.
+    assert (
+        "/" in _s.allowed.seen
+        and "/ok" in _s.allowed.seen
+        and "/frame" in _s.allowed.seen
+    )
+    assert _s.blocked.seen == []
+    _s.refused = _s.page.refused("resource")
+    for path in ("/img.png", "/evil.js", "/leak", "/xhr"):
+        _s.path = path
+        assert _s.blocked.url(_s.path) in _s.refused, (_s.path, _s.refused)
+
+
+def _cc_test_a_page_cann_p4(_s):
+    # A frame is a navigation of its own first; whichever hook saw it, it
+    # was refused before any request left.
+    assert _s.blocked.url("/frame") in _s.refused + _s.page.refused("navigation")
+    # window.open returned null before createWindow was even consulted: the
+    # page setting closes that door first, and createWindow is the second lock.
+    assert _s.page.refused("window") == []
+    assert (
+        _s.page.page.createWindow(type(_s.page.page).WebWindowType.WebBrowserTab)
+        is None
+    )
+    assert _s.page.refused("window") == [""]
+
+
+_CC_TEXT_1 = """<!doctype html><html><body>
+<img id="img" src="{blocked}/img.png">
+<script src="{blocked}/evil.js"></script>
+<iframe id="frame" src="{blocked}/frame"></iframe>
+<iframe id="ok-frame" src="{allowed}/frame"></iframe>
+<script>
+window.results = {{}};
+fetch("{allowed}/ok").then(r => r.text()).then(t => {{ window.results.allowed = t; }})
+  .catch(e => {{ window.results.allowed = "error:" + e.message; }});
+fetch("{blocked}/leak").then(r => r.text()).then(t => {{ window.results.blocked = t; }})
+  .catch(e => {{ window.results.blocked = "error:" + e.message; }});
+const xhr = new XMLHttpRequest();
+xhr.onloadend = () => {{ window.results.xhr = xhr.status; }};
+xhr.open("GET", "{blocked}/xhr"); xhr.send();
+try {{
+  const socket = new WebSocket("{blocked_ws}/socket");
+  socket.onerror = () => {{ window.results.socket = "error"; }};
+  socket.onopen = () => {{ window.results.socket = "open"; }};
+}} catch (e) {{ window.results.socket = "error:" + e.message; }}
+window.results.opened = String(window.open("{blocked}/popup"));
+</script>
+</body></html>"""
+
+
 def _packaged_assets_load_from_facts11234567891011121314151617(**values):
     _packaged_assets_load_from_facts112345678910111213141516(
         app=values["app"],
@@ -318,115 +582,38 @@ def make_page(app, profile) -> Iterator[Callable[[BrowserPolicy], _Page]]:
         page.close(app)
 
 
-ESCAPE_HTML = """<!doctype html><html><body>
-<img id="img" src="{blocked}/img.png">
-<script src="{blocked}/evil.js"></script>
-<iframe id="frame" src="{blocked}/frame"></iframe>
-<iframe id="ok-frame" src="{allowed}/frame"></iframe>
-<script>
-window.results = {{}};
-fetch("{allowed}/ok").then(r => r.text()).then(t => {{ window.results.allowed = t; }})
-  .catch(e => {{ window.results.allowed = "error:" + e.message; }});
-fetch("{blocked}/leak").then(r => r.text()).then(t => {{ window.results.blocked = t; }})
-  .catch(e => {{ window.results.blocked = "error:" + e.message; }});
-const xhr = new XMLHttpRequest();
-xhr.onloadend = () => {{ window.results.xhr = xhr.status; }};
-xhr.open("GET", "{blocked}/xhr"); xhr.send();
-try {{
-  const socket = new WebSocket("{blocked_ws}/socket");
-  socket.onerror = () => {{ window.results.socket = "error"; }};
-  socket.onopen = () => {{ window.results.socket = "open"; }};
-}} catch (e) {{ window.results.socket = "error:" + e.message; }}
-window.results.opened = String(window.open("{blocked}/popup"));
-</script>
-</body></html>"""
+ESCAPE_HTML = _CC_TEXT_1
 
 
 def test_a_page_cannot_reach_an_origin_the_policy_did_not_grant(
     app, make_page, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
-    allowed.page(
-        "/",
-        ESCAPE_HTML.format(
-            allowed=allowed.origin,
-            blocked=blocked.origin,
-            blocked_ws=blocked.origin.replace("http://", "ws://"),
-        ),
-    )
-    allowed.page("/frame", "<html><body>frame</body></html>")
-    page = make_page(BrowserPolicy(origins=(allowed.origin,)))
-
-    page.page.load(QUrl(allowed.url("/")))
-    page.wait_loaded(app)
-    pump(
-        app,
-        lambda: (
-            {"allowed", "blocked", "xhr"}
-            <= set(page.evaluate(app, "Object.keys(window.results)"))
-        ),
-    )
-    settle(app, 0.5)
-
-    results = page.evaluate(app, "window.results")
-    assert results["allowed"] == "hello"
-    assert str(results["blocked"]).startswith("error:")
-    assert results["xhr"] == 0
-    assert results["opened"] == "null"
-    assert results.get("socket", "error") != "open"
-    # The granted origin served the page, the frame and the fetch - and the
-    # other one was never asked for anything, by any means.
-    assert "/" in allowed.seen and "/ok" in allowed.seen and "/frame" in allowed.seen
-    assert blocked.seen == []
-    refused = page.refused("resource")
-    for path in ("/img.png", "/evil.js", "/leak", "/xhr"):
-        assert blocked.url(path) in refused, (path, refused)
-    # A frame is a navigation of its own first; whichever hook saw it, it
-    # was refused before any request left.
-    assert blocked.url("/frame") in refused + page.refused("navigation")
-    # window.open returned null before createWindow was even consulted: the
-    # page setting closes that door first, and createWindow is the second lock.
-    assert page.refused("window") == []
-    assert page.page.createWindow(type(page.page).WebWindowType.WebBrowserTab) is None
-    assert page.refused("window") == [""]
+    _s = _CcState(app=app, make_page=make_page, allowed=allowed, blocked=blocked)
+    for _p in (
+        _cc_test_a_page_cann_p1,
+        _cc_test_a_page_cann_p2,
+        _cc_test_a_page_cann_p3,
+        _cc_test_a_page_cann_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_a_navigation_out_of_the_policy_is_refused_and_one_inside_is_not(
     app, make_page, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
-    allowed.page("/start", "<html><body>start</body></html>")
-    allowed.page("/second", "<html><body>second</body></html>")
-    page = make_page(BrowserPolicy(origins=(allowed.origin,)))
-    page.page.load(QUrl(allowed.url("/start")))
-    page.wait_loaded(app)
-    before = list(blocked.seen)
-
-    page.page.runJavaScript(f'location.href = "{blocked.url("/nav")}"')
-    pump(app, lambda: bool(page.refused("navigation")))
-    settle(app, 0.3)
-
-    assert page.page.url().toString() == allowed.url("/start")
-    assert blocked.seen == before
-    assert page.refused("navigation") == [blocked.url("/nav")]
-
-    loads = len(page.loads)
-    page.page.runJavaScript(f'location.href = "{allowed.url("/second")}"')
-    page.wait_loaded(app, count=loads + 1)
-    assert page.page.url().toString() == allowed.url("/second")
-    assert page.loads[-1] is True
-
-    # A data: navigation is the host's: setHtml works, the page's own is refused.
-    loads = len(page.loads)
-    page.page.setHtml("<html><body>host</body></html>", QUrl(allowed.url("/")))
-    page.wait_loaded(app, count=loads + 1)
-    assert page.loads[-1] is True
-    # Chromium itself refuses a top-frame data: navigation from script, so the
-    # policy's own rule is the second lock here; either way the page stays.
-    loads = len(page.loads)
-    page.page.runJavaScript('location.href = "data:text/html,<b>page</b>"')
-    settle(app, 0.5)
-    assert page.page.url().toString() == allowed.url("/")
-    assert len(page.loads) == loads
-    assert all(url != allowed.url("/") for url in page.refused("navigation"))
+    _s1 = _CcState1(app=app, make_page=make_page, allowed=allowed, blocked=blocked)
+    for _p1 in (
+        _cc_test_a_navigatio_p1,
+        _cc_test_a_navigatio_p2,
+        _cc_test_a_navigatio_p3,
+    ):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 def test_a_subframe_cannot_navigate_out_either(
@@ -464,54 +651,21 @@ def test_packaged_assets_load_from_their_root_and_from_nowhere_else(
     app, make_page, tmp_path: Path, allowed: LoopbackOrigin, blocked: LoopbackOrigin
 ) -> None:
     """A ``file:`` page: its own root, a granted origin, and nothing else."""
-    root = tmp_path / "assets"
-    root.mkdir()
-    secret = tmp_path / "secret.txt"
-    secret.write_text("secret", encoding="utf-8")
-    secret_script = tmp_path / "secret.js"
-    secret_script.write_text('window.results.outside = "leaked";', encoding="utf-8")
-    (root / "ok.js").write_text('window.results.inside = "ok";', encoding="utf-8")
-    (root / "index.html").write_text(
-        f"""<html><body><script>window.results = {{}};</script>
-        <script src="ok.js"></script>
-        <script src="{secret_script.as_uri()}"></script>
-        <script src="{blocked.url("/from-file.js")}"></script>
-        <script>
-        fetch("{allowed.url("/from-file")}").then(r => r.text())
-          .then(t => {{ window.results.granted = t; }})
-          .catch(e => {{ window.results.granted = "error:" + e.message; }});
-        fetch("{blocked.url("/from-file")}").then(r => r.text())
-          .then(t => {{ window.results.remote = t; }})
-          .catch(e => {{ window.results.remote = "error:" + e.message; }});
-        </script></body></html>""",
-        encoding="utf-8",
-    )
-    page = make_page(BrowserPolicy(origins=(allowed.origin,), asset_roots=(root,)))
-    before = list(blocked.seen)
-
-    page.page.load(QUrl.fromLocalFile(str(root / "index.html")))
-    page.wait_loaded(app)
-    pump(
-        app,
-        lambda: (
-            {"inside", "granted", "remote"}
-            <= set(page.evaluate(app, "Object.keys(window.results)"))
-        ),
-    )
-    settle(app, 0.3)
-
-    results = page.evaluate(app, "window.results")
-    assert results["inside"] == "ok"
-    assert "outside" not in results
-    assert results["granted"] == "hello"
-    assert "/from-file" in allowed.seen
-    assert str(results["remote"]).startswith("error:")
-    assert blocked.seen == before
-    _packaged_assets_load_from_facts11234567891011121314151617(
+    _s2 = _CcState2(
         app=app,
+        make_page=make_page,
+        tmp_path=tmp_path,
+        allowed=allowed,
         blocked=blocked,
-        page=page,
-        root=root,
-        secret=secret,
-        secret_script=secret_script,
     )
+    for _p2 in (
+        _cc_test_packaged_as_p1,
+        _cc_test_packaged_as_p2,
+        _cc_test_packaged_as_p3,
+        _cc_test_packaged_as_p4,
+        _cc_test_packaged_as_p5,
+    ):
+        _r2 = _p2(_s2)
+        if isinstance(_r2, _CcReturn2):
+            return _r2.value
+    return None

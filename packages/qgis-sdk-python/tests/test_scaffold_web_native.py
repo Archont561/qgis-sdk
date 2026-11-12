@@ -29,6 +29,165 @@ from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command, script_command
 
 
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_the_built_p_p1(_s1):
+    _s1.root, _s1.framework = _s1.built_project
+    _s1.plugin = f"{_s1.framework}_demo"
+    _s1.placement = "dock" if _s1.framework == "react" else "dialog"
+    _s1.button, _s1.output = (
+        ("button", "output") if _s1.framework == "react" else ("#ping", "#ping-result")
+    )
+    _s1.monkeypatch.syspath_prepend(str(_s1.root))
+    _forget(_s1.plugin)  # the other manager's project used the same package name
+
+    # The scaffold's module-level application, the only public entry point
+    # since the class-based authoring API was retired (TASK-141).
+    _s1.desktop = host(f"{_s1.plugin}.plugin:app", placement=_s1.placement)(None)
+
+
+def _cc_test_the_built_p_p2(_s1):
+    _s1.view = (
+        _s1.widget.widget()
+        if _s1.placement == "dock"
+        else _s1.widget.layout().itemAt(0).widget()
+    )
+    _s1.page = _s1.view.page()
+    _s1.loaded: list[bool] = []
+    _s1.page.loadFinished.connect(_s1.loaded.append)
+    _pump(_s1.qgis_app, lambda: bool(_s1.loaded))
+    assert _s1.loaded == [True], _s1.page.url().toString()
+    assert _s1.page.url().toLocalFile() == str(
+        _s1.root / _s1.plugin / "web" / "index.html"
+    )
+
+
+def _cc_test_the_built_p_p3(_s1):
+
+    _pump(
+        _s1.qgis_app,
+        lambda: _evaluate(
+            _s1.qgis_app, _s1.page, f"document.querySelector({_s1.button!r}) !== null"
+        ),
+    )
+    _evaluate(
+        _s1.qgis_app, _s1.page, f"document.querySelector({_s1.button!r}).click(); true"
+    )
+
+
+def _cc_test_the_built_p_p4(_s1):
+    _pump(
+        _s1.qgis_app,
+        lambda: (
+            _evaluate(
+                _s1.qgis_app,
+                _s1.page,
+                f"document.querySelector({_s1.output!r}).textContent",
+            )
+            == "1"
+        ),
+    )
+    _assert_page_took_the_host_palette(_s1.qgis_app, _s1.page)
+
+
+def _cc_test_the_built_p_p5(_s1):
+    _s1.desktop.unload()
+    _s1.qgis_app.processEvents()
+    _forget(_s1.plugin)
+
+
+def _cc_test_the_built_p_p6(_s1):
+    _s1.desktop.initGui()
+    _s1.widget = _s1.desktop.show_view()
+    try:
+        for _p1 in (
+            _cc_test_the_built_p_p2,
+            _cc_test_the_built_p_p3,
+            _cc_test_the_built_p_p4,
+        ):
+            _r1 = _p1(_s1)
+            if isinstance(_r1, _CcReturn1):
+                return _r1
+    finally:
+        for _p1 in (_cc_test_the_built_p_p5,):
+            _p1(_s1)
+    assert _s1.desktop.runtime.state.value == "stopped"
+    assert _s1.desktop.view is None
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_built_project_p1(_s):
+    _s.framework = _s.request.param
+    _s.placement = "dock" if _s.framework == "react" else "dialog"
+    _s.plugin = f"{_s.framework}_demo"
+    _s.root = _s.tmp_path_factory.mktemp(_s.manager) / _s.plugin
+
+
+def _cc_built_project_p2(_s):
+    write_scaffold(
+        ScaffoldOptions.resolve(
+            _s.plugin,
+            web=_s.framework,
+            placement=_s.placement,
+            package_manager=_s.manager,
+            sdk_dependency=_s.workspace_bridge,
+            ui_dependency=_s.workspace_ui,
+        ),
+        _s.root,
+    )
+    _s.web = _s.root / "web"
+
+
+def _cc_built_project_p3(_s):
+    _s.executable = MANAGERS[_s.manager]
+    _run(_s.executable, install_command(_s.manager), _s.web)
+    for script in ("test", "typecheck", "build"):
+        _s.script = script
+        _run(_s.executable, script_command(_s.manager, _s.script), _s.web)
+    return _CcReturn(_s.root, _s.framework)
+
+
 def _assert_page_took_the_phase1(app, page, theme):
     assert (
         _evaluate(
@@ -105,27 +264,18 @@ def built_project(
     templates are qualified against what this checkout ships, not the
     releases the scaffold pins.
     """
-    framework = request.param
-    placement = "dock" if framework == "react" else "dialog"
-    plugin = f"{framework}_demo"
-    root = tmp_path_factory.mktemp(manager) / plugin
-    write_scaffold(
-        ScaffoldOptions.resolve(
-            plugin,
-            web=framework,
-            placement=placement,
-            package_manager=manager,
-            sdk_dependency=workspace_bridge,
-            ui_dependency=workspace_ui,
-        ),
-        root,
+    _s = _CcState(
+        request=request,
+        manager=manager,
+        tmp_path_factory=tmp_path_factory,
+        workspace_bridge=workspace_bridge,
+        workspace_ui=workspace_ui,
     )
-    web = root / "web"
-    executable = MANAGERS[manager]
-    _run(executable, install_command(manager), web)
-    for script in ("test", "typecheck", "build"):
-        _run(executable, script_command(manager, script), web)
-    return root, framework
+    for _p in (_cc_built_project_p1, _cc_built_project_p2, _cc_built_project_p3):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_the_build_lands_inside_the_plugin_package(
@@ -143,56 +293,14 @@ def test_the_build_lands_inside_the_plugin_package(
 def test_the_built_page_answers_a_ping_inside_qgis(
     qgis_app: Any, built_project: tuple[Path, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, framework = built_project
-    plugin = f"{framework}_demo"
-    placement = "dock" if framework == "react" else "dialog"
-    button, output = (
-        ("button", "output") if framework == "react" else ("#ping", "#ping-result")
+    _s1 = _CcState1(
+        qgis_app=qgis_app, built_project=built_project, monkeypatch=monkeypatch
     )
-    monkeypatch.syspath_prepend(str(root))
-    _forget(plugin)  # the other manager's project used the same package name
-
-    # The scaffold's module-level application, the only public entry point
-    # since the class-based authoring API was retired (TASK-141).
-    desktop = host(f"{plugin}.plugin:app", placement=placement)(None)
-    desktop.initGui()
-    widget = desktop.show_view()
-    try:
-        view = (
-            widget.widget()
-            if placement == "dock"
-            else widget.layout().itemAt(0).widget()
-        )
-        page = view.page()
-        loaded: list[bool] = []
-        page.loadFinished.connect(loaded.append)
-        _pump(qgis_app, lambda: bool(loaded))
-        assert loaded == [True], page.url().toString()
-        assert page.url().toLocalFile() == str(root / plugin / "web" / "index.html")
-
-        _pump(
-            qgis_app,
-            lambda: _evaluate(
-                qgis_app, page, f"document.querySelector({button!r}) !== null"
-            ),
-        )
-        _evaluate(qgis_app, page, f"document.querySelector({button!r}).click(); true")
-        _pump(
-            qgis_app,
-            lambda: (
-                _evaluate(
-                    qgis_app, page, f"document.querySelector({output!r}).textContent"
-                )
-                == "1"
-            ),
-        )
-        _assert_page_took_the_host_palette(qgis_app, page)
-    finally:
-        desktop.unload()
-        qgis_app.processEvents()
-        _forget(plugin)
-    assert desktop.runtime.state.value == "stopped"
-    assert desktop.view is None
+    for _p1 in (_cc_test_the_built_p_p1, _cc_test_the_built_p_p6):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 def _assert_page_took_the_host_palette(app: Any, page: Any) -> None:

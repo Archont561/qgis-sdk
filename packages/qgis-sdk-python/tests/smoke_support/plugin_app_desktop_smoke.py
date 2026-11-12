@@ -19,24 +19,116 @@ from smoke_support.desktop_smoke_kit import (
     write_workspace_file,
 )
 
-EVIDENCE_FIELDS = (
-    "discovered",
-    "real_iface",
-    "both_loaded",
-    "native_context",
-    "provider_registration",
-    "actions_and_dialogs",
-    "surface_wire_dispatch",
-    "surface_direct_capabilities",
-    "surface_navigation",
-    "closed_view_capabilities",
-    "first_unload_isolated",
-    "reload_fresh_module",
-    "final_cleanup",
-    "direct_app_spec_resolved",
-)
 
-PLUGIN_SOURCE = """\
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_run_smoke_p1(_s):
+    _s.root = profile_plugin_dir(_s.executable, _s.prefix, _s.workspace)
+    _s.names = ("application_app_one", "application_app_two")
+
+
+def _cc_run_smoke_p2(_s):
+    for name, suffix, key in zip(_s.names, ("one", "two"), ("1", "2")):
+        _s.name = name
+        _s.suffix = suffix
+        _s.key = key
+        _s.package = _s.root / _s.name
+        _s.package.mkdir(parents=True, exist_ok=True)
+        (_s.package / "__init__.py").write_text(
+            'from qgis_sdk.adapters.desktop import host\nclassFactory = host(__name__ + ".plugin:app")\n',
+            encoding="utf-8",
+        )
+        (_s.package / "plugin.py").write_text(
+            PLUGIN_SOURCE.replace("NAME", _s.suffix).replace("KEY", _s.key),
+            encoding="utf-8",
+        )
+        (_s.package / "metadata.txt").write_text(
+            f"[general]\nname=Application {_s.suffix}\ndescription=Application test\nversion=0.1\nqgisMinimumVersion=4.0\nauthor=SDK\nemail=none@example.test\n",
+            encoding="utf-8",
+        )
+
+
+def _cc_run_smoke_p3(_s):
+    write_request(
+        _s.workspace,
+        {
+            "names": list(_s.names),
+            "plugins_root": str(_s.root),
+            "scripts": str(Path(__file__).resolve().parent),
+        },
+    )
+    _s.probe = write_workspace_file(_s.workspace, "app-probe.py", PROBE)
+    run_desktop_probe(_s.executable, _s.prefix, _s.workspace, _s.probe)
+    _s.report = read_report(_s.workspace)
+
+
+def _cc_run_smoke_p4(_s):
+    if _s.report is None:
+        return _CcReturn({"passed": False, "error": "QGIS Desktop wrote no report"})
+    return _CcReturn({**_s.report, "passed": passed(_s.report)})
+
+
+def _cc_run_smoke_p5(_s):
+    return _CcReturn(
+        {"passed": False, "error": f"{type(_s.error).__name__}: {_s.error}"}
+    )
+
+
+def _cc_run_smoke_p6(_s):
+    _s.workspace = Path(_s.temporary)
+    try:
+        for _p in (
+            _cc_run_smoke_p1,
+            _cc_run_smoke_p2,
+            _cc_run_smoke_p3,
+            _cc_run_smoke_p4,
+        ):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    except Exception as error:  # noqa: BLE001
+        _s.error = error
+        for _p in (_cc_run_smoke_p5,):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
+def _cc_run_smoke_p7(_s):
+    _s.prefix = _s.prefix or Path(sys.prefix)
+    _s.executable = qgis_executable(_s.prefix)
+    if not _s.executable.is_file():
+        return _CcReturn(
+            {"passed": False, "error": f"QGIS Desktop not found: {_s.executable}"}
+        )
+    with tempfile.TemporaryDirectory(prefix="qgis-sdk-app-desktop-") as _s.temporary:
+        for _p in (_cc_run_smoke_p6,):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
+_CC_TEXT_1 = """\
 from qgis.PyQt.QtCore import QThread
 from qgis.PyQt.QtWidgets import QApplication, QLabel, QPushButton
 from qgis_sdk import QgisSdkPlugin, menu, shortcut, toolbar
@@ -89,8 +181,7 @@ app = QgisSdkPlugin(id="application.NAME", title="Application NAME")
 app.include(child)
 
 """
-
-PROBE = """\
+_CC_TEXT_2 = """\
 import importlib
 import json
 import os
@@ -174,6 +265,28 @@ os._exit(0 if result["error"] is None else 1)
 """
 
 
+EVIDENCE_FIELDS = (
+    "discovered",
+    "real_iface",
+    "both_loaded",
+    "native_context",
+    "provider_registration",
+    "actions_and_dialogs",
+    "surface_wire_dispatch",
+    "surface_direct_capabilities",
+    "surface_navigation",
+    "closed_view_capabilities",
+    "first_unload_isolated",
+    "reload_fresh_module",
+    "final_cleanup",
+    "direct_app_spec_resolved",
+)
+
+PLUGIN_SOURCE = _CC_TEXT_1
+
+PROBE = _CC_TEXT_2
+
+
 def passed(payload: dict[str, object]) -> bool:
     """Fail unless every named evidence item is explicitly true."""
     return payload.get("error") is None and all(
@@ -183,43 +296,9 @@ def passed(payload: dict[str, object]) -> bool:
 
 def run_smoke(prefix: Path | None = None) -> dict[str, object]:
     """Launch QGIS Desktop with two throwaway application plugins."""
-    prefix = prefix or Path(sys.prefix)
-    executable = qgis_executable(prefix)
-    if not executable.is_file():
-        return {"passed": False, "error": f"QGIS Desktop not found: {executable}"}
-    with tempfile.TemporaryDirectory(prefix="qgis-sdk-app-desktop-") as temporary:
-        workspace = Path(temporary)
-        try:
-            root = profile_plugin_dir(executable, prefix, workspace)
-            names = ("application_app_one", "application_app_two")
-            for name, suffix, key in zip(names, ("one", "two"), ("1", "2")):
-                package = root / name
-                package.mkdir(parents=True, exist_ok=True)
-                (package / "__init__.py").write_text(
-                    'from qgis_sdk.adapters.desktop import host\nclassFactory = host(__name__ + ".plugin:app")\n',
-                    encoding="utf-8",
-                )
-                (package / "plugin.py").write_text(
-                    PLUGIN_SOURCE.replace("NAME", suffix).replace("KEY", key),
-                    encoding="utf-8",
-                )
-                (package / "metadata.txt").write_text(
-                    f"[general]\nname=Application {suffix}\ndescription=Application test\nversion=0.1\nqgisMinimumVersion=4.0\nauthor=SDK\nemail=none@example.test\n",
-                    encoding="utf-8",
-                )
-            write_request(
-                workspace,
-                {
-                    "names": list(names),
-                    "plugins_root": str(root),
-                    "scripts": str(Path(__file__).resolve().parent),
-                },
-            )
-            probe = write_workspace_file(workspace, "app-probe.py", PROBE)
-            run_desktop_probe(executable, prefix, workspace, probe)
-            report = read_report(workspace)
-            if report is None:
-                return {"passed": False, "error": "QGIS Desktop wrote no report"}
-            return {**report, "passed": passed(report)}
-        except Exception as error:  # noqa: BLE001 - a failed qualification is reported
-            return {"passed": False, "error": f"{type(error).__name__}: {error}"}
+    _s = _CcState(prefix=prefix)
+    for _p in (_cc_run_smoke_p7,):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

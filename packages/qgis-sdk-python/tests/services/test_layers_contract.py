@@ -18,6 +18,75 @@ from qgis_sdk.models import (
 from qgis_sdk.testing import VectorLayerDeclaration
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_export_rech_p1(_s):
+    _s.first = _s.tmp_path / "first.geojson"
+    _s.second = _s.tmp_path / "second.geojson"
+    _s.first.write_bytes(_s.services.dataset.read_bytes())
+    _s.second.write_bytes(_s.services.dataset.read_bytes())
+    _s.source = _s.tmp_path / "source.geojson"
+    try:
+        _s.source.symlink_to(_s.first)
+    except (OSError, NotImplementedError) as error:
+        _s.error = error
+        pytest.skip(f"symbolic links unavailable: {_s.error}")
+    _register_fake_source(_s.services, _s.source)
+    _s.info = _s.services.layers.open_vector(_s.source)
+    _s.before = _s.second.read_bytes()
+
+
+def _cc_test_export_rech_p2(_s):
+    _s.inode = _s.second.stat().st_ino
+    _s.run_export = exports.run_export
+
+    def retarget_during_write(plan: exports.ExportPlan, write: object) -> None:
+        def write_then_retarget(partial: Path) -> None:
+            partial.write_text("new contents", encoding="utf-8")
+            _s.source.unlink()
+            _s.source.symlink_to(_s.second)
+
+        _s.write_then_retarget = write_then_retarget
+
+        _s.run_export(plan, write_then_retarget)
+
+    _s.retarget_during_write = retarget_during_write
+
+    _s.monkeypatch.setattr(exports, "run_export", _s.retarget_during_write)
+
+
+def _cc_test_export_rech_p3(_s):
+    _export_rechecks_a_retargeted_facts21234567891011121314151617(
+        before=_s.before,
+        info=_s.info,
+        inode=_s.inode,
+        second=_s.second,
+        services=_s.services,
+        source=_s.source,
+        tmp_path=_s.tmp_path,
+    )
+
+
 def _export_rechecks_a_retargeted_facts21234567891011121314151617(**values):
     _export_rechecks_a_retargeted_facts212345678910111213141516(
         before=values["before"],
@@ -558,39 +627,16 @@ def test_export_refuses_a_retargeted_source_symlink(
 def test_export_rechecks_a_retargeted_source_symlink_before_commit(
     services: Services, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    first = tmp_path / "first.geojson"
-    second = tmp_path / "second.geojson"
-    first.write_bytes(services.dataset.read_bytes())
-    second.write_bytes(services.dataset.read_bytes())
-    source = tmp_path / "source.geojson"
-    try:
-        source.symlink_to(first)
-    except (OSError, NotImplementedError) as error:
-        pytest.skip(f"symbolic links unavailable: {error}")
-    _register_fake_source(services, source)
-    info = services.layers.open_vector(source)
-    before = second.read_bytes()
-    inode = second.stat().st_ino
-    run_export = exports.run_export
-
-    def retarget_during_write(plan: exports.ExportPlan, write: object) -> None:
-        def write_then_retarget(partial: Path) -> None:
-            partial.write_text("new contents", encoding="utf-8")
-            source.unlink()
-            source.symlink_to(second)
-
-        run_export(plan, write_then_retarget)
-
-    monkeypatch.setattr(exports, "run_export", retarget_during_write)
-    _export_rechecks_a_retargeted_facts21234567891011121314151617(
-        before=before,
-        info=info,
-        inode=inode,
-        second=second,
-        services=services,
-        source=source,
-        tmp_path=tmp_path,
-    )
+    _s = _CcState(services=services, tmp_path=tmp_path, monkeypatch=monkeypatch)
+    for _p in (
+        _cc_test_export_rech_p1,
+        _cc_test_export_rech_p2,
+        _cc_test_export_rech_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_export_refuses_a_hard_link_to_its_source(

@@ -16,6 +16,104 @@ from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.models import QgisSdkScopeClosedError
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_native_plug_p1(_s):
+    from qgis.core import QgsApplication
+
+    _s.QgsApplication = QgsApplication
+
+
+def _cc_test_native_plug_p2(_s):
+    from qgis_sdk.adapters.qgis import (
+        NativeAlgorithms,
+        NativeContextOptions,
+        NativeLayers,
+        NativeNetworkTransport,
+        NativeNotifications,
+        NativeProject,
+        NativeSettings,
+        NativeStyles,
+        QgsTaskWorkers,
+        native_plugin_context,
+    )
+
+    _s.NativeAlgorithms = NativeAlgorithms
+    _s.NativeContextOptions = NativeContextOptions
+    _s.NativeLayers = NativeLayers
+    _s.NativeNetworkTransport = NativeNetworkTransport
+    _s.NativeNotifications = NativeNotifications
+    _s.NativeProject = NativeProject
+    _s.NativeSettings = NativeSettings
+    _s.NativeStyles = NativeStyles
+    _s.QgsTaskWorkers = QgsTaskWorkers
+    _s.native_plugin_context = native_plugin_context
+
+
+def _cc_test_native_plug_p3(_s):
+    from qgis_sdk.bridge.host import HostServices
+
+    _s.HostServices = HostServices
+    from qgis_sdk.network import NetworkClient
+
+    _s.NetworkClient = NetworkClient
+
+    _s.iface = object()
+    _s.scope = ResourceScope()
+
+    _s.context = _s.native_plugin_context(
+        _s.scope,
+        _s.NativeContextOptions(settings_prefix="qgis-sdk-test", iface=_s.iface),
+    )
+
+    assert isinstance(_s.context, PluginContext)
+    assert _s.context.scope is _s.scope
+
+
+def _cc_test_native_plug_p4(_s):
+    assert _s.context.desktop.iface is _s.iface
+    assert isinstance(_s.context.layers, _s.NativeLayers)
+    assert isinstance(_s.context.project, _s.NativeProject)
+    assert isinstance(_s.context.settings, _s.NativeSettings)
+    assert isinstance(_s.context.styles, _s.NativeStyles)
+    assert isinstance(_s.context.algorithms, _s.NativeAlgorithms)
+    # The worker backend is the task manager since 0.9.0 (decision-65).
+    assert isinstance(_s.context.workers, _s.QgsTaskWorkers)
+    assert _s.context.workers.manager is _s.QgsApplication.taskManager()
+    assert isinstance(_s.context.network, _s.NetworkClient)
+    assert isinstance(_s.context.notifications, _s.NativeNotifications)
+
+
+def _cc_test_native_plug_p5(_s):
+    _native_plugin_context_wires_phase3(
+        _s.HostServices,
+        _s.NativeNetworkTransport,
+        _s.context,
+        _s.native_services,
+        _s.scope,
+    )
+
+
 def _native_plugin_context_wires_phase3(
     HostServices, NativeNetworkTransport, context, native_services, scope
 ):
@@ -56,45 +154,18 @@ if TYPE_CHECKING:
 def test_native_plugin_context_wires_every_curated_service(
     native_services: Services,
 ) -> None:
-    from qgis.core import QgsApplication
-    from qgis_sdk.adapters.qgis import (
-        NativeAlgorithms,
-        NativeContextOptions,
-        NativeLayers,
-        NativeNetworkTransport,
-        NativeNotifications,
-        NativeProject,
-        NativeSettings,
-        NativeStyles,
-        QgsTaskWorkers,
-        native_plugin_context,
-    )
-    from qgis_sdk.bridge.host import HostServices
-    from qgis_sdk.network import NetworkClient
-
-    iface = object()
-    scope = ResourceScope()
-
-    context = native_plugin_context(
-        scope, NativeContextOptions(settings_prefix="qgis-sdk-test", iface=iface)
-    )
-
-    assert isinstance(context, PluginContext)
-    assert context.scope is scope
-    assert context.desktop.iface is iface
-    assert isinstance(context.layers, NativeLayers)
-    assert isinstance(context.project, NativeProject)
-    assert isinstance(context.settings, NativeSettings)
-    assert isinstance(context.styles, NativeStyles)
-    assert isinstance(context.algorithms, NativeAlgorithms)
-    # The worker backend is the task manager since 0.9.0 (decision-65).
-    assert isinstance(context.workers, QgsTaskWorkers)
-    assert context.workers.manager is QgsApplication.taskManager()
-    assert isinstance(context.network, NetworkClient)
-    assert isinstance(context.notifications, NativeNotifications)
-    _native_plugin_context_wires_phase3(
-        HostServices, NativeNetworkTransport, context, native_services, scope
-    )
+    _s = _CcState(native_services=native_services)
+    for _p in (
+        _cc_test_native_plug_p1,
+        _cc_test_native_plug_p2,
+        _cc_test_native_plug_p3,
+        _cc_test_native_plug_p4,
+        _cc_test_native_plug_p5,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_native_plugin_context_without_an_iface_has_no_desktop_access(

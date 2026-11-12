@@ -12,6 +12,7 @@ test imports it and ``tsc`` compiles it, so "deterministic" here never becomes
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -39,6 +40,30 @@ from qgis_sdk_tools.generate import (
     write_generated,
 )
 from typer.testing import CliRunner
+
+_CC_DATA_1 = {
+    "anyOf": [
+        {
+            "type": "object",
+            "title": "VectorReading",
+            "properties": {"kind": {"enum": ["vector"]}},
+            "required": ["kind"],
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "title": "RasterReading",
+            "properties": {"kind": {"enum": ["raster"]}},
+            "required": ["kind"],
+            "additionalProperties": False,
+        },
+    ]
+}
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
 
 
 def _a_union_result_is_phase1(described):
@@ -315,24 +340,7 @@ def test_a_union_result_keeps_its_named_interfaces() -> None:
     described = _single(
         "sites.read",
         request={"type": "object", "properties": {}, "additionalProperties": False},
-        result={
-            "anyOf": [
-                {
-                    "type": "object",
-                    "title": "VectorReading",
-                    "properties": {"kind": {"enum": ["vector"]}},
-                    "required": ["kind"],
-                    "additionalProperties": False,
-                },
-                {
-                    "type": "object",
-                    "title": "RasterReading",
-                    "properties": {"kind": {"enum": ["raster"]}},
-                    "required": ["kind"],
-                    "additionalProperties": False,
-                },
-            ]
-        },
+        result=_cc_fresh_1(),
     )
 
     generated = generate_typescript(described)

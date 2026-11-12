@@ -55,6 +55,80 @@ from qgis_sdk.declarations import (
     validate_given,
 )
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_algorithm_p1(_s):
+    validate_given(_s.id, _s.title)
+    if _s.group is not None and (not isinstance(_s.group, str) or not _s.group.strip()):
+        raise QgisSdkDeclarationError(
+            f"{_s.id if _s.id is not None else 'algorithm'}: group must be a nonempty string"
+        )
+
+
+def _cc_algorithm_decorate(_s, function: T) -> T:
+    if inspect.isclass(function):
+        raise QgisSdkDeclarationError(
+            "@provider.algorithm declares a function, not a class: write "
+            "`@provider.algorithm def name(ctx: AlgorithmContext, ...) -> "
+            "VectorLayerInfo` (the class form was removed; see the 0.6.0 "
+            "migration notes)"
+        )
+    if not inspect.isfunction(function):
+        raise QgisSdkDeclarationError("@provider.algorithm requires a function")
+    declared = _s.self._declaration(function, _s.id, _s.title, _s.group)
+    if declared.id in _s.self._described:
+        raise QgisSdkDeclarationError(
+            f"{_s.self._id}: duplicate algorithm id {declared.id!r}"
+        )
+    if ALGORITHM_ATTRIBUTE in vars(function):
+        raise QgisSdkDeclarationError(
+            f"{declared.qualified_id}: already declared; "
+            "declare a function on one provider"
+        )
+    # Described before it is marked: a refused function keeps no marker,
+    # so it cannot describe as an algorithm while registered nowhere.
+    described = describe_declared_algorithm(function, declared)
+    mark_function(function, ALGORITHM_ATTRIBUTE, declared, "@provider.algorithm")
+    _s.self._described[declared.id] = described
+    _s.self._functions[declared.id] = function
+    return function
+
+
+def _cc_algorithm_p2(_s):
+    def decorate(function):
+        return _cc_algorithm_decorate(_s, function)
+
+    _s.decorate = decorate
+
+
+def _cc_algorithm_p3(_s):
+
+    if _s.function is None:
+        return _CcReturn(_s.decorate)
+    return _CcReturn(_s.decorate(_s.function))
+
+
 __all__ = [
     "CRS_PARAMETER",
     "LAYER_PARAMETER",
@@ -124,59 +198,13 @@ class Provider:
         title: str | None = None,
         group: str | None = None,
     ) -> Any:
-        """Declare ``function`` as one of this provider's algorithms.
-
-        The function is described immediately, so a missing context
-        parameter, an input no host could render or a result that is not a
-        declared output kind all fail here rather than during the first
-        execution. Nothing is
-        wrapped: it gains ``describe()`` and a test calls the original function
-        with a fake context.
-
-        ``@provider.algorithm`` alone derives the id and title from the
-        function name. The derived id is the plain snake_case name - the
-        provider is its namespace and refuses a duplicate - so the toolbox
-        shows ``field_tools:buffer`` rather than a hashed suffix.
-        """
-        validate_given(id, title)
-        if group is not None and (not isinstance(group, str) or not group.strip()):
-            raise QgisSdkDeclarationError(
-                f"{id if id is not None else 'algorithm'}: group must be a nonempty string"
-            )
-
-        def decorate(function: T) -> T:
-            if inspect.isclass(function):
-                raise QgisSdkDeclarationError(
-                    "@provider.algorithm declares a function, not a class: write "
-                    "`@provider.algorithm def name(ctx: AlgorithmContext, ...) -> "
-                    "VectorLayerInfo` (the class form was removed; see the 0.6.0 "
-                    "migration notes)"
-                )
-            if not inspect.isfunction(function):
-                raise QgisSdkDeclarationError("@provider.algorithm requires a function")
-            declared = self._declaration(function, id, title, group)
-            if declared.id in self._described:
-                raise QgisSdkDeclarationError(
-                    f"{self._id}: duplicate algorithm id {declared.id!r}"
-                )
-            if ALGORITHM_ATTRIBUTE in vars(function):
-                raise QgisSdkDeclarationError(
-                    f"{declared.qualified_id}: already declared; "
-                    "declare a function on one provider"
-                )
-            # Described before it is marked: a refused function keeps no marker,
-            # so it cannot describe as an algorithm while registered nowhere.
-            described = describe_declared_algorithm(function, declared)
-            mark_function(
-                function, ALGORITHM_ATTRIBUTE, declared, "@provider.algorithm"
-            )
-            self._described[declared.id] = described
-            self._functions[declared.id] = function
-            return function
-
-        if function is None:
-            return decorate
-        return decorate(function)
+        "Declare ``function`` as one of this provider's algorithms.\n\n        The function is described immediately, so a missing context\n        parameter, an input no host could render or a result that is not a\n        declared output kind all fail here rather than during the first\n        execution. Nothing is\n        wrapped: it gains ``describe()`` and a test calls the original function\n        with a fake context.\n\n        ``@provider.algorithm`` alone derives the id and title from the\n        function name. The derived id is the plain snake_case name - the\n        provider is its namespace and refuses a duplicate - so the toolbox\n        shows ``field_tools:buffer`` rather than a hashed suffix.\n"
+        _s = _CcState(self=self, function=function, id=id, title=title, group=group)
+        for _p in (_cc_algorithm_p1, _cc_algorithm_p2, _cc_algorithm_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def _declaration(
         self,

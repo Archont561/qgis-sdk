@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Coroutine
 
 import pytest
@@ -9,6 +10,101 @@ from qgis_sdk.core import JobState, ResourceScope, StepScheduler
 from qgis_sdk.models import QgisSdkHttpStatusError, QgisSdkServiceResponseError
 from qgis_sdk.network import CollectionInfo, NetworkClient, OgcApiFeatures
 from qgis_sdk.testing import FakeNetworkTransport, reply
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_items_pages_p1(_s):
+    _s.first = f"{BASE}/collections/sites/items?limit=2&bbox=1%2C2%2C3%2C4"
+    _s.second = f"{BASE}/collections/sites/items?limit=2&offset=2"
+
+
+def _cc_test_items_pages_p2(_s):
+    _s.transport.expect(
+        "GET",
+        _s.first,
+        reply(
+            json={
+                "type": "FeatureCollection",
+                "features": _cc_fresh_1(),
+                "numberMatched": 3,
+                "numberReturned": 2,
+                "links": [
+                    {"rel": "self", "href": _s.first},
+                    {"rel": "next", "href": _s.second},
+                ],
+            }
+        ),
+    )
+
+
+def _cc_test_items_pages_p3(_s):
+    _s.transport.expect(
+        "GET",
+        _s.second,
+        reply(json=_cc_fresh_2()),
+    )
+
+    async def both() -> tuple[object, object, object]:
+        page = await _s.service.items("sites", limit=2, bbox=(1, 2, 3, 4))
+        last = await _s.service.next_page(page)
+        assert last is not None
+        return page, last, await _s.service.next_page(last)
+
+    _s.both = both
+
+
+def _cc_test_items_pages_p4(_s):
+
+    _s.page, _s.last, _s.after_last = run(_s.both())
+
+    assert _s.page.number_matched == 3
+    assert _s.page.number_returned == 2
+    _items_pages_carry_features_phase1(
+        _s.after_last, _s.last, _s.page, _s.second, _s.transport
+    )
+
+
+_CC_DATA_1 = [
+    {"type": "Feature", "id": 1},
+    {"type": "Feature", "id": 2},
+]
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
+
+
+_CC_DATA_2 = {
+    "type": "FeatureCollection",
+    "features": [{"type": "Feature", "id": 3}],
+}
+
+
+def _cc_fresh_2():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_2)
 
 
 def _collections_are_typed_values_facts1(collections, transport):
@@ -86,49 +182,17 @@ def test_collections_are_typed_values_fetched_through_the_shared_client(
 def test_items_pages_carry_features_and_the_next_link(
     service: OgcApiFeatures, transport: FakeNetworkTransport
 ) -> None:
-    first = f"{BASE}/collections/sites/items?limit=2&bbox=1%2C2%2C3%2C4"
-    second = f"{BASE}/collections/sites/items?limit=2&offset=2"
-    transport.expect(
-        "GET",
-        first,
-        reply(
-            json={
-                "type": "FeatureCollection",
-                "features": [
-                    {"type": "Feature", "id": 1},
-                    {"type": "Feature", "id": 2},
-                ],
-                "numberMatched": 3,
-                "numberReturned": 2,
-                "links": [
-                    {"rel": "self", "href": first},
-                    {"rel": "next", "href": second},
-                ],
-            }
-        ),
-    )
-    transport.expect(
-        "GET",
-        second,
-        reply(
-            json={
-                "type": "FeatureCollection",
-                "features": [{"type": "Feature", "id": 3}],
-            }
-        ),
-    )
-
-    async def both() -> tuple[object, object, object]:
-        page = await service.items("sites", limit=2, bbox=(1, 2, 3, 4))
-        last = await service.next_page(page)
-        assert last is not None
-        return page, last, await service.next_page(last)
-
-    page, last, after_last = run(both())
-
-    assert page.number_matched == 3
-    assert page.number_returned == 2
-    _items_pages_carry_features_phase1(after_last, last, page, second, transport)
+    _s = _CcState(service=service, transport=transport)
+    for _p in (
+        _cc_test_items_pages_p1,
+        _cc_test_items_pages_p2,
+        _cc_test_items_pages_p3,
+        _cc_test_items_pages_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_an_http_failure_surfaces_as_the_status_error(

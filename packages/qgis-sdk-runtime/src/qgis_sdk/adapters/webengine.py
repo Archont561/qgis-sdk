@@ -29,6 +29,126 @@ from urllib.request import url2pathname
 from qgis_sdk.models.errors import QgisSdkBridgeError, QgisSdkOptionalDependencyError
 from qgis_sdk.network.grants import origin_of
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_create_restricte_p1(_s):
+    _s.imported = _import_webengine_core()
+    if _s.imported is None:
+        raise QgisSdkOptionalDependencyError(
+            WEBENGINE_DEPENDENCY, WEBENGINE_INSTALLATION_HINT
+        )
+    _s.page_class, _s.interceptor_class, _s.settings_class = _s.imported
+
+    def refused(kind: str, decision: Decision) -> None:
+        if _s.on_refusal is not None:
+            _s.on_refusal(kind, decision)
+
+    _s.refused = refused
+
+
+def _cc_create_restricte_p2(_s):
+
+    class _Interceptor(_s.interceptor_class):  # type: ignore[misc,valid-type]
+        def interceptRequest(self, info: Any) -> None:
+            decision = _s.policy.resource(info.requestUrl().toString())
+            if not decision.allowed:
+                info.block(True)
+                _s.refused("resource", decision)
+
+        _s.interceptRequest = interceptRequest
+
+    _s._Interceptor = _Interceptor
+
+
+def _cc_create_restricte_p3(_s):
+
+    class _RestrictedPage(_s.page_class):  # type: ignore[misc,valid-type]
+        def acceptNavigationRequest(
+            self, url: Any, navigation_type: Any, is_main_frame: bool
+        ) -> bool:
+            typed = getattr(type(self).NavigationType, "NavigationTypeTyped", None)
+            decision = _s.policy.navigation(
+                url.toString(), host_initiated=navigation_type == typed
+            )
+            if not decision.allowed:
+                _s.refused("navigation", decision)
+                return False
+            return bool(
+                super().acceptNavigationRequest(url, navigation_type, is_main_frame)
+            )
+
+        _s.acceptNavigationRequest = acceptNavigationRequest
+
+        def createWindow(self, window_type: Any) -> Any:
+            _s.refused("window", Decision(False, "", "the page may not open windows"))
+            return None
+
+        _s.createWindow = createWindow
+
+    _s._RestrictedPage = _RestrictedPage
+
+
+def _cc_create_restricte_p4(_s):
+
+    _s.page = (
+        _s._RestrictedPage(_s.profile, _s.parent)
+        if _s.profile is not None
+        else (
+            _s._RestrictedPage(_s.parent)
+            if _s.parent is not None
+            else _s._RestrictedPage()
+        )
+    )
+    _s.interceptor = _s._Interceptor(_s.page)
+    _s.page.setUrlRequestInterceptor(_s.interceptor)
+    _s.page._qgis_sdk_interceptor = _s.interceptor  # keep it alive with the page
+    _s.page._qgis_sdk_policy = _s.policy
+
+
+def _cc_create_restricte_p5(_s):
+    if _s.settings_class is not None:
+        _s.attribute = _s.settings_class.WebAttribute
+        _s.settings = _s.page.settings()
+        for name, value in (
+            ("JavascriptCanOpenWindows", False),
+            ("LocalContentCanAccessRemoteUrls", bool(_s.policy.origins)),
+            ("LocalContentCanAccessFileUrls", bool(_s.policy.asset_roots)),
+            ("AllowRunningInsecureContent", False),
+            ("PluginsEnabled", False),
+            ("PdfViewerEnabled", False),
+        ):
+            _s.name = name
+            _s.value = value
+            _s.flag = getattr(_s.attribute, _s.name, None)
+            if _s.flag is not None:
+                _s.settings.setAttribute(_s.flag, _s.value)
+
+
+def _cc_create_restricte_p6(_s):
+    return _CcReturn(_s.page)
+
+
 WEBENGINE_DEPENDENCY = "pyqt6-webengine"
 WEBENGINE_INSTALLATION_HINT = (
     "Install the Qt WebEngine Python bindings provided by the QGIS "
@@ -264,84 +384,20 @@ def create_restricted_page(
     parent: Any | None = None,
     on_refusal: Refusal | None = None,
 ) -> Any:
-    """Create a ``QWebEnginePage`` that consults ``policy`` for every egress.
-
-    Three hooks, all on the page: ``acceptNavigationRequest`` refuses a
-    navigation (main frame or subframe) the policy does not allow, a request
-    interceptor blocks every resource request it does not allow - fetch, XHR,
-    images, scripts, frames, sockets - and ``createWindow`` opens nothing, so a
-    ``window.open`` or ``target=_blank`` cannot leave the policy behind. Page
-    settings close the remaining doors: no plugins, no script-opened windows,
-    and Chromium's two local-content switches follow the policy - local
-    content (``file:``, ``qrc:``) may load ``file:`` subresources only when
-    the policy names asset roots and may reach remote URLs only when it grants
-    origins; the interceptor is what confines both to the list.
-
-    ``on_refusal`` receives ``("navigation" | "resource" | "window", decision)``
-    for each refusal, for the host's log; nothing is reported to the page
-    beyond the failed load it observes anyway.
-    """
-    imported = _import_webengine_core()
-    if imported is None:
-        raise QgisSdkOptionalDependencyError(
-            WEBENGINE_DEPENDENCY, WEBENGINE_INSTALLATION_HINT
-        )
-    page_class, interceptor_class, settings_class = imported
-
-    def refused(kind: str, decision: Decision) -> None:
-        if on_refusal is not None:
-            on_refusal(kind, decision)
-
-    class _Interceptor(interceptor_class):  # type: ignore[misc,valid-type]
-        def interceptRequest(self, info: Any) -> None:
-            decision = policy.resource(info.requestUrl().toString())
-            if not decision.allowed:
-                info.block(True)
-                refused("resource", decision)
-
-    class _RestrictedPage(page_class):  # type: ignore[misc,valid-type]
-        def acceptNavigationRequest(
-            self, url: Any, navigation_type: Any, is_main_frame: bool
-        ) -> bool:
-            typed = getattr(type(self).NavigationType, "NavigationTypeTyped", None)
-            decision = policy.navigation(
-                url.toString(), host_initiated=navigation_type == typed
-            )
-            if not decision.allowed:
-                refused("navigation", decision)
-                return False
-            return bool(
-                super().acceptNavigationRequest(url, navigation_type, is_main_frame)
-            )
-
-        def createWindow(self, window_type: Any) -> Any:
-            refused("window", Decision(False, "", "the page may not open windows"))
-            return None
-
-    page = (
-        _RestrictedPage(profile, parent)
-        if profile is not None
-        else (_RestrictedPage(parent) if parent is not None else _RestrictedPage())
-    )
-    interceptor = _Interceptor(page)
-    page.setUrlRequestInterceptor(interceptor)
-    page._qgis_sdk_interceptor = interceptor  # keep it alive with the page
-    page._qgis_sdk_policy = policy
-    if settings_class is not None:
-        attribute = settings_class.WebAttribute
-        settings = page.settings()
-        for name, value in (
-            ("JavascriptCanOpenWindows", False),
-            ("LocalContentCanAccessRemoteUrls", bool(policy.origins)),
-            ("LocalContentCanAccessFileUrls", bool(policy.asset_roots)),
-            ("AllowRunningInsecureContent", False),
-            ("PluginsEnabled", False),
-            ("PdfViewerEnabled", False),
-        ):
-            flag = getattr(attribute, name, None)
-            if flag is not None:
-                settings.setAttribute(flag, value)
-    return page
+    'Create a ``QWebEnginePage`` that consults ``policy`` for every egress.\n\n    Three hooks, all on the page: ``acceptNavigationRequest`` refuses a\n    navigation (main frame or subframe) the policy does not allow, a request\n    interceptor blocks every resource request it does not allow - fetch, XHR,\n    images, scripts, frames, sockets - and ``createWindow`` opens nothing, so a\n    ``window.open`` or ``target=_blank`` cannot leave the policy behind. Page\n    settings close the remaining doors: no plugins, no script-opened windows,\n    and Chromium\'s two local-content switches follow the policy - local\n    content (``file:``, ``qrc:``) may load ``file:`` subresources only when\n    the policy names asset roots and may reach remote URLs only when it grants\n    origins; the interceptor is what confines both to the list.\n\n    ``on_refusal`` receives ``("navigation" | "resource" | "window", decision)``\n    for each refusal, for the host\'s log; nothing is reported to the page\n    beyond the failed load it observes anyway.\n'
+    _s = _CcState(policy=policy, profile=profile, parent=parent, on_refusal=on_refusal)
+    for _p in (
+        _cc_create_restricte_p1,
+        _cc_create_restricte_p2,
+        _cc_create_restricte_p3,
+        _cc_create_restricte_p4,
+        _cc_create_restricte_p5,
+        _cc_create_restricte_p6,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 __all__ = [

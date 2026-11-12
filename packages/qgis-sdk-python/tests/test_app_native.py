@@ -35,45 +35,85 @@ import pytest
 from layers import qgis_bindings, source_path
 
 
-def _run_probe_facts1(environment, probe, tmp_path):
-    finished = subprocess.run(
-        [sys.executable, str(probe)],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=tmp_path,
-        env=environment,
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_qgis_sdk_ru_p1(_s):
+    from qgis.core import Qgis
+
+    _s.Qgis = Qgis
+    from qgis_sdk_tools.__main__ import app as cli
+
+    _s.cli = cli
+    from qgis_sdk_tools.devtools import find_qgis_install
+
+    _s.find_qgis_install = find_qgis_install
+    from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
+
+    _s.ScaffoldOptions = ScaffoldOptions
+    _s.write_scaffold = write_scaffold
+    from typer.testing import CliRunner
+
+    _s.CliRunner = CliRunner
+
+    _s.root = _s.tmp_path / "field_tools"
+    _s.options = _s.ScaffoldOptions.resolve("field_tools", host="app")
+    _s.write_scaffold(_s.options, _s.root)
+
+
+def _cc_test_qgis_sdk_ru_p2(_s):
+    for name in ("plugin.py", "__main__.py"):
+        _s.name = name
+        _s.module = _s.root / _s.options.plugin / _s.name
+        _s.text = _s.module.read_text(encoding="utf-8")
+        _s.guard = 'if __name__ == "__main__":'
+        # `__main__.py` ends with the guard, which would exit before appended
+        # lines ran: the report goes above it.
+        _s.module.write_text(
+            _s.text.replace(_s.guard, _RUN_REPORT + "\n" + _s.guard, 1)
+            if _s.guard in _s.text
+            else _s.text + _RUN_REPORT,
+            encoding="utf-8",
+        )
+
+
+def _cc_test_qgis_sdk_ru_p3(_s):
+    _s.entry = _s.tmp_path / "entry.txt"
+    _s.marker = _s.tmp_path / "started.json"
+    _s.monkeypatch.setenv("QGIS_SDK_RUN_ENTRY", str(_s.entry))
+    _s.monkeypatch.setenv("QGIS_SDK_RUN_MARKER", str(_s.marker))
+
+    _s.result = _s.CliRunner().invoke(
+        _s.cli, ["run", str(_s.root), "--headless", "--once"]
     )
-    assert finished.returncode == 0, finished.stdout + finished.stderr
-    lines = [line for line in finished.stdout.splitlines() if line.startswith("{")]
-    assert lines, finished.stdout + finished.stderr
-    return json.loads(lines[-1])
+
+    assert _s.result.exit_code == 0, f"{_s.result.output}{_s.result.exception!r}"
+    assert _s.entry.is_file(), "the project's own __main__.py was not the entry"
+    assert _s.marker.is_file(), "the child never imported the project's plugin"
+    _s.reported = json.loads(_s.marker.read_text(encoding="utf-8"))
+    _qgis_sdk_run_starts_phase1(_s.Qgis, _s.find_qgis_install, _s.reported)
 
 
-def _qgis_sdk_run_starts_phase1(Qgis, find_qgis_install, reported):
-    assert reported["version"] == Qgis.version(), "not the QGIS this row has"
-    assert reported["platform"] == "offscreen", "--headless must reach the toolkit"
-    # The interpreter the command discovered, not one the test named: a symlinked
-    # `bin/python` is the same interpreter, so compare where it resolves to.
-    install = find_qgis_install(os.environ)
-    assert Path(reported["interpreter"]).resolve() == Path(install.python).resolve()
-
-
-pytestmark = pytest.mark.qgis
-
-try:
-    # ``find_spec("qgis.core")`` imports ``qgis`` first; ask for the parent.
-    HAVE_QGIS = importlib.util.find_spec("qgis") is not None
-except (ImportError, ValueError):  # pragma: no cover - a broken installation
-    HAVE_QGIS = False
-
-if not HAVE_QGIS:  # pragma: no cover - host-dependent
-    pytest.skip(
-        "the app host on a real toolkit needs the QGIS Python bindings",
-        allow_module_level=True,
-    )
-
-PROBE = '''"""Runs one app host in this interpreter and prints what it found."""
+_CC_TEXT_1 = '''"""Runs one app host in this interpreter and prints what it found."""
 
 from __future__ import annotations
 
@@ -239,6 +279,73 @@ def main() -> int:
 if __name__ == "__main__":
     raise SystemExit(main())
 '''
+_CC_TEXT_2 = """
+import os as _os
+
+if _entry := _os.environ.get("QGIS_SDK_RUN_ENTRY"):
+    import pathlib as _pathlib
+
+    _pathlib.Path(_entry).write_text("entry", encoding="utf-8")
+
+if _marker := _os.environ.get("QGIS_SDK_RUN_MARKER"):
+    import json as _json
+    import pathlib as _pathlib
+    import sys as _sys
+
+    from qgis.core import Qgis as _Qgis
+
+    _pathlib.Path(_marker).write_text(
+        _json.dumps(
+            {
+                "version": _Qgis.version(),
+                "platform": _os.environ.get("QT_QPA_PLATFORM"),
+                "interpreter": _sys.executable,
+            }
+        ),
+        encoding="utf-8",
+    )
+"""
+
+
+def _run_probe_facts1(environment, probe, tmp_path):
+    finished = subprocess.run(
+        [sys.executable, str(probe)],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=tmp_path,
+        env=environment,
+    )
+    assert finished.returncode == 0, finished.stdout + finished.stderr
+    lines = [line for line in finished.stdout.splitlines() if line.startswith("{")]
+    assert lines, finished.stdout + finished.stderr
+    return json.loads(lines[-1])
+
+
+def _qgis_sdk_run_starts_phase1(Qgis, find_qgis_install, reported):
+    assert reported["version"] == Qgis.version(), "not the QGIS this row has"
+    assert reported["platform"] == "offscreen", "--headless must reach the toolkit"
+    # The interpreter the command discovered, not one the test named: a symlinked
+    # `bin/python` is the same interpreter, so compare where it resolves to.
+    install = find_qgis_install(os.environ)
+    assert Path(reported["interpreter"]).resolve() == Path(install.python).resolve()
+
+
+pytestmark = pytest.mark.qgis
+
+try:
+    # ``find_spec("qgis.core")`` imports ``qgis`` first; ask for the parent.
+    HAVE_QGIS = importlib.util.find_spec("qgis") is not None
+except (ImportError, ValueError):  # pragma: no cover - a broken installation
+    HAVE_QGIS = False
+
+if not HAVE_QGIS:  # pragma: no cover - host-dependent
+    pytest.skip(
+        "the app host on a real toolkit needs the QGIS Python bindings",
+        allow_module_level=True,
+    )
+
+PROBE = _CC_TEXT_1
 
 
 def run_probe(tmp_path: Path, *, gui: bool) -> dict[str, object]:
@@ -321,32 +428,7 @@ def test_the_window_carries_the_canvas_and_the_declared_bindings(
 
 #: Appended to a scaffolded project so the child the command starts can report
 #: itself: which entry ran, and under which QGIS.
-_RUN_REPORT = """
-import os as _os
-
-if _entry := _os.environ.get("QGIS_SDK_RUN_ENTRY"):
-    import pathlib as _pathlib
-
-    _pathlib.Path(_entry).write_text("entry", encoding="utf-8")
-
-if _marker := _os.environ.get("QGIS_SDK_RUN_MARKER"):
-    import json as _json
-    import pathlib as _pathlib
-    import sys as _sys
-
-    from qgis.core import Qgis as _Qgis
-
-    _pathlib.Path(_marker).write_text(
-        _json.dumps(
-            {
-                "version": _Qgis.version(),
-                "platform": _os.environ.get("QT_QPA_PLATFORM"),
-                "interpreter": _sys.executable,
-            }
-        ),
-        encoding="utf-8",
-    )
-"""
+_RUN_REPORT = _CC_TEXT_2
 
 
 def test_qgis_sdk_run_starts_the_project_through_the_found_qgis(
@@ -362,36 +444,13 @@ def test_qgis_sdk_run_starts_the_project_through_the_found_qgis(
     ``__main__.py`` is the entry, and the child imports the project's module
     under that QGIS and stops by itself.
     """
-    from qgis.core import Qgis
-    from qgis_sdk_tools.__main__ import app as cli
-    from qgis_sdk_tools.devtools import find_qgis_install
-    from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
-    from typer.testing import CliRunner
-
-    root = tmp_path / "field_tools"
-    options = ScaffoldOptions.resolve("field_tools", host="app")
-    write_scaffold(options, root)
-    for name in ("plugin.py", "__main__.py"):
-        module = root / options.plugin / name
-        text = module.read_text(encoding="utf-8")
-        guard = 'if __name__ == "__main__":'
-        # `__main__.py` ends with the guard, which would exit before appended
-        # lines ran: the report goes above it.
-        module.write_text(
-            text.replace(guard, _RUN_REPORT + "\n" + guard, 1)
-            if guard in text
-            else text + _RUN_REPORT,
-            encoding="utf-8",
-        )
-    entry = tmp_path / "entry.txt"
-    marker = tmp_path / "started.json"
-    monkeypatch.setenv("QGIS_SDK_RUN_ENTRY", str(entry))
-    monkeypatch.setenv("QGIS_SDK_RUN_MARKER", str(marker))
-
-    result = CliRunner().invoke(cli, ["run", str(root), "--headless", "--once"])
-
-    assert result.exit_code == 0, f"{result.output}{result.exception!r}"
-    assert entry.is_file(), "the project's own __main__.py was not the entry"
-    assert marker.is_file(), "the child never imported the project's plugin"
-    reported = json.loads(marker.read_text(encoding="utf-8"))
-    _qgis_sdk_run_starts_phase1(Qgis, find_qgis_install, reported)
+    _s = _CcState(tmp_path=tmp_path, monkeypatch=monkeypatch)
+    for _p in (
+        _cc_test_qgis_sdk_ru_p1,
+        _cc_test_qgis_sdk_ru_p2,
+        _cc_test_qgis_sdk_ru_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

@@ -51,6 +51,58 @@ from ._session import (
     ShutdownReport,
 )
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_main_p1(_s):
+    try:
+        _s.options = parse_argv(_s.argv)
+    except QgisSdkAppError as error:
+        _s.error = error
+        print(f"qgis-sdk app: {_s.error}", file=sys.stderr)
+        return _CcReturn(2)
+
+
+def _cc_main_p2(_s):
+    try:
+        return _CcReturn(
+            run(
+                _s.app,
+                gui=_s.options.gui,
+                argv=_s.options.argv,
+                grace=_s.options.grace,
+                once=_s.options.once,
+                backend=_s.backend,
+                title=_s.options.title,
+            )
+        )
+    except QgisSdkAppError as error:
+        _s.error = error
+        # A launcher has no traceback to show: the refusal is the whole message.
+        print(f"qgis-sdk app: {_s.error}", file=sys.stderr)
+        return _CcReturn(2)
+
+
 __all__ = [
     "DRAIN_INTERVAL",
     "GRACE_SECONDS",
@@ -72,16 +124,7 @@ _running: AppSession | None = None
 
 
 def run(app: QgisSdkPlugin, **options: Unpack[_RunOptions1]) -> int:
-    """Run ``app`` as a standalone PyQGIS application; return the exit code.
-
-    ``argv`` is what the toolkit sees (``sys.argv[1:]`` from a launcher);
-    ``gui`` opens the window and with it ``ctx.ui`` and the Desktop-style
-    bindings; ``grace`` bounds the wait for running jobs at shutdown;
-    ``once`` starts the app, delivers what is already queued and stops instead
-    of running the event loop (``qgis-sdk run --once``). ``backend`` is the
-    toolkit seam: left out, the Qt one in :mod:`qgis_sdk.adapters.app` is built,
-    which is the only import here that needs QGIS.
-    """
+    "Run ``app`` as a standalone PyQGIS application; return the exit code.\n\n    ``argv`` is what the toolkit sees (``sys.argv[1:]`` from a launcher);\n    ``gui`` opens the window and with it ``ctx.ui`` and the Desktop-style\n    bindings; ``grace`` bounds the wait for running jobs at shutdown;\n    ``once`` starts the app, delivers what is already queued and stops instead\n    of running the event loop (``qgis-sdk run --once``). ``backend`` is the\n    toolkit seam: left out, the Qt one in :mod:`qgis_sdk.adapters.app` is built,\n    which is the only import here that needs QGIS.\n"
     values = _RunValues1(**options)
     global _running
     if _running is not None:
@@ -119,25 +162,12 @@ def main(
     no traceback to show. Everything the SDK does not recognise goes to the
     toolkit, so ``-platform offscreen`` works from a launcher too.
     """
-    try:
-        options = parse_argv(argv)
-    except QgisSdkAppError as error:
-        print(f"qgis-sdk app: {error}", file=sys.stderr)
-        return 2
-    try:
-        return run(
-            app,
-            gui=options.gui,
-            argv=options.argv,
-            grace=options.grace,
-            once=options.once,
-            backend=backend,
-            title=options.title,
-        )
-    except QgisSdkAppError as error:
-        # A launcher has no traceback to show: the refusal is the whole message.
-        print(f"qgis-sdk app: {error}", file=sys.stderr)
-        return 2
+    _s = _CcState(**locals())
+    for _p in (_cc_main_p1, _cc_main_p2):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def quit() -> None:

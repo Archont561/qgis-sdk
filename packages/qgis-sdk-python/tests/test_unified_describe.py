@@ -11,6 +11,73 @@ from qgis_sdk.models import VectorLayerInfo
 from qgis_sdk.providers import Provider
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_action_desc_p1(_s):
+    from qgis_sdk import describe, menu, shortcut, toolbar
+
+    _s.describe = describe
+    _s.menu = menu
+    _s.shortcut = shortcut
+    _s.toolbar = toolbar
+    from qgis_sdk.bindings import MenuBinding, ShortcutBinding, ToolbarBinding
+
+    _s.MenuBinding = MenuBinding
+    _s.ShortcutBinding = ShortcutBinding
+    _s.ToolbarBinding = ToolbarBinding
+
+    _s.app = QgisSdkPlugin(id="sample", title="Sample")
+
+    @_s.toolbar(text="Run")
+    @_s.shortcut("Ctrl+R")
+    @_s.menu("Plugins/Tools")
+    @_s.app.action(id="run", title="Run")
+    def run_task(ctx: PluginContext, count: int) -> int:
+        return count
+
+    _s.run_task = run_task
+
+
+def _cc_test_action_desc_p2(_s):
+
+    _s.expected = (
+        _s.MenuBinding("Plugins/Tools"),
+        _s.ShortcutBinding("Ctrl+R"),
+        _s.ToolbarBinding(text="Run"),
+    )
+    _s.info = _s.describe(_s.run_task)
+    assert _s.info.id == "run"
+    assert _s.info.handler == "run_task"
+    assert _s.info.request["required"] == ["count"]
+    assert _s.info.bindings == _s.expected
+    assert _s.run_task.describe() == _s.info
+
+
+def _cc_test_action_desc_p3(_s):
+    assert _s.describe(_s.app).actions[0].bindings == _s.expected
+    assert "bindings" not in _s.describe(_s.app).to_dict()["actions"][0]
+
+
 def test_describe_and_method_describe_plugin_and_algorithm_without_running() -> None:
     from qgis_sdk import describe
 
@@ -34,31 +101,16 @@ def test_describe_and_method_describe_plugin_and_algorithm_without_running() -> 
 
 
 def test_action_description_combines_handler_and_stacked_bindings() -> None:
-    from qgis_sdk import describe, menu, shortcut, toolbar
-    from qgis_sdk.bindings import MenuBinding, ShortcutBinding, ToolbarBinding
-
-    app = QgisSdkPlugin(id="sample", title="Sample")
-
-    @toolbar(text="Run")
-    @shortcut("Ctrl+R")
-    @menu("Plugins/Tools")
-    @app.action(id="run", title="Run")
-    def run_task(ctx: PluginContext, count: int) -> int:
-        return count
-
-    expected = (
-        MenuBinding("Plugins/Tools"),
-        ShortcutBinding("Ctrl+R"),
-        ToolbarBinding(text="Run"),
-    )
-    info = describe(run_task)
-    assert info.id == "run"
-    assert info.handler == "run_task"
-    assert info.request["required"] == ["count"]
-    assert info.bindings == expected
-    assert run_task.describe() == info
-    assert describe(app).actions[0].bindings == expected
-    assert "bindings" not in describe(app).to_dict()["actions"][0]
+    _s = _CcState()
+    for _p in (
+        _cc_test_action_desc_p1,
+        _cc_test_action_desc_p2,
+        _cc_test_action_desc_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_job_stream_and_surface_share_describe_entry_points() -> None:

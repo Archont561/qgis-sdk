@@ -27,6 +27,112 @@ from typing import Any
 
 from qgis_sdk.models.errors import QgisSdkBridgeError
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_check_p1(_s):
+    if not isinstance(_s.schema, Mapping):
+        raise QgisSdkBridgeError(f"{_s.path}: a schema must be an object")
+    _s.unknown = set(_s.schema) - _KNOWN_KEYWORDS
+    if _s.unknown:
+        raise QgisSdkBridgeError(
+            f"{_s.path}: unsupported schema keyword(s) {', '.join(sorted(_s.unknown))}"
+        )
+
+
+def _cc_check_p2(_s):
+    if "anyOf" in _s.schema:
+        _s.branches = _s.schema["anyOf"]
+        if not isinstance(_s.branches, list) or not _s.branches:
+            raise QgisSdkBridgeError(f"{_s.path}: anyOf must be a nonempty list")
+        _s.failures = []
+        for branch in _s.branches:
+            _s.branch = branch
+            try:
+                _check(
+                    _s.value, _s.branch, path=_s.path, allow_unknown=_s.allow_unknown
+                )
+            except QgisSdkBridgeError as error:
+                _s.error = error
+                _s.failures.append(str(_s.error))
+            else:
+                return _CcReturn(None)
+        raise QgisSdkBridgeError(
+            f"{_s.path}: matches none of the allowed forms ({'; '.join(_s.failures)})"
+        )
+
+
+def _cc_check_p3(_s):
+    # ``"type": ["string", "number"]`` says what ``anyOf`` says the long way;
+    # an expression's value is the case that needs it.
+    _s.failures = []
+
+
+def _cc_check_p4(_s):
+    for alternative in _s.declared:
+        _s.alternative = alternative
+        try:
+            _check(
+                _s.value,
+                {key: item for key, item in _s.schema.items() if key != "type"}
+                | {"type": _s.alternative},
+                path=_s.path,
+                allow_unknown=_s.allow_unknown,
+            )
+        except QgisSdkBridgeError as error:
+            _s.error = error
+            _s.failures.append(str(_s.error))
+        else:
+            return _CcReturn(None)
+
+
+def _cc_check_p5(_s):
+    raise QgisSdkBridgeError(
+        f"{_s.path}: matches none of the allowed types ({'; '.join(_s.failures)})"
+    )
+
+
+def _cc_check_p6(_s):
+    if "enum" in _s.schema:
+        _check_enum(_s.value, _s.schema["enum"], path=_s.path)
+        return _CcReturn(None)
+    _s.declared = _s.schema.get("type")
+    if _s.declared is None:
+        raise QgisSdkBridgeError(f"{_s.path}: a schema needs a type, anyOf or enum")
+    if isinstance(_s.declared, list):
+        for _p in (_cc_check_p3, _cc_check_p4, _cc_check_p5):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
+def _cc_check_p7(_s):
+    if _s.declared not in _PRIMITIVES:
+        raise QgisSdkBridgeError(f"{_s.path}: unsupported type {_s.declared!r}")
+    _s.checker = _CHECKERS[_s.declared]
+    _s.checker(_s.value, _s.schema, path=_s.path, allow_unknown=_s.allow_unknown)
+
+
 _PRIMITIVES = ("string", "boolean", "integer", "number", "null", "array", "object")
 _KNOWN_KEYWORDS = frozenset(
     {
@@ -62,58 +168,12 @@ def validate(
 
 
 def _check(value: Any, schema: Any, *, path: str, allow_unknown: bool) -> None:
-    if not isinstance(schema, Mapping):
-        raise QgisSdkBridgeError(f"{path}: a schema must be an object")
-    unknown = set(schema) - _KNOWN_KEYWORDS
-    if unknown:
-        raise QgisSdkBridgeError(
-            f"{path}: unsupported schema keyword(s) {', '.join(sorted(unknown))}"
-        )
-    if "anyOf" in schema:
-        branches = schema["anyOf"]
-        if not isinstance(branches, list) or not branches:
-            raise QgisSdkBridgeError(f"{path}: anyOf must be a nonempty list")
-        failures = []
-        for branch in branches:
-            try:
-                _check(value, branch, path=path, allow_unknown=allow_unknown)
-            except QgisSdkBridgeError as error:
-                failures.append(str(error))
-            else:
-                return
-        raise QgisSdkBridgeError(
-            f"{path}: matches none of the allowed forms ({'; '.join(failures)})"
-        )
-    if "enum" in schema:
-        _check_enum(value, schema["enum"], path=path)
-        return
-    declared = schema.get("type")
-    if declared is None:
-        raise QgisSdkBridgeError(f"{path}: a schema needs a type, anyOf or enum")
-    if isinstance(declared, list):
-        # ``"type": ["string", "number"]`` says what ``anyOf`` says the long way;
-        # an expression's value is the case that needs it.
-        failures = []
-        for alternative in declared:
-            try:
-                _check(
-                    value,
-                    {key: item for key, item in schema.items() if key != "type"}
-                    | {"type": alternative},
-                    path=path,
-                    allow_unknown=allow_unknown,
-                )
-            except QgisSdkBridgeError as error:
-                failures.append(str(error))
-            else:
-                return
-        raise QgisSdkBridgeError(
-            f"{path}: matches none of the allowed types ({'; '.join(failures)})"
-        )
-    if declared not in _PRIMITIVES:
-        raise QgisSdkBridgeError(f"{path}: unsupported type {declared!r}")
-    checker = _CHECKERS[declared]
-    checker(value, schema, path=path, allow_unknown=allow_unknown)
+    _s = _CcState(value=value, schema=schema, path=path, allow_unknown=allow_unknown)
+    for _p in (_cc_check_p1, _cc_check_p2, _cc_check_p6, _cc_check_p7):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _check_string(

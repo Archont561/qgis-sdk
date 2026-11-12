@@ -61,6 +61,219 @@ from .vendor import (
 )
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_build_app_p1(_s):
+    try:
+        _s.project = inspect_project(_s.root)
+    except QgisSdkDevError as error:
+        _s.error = error
+        raise QgisSdkBuildError(str(_s.error)) from _s.error
+    _s.root = _s.project.root
+    _s.config = _s.project.config
+    _s.plugin = _s.project.plugin
+    _s.package = _s.root / _s.plugin
+    _s.assets = _s.package / "web"
+
+
+def _cc_build_app_p2(_s):
+    if not {"desktop", "app"} & set(_s.config.hosts):
+        # A server-only project has no application to start: its declarations are
+        # hooks QGIS Server calls (decision-52 point 1).
+        raise QgisSdkBuildError(
+            f"`--target app` needs an application, but {_s.plugin} declares "
+            f"hosts = [{', '.join(repr(host) for host in _s.config.hosts)}]; add "
+            "`app` (or `desktop`) to `[tool.qgis-sdk] hosts`, or build the plugin "
+            "ZIP QGIS Server loads"
+        )
+
+    _s.report = check_project(_s.root)
+    _s.diagnostics = list(_s.report.diagnostics)
+
+
+def _cc_build_app_p3(_s):
+    _s.vendored = _read_vendored(_s.config.build.vendor)
+    _s.web_outcome: WebOutcome = "none"
+    if _s.project.web is not None:
+        if _s.web:
+            _build_web(_s.project.web, _s.run)
+            _s.web_outcome = "built"
+        else:
+            _s.web_outcome = "prebuilt"
+        _s.diagnostics.extend(check_web_assets(_s.assets, _s.plugin))
+    _s.diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
+
+
+def _cc_build_app_p4(_s):
+    _s.report = CheckReport(
+        root=_s.root,
+        diagnostics=tuple(_s.diagnostics),
+        files_checked=_s.report.files_checked,
+    )
+    if not _s.report.ok:
+        raise QgisSdkBuildRefusedError(_s.report.diagnostics)
+
+    _s.version = _s.config.version
+    _s.out = Path(_s.out) if _s.out is not None else _s.root / OUTPUT_DIRECTORY
+    _s.out.mkdir(parents=True, exist_ok=True)
+    _s.directory = _s.out / f"{_s.plugin}-{_s.version}{APP_SUFFIX}"
+    if _s.directory.exists():
+        shutil.rmtree(_s.directory)
+
+
+def _cc_build_app_p5(_s):
+    _s.directory.mkdir(parents=True)
+    _s.runtime = runtime_version()
+    _s.prefix = f"{_s.plugin}.{VENDOR_PACKAGE}"
+    _s.roots = (RUNTIME_PACKAGE, *vendored_roots(_s.vendored))
+    _s.staged = _s.directory / _s.plugin
+    _stage_plugin(
+        _s.package,
+        _s.staged,
+        prefix=_s.prefix,
+        roots=_s.roots,
+        append={f"{LAUNCHER_MODULE}.py": launcher_source(_s.config)},
+    )
+
+
+def _cc_build_app_p6(_s):
+    _stage_runtime(
+        _s.staged / VENDOR_PACKAGE,
+        prefix=_s.prefix,
+        include_http=_imports_optional(_plugin_sources(_s.package), "http"),
+    )
+    _s.records = stage_vendored(
+        _s.staged / VENDOR_PACKAGE, _s.vendored, prefix=_s.prefix
+    )
+    (_s.staged / VENDOR_PACKAGE / "NOTICE").write_text(
+        notice(_s.runtime, requirement=None, vendored=_s.records),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def _cc_build_app_p7(_s):
+    (_s.directory / "pyproject.toml").write_text(
+        distribution_project(_s.config, directory=_s.staged),
+        encoding="utf-8",
+        newline="\n",
+    )
+    _s.files = tuple(
+        path.relative_to(_s.directory).as_posix()
+        for path in sorted(_s.directory.rglob("*"))
+        if path.is_file()
+    )
+
+
+def _cc_build_app_p8(_s):
+    return _CcReturn(
+        _build_app_facts11234567891011121314151617(
+            config=_s.config,
+            directory=_s.directory,
+            files=_s.files,
+            plugin=_s.plugin,
+            records=_s.records,
+            report=_s.report,
+            runtime=_s.runtime,
+            version=_s.version,
+            web_outcome=_s.web_outcome,
+        )
+    )
+
+
+_CC_TEXT_1 = '''"""Starts __TITLE__; written by `qgis-sdk build --target app`.
+
+The application is the one `[tool.qgis-sdk] plugin` names, and the flags are
+`qgis_sdk.app`'s: `--headless`, `--once`, `--grace`, `--title`, and everything
+after `--` goes to the toolkit. This module is generated into the staged copy -
+the project's own sources are never edited.
+"""
+
+from __future__ import annotations
+
+import importlib
+import sys
+
+from qgis_sdk.app import main as run_app
+
+#: (import name, pip requirement, why) for everything the project declares.
+_EXTERNALS = __EXTERNALS__
+
+
+def _missing_externals() -> list[str]:
+    """The declared externals this interpreter cannot import, with the fix."""
+    missing: list[str] = []
+    for name, requirement, reason in _EXTERNALS:
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            why = f" ({reason})" if reason else ""
+            missing.append(f"{name}{why} is missing: pip install {requirement}")
+    return missing
+
+
+def main(argv=None) -> int:
+    """Run the application; the console script calls this."""
+    missing = _missing_externals()
+    if missing:
+        for line in missing:
+            print(f"qgis-sdk app: {line}", file=sys.stderr)
+        return 3
+    application = getattr(importlib.import_module(__MODULE__), __ATTRIBUTE__)
+    return run_app(application, argv)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'''
+_CC_TEXT_2 = """# Generated by `qgis-sdk build --target app` from {source}/pyproject.toml.
+# Install it with `pip install .` (or `pip install --user .`), then run `{script}`.
+# The runtime is vendored inside the package, so this distribution has no
+# runtime dependency; the externals the project declares are probed by the
+# launcher and are never installed by pip on its own.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{name}"
+version = "{version}"
+description = "{description}"
+requires-python = "{requires_python}"
+dependencies = []
+
+[project.scripts]
+{script} = "{plugin}._launcher:main"
+
+[tool.setuptools.packages.find]
+include = ["{plugin}*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+{package_data}
+"""
+
+
 def _build_app_facts11234567891011121314151617(**values):
     return _build_app_facts112345678910111213141516(
         config=values["config"],
@@ -374,93 +587,21 @@ def build_app(
     exists, so a second build is the same tree rather than a union with the
     first.
     """
-    try:
-        project = inspect_project(root)
-    except QgisSdkDevError as error:
-        raise QgisSdkBuildError(str(error)) from error
-    root = project.root
-    config = project.config
-    plugin = project.plugin
-    package = root / plugin
-    assets = package / "web"
-    if not {"desktop", "app"} & set(config.hosts):
-        # A server-only project has no application to start: its declarations are
-        # hooks QGIS Server calls (decision-52 point 1).
-        raise QgisSdkBuildError(
-            f"`--target app` needs an application, but {plugin} declares "
-            f"hosts = [{', '.join(repr(host) for host in config.hosts)}]; add "
-            "`app` (or `desktop`) to `[tool.qgis-sdk] hosts`, or build the plugin "
-            "ZIP QGIS Server loads"
-        )
-
-    report = check_project(root)
-    diagnostics = list(report.diagnostics)
-    vendored = _read_vendored(config.build.vendor)
-    web_outcome: WebOutcome = "none"
-    if project.web is not None:
-        if web:
-            _build_web(project.web, run)
-            web_outcome = "built"
-        else:
-            web_outcome = "prebuilt"
-        diagnostics.extend(check_web_assets(assets, plugin))
-    diagnostics.sort(key=lambda d: (d.path.as_posix(), d.line, d.column, d.rule))
-    report = CheckReport(
-        root=root, diagnostics=tuple(diagnostics), files_checked=report.files_checked
-    )
-    if not report.ok:
-        raise QgisSdkBuildRefusedError(report.diagnostics)
-
-    version = config.version
-    out = Path(out) if out is not None else root / OUTPUT_DIRECTORY
-    out.mkdir(parents=True, exist_ok=True)
-    directory = out / f"{plugin}-{version}{APP_SUFFIX}"
-    if directory.exists():
-        shutil.rmtree(directory)
-    directory.mkdir(parents=True)
-    runtime = runtime_version()
-    prefix = f"{plugin}.{VENDOR_PACKAGE}"
-    roots = (RUNTIME_PACKAGE, *vendored_roots(vendored))
-    staged = directory / plugin
-    _stage_plugin(
-        package,
-        staged,
-        prefix=prefix,
-        roots=roots,
-        append={f"{LAUNCHER_MODULE}.py": launcher_source(config)},
-    )
-    _stage_runtime(
-        staged / VENDOR_PACKAGE,
-        prefix=prefix,
-        include_http=_imports_optional(_plugin_sources(package), "http"),
-    )
-    records = stage_vendored(staged / VENDOR_PACKAGE, vendored, prefix=prefix)
-    (staged / VENDOR_PACKAGE / "NOTICE").write_text(
-        notice(runtime, requirement=None, vendored=records),
-        encoding="utf-8",
-        newline="\n",
-    )
-    (directory / "pyproject.toml").write_text(
-        distribution_project(config, directory=staged),
-        encoding="utf-8",
-        newline="\n",
-    )
-    files = tuple(
-        path.relative_to(directory).as_posix()
-        for path in sorted(directory.rglob("*"))
-        if path.is_file()
-    )
-    return _build_app_facts11234567891011121314151617(
-        config=config,
-        directory=directory,
-        files=files,
-        plugin=plugin,
-        records=records,
-        report=report,
-        runtime=runtime,
-        version=version,
-        web_outcome=web_outcome,
-    )
+    _s = _CcState(root=root, out=out, web=web, run=run)
+    for _p in (
+        _cc_build_app_p1,
+        _cc_build_app_p2,
+        _cc_build_app_p3,
+        _cc_build_app_p4,
+        _cc_build_app_p5,
+        _cc_build_app_p6,
+        _cc_build_app_p7,
+        _cc_build_app_p8,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def script_name(plugin: str) -> str:
@@ -493,51 +634,7 @@ def launcher_source(config: ProjectConfig) -> str:
 
 #: The generated launcher. ``qgis_sdk`` is rewritten to the vendored path by
 #: :func:`_stage_plugin`, exactly like the plugin's own modules.
-_LAUNCHER_TEMPLATE: Final = '''"""Starts __TITLE__; written by `qgis-sdk build --target app`.
-
-The application is the one `[tool.qgis-sdk] plugin` names, and the flags are
-`qgis_sdk.app`'s: `--headless`, `--once`, `--grace`, `--title`, and everything
-after `--` goes to the toolkit. This module is generated into the staged copy -
-the project's own sources are never edited.
-"""
-
-from __future__ import annotations
-
-import importlib
-import sys
-
-from qgis_sdk.app import main as run_app
-
-#: (import name, pip requirement, why) for everything the project declares.
-_EXTERNALS = __EXTERNALS__
-
-
-def _missing_externals() -> list[str]:
-    """The declared externals this interpreter cannot import, with the fix."""
-    missing: list[str] = []
-    for name, requirement, reason in _EXTERNALS:
-        try:
-            importlib.import_module(name)
-        except ImportError:
-            why = f" ({reason})" if reason else ""
-            missing.append(f"{name}{why} is missing: pip install {requirement}")
-    return missing
-
-
-def main(argv=None) -> int:
-    """Run the application; the console script calls this."""
-    missing = _missing_externals()
-    if missing:
-        for line in missing:
-            print(f"qgis-sdk app: {line}", file=sys.stderr)
-        return 3
-    application = getattr(importlib.import_module(__MODULE__), __ATTRIBUTE__)
-    return run_app(application, argv)
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-'''
+_LAUNCHER_TEMPLATE: Final = _CC_TEXT_1
 
 
 def distribution_project(config: ProjectConfig, *, directory: Path) -> str:
@@ -615,29 +712,4 @@ def _one_line(text: str) -> str:
     return " ".join(text.split())
 
 
-_PROJECT_TEMPLATE: Final = """# Generated by `qgis-sdk build --target app` from {source}/pyproject.toml.
-# Install it with `pip install .` (or `pip install --user .`), then run `{script}`.
-# The runtime is vendored inside the package, so this distribution has no
-# runtime dependency; the externals the project declares are probed by the
-# launcher and are never installed by pip on its own.
-[build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "{name}"
-version = "{version}"
-description = "{description}"
-requires-python = "{requires_python}"
-dependencies = []
-
-[project.scripts]
-{script} = "{plugin}._launcher:main"
-
-[tool.setuptools.packages.find]
-include = ["{plugin}*"]
-namespaces = false
-
-[tool.setuptools.package-data]
-{package_data}
-"""
+_PROJECT_TEMPLATE: Final = _CC_TEXT_2

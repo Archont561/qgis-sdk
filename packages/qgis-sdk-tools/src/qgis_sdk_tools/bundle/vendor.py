@@ -36,6 +36,89 @@ from qgis_sdk_tools.check.versions import installed_runtime_version
 from qgis_sdk_tools.distributions import Distribution, file_path, normalize
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_stage_vendored_p1(_s):
+    for relative in _s.distribution.files:
+        _s.relative = relative
+        if not _s.relative.parts or _s.relative.parts[0] not in _s.distribution.roots:
+            continue
+        _s.source = file_path(_s.distribution.name, _s.relative)
+        _s.target = _s.vendor / _s.relative
+        _s.target.parent.mkdir(parents=True, exist_ok=True)
+        if _s.relative.suffix == ".py":
+            _s.target.write_text(
+                rewrite_imports(
+                    _s.source.read_text(encoding="utf-8"),
+                    prefix=_s.prefix,
+                    roots=_s.roots,
+                ),
+                encoding="utf-8",
+                newline="\n",
+            )
+        else:
+            shutil.copyfile(_s.source, _s.target)
+
+
+def _cc_stage_vendored_p2(_s):
+    for relative in _s.distribution.licences:
+        _s.relative = relative
+        _s.licences.mkdir(parents=True, exist_ok=True)
+        _s.target = (
+            _s.licences
+            / f"{normalize(_s.distribution.name)}-{_s.distribution.version}-{_s.relative.name}"
+        )
+        shutil.copyfile(file_path(_s.distribution.name, _s.relative), _s.target)
+    _s.records.append((_s.distribution.name, _s.distribution.version))
+
+
+def _cc_stage_vendored_p3(_s):
+    _s.roots = vendored_roots(_s.distributions)
+    _s.licences = _s.vendor / LICENCES_DIRECTORY
+    _s.records: list[tuple[str, str]] = []
+
+
+def _cc_stage_vendored_p4(_s):
+    for distribution in _s.distributions:
+        _s.distribution = distribution
+        _a = None
+        for _p in (_cc_stage_vendored_p1, _cc_stage_vendored_p2):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+            if isinstance(_r, (_CcBreak, _CcContinue)):
+                _a = _r
+                break
+        if isinstance(_a, _CcBreak):
+            break
+        if isinstance(_a, _CcContinue):
+            continue
+
+
+def _cc_stage_vendored_p5(_s):
+    return _CcReturn(tuple(_s.records))
+
+
 def _rewrite_imports_tail1(**values):
     lines = values["lines"]
     prefix = values["prefix"]
@@ -215,32 +298,9 @@ def stage_vendored(
     ``import numpy`` inside itself resolves to this plugin's copy. Files are
     copied byte for byte otherwise (data, ``py.typed``, translations).
     """
-    roots = vendored_roots(distributions)
-    licences = vendor / LICENCES_DIRECTORY
-    records: list[tuple[str, str]] = []
-    for distribution in distributions:
-        for relative in distribution.files:
-            if not relative.parts or relative.parts[0] not in distribution.roots:
-                continue
-            source = file_path(distribution.name, relative)
-            target = vendor / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if relative.suffix == ".py":
-                target.write_text(
-                    rewrite_imports(
-                        source.read_text(encoding="utf-8"), prefix=prefix, roots=roots
-                    ),
-                    encoding="utf-8",
-                    newline="\n",
-                )
-            else:
-                shutil.copyfile(source, target)
-        for relative in distribution.licences:
-            licences.mkdir(parents=True, exist_ok=True)
-            target = (
-                licences
-                / f"{normalize(distribution.name)}-{distribution.version}-{relative.name}"
-            )
-            shutil.copyfile(file_path(distribution.name, relative), target)
-        records.append((distribution.name, distribution.version))
-    return tuple(records)
+    _s = _CcState(vendor=vendor, distributions=distributions, prefix=prefix)
+    for _p in (_cc_stage_vendored_p3, _cc_stage_vendored_p4, _cc_stage_vendored_p5):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

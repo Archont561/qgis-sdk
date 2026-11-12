@@ -21,15 +21,72 @@ from qgis_sdk_tools.generate._contract import (
 from qgis_sdk_tools.generate._names import _Action, _Stream
 
 
-class _Namer(Protocol):
-    """What emission asks of the generator: the name of a schema, if it has one."""
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
 
-    def name_for(self, schema: Mapping[str, Any]) -> str | None:
-        """Return the exported type name registered for ``schema``."""
-        ...
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
 
 
-_CALL_HELPER = """async function call<T>(
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_inline_validator_p1(_s):
+    if "anyOf" in _s.schema:
+        return _CcReturn(
+            "("
+            + " || ".join(
+                _inline_validator(branch, _s.expression, _s.generator)
+                for branch in _s.schema["anyOf"]
+            )
+            + ")"
+        )
+
+
+def _cc_inline_validator_p2(_s):
+    if "enum" in _s.schema:
+        return _CcReturn(
+            "("
+            + " || ".join(
+                f"{_s.expression} === {_literal(value)}" for value in _s.schema["enum"]
+            )
+            + ")"
+        )
+    _s.declared = _s.schema.get("type")
+
+
+def _cc_inline_validator_p3(_s):
+    if isinstance(_s.declared, list):
+        return _CcReturn(
+            "("
+            + " || ".join(
+                _inline_validator({"type": alternative}, _s.expression, _s.generator)
+                for alternative in _s.declared
+            )
+            + ")"
+        )
+    _s.validate = _VALIDATORS.get(_s.declared) if isinstance(_s.declared, str) else None
+    if _s.validate is None:
+        raise QgisSdkBridgeError(f"cannot validate {_s.declared!r}")
+
+
+def _cc_inline_validator_p4(_s):
+    return _CcReturn(_s.validate(_s.schema, _s.expression, _s.generator))
+
+
+_CC_TEXT_1 = """async function call<T>(
 \tclient: BridgeClientLike,
 \toperation: string,
 \tinput: unknown,
@@ -51,9 +108,7 @@ _CALL_HELPER = """async function call<T>(
 \treturn value as T;
 }
 """
-
-
-_OPEN_HELPER = """async function open<E extends { readonly kind: string }>(
+_CC_TEXT_2 = """async function open<E extends { readonly kind: string }>(
 \tclient: BridgeClientLike,
 \toperation: string,
 \tinput: unknown,
@@ -109,6 +164,20 @@ _OPEN_HELPER = """async function open<E extends { readonly kind: string }>(
 \treturn handle;
 }
 """
+
+
+class _Namer(Protocol):
+    """What emission asks of the generator: the name of a schema, if it has one."""
+
+    def name_for(self, schema: Mapping[str, Any]) -> str | None:
+        """Return the exported type name registered for ``schema``."""
+        ...
+
+
+_CALL_HELPER = _CC_TEXT_1
+
+
+_OPEN_HELPER = _CC_TEXT_2
 
 
 def _call_helper(surface: _Surface) -> str:
@@ -402,37 +471,17 @@ _VALIDATORS: dict[str, Callable[[Mapping[str, Any], str, _Namer | None], str]] =
 def _inline_validator(
     schema: Mapping[str, Any], expression: str, generator: _Namer | None = None
 ) -> str:
-    if "anyOf" in schema:
-        return (
-            "("
-            + " || ".join(
-                _inline_validator(branch, expression, generator)
-                for branch in schema["anyOf"]
-            )
-            + ")"
-        )
-    if "enum" in schema:
-        return (
-            "("
-            + " || ".join(
-                f"{expression} === {_literal(value)}" for value in schema["enum"]
-            )
-            + ")"
-        )
-    declared = schema.get("type")
-    if isinstance(declared, list):
-        return (
-            "("
-            + " || ".join(
-                _inline_validator({"type": alternative}, expression, generator)
-                for alternative in declared
-            )
-            + ")"
-        )
-    validate = _VALIDATORS.get(declared) if isinstance(declared, str) else None
-    if validate is None:
-        raise QgisSdkBridgeError(f"cannot validate {declared!r}")
-    return validate(schema, expression, generator)
+    _s = _CcState(schema=schema, expression=expression, generator=generator)
+    for _p in (
+        _cc_inline_validator_p1,
+        _cc_inline_validator_p2,
+        _cc_inline_validator_p3,
+        _cc_inline_validator_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _bound_checks(schema: Mapping[str, Any], expression: str) -> list[str]:

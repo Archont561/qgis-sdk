@@ -2,8 +2,81 @@
 
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_documented__p1(_s):
+    import shlex
+
+    _s.shlex = shlex
+
+    from qgis_sdk_tools.__main__ import app
+
+    _s.app = app
+    from typer.testing import CliRunner
+
+    _s.CliRunner = CliRunner
+
+    _s.guide = GUIDE.read_text(encoding="utf-8")
+    _s.commands = re.findall(r"^qgis-sdk new my_tools[^\n]*$", _s.guide, re.MULTILINE)
+    assert _s.commands == _cc_fresh_1()
+    _s.runner = _s.CliRunner()
+
+
+def _cc_test_documented__p2(_s):
+    for index, command in enumerate(_s.commands):
+        _s.index = index
+        _s.command = command
+        _s.root = _s.tmp_path / str(_s.index)
+        _s.root.mkdir()
+        _s.project = _s.root / "my_tools"
+        _s.args = _s.shlex.split(_s.command)[1:]
+        _s.args[1] = str(_s.project)
+        _s.result = _s.runner.invoke(_s.app, _s.args)
+        assert _s.result.exit_code == 0, _s.result.output
+        assert (_s.project / "pyproject.toml").is_file()
+        assert (_s.project / "my_tools/plugin.py").is_file()
+        assert (_s.project / "tests/test_plugin.py").is_file()
+        assert (_s.project / "my_tools/ui.py").is_file() == (_s.index == 1)
+        assert not (_s.project / "my_tools/surfaces.py").exists()
+        assert (_s.project / "web/src/bridge.schema.ts").is_file() == (_s.index == 2)
+
+
+_CC_DATA_1 = [
+    'qgis-sdk new my_tools --title "My Tools" --no-input',
+    'qgis-sdk new my_tools --title "My Tools" --ui native --no-input',
+    'qgis-sdk new my_tools --title "My Tools" --web vanilla --no-input --no-install',
+]
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
+
 
 ROOT = Path(__file__).resolve().parents[3]
 GUIDE = ROOT / "apps/docs/content/docs/start/first-plugin.mdx"
@@ -62,30 +135,9 @@ def test_the_walk_does_not_send_the_reader_to_another_page() -> None:
 
 
 def test_documented_scaffold_commands_match_the_generated_files(tmp_path: Path) -> None:
-    import shlex
-
-    from qgis_sdk_tools.__main__ import app
-    from typer.testing import CliRunner
-
-    guide = GUIDE.read_text(encoding="utf-8")
-    commands = re.findall(r"^qgis-sdk new my_tools[^\n]*$", guide, re.MULTILINE)
-    assert commands == [
-        'qgis-sdk new my_tools --title "My Tools" --no-input',
-        'qgis-sdk new my_tools --title "My Tools" --ui native --no-input',
-        'qgis-sdk new my_tools --title "My Tools" --web vanilla --no-input --no-install',
-    ]
-    runner = CliRunner()
-    for index, command in enumerate(commands):
-        root = tmp_path / str(index)
-        root.mkdir()
-        project = root / "my_tools"
-        args = shlex.split(command)[1:]
-        args[1] = str(project)
-        result = runner.invoke(app, args)
-        assert result.exit_code == 0, result.output
-        assert (project / "pyproject.toml").is_file()
-        assert (project / "my_tools/plugin.py").is_file()
-        assert (project / "tests/test_plugin.py").is_file()
-        assert (project / "my_tools/ui.py").is_file() == (index == 1)
-        assert not (project / "my_tools/surfaces.py").exists()
-        assert (project / "web/src/bridge.schema.ts").is_file() == (index == 2)
+    _s = _CcState(tmp_path=tmp_path)
+    for _p in (_cc_test_documented__p1, _cc_test_documented__p2):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

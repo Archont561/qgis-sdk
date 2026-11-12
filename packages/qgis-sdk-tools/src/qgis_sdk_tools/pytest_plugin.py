@@ -177,9 +177,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         session.exitstatus = 1
 
 
-@pytest.fixture(scope="session")
-def qgis_app() -> Iterator[Any]:
-    """A ``QgsApplication``: started here for ``qgis``, the Desktop's own in ``desktop``."""
+def _qgis_app_target():
+    """Refuse a run that asked for a target without PyQGIS."""
     target = _target()
     if target is not None and target not in NATIVE_TARGETS:
         pytest.fail(
@@ -187,6 +186,11 @@ def qgis_app() -> Iterator[Any]:
             "`qgis-sdk test --target qgis`",
             pytrace=False,
         )
+    return target
+
+
+def _import_qgs_application(target):
+    """Import PyQGIS, or skip/fail with the reason a user can act on."""
     try:
         from qgis.core import QgsApplication
     except ImportError as error:
@@ -197,10 +201,11 @@ def qgis_app() -> Iterator[Any]:
         if target is None:
             pytest.skip(message)
         pytest.fail(message, pytrace=False)
-    existing = QgsApplication.instance()
-    if existing is not None:
-        yield existing
-        return
+    return QgsApplication
+
+
+def _prepare_qgis_app(QgsApplication):
+    """Start one QgsApplication, honouring the headless and prefix settings."""
     from qgis_sdk_tools.devtools import wants_headless
 
     if wants_headless(os.environ):
@@ -210,6 +215,19 @@ def qgis_app() -> Iterator[Any]:
         QgsApplication.setPrefixPath(prefix, True)
     app = QgsApplication([b"qgis-sdk-test"], True)
     app.initQgis()
+    return app
+
+
+@pytest.fixture(scope="session")
+def qgis_app() -> Iterator[Any]:
+    """A ``QgsApplication``: started here for ``qgis``, the Desktop's own in ``desktop``."""
+    target = _qgis_app_target()
+    QgsApplication = _import_qgs_application(target)
+    existing = QgsApplication.instance()
+    if existing is not None:
+        yield existing
+        return
+    app = _prepare_qgis_app(QgsApplication)
     try:
         yield app
     finally:

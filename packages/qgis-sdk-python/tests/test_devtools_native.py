@@ -44,6 +44,173 @@ from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 from qgis_sdk_tools.scaffold.web import install_command
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_the_page_se_p1(_s):
+    _s.page = _s.widget.layout().itemAt(0).widget().page()
+    _s.loads: list[bool] = []
+    _s.page.loadFinished.connect(_s.loads.append)
+    _pump(_s.qgis_app, lambda: bool(_s.loads))
+    assert _s.loads == [True]
+    assert _s.page.url().toString() == _s.vite + "/"
+
+    _pump(
+        _s.qgis_app,
+        lambda: _js(_s.qgis_app, _s.page, "!!document.querySelector('#ping')"),
+    )
+    _js(_s.qgis_app, _s.page, "document.querySelector('#ping').click(); true")
+
+
+def _cc_test_the_page_se_p2(_s):
+    _pump(
+        _s.qgis_app,
+        lambda: (
+            _js(
+                _s.qgis_app,
+                _s.page,
+                "document.querySelector('#ping-result').textContent",
+            )
+            == "1"
+        ),
+    )
+
+
+def _cc_test_the_page_se_p3(_s):
+
+    # Edit text the page actually renders: HMR is proven by the new label
+    # arriving in the live document, not by the file being touched.
+    _s.marker = "<h1>Web Tools</h1>"
+    assert _s.marker in _s.original, "the scaffolded page moved; pick another marker"
+    _s.app_ts.write_text(
+        _s.original.replace(_s.marker, "<h1>Web Tools (edited)</h1>"), encoding="utf-8"
+    )
+
+
+def _cc_test_the_page_se_p4(_s):
+    _pump(
+        _s.qgis_app,
+        lambda: (
+            "edited"
+            in (
+                _js(
+                    _s.qgis_app, _s.page, "document.body ? document.body.innerText : ''"
+                )
+                or ""
+            )
+        ),
+    )
+
+
+def _cc_test_the_page_se_p5(_s):
+    _pump(
+        _s.qgis_app,
+        lambda: _js(_s.qgis_app, _s.page, "!!document.querySelector('#ping')"),
+    )
+    _js(_s.qgis_app, _s.page, "document.querySelector('#ping').click(); true")
+
+
+def _cc_test_the_page_se_p6(_s):
+    _pump(
+        _s.qgis_app,
+        lambda: (
+            _js(
+                _s.qgis_app,
+                _s.page,
+                "document.querySelector('#ping-result').textContent",
+            )
+            == "1"
+        ),
+    )
+
+
+def _cc_test_the_page_se_p7(_s):
+    _s.app_ts.write_text(_s.original, encoding="utf-8")
+    _s.desktop.unload()
+    assert _s.desktop.view is None
+    _s.qgis_app.processEvents()
+    for name in [n for n in sys.modules if n.split(".")[0] == "web_tools"]:
+        _s.name = name
+        del sys.modules[_s.name]
+
+
+def _cc_test_the_page_se_p8(_s):
+    _s.monkeypatch.setenv(DEV_SERVER_ENV, _s.vite)
+    _s.monkeypatch.syspath_prepend(str(_s.web_project))
+    _s.desktop = host("web_tools.plugin:app", placement="dialog")(None)
+    _s.desktop.initGui()
+    _s.widget = _s.desktop.show_view()
+    _s.app_ts = _s.web_project / "web" / "src" / "app.ts"
+    _s.original = _s.app_ts.read_text(encoding="utf-8")
+
+
+def _cc_test_the_page_se_p9(_s):
+    try:
+        for _p in (
+            _cc_test_the_page_se_p1,
+            _cc_test_the_page_se_p2,
+            _cc_test_the_page_se_p3,
+            _cc_test_the_page_se_p4,
+            _cc_test_the_page_se_p5,
+            _cc_test_the_page_se_p6,
+        ):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    finally:
+        for _p in (_cc_test_the_page_se_p7,):
+            _p(_s)
+
+
+_CC_TEXT_1 = """import pytest
+from qgis_sdk.adapters.desktop import host
+
+classFactory = host("field_tools.plugin:app")
+
+
+@pytest.mark.qgis
+def test_project_layers_under_a_real_qgis(qgis_app):
+    plugin = classFactory(None)
+    plugin.initGui()
+    try:
+        assert plugin.runtime.actions["project_layers"]() == []
+    finally:
+        plugin.unload()
+
+
+@pytest.mark.desktop
+def test_the_source_plugin_loads_through_desktop(qgis_iface):
+    import qgis.utils
+
+    qgis.utils.updateAvailablePlugins()
+    assert "field_tools" in qgis.utils.available_plugins
+    assert qgis.utils.loadPlugin("field_tools")
+    assert qgis.utils.startPlugin("field_tools")
+    assert qgis.utils.plugins["field_tools"].runtime.state.value == "running"
+    assert qgis_iface.mainWindow() is not None
+    assert qgis.utils.unloadPlugin("field_tools")
+"""
+
+
 def _desktop_loads_reloads_refuses_facts11(blockers, project, report, result):
     assert report == {
         "started": True,
@@ -92,7 +259,7 @@ try:  # the web half: WebEngine has to be imported before the application
     from PyQt6.QtCore import QCoreApplication, Qt
 
     QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-    import PyQt6.QtWebEngineWidgets  # noqa: F401
+    import PyQt6.QtWebEngineWidgets  # noqa: F401  (must precede the application)
 
     WEBENGINE = True
 except ImportError:  # pragma: no cover - depends on the host
@@ -100,34 +267,7 @@ except ImportError:  # pragma: no cover - depends on the host
 
 DEADLINE = 30.0
 
-NATIVE_TESTS = """import pytest
-from qgis_sdk.adapters.desktop import host
-
-classFactory = host("field_tools.plugin:app")
-
-
-@pytest.mark.qgis
-def test_project_layers_under_a_real_qgis(qgis_app):
-    plugin = classFactory(None)
-    plugin.initGui()
-    try:
-        assert plugin.runtime.actions["project_layers"]() == []
-    finally:
-        plugin.unload()
-
-
-@pytest.mark.desktop
-def test_the_source_plugin_loads_through_desktop(qgis_iface):
-    import qgis.utils
-
-    qgis.utils.updateAvailablePlugins()
-    assert "field_tools" in qgis.utils.available_plugins
-    assert qgis.utils.loadPlugin("field_tools")
-    assert qgis.utils.startPlugin("field_tools")
-    assert qgis.utils.plugins["field_tools"].runtime.state.value == "running"
-    assert qgis_iface.mainWindow() is not None
-    assert qgis.utils.unloadPlugin("field_tools")
-"""
+NATIVE_TESTS = _CC_TEXT_1
 
 
 def _cli(
@@ -362,72 +502,14 @@ def vite(web_project: Path) -> Iterator[str]:
 def test_the_page_served_by_vite_updates_in_place_and_keeps_its_bridge(
     qgis_app: Any, web_project: Path, vite: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(DEV_SERVER_ENV, vite)
-    monkeypatch.syspath_prepend(str(web_project))
-    desktop = host("web_tools.plugin:app", placement="dialog")(None)
-    desktop.initGui()
-    widget = desktop.show_view()
-    app_ts = web_project / "web" / "src" / "app.ts"
-    original = app_ts.read_text(encoding="utf-8")
-    try:
-        page = widget.layout().itemAt(0).widget().page()
-        loads: list[bool] = []
-        page.loadFinished.connect(loads.append)
-        _pump(qgis_app, lambda: bool(loads))
-        assert loads == [True]
-        assert page.url().toString() == vite + "/"
-
-        _pump(
-            qgis_app, lambda: _js(qgis_app, page, "!!document.querySelector('#ping')")
-        )
-        _js(qgis_app, page, "document.querySelector('#ping').click(); true")
-        _pump(
-            qgis_app,
-            lambda: (
-                _js(
-                    qgis_app, page, "document.querySelector('#ping-result').textContent"
-                )
-                == "1"
-            ),
-        )
-
-        # Edit text the page actually renders: HMR is proven by the new label
-        # arriving in the live document, not by the file being touched.
-        marker = "<h1>Web Tools</h1>"
-        assert marker in original, "the scaffolded page moved; pick another marker"
-        app_ts.write_text(
-            original.replace(marker, "<h1>Web Tools (edited)</h1>"), encoding="utf-8"
-        )
-        _pump(
-            qgis_app,
-            lambda: (
-                "edited"
-                in (
-                    _js(qgis_app, page, "document.body ? document.body.innerText : ''")
-                    or ""
-                )
-            ),
-        )
-        _pump(
-            qgis_app, lambda: _js(qgis_app, page, "!!document.querySelector('#ping')")
-        )
-        _js(qgis_app, page, "document.querySelector('#ping').click(); true")
-        _pump(
-            qgis_app,
-            lambda: (
-                _js(
-                    qgis_app, page, "document.querySelector('#ping-result').textContent"
-                )
-                == "1"
-            ),
-        )
-    finally:
-        app_ts.write_text(original, encoding="utf-8")
-        desktop.unload()
-        assert desktop.view is None
-        qgis_app.processEvents()
-        for name in [n for n in sys.modules if n.split(".")[0] == "web_tools"]:
-            del sys.modules[name]
+    _s = _CcState(
+        qgis_app=qgis_app, web_project=web_project, vite=vite, monkeypatch=monkeypatch
+    )
+    for _p in (_cc_test_the_page_se_p8, _cc_test_the_page_se_p9):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _pump(app: Any, until: Any) -> None:

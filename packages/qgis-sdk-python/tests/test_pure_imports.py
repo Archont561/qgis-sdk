@@ -10,23 +10,7 @@ from pathlib import Path
 import layers
 import pytest
 
-
-def _pure_public_imports_succeed_phase1(script, tmp_path):
-    result = subprocess.run(
-        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        timeout=15,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "native-free"
-
-
-def _the_server_adapter_imports_phase2(tmp_path):
-    script = textwrap.dedent(
-        """
+_CC_TEXT_1 = """
         import importlib
         import sys
 
@@ -46,7 +30,59 @@ def _the_server_adapter_imports_phase2(tmp_path):
         assert 'qgis' not in sys.modules
         print('server-only')
         """
+_CC_TEXT_2 = """
+        import importlib
+        import sys
+
+        sys.path[:0] = sys.argv[1:]
+
+        class RejectNative:
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.split('.')[0] in {'qgis', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'pydantic'}:
+                    raise AssertionError(f'eager native import: {fullname}')
+                return None
+
+        sys.meta_path.insert(0, RejectNative())
+        for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
+                       'qgis_sdk.services', 'qgis_sdk_tools.scaffold', 'qgis_sdk_tools.__main__',
+                       'qgis_sdk_tools.check', 'qgis_sdk_tools.cli',
+                       'qgis_sdk.core', 'qgis_sdk.jobs',
+                       'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
+                       'qgis_sdk.console',
+                       'qgis_sdk.adapters.desktop',
+                       'qgis_sdk.adapters.webengine',
+                       'qgis_sdk.testing'):
+            importlib.import_module(module)
+        from qgis_sdk import QgisSdkPlugin, describe
+        from qgis_sdk.core import PluginContext
+
+        app = QgisSdkPlugin(id='isolated', title='Isolated')
+        @app.action(id='run', title='Run')
+        def run(ctx: PluginContext, count: int) -> str:
+            raise AssertionError('inspection dispatched a handler')
+
+        assert describe(app).actions[0].id == 'run'
+        assert 'qgis' not in sys.modules
+        assert 'pydantic' not in sys.modules
+        print('native-free')
+        """
+
+
+def _pure_public_imports_succeed_phase1(script, tmp_path):
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script, *map(str, layers.SOURCE_ROOTS)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
     )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "native-free"
+
+
+def _the_server_adapter_imports_phase2(tmp_path):
+    script = textwrap.dedent(_CC_TEXT_1)
     _the_server_adapter_imports_phase1(script, tmp_path)
 
 
@@ -219,44 +255,7 @@ def test_the_tools_tree_imports_the_runtime_the_stdlib_and_its_declared_deps() -
 def test_pure_public_imports_succeed_with_native_modules_forbidden(
     tmp_path: Path,
 ) -> None:
-    script = textwrap.dedent(
-        """
-        import importlib
-        import sys
-
-        sys.path[:0] = sys.argv[1:]
-
-        class RejectNative:
-            def find_spec(self, fullname, path=None, target=None):
-                if fullname.split('.')[0] in {'qgis', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6', 'pydantic'}:
-                    raise AssertionError(f'eager native import: {fullname}')
-                return None
-
-        sys.meta_path.insert(0, RejectNative())
-        for module in ('qgis_sdk', 'qgis_sdk.models', 'qgis_sdk.declarations',
-                       'qgis_sdk.services', 'qgis_sdk_tools.scaffold', 'qgis_sdk_tools.__main__',
-                       'qgis_sdk_tools.check', 'qgis_sdk_tools.cli',
-                       'qgis_sdk.core', 'qgis_sdk.jobs',
-                       'qgis_sdk.core.contexts', 'qgis_sdk.core.runtime',
-                       'qgis_sdk.console',
-                       'qgis_sdk.adapters.desktop',
-                       'qgis_sdk.adapters.webengine',
-                       'qgis_sdk.testing'):
-            importlib.import_module(module)
-        from qgis_sdk import QgisSdkPlugin, describe
-        from qgis_sdk.core import PluginContext
-
-        app = QgisSdkPlugin(id='isolated', title='Isolated')
-        @app.action(id='run', title='Run')
-        def run(ctx: PluginContext, count: int) -> str:
-            raise AssertionError('inspection dispatched a handler')
-
-        assert describe(app).actions[0].id == 'run'
-        assert 'qgis' not in sys.modules
-        assert 'pydantic' not in sys.modules
-        print('native-free')
-        """
-    )
+    script = textwrap.dedent(_CC_TEXT_2)
     _pure_public_imports_succeed_phase1(script, tmp_path)
 
 

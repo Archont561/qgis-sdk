@@ -17,6 +17,73 @@ import pytest
 from qgis_sdk.models import FeatureQuery
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_committed_p1(_s):
+    assert _s.native_services.editable_layer is not None
+    _s.layer_id = _s.native_services.editable_layer()
+    _s.features = _features(_s.native_services)
+
+    _s.session = _s.features.begin_edit(_s.layer_id)
+    try:
+        _s.added = _s.session.add({"id": 42, "value": "committed"})
+        _s.outcome = _s.session.commit()
+    finally:
+        _s.session.close()
+
+    assert _s.outcome.committed is True
+
+
+def _cc_test_a_committed_p2(_s):
+    assert _s.outcome.applied == 1
+    # QGIS renumbers a pending add from the provider when the buffer commits, so
+    # the id `add` returned is not the stored one; the returned ids are the ones
+    # the buffer held (doc-12).
+    assert _s.added in _s.outcome.feature_ids
+
+
+def _cc_test_a_committed_p3(_s):
+    _s.stored = _only(
+        _s.features.page(
+            _s.layer_id,
+            FeatureQuery(
+                limit=10, encoding="wkt", expression="\"value\" = 'committed'"
+            ),
+        )
+    )
+
+    # A fresh reader over the same file sees the row: the commit reached the
+    # provider rather than only the layer's buffer.
+    from qgis.core import QgsVectorLayer
+
+    _s.QgsVectorLayer = QgsVectorLayer
+
+
+def _cc_test_a_committed_p4(_s):
+
+    _a_committed_edit_is_phase1(_s.QgsVectorLayer, _s.native_services, _s.stored)
+
+
 def _a_committed_edit_is_phase1(QgsVectorLayer, native_services, stored):
     path = native_services.editable_dataset
     assert path is not None
@@ -81,34 +148,14 @@ def test_a_page_of_wkb_round_trips_through_the_provider(
 def test_a_committed_edit_is_in_the_file_a_second_reader_opens(
     native_services: Services,
 ) -> None:
-    assert native_services.editable_layer is not None
-    layer_id = native_services.editable_layer()
-    features = _features(native_services)
-
-    session = features.begin_edit(layer_id)
-    try:
-        added = session.add({"id": 42, "value": "committed"})
-        outcome = session.commit()
-    finally:
-        session.close()
-
-    assert outcome.committed is True
-    assert outcome.applied == 1
-    # QGIS renumbers a pending add from the provider when the buffer commits, so
-    # the id `add` returned is not the stored one; the returned ids are the ones
-    # the buffer held (doc-12).
-    assert added in outcome.feature_ids
-    stored = _only(
-        features.page(
-            layer_id,
-            FeatureQuery(
-                limit=10, encoding="wkt", expression="\"value\" = 'committed'"
-            ),
-        )
-    )
-
-    # A fresh reader over the same file sees the row: the commit reached the
-    # provider rather than only the layer's buffer.
-    from qgis.core import QgsVectorLayer
-
-    _a_committed_edit_is_phase1(QgsVectorLayer, native_services, stored)
+    _s = _CcState(native_services=native_services)
+    for _p in (
+        _cc_test_a_committed_p1,
+        _cc_test_a_committed_p2,
+        _cc_test_a_committed_p3,
+        _cc_test_a_committed_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

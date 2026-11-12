@@ -23,6 +23,109 @@ from qgis_sdk.models import (
 from qgis_sdk.testing import FakeFeatures
 
 
+def _cc_expr1_args1(_s):
+    return ["parcels"]
+
+
+def _cc_expr1_list2(_s):
+    return [
+        (
+            1,
+            {"name": "A", "area": 10, "note": None},
+            Geometry(encoding="wkt", value="POINT (0 0)", geometry_type="point"),
+        )
+    ]
+
+
+def _cc_expr1_list3(_s):
+    return [
+        (
+            2,
+            {"name": "B", "area": 20, "note": "x"},
+            Geometry(
+                encoding="wkt",
+                value="POLYGON EMPTY",
+                geometry_type="polygon",
+                is_empty=True,
+            ),
+        )
+    ]
+
+
+def _cc_expr1_list4(_s):
+    return [
+        (
+            3,
+            {"name": "C", "area": 30, "note": "y"},
+            Geometry(
+                encoding="wkt",
+                value="MULTIPOINT ((0 0),(1 1))",
+                geometry_type="multipoint",
+                part_count=2,
+                vertex_count=2,
+            ),
+        )
+    ]
+
+
+def _cc_expr1_value5(_s):
+    value = []
+    value.extend(_cc_expr1_list2(_s))
+    value.extend(_cc_expr1_list3(_s))
+    value.extend(_cc_expr1_list4(_s))
+    return value
+
+
+def _cc_expr1_kw6(_s):
+    return {"fields": ("name", "area", "note"), "rows": _cc_expr1_value5(_s)}
+
+
+def _cc_expr1_call7(_s):
+    args = []
+    args.extend(_cc_expr1_args1(_s))
+    kwargs = {}
+    kwargs.update(_cc_expr1_kw6(_s))
+    return _s.service.declare(*args, **kwargs)
+
+
+def _cc_expr1_apply(_s):
+    return _cc_expr1_call7(_s)
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_fixture_features_p1(_s):
+    _s.service = FakeFeatures(_s.scope)
+
+
+def _cc_fixture_features_p2(_s):
+    _cc_expr1_apply(_s)
+
+
+def _cc_fixture_features_p3(_s):
+    return _CcReturn(_s.service)
+
+
 @pytest.fixture(name="scope")
 def fixture_scope() -> Iterator[ResourceScope]:
     scope = ResourceScope()
@@ -32,40 +135,16 @@ def fixture_scope() -> Iterator[ResourceScope]:
 
 @pytest.fixture(name="features")
 def fixture_features(scope: ResourceScope) -> FakeFeatures:
-    service = FakeFeatures(scope)
-    service.declare(
-        "parcels",
-        fields=("name", "area", "note"),
-        rows=[
-            (
-                1,
-                {"name": "A", "area": 10, "note": None},
-                Geometry(encoding="wkt", value="POINT (0 0)", geometry_type="point"),
-            ),
-            (
-                2,
-                {"name": "B", "area": 20, "note": "x"},
-                Geometry(
-                    encoding="wkt",
-                    value="POLYGON EMPTY",
-                    geometry_type="polygon",
-                    is_empty=True,
-                ),
-            ),
-            (
-                3,
-                {"name": "C", "area": 30, "note": "y"},
-                Geometry(
-                    encoding="wkt",
-                    value="MULTIPOINT ((0 0),(1 1))",
-                    geometry_type="multipoint",
-                    part_count=2,
-                    vertex_count=2,
-                ),
-            ),
-        ],
-    )
-    return service
+    _s = _CcState(scope=scope)
+    for _p in (
+        _cc_fixture_features_p1,
+        _cc_fixture_features_p2,
+        _cc_fixture_features_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 # -- geometry ----------------------------------------------------------------

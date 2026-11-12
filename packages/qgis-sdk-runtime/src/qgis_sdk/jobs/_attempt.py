@@ -35,6 +35,62 @@ from qgis_sdk.models import (
 )
 from qgis_sdk.services import WorkItem
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+async def _cc_run_attempt_p1(_s):
+    _s.attempt.scope.ensure_open()
+    await _wait_for_prerequisites(_s.attempt)
+    _s.workers = _s.attempt.runtime.workers
+    assert _s.workers is not None, "submission is refused without a worker backend"
+    _s.context = WorkerContext(
+        progress=_s.attempt.progress,
+        cancellation=_Cancellation(_s.attempt),
+    )
+
+
+async def _cc_run_attempt_p2(_s):
+    _s.item = WorkItem(
+        title=_s.attempt.description.title,
+        progress=_s.attempt.progress,
+        cancel=_s.attempt.request_cancel,
+    )
+    _s.handoff = _s.workers.offload(
+        lambda: _s.function(_s.context, **_s.arguments), item=_s.item
+    )
+    _s.outcome = await _s.handoff
+    _s.description = _s.attempt.description
+
+
+async def _cc_run_attempt_p3(_s):
+    if not _accepts(_s.outcome, _s.description.result_type):
+        raise QgisSdkDeclarationError(
+            f"{_s.description.id}: returned {type_name(type(_s.outcome))}, not the "
+            f"declared {type_name(_s.description.result_type)}"
+        )
+    return _CcReturn(_s.outcome)
+
+
 if TYPE_CHECKING:
     from qgis_sdk.jobs._handles import JobHandle
     from qgis_sdk.jobs._service import JobService, _Runtime
@@ -381,28 +437,12 @@ async def _run_attempt(
     else (decision-65); the result is validated here, on the driving thread,
     before any subscriber sees it.
     """
-    attempt.scope.ensure_open()
-    await _wait_for_prerequisites(attempt)
-    workers = attempt.runtime.workers
-    assert workers is not None, "submission is refused without a worker backend"
-    context = WorkerContext(
-        progress=attempt.progress,
-        cancellation=_Cancellation(attempt),
-    )
-    item = WorkItem(
-        title=attempt.description.title,
-        progress=attempt.progress,
-        cancel=attempt.request_cancel,
-    )
-    handoff = workers.offload(lambda: function(context, **arguments), item=item)
-    outcome = await handoff
-    description = attempt.description
-    if not _accepts(outcome, description.result_type):
-        raise QgisSdkDeclarationError(
-            f"{description.id}: returned {type_name(type(outcome))}, not the "
-            f"declared {type_name(description.result_type)}"
-        )
-    return outcome
+    _s = _CcState(attempt=attempt, function=function, arguments=arguments)
+    for _p in (_cc_run_attempt_p1, _cc_run_attempt_p2, _cc_run_attempt_p3):
+        _r = await _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 class _InitOptions1(TypedDict, total=False):

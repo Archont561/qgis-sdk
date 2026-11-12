@@ -55,73 +55,8 @@ ProjectWatchCanceller = Callable[[], None]
 ProjectChanged = Callable[[ProjectChange], None]
 
 
-class Project(Protocol):
-    """The open project, as a plugin and a page edit it.
-
-    Implementations raise ``QgisSdkLayerNotFoundError`` for an unknown layer id,
-    ``QgisSdkBookmarkNotFoundError`` for an unknown bookmark name,
-    ``QgisSdkProjectFileError`` for a file that could not be read, written or
-    saved, and ``QgisSdkUnsupportedCapabilityError`` on a host with no project at
-    all (a QGIS Server has none - it draws a request).
-    """
-
-    def layer_ids(self) -> tuple[str, ...]:
-        """Return the project's layer ids in tree order."""
-        ...
-
-    def add_layer(self, layer_id: str, *, group: str | None = None) -> LayerTree:
-        """Add an owned layer to the project, optionally into a group.
-
-        Adding the same layer twice leaves one entry (and moves it when
-        ``group`` names a different group). An unknown group id is refused by
-        name - ``QgisSdkLayerNotFoundError`` - and nothing is added.
-        """
-        ...
-
-    def remove_layer(self, layer_id: str) -> LayerTree:
-        """Remove one layer from the project; the layer itself stays open.
-
-        Destructive: the project forgets the layer, so the *layer service* still
-        owns it and ``Layers.get`` keeps answering. A layer the project does not
-        hold is refused by name.
-        """
-        ...
-
-    def move_layer(
-        self, layer_id: str, *, group: str | None = None, index: int | None = None
-    ) -> LayerTree:
-        """Move one layer within the tree, into ``group`` and to ``index``.
-
-        ``index`` is the position among the destination group's children; left
-        out, the layer goes last. An index past the end is refused rather than
-        clamped, because a clamp would silently place a layer somewhere else.
-        """
-        ...
-
-    def set_visible(self, node_id: str, visible: bool) -> LayerTree:
-        """Show or hide one layer or group and return the tree it produced.
-
-        The node's own visibility, not its effective one: hiding a group hides
-        what it holds without rewriting every child.
-        """
-        ...
-
-    def layer_tree(self) -> LayerTree:
-        """Return the whole tree: groups, layers, visibility and order."""
-        ...
-
-    def crs(self) -> str | None:
-        """Return the project's CRS as an authority id, or ``None`` when unset."""
-        ...
-
-    def set_crs(self, auth_id: str) -> str:
-        """Set the project's CRS and report the authority id it landed on.
-
-        An identifier the host cannot resolve is refused with
-        ``QgisSdkUnsupportedCapabilityError`` naming it; the project keeps its
-        previous CRS.
-        """
-        ...
+class _ProjectRecords(Protocol):
+    """Variables, custom properties, bookmarks and the project file."""
 
     def variables(self) -> tuple[ProjectEntry, ...]:
         """Return the project's expression variables, in the host's order."""
@@ -206,4 +141,73 @@ class Project(Protocol):
 
     def watch_changes(self, on_change: ProjectChanged) -> ProjectWatchCanceller:
         """Call ``on_change`` whenever the project changes, until cancelled."""
+        ...
+
+
+class Project(_ProjectRecords, Protocol):
+    """The open project, as a plugin and a page edit it.
+
+    Implementations raise ``QgisSdkLayerNotFoundError`` for an unknown layer id,
+    ``QgisSdkBookmarkNotFoundError`` for an unknown bookmark name,
+    ``QgisSdkProjectFileError`` for a file that could not be read, written or
+    saved, and ``QgisSdkUnsupportedCapabilityError`` on a host with no project at
+    all (a QGIS Server has none - it draws a request).
+    """
+
+    def layer_ids(self) -> tuple[str, ...]:
+        """Return the project's layer ids in tree order."""
+        ...
+
+    def add_layer(self, layer_id: str, *, group: str | None = None) -> LayerTree:
+        """Add an owned layer to the project, optionally into a group.
+
+        Adding the same layer twice leaves one entry (and moves it when
+        ``group`` names a different group). An unknown group id is refused by
+        name - ``QgisSdkLayerNotFoundError`` - and nothing is added.
+        """
+        ...
+
+    def remove_layer(self, layer_id: str) -> LayerTree:
+        """Remove one layer from the project; the layer itself stays open.
+
+        Destructive: the project forgets the layer, so the *layer service* still
+        owns it and ``Layers.get`` keeps answering. A layer the project does not
+        hold is refused by name.
+        """
+        ...
+
+    def move_layer(
+        self, layer_id: str, *, group: str | None = None, index: int | None = None
+    ) -> LayerTree:
+        """Move one layer within the tree, into ``group`` and to ``index``.
+
+        ``index`` is the position among the destination group's children; left
+        out, the layer goes last. An index past the end is refused rather than
+        clamped, because a clamp would silently place a layer somewhere else.
+        """
+        ...
+
+    def set_visible(self, node_id: str, visible: bool) -> LayerTree:
+        """Show or hide one layer or group and return the tree it produced.
+
+        The node's own visibility, not its effective one: hiding a group hides
+        what it holds without rewriting every child.
+        """
+        ...
+
+    def layer_tree(self) -> LayerTree:
+        """Return the whole tree: groups, layers, visibility and order."""
+        ...
+
+    def crs(self) -> str | None:
+        """Return the project's CRS as an authority id, or ``None`` when unset."""
+        ...
+
+    def set_crs(self, auth_id: str) -> str:
+        """Set the project's CRS and report the authority id it landed on.
+
+        An identifier the host cannot resolve is refused with
+        ``QgisSdkUnsupportedCapabilityError`` naming it; the project keeps its
+        previous CRS.
+        """
         ...

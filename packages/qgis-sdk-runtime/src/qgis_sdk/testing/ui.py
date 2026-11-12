@@ -20,6 +20,75 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_fake_ui_context_p1(_s):
+    from qgis_sdk.ui.actions import ViewActions
+
+    _s.ViewActions = ViewActions
+    from qgis_sdk.ui.streams import ViewStreams
+
+    _s.ViewStreams = ViewStreams
+
+    from .fakes import RecordingLog, RecordingNotifications
+
+    _s.RecordingLog = RecordingLog
+    _s.RecordingNotifications = RecordingNotifications
+
+    if _s.scope is None:
+        _s.scope = ResourceScope()
+    _s.notifications = _s.services.pop(
+        "notifications", None
+    ) or _s.RecordingNotifications(_s.scope)
+    _s.view = _s.services.pop("view", None) or FakeViewControl()
+    if "log" not in _s.services:
+        _s.services["log"] = _s.RecordingLog(_s.scope)
+
+
+def _cc_fake_ui_context_p2(_s):
+    if _s.runtime is not None:
+        if "actions" in _s.services or "streams" in _s.services:
+            raise QgisSdkUiError(
+                "fake_ui_context: pass runtime or actions/streams, not both"
+            )
+        _s.services["actions"] = _s.ViewActions(
+            _s.runtime, view_id=_s.view_id, scope=_s.scope
+        )
+        _s.services["streams"] = _s.ViewStreams(_s.runtime, view_id=_s.view_id)
+        if "jobs" not in _s.services:
+            _s.context = getattr(_s.runtime, "context", None)
+            if _s.context is not None and _s.context.has("jobs"):
+                # The same view-scoped facade a real host builds, so a test
+                # sees the owner rules instead of a plugin-lifetime stand-in.
+                _s.services["jobs"] = _s.context.jobs.scoped(_s.scope)
+
+
+def _cc_fake_ui_context_p3(_s):
+    return _CcReturn(
+        UiContext(_s.notifications, _s.view, _s.scope, UiServices(**_s.services))
+    )
+
+
 def _build_surface_tail1(**values):
     ctx = values["ctx"]
     initial = values["initial"]
@@ -139,31 +208,12 @@ def fake_ui_context(
     ``streams`` as the host would, dispatches action calls on behalf of
     ``scope``, and adds ``jobs`` when the plugin declares any.
     """
-    from qgis_sdk.ui.actions import ViewActions
-    from qgis_sdk.ui.streams import ViewStreams
-
-    from .fakes import RecordingLog, RecordingNotifications
-
-    if scope is None:
-        scope = ResourceScope()
-    notifications = services.pop("notifications", None) or RecordingNotifications(scope)
-    view = services.pop("view", None) or FakeViewControl()
-    if "log" not in services:
-        services["log"] = RecordingLog(scope)
-    if runtime is not None:
-        if "actions" in services or "streams" in services:
-            raise QgisSdkUiError(
-                "fake_ui_context: pass runtime or actions/streams, not both"
-            )
-        services["actions"] = ViewActions(runtime, view_id=view_id, scope=scope)
-        services["streams"] = ViewStreams(runtime, view_id=view_id)
-        if "jobs" not in services:
-            context = getattr(runtime, "context", None)
-            if context is not None and context.has("jobs"):
-                # The same view-scoped facade a real host builds, so a test
-                # sees the owner rules instead of a plugin-lifetime stand-in.
-                services["jobs"] = context.jobs.scoped(scope)
-    return UiContext(notifications, view, scope, UiServices(**services))
+    _s = _CcState(scope=scope, runtime=runtime, view_id=view_id, services=services)
+    for _p in (_cc_fake_ui_context_p1, _cc_fake_ui_context_p2, _cc_fake_ui_context_p3):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 @dataclass(slots=True)

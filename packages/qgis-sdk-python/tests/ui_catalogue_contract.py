@@ -8,6 +8,8 @@ against the mounted widgets under a ``QgsApplication``, through the same
 
 from __future__ import annotations
 
+import copy
+
 import pytest
 from qgis_sdk.jobs import JobStatus
 from qgis_sdk.models import QgisSdkUiError
@@ -31,6 +33,43 @@ from qgis_sdk.ui import (
     ui_snapshot,
 )
 from ui_component_contract import Rendering
+
+_CC_DATA_1 = (
+    "root",
+    "options",
+    "form/enabled",
+    "pages",
+    "one",
+    "form/a",
+    "two",
+    "form/b",
+    "actions",
+    "buttons/run",
+    "buttons/dialog_buttons",
+    "feedback/job",
+    "feedback/log",
+    "feedback/results",
+)
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
+
+
+_CC_DATA_2 = [
+    "Group",
+    "Tabs",
+    "Row",
+    "JobProgress",
+    "LogView",
+    "ResultTable",
+]
+
+
+def _cc_fresh_2():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_2)
 
 
 def _test_a_result_table_tail1(**values):
@@ -433,33 +472,11 @@ def test_a_snapshot_lists_the_semantic_tree_with_the_same_ids(
             ],
         )
     )
-    expected = (
-        "root",
-        "options",
-        "form/enabled",
-        "pages",
-        "one",
-        "form/a",
-        "two",
-        "form/b",
-        "actions",
-        "buttons/run",
-        "buttons/dialog_buttons",
-        "feedback/job",
-        "feedback/log",
-        "feedback/results",
-    )
+    expected = _cc_fresh_1()
     semantic = ui_snapshot(root)
     assert snapshot_names(semantic) == expected
     assert semantic["type"] == "Panel"
-    assert [child["type"] for child in semantic["children"]] == [
-        "Group",
-        "Tabs",
-        "Row",
-        "JobProgress",
-        "LogView",
-        "ResultTable",
-    ]
+    assert [child["type"] for child in semantic["children"]] == _cc_fresh_2()
     if rendering.native:
         native = ui_snapshot(root.widget)
         assert set(expected) <= set(snapshot_names(native))

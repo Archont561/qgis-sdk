@@ -33,6 +33,179 @@ from types import MappingProxyType
 from .models import QgisSdkError, QgisSdkExportFailedError, QgisSdkExportRefusedError
 
 
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_run_export_p1(_s1):
+    try:
+        _s1.write(_s1.partial)
+    except QgisSdkError:
+        raise
+    except Exception as error:  # noqa: BLE001
+        _s1.error = error
+        raise QgisSdkExportFailedError(
+            str(_s1.destination), str(_s1.error)
+        ) from _s1.error
+    if not _s1.partial.is_file():
+        raise QgisSdkExportFailedError(
+            str(_s1.destination), "the writer produced no file"
+        )
+    if _s1.plan.source is not None:
+        refuse_source_destination(_s1.plan.source, _s1.destination)
+
+
+def _cc_run_export_p2(_s1):
+    try:
+        if _s1.plan.overwrite:
+            _s1.partial.replace(_s1.destination)
+        else:
+            # The staging file is on the same filesystem. Creating the link
+            # atomically refuses even a destination created during writing.
+            _s1.destination.hardlink_to(_s1.partial)
+    except FileExistsError as error:
+        _s1.error = error
+        raise QgisSdkExportRefusedError(
+            str(_s1.destination),
+            ["the destination exists; pass overwrite=True to replace it"],
+        ) from _s1.error
+    except OSError as error:
+        _s1.error = error
+        raise QgisSdkExportFailedError(
+            str(_s1.destination), str(_s1.error)
+        ) from _s1.error
+
+
+def _cc_run_export_p3(_s1):
+    shutil.rmtree(_s1.staging, ignore_errors=True)
+
+
+def _cc_run_export_p4(_s1):
+    _s1.destination = _s1.plan.destination
+    _s1.staging = Path(
+        tempfile.mkdtemp(prefix=f".{_s1.destination.name}.", dir=_s1.destination.parent)
+    )
+    _s1.partial = _s1.staging / _s1.destination.name
+
+
+def _cc_run_export_p5(_s1):
+    try:
+        for _p1 in (_cc_run_export_p1, _cc_run_export_p2):
+            _r1 = _p1(_s1)
+            if isinstance(_r1, _CcReturn1):
+                return _r1
+    finally:
+        for _p1 in (_cc_run_export_p3,):
+            _p1(_s1)
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_refuse_source_de_p1(_s):
+    if _s.source is None:
+        raise ValueError(
+            "the layer's source dataset cannot be verified; "
+            "open a direct local GeoJSON, GeoPackage or ESRI Shapefile instead"
+        )
+    if _s.source.reference.resolve() != _s.source.path:
+        raise ValueError("the layer's source path has changed; reopen the layer")
+
+
+def _cc_refuse_source_de_p2(_s):
+    if _s.source.device is not None:
+        _s.info = _s.source.path.stat()
+        if (_s.info.st_dev, _s.info.st_ino) != (_s.source.device, _s.source.inode):
+            raise ValueError("the layer's source dataset has changed")
+    else:
+        try:
+            _s.source.reference.stat()
+        except FileNotFoundError:
+            pass
+        else:
+            raise ValueError(
+                "the layer's virtual source has appeared; reopen the layer"
+            )
+
+
+def _cc_refuse_source_de_p3(_s):
+    _s.same = _s.source.path == _s.destination.resolve()
+    if not _s.same and _s.source.device is not None:
+        try:
+            _s.info = _s.destination.stat()
+        except FileNotFoundError:
+            pass
+        else:
+            _s.same = (_s.info.st_dev, _s.info.st_ino) == (
+                _s.source.device,
+                _s.source.inode,
+            )
+    if _s.same:
+        raise ValueError("the destination is the layer's source dataset")
+
+
+def _cc_refuse_source_de_p4(_s):
+    raise QgisSdkExportRefusedError(
+        str(_s.destination), [f"source safety check failed: {_s.error}"]
+    ) from _s.error
+
+
+def _cc_refuse_source_de_p5(_s):
+    _s.destination = Path(_s.destination)
+    try:
+        for _p in (
+            _cc_refuse_source_de_p1,
+            _cc_refuse_source_de_p2,
+            _cc_refuse_source_de_p3,
+        ):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    except (OSError, RuntimeError, ValueError) as error:
+        _s.error = error
+        for _p in (_cc_refuse_source_de_p4,):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
 def _plan_export_facts1(destination, driver, overwrite, reasons):
     if destination.is_dir():
         reasons.append("the destination is a directory")
@@ -124,42 +297,12 @@ def capture_source(
 
 def refuse_source_destination(source: SourceIdentity | None, destination: Path) -> None:
     """Fail closed unless the destination is distinct from the opened file."""
-    destination = Path(destination)
-    try:
-        if source is None:
-            raise ValueError(
-                "the layer's source dataset cannot be verified; "
-                "open a direct local GeoJSON, GeoPackage or ESRI Shapefile instead"
-            )
-        if source.reference.resolve() != source.path:
-            raise ValueError("the layer's source path has changed; reopen the layer")
-        if source.device is not None:
-            info = source.path.stat()
-            if (info.st_dev, info.st_ino) != (source.device, source.inode):
-                raise ValueError("the layer's source dataset has changed")
-        else:
-            try:
-                source.reference.stat()
-            except FileNotFoundError:
-                pass
-            else:
-                raise ValueError(
-                    "the layer's virtual source has appeared; reopen the layer"
-                )
-        same = source.path == destination.resolve()
-        if not same and source.device is not None:
-            try:
-                info = destination.stat()
-            except FileNotFoundError:
-                pass
-            else:
-                same = (info.st_dev, info.st_ino) == (source.device, source.inode)
-        if same:
-            raise ValueError("the destination is the layer's source dataset")
-    except (OSError, RuntimeError, ValueError) as error:
-        raise QgisSdkExportRefusedError(
-            str(destination), [f"source safety check failed: {error}"]
-        ) from error
+    _s = _CcState(source=source, destination=destination)
+    for _p in (_cc_refuse_source_de_p5,):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def protect_source(plan: ExportPlan, source: SourceIdentity | None) -> ExportPlan:
@@ -181,37 +324,9 @@ def run_export(plan: ExportPlan, write: Callable[[Path], None]) -> None:
     error passes through; other writer and commit errors become
     :class:`QgisSdkExportFailedError`.
     """
-    destination = plan.destination
-    staging = Path(
-        tempfile.mkdtemp(prefix=f".{destination.name}.", dir=destination.parent)
-    )
-    partial = staging / destination.name
-    try:
-        try:
-            write(partial)
-        except QgisSdkError:
-            raise
-        except Exception as error:
-            raise QgisSdkExportFailedError(str(destination), str(error)) from error
-        if not partial.is_file():
-            raise QgisSdkExportFailedError(
-                str(destination), "the writer produced no file"
-            )
-        if plan.source is not None:
-            refuse_source_destination(plan.source, destination)
-        try:
-            if plan.overwrite:
-                partial.replace(destination)
-            else:
-                # The staging file is on the same filesystem. Creating the link
-                # atomically refuses even a destination created during writing.
-                destination.hardlink_to(partial)
-        except FileExistsError as error:
-            raise QgisSdkExportRefusedError(
-                str(destination),
-                ["the destination exists; pass overwrite=True to replace it"],
-            ) from error
-        except OSError as error:
-            raise QgisSdkExportFailedError(str(destination), str(error)) from error
-    finally:
-        shutil.rmtree(staging, ignore_errors=True)
+    _s1 = _CcState1(plan=plan, write=write)
+    for _p1 in (_cc_run_export_p4, _cc_run_export_p5):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None

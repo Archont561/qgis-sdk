@@ -23,12 +23,90 @@ from typing import Any
 
 import pytest
 
-pytestmark = pytest.mark.qgis
 
-PACKAGE = "console_tools"
-SPEC = f"{PACKAGE}.plugin:app"
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
 
-PLUGIN = """
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_handle_dr_p1(_s):
+    assert _s.session.plugins() == (PACKAGE,)
+    _s.handle = _s.session.plugin(PACKAGE)
+
+    assert _s.handle.name == PACKAGE
+    assert _s.handle.description.id == "console_tools"
+    assert _s.handle.actions == ("buffer", "count")
+    assert _s.handle.surfaces() == ("buffer_dialog",)
+    assert _s.handle.algorithms == (f"{PACKAGE}:centroid",)
+    assert _s.handle.state.value == "running"
+    assert _s.handle.ctx is _s.loaded.context
+
+    assert _s.handle.run("count") == 0
+
+
+def _cc_test_a_handle_dr_p2(_s):
+    assert _s.handle.run("buffer", distance=10.0) == "roads+10"
+    assert _s.handle.run("buffer", distance=1.5, layer_id="rivers") == "rivers+1.5"
+
+    with pytest.raises(_s.QgisSdkBridgeError) as _s.refused:
+        _s.handle.run("buffer", distance="far")
+    assert "payload.distance" in str(_s.refused.value)
+
+    _s.opened = _s.handle.open("buffer")
+    _s.dialog = _s.loaded.surfaces.dialogs[0]
+    assert _s.opened is _s.dialog.surface
+    assert _s.dialog.widget.windowTitle() == "Buffer a layer"
+    _s.label = _s.dialog.widget.findChild(_s.QtWidgets.QLabel)
+
+
+def _cc_test_a_handle_dr_p3(_s):
+    assert _s.label is not None and _s.label.text() == "distance"
+
+    # The class name and the surface id reach the same surface.
+    assert _s.handle.open("BufferDialog") is not _s.opened
+    assert len(_s.loaded.surfaces.dialogs) == 2
+
+
+def _cc_test_a_handle_dr_p4(_s):
+    from qgis.PyQt import QtWidgets
+
+    _s.QtWidgets = QtWidgets
+    from qgis_sdk.console import connect
+
+    _s.connect = connect
+    from qgis_sdk.models import QgisSdkBridgeError
+
+    _s.QgisSdkBridgeError = QgisSdkBridgeError
+
+    with _s.connect() as _s.session:
+        for _p in (
+            _cc_test_a_handle_dr_p1,
+            _cc_test_a_handle_dr_p2,
+            _cc_test_a_handle_dr_p3,
+        ):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
+_CC_TEXT_1 = """
 from qgis_sdk import QgisSdkPlugin
 from qgis_sdk.core import AlgorithmContext, PluginContext
 from qgis_sdk.models import LayerInput, VectorLayerInfo
@@ -71,6 +149,14 @@ def count(ctx: PluginContext) -> int:
 def buffer_layer(ctx: PluginContext, distance: float, layer_id: str = "roads") -> str:
     return f"{layer_id}+{distance:g}"
 """
+
+
+pytestmark = pytest.mark.qgis
+
+PACKAGE = "console_tools"
+SPEC = f"{PACKAGE}.plugin:app"
+
+PLUGIN = _CC_TEXT_1
 
 
 @pytest.fixture(scope="module")
@@ -146,40 +232,12 @@ def test_connect_with_an_iface_exposes_the_desktop_service(qgis_app: Any) -> Non
 
 
 def test_a_handle_drives_the_plugin_qgis_holds(loaded: Any, qgis_app: Any) -> None:
-    from qgis.PyQt import QtWidgets
-    from qgis_sdk.console import connect
-    from qgis_sdk.models import QgisSdkBridgeError
-
-    with connect() as session:
-        assert session.plugins() == (PACKAGE,)
-        handle = session.plugin(PACKAGE)
-
-        assert handle.name == PACKAGE
-        assert handle.description.id == "console_tools"
-        assert handle.actions == ("buffer", "count")
-        assert handle.surfaces() == ("buffer_dialog",)
-        assert handle.algorithms == (f"{PACKAGE}:centroid",)
-        assert handle.state.value == "running"
-        assert handle.ctx is loaded.context
-
-        assert handle.run("count") == 0
-        assert handle.run("buffer", distance=10.0) == "roads+10"
-        assert handle.run("buffer", distance=1.5, layer_id="rivers") == "rivers+1.5"
-
-        with pytest.raises(QgisSdkBridgeError) as refused:
-            handle.run("buffer", distance="far")
-        assert "payload.distance" in str(refused.value)
-
-        opened = handle.open("buffer")
-        dialog = loaded.surfaces.dialogs[0]
-        assert opened is dialog.surface
-        assert dialog.widget.windowTitle() == "Buffer a layer"
-        label = dialog.widget.findChild(QtWidgets.QLabel)
-        assert label is not None and label.text() == "distance"
-
-        # The class name and the surface id reach the same surface.
-        assert handle.open("BufferDialog") is not opened
-        assert len(loaded.surfaces.dialogs) == 2
+    _s = _CcState(loaded=loaded, qgis_app=qgis_app)
+    for _p in (_cc_test_a_handle_dr_p4,):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_a_session_the_plugin_hands_out_shares_its_services_and_closes_with_it(

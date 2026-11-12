@@ -40,6 +40,77 @@ from qgis_sdk.models import (
     SingleSymbolRenderer,
 )
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_shape_of_p1(_s):
+    if isinstance(_s.renderer, GraduatedRenderer):
+        return _CcReturn(
+            (
+                _s.renderer.kind,
+                _s.renderer.field,
+                _s.renderer.mode,
+                tuple(
+                    (band.lower, band.upper, band.symbol.color)
+                    for band in _s.renderer.classes
+                ),
+            )
+        )
+
+
+def _cc_shape_of_p2(_s):
+    if isinstance(_s.renderer, RuleBasedRenderer):
+        return _CcReturn(
+            (
+                _s.renderer.kind,
+                tuple(
+                    (
+                        " ".join(rule.filter.split()),
+                        rule.label,
+                        rule.symbol.color,
+                        rule.enabled,
+                    )
+                    for rule in _s.renderer.rules
+                ),
+            )
+        )
+
+
+def _cc_shape_of_p3(_s):
+    if isinstance(_s.renderer, CategorizedRenderer):
+        return _CcReturn(
+            (
+                _s.renderer.kind,
+                _s.renderer.field,
+                tuple(
+                    (category.value, category.label, category.symbol.color)
+                    for category in _s.renderer.categories
+                ),
+            )
+        )
+    return _CcReturn((_s.renderer.kind, _s.renderer.symbol))
+
+
 pytestmark = pytest.mark.qgis
 
 if TYPE_CHECKING:
@@ -139,38 +210,12 @@ def _shape_of(renderer) -> tuple[object, ...]:
     that decide what the map shows - and not on the caption a user could have
     typed over.
     """
-    if isinstance(renderer, GraduatedRenderer):
-        return (
-            renderer.kind,
-            renderer.field,
-            renderer.mode,
-            tuple(
-                (band.lower, band.upper, band.symbol.color) for band in renderer.classes
-            ),
-        )
-    if isinstance(renderer, RuleBasedRenderer):
-        return (
-            renderer.kind,
-            tuple(
-                (
-                    " ".join(rule.filter.split()),
-                    rule.label,
-                    rule.symbol.color,
-                    rule.enabled,
-                )
-                for rule in renderer.rules
-            ),
-        )
-    if isinstance(renderer, CategorizedRenderer):
-        return (
-            renderer.kind,
-            renderer.field,
-            tuple(
-                (category.value, category.label, category.symbol.color)
-                for category in renderer.categories
-            ),
-        )
-    return (renderer.kind, renderer.symbol)
+    _s = _CcState(renderer=renderer)
+    for _p in (_cc_shape_of_p1, _cc_shape_of_p2, _cc_shape_of_p3):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 @pytest.mark.parametrize("renderer", RENDERERS)

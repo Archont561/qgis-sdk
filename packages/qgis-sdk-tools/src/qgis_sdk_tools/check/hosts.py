@@ -94,40 +94,53 @@ def check_hosts(
         yield from _server_declarations(tree, names, path, hosts)
 
 
+def _desktop_binding_findings(tree, names, path, hosts):
+    """``HOST001`` for a window-only binding on a declared function."""
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            dotted = names.declared_as(decorator)
+            if dotted is None:
+                continue
+            module, _, attribute = dotted.rpartition(".")
+            if module in _BINDING_SOURCES and attribute in DESKTOP_BINDINGS:
+                yield _desktop_finding(
+                    path,
+                    decorator.lineno,
+                    decorator.col_offset + 1,
+                    f"the `@{attribute}` binding on `{node.name}`",
+                    hosts,
+                )
+
+
+def _desktop_surface_findings(tree, names, path, hosts):
+    """``HOST001`` for a window-only surface a declared class inherits."""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for base in node.bases:
+            dotted = names.dotted(base)
+            if dotted is None:
+                continue
+            module, _, attribute = dotted.rpartition(".")
+            if module in _SURFACE_SOURCES and attribute in SURFACE_CLASSES:
+                yield _desktop_finding(
+                    path,
+                    node.lineno,
+                    node.col_offset + 1,
+                    f"the `{node.name}` {attribute} surface",
+                    hosts,
+                )
+                break
+
+
 def _desktop_declarations(
     tree: ast.Module, names: ModuleNames, path: Path, hosts: Sequence[str]
 ) -> Iterator[Diagnostic]:
     """``HOST001``: a binding or surface that only a window can host."""
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for decorator in node.decorator_list:
-                dotted = names.declared_as(decorator)
-                if dotted is None:
-                    continue
-                module, _, attribute = dotted.rpartition(".")
-                if module in _BINDING_SOURCES and attribute in DESKTOP_BINDINGS:
-                    yield _desktop_finding(
-                        path,
-                        decorator.lineno,
-                        decorator.col_offset + 1,
-                        f"the `@{attribute}` binding on `{node.name}`",
-                        hosts,
-                    )
-        elif isinstance(node, ast.ClassDef):
-            for base in node.bases:
-                dotted = names.dotted(base)
-                if dotted is None:
-                    continue
-                module, _, attribute = dotted.rpartition(".")
-                if module in _SURFACE_SOURCES and attribute in SURFACE_CLASSES:
-                    yield _desktop_finding(
-                        path,
-                        node.lineno,
-                        node.col_offset + 1,
-                        f"the `{node.name}` {attribute} surface",
-                        hosts,
-                    )
-                    break
+    yield from _desktop_binding_findings(tree, names, path, hosts)
+    yield from _desktop_surface_findings(tree, names, path, hosts)
 
 
 def _server_declarations(

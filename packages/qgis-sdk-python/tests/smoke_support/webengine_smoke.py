@@ -25,6 +25,91 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_run_headless_loa_p1(_s):
+    from PyQt6.QtCore import QT_VERSION_STR, Qt, QTimer
+
+    _s.QT_VERSION_STR = QT_VERSION_STR
+    _s.Qt = Qt
+    _s.QTimer = QTimer
+    from PyQt6.QtWidgets import QApplication
+
+    _s.QApplication = QApplication
+
+    # WebEngine shares its OpenGL context, so the attribute has to be set
+    # before the application object exists.
+    _s.QApplication.setAttribute(
+        _s.Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True
+    )
+
+    from qgis.core import Qgis, QgsApplication
+
+    _s.Qgis = Qgis
+    _s.QgsApplication = QgsApplication
+
+    _s.QgsApplication.setPrefixPath(str(_s.prefix), True)
+    _s.application = _s.QgsApplication([b"qgis-webengine-smoke"], True)
+    _s.application.initQgis()
+
+
+def _cc_run_headless_loa_p2(_s):
+
+    from PyQt6.QtWebEngineCore import QWebEngineProfile
+
+    _s.QWebEngineProfile = QWebEngineProfile
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+
+    _s.QWebEngineView = QWebEngineView
+
+    _s.user_agent = _s.QWebEngineProfile().httpUserAgent()
+    _s.view = _s.QWebEngineView()
+    _s.view.setHtml(SMOKE_HTML)
+
+    _s.finished: list[bool] = []
+
+
+def _cc_run_headless_loa_p3(_s):
+
+    def on_load_finished(ok: bool) -> None:
+        _s.finished.append(ok)
+        _s.application.quit()
+
+    _s.on_load_finished = on_load_finished
+
+    _s.view.loadFinished.connect(_s.on_load_finished)
+    # The timer only bounds the wait when the page never finishes loading.
+    _s.QTimer.singleShot(_s.timeout_ms, _s.application.quit)
+    _s.application.exec()
+
+    _s.application.exitQgis()
+    return _CcReturn(
+        _run_headless_load_phase1(
+            _s.QT_VERSION_STR, _s.Qgis, _s.finished, _s.user_agent
+        )
+    )
+
+
 def _run_headless_load_phase1(QT_VERSION_STR, Qgis, finished, user_agent):
     return QualificationReport(
         platform=platform.platform(),
@@ -156,36 +241,13 @@ def run_smoke(
 
 def _run_headless_load(prefix: Path, timeout_ms: int) -> QualificationReport:
     """Start QGIS, load a page in a WebEngine view and tear QGIS down."""
-    from PyQt6.QtCore import QT_VERSION_STR, Qt, QTimer
-    from PyQt6.QtWidgets import QApplication
-
-    # WebEngine shares its OpenGL context, so the attribute has to be set
-    # before the application object exists.
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-
-    from qgis.core import Qgis, QgsApplication
-
-    QgsApplication.setPrefixPath(str(prefix), True)
-    application = QgsApplication([b"qgis-webengine-smoke"], True)
-    application.initQgis()
-
-    from PyQt6.QtWebEngineCore import QWebEngineProfile
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-
-    user_agent = QWebEngineProfile().httpUserAgent()
-    view = QWebEngineView()
-    view.setHtml(SMOKE_HTML)
-
-    finished: list[bool] = []
-
-    def on_load_finished(ok: bool) -> None:
-        finished.append(ok)
-        application.quit()
-
-    view.loadFinished.connect(on_load_finished)
-    # The timer only bounds the wait when the page never finishes loading.
-    QTimer.singleShot(timeout_ms, application.quit)
-    application.exec()
-
-    application.exitQgis()
-    return _run_headless_load_phase1(QT_VERSION_STR, Qgis, finished, user_agent)
+    _s = _CcState(prefix=prefix, timeout_ms=timeout_ms)
+    for _p in (
+        _cc_run_headless_loa_p1,
+        _cc_run_headless_loa_p2,
+        _cc_run_headless_loa_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

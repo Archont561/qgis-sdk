@@ -47,6 +47,69 @@ from qgis_sdk.models import (
 )
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_register_p1(_s):
+    if _s.extent.crs is not None:
+        raise QgisSdkUnsupportedCapabilityError(
+            "extent",
+            "a declared raster extent carries no CRS of its own; "
+            "name the CRS on the dataset instead",
+        )
+    _s.types = tuple(_s.data_types or ("Float32",) * _s.band_count)
+    _s.nodata = tuple(_s.no_data if _s.no_data is not None else (None,) * _s.band_count)
+
+
+def _cc_register_p2(_s):
+    _s.info = RasterLayerInfo(
+        id=f"raster-{len(_s.self._rasters) + 1}",
+        name=_s.name,
+        band_count=_s.band_count,
+        data_types=_s.types,
+        no_data=_s.nodata,
+        extent=_s.extent,
+        resolution=_s.resolution,
+        crs=_s.crs,
+    )
+    _s.values_tuple = tuple(
+        _s.values if _s.values is not None else (None,) * _s.band_count
+    )
+
+
+def _cc_register_p3(_s):
+    if len(_s.values_tuple) != _s.band_count:
+        raise ValueError("a declared raster has one value per band")
+    _register_facts11234567891011121314151617(
+        dataset_path=_s.dataset_path,
+        holes=_s.holes,
+        info=_s.info,
+        self=_s.self,
+        source=_s.source,
+        statistics=_s.statistics,
+        values_tuple=_s.values_tuple,
+    )
+
+
 def _register_facts11234567891011121314151617(**values):
     _register_facts112345678910111213141516(
         dataset_path=values["dataset_path"],
@@ -288,45 +351,13 @@ class _FakeRastersMixin1:
         statistics: Mapping[int, RasterStatistics] | None = None,
         dataset_path: Path | None = None,
     ) -> None:
-        """Declare a raster dataset, and what reading it answers.
-
-        ``values`` is one sampled value per band, returned for a point inside
-        ``extent``; ``holes`` names the points a band is empty at, standing in
-        for the pixel grid this fake does not have. ``statistics`` is declared
-        by band number, and a band left out answers :data:`_EMPTY_STATISTICS`.
-        ``dataset_path`` models a container: the file the export copies, when it
-        differs from ``source``.
-        """
-        if extent.crs is not None:
-            raise QgisSdkUnsupportedCapabilityError(
-                "extent",
-                "a declared raster extent carries no CRS of its own; "
-                "name the CRS on the dataset instead",
-            )
-        types = tuple(data_types or ("Float32",) * band_count)
-        nodata = tuple(no_data if no_data is not None else (None,) * band_count)
-        info = RasterLayerInfo(
-            id=f"raster-{len(self._rasters) + 1}",
-            name=name,
-            band_count=band_count,
-            data_types=types,
-            no_data=nodata,
-            extent=extent,
-            resolution=resolution,
-            crs=crs,
-        )
-        values_tuple = tuple(values if values is not None else (None,) * band_count)
-        if len(values_tuple) != band_count:
-            raise ValueError("a declared raster has one value per band")
-        _register_facts11234567891011121314151617(
-            dataset_path=dataset_path,
-            holes=holes,
-            info=info,
-            self=self,
-            source=source,
-            statistics=statistics,
-            values_tuple=values_tuple,
-        )
+        "Declare a raster dataset, and what reading it answers.\n\n        ``values`` is one sampled value per band, returned for a point inside\n        ``extent``; ``holes`` names the points a band is empty at, standing in\n        for the pixel grid this fake does not have. ``statistics`` is declared\n        by band number, and a band left out answers :data:`_EMPTY_STATISTICS`.\n        ``dataset_path`` models a container: the file the export copies, when it\n        differs from ``source``.\n"
+        _s = _CcState(**locals())
+        for _p in (_cc_register_p1, _cc_register_p2, _cc_register_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def open_raster(self, source: Path) -> RasterLayerInfo:
         """Return a new raster for a declared dataset."""

@@ -28,6 +28,130 @@ from .reloader import (
 )
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_bootstrap_p1(_s):
+    import qgis.utils
+
+    _s.qgis = qgis
+    from qgis.core import Qgis
+
+    _s.Qgis = Qgis
+    from qgis.PyQt.QtCore import QCoreApplication, QTimer
+
+    _s.QCoreApplication = QCoreApplication
+    _s.QTimer = QTimer
+    from qgis.PyQt.QtGui import QKeySequence
+
+    _s.QKeySequence = QKeySequence
+    from qgis.PyQt.QtWidgets import QAction
+
+    _s.QAction = QAction
+
+    _s.root = Path(str(_s.request["root"]))
+    _s.plugin = str(_s.request["plugin"])
+    _s.iface = _s.qgis.utils.iface
+
+
+def _cc_bootstrap_p2(_s):
+    _s.levels = {
+        "info": _s.Qgis.MessageLevel.Info,
+        "warning": _s.Qgis.MessageLevel.Warning,
+        "critical": _s.Qgis.MessageLevel.Critical,
+    }
+
+    def notify(level: NotifyLevel, text: str) -> None:
+        if _s.iface is not None:
+            _s.iface.messageBar().pushMessage(
+                "qgis-sdk dev", text, level=_s.levels[level], duration=8
+            )
+
+    _s.notify = notify
+
+
+def _cc_bootstrap_p3(_s):
+
+    _s.debounce = _s.QTimer()
+    _s.debounce.setSingleShot(True)
+    _s.debounce.setInterval(DEBOUNCE_MS)
+
+
+def _cc_bootstrap_p4(_s):
+    _s.coordinator = ReloadCoordinator(
+        root=_s.root,
+        plugin=_s.plugin,
+        host=QgisUtilsHost(),
+        say=say,
+        notify=_s.notify,
+        schedule=_s.debounce.start,
+        pump=lambda: (_s.QCoreApplication.processEvents(), time.sleep(0.05)),
+    )
+    _s.debounce.timeout.connect(lambda: _s.coordinator.reload())
+    _s.session = DevSession(
+        request=_s.request, coordinator=_s.coordinator, watcher=None
+    )
+    _s.session.timers.append(_s.debounce)
+
+
+def _cc_bootstrap_p5(_s):
+
+    if _s.iface is not None:
+        _s.action = _s.QAction(f"Reload {_s.plugin}", _s.iface.mainWindow())
+        _s.action.setShortcut(_s.QKeySequence("Ctrl+Shift+R"))
+        _s.action.triggered.connect(lambda _checked=False: _s.coordinator.reload())
+        _s.iface.addToolBarIcon(_s.action)
+        _s.session.actions.append(_s.action)
+
+
+def _cc_bootstrap_p6(_s):
+
+    if _s.request.get("watch", False):
+        _s.watcher = SourceWatcher(_s.root, _s.plugin, on_change=_s.coordinator.request)
+        _s.ticker = _s.QTimer()
+        _s.ticker.setInterval(WATCH_INTERVAL_MS)
+        _s.ticker.timeout.connect(_s.watcher.poll)
+        _s.session.watcher = _s.watcher
+        _s.session.timers.append(_s.ticker)
+        if not _s.request.get("exercise"):
+            _s.ticker.start()
+            say(f"watching {_s.root / _s.plugin} for Python changes")
+
+
+def _cc_bootstrap_p7(_s):
+
+    _s.started = _s.coordinator.start()
+    _s.exercise = _s.request.get("exercise")
+    if _s.exercise:
+        from .exercise import run_exercise
+
+        _s.run_exercise = run_exercise
+
+        _s.run_exercise(_s.session, Path(str(_s.exercise)))
+    elif not _s.started:
+        say(f"{_s.plugin} is disabled; fix the error and press Reload (Ctrl+Shift+R)")
+    return _CcReturn(_s.session)
+
+
 class QgisUtilsHost:
     """The real :class:`PluginHost`, over ``qgis.utils``."""
 
@@ -132,70 +256,20 @@ def bootstrap(request: Mapping[str, object]) -> DevSession:
     ``exercise`` set it hands over to :mod:`.exercise`, which drives the
     policy and quits QGIS.
     """
-    import qgis.utils
-    from qgis.core import Qgis
-    from qgis.PyQt.QtCore import QCoreApplication, QTimer
-    from qgis.PyQt.QtGui import QKeySequence
-    from qgis.PyQt.QtWidgets import QAction
-
-    root = Path(str(request["root"]))
-    plugin = str(request["plugin"])
-    iface = qgis.utils.iface
-    levels = {
-        "info": Qgis.MessageLevel.Info,
-        "warning": Qgis.MessageLevel.Warning,
-        "critical": Qgis.MessageLevel.Critical,
-    }
-
-    def notify(level: NotifyLevel, text: str) -> None:
-        if iface is not None:
-            iface.messageBar().pushMessage(
-                "qgis-sdk dev", text, level=levels[level], duration=8
-            )
-
-    debounce = QTimer()
-    debounce.setSingleShot(True)
-    debounce.setInterval(DEBOUNCE_MS)
-    coordinator = ReloadCoordinator(
-        root=root,
-        plugin=plugin,
-        host=QgisUtilsHost(),
-        say=say,
-        notify=notify,
-        schedule=debounce.start,
-        pump=lambda: (QCoreApplication.processEvents(), time.sleep(0.05)),
-    )
-    debounce.timeout.connect(lambda: coordinator.reload())
-    session = DevSession(request=request, coordinator=coordinator, watcher=None)
-    session.timers.append(debounce)
-
-    if iface is not None:
-        action = QAction(f"Reload {plugin}", iface.mainWindow())
-        action.setShortcut(QKeySequence("Ctrl+Shift+R"))
-        action.triggered.connect(lambda _checked=False: coordinator.reload())
-        iface.addToolBarIcon(action)
-        session.actions.append(action)
-
-    if request.get("watch", False):
-        watcher = SourceWatcher(root, plugin, on_change=coordinator.request)
-        ticker = QTimer()
-        ticker.setInterval(WATCH_INTERVAL_MS)
-        ticker.timeout.connect(watcher.poll)
-        session.watcher = watcher
-        session.timers.append(ticker)
-        if not request.get("exercise"):
-            ticker.start()
-            say(f"watching {root / plugin} for Python changes")
-
-    started = coordinator.start()
-    exercise = request.get("exercise")
-    if exercise:
-        from .exercise import run_exercise
-
-        run_exercise(session, Path(str(exercise)))
-    elif not started:
-        say(f"{plugin} is disabled; fix the error and press Reload (Ctrl+Shift+R)")
-    return session
+    _s = _CcState(request=request)
+    for _p in (
+        _cc_bootstrap_p1,
+        _cc_bootstrap_p2,
+        _cc_bootstrap_p3,
+        _cc_bootstrap_p4,
+        _cc_bootstrap_p5,
+        _cc_bootstrap_p6,
+        _cc_bootstrap_p7,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def report_bootstrap_failure(exercise: object) -> None:

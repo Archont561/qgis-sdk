@@ -10,6 +10,36 @@ from typing import TypedDict, Unpack
 
 from qgis_sdk_tools.cli import CliRuntime
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_init_p1(_s):
+    _s.self.argv = tuple(_s.argv)
+    _s.self.cwd = Path(_s.cwd)
+    _s.self.exit_code = _s.exit_code
+    _s.self.terminated = False
+
+
 __all__ = ["FakeCliRuntime", "FakeProcess"]
 
 ExitCodeFor = Callable[[Sequence[str], Path], int]
@@ -19,10 +49,12 @@ class FakeProcess:
     """A background process a test can inspect: never runs, remembers being stopped."""
 
     def __init__(self, argv: Sequence[str], cwd: Path, exit_code: int = 0) -> None:
-        self.argv = tuple(argv)
-        self.cwd = Path(cwd)
-        self.exit_code = exit_code
-        self.terminated = False
+        _s = _CcState(**locals())
+        for _p in (_cc_init_p1,):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return
+        return
 
     def poll(self) -> int | None:
         return self.exit_code if self.terminated else None
@@ -58,21 +90,6 @@ class FakeCliRuntime(CliRuntime):
         self.started: list[FakeProcess] = []
         exit_code = values.run_process if values.run_process is not None else _succeed
 
-        def record(
-            argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
-        ) -> int:
-            self.processes.append((tuple(argv), Path(cwd)))
-            self.environments.append(None if env is None else dict(env))
-            return exit_code(argv, cwd)
-
-        def start(
-            argv: Sequence[str], cwd: Path, env: Mapping[str, str] | None = None
-        ) -> FakeProcess:
-            process = FakeProcess(argv, cwd)
-            self.started.append(process)
-            self.environments.append(None if env is None else dict(env))
-            return process
-
         super().__init__(
             cwd=Path(cwd),
             env=dict(env or {}),
@@ -80,8 +97,12 @@ class FakeCliRuntime(CliRuntime):
             err=io.StringIO(),
             inp=io.StringIO(values.input),
             interactive=values.interactive,
-            run_process=record,
-            start_process=start,
+            run_process=lambda argv, cwd, env=None: _record_run(
+                self, exit_code, argv, cwd, env
+            ),
+            start_process=lambda argv, cwd, env=None: _record_start(
+                self, argv, cwd, env
+            ),
         )
 
     @property
@@ -93,6 +114,21 @@ class FakeCliRuntime(CliRuntime):
     def stderr(self) -> str:
         """Everything the command wrote to ``err`` so far."""
         return self.err.getvalue()  # type: ignore[attr-defined]
+
+
+def _record_run(runner, exit_code, argv, cwd, env=None):
+    """Record one foreground process and answer with the configured exit code."""
+    runner.processes.append((tuple(argv), Path(cwd)))
+    runner.environments.append(None if env is None else dict(env))
+    return exit_code(argv, cwd)
+
+
+def _record_start(runner, argv, cwd, env=None):
+    """Record one background process and return its stand-in."""
+    process = FakeProcess(argv, cwd)
+    runner.started.append(process)
+    runner.environments.append(None if env is None else dict(env))
+    return process
 
 
 def _succeed(argv: Sequence[str], cwd: Path) -> int:

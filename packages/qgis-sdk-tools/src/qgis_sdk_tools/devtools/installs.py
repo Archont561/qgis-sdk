@@ -26,6 +26,71 @@ from qgis_sdk.models import QgisSdkError
 from qgis_sdk_tools.manifest import read_pyproject, table
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_find_qgis_instal_p1(_s):
+    _s.looked: list[str] = []
+    _s.which = _which if _s.which is None else _s.which
+    for candidate, source in _explicit_candidates(
+        _s.env, prefix=_s.prefix, project=_s.project
+    ):
+        _s.candidate = candidate
+        _s.source = source
+        _s.install = _resolve(_s.candidate, _s.source)
+        if _s.install is None:
+            raise QgisSdkQgisNotFoundError(
+                f"{_s.source} names {_s.candidate}, which has no QGIS Python bindings "
+                f"(none of {_layouts(BINDINGS_LAYOUTS)} under it). Point it at "
+                "the QGIS install prefix, or drop it and pass --qgis-prefix."
+            )
+        return _CcReturn(_s.install)
+
+
+def _cc_find_qgis_instal_p2(_s):
+
+    _s.executable = _s.which("qgis", _s.env.get("PATH"))
+    if _s.executable is not None:
+        _s.found = Path(_s.executable).resolve()
+        _s.install = _resolve(_s.found.parent.parent, f"qgis on PATH ({_s.executable})")
+        if _s.install is not None:
+            return _CcReturn(_s.install)
+        _s.looked.append(f"qgis on PATH ({_s.executable}) has no bindings next to it")
+    else:
+        _s.looked.append("no qgis executable on PATH")
+
+    _s.current = Path(sys.prefix if _s.sys_prefix is None else _s.sys_prefix)
+
+
+def _cc_find_qgis_instal_p3(_s):
+    _s.install = _resolve(_s.current, "the current Python environment")
+    if _s.install is not None:
+        return _CcReturn(_s.install)
+    _s.looked.append(f"the current Python environment ({_s.current}) has no bindings")
+
+    _s.tried = "\n".join(f"  - {entry}" for entry in _s.looked)
+    _find_qgis_install_phase1(_s.tried)
+
+
 def _environment_facts1(desktop, env, headless, self):
     if headless:
         env.setdefault("QT_QPA_PLATFORM", HEADLESS_PLATFORM)
@@ -188,36 +253,18 @@ def find_qgis_install(
     there: silently moving on would run the tests against a different QGIS
     than the one asked for.
     """
-    looked: list[str] = []
-    which = _which if which is None else which
-    for candidate, source in _explicit_candidates(env, prefix=prefix, project=project):
-        install = _resolve(candidate, source)
-        if install is None:
-            raise QgisSdkQgisNotFoundError(
-                f"{source} names {candidate}, which has no QGIS Python bindings "
-                f"(none of {_layouts(BINDINGS_LAYOUTS)} under it). Point it at "
-                "the QGIS install prefix, or drop it and pass --qgis-prefix."
-            )
-        return install
-
-    executable = which("qgis", env.get("PATH"))
-    if executable is not None:
-        found = Path(executable).resolve()
-        install = _resolve(found.parent.parent, f"qgis on PATH ({executable})")
-        if install is not None:
-            return install
-        looked.append(f"qgis on PATH ({executable}) has no bindings next to it")
-    else:
-        looked.append("no qgis executable on PATH")
-
-    current = Path(sys.prefix if sys_prefix is None else sys_prefix)
-    install = _resolve(current, "the current Python environment")
-    if install is not None:
-        return install
-    looked.append(f"the current Python environment ({current}) has no bindings")
-
-    tried = "\n".join(f"  - {entry}" for entry in looked)
-    _find_qgis_install_phase1(tried)
+    _s = _CcState(
+        env=env, prefix=prefix, project=project, which=which, sys_prefix=sys_prefix
+    )
+    for _p in (
+        _cc_find_qgis_instal_p1,
+        _cc_find_qgis_instal_p2,
+        _cc_find_qgis_instal_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _which(name: str, path: str | None) -> str | None:

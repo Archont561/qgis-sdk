@@ -83,6 +83,163 @@ from qgis_sdk.ui.form import Form
 
 from .processing._parameters import _qt_filter
 
+
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_result_table_p1(_s1):
+    _s1.table = QTableWidget(0, len(_s1.component.columns), _s1.parent)
+    _s1.table.setHorizontalHeaderLabels(list(_s1.component.headings))
+    _s1.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    _s1.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    _s1.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+    _s1.table.verticalHeader().setVisible(False)
+
+
+def _cc_result_table_p2(_s1):
+
+    def apply(value: object) -> None:
+        rows, selected = value  # type: ignore[misc]
+        _s1.table.blockSignals(True)
+        try:
+            _s1.table.setRowCount(len(rows))
+            for row_index, cells in enumerate(rows):
+                _s1.row_index = row_index
+                _s1.cells = cells
+                for column_index, text in enumerate(cells):
+                    _s1.column_index = column_index
+                    _s1.text = text
+                    item = QTableWidgetItem(text)
+                    item.setFlags(
+                        item.flags() & ~qt_enum(Qt, "ItemFlag", "ItemIsEditable")
+                    )
+                    _s1.table.setItem(row_index, column_index, item)
+            _s1.table.clearSelection()
+            if selected is not None:
+                _s1.table.selectRow(selected)
+        finally:
+            _s1.table.blockSignals(False)
+
+    _s1.apply = apply
+
+
+def _cc_result_table_p3(_s1):
+
+    def read() -> None:
+        rows = {index.row() for index in _s1.table.selectionModel().selectedRows()}
+        _s1.on_change(min(rows) if rows else None)
+
+    _s1.read = read
+
+    _s1.rendering = Rendering(_s1.table, _s1.apply)
+    _connect(_s1.rendering, _s1.table.itemSelectionChanged, _s1.read)
+    return _CcReturn1(_s1.rendering)
+
+
+def _CcPhases1():
+    return (
+        _cc_job_progress_p1,
+        _cc_job_progress_p2,
+        _cc_job_progress_p3,
+        _cc_job_progress_p4,
+    )
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_job_progress_p1(_s):
+    _s.widget = QWidget(_s.parent)
+    _s.layout = QHBoxLayout(_s.widget)
+    _s.layout.setContentsMargins(0, 0, 0, 0)
+    _s.bar = QProgressBar(_s.widget)
+    _s.bar.setObjectName(f"{_s.component.object_name}/bar")
+    _s.bar.setRange(0, 100)
+    _s.bar.setTextVisible(True)
+    _s.message = QLabel(_s.widget)
+    _s.message.setObjectName(f"{_s.component.object_name}/message")
+    _s.layout.addWidget(_s.bar, 1)
+    _s.layout.addWidget(_s.message)
+    _s.cancel: QPushButton | None = None
+
+
+def _cc_job_progress_p2(_s):
+    if _s.component.cancellable:
+        _s.cancel = QPushButton("Cancel", _s.widget)
+        _s.cancel.setObjectName(f"{_s.component.object_name}/cancel")
+        _s.layout.addWidget(_s.cancel)
+
+
+def _cc_job_progress_p3(_s):
+
+    def apply(value: object) -> None:
+        status, fraction, text = value  # type: ignore[misc]
+        if fraction is None:
+            if status in ("queued", "running"):
+                _s.bar.setRange(0, 0)  # busy
+            else:
+                _s.bar.setRange(0, 100)
+                _s.bar.setValue(0)
+        else:
+            _s.bar.setRange(0, 100)
+            _s.bar.setValue(round(float(fraction) * 100))
+        _s.message.setText(text if text else ("" if status == "idle" else str(status)))
+        if _s.cancel is not None:
+            _s.cancel.setEnabled(status in ("queued", "running"))
+
+    _s.apply = apply
+
+
+def _cc_job_progress_p4(_s):
+
+    _s.rendering = Rendering(_s.widget, _s.apply)
+    if _s.cancel is not None:
+        _connect(
+            _s.rendering,
+            _s.cancel.clicked,
+            lambda _checked=False: _s.on_change("cancel"),
+        )
+    return _CcReturn(_s.rendering)
+
+
 __all__ = ["Rendering", "load_ui", "mount"]
 
 #: Spin-box bounds: wide enough never to clip a
@@ -475,42 +632,12 @@ def _custom(
 def _job_progress(
     component: JobProgress, parent: QWidget | None, on_change: OnChange
 ) -> Rendering:
-    widget = QWidget(parent)
-    layout = QHBoxLayout(widget)
-    layout.setContentsMargins(0, 0, 0, 0)
-    bar = QProgressBar(widget)
-    bar.setObjectName(f"{component.object_name}/bar")
-    bar.setRange(0, 100)
-    bar.setTextVisible(True)
-    message = QLabel(widget)
-    message.setObjectName(f"{component.object_name}/message")
-    layout.addWidget(bar, 1)
-    layout.addWidget(message)
-    cancel: QPushButton | None = None
-    if component.cancellable:
-        cancel = QPushButton("Cancel", widget)
-        cancel.setObjectName(f"{component.object_name}/cancel")
-        layout.addWidget(cancel)
-
-    def apply(value: object) -> None:
-        status, fraction, text = value  # type: ignore[misc]
-        if fraction is None:
-            if status in ("queued", "running"):
-                bar.setRange(0, 0)  # busy
-            else:
-                bar.setRange(0, 100)
-                bar.setValue(0)
-        else:
-            bar.setRange(0, 100)
-            bar.setValue(round(float(fraction) * 100))
-        message.setText(text if text else ("" if status == "idle" else str(status)))
-        if cancel is not None:
-            cancel.setEnabled(status in ("queued", "running"))
-
-    rendering = Rendering(widget, apply)
-    if cancel is not None:
-        _connect(rendering, cancel.clicked, lambda _checked=False: on_change("cancel"))
-    return rendering
+    _s = _CcState(**locals())
+    for _p in _CcPhases1():
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _log_view(
@@ -531,38 +658,12 @@ def _log_view(
 def _result_table(
     component: ResultTable, parent: QWidget | None, on_change: OnChange
 ) -> Rendering:
-    table = QTableWidget(0, len(component.columns), parent)
-    table.setHorizontalHeaderLabels(list(component.headings))
-    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-    table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-    table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-    table.verticalHeader().setVisible(False)
-
-    def apply(value: object) -> None:
-        rows, selected = value  # type: ignore[misc]
-        table.blockSignals(True)
-        try:
-            table.setRowCount(len(rows))
-            for row_index, cells in enumerate(rows):
-                for column_index, text in enumerate(cells):
-                    item = QTableWidgetItem(text)
-                    item.setFlags(
-                        item.flags() & ~qt_enum(Qt, "ItemFlag", "ItemIsEditable")
-                    )
-                    table.setItem(row_index, column_index, item)
-            table.clearSelection()
-            if selected is not None:
-                table.selectRow(selected)
-        finally:
-            table.blockSignals(False)
-
-    def read() -> None:
-        rows = {index.row() for index in table.selectionModel().selectedRows()}
-        on_change(min(rows) if rows else None)
-
-    rendering = Rendering(table, apply)
-    _connect(rendering, table.itemSelectionChanged, read)
-    return rendering
+    _s1 = _CcState1(component=component, parent=parent, on_change=on_change)
+    for _p1 in (_cc_result_table_p1, _cc_result_table_p2, _cc_result_table_p3):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 _BUILDERS: tuple[tuple[type[Component], Callable[..., Rendering]], ...] = (

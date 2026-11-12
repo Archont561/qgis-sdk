@@ -14,6 +14,103 @@ from pathlib import Path
 import pytest
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_widget_su_p1(_s):
+    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
+
+    _s.NativeContextOptions = NativeContextOptions
+    _s.native_plugin_context = native_plugin_context
+    from qgis_sdk.adapters.surfaces import SurfaceHost
+
+    _s.SurfaceHost = SurfaceHost
+    from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
+
+    _s.describe_bindings = describe_bindings
+    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+
+    _s.PluginContext = PluginContext
+    _s.PluginRuntime = PluginRuntime
+    _s.ResourceScope = ResourceScope
+    from qgis_sdk.declarations._plugin import plugin
+
+    _s.plugin = plugin
+
+    _s.seen: list[object] = []
+
+
+def _cc_test_a_widget_su_p2(_s):
+
+    class LegacyDialog(QWidget):
+        kind = "dialog"
+        title = "Legacy"
+
+        def __init__(self, ctx: object) -> None:
+            super().__init__()
+            self.ctx = ctx
+            _s.seen.append(ctx)
+            QVBoxLayout(self).addWidget(QLabel("legacy", self))
+
+        _s.__init__ = __init__
+
+        def on_close(self) -> None:
+            _s.seen.append("closed")
+
+        _s.on_close = on_close
+
+    _s.LegacyDialog = LegacyDialog
+
+
+def _cc_test_a_widget_su_p3(_s):
+
+    @_s.plugin(id="legacy_tools", title="Legacy tools")
+    class LegacyTools:
+        ctx: _s.PluginContext
+        surfaces = (_s.LegacyDialog,)
+
+    _s.LegacyTools = LegacyTools
+
+    _s.scope = _s.ResourceScope()
+    _s.context = _s.native_plugin_context(
+        _s.scope, _s.NativeContextOptions(settings_prefix="legacy_tools")
+    )
+
+
+def _cc_test_a_widget_su_p4(_s):
+    _s.host = _s.SurfaceHost(
+        iface=None,
+        plugin_id="legacy_tools",
+        title="Legacy tools",
+        bindings=_s.describe_bindings(_s.LegacyTools),
+    )
+    _s.runtime = _s.PluginRuntime._from_plugin_class(
+        _s.LegacyTools, _s.context.with_services(ui=_s.host)
+    )
+    _s.host.attach(_s.runtime, _s.context)
+    _s.runtime.start()
+    _a_widget_surface_opens_phase1(_s.LegacyDialog, _s.host, _s.runtime, _s.seen)
+
+
 def _a_widget_surface_opens_phase1(LegacyDialog, host, runtime, seen):
     try:
         opened = host.open(LegacyDialog)
@@ -107,45 +204,14 @@ def test_custom_accepts_a_built_widget_and_reparents_it(rendering: Rendering) ->
 
 
 def test_a_widget_surface_opens_under_the_host(qgis_app: object) -> None:
-    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
-    from qgis_sdk.adapters.surfaces import SurfaceHost
-    from qgis_sdk.bindings import _describe_lowered_bindings as describe_bindings
-    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
-    from qgis_sdk.declarations._plugin import plugin
-
-    seen: list[object] = []
-
-    class LegacyDialog(QWidget):
-        kind = "dialog"
-        title = "Legacy"
-
-        def __init__(self, ctx: object) -> None:
-            super().__init__()
-            self.ctx = ctx
-            seen.append(ctx)
-            QVBoxLayout(self).addWidget(QLabel("legacy", self))
-
-        def on_close(self) -> None:
-            seen.append("closed")
-
-    @plugin(id="legacy_tools", title="Legacy tools")
-    class LegacyTools:
-        ctx: PluginContext
-        surfaces = (LegacyDialog,)
-
-    scope = ResourceScope()
-    context = native_plugin_context(
-        scope, NativeContextOptions(settings_prefix="legacy_tools")
-    )
-    host = SurfaceHost(
-        iface=None,
-        plugin_id="legacy_tools",
-        title="Legacy tools",
-        bindings=describe_bindings(LegacyTools),
-    )
-    runtime = PluginRuntime._from_plugin_class(
-        LegacyTools, context.with_services(ui=host)
-    )
-    host.attach(runtime, context)
-    runtime.start()
-    _a_widget_surface_opens_phase1(LegacyDialog, host, runtime, seen)
+    _s = _CcState(qgis_app=qgis_app)
+    for _p in (
+        _cc_test_a_widget_su_p1,
+        _cc_test_a_widget_su_p2,
+        _cc_test_a_widget_su_p3,
+        _cc_test_a_widget_su_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

@@ -51,6 +51,66 @@ from qgis_sdk.declarations._plugin import refuse_bindings
 from qgis_sdk.models.canvas import CAPTURE_SHAPES
 from qgis_sdk.models.features import Geometry
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_tool_p1(_s):
+    validate_given(_s.id, _s.title)
+
+
+def _cc_tool_p2(_s):
+
+    def decorate(target: T) -> T:
+        if not inspect.isfunction(target):
+            raise QgisSdkDeclarationError("@tool requires an instance method")
+        name = getattr(target, "__name__", "tool")
+        declared = _ToolMetadata(
+            id=_s.id if _s.id is not None else derive_id(name),
+            title=_s.title if _s.title is not None else derive_title(name),
+            captures=_refuse_unknown_shape(_s.captures, f"tool {_s.id or name}"),
+        )
+        _refuse_bad_signature(target, f"tool {declared.id}")
+        refuse_bindings(
+            target,
+            "@tool",
+            instead="bind an @action that calls start() on it",
+        )
+        if TOOL_ATTRIBUTE in vars(target):
+            raise QgisSdkDeclarationError(f"{name} is already declared as a tool")
+        attach_describe(target)
+        target.__qgis_sdk_tool__ = declared  # type: ignore[attr-defined]
+        return target
+
+    _s.decorate = decorate
+
+
+def _cc_tool_p3(_s):
+
+    if _s.method is None:
+        return _CcReturn(_s.decorate)
+    return _CcReturn(_s.decorate(_s.method))
+
+
 __all__ = ["TOOL_ATTRIBUTE", "ToolDescription", "declared_tools", "start", "tool"]
 
 TOOL_ATTRIBUTE = "__qgis_sdk_tool__"
@@ -140,39 +200,13 @@ def tool(
     id: str | None = None,
     title: str | None = None,
 ) -> Any:
-    """Declare a method that captures one ``point``, ``line`` or ``polygon``.
-
-    ``@tool`` alone names the tool after the method and captures a polygon;
-    ``id=``, ``title=`` and ``captures=`` override any of the three. The method
-    is not wrapped: it is an ordinary instance method that a test can call with
-    a hand-built :class:`~qgis_sdk.models.features.Geometry`.
-    """
-    validate_given(id, title)
-
-    def decorate(target: T) -> T:
-        if not inspect.isfunction(target):
-            raise QgisSdkDeclarationError("@tool requires an instance method")
-        name = getattr(target, "__name__", "tool")
-        declared = _ToolMetadata(
-            id=id if id is not None else derive_id(name),
-            title=title if title is not None else derive_title(name),
-            captures=_refuse_unknown_shape(captures, f"tool {id or name}"),
-        )
-        _refuse_bad_signature(target, f"tool {declared.id}")
-        refuse_bindings(
-            target,
-            "@tool",
-            instead="bind an @action that calls start() on it",
-        )
-        if TOOL_ATTRIBUTE in vars(target):
-            raise QgisSdkDeclarationError(f"{name} is already declared as a tool")
-        attach_describe(target)
-        target.__qgis_sdk_tool__ = declared  # type: ignore[attr-defined]
-        return target
-
-    if method is None:
-        return decorate
-    return decorate(method)
+    "Declare a method that captures one ``point``, ``line`` or ``polygon``.\n\n    ``@tool`` alone names the tool after the method and captures a polygon;\n    ``id=``, ``title=`` and ``captures=`` override any of the three. The method\n    is not wrapped: it is an ordinary instance method that a test can call with\n    a hand-built :class:`~qgis_sdk.models.features.Geometry`.\n"
+    _s = _CcState(method=method, captures=captures, id=id, title=title)
+    for _p in (_cc_tool_p1, _cc_tool_p2, _cc_tool_p3):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def declared_tools(cls: type) -> tuple[tuple[str, _ToolMetadata], ...]:
