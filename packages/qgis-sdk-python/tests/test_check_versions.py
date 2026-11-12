@@ -3,6 +3,7 @@ tools release supports (TASK-57, decision-35)."""
 
 from __future__ import annotations
 
+import importlib.metadata
 from pathlib import Path
 
 import pytest
@@ -86,6 +87,26 @@ def test_the_supported_range_is_read_from_the_tools_distribution() -> None:
     # Whether installed or run from the checkout, the tools know their range.
     assert rng is not None
     assert rng.lower.count(".") == 2 and rng.upper.count(".") == 1
+    assert rng.as_requirement().startswith("qgis-sdk-runtime>=")
+
+
+def test_an_install_without_metadata_falls_back_to_its_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tree that was never installed still knows its range, from the manifest.
+
+    The fallback reads the tools' own ``pyproject.toml``, so it moves with the
+    module that reads it: a module one directory deeper needs one more ``parent``
+    or it finds nothing and reports no range at all.
+    """
+
+    def absent(name: str) -> list[str]:
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "requires", absent)
+    rng = supported_runtime_range()
+
+    assert rng is not None
     assert rng.as_requirement().startswith("qgis-sdk-runtime>=")
 
 

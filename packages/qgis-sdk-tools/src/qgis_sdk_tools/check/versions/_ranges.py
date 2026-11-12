@@ -73,7 +73,7 @@ def supported_runtime_range() -> RuntimeRange | None:
     try:
         requirements = list(importlib.metadata.requires(TOOLS_DISTRIBUTION) or ())
     except importlib.metadata.PackageNotFoundError:
-        source = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        source = Path(__file__).resolve().parents[4] / "pyproject.toml"
         data, _malformed = read_pyproject(source)
         project = table(data, "project") or {}
         if project.get("name") == TOOLS_DISTRIBUTION:

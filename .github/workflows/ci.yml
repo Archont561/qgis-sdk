@@ -406,6 +406,29 @@ jobs:
           QGIS_SDK_SERVER_DEV: "1"
         run: .venv-lts/bin/python -m automation.ci lts
 
+      - name: Diagnose the LTS server test
+        id: diag
+        if: failure()
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QGIS_SDK_SERVER_DEV: "1"
+        run: |
+          set +e
+          .venv-lts/bin/python -m pytest \
+            -c packages/qgis-sdk-python/pyproject.toml \
+            packages/qgis-sdk-python/tests/test_server_devtools_native.py \
+            -q -rs --tb=long > /tmp/lts.log 2>&1
+          python3 - /tmp/lts.log <<'PY'
+          import pathlib
+          import sys
+
+          text = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          flat = " | ".join(line for line in text.splitlines() if line.strip())[-40000:]
+          for index in range(0, max(len(flat), 1), 5000):
+              print(f"::error title=lts {index}::{flat[index:index + 5000]}")
+          PY
+          exit 0
+
   # Preserve the existing required `checks` status while ensuring a failed,
   # cancelled, or unexpectedly skipped Linux job cannot pass the aggregate.
   checks:
