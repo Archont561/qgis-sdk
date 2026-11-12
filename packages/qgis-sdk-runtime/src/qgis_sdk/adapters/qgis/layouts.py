@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -66,225 +67,126 @@ from qgis_sdk.services.layouts import (
 )
 
 
-def _render_facts11234567891011121314151617(**values):
-    return _render_facts112345678910111213141516(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
+@dataclass(frozen=True, slots=True)
+class _RenderFacts:
+    """Everything one single-layout export needs, as one record."""
+
+    backend: Any
+    exporter: Any
+    request: LayoutRequest
+    settings: Any
+    plan: Any
+    pages: int
+    progress: Progress
 
 
-def _render_facts112345678910111213141516(**values):
-    return _render_facts1123456789101112131415(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts1123456789101112131415(**values):
-    return _render_facts11234567891011121314(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts11234567891011121314(**values):
-    return _render_facts112345678910111213(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts112345678910111213(**values):
-    return _render_facts1123456789101112(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts1123456789101112(**values):
-    return _render_facts11234567891011(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts11234567891011(**values):
-    return _render_facts112345678910(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts112345678910(**values):
-    return _render_facts1123456789(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts1123456789(**values):
-    return _render_facts112345678(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts112345678(**values):
-    return _render_facts11234567(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts11234567(**values):
-    return _render_facts1123456(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts1123456(**values):
-    return _render_facts112345(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts112345(**values):
-    return _render_facts11234(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts11234(**values):
-    return _render_facts1123(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts1123(**values):
-    return _render_facts112(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts112(**values):
-    return _render_facts11(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts11(**values):
-    return _render_facts1(
-        exporter=values["exporter"],
-        pages=values["pages"],
-        plan=values["plan"],
-        progress=values["progress"],
-        request=values["request"],
-        self=values["self"],
-        settings=values["settings"],
-    )
-
-
-def _render_facts1(**values):
+def _render_export(facts: _RenderFacts) -> LayoutExport:
+    """Write the planned file, report completion, and describe the export."""
     export_policy.run_export(
-        values["plan"],
+        facts.plan,
         lambda partial: _write(
-            values["self"]._core,
-            values["exporter"],
-            values["request"],
+            facts.backend._core,
+            facts.exporter,
+            facts.request,
             partial,
-            values["settings"],
+            facts.settings,
         ),
     )
-    values["progress"].report(1.0)
-    return exported(
-        values["request"], values["plan"].destination, pages=values["pages"]
-    )
+    facts.progress.report(1.0)
+    return exported(facts.request, facts.plan.destination, pages=facts.pages)
+
+
+def _check_pages(request: LayoutRequest, pages: int) -> None:
+    """A layout needs a page, and a single-page format needs exactly one."""
+    if pages < 1:
+        raise QgisSdkExportRefusedError(
+            request.destination, ["the layout has no page to export"]
+        )
+    if request.format in SINGLE_PAGE_FORMATS and pages > 1:
+        raise QgisSdkExportRefusedError(
+            request.destination,
+            [
+                (
+                    f"a {request.format} file holds one page and the layout has "
+                    f"{pages}; export it as pdf or run its atlas"
+                )
+            ],
+        )
+
+
+def _enabled_atlas(layout: Any, request: AtlasRequest) -> Any:
+    """The layout's atlas, refused by name when the designer never enabled one."""
+    atlas = layout.atlas()
+    if atlas is None or not atlas.enabled():
+        raise QgisSdkExportRefusedError(
+            request.directory,
+            [
+                (
+                    "the layout has no atlas; enable one over a coverage layer in "
+                    "the print designer, because no backend can add one for a caller"
+                )
+            ],
+        )
+    return atlas
+
+
+@dataclass(frozen=True, slots=True)
+class _AtlasFacts:
+    """The atlas, its exporter and the caller's request, held as one record."""
+
+    core: Any
+    layout: Any
+    atlas: Any
+    exporter: Any
+    settings: Any
+    request: AtlasRequest
+    progress: Progress
+    cancellation: Cancellation
+
+    def render(self) -> AtlasExport:
+        """Iterate the pages once, then hand the written files to the caller."""
+        if not self.atlas.beginRender():  # pragma: no cover - empty coverage layer
+            raise QgisSdkExportRefusedError(
+                self.request.directory,
+                ["the atlas covered no feature; its coverage layer selected nothing"],
+            )
+        written: list[tuple[int, int | None, Path]] = []
+        try:
+            total = self.atlas.count()
+            if total < 1:  # pragma: no cover - beginRender refused an empty atlas
+                raise QgisSdkExportRefusedError(
+                    self.request.directory, ["the atlas has no page to write"]
+                )
+            for index in range(total):
+                self._write_page(index, total, written)
+        finally:
+            self.atlas.endRender()
+        return atlas_pages(self.request, written)
+
+    def _write_page(self, index: int, total: int, written: list) -> None:
+        """Seek to one page, export it under the caller's pattern, report progress."""
+        stop_if_cancelled(self.cancellation)
+        if not self.atlas.seekTo(index):
+            raise QgisSdkExportFailedError(
+                self.request.directory,
+                f"the atlas could not seek to page {index + 1} of {total}",
+            )
+        # ``prepareForFeature`` put the page's coverage feature in the
+        # layout's report context, which is where its id is readable.
+        feature = self.layout.reportContext().feature()
+        feature_id = int(feature.id()) if feature.isValid() else None
+        path = page_path(self.request, index=index + 1, feature_id=feature_id)
+        plan = export_policy.plan_export(
+            path, overwrite=self.request.overwrite, drivers=LAYOUT_SUFFIXES
+        )
+        export_policy.run_export(
+            plan,
+            lambda partial: _write(
+                self.core, self.exporter, self.request, partial, self.settings
+            ),
+        )
+        written.append((index + 1, feature_id, plan.destination))
+        self.progress.report((index + 1) / total)
 
 
 def _template_document_phase1(content, document, path):
@@ -406,37 +308,23 @@ class _NativeLayoutsBackend:
     ) -> LayoutExport:
         layout = self._layout(request.layout)
         pages = layout.pageCollection().pageCount()
-        if pages < 1:
-            raise QgisSdkExportRefusedError(
-                request.destination, ["the layout has no page to export"]
-            )
-        if request.format in SINGLE_PAGE_FORMATS and pages > 1:
-            raise QgisSdkExportRefusedError(
-                request.destination,
-                [
-                    (
-                        f"a {request.format} file holds one page and the layout has "
-                        f"{pages}; export it as pdf or run its atlas"
-                    )
-                ],
-            )
+        _check_pages(request, pages)
         stop_if_cancelled(cancellation)
         plan = export_policy.plan_export(
             Path(request.destination),
             overwrite=request.overwrite,
             drivers=LAYOUT_SUFFIXES,
         )
-        exporter = self._core.QgsLayoutExporter(layout)
-        settings = _settings(self._core, request)
-        return _render_facts11234567891011121314151617(
-            exporter=exporter,
-            pages=pages,
-            plan=plan,
-            progress=progress,
+        facts = _RenderFacts(
+            backend=self,
+            exporter=self._core.QgsLayoutExporter(layout),
             request=request,
-            self=self,
-            settings=settings,
+            settings=_settings(self._core, request),
+            plan=plan,
+            pages=pages,
+            progress=progress,
         )
+        return _render_export(facts)
 
     def render_atlas(
         self,
@@ -447,55 +335,18 @@ class _NativeLayoutsBackend:
     ) -> AtlasExport:
         core = self._core
         layout = self._layout(request.layout)
-        atlas = layout.atlas()
-        if atlas is None or not atlas.enabled():
-            raise QgisSdkExportRefusedError(
-                request.directory,
-                [
-                    (
-                        "the layout has no atlas; enable one over a coverage layer in "
-                        "the print designer, because no backend can add one for a caller"
-                    )
-                ],
-            )
-        exporter = core.QgsLayoutExporter(layout)
-        settings = _settings(core, request)
-        written: list[tuple[int, int | None, Path]] = []
-        if not atlas.beginRender():  # pragma: no cover - an empty coverage layer
-            raise QgisSdkExportRefusedError(
-                request.directory,
-                ["the atlas covered no feature; its coverage layer selected nothing"],
-            )
-        try:
-            total = atlas.count()
-            if total < 1:  # pragma: no cover - beginRender refused an empty atlas
-                raise QgisSdkExportRefusedError(
-                    request.directory, ["the atlas has no page to write"]
-                )
-            for index in range(total):
-                stop_if_cancelled(cancellation)
-                if not atlas.seekTo(index):
-                    raise QgisSdkExportFailedError(
-                        request.directory,
-                        f"the atlas could not seek to page {index + 1} of {total}",
-                    )
-                # ``prepareForFeature`` put the page's coverage feature in the
-                # layout's report context, which is where its id is readable.
-                feature = layout.reportContext().feature()
-                feature_id = int(feature.id()) if feature.isValid() else None
-                path = page_path(request, index=index + 1, feature_id=feature_id)
-                plan = export_policy.plan_export(
-                    path, overwrite=request.overwrite, drivers=LAYOUT_SUFFIXES
-                )
-                export_policy.run_export(
-                    plan,
-                    lambda partial: _write(core, exporter, request, partial, settings),
-                )
-                written.append((index + 1, feature_id, plan.destination))
-                progress.report((index + 1) / total)
-        finally:
-            atlas.endRender()
-        return atlas_pages(request, written)
+        atlas = _enabled_atlas(layout, request)
+        facts = _AtlasFacts(
+            core=core,
+            layout=layout,
+            atlas=atlas,
+            exporter=core.QgsLayoutExporter(layout),
+            settings=_settings(core, request),
+            request=request,
+            progress=progress,
+            cancellation=cancellation,
+        )
+        return facts.render()
 
     # -- helpers ----------------------------------------------------------------
 

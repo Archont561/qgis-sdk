@@ -7,6 +7,8 @@ presented when the run is refused, cancelled or cannot take the style.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 from conftest import WORKING_CRS
 from qgis_sdk.core import PluginContext, PluginServices, ResourceScope
@@ -31,220 +33,18 @@ from simple.plugin import FIXTURE
 from simple.workflow import LocalGisWorkflow
 
 
-def _context_facts11234567891011121314151617(**values):
-    return _context_facts112345678910111213141516(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
+@dataclass(frozen=True, slots=True)
+class _ContextFacts:
+    """The fakes behind one workflow context, arranged as one record."""
+
+    scope: ResourceScope
+    layers: FakeLayers
+    algorithms: FakeAlgorithms
+    project: FakeProject
+    styles: FakeStyles
 
 
-def _context_facts112345678910111213141516(**values):
-    return _context_facts1123456789101112131415(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts1123456789101112131415(**values):
-    return _context_facts11234567891011121314(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts11234567891011121314(**values):
-    return _context_facts112345678910111213(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts112345678910111213(**values):
-    return _context_facts1123456789101112(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts1123456789101112(**values):
-    return _context_facts11234567891011(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts11234567891011(**values):
-    return _context_facts112345678910(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts112345678910(**values):
-    return _context_facts1123456789(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts1123456789(**values):
-    return _context_facts112345678(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts112345678(**values):
-    return _context_facts11234567(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts11234567(**values):
-    return _context_facts1123456(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts1123456(**values):
-    return _context_facts112345(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts112345(**values):
-    return _context_facts11234(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts11234(**values):
-    return _context_facts1123(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts1123(**values):
-    return _context_facts112(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts112(**values):
-    return _context_facts11(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts11(**values):
-    return _context_facts1(
-        algorithms=values["algorithms"],
-        algorithms_available=values["algorithms_available"],
-        layers=values["layers"],
-        project=values["project"],
-        scope=values["scope"],
-        styles=values["styles"],
-    )
-
-
-def _context_facts1(**values):
-    context = PluginContext(
-        RecordingNotifications(values["scope"]),
-        values["scope"],
-        PluginServices(
-            layers=values["layers"],
-            project=values["project"],
-            styles=values["styles"],
-            algorithms=values["algorithms"] if values["algorithms_available"] else None,
-        ),
-    )
-    return context, values["project"], values["styles"]
-
-
-class _Journal:
-    """Records the order the workflow drives the services in."""
-
-    def __init__(self) -> None:
-        self.events: list[str] = []
-
-
-def _context(
-    journal: _Journal,
-    *,
-    output_fields: tuple[str, ...] = ("id", "value"),
-    algorithms_available: bool = True,
-) -> tuple[PluginContext, FakeProject, FakeStyles]:
+def _arrange(output_fields: tuple[str, ...]) -> _ContextFacts:
     scope = ResourceScope()
     layers = FakeLayers(scope)
     layers.register(
@@ -263,12 +63,16 @@ def _context(
             crs=WORKING_CRS,
         )
     )
-    project = FakeProject(layers, scope)
-    styles = FakeStyles(layers, scope)
+    return _ContextFacts(
+        scope, layers, algorithms, FakeProject(layers, scope), FakeStyles(layers, scope)
+    )
 
-    original_execute = algorithms.execute
-    original_apply = styles.apply_style
-    original_add = project.add_layer
+
+def _instrument(facts: _ContextFacts, journal: _Journal) -> None:
+    """Wrap the three services in a journal that records their call order."""
+    original_execute = facts.algorithms.execute
+    original_apply = facts.styles.apply_style
+    original_add = facts.project.add_layer
 
     def execute(request: object) -> object:
         journal.events.append("execute")
@@ -282,17 +86,41 @@ def _context(
         journal.events.append(f"add:{layer_id}")
         original_add(layer_id)
 
-    algorithms.execute = execute  # type: ignore[method-assign]
-    styles.apply_style = apply_style  # type: ignore[method-assign]
-    project.add_layer = add_layer  # type: ignore[method-assign]
-    return _context_facts11234567891011121314151617(
-        algorithms=algorithms,
-        algorithms_available=algorithms_available,
-        layers=layers,
-        project=project,
-        scope=scope,
-        styles=styles,
+    facts.algorithms.execute = execute  # type: ignore[method-assign]
+    facts.styles.apply_style = apply_style  # type: ignore[method-assign]
+    facts.project.add_layer = add_layer  # type: ignore[method-assign]
+
+
+def _plugin_context(facts: _ContextFacts, available: bool) -> PluginContext:
+    return PluginContext(
+        RecordingNotifications(facts.scope),
+        facts.scope,
+        PluginServices(
+            layers=facts.layers,
+            project=facts.project,
+            styles=facts.styles,
+            algorithms=facts.algorithms if available else None,
+        ),
     )
+
+
+class _Journal:
+    """Records the order the workflow drives the services in."""
+
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+
+def _context(
+    journal: _Journal,
+    *,
+    output_fields: tuple[str, ...] = ("id", "value"),
+    algorithms_available: bool = True,
+) -> tuple[PluginContext, FakeProject, FakeStyles]:
+    facts = _arrange(output_fields)
+    _instrument(facts, journal)
+    context = _plugin_context(facts, algorithms_available)
+    return context, facts.project, facts.styles
 
 
 def test_buffer_runs_styles_and_only_then_presents_the_output() -> None:

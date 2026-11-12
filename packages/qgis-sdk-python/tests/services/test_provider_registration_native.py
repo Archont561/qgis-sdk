@@ -245,37 +245,8 @@ def test_a_second_plugin_with_the_same_provider_id_is_refused_by_name(
     assert _algorithm_ids("sample") == ["sample:buffer", "sample:centroid"]
 
 
-def test_the_toolbox_calls_the_function_through_the_same_context_type(
-    running, native_services: Services, tmp_path: Path
-) -> None:
-    """A provider a plugin declares itself runs exactly like the shipped one."""
-    from qgis import processing
-    from qgis.core import QgsVectorLayer
-
-    seen: list[AlgorithmContext] = []
-    provider = Provider(id="usertest", title="User test provider")
-
-    @provider.algorithm(id="copy", title="Copy layer")
-    def copy_layer(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:
-        seen.append(ctx)
-        return ctx.algorithms.execute(CentroidRequest(layer_id))
-
-    user_app = QgisSdkPlugin(id="user", title="User plugin")
-    user_app.add_provider(provider)
-
-    runtime = _runtime(native_services, user_app)
-    runtime.start()
-    try:
-        assert _algorithm_ids("usertest") == ["usertest:copy"]
-        destination = tmp_path / "user-copy.gpkg"
-        result = processing.run(
-            "usertest:copy",
-            {"layer_id": str(native_services.dataset), "OUTPUT": str(destination)},
-        )
-        assert QgsVectorLayer(result["OUTPUT"], "x", "ogr").featureCount() == 3
-    finally:
-        runtime.unload()
-
+def _assert_same_context(seen, native_services) -> None:
+    """The toolbox handed the body the same service context the runtime built."""
     assert len(seen) == 1
     assert isinstance(seen[0], AlgorithmContext)
     assert seen[0].algorithms is native_services.algorithms
@@ -283,22 +254,8 @@ def test_the_toolbox_calls_the_function_through_the_same_context_type(
     assert _algorithm_ids("usertest") == []
 
 
-def test_the_new_kinds_become_their_processing_parameters_and_values(
-    running, native_services: Services, tmp_path: Path
-) -> None:
-    """TASK-68: file, directory, field, range, colour and enum through the toolbox."""
-    from qgis import processing
-    from qgis.core import (
-        QgsApplication,
-        QgsProcessingParameterColor,
-        QgsProcessingParameterEnum,
-        QgsProcessingParameterField,
-        QgsProcessingParameterFile,
-        QgsProcessingParameterNumber,
-        QgsVectorLayer,
-    )
-
-    seen: dict[str, object] = {}
+def _kinds_algorithm(seen: dict[str, object]) -> Provider:
+    """One algorithm declaring every new parameter kind, recording its values."""
     provider = Provider(id="kinds", title="Kinds provider")
 
     @provider.algorithm(id="classify", title="Classify")
@@ -322,37 +279,50 @@ def test_the_new_kinds_become_their_processing_parameters_and_values(
         )
         return ctx.algorithms.execute(CentroidRequest(layer_id))
 
-    kinds_app = QgisSdkPlugin(id="kinds_owner", title="Kinds owner")
-    kinds_app.add_provider(provider)
+    return provider
 
-    table = tmp_path / "lookup.csv"
-    table.write_text("a,b\n")
+
+def _assert_kind_definitions() -> None:
+    """Each declared kind is its QGIS parameter type with the right settings."""
+    from qgis.core import (
+        QgsApplication,
+        QgsProcessingParameterColor,
+        QgsProcessingParameterEnum,
+        QgsProcessingParameterField,
+        QgsProcessingParameterFile,
+        QgsProcessingParameterNumber,
+    )
+
+    algorithm = QgsApplication.processingRegistry().algorithmById("kinds:classify")
+    definitions = {d.name(): d for d in algorithm.parameterDefinitions()}
+    assert isinstance(definitions["attribute"], QgsProcessingParameterField)
+    assert definitions["attribute"].parentLayerParameterName() == "layer_id"
+    assert isinstance(definitions["table"], QgsProcessingParameterFile)
+    assert definitions["table"].behavior() == QgsProcessingParameterFile.Behavior.File
+    assert definitions["table"].fileFilter() == "CSV (*.csv)"
+    assert isinstance(definitions["folder"], QgsProcessingParameterFile)
+    assert (
+        definitions["folder"].behavior() == QgsProcessingParameterFile.Behavior.Folder
+    )
+    assert isinstance(definitions["weight"], QgsProcessingParameterNumber)
+    assert (definitions["weight"].minimum(), definitions["weight"].maximum()) == (
+        0.0,
+        1.0,
+    )
+    assert isinstance(definitions["fill"], QgsProcessingParameterColor)
+    assert isinstance(definitions["mode"], QgsProcessingParameterEnum)
+    assert definitions["mode"].options() == ["fast", "safe"]
+
+
+def _classify_run(native_services, kinds_app, tmp_path: Path, table: Path) -> None:
+    """Register, inspect, run and unload one provider in the real toolbox."""
+    from qgis import processing
+    from qgis.core import QgsVectorLayer
+
     runtime = _runtime(native_services, kinds_app)
     runtime.start()
     try:
-        algorithm = QgsApplication.processingRegistry().algorithmById("kinds:classify")
-        definitions = {d.name(): d for d in algorithm.parameterDefinitions()}
-        assert isinstance(definitions["attribute"], QgsProcessingParameterField)
-        assert definitions["attribute"].parentLayerParameterName() == "layer_id"
-        assert isinstance(definitions["table"], QgsProcessingParameterFile)
-        assert (
-            definitions["table"].behavior() == QgsProcessingParameterFile.Behavior.File
-        )
-        assert definitions["table"].fileFilter() == "CSV (*.csv)"
-        assert isinstance(definitions["folder"], QgsProcessingParameterFile)
-        assert (
-            definitions["folder"].behavior()
-            == QgsProcessingParameterFile.Behavior.Folder
-        )
-        assert isinstance(definitions["weight"], QgsProcessingParameterNumber)
-        assert (definitions["weight"].minimum(), definitions["weight"].maximum()) == (
-            0.0,
-            1.0,
-        )
-        assert isinstance(definitions["fill"], QgsProcessingParameterColor)
-        assert isinstance(definitions["mode"], QgsProcessingParameterEnum)
-        assert definitions["mode"].options() == ["fast", "safe"]
-
+        _assert_kind_definitions()
         result = processing.run(
             "kinds:classify",
             {
@@ -369,6 +339,57 @@ def test_the_new_kinds_become_their_processing_parameters_and_values(
         assert QgsVectorLayer(result["OUTPUT"], "x", "ogr").featureCount() == 3
     finally:
         runtime.unload()
+
+
+def _copy_run(native_services, user_app, tmp_path: Path) -> None:
+    """Run one declared algorithm through the real toolbox and unload it."""
+    from qgis import processing
+    from qgis.core import QgsVectorLayer
+
+    runtime = _runtime(native_services, user_app)
+    runtime.start()
+    try:
+        assert _algorithm_ids("usertest") == ["usertest:copy"]
+        destination = tmp_path / "user-copy.gpkg"
+        result = processing.run(
+            "usertest:copy",
+            {"layer_id": str(native_services.dataset), "OUTPUT": str(destination)},
+        )
+        assert QgsVectorLayer(result["OUTPUT"], "x", "ogr").featureCount() == 3
+    finally:
+        runtime.unload()
+
+
+def test_the_toolbox_calls_the_function_through_the_same_context_type(
+    running, native_services: Services, tmp_path: Path
+) -> None:
+    """A provider a plugin declares itself runs exactly like the shipped one."""
+    seen: list[AlgorithmContext] = []
+    provider = Provider(id="usertest", title="User test provider")
+
+    @provider.algorithm(id="copy", title="Copy layer")
+    def copy_layer(ctx: AlgorithmContext, layer_id: LayerInput) -> VectorLayerInfo:
+        seen.append(ctx)
+        return ctx.algorithms.execute(CentroidRequest(layer_id))
+
+    user_app = QgisSdkPlugin(id="user", title="User plugin")
+    user_app.add_provider(provider)
+
+    _copy_run(native_services, user_app, tmp_path)
+    _assert_same_context(seen, native_services)
+
+
+def test_the_new_kinds_become_their_processing_parameters_and_values(
+    running, native_services: Services, tmp_path: Path
+) -> None:
+    """TASK-68: file, directory, field, range, colour and enum through the toolbox."""
+    seen: dict[str, object] = {}
+    provider = _kinds_algorithm(seen)
+    kinds_app = QgisSdkPlugin(id="kinds_owner", title="Kinds owner")
+    kinds_app.add_provider(provider)
+    table = tmp_path / "lookup.csv"
+    table.write_text("a,b\n")
+    _classify_run(native_services, kinds_app, tmp_path, table)
 
     assert seen["attribute"] == "value"
     assert isinstance(seen["table"], FileRef)

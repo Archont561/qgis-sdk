@@ -61,10 +61,23 @@ class FakeHost:
     layouts: FakeLayouts
 
 
-@pytest.fixture
-def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
-    scope = ResourceScope()
-    files = FilesService(HostAuthority(), scope, owner="plugin:simple")
+@dataclass(frozen=True, slots=True)
+class _Fakes:
+    """The fakes behind one runtime, arranged before the context is built."""
+
+    files: FilesService
+    rasters: FakeRasters
+    layers: FakeLayers
+    algorithms: FakeAlgorithms
+    project: FakeProject
+    styles: FakeStyles
+    settings: FakeSettings
+    notifications: RecordingNotifications
+    canvas: FakeCanvas
+    layouts: FakeLayouts
+
+
+def _register_rasters(scope: ResourceScope) -> FakeRasters:
     # The rasters first: a raster is a layer too, so the layer fake holds it and
     # `list_layers` answers both kinds (TASK-87).
     rasters = FakeRasters(scope)
@@ -89,6 +102,12 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
             )
         },
     )
+    return rasters
+
+
+def _register_layers(
+    scope: ResourceScope, tmp_path: Path, rasters: FakeRasters
+) -> tuple[FakeLayers, FakeAlgorithms]:
     layers = FakeLayers(scope, rasters=rasters)
     layers.register(
         VectorLayerDeclaration(
@@ -106,6 +125,13 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
             crs=WORKING_CRS,
         )
     )
+    _script_centroids(layers, algorithms, tmp_path)
+    return layers, algorithms
+
+
+def _script_centroids(
+    layers: FakeLayers, algorithms: FakeAlgorithms, tmp_path: Path
+) -> None:
     # The generic surface is scripted per algorithm id: what `native:centroids`
     # produces here is a layer the fake registered, the way a run allocates one.
     centroids = tmp_path / "centroids.gpkg"
@@ -118,6 +144,18 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         )
     )
     algorithms.script_run("native:centroids", {"OUTPUT": centroids})
+
+
+def _register_services(
+    scope: ResourceScope, tmp_path: Path, files: FilesService, layers: FakeLayers
+) -> tuple[
+    FakeProject,
+    FakeStyles,
+    FakeCanvas,
+    FakeSettings,
+    RecordingNotifications,
+    FakeLayouts,
+]:
     project = FakeProject(layers, scope)
     styles = FakeStyles(layers, scope)
     # The buffered output is the layer the workflow presents, so the fake canvas
@@ -133,6 +171,13 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
     )
     settings = FakeSettings(scope)
     notifications = RecordingNotifications(scope)
+    layouts = _register_layouts(scope, tmp_path, files)
+    return project, styles, canvas, settings, notifications, layouts
+
+
+def _register_layouts(
+    scope: ResourceScope, tmp_path: Path, files: FilesService
+) -> FakeLayouts:
     # One layout to export, the way a project with a composed page answers; the
     # fake writes a marker file where QGIS would render the page.
     layouts = FakeLayouts(
@@ -142,21 +187,53 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         working_directory=tmp_path / "layouts",
     )
     layouts.declare_layout("report", pages=2)
-    context = PluginContext(
-        notifications,
+    return layouts
+
+
+def _arrange_fakes(scope: ResourceScope, tmp_path: Path, files: FilesService) -> _Fakes:
+    rasters = _register_rasters(scope)
+    layers, algorithms = _register_layers(scope, tmp_path, rasters)
+    project, styles, canvas, settings, notifications, layouts = _register_services(
+        scope, tmp_path, files, layers
+    )
+    return _Fakes(
+        files=files,
+        rasters=rasters,
+        layers=layers,
+        algorithms=algorithms,
+        project=project,
+        styles=styles,
+        settings=settings,
+        notifications=notifications,
+        canvas=canvas,
+        layouts=layouts,
+    )
+
+
+def _plugin_context(fakes: _Fakes, scope: ResourceScope) -> PluginContext:
+    return PluginContext(
+        fakes.notifications,
         scope,
         PluginServices(
-            layers=layers,
-            project=project,
-            settings=settings,
-            styles=styles,
-            algorithms=algorithms,
-            canvas=canvas,
-            rasters=rasters,
-            layouts=layouts,
-            files=files,
+            layers=fakes.layers,
+            project=fakes.project,
+            settings=fakes.settings,
+            styles=fakes.styles,
+            algorithms=fakes.algorithms,
+            canvas=fakes.canvas,
+            rasters=fakes.rasters,
+            layouts=fakes.layouts,
+            files=fakes.files,
         ),
     )
+
+
+@pytest.fixture
+def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
+    scope = ResourceScope()
+    files = FilesService(HostAuthority(), scope, owner="plugin:simple")
+    fakes = _arrange_fakes(scope, tmp_path, files)
+    context = _plugin_context(fakes, scope)
     factory = create_class_factory(app, context_factory=lambda _: context)
     adapter: DesktopLifecycleAdapter = factory(None)
     adapter.initGui()
@@ -164,15 +241,15 @@ def fake_host(tmp_path: Path) -> Iterator[FakeHost]:
         yield FakeHost(
             runtime=adapter.runtime,
             context=context,
-            layers=layers,
-            algorithms=algorithms,
-            project=project,
-            styles=styles,
-            settings=settings,
-            notifications=notifications,
-            canvas=canvas,
-            rasters=rasters,
-            layouts=layouts,
+            layers=fakes.layers,
+            algorithms=fakes.algorithms,
+            project=fakes.project,
+            styles=fakes.styles,
+            settings=fakes.settings,
+            notifications=fakes.notifications,
+            canvas=fakes.canvas,
+            rasters=fakes.rasters,
+            layouts=fakes.layouts,
         )
     finally:
         adapter.unload()

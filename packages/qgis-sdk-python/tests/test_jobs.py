@@ -1170,10 +1170,8 @@ def test_resubmission_is_explicit_and_nothing_retries_on_its_own(
 # -- dependencies: ctx.jobs.after(handle) -------------------------------------------
 
 
-def test_a_dependent_job_is_not_handed_to_a_worker_until_its_prerequisite_settles(
-    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
-) -> None:
-    order: list[str] = []
+def _dependent_bodies(order: list[str]):
+    """The two bodies whose run order is the dependency's evidence."""
 
     @job(id="dep.first", title="First")
     def first(ctx: WorkerContext, a: int) -> SumResult:
@@ -1185,6 +1183,14 @@ def test_a_dependent_job_is_not_handed_to_a_worker_until_its_prerequisite_settle
         order.append("second")
         return SumResult(a)
 
+    return first, second
+
+
+def test_a_dependent_job_is_not_handed_to_a_worker_until_its_prerequisite_settles(
+    jobs: JobService, workers: FakeWorkers, drive: Callable[[], None]
+) -> None:
+    order: list[str] = []
+    first, second = _dependent_bodies(order)
     prerequisite = jobs.bind(first).delay(a=1)
     dependent = jobs.after(prerequisite).bind(second).delay(a=2)
     assert dependent.status is JobStatus.QUEUED
@@ -1357,6 +1363,27 @@ def threaded_jobs(plugin_scope: ResourceScope, threads: ThreadWorkers) -> JobSer
     return JobService(plugin_scope, workers=threads, gui_thread=lambda: False)
 
 
+def _where_job(bodies, started, release):
+    """A body that waits so the test can inspect the tick before it finishes."""
+
+    @job(id="thread.where", title="Where am I")
+    def where(ctx: WorkerContext, a: int, b: int) -> SumResult:
+        bodies.append(threading.get_ident())
+        started.set()
+        release.wait(5)  # held until the test has looked at the tick
+        ctx.progress.report(0.5)
+        return SumResult(a + b)
+
+    return where
+
+
+def _assert_running(handle, driving, bodies, seen) -> None:
+    """The tick returned while the body was still on the worker."""
+    assert handle.status is JobStatus.RUNNING
+    assert driving not in bodies
+    assert seen == []
+
+
 def test_a_body_runs_on_a_worker_and_never_on_the_driving_thread(
     threaded_jobs: JobService, threads: ThreadWorkers
 ) -> None:
@@ -1367,25 +1394,14 @@ def test_a_body_runs_on_a_worker_and_never_on_the_driving_thread(
     started = threading.Event()
     release = threading.Event()
 
-    @job(id="thread.where", title="Where am I")
-    def where(ctx: WorkerContext, a: int, b: int) -> SumResult:
-        bodies.append(threading.get_ident())
-        started.set()
-        release.wait(5)  # held until the test has looked at the tick
-        ctx.progress.report(0.5)
-        return SumResult(a + b)
-
+    where = _where_job(bodies, started, release)
     handle = threaded_jobs.bind(where).delay(a=2, b=3)
     handle.on_progress(lambda f: seen.append(("progress", threading.get_ident())))
     handle.on_success(lambda r: seen.append(("success", threading.get_ident())))
 
     threaded_jobs.tick()
     assert started.wait(5)
-    # The tick returned while the body was still running: it is not the thread
-    # that runs author code, and delivery waits for the worker.
-    assert handle.status is JobStatus.RUNNING
-    assert driving not in bodies
-    assert seen == []
+    _assert_running(handle, driving, bodies, seen)
 
     release.set()
     threads.wait()

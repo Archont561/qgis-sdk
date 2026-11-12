@@ -90,15 +90,8 @@ def drive(app, jobs: JobService, until: Callable[[], bool]) -> int:
     return ticks
 
 
-def test_the_whole_body_runs_in_one_task_the_task_manager_owns(
-    app, jobs: JobService, workers: QgsTaskWorkers
-) -> None:
-    """AC 1: one task, the job's title, a worker thread, callbacks on the tick."""
-    gui = threading.get_ident()
-    seen: list[tuple[str, int]] = []
-    started = threading.Event()
-    release = threading.Event()
-    bodies: list[int] = []
+def _count_job(started, release, bodies):
+    """The counted body: it waits on the GUI tick, then reports each step."""
 
     @job(id="task.count", title="Count in the task bar")
     def count(ctx: WorkerContext, count: int) -> Total:
@@ -109,17 +102,11 @@ def test_the_whole_body_runs_in_one_task_the_task_manager_owns(
             ctx.progress.report(step / count)
         return Total(total=count, thread=threading.get_ident())
 
-    handle = jobs.bind(count).delay(count=4)
-    handle.on_progress(
-        lambda fraction: seen.append(("progress", threading.get_ident()))
-    )
-    handle.on_success(lambda result: seen.append(("success", threading.get_ident())))
+    return count
 
-    jobs.tick()
-    assert started.wait(5)
 
-    # The job is one task under the application's manager, titled as declared,
-    # and the thread that ticked is free while it runs.
+def _assert_owned_task(workers, seen, bodies, gui) -> None:
+    """The application's manager owns one task, and the ticking thread is free."""
     assert workers.manager is QgsApplication.taskManager()
     (task,) = workers.tasks
     assert isinstance(task, QgsTask)
@@ -128,9 +115,9 @@ def test_the_whole_body_runs_in_one_task_the_task_manager_owns(
     assert gui not in bodies
     assert seen == []
 
-    release.set()
-    drive(app, jobs, lambda: handle.status.settled)
 
+def _assert_delivered(handle, seen, bodies, gui, workers) -> None:
+    """The result and both callbacks arrive on the thread that ticked."""
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.result.total == 4
     assert handle.result.thread == bodies[0]
@@ -139,12 +126,8 @@ def test_the_whole_body_runs_in_one_task_the_task_manager_owns(
     assert workers.submitted == 1
 
 
-def test_progress_reported_by_the_body_reaches_the_task(
-    app, jobs: JobService, workers: QgsTaskWorkers
-) -> None:
-    """The task bar's bar follows ``ctx.progress``; the job is not asked twice."""
-    fractions: list[float] = []
-    release = threading.Event()
+def _progress_run(app, jobs, workers, fractions, release):
+    """Run the progress body with the manager's signal connected for this test."""
 
     @job(id="task.progress", title="Report progress")
     def progress_job(ctx: WorkerContext) -> Total:
@@ -160,18 +143,109 @@ def test_progress_reported_by_the_body_reaches_the_task(
         fractions.append(fraction)
 
     workers.manager.progressChanged.connect(record)
-
     try:
         handle = jobs.bind(progress_job).delay()
         jobs.tick()
         drive(app, jobs, lambda: len(workers.tasks) == 1)
         (task,) = workers.tasks
         assert task.description() == "Report progress"
-
         release.set()
         drive(app, jobs, lambda: handle.status.settled)
     finally:
         workers.manager.progressChanged.disconnect(record)
+    return handle
+
+
+def _cooperative_job(started, release, observed, threads):
+    """A body that observes its cancellation request before it finishes."""
+
+    @job(id="task.cooperative", title="Cooperative")
+    def cooperative(ctx: WorkerContext, count: int) -> Total:
+        threads.append(threading.get_ident())
+        started.set()
+        release.wait(5)
+        observed.append(ctx.cancellation.is_cancelled())
+        return Total(total=count, thread=threading.get_ident())
+
+    return cooperative
+
+
+def _assert_cancelled(handle, observed, threads, gui) -> None:
+    """The cancel button asked the body to stop; the body decided when."""
+    assert observed == [True]
+    assert handle.status is JobStatus.CANCELLED
+    assert threads and threads[0] != gui
+
+
+def _hold_and_queued(ran, gate):
+    """One body holds the only worker; the second stays queued behind it."""
+
+    @job(id="task.hold", title="Hold the manager")
+    def hold(ctx: WorkerContext) -> Total:
+        ran.append("hold")
+        gate.wait(5)
+        return Total(total=0, thread=threading.get_ident())
+
+    @job(id="task.queued", title="Queued behind it")
+    def queued(ctx: WorkerContext) -> Total:
+        ran.append("queued")
+        return Total(total=0, thread=threading.get_ident())
+
+    return hold, queued
+
+
+def _run_queued(app, jobs, workers, ran, gate):
+    """Queue the second task on a one-thread pool and cancel it before it runs."""
+    hold, queued = _hold_and_queued(ran, gate)
+    pool = workers.manager.threadPool()
+    previous = pool.maxThreadCount()
+    pool.setMaxThreadCount(1)  # one worker: the second task stays queued
+    try:
+        holder = jobs.bind(hold).delay()
+        second = jobs.bind(queued).delay()
+        drive(app, jobs, lambda: workers.submitted == 2 and ran == ["hold"])
+        assert second.cancel() is True
+        gate.set()
+        drive(app, jobs, lambda: holder.status.settled and second.status.settled)
+    finally:
+        gate.set()
+        pool.setMaxThreadCount(previous)
+    return holder, second
+
+
+def test_the_whole_body_runs_in_one_task_the_task_manager_owns(
+    app, jobs: JobService, workers: QgsTaskWorkers
+) -> None:
+    """AC 1: one task, the job's title, a worker thread, callbacks on the tick."""
+    gui = threading.get_ident()
+    seen: list[tuple[str, int]] = []
+    started = threading.Event()
+    release = threading.Event()
+    bodies: list[int] = []
+    count = _count_job(started, release, bodies)
+    handle = jobs.bind(count).delay(count=4)
+    handle.on_progress(
+        lambda fraction: seen.append(("progress", threading.get_ident()))
+    )
+    handle.on_success(lambda result: seen.append(("success", threading.get_ident())))
+
+    jobs.tick()
+    assert started.wait(5)
+    # The job is one task under the application's manager, titled as declared,
+    # and the thread that ticked is free while it runs.
+    _assert_owned_task(workers, seen, bodies, gui)
+    release.set()
+    drive(app, jobs, lambda: handle.status.settled)
+    _assert_delivered(handle, seen, bodies, gui, workers)
+
+
+def test_progress_reported_by_the_body_reaches_the_task(
+    app, jobs: JobService, workers: QgsTaskWorkers
+) -> None:
+    """The task bar's bar follows ``ctx.progress``; the job is not asked twice."""
+    fractions: list[float] = []
+    release = threading.Event()
+    handle = _progress_run(app, jobs, workers, fractions, release)
 
     assert handle.status is JobStatus.SUCCEEDED
     assert handle.progress == 0.5
@@ -220,15 +294,7 @@ def test_cancelling_the_task_asks_the_job_to_stop_without_killing_it(
     release = threading.Event()
     observed: list[bool] = []
     threads: list[int] = []
-
-    @job(id="task.cooperative", title="Cooperative")
-    def cooperative(ctx: WorkerContext, count: int) -> Total:
-        threads.append(threading.get_ident())
-        started.set()
-        release.wait(5)
-        observed.append(ctx.cancellation.is_cancelled())
-        return Total(total=count, thread=threading.get_ident())
-
+    cooperative = _cooperative_job(started, release, observed, threads)
     handle = jobs.bind(cooperative).delay(count=2)
     jobs.tick()
     assert started.wait(5)
@@ -239,10 +305,7 @@ def test_cancelling_the_task_asks_the_job_to_stop_without_killing_it(
     assert handle.cancel_requested is True
     release.set()
     drive(app, jobs, lambda: handle.status.settled)
-
-    assert observed == [True]
-    assert handle.status is JobStatus.CANCELLED
-    assert threads and threads[0] != gui
+    _assert_cancelled(handle, observed, threads, gui)
 
 
 def test_a_task_the_manager_never_starts_acknowledges_without_running_the_body(
@@ -251,36 +314,7 @@ def test_a_task_the_manager_never_starts_acknowledges_without_running_the_body(
     """AC 2: a queued task skipped after a request settles instead of blocking a reload."""
     ran: list[str] = []
     gate = threading.Event()
-
-    @job(id="task.hold", title="Hold the manager")
-    def hold(ctx: WorkerContext) -> Total:
-        ran.append("hold")
-        gate.wait(5)
-        return Total(total=0, thread=threading.get_ident())
-
-    @job(id="task.queued", title="Queued behind it")
-    def queued(ctx: WorkerContext) -> Total:
-        ran.append("queued")
-        return Total(total=0, thread=threading.get_ident())
-
-    pool = workers.manager.threadPool()
-    previous = pool.maxThreadCount()
-    pool.setMaxThreadCount(1)  # one worker: the second task stays queued
-    try:
-        holder = jobs.bind(hold).delay()
-        second = jobs.bind(queued).delay()
-        drive(
-            app,
-            jobs,
-            lambda: workers.submitted == 2 and ran == ["hold"],
-        )
-
-        assert second.cancel() is True
-        gate.set()
-        drive(app, jobs, lambda: holder.status.settled and second.status.settled)
-    finally:
-        gate.set()
-        pool.setMaxThreadCount(previous)
+    holder, second = _run_queued(app, jobs, workers, ran, gate)
 
     assert holder.status is JobStatus.SUCCEEDED
     assert second.status is JobStatus.CANCELLED

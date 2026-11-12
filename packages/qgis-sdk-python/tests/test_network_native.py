@@ -23,7 +23,9 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -133,11 +135,26 @@ class _Handler(BaseHTTPRequestHandler):
         parts = urlsplit(self.path)
         query = {key: values[-1] for key, values in parse_qs(parts.query).items()}
         route = parts.path
-        if route == "/json":
-            self._json(200, {"hello": "world"}, **{"X-Server": self.server.label})
-        elif route == "/echo":
-            self._json(200, record)
-        elif route.startswith("/status/"):
+        exact = {
+            "/json": lambda: self._json(
+                200, {"hello": "world"}, **{"X-Server": self.server.label}
+            ),
+            "/echo": lambda: self._json(200, record),
+            "/to": lambda: self._reply(
+                int(query.get("code", "302")), headers={"Location": query["url"]}
+            ),
+            "/slow": lambda: self._slow_route(query),
+            "/basic": lambda: self._basic_route(),
+            "/secure": lambda: self._json(200, {"tls": True}),
+        }
+        if route in exact:
+            exact[route]()
+        elif not self._pattern_route(route):
+            self._reply(404, b"no such route", content_type="text/plain")
+
+    def _pattern_route(self, route: str) -> bool:
+        """Answer the three parameterised routes; False means unknown."""
+        if route.startswith("/status/"):
             self._reply(
                 int(route.rsplit("/", 1)[1]), b"status body", content_type="text/plain"
             )
@@ -147,30 +164,27 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(200, {"hops": "done"})
             else:
                 self._reply(302, headers={"Location": f"/redirect/{remaining - 1}"})
-        elif route == "/to":
-            self._reply(
-                int(query.get("code", "302")), headers={"Location": query["url"]}
-            )
-        elif route == "/slow":
-            time.sleep(int(query.get("ms", "1000")) / 1000)
-            self._json(200, {"slow": True})
         elif route.startswith("/bytes/"):
             self._reply(
                 200, b"x" * int(route.rsplit("/", 1)[1]), content_type="text/plain"
             )
-        elif route == "/basic":
-            if self.headers.get("Authorization") == f"Basic {_BASIC_TOKEN}":
-                self._json(200, {"user": BASIC_USER})
-            else:
-                self._json(
-                    401,
-                    {"error": "unauthorised"},
-                    **{"WWW-Authenticate": 'Basic realm="x"'},
-                )
-        elif route == "/secure":
-            self._json(200, {"tls": True})
         else:
-            self._reply(404, b"no such route", content_type="text/plain")
+            return False
+        return True
+
+    def _slow_route(self, query: dict[str, str]) -> None:
+        time.sleep(int(query.get("ms", "1000")) / 1000)
+        self._json(200, {"slow": True})
+
+    def _basic_route(self) -> None:
+        if self.headers.get("Authorization") == f"Basic {_BASIC_TOKEN}":
+            self._json(200, {"user": BASIC_USER})
+        else:
+            self._json(
+                401,
+                {"error": "unauthorised"},
+                **{"WWW-Authenticate": 'Basic realm="x"'},
+            )
 
 
 class _ProxyHandler(_Handler):
@@ -233,13 +247,8 @@ def proxy() -> Iterator[_Server]:
     yield from _serve(_Server(_ProxyHandler, "proxy"))
 
 
-@pytest.fixture(scope="module")
-def tls_origin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[_Server]:
-    """A self-signed HTTPS origin, if ``openssl`` is around to mint the certificate."""
-    openssl = shutil.which("openssl")
-    if openssl is None:  # pragma: no cover - depends on the host
-        pytest.skip("openssl is needed to mint a self-signed certificate")
-    directory = tmp_path_factory.mktemp("tls")
+def _mint_certificate(openssl: str, directory: Path) -> tuple[Path, Path]:
+    """Write a two-day self-signed certificate for loopback, return key and cert."""
     key, cert = directory / "key.pem", directory / "cert.pem"
     subprocess.run(
         [
@@ -263,6 +272,17 @@ def tls_origin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[_Server]:
         check=True,
         capture_output=True,
     )
+    return key, cert
+
+
+@pytest.fixture(scope="module")
+def tls_origin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[_Server]:
+    """A self-signed HTTPS origin, if ``openssl`` is around to mint the certificate."""
+    openssl = shutil.which("openssl")
+    if openssl is None:  # pragma: no cover - depends on the host
+        pytest.skip("openssl is needed to mint a self-signed certificate")
+    directory = tmp_path_factory.mktemp("tls")
+    key, cert = _mint_certificate(openssl, directory)
     server = _Server(_Handler, "tls")
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert, key)
@@ -530,26 +550,44 @@ def test_a_cross_origin_redirect_drops_credentials_but_keeps_other_headers(
     assert second["x-trace"] == "keep"
 
 
+@dataclass(frozen=True, slots=True)
+class _RedirectRig:
+    """The transport and the two loopback origins a redirect test drives."""
+
+    app: object
+    transport: NativeNetworkTransport
+    origin_a: _Server
+    origin_b: _Server
+
+
+def _send_redirect(
+    rig: _RedirectRig,
+    grant: NetworkGrant,
+    outcomes: list[object],
+    *,
+    credentials: bool = False,
+) -> None:
+    """Send one /to redirect and pump until the transport has answered."""
+    headers = Headers({"Authorization": "Bearer s3cret"}) if credentials else Headers()
+    request = NetworkRequest(
+        method="GET",
+        url=rig.origin_a.url("/to") + "?url=" + rig.origin_b.url("/echo"),
+        headers=headers,
+    )
+    rig.transport.send(grant.constrain(request), outcomes.append)
+    pump(rig.app, lambda: bool(outcomes))
+
+
 def test_a_redirect_out_of_the_granted_origins_is_refused_before_the_hop(
     app, scope, origin_a, origin_b
 ) -> None:
     """A granted origin cannot hand a view's request to one that was not (TASK-20)."""
-    transport = NativeNetworkTransport(scope)
-    grant = NetworkGrant(origins=(origin_a.origin,))
+    rig = _RedirectRig(app, NativeNetworkTransport(scope), origin_a, origin_b)
     before = len(origin_b.seen)
     outcomes: list[object] = []
-
-    transport.send(
-        grant.constrain(
-            NetworkRequest(
-                method="GET",
-                url=origin_a.url("/to") + "?url=" + origin_b.url("/echo"),
-                headers=Headers({"Authorization": "Bearer s3cret"}),
-            )
-        ),
-        outcomes.append,
+    _send_redirect(
+        rig, NetworkGrant(origins=(origin_a.origin,)), outcomes, credentials=True
     )
-    pump(app, lambda: bool(outcomes))
 
     (outcome,) = outcomes
     assert isinstance(outcome, QgisSdkRedirectError)
@@ -559,16 +597,8 @@ def test_a_redirect_out_of_the_granted_origins_is_refused_before_the_hop(
 
     # The same hop inside the grant is just a redirect.
     inside: list[object] = []
-    transport.send(
-        NetworkGrant(origins=(origin_a.origin, origin_b.origin)).constrain(
-            NetworkRequest(
-                method="GET",
-                url=origin_a.url("/to") + "?url=" + origin_b.url("/echo"),
-            )
-        ),
-        inside.append,
-    )
-    pump(app, lambda: bool(inside))
+    grant = NetworkGrant(origins=(origin_a.origin, origin_b.origin))
+    _send_redirect(rig, grant, inside)
     assert isinstance(inside[0], Response)
     assert len(origin_b.seen) == before + 1
 
