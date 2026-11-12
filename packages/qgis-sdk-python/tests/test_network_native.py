@@ -29,6 +29,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from qgis_sdk._published import REQUIRED, published
 
 # The qgis layer: the transport is QgsNetworkAccessManager's. The environment -
 # including the throwaway authentication database the master-password tests
@@ -814,17 +815,34 @@ def test_an_unknown_auth_configuration_fails_before_any_request_leaves(
     assert len(origin_a.seen) == before
 
 
-def test_an_auth_configuration_is_not_forwarded_across_origins(
-    app, scheduler, client, origin_a, origin_b, basic_auth_config
-) -> None:
-    authenticated = client.configure(auth_config=basic_auth_config)
-    result(
-        app,
-        scheduler,
-        authenticated.get(origin_a.url("/to"), params={"url": origin_b.url("/echo")}),
+_CC_SPECS_test_an_auth_configuration_is_not_forwarded_across_origins_1 = (
+    ("app", REQUIRED, REQUIRED, "positional"),
+    ("scheduler", REQUIRED, REQUIRED, "positional"),
+    ("client", REQUIRED, REQUIRED, "positional"),
+    ("origin_a", REQUIRED, REQUIRED, "positional"),
+    ("origin_b", REQUIRED, REQUIRED, "positional"),
+    ("basic_auth_config", REQUIRED, REQUIRED, "positional"),
+)
+
+
+@published(
+    _CC_SPECS_test_an_auth_configuration_is_not_forwarded_across_origins_1,
+    returns=type(None),
+)
+def test_an_auth_configuration_is_not_forwarded_across_origins(_published_values):
+    authenticated = _published_values.client.configure(
+        auth_config=_published_values.basic_auth_config
     )
-    assert "authorization" in origin_a.last()["headers"]
-    assert "authorization" not in origin_b.last()["headers"]
+    result(
+        _published_values.app,
+        _published_values.scheduler,
+        authenticated.get(
+            _published_values.origin_a.url("/to"),
+            params={"url": _published_values.origin_b.url("/echo")},
+        ),
+    )
+    assert "authorization" in _published_values.origin_a.last()["headers"]
+    assert "authorization" not in _published_values.origin_b.last()["headers"]
 
 
 def test_an_untrusted_certificate_is_a_tls_error(

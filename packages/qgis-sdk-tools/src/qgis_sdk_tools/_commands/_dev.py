@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from qgis_sdk._published import REQUIRED, published
 
 from qgis_sdk_tools._commands._app import app
 from qgis_sdk_tools.cli import CliRuntime
@@ -189,17 +190,29 @@ def _run_dev(runtime: CliRuntime, options: _DevOptions) -> int:
     return exit_code
 
 
+_CC_SPECS_dev_1 = (
+    ("ctx", typer.Context, REQUIRED, "positional"),
+    ("path", _PathArg, None, "positional"),
+    ("mode", _ModeOpt, "desktop", "positional"),
+    ("qgis_prefix", _PrefixOpt, None, "positional"),
+    ("no_web", _NoWebOpt, False, "positional"),
+    ("port", _PortOpt, None, "positional"),
+    ("no_watch", _NoWatchOpt, False, "positional"),
+    ("exercise", _ExerciseOpt, None, "positional"),
+)
+
+
 @app.command("dev")
-def dev(
-    ctx: typer.Context,
-    path: _PathArg = None,
-    mode: _ModeOpt = "desktop",
-    qgis_prefix: _PrefixOpt = None,
-    no_web: _NoWebOpt = False,
-    port: _PortOpt = None,
-    no_watch: _NoWatchOpt = False,
-    exercise: _ExerciseOpt = None,
-) -> None:
+@published(_CC_SPECS_dev_1, returns=type(None))
+def dev(_published_values):
     """Run the source plugin inside QGIS, reloading on save, with HMR for a web UI."""
-    options = _DevOptions(path, mode, qgis_prefix, no_web, port, no_watch, exercise)
-    raise typer.Exit(code=_run_dev(ctx.obj, options))
+    options = _DevOptions(
+        _published_values.path,
+        _published_values.mode,
+        _published_values.qgis_prefix,
+        _published_values.no_web,
+        _published_values.port,
+        _published_values.no_watch,
+        _published_values.exercise,
+    )
+    raise typer.Exit(code=_run_dev(_published_values.ctx.obj, options))

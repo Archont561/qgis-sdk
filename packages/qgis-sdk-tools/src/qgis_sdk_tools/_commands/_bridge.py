@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from qgis_sdk._published import published
 from qgis_sdk.bridge.host import host_description
 from qgis_sdk.models import QgisSdkBridgeError
 
@@ -116,23 +117,34 @@ def _generate_bridge(options: _BridgeOptions) -> None:
         raise typer.Exit(code=1) from error
 
 
+_CC_SPECS_bridge_generate_1 = (
+    ("plugin", _PluginOpt, None, "positional"),
+    ("description", _DescriptionOpt, None, "positional"),
+    ("host", _HostOpt, False, "positional"),
+    ("out", _OutOpt, None, "positional"),
+    ("check", _CheckOpt, False, "positional"),
+    ("show", _ShowOpt, False, "positional"),
+)
+
+
 @bridge_app.command("generate")
 @bridge_app.command("generate")
-def bridge_generate(
-    plugin: _PluginOpt = None,
-    description: _DescriptionOpt = None,
-    host: _HostOpt = False,
-    out: _OutOpt = None,
-    check: _CheckOpt = False,
-    show: _ShowOpt = False,
-) -> None:
+@published(_CC_SPECS_bridge_generate_1, returns=type(None))
+def bridge_generate(_published_values):
     """Turn one plugin description into its typed bridge.schema.ts module.
 
     ``QgisSdk.fromBridgeSchema`` gives a page the typed calls and runtime checks
     (decision-44). An ``--out`` not ending in ``.schema.ts`` still renders the
     legacy self-contained client, with a note, for one minor release.
     """
-    options = _BridgeOptions(plugin, description, host, out, check, show)
+    options = _BridgeOptions(
+        _published_values.plugin,
+        _published_values.description,
+        _published_values.host,
+        _published_values.out,
+        _published_values.check,
+        _published_values.show,
+    )
     _generate_bridge(options)
 
 

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from pytest_bdd import given, parsers, then, when
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import ResourceScope
 from qgis_sdk.models import (
     Bookmark,
@@ -404,29 +405,35 @@ def variables_empty(project_world: ProjectWorld) -> None:
     assert project_world.project.variables() == ()
 
 
+_CC_SPECS_add_bookmark_1 = (
+    ("project_world", ProjectWorld, REQUIRED, "positional"),
+    ("name", str, REQUIRED, "positional"),
+    ("x_min", str, REQUIRED, "positional"),
+    ("y_min", str, REQUIRED, "positional"),
+    ("x_max", str, REQUIRED, "positional"),
+    ("y_max", str, REQUIRED, "positional"),
+)
+
+
 @when(
     parsers.parse(
         'the bookmark "{name}" is added over {x_min}, {y_min}, {x_max}, {y_max}'
     )
 )
-def add_bookmark(
-    project_world: ProjectWorld,
-    name: str,
-    x_min: str,
-    y_min: str,
-    x_max: str,
-    y_max: str,
-) -> None:
-    project_world.project.add_bookmark(
-        name,
+@published(_CC_SPECS_add_bookmark_1, returns=type(None))
+def add_bookmark(_published_values):
+    _published_values.project_world.project.add_bookmark(
+        _published_values.name,
         CanvasExtent(
-            x_min=float(x_min),
-            y_min=float(y_min),
-            x_max=float(x_max),
-            y_max=float(y_max),
+            x_min=float(_published_values.x_min),
+            y_min=float(_published_values.y_min),
+            x_max=float(_published_values.x_max),
+            y_max=float(_published_values.y_max),
         ),
     )
-    project_world.bookmark = project_world.project.bookmark(name)
+    _published_values.project_world.bookmark = (
+        _published_values.project_world.project.bookmark(_published_values.name)
+    )
 
 
 @then(parsers.parse('the bookmark "{name}" covers that box'))

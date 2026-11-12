@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from automation import ci, commits, release, results
@@ -342,29 +343,35 @@ def _release_command(command: str, **options: object) -> int:
     return release.main(argv)
 
 
-def release_plan(
-    trigger: str = "push",
-    config: str = "",
-    suffix: str = "",
-    version_override: str = "",
-    scope: str = "",
-    bump: str = "",
-    milestone_tag: str = "",
-    dry_run: str = "false",
-    json: bool = False,
-) -> int:
+@dataclass(frozen=True)
+class _ReleasePlan:
+    """The nine plan options doit passes, as one record (decision-81)."""
+
+    trigger: str = "push"
+    config: str = ""
+    suffix: str = ""
+    version_override: str = ""
+    scope: str = ""
+    bump: str = ""
+    milestone_tag: str = ""
+    dry_run: str = "false"
+    json: bool = False
+
+
+def release_plan(**options) -> int:
     """Decide what the next release is: nothing, a rehearsal, or a tag."""
+    plan = _ReleasePlan(**options)
     return _release_command(
         "plan",
-        trigger=trigger,
-        config=config,
-        suffix=suffix,
-        version_override=version_override,
-        scope=scope,
-        bump=bump,
-        milestone_tag=milestone_tag,
-        dry_run=dry_run,
-        json=json,
+        trigger=plan.trigger,
+        config=plan.config,
+        suffix=plan.suffix,
+        version_override=plan.version_override,
+        scope=plan.scope,
+        bump=plan.bump,
+        milestone_tag=plan.milestone_tag,
+        dry_run=plan.dry_run,
+        json=plan.json,
     )
 
 

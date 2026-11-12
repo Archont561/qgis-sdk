@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, TypedDict, Unpack
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.models import (
     QgisSdkFormError,
     QgisSdkUiError,
@@ -42,34 +43,41 @@ class Number(Input):
     increment.
     """
 
-    def __init__(
-        self,
-        name: str | None = None,
-        *,
-        range: tuple[float, float] | None = None,
-        step: float | None = None,
-        integer: bool | None = None,
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
-    ) -> None:
-        if range is not None:
-            low, high = range
+    _CC_SPECS_init_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("name", str | None, None, "positional"),
+        ("range", tuple[float, float] | None, None, "keyword"),
+        ("step", float | None, None, "keyword"),
+        ("integer", bool | None, None, "keyword"),
+        ("label", str | None, None, "keyword"),
+        ("value", object, None, "keyword"),
+        ("required", bool, False, "keyword"),
+    )
+
+    @published(_CC_SPECS_init_1, returns=type(None))
+    def __init__(_published_values):
+        if _published_values.range is not None:
+            low, high = _published_values.range
             if low > high:
                 raise QgisSdkUiError(
-                    f"Number {name!r}: range low {low!r} is above high {high!r}"
+                    f"Number {_published_values.name!r}: range low {low!r} is above high {high!r}"
                 )
             integral = isinstance(low, int) and isinstance(high, int)
-            if integer is None:
-                integer = integral
-            elif integer and not integral:
+            if _published_values.integer is None:
+                _published_values.integer = integral
+            elif _published_values.integer and not integral:
                 raise QgisSdkUiError(
-                    f"Number {name!r}: an integer range needs integer bounds"
+                    f"Number {_published_values.name!r}: an integer range needs integer bounds"
                 )
-        self.range = range
-        self.step = step
-        self.integer = bool(integer)
-        super().__init__(name, label=label, value=value, required=required)
+        _published_values.self.range = _published_values.range
+        _published_values.self.step = _published_values.step
+        _published_values.self.integer = bool(_published_values.integer)
+        super(Number, _published_values.self).__init__(
+            _published_values.name,
+            label=_published_values.label,
+            value=_published_values.value,
+            required=_published_values.required,
+        )
 
     @property
     def kind(self) -> str:  # type: ignore[override]
@@ -104,19 +112,28 @@ class Choice(Input):
 
     kind = "choice"
 
-    def __init__(
-        self,
-        name: str | None = None,
-        *,
-        options: Sequence[str],
-        label: str | None = None,
-        value: object = None,
-        required: bool = False,
-    ) -> None:
-        self.options = tuple(options)
-        if not self.options:
-            raise QgisSdkUiError(f"Choice {name!r} needs at least one option")
-        super().__init__(name, label=label, value=value, required=required)
+    _CC_SPECS_init_2 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("name", str | None, None, "positional"),
+        ("options", Sequence[str], REQUIRED, "keyword"),
+        ("label", str | None, None, "keyword"),
+        ("value", object, None, "keyword"),
+        ("required", bool, False, "keyword"),
+    )
+
+    @published(_CC_SPECS_init_2, returns=type(None))
+    def __init__(_published_values):
+        _published_values.self.options = tuple(_published_values.options)
+        if not _published_values.self.options:
+            raise QgisSdkUiError(
+                f"Choice {_published_values.name!r} needs at least one option"
+            )
+        super(Choice, _published_values.self).__init__(
+            _published_values.name,
+            label=_published_values.label,
+            value=_published_values.value,
+            required=_published_values.required,
+        )
 
     def _default(self) -> object:
         return self.options[0]

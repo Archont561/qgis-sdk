@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core.scope import ResourceScope
 from qgis_sdk.jobs import JobService
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
@@ -454,14 +455,18 @@ def _shape_difference(before: tuple[Any, ...], after: tuple[Any, ...]) -> str:
     return ", ".join(moved) if moved else "nothing"
 
 
-def _object(
-    base: type,
-    name: str,
-    slots: tuple[str, ...],
-    methods: dict[str, Callable[..., Any]],
-    arguments: tuple[Any, ...],
-    **state: Any,
-) -> Any:
+_CC_SPECS_object_1 = (
+    ("base", type, REQUIRED, "positional"),
+    ("name", str, REQUIRED, "positional"),
+    ("slots", tuple[str, ...], REQUIRED, "positional"),
+    ("methods", dict[str, Callable[..., Any]], REQUIRED, "positional"),
+    ("arguments", tuple[Any, ...], REQUIRED, "positional"),
+    ("state", Any, REQUIRED, "var_keyword"),
+)
+
+
+@published(_CC_SPECS_object_1, returns=Any)
+def _object(_published_values):
     """Build one QGIS plugin object and give it the state its slots need.
 
     The subclass is made with :func:`type` so the constructor stays QGIS's own -
@@ -470,11 +475,15 @@ def _object(
     is attached afterwards. ``slots`` are the C++ virtuals this subclass overrides; naming
     them keeps a typo in a method name from silently doing nothing.
     """
-    missing = set(slots) - set(methods)
+    missing = set(_published_values.slots) - set(_published_values.methods)
     if missing:  # pragma: no cover - a programming error, not a runtime state
-        raise TypeError(f"{name} declares no override for {sorted(missing)}")
-    instance = type(name, (base,), methods)(*arguments)
-    for attribute, value in state.items():
+        raise TypeError(
+            f"{_published_values.name} declares no override for {sorted(missing)}"
+        )
+    instance = type(
+        _published_values.name, (_published_values.base,), _published_values.methods
+    )(*_published_values.arguments)
+    for attribute, value in _published_values.state.items():
         setattr(instance, attribute, value)
     return instance
 

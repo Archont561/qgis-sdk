@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import (
     PluginContext,
     PluginRuntime,
@@ -75,44 +76,55 @@ class FormDemo:
 
     calls: list[dict] = []  # noqa: RUF012 - reset by the fixture
 
+    _CC_SPECS_plain_2 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("name", str, REQUIRED, "positional"),
+        ("count", int, REQUIRED, "positional"),
+        ("ratio", float, REQUIRED, "positional"),
+        ("enabled", bool, REQUIRED, "positional"),
+        ("mode", Literal["fast", "safe"], REQUIRED, "positional"),
+        ("note", str | None, None, "positional"),
+    )
+
     @action(id="plain", title="Plain fields")
-    def plain(
-        self,
-        name: str,
-        count: int,
-        ratio: float,
-        enabled: bool,
-        mode: Literal["fast", "safe"],
-        note: str | None = None,
-    ) -> str:
+    @published(_CC_SPECS_plain_2, returns=str)
+    def plain(_published_values):
         FormDemo.calls.append(
             {
-                "name": name,
-                "count": count,
-                "ratio": ratio,
-                "enabled": enabled,
-                "mode": mode,
-                "note": note,
+                "name": _published_values.name,
+                "count": _published_values.count,
+                "ratio": _published_values.ratio,
+                "enabled": _published_values.enabled,
+                "mode": _published_values.mode,
+                "note": _published_values.note,
             }
         )
-        return name
+        return _published_values.name
 
     @action(id="buffer", title="Buffer")
     def buffer(self, layer: LayerInput, distance: Metres, crs: CrsInput) -> str:
         FormDemo.calls.append({"layer": layer, "distance": distance, "crs": crs})
         return f"{layer}:{distance}:{crs}"
 
+    _CC_SPECS_kinds_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("layer", LayerInput, REQUIRED, "positional"),
+        ("attribute", FieldInput(of="layer"), REQUIRED, "positional"),
+        ("weight", Range(0.0, 1.0), REQUIRED, "positional"),
+        ("fill", ColourInput(), REQUIRED, "positional"),
+        ("source", FileInput(filters=("*.csv",)), REQUIRED, "positional"),
+    )
+
     @action(id="kinds", title="New kinds")
-    def kinds(
-        self,
-        layer: LayerInput,
-        attribute: FieldInput(of="layer"),
-        weight: Range(0.0, 1.0),
-        fill: ColourInput(),
-        source: FileInput(filters=("*.csv",)),
-    ) -> str:
-        FormDemo.calls.append({"attribute": attribute, "source": source})
-        return attribute
+    @published(_CC_SPECS_kinds_1, returns=str)
+    def kinds(_published_values):
+        FormDemo.calls.append(
+            {
+                "attribute": _published_values.attribute,
+                "source": _published_values.source,
+            }
+        )
+        return _published_values.attribute
 
 
 GEOJSON = '{"type": "FeatureCollection", "features": []}'

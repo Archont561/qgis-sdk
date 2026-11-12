@@ -108,6 +108,9 @@ TOOLS_ROOT = layers.TOOLS_SOURCE / "qgis_sdk_tools"
 # table at all: they may import the runtime, Typer and pytest, and the runtime
 # never imports them (decision-35).
 LAYER_ORDER = {
+    # The stdlib-only published-signature helper sits at the base so every
+    # layer may declare a wide external contract without importing upward.
+    "_published": 0,
     "models": 0,
     "environment": 0,
     "declarations": 1,
@@ -131,6 +134,7 @@ LAYER_ORDER = {
     "testing": 3,
 }
 LAYER_PATHS = {
+    "_published": SOURCE_ROOT / "_published.py",
     "http": SOURCE_ROOT / "http",
     "algorithms": SOURCE_ROOT / "algorithms.py",
     "batch": SOURCE_ROOT / "batch.py",

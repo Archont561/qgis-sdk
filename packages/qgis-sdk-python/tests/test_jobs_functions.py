@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Annotated, Literal
 
 import pytest
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import ResourceScope, WorkerContext
 from qgis_sdk.declarations import QgisSdkDeclarationError, describe
 from qgis_sdk.jobs import JobService, JobStatus, describe_job, job
@@ -270,16 +271,20 @@ class Window:
     upper: int
 
 
+_CC_SPECS_typed_1 = (
+    ("ctx", WorkerContext, REQUIRED, "positional"),
+    ("window", Window, REQUIRED, "positional"),
+    ("mode", Literal["fast", "exact"], REQUIRED, "positional"),
+    ("label", str | None, None, "positional"),
+    ("weights", list[float] | None, None, "positional"),
+    ("unit", Annotated[str, "metres"], "m", "positional"),
+)
+
+
 @job(id="fn.typed", title="Typed inputs")
-def typed(
-    ctx: WorkerContext,
-    window: Window,
-    mode: Literal["fast", "exact"],
-    label: str | None = None,
-    weights: list[float] | None = None,
-    unit: Annotated[str, "metres"] = "m",
-) -> str:
-    return f"{window.lower}-{window.upper} {mode} {label} {weights} {unit}"
+@published(_CC_SPECS_typed_1, returns=str)
+def typed(_published_values):
+    return f"{_published_values.window.lower}-{_published_values.window.upper} {_published_values.mode} {_published_values.label} {_published_values.weights} {_published_values.unit}"
 
 
 def test_the_argument_check_understands_the_annotations_actions_use(

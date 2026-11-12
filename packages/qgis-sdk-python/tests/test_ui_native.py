@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
+from qgis_sdk._published import REQUIRED, published
 from qgis_sdk.core import PluginRuntime, ResourceScope, UiContext, UiServices
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.models import (
@@ -71,25 +72,28 @@ class FormDemo:
 
     calls: list[dict] = []  # noqa: RUF012 - reset by the fixture
 
+    _CC_SPECS_plain_1 = (
+        ("self", REQUIRED, REQUIRED, "positional"),
+        ("name", str, REQUIRED, "positional"),
+        ("count", int, REQUIRED, "positional"),
+        ("ratio", float, REQUIRED, "positional"),
+        ("enabled", bool, REQUIRED, "positional"),
+        ("mode", Literal["fast", "safe"], REQUIRED, "positional"),
+    )
+
     @action(id="plain", title="Plain fields")
-    def plain(
-        self,
-        name: str,
-        count: int,
-        ratio: float,
-        enabled: bool,
-        mode: Literal["fast", "safe"],
-    ) -> str:
+    @published(_CC_SPECS_plain_1, returns=str)
+    def plain(_published_values):
         FormDemo.calls.append(
             {
-                "name": name,
-                "count": count,
-                "ratio": ratio,
-                "enabled": enabled,
-                "mode": mode,
+                "name": _published_values.name,
+                "count": _published_values.count,
+                "ratio": _published_values.ratio,
+                "enabled": _published_values.enabled,
+                "mode": _published_values.mode,
             }
         )
-        return name
+        return _published_values.name
 
     @action(id="marked", title="Marked fields")
     def marked(
