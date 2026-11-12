@@ -27,7 +27,8 @@ from collections.abc import Iterator
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-ROOTS = (*sorted((ROOT / "packages").glob("*/src")), ROOT / "automation")
+PACKAGES = tuple(sorted((ROOT / "packages").glob("*/src")))
+AUTOMATION = ROOT / "automation"
 
 
 def _module_name(path: Path, root: Path) -> str:
@@ -39,9 +40,15 @@ def _module_name(path: Path, root: Path) -> str:
 
 
 def _modules() -> dict[str, Path]:
-    return {
-        _module_name(path, root): path for root in ROOTS for path in root.rglob("*.py")
+    """Every importable module under the shipped roots, by dotted name."""
+    found = {
+        _module_name(path, root): path
+        for root in PACKAGES
+        for path in root.rglob("*.py")
     }
+    for path in AUTOMATION.rglob("*.py"):
+        found[f"automation.{_module_name(path, AUTOMATION)}"] = path
+    return found
 
 
 def _walk(statements: list[ast.stmt]) -> Iterator[ast.stmt]:
@@ -224,6 +231,58 @@ def _missing_names(name: str, path: Path, node: ast.ImportFrom) -> list[str]:
         and alias.name not in BOUND[target]
         and f"{target}.{alias.name}" not in MODULES
     ]
+
+
+PREFIXES = ("qgis_sdk.", "qgis_sdk_tools.", "automation.")
+
+
+def _unresolved_modules() -> list[str]:
+    """Relative and in-tree imports whose target module is not there.
+
+    Read from every import, not only the module-body ones: a function-local
+    ``from .bootstrap import say`` is still a ``ModuleNotFoundError`` the first
+    time that function runs, and moving a file into a package of its own is
+    exactly what turns ``.bootstrap`` into ``..bootstrap``.
+    """
+    missing: list[str] = []
+    for name, path in MODULES.items():
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        missing.extend(_missing_modules(name, path, tree))
+    return missing
+
+
+def _missing_modules(name: str, path: Path, tree: ast.Module) -> list[str]:
+    wanted = {
+        _target(name, node, path) if node.level else (node.module or "")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+    }
+    return [
+        f"{path}:{name} imports the missing module {target}"
+        for target in sorted(wanted)
+        if _is_missing(target)
+    ]
+
+
+def _is_missing(target: str) -> bool:
+    if target in MODULES or target in {"", "__future__"}:
+        return False
+    if not target.startswith(PREFIXES):
+        return False
+    return not any(f"{target}.{module}" in MODULES for module in _children(target))
+
+
+def _children(target: str) -> set[str]:
+    return {
+        module[len(target) + 1 :].split(".")[0]
+        for module in MODULES
+        if module.startswith(f"{target}.")
+    }
+
+
+def test_every_imported_module_exists() -> None:
+    """A relative import that resolves outside the package is a missing module."""
+    assert _unresolved_modules() == [], "\n".join(_unresolved_modules())
 
 
 def test_no_module_body_import_cycle() -> None:

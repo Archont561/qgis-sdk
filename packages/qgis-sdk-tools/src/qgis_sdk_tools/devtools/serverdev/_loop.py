@@ -301,7 +301,7 @@ def bootstrap_server(request: Mapping[str, object]) -> ServerLoop:
     headless ``QgsApplication``, one ``QgsServer``, the plugin loaded through
     its generated package, and the reload watcher armed unless ``watch`` is off.
     """
-    from .bootstrap import say
+    from ..bootstrap import say
 
     wiring = _start_server(request, say)
     loop = _server_loop(wiring)

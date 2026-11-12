@@ -49,6 +49,7 @@ from qgis_sdk.ui.custom import Custom
 from qgis_sdk.ui.feedback import JobProgress, LogView, ResultTable
 from qgis_sdk.ui.form import Form
 
+from ..processing._parameters import _qt_filter
 from ._result_table_state import (
     CcPhases1,
     CcReturn,
@@ -69,7 +70,6 @@ from ._result_table_state import (
     text,
     toggle,
 )
-from .processing._parameters import _qt_filter
 
 
 def _field(
