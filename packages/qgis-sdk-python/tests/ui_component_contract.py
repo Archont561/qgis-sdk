@@ -60,9 +60,12 @@ from qgis_sdk.ui import (
 )
 from qgis_sdk.ui.actions import ViewActions
 
-GEOJSON = """{"type": "FeatureCollection", "features": [{"type": "Feature",
+_CC_TEXT_1 = """{"type": "FeatureCollection", "features": [{"type": "Feature",
 "properties": {"name": "a", "kind": "b"}, "geometry": {"type": "Point",
 "coordinates": [21.0, 52.2]}}]}"""
+
+
+GEOJSON = _CC_TEXT_1
 
 
 @job(id="slow_sum", title="Slow sum")
@@ -148,93 +151,135 @@ class Rendering:
         return info.id
 
 
+class _RenderingSetup:
+    """One mutable record shared by the rendering fixture's phases."""
+
+    def __init__(self, **values):
+        self.__dict__.update(values)
+
+
+def _rendering_facts(request, tmp_path, backend):
+    """Write the fixture dataset and name the paths both backends share."""
+    state = _RenderingSetup(request=request, backend=backend)
+    state.scope = ResourceScope()
+    state.notifications = RecordingNotifications(state.scope)
+    state.dataset = tmp_path / "sites.geojson"
+    state.dataset.write_text(GEOJSON, encoding="utf-8")
+    state.raster_dataset = (
+        Path(__file__).parent / "fixtures" / "reference" / "elevation.asc"
+    )
+    return state
+
+
+def _rendering_native_context(state):
+    """Build the plugin context from a real QGIS application."""
+    state.request.getfixturevalue("qgis_app")
+    from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
+
+    state.context = native_plugin_context(
+        state.scope,
+        NativeContextOptions(
+            settings_prefix="components", notifications=state.notifications
+        ),
+    )
+
+
+def _rendering_fake_context(state):
+    """Build the plugin context from the in-memory doubles."""
+    rasters = FakeRasters(state.scope)
+    rasters.register(
+        state.raster_dataset,
+        name="elevation",
+        extent=CanvasExtent(x_min=21.0, y_min=52.0, x_max=21.3, y_max=52.2),
+        crs="EPSG:4326",
+        values=(1.0,),
+    )
+    layers = FakeLayers(state.scope, rasters=rasters)
+    layers.register(
+        VectorLayerDeclaration(
+            state.dataset,
+            name="sites",
+            geometry_type="point",
+            field_names=("name", "kind"),
+        )
+    )
+    state.context = PluginContext(
+        state.notifications,
+        state.scope,
+        PluginServices(
+            layers=layers,
+            rasters=rasters,
+            project=FakeProject(layers, state.scope),
+            files=FakeFiles(state.scope),
+            log=RecordingLog(state.scope, "catalogue"),
+        ),
+    )
+
+
+def _rendering_runtime(state):
+    """Start the plugin and build the view's own context and scope."""
+    state.runtime = PluginRuntime._from_plugin_class(CataloguePlugin, state.context)
+    state.runtime.start()
+    state.instance = state.runtime.instance
+    assert isinstance(state.instance, CataloguePlugin)
+    state.instance.workers = FakeWorkers()
+    state.instance.jobs = JobService(
+        state.scope, workers=state.instance.workers, gui_thread=lambda: False
+    )
+    state.instance.calls = []
+    # The view's scope is a child of the plugin's, as under the host: closing
+    # the window detaches its components while the plugin's services live on.
+    state.view_scope = state.scope.child()
+    state.ctx = UiContext(
+        state.notifications,
+        FakeViewControl(),
+        state.view_scope,
+        UiServices(
+            actions=ViewActions(state.runtime, view_id="catalogue.test#1"),
+            layers=state.context.layers,
+            rasters=state.context.rasters if state.context.has("rasters") else None,
+            project=state.context.project,
+            files=state.context.files,
+            log=state.context.log,
+        ),
+    )
+
+
+def _rendering_value(state):
+    """The one record the tests receive from the fixture."""
+    return Rendering(
+        state.ctx,
+        state.view_scope,
+        state.dataset,
+        native=state.backend == "native",
+        runtime=state.runtime,
+        raster_dataset=state.raster_dataset,
+    )
+
+
+def _rendering_teardown(state):
+    """Unload the plugin, close its scope and clear native map layers."""
+    state.runtime.unload()
+    if not state.scope.closed:
+        state.scope.close()
+    if state.backend == "native":
+        from qgis.core import QgsProject
+
+        QgsProject.instance().removeAllMapLayers()
+
+
 def make_rendering(
     request: pytest.FixtureRequest, tmp_path: Path, backend: str
 ) -> Iterator[Rendering]:
     """Yield the ``fake`` or ``native`` rendering; the native one needs ``qgis_app``."""
-    scope = ResourceScope()
-    notifications = RecordingNotifications(scope)
-    dataset = tmp_path / "sites.geojson"
-    dataset.write_text(GEOJSON, encoding="utf-8")
-    raster_dataset = Path(__file__).parent / "fixtures" / "reference" / "elevation.asc"
-    if backend == "native":
-        request.getfixturevalue("qgis_app")
-        from qgis.core import QgsProject
-        from qgis_sdk.adapters.qgis import NativeContextOptions, native_plugin_context
-
-        context = native_plugin_context(
-            scope,
-            NativeContextOptions(
-                settings_prefix="components", notifications=notifications
-            ),
-        )
+    state = _rendering_facts(request, tmp_path, backend)
+    if state.backend == "native":
+        _rendering_native_context(state)
     else:
-        rasters = FakeRasters(scope)
-        rasters.register(
-            raster_dataset,
-            name="elevation",
-            extent=CanvasExtent(x_min=21.0, y_min=52.0, x_max=21.3, y_max=52.2),
-            crs="EPSG:4326",
-            values=(1.0,),
-        )
-        layers = FakeLayers(scope, rasters=rasters)
-        layers.register(
-            VectorLayerDeclaration(
-                dataset,
-                name="sites",
-                geometry_type="point",
-                field_names=("name", "kind"),
-            )
-        )
-        context = PluginContext(
-            notifications,
-            scope,
-            PluginServices(
-                layers=layers,
-                rasters=rasters,
-                project=FakeProject(layers, scope),
-                files=FakeFiles(scope),
-                log=RecordingLog(scope, "catalogue"),
-            ),
-        )
-    runtime = PluginRuntime._from_plugin_class(CataloguePlugin, context)
-    runtime.start()
-    instance = runtime.instance
-    assert isinstance(instance, CataloguePlugin)
-    instance.workers = FakeWorkers()
-    instance.jobs = JobService(
-        scope, workers=instance.workers, gui_thread=lambda: False
-    )
-    instance.calls = []
-    # The view's scope is a child of the plugin's, as under the host: closing
-    # the window detaches its components while the plugin's services live on.
-    view_scope = scope.child()
-    ctx = UiContext(
-        notifications,
-        FakeViewControl(),
-        view_scope,
-        UiServices(
-            actions=ViewActions(runtime, view_id="catalogue.test#1"),
-            layers=context.layers,
-            rasters=context.rasters if context.has("rasters") else None,
-            project=context.project,
-            files=context.files,
-            log=context.log,
-        ),
-    )
-    yield Rendering(
-        ctx,
-        view_scope,
-        dataset,
-        native=backend == "native",
-        runtime=runtime,
-        raster_dataset=raster_dataset,
-    )
-    runtime.unload()
-    if not scope.closed:
-        scope.close()
-    if backend == "native":
-        QgsProject.instance().removeAllMapLayers()
+        _rendering_fake_context(state)
+    _rendering_runtime(state)
+    yield _rendering_value(state)
+    _rendering_teardown(state)
 
 
 @pytest.mark.parametrize(

@@ -61,6 +61,70 @@ from qgis_sdk.models import (
 )
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_export_raster_p1(_s):
+    _s.self._scope.ensure_open()
+    _s.layer = _s.self._require(_s.layer_id)
+    _s.plan = export_policy.plan_export(
+        _s.destination, overwrite=_s.overwrite, drivers=RASTER_EXPORT_DRIVERS
+    )
+    _s.plan = export_policy.protect_source(
+        _s.plan, _s.self._export_sources[_s.layer_id]
+    )
+    _s.provider = _s.layer.dataProvider()
+
+
+def _cc_export_raster_p2(_s):
+
+    def write(partial: Path) -> None:
+        writer = QgsRasterFileWriter(str(partial))
+        writer.setOutputFormat(_s.plan.driver)
+        result = writer.writeRaster(
+            _pipe(_s.provider),
+            _s.layer.width(),
+            _s.layer.height(),
+            _s.layer.extent(),
+            _s.layer.crs(),
+            QgsCoordinateTransformContext(),
+        )
+        # ``NoError`` is 0 under every spelling of the enum across the
+        # versions this adapter supports, so the check does not name it.
+        if int(result) != 0:
+            raise QgisSdkExportFailedError(
+                str(_s.plan.destination), f"raster writer error {int(result)}"
+            )
+        _close_writer(writer)
+
+    _s.write = write
+
+
+def _cc_export_raster_p3(_s):
+
+    export_policy.run_export(_s.plan, _s.write)
+    return _CcReturn(RasterExport(path=str(_s.plan.destination), driver=_s.plan.driver))
+
+
 def _statistics_facts1(band, stats, total, valid):
     return RasterStatistics(
         band=band,
@@ -156,41 +220,15 @@ class NativeRasters:
     def export_raster(
         self, layer_id: str, destination: Path, *, overwrite: bool = False
     ) -> RasterExport:
-        """Write the raster with ``QgsRasterFileWriter`` under the shared policy.
-
-        The writer targets a staged path, so a half-written GeoTIFF never
-        appears at the destination. The shared policy checks the source before
-        writing and immediately before committing.
-        """
-        self._scope.ensure_open()
-        layer = self._require(layer_id)
-        plan = export_policy.plan_export(
-            destination, overwrite=overwrite, drivers=RASTER_EXPORT_DRIVERS
+        "Write the raster with ``QgsRasterFileWriter`` under the shared policy.\n\n        The writer targets a staged path, so a half-written GeoTIFF never\n        appears at the destination. The shared policy checks the source before\n        writing and immediately before committing.\n"
+        _s = _CcState(
+            self=self, layer_id=layer_id, destination=destination, overwrite=overwrite
         )
-        plan = export_policy.protect_source(plan, self._export_sources[layer_id])
-        provider = layer.dataProvider()
-
-        def write(partial: Path) -> None:
-            writer = QgsRasterFileWriter(str(partial))
-            writer.setOutputFormat(plan.driver)
-            result = writer.writeRaster(
-                _pipe(provider),
-                layer.width(),
-                layer.height(),
-                layer.extent(),
-                layer.crs(),
-                QgsCoordinateTransformContext(),
-            )
-            # ``NoError`` is 0 under every spelling of the enum across the
-            # versions this adapter supports, so the check does not name it.
-            if int(result) != 0:
-                raise QgisSdkExportFailedError(
-                    str(plan.destination), f"raster writer error {int(result)}"
-                )
-            _close_writer(writer)
-
-        export_policy.run_export(plan, write)
-        return RasterExport(path=str(plan.destination), driver=plan.driver)
+        for _p in (_cc_export_raster_p1, _cc_export_raster_p2, _cc_export_raster_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def _qgs_raster(self, layer_id: str) -> QgsRasterLayer:
         """Hand the native handle to a sibling adapter in this package.

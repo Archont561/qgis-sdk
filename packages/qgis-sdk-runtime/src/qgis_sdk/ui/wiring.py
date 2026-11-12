@@ -17,6 +17,7 @@ signal of a widget directly.
 
 from __future__ import annotations
 
+import copy
 import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -31,6 +32,92 @@ from qgis_sdk.declarations import (
 from qgis_sdk.models import QgisSdkUiError
 
 from .components import Component, Container
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_connection_p1(_s):
+    _s.shown = _s.wire.shown
+    _s.node = _node(_s.root, _s.wire, _s.surface)
+    _s.signal = _s.wire.signal or "changed"
+
+
+def _cc_connection_p2(_s):
+    if isinstance(_s.node, Component):
+        _s.subscription_name = ON_SIGNALS.get(_s.signal, _s.signal)
+        _s.subscribe_method = getattr(_s.node, _s.subscription_name, None)
+        if not callable(_s.subscribe_method) or _s.subscription_name in _cc_fresh_1():
+            raise QgisSdkUiError(
+                f"@on({_s.shown}).{_s.signal}: {type(_s.node).__name__} "
+                f"{_s.node.name!r} has no such signal"
+            )
+        _s.listener = _adapt(_s.method)
+        return _CcReturn(lambda: _s.subscribe_method(_s.listener))
+    _s.qt_signal = _qt_signal(_s.node, _s.signal)
+
+
+def _cc_connection_p3(_s):
+    if _s.qt_signal is None:
+        raise QgisSdkUiError(
+            f"@on({_s.shown}, {_s.signal!r}): widget {_s.shown} "
+            f"({type(_s.node).__name__}) has no such signal"
+        )
+    _s.slot = _adapt(_s.method)
+
+
+def _cc_connection_p4(_s):
+
+    def connect() -> Callable[[], None]:
+        _s.qt_signal.connect(_s.slot)
+
+        def disconnect() -> None:
+            try:
+                _s.qt_signal.disconnect(_s.slot)
+            except (TypeError, RuntimeError):  # already gone with the widget
+                pass
+
+        _s.disconnect = disconnect
+
+        return disconnect
+
+    _s.connect = connect
+
+
+def _cc_connection_p5(_s):
+
+    return _CcReturn(_s.connect)
+
+
+_CC_DATA_1 = (
+    "attach",
+    "mount",
+    "dispose",
+)
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
 
 
 def _wire_surface_facts1(ctx, disconnects, root, surface, unwire):
@@ -295,43 +382,18 @@ def _subscription(
 def _connection(
     root: Any, wire: Wire, method: Callable[..., Any], surface: Any
 ) -> Callable[[], Callable[[], None]]:
-    shown = wire.shown
-    node = _node(root, wire, surface)
-    signal = wire.signal or "changed"
-    if isinstance(node, Component):
-        subscription_name = ON_SIGNALS.get(signal, signal)
-        subscribe_method = getattr(node, subscription_name, None)
-        if not callable(subscribe_method) or subscription_name in (
-            "attach",
-            "mount",
-            "dispose",
-        ):
-            raise QgisSdkUiError(
-                f"@on({shown}).{signal}: {type(node).__name__} "
-                f"{node.name!r} has no such signal"
-            )
-        listener = _adapt(method)
-        return lambda: subscribe_method(listener)
-    qt_signal = _qt_signal(node, signal)
-    if qt_signal is None:
-        raise QgisSdkUiError(
-            f"@on({shown}, {signal!r}): widget {shown} "
-            f"({type(node).__name__}) has no such signal"
-        )
-    slot = _adapt(method)
-
-    def connect() -> Callable[[], None]:
-        qt_signal.connect(slot)
-
-        def disconnect() -> None:
-            try:
-                qt_signal.disconnect(slot)
-            except (TypeError, RuntimeError):  # already gone with the widget
-                pass
-
-        return disconnect
-
-    return connect
+    _s = _CcState(root=root, wire=wire, method=method, surface=surface)
+    for _p in (
+        _cc_connection_p1,
+        _cc_connection_p2,
+        _cc_connection_p3,
+        _cc_connection_p4,
+        _cc_connection_p5,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _node(root: Any, wire: Wire, surface: Any) -> Any:

@@ -27,145 +27,212 @@ from qgis_sdk_tools.scaffold.web import (
     UI_NPM_VERSION,
 )
 
+_CcAnn1 = Annotated[
+    Path, typer.Argument(help="Directory to create the plugin project in.")
+]
+_CcAnn2 = Annotated[
+    str | None,
+    typer.Option(help="Plugin package name; defaults to the target name."),
+]
+_CcAnn3 = Annotated[str | None, typer.Option(help="Human-readable plugin title.")]
+_CcAnn4 = Annotated[str | None, typer.Option(help="Author recorded in metadata.txt.")]
+_CcAnn5 = Annotated[
+    str | None, typer.Option(help="Author email recorded in metadata.txt.")
+]
+_CcAnn6 = Annotated[
+    str | None, typer.Option(help="Plugin version recorded in metadata.txt.")
+]
+_CcAnn7 = Annotated[
+    str | None,
+    typer.Option(help="Lowest QGIS version allowed to load the plugin."),
+]
+_CcAnn8 = Annotated[
+    bool,
+    typer.Option(
+        "--algorithm",
+        help="Start with a Processing provider and one function algorithm.",
+    ),
+]
+_CcAnn9 = Annotated[
+    str | None,
+    typer.Option(
+        "--ui",
+        help="native: a bound Dialog in pure PyQt plus a toolbar action opening it.",
+    ),
+]
+_CcAnn10 = Annotated[
+    str,
+    typer.Option(
+        "--host",
+        help=(
+            "desktop (default): QGIS loads classFactory. server: QGIS Server "
+            "loads serverClassFactory and the starter declares filters, "
+            "services and access hooks instead of actions. app: a standalone "
+            "PyQGIS application - `python -m <package>` or `qgis-sdk run` - "
+            "with its own window and no plugin lifecycle."
+        ),
+    ),
+]
+_CcAnn11 = Annotated[
+    str | None,
+    typer.Option(help="Add a web UI: vanilla or react (a terminal is asked)."),
+]
+_CcAnn12 = Annotated[
+    str | None,
+    typer.Option(help="Show the web UI as a dialog (default) or a dock."),
+]
+_CcAnn13 = Annotated[
+    str | None,
+    typer.Option(help="npm (default), pnpm or bun for the web UI."),
+]
+_CcAnn14 = Annotated[
+    str | None,
+    typer.Option(
+        help=(
+            "What web/package.json depends on for @archont561/qgis-sdk: "
+            f"the latest release ({SDK_NPM_VERSION}) unless given; inside "
+            "the SDK repository pass file:<path to packages/qgis-sdk-typescript>."
+        ),
+    ),
+]
+_CcAnn15 = Annotated[
+    str | None,
+    typer.Option(
+        help=(
+            "The same for @archont561/qgis-sdk-ui, the web components the page "
+            f"opts into: the latest release ({UI_NPM_VERSION}) unless given."
+        ),
+    ),
+]
+_CcAnn16 = Annotated[
+    bool | None,
+    typer.Option(
+        "--install/--no-install",
+        help="Run the package manager's install in web/ after writing.",
+    ),
+]
+_CcAnn17 = Annotated[
+    bool, typer.Option("--no-input", help="Never ask; flags and defaults decide.")
+]
+_CcAnn18 = Annotated[bool, typer.Option(help="Print the file plan and write nothing.")]
+_CcAnn19 = Annotated[bool, typer.Option(help="Regenerate files that already exist.")]
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_new_p1(_s):
+    _s.answers = _web_answers(
+        _s.runtime,
+        web=_s.web,
+        placement=_s.placement,
+        package_manager=_s.package_manager,
+        sdk_dependency=_s.sdk_dependency,
+        ui_dependency=_s.ui_dependency,
+        install=_s.install,
+        no_input=_s.no_input,
+    )
+
+
+def _cc_new_p2(_s):
+    _s.options = _resolve(
+        _s.target,
+        plugin=_s.plugin,
+        title=_s.title,
+        author=_s.author,
+        email=_s.email,
+        version=_s.version,
+        qgis_minimum_version=_s.qgis_minimum_version,
+        web=_s.answers.web,
+        placement=_s.answers.placement,
+        package_manager=_s.answers.package_manager,
+        sdk_dependency=_s.sdk_dependency,
+        ui_dependency=_s.ui_dependency,
+        algorithm=_s.algorithm,
+        ui=_s.ui,
+        host=_s.host,
+    )
+
+
+def _cc_new_p3(_s):
+    _s.root = _s.runtime.resolve(_s.target)
+    _report(_s.runtime, _s.options, _s.root, dry_run=_s.dry_run, force=_s.force)
+
+
+def _cc_new_p4(_s):
+    typer.echo(str(_s.error), file=_s.runtime.err)
+    raise typer.Exit(code=1) from _s.error
+
+
+def _cc_new_p5(_s):
+    _s.runtime: CliRuntime = _s.ctx.obj
+    try:
+        for _p in (_cc_new_p1, _cc_new_p2, _cc_new_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    except QgisSdkScaffoldError as error:
+        _s.error = error
+        for _p in (_cc_new_p4,):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
+def _cc_new_p6(_s):
+    if _s.answers.install and not _s.dry_run and _s.options.web is not None:
+        _install(_s.runtime, _s.options, _s.target, _s.root)
+
 
 @app.command("new")
 def new(
     ctx: typer.Context,
-    target: Annotated[
-        Path, typer.Argument(help="Directory to create the plugin project in.")
-    ],
-    plugin: Annotated[
-        str | None,
-        typer.Option(help="Plugin package name; defaults to the target name."),
-    ] = None,
-    title: Annotated[
-        str | None, typer.Option(help="Human-readable plugin title.")
-    ] = None,
-    author: Annotated[
-        str | None, typer.Option(help="Author recorded in metadata.txt.")
-    ] = None,
-    email: Annotated[
-        str | None, typer.Option(help="Author email recorded in metadata.txt.")
-    ] = None,
-    version: Annotated[
-        str | None, typer.Option(help="Plugin version recorded in metadata.txt.")
-    ] = None,
-    qgis_minimum_version: Annotated[
-        str | None,
-        typer.Option(help="Lowest QGIS version allowed to load the plugin."),
-    ] = None,
-    algorithm: Annotated[
-        bool,
-        typer.Option(
-            "--algorithm",
-            help="Start with a Processing provider and one function algorithm.",
-        ),
-    ] = False,
-    ui: Annotated[
-        str | None,
-        typer.Option(
-            "--ui",
-            help="native: a bound Dialog in pure PyQt plus a toolbar action opening it.",
-        ),
-    ] = None,
-    host: Annotated[
-        str,
-        typer.Option(
-            "--host",
-            help=(
-                "desktop (default): QGIS loads classFactory. server: QGIS Server "
-                "loads serverClassFactory and the starter declares filters, "
-                "services and access hooks instead of actions. app: a standalone "
-                "PyQGIS application - `python -m <package>` or `qgis-sdk run` - "
-                "with its own window and no plugin lifecycle."
-            ),
-        ),
-    ] = "desktop",
-    web: Annotated[
-        str | None,
-        typer.Option(help="Add a web UI: vanilla or react (a terminal is asked)."),
-    ] = None,
-    placement: Annotated[
-        str | None,
-        typer.Option(help="Show the web UI as a dialog (default) or a dock."),
-    ] = None,
-    package_manager: Annotated[
-        str | None,
-        typer.Option(help="npm (default), pnpm or bun for the web UI."),
-    ] = None,
-    sdk_dependency: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "What web/package.json depends on for @archont561/qgis-sdk: "
-                f"the latest release ({SDK_NPM_VERSION}) unless given; inside "
-                "the SDK repository pass file:<path to packages/qgis-sdk-typescript>."
-            ),
-        ),
-    ] = None,
-    ui_dependency: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "The same for @archont561/qgis-sdk-ui, the web components the page "
-                f"opts into: the latest release ({UI_NPM_VERSION}) unless given."
-            ),
-        ),
-    ] = None,
-    install: Annotated[
-        bool | None,
-        typer.Option(
-            "--install/--no-install",
-            help="Run the package manager's install in web/ after writing.",
-        ),
-    ] = None,
-    no_input: Annotated[
-        bool, typer.Option("--no-input", help="Never ask; flags and defaults decide.")
-    ] = False,
-    dry_run: Annotated[
-        bool, typer.Option(help="Print the file plan and write nothing.")
-    ] = False,
-    force: Annotated[
-        bool, typer.Option(help="Regenerate files that already exist.")
-    ] = False,
+    target: _CcAnn1,
+    plugin: _CcAnn2 = None,
+    title: _CcAnn3 = None,
+    author: _CcAnn4 = None,
+    email: _CcAnn5 = None,
+    version: _CcAnn6 = None,
+    qgis_minimum_version: _CcAnn7 = None,
+    algorithm: _CcAnn8 = False,
+    ui: _CcAnn9 = None,
+    host: _CcAnn10 = "desktop",
+    web: _CcAnn11 = None,
+    placement: _CcAnn12 = None,
+    package_manager: _CcAnn13 = None,
+    sdk_dependency: _CcAnn14 = None,
+    ui_dependency: _CcAnn15 = None,
+    install: _CcAnn16 = None,
+    no_input: _CcAnn17 = False,
+    dry_run: _CcAnn18 = False,
+    force: _CcAnn19 = False,
 ) -> None:
     """Write a minimal, loadable plugin project at TARGET, with a web UI if asked."""
-    runtime: CliRuntime = ctx.obj
-    try:
-        answers = _web_answers(
-            runtime,
-            web=web,
-            placement=placement,
-            package_manager=package_manager,
-            sdk_dependency=sdk_dependency,
-            ui_dependency=ui_dependency,
-            install=install,
-            no_input=no_input,
-        )
-        options = _resolve(
-            target,
-            plugin=plugin,
-            title=title,
-            author=author,
-            email=email,
-            version=version,
-            qgis_minimum_version=qgis_minimum_version,
-            web=answers.web,
-            placement=answers.placement,
-            package_manager=answers.package_manager,
-            sdk_dependency=sdk_dependency,
-            ui_dependency=ui_dependency,
-            algorithm=algorithm,
-            ui=ui,
-            host=host,
-        )
-        root = runtime.resolve(target)
-        _report(runtime, options, root, dry_run=dry_run, force=force)
-    except QgisSdkScaffoldError as error:
-        typer.echo(str(error), file=runtime.err)
-        raise typer.Exit(code=1) from error
-    if answers.install and not dry_run and options.web is not None:
-        _install(runtime, options, target, root)
+    _s = _CcState(**locals())
+    for _p in (_cc_new_p5, _cc_new_p6):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _web_answers(runtime: CliRuntime, **options: Unpack[_WebOptions1]) -> WebAnswers:

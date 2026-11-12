@@ -19,6 +19,64 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_from_wire_p1(_s):
+    if isinstance(_s.value, _s.cls):
+        return _CcReturn(_s.value)
+    if not isinstance(_s.value, dict) or _s.value.get("kind") != BLOB_REF_KIND:
+        raise ValueError("a BlobRef is a {kind, id, size, media_type, checksum} object")
+    _s.blob_id = _s.value.get("id")
+    if not isinstance(_s.blob_id, str) or not _s.blob_id:
+        raise ValueError("a BlobRef carries a non-empty string id")
+    _s.size = _s.value.get("size")
+
+
+def _cc_from_wire_p2(_s):
+    if not isinstance(_s.size, int) or isinstance(_s.size, bool) or _s.size < 0:
+        raise ValueError("a BlobRef carries a non-negative integer size")
+    _s.media_type = _s.value.get("media_type")
+    if not isinstance(_s.media_type, str) or not _s.media_type:
+        raise ValueError("a BlobRef carries a media type")
+    _s.checksum = _s.value.get("checksum")
+
+
+def _cc_from_wire_p3(_s):
+    if not isinstance(_s.checksum, str) or not _s.checksum:
+        raise ValueError("a BlobRef carries a checksum")
+    _s.expires_at = _s.value.get("expires_at")
+    return _CcReturn(
+        _s.cls(
+            id=_s.blob_id,
+            size=_s.size,
+            media_type=_s.media_type,
+            checksum=_s.checksum,
+            expires_at=None if _s.expires_at is None else str(_s.expires_at),
+        )
+    )
+
+
 __all__ = ["BLOB_REF", "BLOB_REF_KIND", "BlobRef"]
 
 #: The ``kind`` brand of a blob reference. It is deliberately not ``file`` or
@@ -76,29 +134,9 @@ class BlobRef:
     @classmethod
     def from_wire(cls, value: Any) -> BlobRef:
         """Rebuild a ref from its wire shape; a value already a ref passes."""
-        if isinstance(value, cls):
-            return value
-        if not isinstance(value, dict) or value.get("kind") != BLOB_REF_KIND:
-            raise ValueError(
-                "a BlobRef is a {kind, id, size, media_type, checksum} object"
-            )
-        blob_id = value.get("id")
-        if not isinstance(blob_id, str) or not blob_id:
-            raise ValueError("a BlobRef carries a non-empty string id")
-        size = value.get("size")
-        if not isinstance(size, int) or isinstance(size, bool) or size < 0:
-            raise ValueError("a BlobRef carries a non-negative integer size")
-        media_type = value.get("media_type")
-        if not isinstance(media_type, str) or not media_type:
-            raise ValueError("a BlobRef carries a media type")
-        checksum = value.get("checksum")
-        if not isinstance(checksum, str) or not checksum:
-            raise ValueError("a BlobRef carries a checksum")
-        expires_at = value.get("expires_at")
-        return cls(
-            id=blob_id,
-            size=size,
-            media_type=media_type,
-            checksum=checksum,
-            expires_at=None if expires_at is None else str(expires_at),
-        )
+        _s = _CcState(cls=cls, value=value)
+        for _p in (_cc_from_wire_p1, _cc_from_wire_p2, _cc_from_wire_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None

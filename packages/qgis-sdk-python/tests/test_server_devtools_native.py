@@ -33,25 +33,7 @@ from pathlib import Path
 import layers
 import pytest
 
-pytestmark = pytest.mark.server
-
-pytest.importorskip(
-    "qgis.server", reason="this QGIS was built without WITH_SERVER (no qgis.server)"
-)
-
-if not os.environ.get("QGIS_SDK_SERVER_DEV"):
-    pytest.skip(
-        "set QGIS_SDK_SERVER_DEV=1 to run `qgis-sdk dev --host server` against "
-        "a real QGIS Server",
-        allow_module_level=True,
-    )
-
-DEADLINE = 90.0
-
-#: The command, the port it was given, and the lines it has said so far.
-Running = tuple[subprocess.Popen[str], int, list[str]]
-
-PYPROJECT = """[project]
+_CC_TEXT_1 = """[project]
 name = "devtools-demo"
 version = "0.1.0"
 description = "A server plugin for the dev loop."
@@ -63,8 +45,7 @@ plugin = "devtools_demo.plugin:app"
 qgis-minimum-version = "3.40"
 hosts = ["server"]
 """
-
-PLUGIN = '''"""One filter and one service: enough to see a reload in an HTTP body."""
+_CC_TEXT_2 = '''"""One filter and one service: enough to see a reload in an HTTP body."""
 
 from __future__ import annotations
 
@@ -97,8 +78,7 @@ def stamp(
 def answer(ctx: ServerContext, request: ServerRequest) -> ServerResponse:
     return ServerResponse.text(f"marker={{request.param('MARKER')}}")
 '''
-
-ENTRY = '''"""The entry QGIS Server calls, and the ``HOOKS`` a reload reads."""
+_CC_TEXT_3 = '''"""The entry QGIS Server calls, and the ``HOOKS`` a reload reads."""
 
 from __future__ import annotations
 
@@ -114,6 +94,31 @@ def serverClassFactory(serverIface):
 
     return QgsServerHost(HOOKS, serverIface).register()
 '''
+
+
+pytestmark = pytest.mark.server
+
+pytest.importorskip(
+    "qgis.server", reason="this QGIS was built without WITH_SERVER (no qgis.server)"
+)
+
+if not os.environ.get("QGIS_SDK_SERVER_DEV"):
+    pytest.skip(
+        "set QGIS_SDK_SERVER_DEV=1 to run `qgis-sdk dev --host server` against "
+        "a real QGIS Server",
+        allow_module_level=True,
+    )
+
+DEADLINE = 90.0
+
+#: The command, the port it was given, and the lines it has said so far.
+Running = tuple[subprocess.Popen[str], int, list[str]]
+
+PYPROJECT = _CC_TEXT_1
+
+PLUGIN = _CC_TEXT_2
+
+ENTRY = _CC_TEXT_3
 
 
 def write_project(root: Path, marker: str) -> Path:
@@ -204,14 +209,8 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
 
 
-@pytest.fixture
-def running(project: Path) -> Iterator[Running]:
-    """``qgis-sdk dev --host server`` as a user runs it, in its own process.
-
-    What it says is drained as it says it: the notes name the QGIS the command
-    chose and the command it runs, which is the first thing worth knowing when
-    the loops below time out.
-    """
+def _start_dev_server(project: Path):
+    """Launch ``qgis-sdk dev --host server`` and read its first notes."""
     port = free_port()
     env = {
         key: value for key, value in os.environ.items() if not key.startswith("PYTEST_")
@@ -234,13 +233,24 @@ def running(project: Path) -> Iterator[Running]:
         stderr=subprocess.STDOUT,
         text=True,
     )
-    said = read_alongside(process)
+    return process, port, read_alongside(process)
+
+
+def _stop_dev_server(process) -> None:
+    """Stop a dev server a test started, whatever state it is in."""
+    if process.poll() is None:
+        process.terminate()
+    process.wait(timeout=60)
+
+
+@pytest.fixture
+def running(project: Path) -> Iterator[Running]:
+    "``qgis-sdk dev --host server`` as a user runs it, in its own process.\n\n    What it says is drained as it says it: the notes name the QGIS the command\n    chose and the command it runs, which is the first thing worth knowing when\n    the loops below time out.\n"
+    process, port, said = _start_dev_server(project)
     try:
         yield process, port, said
     finally:
-        if process.poll() is None:
-            process.terminate()
-        process.wait(timeout=60)
+        _stop_dev_server(process)
 
 
 def test_the_server_answers_the_service_the_plugin_declares(

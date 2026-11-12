@@ -39,6 +39,107 @@ from qgis_sdk_tools.check import check_project
 from qgis_sdk_tools.paths import walk_files
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_reload_once_p1(_s):
+    _s.self.generation += 1
+    _s.plugin = _s.self._plugin
+    _s.problems, _s.warnings = _s.self._preflight(_s.self._root, _s.plugin)
+    for warning in _s.warnings:
+        _s.warning = warning
+        _s.self._say(f"warning: {_s.warning}")
+
+
+def _cc_reload_once_p2(_s):
+    _s.self._host.resume(_s.plugin)
+    _s.first = _s.outcome.blockers[0] if _s.outcome.blockers else "unknown"
+    _s.more = (
+        f" (+{len(_s.outcome.blockers) - 1} more)"
+        if len(_s.outcome.blockers) > 1
+        else ""
+    )
+    _s.self._say(
+        f"reload refused, revision {_s.self.revision} keeps running: "
+        f"{_s.first}{_s.more}; finish or cancel that work and Reload, or "
+        "restart `qgis-sdk dev`"
+    )
+
+
+def _cc_reload_once_p3(_s):
+    _s.self._notify("critical", f"{_s.plugin} reload refused: {_s.first}{_s.more}")
+    return _CcReturn(
+        _s.self._report("refused", blockers=_s.outcome.blockers, reason="quiesce")
+    )
+
+
+def _cc_reload_once_p4(_s):
+    _s.outcome = _s.self._quiesce()
+    if _s.outcome.refused:
+        for _p in (_cc_reload_once_p2, _cc_reload_once_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+
+
+def _cc_reload_once_p5(_s):
+    if not _s.self._host.unload(_s.plugin):
+        _s.self.running = False
+        _s.self._say(
+            f"unload of revision {_s.self.revision} failed; {_s.plugin} is "
+            "disabled and its old modules may linger: restart `qgis-sdk dev`"
+        )
+        _s.self._notify("critical", f"{_s.plugin} unload failed: restart qgis-sdk dev")
+        return _CcReturn(_s.self._report("disabled", reason="unload failed; restart"))
+    _s.self.running = False
+
+
+def _cc_reload_once_p6(_s):
+    if _s.problems:
+        _s.more = f" (+{len(_s.problems) - 1} more)" if len(_s.problems) > 1 else ""
+        _s.kept = (
+            f"revision {_s.self.revision} keeps running"
+            if _s.self.running
+            else f"{_s.plugin} stays disabled"
+        )
+        _s.self._say(f"reload refused, {_s.kept}: {_s.problems[0]}{_s.more}")
+        _s.self._notify("critical", f"reload refused: {_s.problems[0]}{_s.more}")
+        return _CcReturn(
+            _s.self._report("refused", problems=tuple(_s.problems), reason="preflight")
+        )
+
+
+def _cc_reload_once_p7(_s):
+    if _s.self.running:
+        for _p in (_cc_reload_once_p4, _cc_reload_once_p5):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    if _s.self._start():
+        _s.self._notify("info", f"{_s.plugin} reloaded (revision {_s.self.revision})")
+        return _CcReturn(_s.self._report("reloaded"))
+    return _CcReturn(_reload_once_phase1(_s.plugin, _s.self))
+
+
 def _preflight_tail1(**values):
     plugin = values["plugin"]
     problems = values["problems"]
@@ -221,55 +322,12 @@ class ReloadCoordinator:
     # -- the policy
 
     def _reload_once(self) -> ReloadReport:
-        self.generation += 1
-        plugin = self._plugin
-        problems, warnings = self._preflight(self._root, plugin)
-        for warning in warnings:
-            self._say(f"warning: {warning}")
-        if problems:
-            more = f" (+{len(problems) - 1} more)" if len(problems) > 1 else ""
-            kept = (
-                f"revision {self.revision} keeps running"
-                if self.running
-                else f"{plugin} stays disabled"
-            )
-            self._say(f"reload refused, {kept}: {problems[0]}{more}")
-            self._notify("critical", f"reload refused: {problems[0]}{more}")
-            return self._report("refused", problems=tuple(problems), reason="preflight")
-        if self.running:
-            outcome = self._quiesce()
-            if outcome.refused:
-                self._host.resume(plugin)
-                first = outcome.blockers[0] if outcome.blockers else "unknown"
-                more = (
-                    f" (+{len(outcome.blockers) - 1} more)"
-                    if len(outcome.blockers) > 1
-                    else ""
-                )
-                self._say(
-                    f"reload refused, revision {self.revision} keeps running: "
-                    f"{first}{more}; finish or cancel that work and Reload, or "
-                    "restart `qgis-sdk dev`"
-                )
-                self._notify("critical", f"{plugin} reload refused: {first}{more}")
-                return self._report(
-                    "refused", blockers=outcome.blockers, reason="quiesce"
-                )
-            if not self._host.unload(plugin):
-                self.running = False
-                self._say(
-                    f"unload of revision {self.revision} failed; {plugin} is "
-                    "disabled and its old modules may linger: restart `qgis-sdk dev`"
-                )
-                self._notify(
-                    "critical", f"{plugin} unload failed: restart qgis-sdk dev"
-                )
-                return self._report("disabled", reason="unload failed; restart")
-            self.running = False
-        if self._start():
-            self._notify("info", f"{plugin} reloaded (revision {self.revision})")
-            return self._report("reloaded")
-        return _reload_once_phase1(plugin, self)
+        _s = _CcState(self=self)
+        for _p in (_cc_reload_once_p1, _cc_reload_once_p6, _cc_reload_once_p7):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def _quiesce(self) -> QuiesceOutcome:
         """Give the running revision a bounded time to reach a safe point."""

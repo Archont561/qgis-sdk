@@ -23,18 +23,7 @@ from qgis_sdk.adapters.desktop import (
 from qgis_sdk.core import PluginContext, PluginRuntimeState
 from qgis_sdk.models import QgisSdkUnsupportedCapabilityError
 
-PACKAGE = "hosted_tools"
-
-
-@pytest.fixture(scope="module")
-def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    root = tmp_path_factory.mktemp("hosted")
-    package = root / PACKAGE
-    package.mkdir()
-    (package / "__init__.py").write_text("", encoding="utf-8")
-    (package / "plugin.py").write_text(
-        textwrap.dedent(
-            """
+_CC_TEXT_1 = """
             from qgis_sdk import QgisSdkPlugin, menu, toolbar
             from qgis_sdk.core import PluginContext, ResourceScope
             from qgis_sdk.ui import Dialog
@@ -88,7 +77,19 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
             not_a_class = 3
             """
-        ),
+
+
+PACKAGE = "hosted_tools"
+
+
+@pytest.fixture(scope="module")
+def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    root = tmp_path_factory.mktemp("hosted")
+    package = root / PACKAGE
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "plugin.py").write_text(
+        textwrap.dedent(_CC_TEXT_1),
         encoding="utf-8",
     )
     sys.path.insert(0, str(root))

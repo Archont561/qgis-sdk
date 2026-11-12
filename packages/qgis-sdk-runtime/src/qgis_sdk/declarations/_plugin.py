@@ -17,6 +17,74 @@ from qgis_sdk.declarations._metadata import (
     validate_given,
 )
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_stream_p1(_s):
+    validate_given(_s.id, _s.title)
+    _s.label = _s.id if _s.id is not None else "stream"
+    if not isinstance(_s.events, dict):
+        raise QgisSdkDeclarationError(
+            f"{_s.label}: events must be a mapping of kind to type"
+        )
+    if not _s.events:
+        raise QgisSdkDeclarationError(
+            f"{_s.label}: a stream declares at least one event kind"
+        )
+
+
+def _cc_stream_p2(_s):
+    for kind in _s.events:
+        _s.kind = kind
+        if _s.kind not in STREAM_EVENT_KINDS:
+            raise QgisSdkDeclarationError(
+                f"{_s.label}: {_s.kind!r} is not a stream event kind; "
+                f"use one of {', '.join(STREAM_EVENT_KINDS)}"
+            )
+
+
+def _cc_stream_p3(_s):
+
+    def decorate(method: T) -> T:
+        if not inspect.isfunction(method):
+            raise QgisSdkDeclarationError("@stream requires an instance method")
+        declared = method_metadata(method, _s.id, _s.title)
+        _require_undeclared(method, declared.id, "@stream")
+        refuse_bindings(method, "@stream")
+        attach_describe(method)
+        method.__qgis_sdk_stream__ = _StreamMetadata(
+            declared.id, declared.title, dict(_s.events)
+        )
+        return method
+
+    _s.decorate = decorate
+
+
+def _cc_stream_p4(_s):
+
+    return _CcReturn(_s.decorate)
+
+
 PLUGIN_ATTRIBUTE = "__qgis_sdk_plugin__"
 #: An SDK class with this dict describes itself as an action *result* (the
 #: handle a job-submitting action returns); ``WIRE_VALUE_METHOD`` is how the
@@ -140,36 +208,12 @@ def stream(
     emit. An omitted ``id`` or ``title`` comes from the method name, as for
     ``@action``.
     """
-    validate_given(id, title)
-    label = id if id is not None else "stream"
-    if not isinstance(events, dict):
-        raise QgisSdkDeclarationError(
-            f"{label}: events must be a mapping of kind to type"
-        )
-    if not events:
-        raise QgisSdkDeclarationError(
-            f"{label}: a stream declares at least one event kind"
-        )
-    for kind in events:
-        if kind not in STREAM_EVENT_KINDS:
-            raise QgisSdkDeclarationError(
-                f"{label}: {kind!r} is not a stream event kind; "
-                f"use one of {', '.join(STREAM_EVENT_KINDS)}"
-            )
-
-    def decorate(method: T) -> T:
-        if not inspect.isfunction(method):
-            raise QgisSdkDeclarationError("@stream requires an instance method")
-        declared = method_metadata(method, id, title)
-        _require_undeclared(method, declared.id, "@stream")
-        refuse_bindings(method, "@stream")
-        attach_describe(method)
-        method.__qgis_sdk_stream__ = _StreamMetadata(
-            declared.id, declared.title, dict(events)
-        )
-        return method
-
-    return decorate
+    _s = _CcState(events=events, id=id, title=title)
+    for _p in (_cc_stream_p1, _cc_stream_p2, _cc_stream_p3, _cc_stream_p4):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _require_undeclared(method: Any, id: str, decorator: str) -> None:

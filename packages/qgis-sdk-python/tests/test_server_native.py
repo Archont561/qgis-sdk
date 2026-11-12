@@ -37,6 +37,72 @@ from qgis_sdk.server import (
     service,
 )
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_the_same_ho_p1(_s):
+    from qgis_sdk.testing import FakeServerInterface
+
+    _s.FakeServerInterface = FakeServerInterface
+
+    _s.interface = _s.FakeServerInterface()
+    _s.answered = _s.interface.serve(
+        HOOKS,
+        ServerRequest(
+            method="GET",
+            url="http://localhost/qgis/qgis_mapserv.fcgi",
+            params={"SERVICE": "WMS", "SDK_DEMO": "1", "MARKER": "pure"},
+        ),
+    )
+
+
+def _cc_test_the_same_ho_p2(_s):
+
+    assert _s.answered.status == 200
+    assert _s.answered.body == b"marker=pure routed=yes"
+
+    REFUSED.add("secret_layer")
+
+
+def _cc_test_the_same_ho_p3(_s):
+    try:
+        _s.refused = _s.FakeServerInterface().serve(
+            HOOKS,
+            ServerRequest(
+                method="GET",
+                url="http://localhost/qgis/qgis_mapserv.fcgi",
+                params={"SERVICE": "WMS", "LAYERS": "secret_layer"},
+            ),
+        )
+    finally:
+        REFUSED.discard("secret_layer")
+
+
+def _cc_test_the_same_ho_p4(_s):
+
+    assert _s.refused.status == 403
+
+
 # One layer per module: `server` already means the QGIS bindings are there,
 # and the application comes from the shared `qgis_app` fixture.
 pytestmark = pytest.mark.server
@@ -150,35 +216,17 @@ def test_the_same_hooks_answer_without_qgis(qgis_app) -> None:
     the same `ServerHost` a deployed server drives, so the three claims are
     checked here with no Qt object in the path at all.
     """
-    from qgis_sdk.testing import FakeServerInterface
-
-    interface = FakeServerInterface()
-    answered = interface.serve(
-        HOOKS,
-        ServerRequest(
-            method="GET",
-            url="http://localhost/qgis/qgis_mapserv.fcgi",
-            params={"SERVICE": "WMS", "SDK_DEMO": "1", "MARKER": "pure"},
-        ),
-    )
-
-    assert answered.status == 200
-    assert answered.body == b"marker=pure routed=yes"
-
-    REFUSED.add("secret_layer")
-    try:
-        refused = FakeServerInterface().serve(
-            HOOKS,
-            ServerRequest(
-                method="GET",
-                url="http://localhost/qgis/qgis_mapserv.fcgi",
-                params={"SERVICE": "WMS", "LAYERS": "secret_layer"},
-            ),
-        )
-    finally:
-        REFUSED.discard("secret_layer")
-
-    assert refused.status == 403
+    _s = _CcState(qgis_app=qgis_app)
+    for _p in (
+        _cc_test_the_same_ho_p1,
+        _cc_test_the_same_ho_p2,
+        _cc_test_the_same_ho_p3,
+        _cc_test_the_same_ho_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_a_plugin_answers_a_request_through_a_real_qgis_server(served) -> None:

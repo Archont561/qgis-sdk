@@ -13,37 +13,89 @@ from qgis_sdk.core import PluginContext, ResourceScope
 from qgis_sdk.testing import RecordingNotifications
 
 
-def test_direct_desktop_adapters_accept_applications_and_reject_classes() -> None:
-    app = QgisSdkPlugin(id="example", title="Example")
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
 
-    @app.action(id="double", title="Double")
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_direct_desk_p1(_s):
+    _s.app = QgisSdkPlugin(id="example", title="Example")
+
+    @_s.app.action(id="double", title="Double")
     def double(ctx: PluginContext, value: int) -> int:
         return value * 2
+
+    _s.double = double
 
     def context_factory(iface: object) -> PluginContext:
         scope = ResourceScope()
         return PluginContext(RecordingNotifications(scope), scope)
 
+    _s.context_factory = context_factory
+
+
+def _cc_test_direct_desk_p2(_s):
+
     for factory in (
-        lambda: DesktopLifecycleAdapter(app, None, context_factory=context_factory),
-        lambda: create_class_factory(app, context_factory=context_factory)(None),
+        lambda: DesktopLifecycleAdapter(
+            _s.app, None, context_factory=_s.context_factory
+        ),
+        lambda: create_class_factory(_s.app, context_factory=_s.context_factory)(None),
     ):
-        adapter = factory()
-        adapter.initGui()
+        _s.factory = factory
+        _s.adapter = _s.factory()
+        _s.adapter.initGui()
         try:
-            assert adapter.runtime.actions["double"](21) == 42
+            assert _s.adapter.runtime.actions["double"](21) == 42
         finally:
-            adapter.unload()
+            _s.adapter.unload()
     from qgis_sdk.declarations._plugin import plugin
 
-    @plugin(id="legacy", title="Legacy")
+    _s.plugin = plugin
+
+
+def _cc_test_direct_desk_p3(_s):
+
+    @_s.plugin(id="legacy", title="Legacy")
     class Legacy:
         pass
 
+    _s.Legacy = Legacy
+
     with pytest.raises(QgisSdkDeclarationError, match="QgisSdkPlugin"):
-        DesktopLifecycleAdapter(Legacy, None, context_factory=context_factory)
+        DesktopLifecycleAdapter(_s.Legacy, None, context_factory=_s.context_factory)
     with pytest.raises(QgisSdkDeclarationError, match="QgisSdkPlugin"):
-        create_class_factory(Legacy, context_factory=context_factory)
+        create_class_factory(_s.Legacy, context_factory=_s.context_factory)
+
+
+def test_direct_desktop_adapters_accept_applications_and_reject_classes() -> None:
+    _s = _CcState()
+    for _p in (
+        _cc_test_direct_desk_p1,
+        _cc_test_direct_desk_p2,
+        _cc_test_direct_desk_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 from qgis_sdk_tools.generate import describe_plugin_spec

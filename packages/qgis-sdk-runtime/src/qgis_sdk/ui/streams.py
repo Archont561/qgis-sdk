@@ -29,6 +29,68 @@ from .actions import CALLING_VIEW
 from .form_fields import coerce_values
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_subscribe_p1(_s):
+    _s.described = next(
+        (item for item in _s.self._runtime.description.streams if item.id == _s.stream),
+        None,
+    )
+    if _s.described is None:
+        _s.known = ", ".join(_s.self.ids) or "none"
+        raise QgisSdkUiError(
+            f"{_s.self._runtime.description.id} declares no stream {_s.stream!r}; "
+            f"it has: {_s.known}"
+        )
+    _s.method = _s.self._runtime.streams.get(_s.stream)
+
+
+def _cc_subscribe_p2(_s):
+    if _s.method is None:
+        raise QgisSdkUiError(f"{_s.stream} is not bound: the plugin is not running")
+    if _s.owner is not None:
+        _s.owner.ensure_open()
+    # The same validated path a page's subscribe request takes: unknown
+    # and ill-typed arguments are refused by name before the method runs.
+    try:
+        _s.coerced = coerce_values(_s.described, _s.request)  # type: ignore[arg-type]
+    except QgisSdkFormError as error:
+        _s.error = error
+        raise QgisSdkUiError(f"{_s.stream}: {_s.error}") from _s.error
+    _s.subscription = ViewSubscription(_s.self, _s.stream, _s.callback)
+
+
+def _cc_subscribe_p3(_s):
+    try:
+        _s.source = _s.method(**_s.coerced)
+    except QgisSdkError as error:
+        _s.error = error
+        raise QgisSdkUiError(f"{_s.stream}: {_s.error}") from _s.error
+    return _CcReturn(
+        _subscribe_facts11(_s.owner, _s.self, _s.source, _s.stream, _s.subscription)
+    )
+
+
 def _subscribe_facts11(owner, self, source, stream, subscription):
     if source is not None and not (
         hasattr(source, "__next__") or isinstance(source, PushSource)
@@ -278,33 +340,14 @@ class ViewStreams:
         the view's. An unknown stream is refused by name; what the method
         raises while opening is refused with its message.
         """
-        described = next(
-            (item for item in self._runtime.description.streams if item.id == stream),
-            None,
+        _s = _CcState(
+            self=self, stream=stream, callback=callback, owner=owner, request=request
         )
-        if described is None:
-            known = ", ".join(self.ids) or "none"
-            raise QgisSdkUiError(
-                f"{self._runtime.description.id} declares no stream {stream!r}; "
-                f"it has: {known}"
-            )
-        method = self._runtime.streams.get(stream)
-        if method is None:
-            raise QgisSdkUiError(f"{stream} is not bound: the plugin is not running")
-        if owner is not None:
-            owner.ensure_open()
-        # The same validated path a page's subscribe request takes: unknown
-        # and ill-typed arguments are refused by name before the method runs.
-        try:
-            coerced = coerce_values(described, request)  # type: ignore[arg-type]
-        except QgisSdkFormError as error:
-            raise QgisSdkUiError(f"{stream}: {error}") from error
-        subscription = ViewSubscription(self, stream, callback)
-        try:
-            source = method(**coerced)
-        except QgisSdkError as error:
-            raise QgisSdkUiError(f"{stream}: {error}") from error
-        return _subscribe_facts11(owner, self, source, stream, subscription)
+        for _p in (_cc_subscribe_p1, _cc_subscribe_p2, _cc_subscribe_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def pump(self, limit: int = MAX_FRAMES_PER_PUMP) -> int:
         """Advance every open subscription; returns how many events were delivered."""

@@ -54,6 +54,113 @@ from qgis_sdk.ui.uifile import FakeUiTree, read_ui, ui_names
 from qgis_sdk.ui.wiring import Wire
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_designer__p1(_s):
+    class Missing(Dialog):
+        ui = str(_s.ui_file)
+
+        @on("radius").changed
+        def radius(self, value: float) -> None: ...
+
+        _s.radius = radius
+
+    _s.Missing = Missing
+
+    with pytest.raises(QgisSdkUiError, match="no node named 'radius'"):
+        build_surface(_s.Missing, _s.ctx)
+
+
+def _cc_test_a_designer__p2(_s):
+
+    class WrongSignal(Dialog):
+        ui = str(_s.ui_file)
+
+        @on("note", "valueChanged")
+        def note(self, value: object) -> None: ...
+
+        _s.note = note
+
+    _s.WrongSignal = WrongSignal
+
+    with pytest.raises(QgisSdkUiError, match="has no such signal"):
+        build_surface(_s.WrongSignal, _s.ctx)
+
+    class NoFile(Dialog):
+        ui = "nowhere.ui"
+
+    _s.NoFile = NoFile
+
+
+def _cc_test_a_designer__p3(_s):
+
+    with pytest.raises(QgisSdkUiError, match="does not exist"):
+        _s.NoFile().build()
+
+    class Nothing(Dialog):
+        pass
+
+    _s.Nothing = Nothing
+
+    with pytest.raises(NotImplementedError, match="Designer file"):
+        _s.Nothing().build()
+
+
+_CC_TEXT_1 = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>BufferForm</class>
+ <widget class="QWidget" name="BufferForm">
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QDoubleSpinBox" name="distance"/>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="row">
+     <item>
+      <widget class="QLineEdit" name="note"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="go">
+       <property name="text"><string>Go</string></property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QgsMapLayerComboBox" name="layer"/>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="buttons"/>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
+"""
+
+
 def _a_failing_or_malformed_facts1(heard, runtime):
     assert [(event.stream, event.kind) for event in heard] == [
         ("numbers", "error"),
@@ -439,39 +546,7 @@ def test_subscribe_without_streams_or_an_unknown_stream_is_refused(
 
 # -- a ui= tree under the fake ----------------------------------------------------------
 
-UI_FILE = """\
-<?xml version="1.0" encoding="UTF-8"?>
-<ui version="4.0">
- <class>BufferForm</class>
- <widget class="QWidget" name="BufferForm">
-  <layout class="QVBoxLayout" name="verticalLayout">
-   <item>
-    <widget class="QDoubleSpinBox" name="distance"/>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="row">
-     <item>
-      <widget class="QLineEdit" name="note"/>
-     </item>
-     <item>
-      <widget class="QPushButton" name="go">
-       <property name="text"><string>Go</string></property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QgsMapLayerComboBox" name="layer"/>
-   </item>
-   <item>
-    <widget class="QDialogButtonBox" name="buttons"/>
-   </item>
-  </layout>
- </widget>
- <resources/>
- <connections/>
-</ui>
-"""
+UI_FILE = _CC_TEXT_1
 
 
 @pytest.fixture
@@ -541,35 +616,16 @@ def test_on_wires_to_the_fake_tree_of_a_designer_file(
 def test_a_designer_name_or_signal_that_does_not_exist_is_refused(
     ui_file: Path, ctx: UiContext
 ) -> None:
-    class Missing(Dialog):
-        ui = str(ui_file)
-
-        @on("radius").changed
-        def radius(self, value: float) -> None: ...
-
-    with pytest.raises(QgisSdkUiError, match="no node named 'radius'"):
-        build_surface(Missing, ctx)
-
-    class WrongSignal(Dialog):
-        ui = str(ui_file)
-
-        @on("note", "valueChanged")
-        def note(self, value: object) -> None: ...
-
-    with pytest.raises(QgisSdkUiError, match="has no such signal"):
-        build_surface(WrongSignal, ctx)
-
-    class NoFile(Dialog):
-        ui = "nowhere.ui"
-
-    with pytest.raises(QgisSdkUiError, match="does not exist"):
-        NoFile().build()
-
-    class Nothing(Dialog):
-        pass
-
-    with pytest.raises(NotImplementedError, match="Designer file"):
-        Nothing().build()
+    _s = _CcState(ui_file=ui_file, ctx=ctx)
+    for _p in (
+        _cc_test_a_designer__p1,
+        _cc_test_a_designer__p2,
+        _cc_test_a_designer__p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 # -- the behaviour mixins ---------------------------------------------------------------

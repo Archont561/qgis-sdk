@@ -9,10 +9,100 @@ edit reaching the state, the QGIS widget classes behind the pickers.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_every_layer_p1(_s):
+    for kind in _cc_fresh_1():
+        _s.kind = kind
+        _s.picker = _s.rendering.attach(LayerPicker(f"{_s.kind}_pick", kind=_s.kind))
+        assert isinstance(_s.picker.widget, QgsMapLayerComboBox)
+
+    _s.own = _s.rendering.attach(LayerPicker("annotation_pick", kind="annotation"))
+    _s.own.widget.setLayer(_s.annotation)
+    assert _s.own.value() == _s.annotation.id()
+
+    _s.every = _s.rendering.attach(LayerPicker("every_pick", kind="any"))
+    _s.every.widget.setLayer(_s.annotation)
+    assert _s.every.value() == _s.annotation.id()
+
+
+def _cc_test_every_layer_p2(_s):
+
+    # A vector picker is not offered an annotation layer at all: the filter
+    # is the kind the input asked for, not a label on the same list.
+    _s.foreign = _s.rendering.attach(LayerPicker("vector_pick", kind="vector"))
+    _s.foreign.widget.setLayer(_s.annotation)
+    assert _s.foreign.widget.currentLayer() is None
+
+
+def _cc_test_every_layer_p3(_s):
+    QgsProject.instance().removeMapLayer(_s.annotation.id())
+
+
+def _cc_test_every_layer_p4(_s):
+    from qgis.core import QgsAnnotationLayer
+
+    _s.QgsAnnotationLayer = QgsAnnotationLayer
+
+    _s.annotation = _s.QgsAnnotationLayer(
+        "notes",
+        _s.QgsAnnotationLayer.LayerOptions(QgsProject.instance().transformContext()),
+    )
+    QgsProject.instance().addMapLayer(_s.annotation)
+
+
+def _cc_test_every_layer_p5(_s):
+    try:
+        for _p in (_cc_test_every_layer_p1, _cc_test_every_layer_p2):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    finally:
+        for _p in (_cc_test_every_layer_p3,):
+            _p(_s)
+
+
+_CC_DATA_1 = (
+    "vector",
+    "raster",
+    "mesh",
+    "point_cloud",
+    "vector_tile",
+    "tiled_scene",
+    "any",
+)
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
 
 
 def _native_edits_by_the_facts1(seen):
@@ -117,41 +207,12 @@ def test_every_layer_kind_mounts_and_offers_only_its_own_kind(
     the point cloud, vector tile and tiled scene fixtures are opened through the
     service contract instead, where the provider has to read them.
     """
-    from qgis.core import QgsAnnotationLayer
-
-    annotation = QgsAnnotationLayer(
-        "notes",
-        QgsAnnotationLayer.LayerOptions(QgsProject.instance().transformContext()),
-    )
-    QgsProject.instance().addMapLayer(annotation)
-    try:
-        for kind in (
-            "vector",
-            "raster",
-            "mesh",
-            "point_cloud",
-            "vector_tile",
-            "tiled_scene",
-            "any",
-        ):
-            picker = rendering.attach(LayerPicker(f"{kind}_pick", kind=kind))
-            assert isinstance(picker.widget, QgsMapLayerComboBox)
-
-        own = rendering.attach(LayerPicker("annotation_pick", kind="annotation"))
-        own.widget.setLayer(annotation)
-        assert own.value() == annotation.id()
-
-        every = rendering.attach(LayerPicker("every_pick", kind="any"))
-        every.widget.setLayer(annotation)
-        assert every.value() == annotation.id()
-
-        # A vector picker is not offered an annotation layer at all: the filter
-        # is the kind the input asked for, not a label on the same list.
-        foreign = rendering.attach(LayerPicker("vector_pick", kind="vector"))
-        foreign.widget.setLayer(annotation)
-        assert foreign.widget.currentLayer() is None
-    finally:
-        QgsProject.instance().removeMapLayer(annotation.id())
+    _s = _CcState(rendering=rendering)
+    for _p in (_cc_test_every_layer_p4, _cc_test_every_layer_p5):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_native_pickers_are_the_qgis_widgets(rendering: Rendering) -> None:

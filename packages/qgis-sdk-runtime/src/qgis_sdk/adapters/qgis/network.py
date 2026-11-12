@@ -65,6 +65,77 @@ from qgis_sdk.network.grants import origin_of
 from qgis_sdk.services import Deliver
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_follow_p1(_s):
+    _s.current = _s.reply.url()
+    _s.target = _s.current.resolved(_s.location)
+    _s.target_url = _s.target.toString()
+    if _s.self._hops >= _s.self._request.max_redirects:
+        return _CcReturn(
+            QgisSdkRedirectError(
+                f"more than {_s.self._request.max_redirects} redirects",
+                method=_s.self._method,
+                url=_s.target_url,
+            )
+        )
+
+
+def _cc_follow_p2(_s):
+    if _s.target.scheme().lower() not in ("http", "https"):
+        return _CcReturn(
+            QgisSdkRedirectError(
+                f"redirect to scheme {_s.target.scheme()!r} refused",
+                method=_s.self._method,
+                url=_s.target_url,
+            )
+        )
+    if _s.current.scheme().lower() == "https" and _s.target.scheme().lower() == "http":
+        return _CcReturn(
+            QgisSdkRedirectError(
+                "redirect from https to http refused",
+                method=_s.self._method,
+                url=_s.target_url,
+            )
+        )
+
+
+def _cc_follow_p3(_s):
+    _s.allowed = _s.self._request.allowed_origins
+    if _s.allowed is not None and origin_of(_s.target_url) not in _s.allowed:
+        # The grant that constrained this request named the origins a hop
+        # may reach; a redirect is how a granted origin would otherwise
+        # hand the view's request to one that was not.
+        return _CcReturn(
+            QgisSdkRedirectError(
+                f"redirect to {origin_of(_s.target_url)!r} leaves the granted origins",
+                method=_s.self._method,
+                url=_s.target_url,
+            )
+        )
+    return _CcReturn(_follow_phase2(_s.current, _s.self, _s.status, _s.target_url))
+
+
 def _issue_facts1(reply, self):
     reply.finished.connect(self._on_finished)
     timer = QTimer(reply)
@@ -325,38 +396,12 @@ class __ExchangeMixin2:
     def _follow(
         self, reply: QNetworkReply, status: int, location: QUrl
     ) -> QgisSdkNetworkError | None:
-        current = reply.url()
-        target = current.resolved(location)
-        target_url = target.toString()
-        if self._hops >= self._request.max_redirects:
-            return QgisSdkRedirectError(
-                f"more than {self._request.max_redirects} redirects",
-                method=self._method,
-                url=target_url,
-            )
-        if target.scheme().lower() not in ("http", "https"):
-            return QgisSdkRedirectError(
-                f"redirect to scheme {target.scheme()!r} refused",
-                method=self._method,
-                url=target_url,
-            )
-        if current.scheme().lower() == "https" and target.scheme().lower() == "http":
-            return QgisSdkRedirectError(
-                "redirect from https to http refused",
-                method=self._method,
-                url=target_url,
-            )
-        allowed = self._request.allowed_origins
-        if allowed is not None and origin_of(target_url) not in allowed:
-            # The grant that constrained this request named the origins a hop
-            # may reach; a redirect is how a granted origin would otherwise
-            # hand the view's request to one that was not.
-            return QgisSdkRedirectError(
-                f"redirect to {origin_of(target_url)!r} leaves the granted origins",
-                method=self._method,
-                url=target_url,
-            )
-        return _follow_phase2(current, self, status, target_url)
+        _s = _CcState(self=self, reply=reply, status=status, location=location)
+        for _p in (_cc_follow_p1, _cc_follow_p2, _cc_follow_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def _error(
         self, kind: type[QgisSdkNetworkError], message: str

@@ -25,17 +25,122 @@ from qgis_sdk_tools.bundle import VENDOR_PACKAGE, build_plugin
 from qgis_sdk_tools.devtools import find_qgis_install
 from qgis_sdk_tools.scaffold import ScaffoldOptions, write_scaffold
 
-pytestmark = pytest.mark.desktop
 
-if not os.environ.get("QGIS_SDK_BUILD_INSTALL"):
-    pytest.skip(
-        "set QGIS_SDK_BUILD_INSTALL=1 to install a built ZIP into a real QGIS",
-        allow_module_level=True,
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_two_built_p_p1(_s):
+    _s.install = find_qgis_install(dict(os.environ))
+    assert _s.install.executable is not None, "this harness needs QGIS Desktop"
+    _s.profiles = _s.tmp_path / "profiles-root"
+    _s.plugins_dir = _s.profiles / "profiles" / "build" / "python" / "plugins"
+    _s.plugins_dir.mkdir(parents=True)
+
+
+def _cc_test_two_built_p_p2(_s):
+
+    for name in PLUGINS:
+        _s.name = name
+        _s.root = _s.tmp_path / "src" / _s.name
+        write_scaffold(ScaffoldOptions.resolve(_s.name), _s.root)
+        _s.result = build_plugin(_s.root, run=never_run)
+        with zipfile.ZipFile(_s.result.archive) as _s.zf:
+            assert _s.zf.namelist()[0].startswith(f"{_s.name}/")
+            _s.zf.extractall(_s.plugins_dir)  # what QGIS's "Install from ZIP" does
+        # Stand in for two different SDK versions: mark each vendored copy so
+        # the probe can tell which one a plugin's runtime came from.
+        _s.vendored_init = (
+            _s.plugins_dir / _s.name / VENDOR_PACKAGE / "qgis_sdk" / "__init__.py"
+        )
+        _s.vendored_init.write_text(
+            _s.vendored_init.read_text(encoding="utf-8")
+            + f'\nVENDORED_MARK = "{_s.name}"\n',
+            encoding="utf-8",
+        )
+
+
+def _cc_test_two_built_p_p3(_s):
+
+    _s.probe = _s.tmp_path / "probe.py"
+    _s.probe.write_text(PROBE, encoding="utf-8")
+    compile(PROBE, str(_s.probe), "exec")
+    _s.report_path = _s.tmp_path / "report.json"
+    _s.base = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH"}}
+    _s.env = _s.install.environment(_s.base, headless=True, desktop=True)
+    _s.env["QGIS_SDK_BUILD_REPORT"] = str(_s.report_path)
+    _s.env["QGIS_SDK_BUILD_PLUGINS"] = json.dumps(list(PLUGINS))
+
+
+def _cc_test_two_built_p_p4(_s):
+
+    _s.completed = subprocess.run(
+        [
+            str(_s.install.executable),
+            "--profiles-path",
+            str(_s.profiles),
+            "--profile",
+            "build",
+            "--code",
+            str(_s.probe),
+        ],
+        cwd=_s.tmp_path,
+        env=_s.env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
     )
 
-PLUGINS = ("field_tools", "other_tools")
 
-PROBE = '''"""Start two built plugins in a clean profile with qgis_sdk unavailable."""
+def _cc_test_two_built_p_p5(_s):
+
+    assert _s.report_path.is_file(), _s.completed.stdout + _s.completed.stderr
+    _s.report = json.loads(_s.report_path.read_text(encoding="utf-8"))
+    assert _s.report["error"] is None, _s.report["error"]
+    assert _s.completed.returncode == 0
+    assert _s.report["available"] == sorted(PLUGINS)
+
+
+def _cc_test_two_built_p_p6(_s):
+    for name in PLUGINS:
+        _s.name = name
+        assert _s.report[f"{_s.name}_loaded"] is True
+        assert _s.report[f"{_s.name}_started"] is True
+        assert _s.report[f"{_s.name}_ping"] == 42
+        assert _s.report[f"{_s.name}_description"] == _s.name
+        assert _s.report[f"{_s.name}_action_description"] == "ping"
+        assert _s.report[f"{_s.name}_runtime_module"].startswith(
+            f"{_s.name}.{VENDOR_PACKAGE}.qgis_sdk."
+        )
+        assert _s.report[f"{_s.name}_mark"] == _s.name
+    assert _s.report["distinct_runtime_classes"] is True
+    assert _s.report["sdk_imported"] is False
+
+
+def _cc_test_two_built_p_p7(_s):
+    assert _s.report["unloaded"] == [True, True]
+
+
+_CC_TEXT_1 = '''"""Start two built plugins in a clean profile with qgis_sdk unavailable."""
 
 import json
 import os
@@ -89,6 +194,19 @@ os._exit(0 if report["error"] is None else 1)
 '''
 
 
+pytestmark = pytest.mark.desktop
+
+if not os.environ.get("QGIS_SDK_BUILD_INSTALL"):
+    pytest.skip(
+        "set QGIS_SDK_BUILD_INSTALL=1 to install a built ZIP into a real QGIS",
+        allow_module_level=True,
+    )
+
+PLUGINS = ("field_tools", "other_tools")
+
+PROBE = _CC_TEXT_1
+
+
 def never_run(argv: Sequence[str], cwd: Path) -> int:
     raise AssertionError(f"no process expected, got {argv} in {cwd}")
 
@@ -96,69 +214,17 @@ def never_run(argv: Sequence[str], cwd: Path) -> int:
 def test_two_built_plugins_load_from_their_own_vendored_runtimes(
     tmp_path: Path,
 ) -> None:
-    install = find_qgis_install(dict(os.environ))
-    assert install.executable is not None, "this harness needs QGIS Desktop"
-    profiles = tmp_path / "profiles-root"
-    plugins_dir = profiles / "profiles" / "build" / "python" / "plugins"
-    plugins_dir.mkdir(parents=True)
-
-    for name in PLUGINS:
-        root = tmp_path / "src" / name
-        write_scaffold(ScaffoldOptions.resolve(name), root)
-        result = build_plugin(root, run=never_run)
-        with zipfile.ZipFile(result.archive) as zf:
-            assert zf.namelist()[0].startswith(f"{name}/")
-            zf.extractall(plugins_dir)  # what QGIS's "Install from ZIP" does
-        # Stand in for two different SDK versions: mark each vendored copy so
-        # the probe can tell which one a plugin's runtime came from.
-        vendored_init = plugins_dir / name / VENDOR_PACKAGE / "qgis_sdk" / "__init__.py"
-        vendored_init.write_text(
-            vendored_init.read_text(encoding="utf-8") + f'\nVENDORED_MARK = "{name}"\n',
-            encoding="utf-8",
-        )
-
-    probe = tmp_path / "probe.py"
-    probe.write_text(PROBE, encoding="utf-8")
-    compile(PROBE, str(probe), "exec")
-    report_path = tmp_path / "report.json"
-    base = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH"}}
-    env = install.environment(base, headless=True, desktop=True)
-    env["QGIS_SDK_BUILD_REPORT"] = str(report_path)
-    env["QGIS_SDK_BUILD_PLUGINS"] = json.dumps(list(PLUGINS))
-
-    completed = subprocess.run(
-        [
-            str(install.executable),
-            "--profiles-path",
-            str(profiles),
-            "--profile",
-            "build",
-            "--code",
-            str(probe),
-        ],
-        cwd=tmp_path,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=300,
-    )
-
-    assert report_path.is_file(), completed.stdout + completed.stderr
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert report["error"] is None, report["error"]
-    assert completed.returncode == 0
-    assert report["available"] == sorted(PLUGINS)
-    for name in PLUGINS:
-        assert report[f"{name}_loaded"] is True
-        assert report[f"{name}_started"] is True
-        assert report[f"{name}_ping"] == 42
-        assert report[f"{name}_description"] == name
-        assert report[f"{name}_action_description"] == "ping"
-        assert report[f"{name}_runtime_module"].startswith(
-            f"{name}.{VENDOR_PACKAGE}.qgis_sdk."
-        )
-        assert report[f"{name}_mark"] == name
-    assert report["distinct_runtime_classes"] is True
-    assert report["sdk_imported"] is False
-    assert report["unloaded"] == [True, True]
+    _s = _CcState(tmp_path=tmp_path)
+    for _p in (
+        _cc_test_two_built_p_p1,
+        _cc_test_two_built_p_p2,
+        _cc_test_two_built_p_p3,
+        _cc_test_two_built_p_p4,
+        _cc_test_two_built_p_p5,
+        _cc_test_two_built_p_p6,
+        _cc_test_two_built_p_p7,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

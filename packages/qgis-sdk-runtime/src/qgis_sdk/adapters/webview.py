@@ -26,6 +26,141 @@ from qgis_sdk.core import PluginContext
 from qgis_sdk.environment import dev_server
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_open_view_p1(_s):
+    _s.values = _OpenValues1(**_s.options)
+    from qgis.PyQt.QtCore import Qt, QUrl
+
+    _s.Qt = Qt
+    _s.QUrl = QUrl
+    from qgis.PyQt.QtWebChannel import QWebChannel
+
+    _s.QWebChannel = QWebChannel
+    from qgis.PyQt.QtWidgets import QDialog, QDockWidget, QVBoxLayout
+
+    _s.QDialog = QDialog
+    _s.QDockWidget = QDockWidget
+    _s.QVBoxLayout = QVBoxLayout
+
+    from qgis_sdk.adapters.webchannel import create_channel_object
+
+    _s.create_channel_object = create_channel_object
+    from qgis_sdk.adapters.webengine import (
+        BrowserPolicy,
+        create_restricted_page,
+        create_webengine_view,
+    )
+
+    _s.BrowserPolicy = BrowserPolicy
+    _s.create_restricted_page = create_restricted_page
+    _s.create_webengine_view = create_webengine_view
+
+
+def _cc_open_view_p2(_s):
+
+    if _s.values.placement not in PLACEMENTS:
+        raise ValueError(
+            f"placement must be one of {PLACEMENTS}, got {_s.values.placement!r}"
+        )
+    _s.served_from = dev_server()
+    _s.index = _s.values.assets / "index.html"
+    _s.dispatcher = Dispatcher.from_runtime(
+        _s.runtime,
+        authorize=lambda binding, operation: binding.view_id == _s.values.view_id,
+        theme=palette_theme,
+    )
+
+
+def _cc_open_view_p3(_s):
+    if _s.values.grants:
+        from qgis_sdk.bridge.host import (
+            HostServices,
+            granted_operations,
+            register_host_operations,
+        )
+
+        _s.HostServices = HostServices
+        _s.granted_operations = granted_operations
+        _s.register_host_operations = register_host_operations
+
+        _s.register_host_operations(
+            _s.dispatcher,
+            _s.HostServices.from_context(_s.context),
+            only=_s.granted_operations(tuple(_s.values.grants)),
+        )
+
+
+def _cc_open_view_p4(_s):
+    _s.binding = _s.dispatcher.bind(
+        view_id=_s.values.view_id, origin=_s.served_from or _s.values.assets.as_uri()
+    )
+    _s.policy = _s.BrowserPolicy(
+        origins=() if _s.served_from is None else (_s.served_from,),
+        asset_roots=(_s.values.assets,) if _s.values.assets.is_dir() else (),
+    )
+    _s.view = _s.create_webengine_view()
+    _s.page = _s.create_restricted_page(_s.policy, parent=_s.view)
+    _s.channel = _s.QWebChannel(_s.page)
+
+
+def _cc_open_view_p5(_s):
+    _s.channel.registerObject(
+        CHANNEL_OBJECT,
+        _s.create_channel_object(_s.dispatcher, _s.binding, parent=_s.page),
+    )
+    _s.page.setWebChannel(_s.channel)
+    _s.view.setPage(_s.page)
+
+
+def _cc_open_view_p6(_s):
+    if _s.served_from is not None:
+        _s.page.load(_s.QUrl(_s.served_from + "/"))
+    elif _s.index.is_file():
+        _s.page.load(_s.QUrl.fromLocalFile(str(_s.index)))
+    else:
+        _s.page.setHtml(
+            f"<p>No built page at <code>{_s.index}</code>. "
+            "Run the web build in <code>web/</code> first.</p>"
+        )
+
+    _s.parent = None if _s.iface is None else _s.iface.mainWindow()
+
+
+def _cc_open_view_p7(_s):
+    if _s.values.placement == "dock":
+        _s.dock = _s.QDockWidget(_s.values.title, _s.parent)
+        _s.dock.setObjectName(_s.values.view_id)
+        _s.dock.setWidget(_s.view)
+        if _s.iface is not None:
+            _s.iface.addDockWidget(_s.Qt.DockWidgetArea.RightDockWidgetArea, _s.dock)
+        return _CcReturn(_s.dock)
+    _s.dialog = _s.QDialog(_s.parent)
+    return _CcReturn(
+        _open_view_phase1(_s.QVBoxLayout, _s.dialog, _s.values.title, _s.view)
+    )
+
+
 def _open_view_phase1(QVBoxLayout, dialog, title, view):
     dialog.setWindowTitle(title)
     layout = QVBoxLayout(dialog)
@@ -87,76 +222,20 @@ def open_view(
     the very services ``context`` carries; no grants, no host operation.
     ``assets`` is the directory the built page lives in (``<package>/web``).
     """
-    values = _OpenValues1(**options)
-    from qgis.PyQt.QtCore import Qt, QUrl
-    from qgis.PyQt.QtWebChannel import QWebChannel
-    from qgis.PyQt.QtWidgets import QDialog, QDockWidget, QVBoxLayout
-
-    from qgis_sdk.adapters.webchannel import create_channel_object
-    from qgis_sdk.adapters.webengine import (
-        BrowserPolicy,
-        create_restricted_page,
-        create_webengine_view,
-    )
-
-    if values.placement not in PLACEMENTS:
-        raise ValueError(
-            f"placement must be one of {PLACEMENTS}, got {values.placement!r}"
-        )
-    served_from = dev_server()
-    index = values.assets / "index.html"
-    dispatcher = Dispatcher.from_runtime(
-        runtime,
-        authorize=lambda binding, operation: binding.view_id == values.view_id,
-        theme=palette_theme,
-    )
-    if values.grants:
-        from qgis_sdk.bridge.host import (
-            HostServices,
-            granted_operations,
-            register_host_operations,
-        )
-
-        register_host_operations(
-            dispatcher,
-            HostServices.from_context(context),
-            only=granted_operations(tuple(values.grants)),
-        )
-    binding = dispatcher.bind(
-        view_id=values.view_id, origin=served_from or values.assets.as_uri()
-    )
-    policy = BrowserPolicy(
-        origins=() if served_from is None else (served_from,),
-        asset_roots=(values.assets,) if values.assets.is_dir() else (),
-    )
-    view = create_webengine_view()
-    page = create_restricted_page(policy, parent=view)
-    channel = QWebChannel(page)
-    channel.registerObject(
-        CHANNEL_OBJECT, create_channel_object(dispatcher, binding, parent=page)
-    )
-    page.setWebChannel(channel)
-    view.setPage(page)
-    if served_from is not None:
-        page.load(QUrl(served_from + "/"))
-    elif index.is_file():
-        page.load(QUrl.fromLocalFile(str(index)))
-    else:
-        page.setHtml(
-            f"<p>No built page at <code>{index}</code>. "
-            "Run the web build in <code>web/</code> first.</p>"
-        )
-
-    parent = None if iface is None else iface.mainWindow()
-    if values.placement == "dock":
-        dock = QDockWidget(values.title, parent)
-        dock.setObjectName(values.view_id)
-        dock.setWidget(view)
-        if iface is not None:
-            iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        return dock
-    dialog = QDialog(parent)
-    return _open_view_phase1(QVBoxLayout, dialog, values.title, view)
+    _s = _CcState(runtime=runtime, context=context, iface=iface, options=options)
+    for _p in (
+        _cc_open_view_p1,
+        _cc_open_view_p2,
+        _cc_open_view_p3,
+        _cc_open_view_p4,
+        _cc_open_view_p5,
+        _cc_open_view_p6,
+        _cc_open_view_p7,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def close_view(widget: Any, iface: Any) -> None:

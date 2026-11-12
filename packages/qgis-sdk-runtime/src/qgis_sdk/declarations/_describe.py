@@ -24,6 +24,91 @@ from qgis_sdk.declarations._schemas import (
 )
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_describe_plugin_p1(_s):
+    _s.method = (
+        _s.member.__func__
+        if isinstance(_s.member, (staticmethod, classmethod))
+        else _s.member
+    )
+    if isinstance(_s.member, property):
+        _s.method = _s.member.fget
+    if not inspect.isfunction(_s.method):
+        return _CcContinue()
+    _s.declaration = getattr(_s.method, "__qgis_sdk_action__", None)
+    _s.streamed = getattr(_s.method, "__qgis_sdk_stream__", None)
+    _s.declared = _s.declaration if _s.declaration is not None else _s.streamed
+
+
+def _cc_describe_plugin_p2(_s):
+    if _s.declared is None:
+        return _CcContinue()
+    if _s.declared.id in _s.ids:
+        raise QgisSdkDeclarationError(
+            f"{'stream' if _s.declaration is None else 'action'} {_s.declared.id}: "
+            f"duplicate id at {_s.name}"
+        )
+    _s.ids.add(_s.declared.id)
+    if _s.declaration is not None:
+        _s.actions.append(_describe_action(_s.name, _s.member, _s.declaration))
+    else:
+        _s.streams.append(_describe_stream(_s.name, _s.member, _s.streamed))
+
+
+def _cc_describe_plugin_p3(_s):
+    _s.own = declared_metadata(_s.cls, PLUGIN_ATTRIBUTE, "describe_plugin", "@plugin")
+    _s.members = {}
+    for base in reversed(_s.cls.__mro__):
+        _s.base = base
+        _s.members.update(vars(_s.base))
+    _s.actions: list[ActionDescription] = []
+    _s.streams: list[StreamDescription] = []
+    _s.ids: set[str] = set()
+
+
+def _cc_describe_plugin_p4(_s):
+    for name, member in _s.members.items():
+        _s.name = name
+        _s.member = member
+        _a = None
+        for _p in (_cc_describe_plugin_p1, _cc_describe_plugin_p2):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+            if isinstance(_r, (_CcBreak, _CcContinue)):
+                _a = _r
+                break
+        if isinstance(_a, _CcBreak):
+            break
+        if isinstance(_a, _CcContinue):
+            continue
+
+
+def _cc_describe_plugin_p5(_s):
+    return _CcReturn(_describe_plugin_phase1(_s.actions, _s.own, _s.streams))
+
+
 def _describe_facts1(cls):
     if not (inspect.isclass(cls) or inspect.isfunction(cls)):
         raise QgisSdkDeclarationError(
@@ -160,39 +245,12 @@ def describe_plugin(cls: type) -> PluginDescription:
     Actions and streams share one id namespace (decision-28): the dispatcher
     allowlists both by id, so a duplicate across the two is refused here.
     """
-    own = declared_metadata(cls, PLUGIN_ATTRIBUTE, "describe_plugin", "@plugin")
-    members = {}
-    for base in reversed(cls.__mro__):
-        members.update(vars(base))
-    actions: list[ActionDescription] = []
-    streams: list[StreamDescription] = []
-    ids: set[str] = set()
-    for name, member in members.items():
-        method = (
-            member.__func__
-            if isinstance(member, (staticmethod, classmethod))
-            else member
-        )
-        if isinstance(member, property):
-            method = member.fget
-        if not inspect.isfunction(method):
-            continue
-        declaration = getattr(method, "__qgis_sdk_action__", None)
-        streamed = getattr(method, "__qgis_sdk_stream__", None)
-        declared = declaration if declaration is not None else streamed
-        if declared is None:
-            continue
-        if declared.id in ids:
-            raise QgisSdkDeclarationError(
-                f"{'stream' if declaration is None else 'action'} {declared.id}: "
-                f"duplicate id at {name}"
-            )
-        ids.add(declared.id)
-        if declaration is not None:
-            actions.append(_describe_action(name, member, declaration))
-        else:
-            streams.append(_describe_stream(name, member, streamed))
-    return _describe_plugin_phase1(actions, own, streams)
+    _s = _CcState(cls=cls)
+    for _p in (_cc_describe_plugin_p3, _cc_describe_plugin_p4, _cc_describe_plugin_p5):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _describe_lowered_plugin(cls: type) -> PluginDescription:

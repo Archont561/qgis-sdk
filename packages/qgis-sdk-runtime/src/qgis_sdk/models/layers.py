@@ -40,31 +40,82 @@ from qgis_sdk.models.canvas import (
 )
 
 
-def _post_init___tail2(**values):
-    self = values["self"]
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_post_init___tail_p1(_s):
+    _s.self = _s.values["self"]
     for name in ("data_types", "no_data"):
-        values = getattr(self, name)
-        if len(values) != self.band_count:
+        _s.name = name
+        _s.values = getattr(_s.self, _s.name)
+        if len(_s.values) != _s.self.band_count:
             raise ValueError(
-                f"{name} has one entry per band ({self.band_count}), not {len(values)}"
+                f"{_s.name} has one entry per band ({_s.self.band_count}), not {len(_s.values)}"
             )
-    for data_type in self.data_types:
-        if not isinstance(data_type, str) or not data_type:
+    for data_type in _s.self.data_types:
+        _s.data_type = data_type
+        if not isinstance(_s.data_type, str) or not _s.data_type:
             raise ValueError("a band data type is a nonempty string")
-    for value in self.no_data:
-        if value is not None and not _is_number(value):
+
+
+def _cc_post_init___tail_p2(_s):
+    for value in _s.self.no_data:
+        _s.value = value
+        if _s.value is not None and not _is_number(_s.value):
             raise ValueError("a no-data value is a finite number or None")
-    if len(self.resolution) != 2:
+    if len(_s.self.resolution) != 2:
         raise ValueError("resolution is (x, y)")
-    for value in self.resolution:
-        if not _is_number(value) or value <= 0:
+
+
+def _cc_post_init___tail_p3(_s):
+    for value in _s.self.resolution:
+        _s.value = value
+        if not _is_number(_s.value) or _s.value <= 0:
             raise ValueError("a pixel size is a finite positive number")
-    if self.extent.crs is not None:
+    if _s.self.extent.crs is not None:
         raise ValueError(
             "a raster extent carries no CRS of its own; the raster names it"
         )
-    if self.crs is not None and (not isinstance(self.crs, str) or not self.crs):
+
+
+def _cc_post_init___tail_p4(_s):
+    if _s.self.crs is not None and (
+        not isinstance(_s.self.crs, str) or not _s.self.crs
+    ):
         raise ValueError("crs is a nonempty string or None")
+
+
+def _post_init___tail2(**values):
+    _s = _CcState(values=values)
+    for _p in (
+        _cc_post_init___tail_p1,
+        _cc_post_init___tail_p2,
+        _cc_post_init___tail_p3,
+        _cc_post_init___tail_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _post_init___tail1(**values):

@@ -59,6 +59,72 @@ from .layers import NativeLayers
 from .rasters import NativeRasters
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_connect_p1(_s):
+    if _s.self._connected:
+        return _CcReturn(None)
+    _s.self._connected = True
+    _s.self._connect_signal(
+        _s.self._project,
+        "crsChanged",
+        lambda *_: _s.self._notify("crs", from_signal=True),
+    )
+
+
+def _cc_connect_p2(_s):
+    _s.self._connect_signal(
+        _s.self._project,
+        "customVariablesChanged",
+        lambda *_: _s.self._notify("variables", from_signal=True),
+    )
+
+
+def _cc_connect_p3(_s):
+    # QGIS reports a layer entering or leaving the project on the project
+    # itself (``layerWasAdded``/``layerWillBeRemoved``); the registry
+    # bridge's own pair is spelled differently from one build to the next.
+    for name in ("layerWasAdded", "layersAdded", "layerAdded"):
+        _s.name = name
+        if _s.self._connect_signal(
+            _s.self._project,
+            _s.name,
+            lambda *_: _s.self._notify("layers", from_signal=True),
+        ):
+            break
+
+
+def _cc_connect_p4(_s):
+    for name in ("layerWillBeRemoved", "layersWillBeRemoved", "layerRemoved"):
+        _s.name = name
+        if _s.self._connect_signal(
+            _s.self._project,
+            _s.name,
+            lambda *_: _s.self._notify("layers", from_signal=True),
+        ):
+            break
+
+
 def _write_facts1(destination, partial):
     if not partial.is_file():
         raise QgisSdkProjectFileError(str(destination), "the writer produced no file")
@@ -375,36 +441,12 @@ class _NativeProjectMixin2:
 
     def _connect(self) -> None:
         """Hook QGIS's own signals once, mapping each to the kind it means."""
-        if self._connected:
-            return
-        self._connected = True
-        self._connect_signal(
-            self._project,
-            "crsChanged",
-            lambda *_: self._notify("crs", from_signal=True),
-        )
-        self._connect_signal(
-            self._project,
-            "customVariablesChanged",
-            lambda *_: self._notify("variables", from_signal=True),
-        )
-        # QGIS reports a layer entering or leaving the project on the project
-        # itself (``layerWasAdded``/``layerWillBeRemoved``); the registry
-        # bridge's own pair is spelled differently from one build to the next.
-        for name in ("layerWasAdded", "layersAdded", "layerAdded"):
-            if self._connect_signal(
-                self._project,
-                name,
-                lambda *_: self._notify("layers", from_signal=True),
-            ):
-                break
-        for name in ("layerWillBeRemoved", "layersWillBeRemoved", "layerRemoved"):
-            if self._connect_signal(
-                self._project,
-                name,
-                lambda *_: self._notify("layers", from_signal=True),
-            ):
-                break
+        _s = _CcState(self=self)
+        for _p in (_cc_connect_p1, _cc_connect_p2, _cc_connect_p3, _cc_connect_p4):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     @staticmethod
     def _connect_signal(source: Any, name: str, handler: Any) -> bool:

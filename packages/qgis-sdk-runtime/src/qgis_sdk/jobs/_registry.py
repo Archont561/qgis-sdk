@@ -25,6 +25,100 @@ from typing import Any
 from qgis_sdk.declarations import QgisSdkDeclarationError, derive_id
 from qgis_sdk.jobs._authoring import _JOB_ATTRIBUTE, JobDescription, describe_job
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_from_declaration_p1(_s):
+    if _s.declaration is None:
+        return _CcReturn(_s.cls.empty(_s.path))
+
+
+def _cc_from_declaration_p2(_s):
+    if isinstance(_s.declaration, Mapping):
+        _s.pairs = list(_s.declaration.items())
+    elif isinstance(_s.declaration, Sequence) and not isinstance(
+        _s.declaration, str | bytes
+    ):
+        _s.pairs = [(None, function) for function in _s.declaration]
+    else:
+        raise QgisSdkDeclarationError(
+            f"{_s.path}: jobs must be a mapping of names to @job functions "
+            f'(`jobs = {{"add": add}}`) or a sequence of @job functions '
+            f"(`jobs = (add, count)`) - neither `{type(_s.declaration).__name__}`"
+        )
+
+
+def _cc_from_declaration_p3(_s):
+    _s.name = _name_of(_s.given, _s.function, _s.position, _s.path)
+    _refuse_reserved(_s.name, _s.path)
+    _s.description = _describe(_s.name, _s.given, _s.function, _s.position, _s.path)
+    if _s.name in _s.entries:
+        raise QgisSdkDeclarationError(
+            f"{_s.path}: two jobs are named {_s.name!r}; give them explicit "
+            'keys (`jobs = {"first": one, "second": two}`)'
+        )
+    _s.other = _s.ids.get(_s.description.id)
+
+
+def _cc_from_declaration_p4(_s):
+    if _s.other is not None:
+        raise QgisSdkDeclarationError(
+            f"{_s.path}: jobs {_s.other!r} and {_s.name!r} declare the same id "
+            f"{_s.description.id!r}; a job id has to stay unique across a "
+            "plugin's registry"
+        )
+    _s.entries[_s.name] = (_s.function, _s.description)
+    _s.ids[_s.description.id] = _s.name
+
+
+def _cc_from_declaration_p5(_s):
+    _s.entries: dict[str, tuple[Callable[..., Any], JobDescription]] = {}
+    _s.ids: dict[str, str] = {}
+
+
+def _cc_from_declaration_p6(_s):
+    for position, (given, function) in enumerate(_s.pairs):
+        _s.position = position
+        _s.given = given
+        _s.function = function
+        _a = None
+        for _p in (_cc_from_declaration_p3, _cc_from_declaration_p4):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+            if isinstance(_r, (_CcBreak, _CcContinue)):
+                _a = _r
+                break
+        if isinstance(_a, _CcBreak):
+            break
+        if isinstance(_a, _CcContinue):
+            continue
+
+
+def _cc_from_declaration_p7(_s):
+    return _CcReturn(_s.cls(_s.entries, _s.path))
+
+
 __all__ = ["RESERVED_JOB_NAMES", "JobRegistry"]
 
 #: Names a job may not take: they are what ``ctx.jobs`` itself reads, so a job
@@ -89,41 +183,18 @@ class JobRegistry:
         suffix that would make ``ctx.jobs.count_features_3f2a91`` the only way
         to reach a job.
         """
-        if declaration is None:
-            return cls.empty(path)
-        if isinstance(declaration, Mapping):
-            pairs = list(declaration.items())
-        elif isinstance(declaration, Sequence) and not isinstance(
-            declaration, str | bytes
+        _s = _CcState(cls=cls, declaration=declaration, path=path)
+        for _p in (
+            _cc_from_declaration_p1,
+            _cc_from_declaration_p2,
+            _cc_from_declaration_p5,
+            _cc_from_declaration_p6,
+            _cc_from_declaration_p7,
         ):
-            pairs = [(None, function) for function in declaration]
-        else:
-            raise QgisSdkDeclarationError(
-                f"{path}: jobs must be a mapping of names to @job functions "
-                f'(`jobs = {{"add": add}}`) or a sequence of @job functions '
-                f"(`jobs = (add, count)`) - neither `{type(declaration).__name__}`"
-            )
-        entries: dict[str, tuple[Callable[..., Any], JobDescription]] = {}
-        ids: dict[str, str] = {}
-        for position, (given, function) in enumerate(pairs):
-            name = _name_of(given, function, position, path)
-            _refuse_reserved(name, path)
-            description = _describe(name, given, function, position, path)
-            if name in entries:
-                raise QgisSdkDeclarationError(
-                    f"{path}: two jobs are named {name!r}; give them explicit "
-                    'keys (`jobs = {"first": one, "second": two}`)'
-                )
-            other = ids.get(description.id)
-            if other is not None:
-                raise QgisSdkDeclarationError(
-                    f"{path}: jobs {other!r} and {name!r} declare the same id "
-                    f"{description.id!r}; a job id has to stay unique across a "
-                    "plugin's registry"
-                )
-            entries[name] = (function, description)
-            ids[description.id] = name
-        return cls(entries, path)
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     # -- reading
 

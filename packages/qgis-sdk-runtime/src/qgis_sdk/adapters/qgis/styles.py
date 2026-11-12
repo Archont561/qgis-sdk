@@ -82,6 +82,153 @@ from qgis_sdk.resources import require_style, style_path
 
 from .layers import NativeLayers
 
+
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_build_renderer_p1(_s1):
+    if isinstance(_s1.renderer, SingleSymbolRenderer):
+        return _CcReturn1(QgsSingleSymbolRenderer(_build_symbol(_s1.renderer.symbol)))
+    if isinstance(_s1.renderer, CategorizedRenderer):
+        return _CcReturn1(
+            QgsCategorizedSymbolRenderer(
+                _s1.renderer.field,
+                [
+                    QgsRendererCategory(
+                        category.value, _build_symbol(category.symbol), category.label
+                    )
+                    for category in _s1.renderer.categories
+                ],
+            )
+        )
+
+
+def _cc_build_renderer_p2(_s1):
+    if isinstance(_s1.renderer, GraduatedRenderer):
+        _s1.built = QgsGraduatedSymbolRenderer(
+            _s1.renderer.field,
+            [
+                QgsRendererRange(
+                    band.lower, band.upper, _build_symbol(band.symbol), band.label
+                )
+                for band in _s1.renderer.classes
+            ],
+        )
+        _s1.built.setClassificationMethod(_CLASSIFICATION_METHODS[_s1.renderer.mode]())
+        return _CcReturn1(_s1.built)
+
+
+def _cc_build_renderer_p3(_s1):
+    _s1.root = QgsRuleBasedRenderer.Rule(None)
+    for rule in _s1.renderer.rules:
+        _s1.rule = rule
+        _s1.child = QgsRuleBasedRenderer.Rule(
+            _build_symbol(_s1.rule.symbol), 0, 0, _s1.rule.filter, _s1.rule.label
+        )
+        _s1.child.setActive(_s1.rule.enabled)
+        _s1.root.appendChild(_s1.child)
+    return _CcReturn1(QgsRuleBasedRenderer(_s1.root))
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_describe_rendere_p1(_s):
+    if isinstance(_s.renderer, QgsSingleSymbolRenderer):
+        return _CcReturn(
+            SingleSymbolRenderer(symbol=_describe_symbol(_s.renderer.symbol()))
+        )
+
+
+def _cc_describe_rendere_p2(_s):
+    if isinstance(_s.renderer, QgsCategorizedSymbolRenderer):
+        return _CcReturn(
+            CategorizedRenderer(
+                field=_s.renderer.classAttribute(),
+                categories=tuple(
+                    Category(
+                        value=str(category.value()),
+                        label=category.label(),
+                        symbol=_describe_symbol(category.symbol()),
+                    )
+                    for category in _s.renderer.categories()
+                ),
+            )
+        )
+
+
+def _cc_describe_rendere_p3(_s):
+    if isinstance(_s.renderer, QgsGraduatedSymbolRenderer):
+        return _CcReturn(
+            GraduatedRenderer(
+                field=_s.renderer.classAttribute(),
+                mode=_classification_mode(_s.renderer),
+                classes=tuple(
+                    GraduatedClass(
+                        lower=band.lowerValue(),
+                        upper=band.upperValue(),
+                        label=band.label(),
+                        symbol=_describe_symbol(band.symbol()),
+                    )
+                    for band in _s.renderer.ranges()
+                ),
+            )
+        )
+
+
+def _cc_describe_rendere_p4(_s):
+    if isinstance(_s.renderer, QgsRuleBasedRenderer):
+        return _CcReturn(
+            RuleBasedRenderer(
+                rules=tuple(
+                    _describe_rule(rule) for rule in _s.renderer.rootRule().children()
+                )
+            )
+        )
+    raise QgisSdkUnsupportedCapabilityError(
+        "symbology",
+        f"{type(_s.renderer).__name__} is not a renderer this SDK describes",
+    )
+
+
 __all__ = ["NativeStyles"]
 
 #: Our graduated mode name -> the classification method a renderer is given.
@@ -283,41 +430,17 @@ def _load_style(layer: QgsVectorLayer, path: Path, format: str) -> tuple[str, bo
 
 def _describe_renderer(renderer: QgsFeatureRenderer) -> Renderer:
     """Translate a PyQGIS renderer into the curated description."""
-    if isinstance(renderer, QgsSingleSymbolRenderer):
-        return SingleSymbolRenderer(symbol=_describe_symbol(renderer.symbol()))
-    if isinstance(renderer, QgsCategorizedSymbolRenderer):
-        return CategorizedRenderer(
-            field=renderer.classAttribute(),
-            categories=tuple(
-                Category(
-                    value=str(category.value()),
-                    label=category.label(),
-                    symbol=_describe_symbol(category.symbol()),
-                )
-                for category in renderer.categories()
-            ),
-        )
-    if isinstance(renderer, QgsGraduatedSymbolRenderer):
-        return GraduatedRenderer(
-            field=renderer.classAttribute(),
-            mode=_classification_mode(renderer),
-            classes=tuple(
-                GraduatedClass(
-                    lower=band.lowerValue(),
-                    upper=band.upperValue(),
-                    label=band.label(),
-                    symbol=_describe_symbol(band.symbol()),
-                )
-                for band in renderer.ranges()
-            ),
-        )
-    if isinstance(renderer, QgsRuleBasedRenderer):
-        return RuleBasedRenderer(
-            rules=tuple(_describe_rule(rule) for rule in renderer.rootRule().children())
-        )
-    raise QgisSdkUnsupportedCapabilityError(
-        "symbology", f"{type(renderer).__name__} is not a renderer this SDK describes"
-    )
+    _s = _CcState(renderer=renderer)
+    for _p in (
+        _cc_describe_rendere_p1,
+        _cc_describe_rendere_p2,
+        _cc_describe_rendere_p3,
+        _cc_describe_rendere_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _classification_mode(renderer: QgsGraduatedSymbolRenderer) -> str:
@@ -402,38 +525,12 @@ def _stroke_width(properties: dict) -> float:
 
 def _build_renderer(renderer: Renderer) -> QgsFeatureRenderer:
     """Build the PyQGIS renderer a description asks for."""
-    if isinstance(renderer, SingleSymbolRenderer):
-        return QgsSingleSymbolRenderer(_build_symbol(renderer.symbol))
-    if isinstance(renderer, CategorizedRenderer):
-        return QgsCategorizedSymbolRenderer(
-            renderer.field,
-            [
-                QgsRendererCategory(
-                    category.value, _build_symbol(category.symbol), category.label
-                )
-                for category in renderer.categories
-            ],
-        )
-    if isinstance(renderer, GraduatedRenderer):
-        built = QgsGraduatedSymbolRenderer(
-            renderer.field,
-            [
-                QgsRendererRange(
-                    band.lower, band.upper, _build_symbol(band.symbol), band.label
-                )
-                for band in renderer.classes
-            ],
-        )
-        built.setClassificationMethod(_CLASSIFICATION_METHODS[renderer.mode]())
-        return built
-    root = QgsRuleBasedRenderer.Rule(None)
-    for rule in renderer.rules:
-        child = QgsRuleBasedRenderer.Rule(
-            _build_symbol(rule.symbol), 0, 0, rule.filter, rule.label
-        )
-        child.setActive(rule.enabled)
-        root.appendChild(child)
-    return QgsRuleBasedRenderer(root)
+    _s1 = _CcState1(renderer=renderer)
+    for _p1 in (_cc_build_renderer_p1, _cc_build_renderer_p2, _cc_build_renderer_p3):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 def _build_symbol(symbol: Symbol) -> QgsSymbol:

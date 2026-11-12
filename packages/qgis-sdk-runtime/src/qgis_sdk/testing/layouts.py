@@ -22,6 +22,7 @@ native adapter runs - so a refusal here is the refusal a caller hears there.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,19 @@ from qgis_sdk.services.layouts import (
     page_path,
     stop_if_cancelled,
 )
+
+_CC_DATA_1 = [
+    (
+        "the layout has no atlas; an atlas needs a coverage layer, "
+        "which no backend can add for a caller"
+    )
+]
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
+
 
 __all__ = ["FakeLayouts"]
 
@@ -208,12 +222,7 @@ class _FakeBackend:
         if feature_ids is None:
             raise QgisSdkExportRefusedError(
                 request.layout,
-                [
-                    (
-                        "the layout has no atlas; an atlas needs a coverage layer, "
-                        "which no backend can add for a caller"
-                    )
-                ],
+                _cc_fresh_1(),
             )
         written: list[tuple[int, int | None, Path]] = []
         total = len(feature_ids)

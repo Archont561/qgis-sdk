@@ -31,6 +31,186 @@ from pathlib import Path
 from smoke_support.desktop_lifecycle_smoke import headless_environment, qgis_python_path
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_run_services_p1(_s):
+    from PyQt6.QtCore import QT_VERSION_STR
+
+    _s.QT_VERSION_STR = QT_VERSION_STR
+    from qgis.core import Qgis, QgsApplication, QgsProject, QgsSettings
+
+    _s.Qgis = Qgis
+    _s.QgsApplication = QgsApplication
+    _s.QgsProject = QgsProject
+    _s.QgsSettings = QgsSettings
+
+    _s.QgsApplication.setPrefixPath(str(_s.prefix), True)
+    _s.application = _s.QgsApplication([b"qgis-sdk-native-services-smoke"], True)
+    _s.application.initQgis()
+
+
+def _cc_run_services_p2(_s):
+
+    from qgis_sdk.adapters.qgis import (
+        NativeLayers,
+        NativeNotifications,
+        NativeProject,
+        NativeSettings,
+        NativeStyles,
+    )
+
+    _s.NativeLayers = NativeLayers
+    _s.NativeNotifications = NativeNotifications
+    _s.NativeProject = NativeProject
+    _s.NativeSettings = NativeSettings
+    _s.NativeStyles = NativeStyles
+    from qgis_sdk.core import ResourceScope
+
+    _s.ResourceScope = ResourceScope
+    from qgis_sdk.models import QgisSdkScopeClosedError, QgisSdkStyleIncompatibleError
+
+    _s.QgisSdkScopeClosedError = QgisSdkScopeClosedError
+    _s.QgisSdkStyleIncompatibleError = QgisSdkStyleIncompatibleError
+
+    _s.QgsProject.instance().removeAllMapLayers()
+
+
+def _cc_run_services_p3(_s):
+    _s.scope = _s.ResourceScope()
+    _s.layers = _s.NativeLayers(_s.scope)
+    _s.project = _s.NativeProject(_s.layers, _s.scope)
+    _s.settings = _s.NativeSettings(_s.scope, prefix=SETTINGS_PREFIX)
+    _s.styles = _s.NativeStyles(_s.layers, _s.scope)
+    _s.delivered: list[tuple[str, str]] = []
+    _s.notifications = _s.NativeNotifications(
+        _s.scope, sink=lambda n: _s.delivered.append((n.level, n.message))
+    )
+
+
+def _cc_run_services_p4(_s):
+    # The default sink writes to the QGIS message log, which QGIS swallows from
+    # Python's stdout, so this run proves it executes at every level without
+    # raising rather than claiming to read the log back.
+    _s.log = _s.NativeNotifications(_s.scope)
+    _s.log.info("default message-log sink")
+    _s.log.with_action("Retry", "retry").warning("default message-log sink, levelled")
+
+    _s.info = _s.layers.open_vector(FIXTURE_DATASET)
+    _s.project.add_layer(_s.info.id)
+    # A selection is a host action; the contract only reads one (decision-19).
+    _s.QgsProject.instance().mapLayer(_s.info.id).selectByIds(list(SELECTED_FEATURES))
+    _s.selection = tuple(sorted(_s.layers.selection(_s.info.id)))
+
+
+def _cc_run_services_p5(_s):
+    _s.project_layer_ids = _s.project.layer_ids()
+
+    _s.theme_before = _theme_snapshot()
+    _s.styles.apply_style(_s.info.id, COMPATIBLE_STYLE)
+    _s.renderer = _s.QgsProject.instance().mapLayer(_s.info.id).renderer()
+    _s.style_applied = _s.renderer is not None and _s.renderer.type() == "singleSymbol"
+    try:
+        _s.styles.apply_style(_s.info.id, INCOMPATIBLE_STYLE)
+    except _s.QgisSdkStyleIncompatibleError:
+        _s.style_refused = True
+    else:
+        _s.style_refused = False
+
+
+def _cc_run_services_p6(_s):
+    _s.theme_unchanged = _theme_snapshot() == _s.theme_before
+
+    _s.settings.set(SETTINGS_KEY, SETTINGS_VALUE)
+    _s.settings_round_trip = _s.settings.get(SETTINGS_KEY) == SETTINGS_VALUE
+    _s.notifications.info(NOTIFICATION)
+    _s.notifications.success(NOTIFICATION)
+    _s.notification_delivered = _s.delivered == [
+        ("info", NOTIFICATION),
+        ("success", NOTIFICATION),
+    ]
+
+    _s.scope.close()
+
+
+def _cc_run_services_p7(_s):
+    try:
+        _s.layers.list_layers()
+    except _s.QgisSdkScopeClosedError:
+        _s.refused = True
+    else:
+        _s.refused = False
+    try:
+        _s.settings.set(SETTINGS_KEY, "after-close")
+    except _s.QgisSdkScopeClosedError:
+        _s.settings_refused = True
+    else:
+        _s.settings_refused = False
+
+
+def _cc_run_services_p8(_s):
+    try:
+        _s.notifications.info("after-close")
+    except _s.QgisSdkScopeClosedError:
+        _s.notification_refused = True
+    else:
+        _s.notification_refused = False
+    _s.scope.close()  # repeated close must stay a no-op
+
+    _s.QgsSettings().remove(SETTINGS_PREFIX)
+    _s.QgsProject.instance().removeAllMapLayers()
+    _s.application.exitQgis()
+
+
+def _cc_run_services_p9(_s):
+
+    return _CcReturn(
+        NativeServicesReport(
+            platform=platform.platform(),
+            python_version=platform.python_version(),
+            qgis_version=_s.Qgis.QGIS_VERSION,
+            qt_version=_s.QT_VERSION_STR,
+            qgis_initialised=True,
+            layer_opened=True,
+            layer_name=_s.info.name,
+            layer_geometry_type=_s.info.geometry_type,
+            layer_field_names=_s.info.field_names,
+            layer_crs=_s.info.crs,
+            selection=_s.selection,
+            project_layer_ids=_s.project_layer_ids,
+            scope_closed=_s.scope.closed,
+            reads_refused_after_close=_s.refused,
+            settings_round_trip=_s.settings_round_trip,
+            settings_refused_after_close=_s.settings_refused,
+            notification_delivered=_s.notification_delivered,
+            notification_refused_after_close=_s.notification_refused,
+            style_applied=_s.style_applied,
+            style_incompatible_refused=_s.style_refused,
+            theme_unchanged=_s.theme_unchanged,
+            qgis_exited=True,
+        )
+    )
+
+
 def _unavailable_facts1(cls, error):
     return cls(
         platform=platform.platform(),
@@ -197,114 +377,19 @@ def _theme_snapshot() -> tuple[object, ...]:
 
 def _run_services(prefix: Path) -> NativeServicesReport:
     """Drive one native services run inside a real headless QgsApplication."""
-    from PyQt6.QtCore import QT_VERSION_STR
-    from qgis.core import Qgis, QgsApplication, QgsProject, QgsSettings
-
-    QgsApplication.setPrefixPath(str(prefix), True)
-    application = QgsApplication([b"qgis-sdk-native-services-smoke"], True)
-    application.initQgis()
-
-    from qgis_sdk.adapters.qgis import (
-        NativeLayers,
-        NativeNotifications,
-        NativeProject,
-        NativeSettings,
-        NativeStyles,
-    )
-    from qgis_sdk.core import ResourceScope
-    from qgis_sdk.models import QgisSdkScopeClosedError, QgisSdkStyleIncompatibleError
-
-    QgsProject.instance().removeAllMapLayers()
-    scope = ResourceScope()
-    layers = NativeLayers(scope)
-    project = NativeProject(layers, scope)
-    settings = NativeSettings(scope, prefix=SETTINGS_PREFIX)
-    styles = NativeStyles(layers, scope)
-    delivered: list[tuple[str, str]] = []
-    notifications = NativeNotifications(
-        scope, sink=lambda n: delivered.append((n.level, n.message))
-    )
-    # The default sink writes to the QGIS message log, which QGIS swallows from
-    # Python's stdout, so this run proves it executes at every level without
-    # raising rather than claiming to read the log back.
-    log = NativeNotifications(scope)
-    log.info("default message-log sink")
-    log.with_action("Retry", "retry").warning("default message-log sink, levelled")
-
-    info = layers.open_vector(FIXTURE_DATASET)
-    project.add_layer(info.id)
-    # A selection is a host action; the contract only reads one (decision-19).
-    QgsProject.instance().mapLayer(info.id).selectByIds(list(SELECTED_FEATURES))
-    selection = tuple(sorted(layers.selection(info.id)))
-    project_layer_ids = project.layer_ids()
-
-    theme_before = _theme_snapshot()
-    styles.apply_style(info.id, COMPATIBLE_STYLE)
-    renderer = QgsProject.instance().mapLayer(info.id).renderer()
-    style_applied = renderer is not None and renderer.type() == "singleSymbol"
-    try:
-        styles.apply_style(info.id, INCOMPATIBLE_STYLE)
-    except QgisSdkStyleIncompatibleError:
-        style_refused = True
-    else:
-        style_refused = False
-    theme_unchanged = _theme_snapshot() == theme_before
-
-    settings.set(SETTINGS_KEY, SETTINGS_VALUE)
-    settings_round_trip = settings.get(SETTINGS_KEY) == SETTINGS_VALUE
-    notifications.info(NOTIFICATION)
-    notifications.success(NOTIFICATION)
-    notification_delivered = delivered == [
-        ("info", NOTIFICATION),
-        ("success", NOTIFICATION),
-    ]
-
-    scope.close()
-    try:
-        layers.list_layers()
-    except QgisSdkScopeClosedError:
-        refused = True
-    else:
-        refused = False
-    try:
-        settings.set(SETTINGS_KEY, "after-close")
-    except QgisSdkScopeClosedError:
-        settings_refused = True
-    else:
-        settings_refused = False
-    try:
-        notifications.info("after-close")
-    except QgisSdkScopeClosedError:
-        notification_refused = True
-    else:
-        notification_refused = False
-    scope.close()  # repeated close must stay a no-op
-
-    QgsSettings().remove(SETTINGS_PREFIX)
-    QgsProject.instance().removeAllMapLayers()
-    application.exitQgis()
-
-    return NativeServicesReport(
-        platform=platform.platform(),
-        python_version=platform.python_version(),
-        qgis_version=Qgis.QGIS_VERSION,
-        qt_version=QT_VERSION_STR,
-        qgis_initialised=True,
-        layer_opened=True,
-        layer_name=info.name,
-        layer_geometry_type=info.geometry_type,
-        layer_field_names=info.field_names,
-        layer_crs=info.crs,
-        selection=selection,
-        project_layer_ids=project_layer_ids,
-        scope_closed=scope.closed,
-        reads_refused_after_close=refused,
-        settings_round_trip=settings_round_trip,
-        settings_refused_after_close=settings_refused,
-        notification_delivered=notification_delivered,
-        notification_refused_after_close=notification_refused,
-        style_applied=style_applied,
-        style_incompatible_refused=style_refused,
-        theme_unchanged=theme_unchanged,
-        qgis_exited=True,
-    )
+    _s = _CcState(prefix=prefix)
+    for _p in (
+        _cc_run_services_p1,
+        _cc_run_services_p2,
+        _cc_run_services_p3,
+        _cc_run_services_p4,
+        _cc_run_services_p5,
+        _cc_run_services_p6,
+        _cc_run_services_p7,
+        _cc_run_services_p8,
+        _cc_run_services_p9,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

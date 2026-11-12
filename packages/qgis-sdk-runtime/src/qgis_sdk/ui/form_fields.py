@@ -29,6 +29,67 @@ from qgis_sdk.declarations import WIRE_KIND_KEYWORD, ActionDescription
 from qgis_sdk.models import COLOUR_PATTERN, FileRef, QgisSdkFormError, parameter_kinds
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_number_p1(_s):
+    if isinstance(_s.value, bool):
+        raise _refuse(_s.owner, _s.spec, "a number")
+    if _s.spec.widget == "range":
+        _s.number = _number(_s.owner, _as_number(_s.spec), _s.value)
+        _s.low, _s.high = _s.spec.details.get("minimum"), _s.spec.details.get("maximum")
+        if (
+            _s.low is not None
+            and _s.high is not None
+            and not (_s.low <= _s.number <= _s.high)
+        ):
+            raise _refuse(_s.owner, _s.spec, f"a number between {_s.low} and {_s.high}")
+        return _CcReturn(_s.number)
+
+
+def _cc_number_p2(_s):
+    if _s.spec.widget == "integer":
+        if isinstance(_s.value, int):
+            return _CcReturn(_s.value)
+        if isinstance(_s.value, str) and _s.value.strip().lstrip("+-").isdigit():
+            return _CcReturn(int(_s.value.strip()))
+        raise _refuse(_s.owner, _s.spec, "an integer")
+
+
+def _cc_number_p3(_s):
+    if isinstance(_s.value, (int, float)):
+        _s.number = float(_s.value)
+    elif isinstance(_s.value, str):
+        try:
+            _s.number = float(_s.value.strip())
+        except ValueError:
+            raise _refuse(_s.owner, _s.spec, "a number") from None
+    else:
+        raise _refuse(_s.owner, _s.spec, "a number")
+    if _s.spec.widget == "metres" and _s.number < 0:
+        raise _refuse(_s.owner, _s.spec, "a distance of 0 or more metres")
+    return _CcReturn(_s.number)
+
+
 def _field_tail1(**values):
     concrete = values["concrete"]
     intent = values["intent"]
@@ -528,32 +589,12 @@ def _ref(owner: str, spec: FieldSpec, value: object) -> FileRef:
 
 def _number(owner: str, spec: FieldSpec, value: object) -> object:
     """Coerce a numeric field, keeping ``int`` and ``float`` distinct."""
-    if isinstance(value, bool):
-        raise _refuse(owner, spec, "a number")
-    if spec.widget == "range":
-        number = _number(owner, _as_number(spec), value)
-        low, high = spec.details.get("minimum"), spec.details.get("maximum")
-        if low is not None and high is not None and not (low <= number <= high):
-            raise _refuse(owner, spec, f"a number between {low} and {high}")
-        return number
-    if spec.widget == "integer":
-        if isinstance(value, int):
-            return value
-        if isinstance(value, str) and value.strip().lstrip("+-").isdigit():
-            return int(value.strip())
-        raise _refuse(owner, spec, "an integer")
-    if isinstance(value, (int, float)):
-        number = float(value)
-    elif isinstance(value, str):
-        try:
-            number = float(value.strip())
-        except ValueError:
-            raise _refuse(owner, spec, "a number") from None
-    else:
-        raise _refuse(owner, spec, "a number")
-    if spec.widget == "metres" and number < 0:
-        raise _refuse(owner, spec, "a distance of 0 or more metres")
-    return number
+    _s = _CcState(owner=owner, spec=spec, value=value)
+    for _p in (_cc_number_p1, _cc_number_p2, _cc_number_p3):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _as_number(spec: FieldSpec) -> FieldSpec:

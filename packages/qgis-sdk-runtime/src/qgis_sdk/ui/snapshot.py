@@ -26,6 +26,68 @@ from qgis_sdk.models import QgisSdkUiError
 from .components import Component
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_surface_node_p1(_s):
+    _s.name = _object_name(_s.widget)
+    _s.role = _role(_s.widget)
+    _s.node_id = _s.name or f"#{_s.path}"
+    _s.findings = _unnamed_findings(_s.widget, _s.role, _s.node_id)
+    _s.x, _s.y = _position(_s.widget, _s.surface)
+
+
+def _cc_surface_node_p2(_s):
+    _s.node: dict[str, Any] = {
+        "id": _s.node_id,
+        "role": _s.role,
+        "type": type(_s.widget).__name__,
+        "value": _value(_s.widget, _s.role),
+        "label": _s.labels.get(id(_s.widget)),
+        "state": {
+            "enabled": bool(_call(_s.widget, "isEnabled", True)),
+            "visible": bool(_call(_s.widget, "isVisible", True)),
+            "focus": bool(_call(_s.widget, "hasFocus", False)),
+        },
+        "geometry": {
+            "x": _s.x,
+            "y": _s.y,
+            "width": int(_call(_s.widget, "width", 0)),
+            "height": int(_call(_s.widget, "height", 0)),
+        },
+        "declared": _declared(_s.name, _s.fields),
+    }
+
+
+def _cc_surface_node_p3(_s):
+    _s.children, _s.child_findings = _surface_nodes(
+        _s.widget, _s.surface, _s.labels, _s.fields, parent=_s.path
+    )
+    if _s.children:
+        _s.node["children"] = _s.children
+    _s.findings.extend(_s.child_findings)
+    return _CcReturn((_s.node, _s.findings))
+
+
 def _surface_snapshot_facts112345678(**values):
     return _surface_snapshot_facts11234567(
         findings=values["findings"],
@@ -397,37 +459,14 @@ def _surface_node(
     fields: Sequence[str],
     path: str,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    name = _object_name(widget)
-    role = _role(widget)
-    node_id = name or f"#{path}"
-    findings = _unnamed_findings(widget, role, node_id)
-    x, y = _position(widget, surface)
-    node: dict[str, Any] = {
-        "id": node_id,
-        "role": role,
-        "type": type(widget).__name__,
-        "value": _value(widget, role),
-        "label": labels.get(id(widget)),
-        "state": {
-            "enabled": bool(_call(widget, "isEnabled", True)),
-            "visible": bool(_call(widget, "isVisible", True)),
-            "focus": bool(_call(widget, "hasFocus", False)),
-        },
-        "geometry": {
-            "x": x,
-            "y": y,
-            "width": int(_call(widget, "width", 0)),
-            "height": int(_call(widget, "height", 0)),
-        },
-        "declared": _declared(name, fields),
-    }
-    children, child_findings = _surface_nodes(
-        widget, surface, labels, fields, parent=path
+    _s = _CcState(
+        widget=widget, surface=surface, labels=labels, fields=fields, path=path
     )
-    if children:
-        node["children"] = children
-    findings.extend(child_findings)
-    return node, findings
+    for _p in (_cc_surface_node_p1, _cc_surface_node_p2, _cc_surface_node_p3):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _unnamed_findings(widget: Any, role: str, node_id: str) -> list[dict[str, Any]]:

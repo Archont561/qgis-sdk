@@ -35,6 +35,127 @@ from .errors import QgisSdkAlgorithmNotFoundError, QgisSdkAlgorithmRejectedError
 from .files import FileRef
 from .layers import RasterLayerInfo, VectorLayerInfo
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_validate_paramet_p1(_s):
+    _s.reasons.append(f"{_s.parameter.name} must be a boolean")
+
+
+def _cc_validate_paramet_p2(_s):
+    _s.reasons.append(f"{_s.parameter.name} must be a number")
+
+
+def _cc_validate_paramet_p3(_s):
+    _s.choices = (
+        _s.value if _s.parameter.multiple and isinstance(_s.value, list) else [_s.value]
+    )
+
+
+def _cc_validate_paramet_p4(_s):
+    for choice in _s.choices:
+        _s.choice = choice
+        _s.valid = (
+            isinstance(_s.choice, int)
+            and not isinstance(_s.choice, bool)
+            and 0 <= _s.choice < len(_s.parameter.options)
+        ) or (isinstance(_s.choice, str) and _s.choice in _s.parameter.options)
+        if not _s.valid:
+            _s.reasons.append(
+                f"{_s.parameter.name} must be one of "
+                f"{', '.join(_s.parameter.options)} (or its index)"
+            )
+            break
+
+
+def _cc_validate_paramet_p5(_s):
+    _s.value = _s.params.get(_s.parameter.name)
+    if _s.value is None:
+        # Absent and explicit None are the same thing: not given.
+        if _s.parameter.required:
+            _s.reasons.append(f"{_s.parameter.name} is required")
+        return _CcContinue()
+    _s.kind = _s.parameter.kind
+
+
+_CC_KIND_CHECKS = (
+    (
+        lambda state: state.kind == "boolean" and not isinstance(state.value, bool),
+        (_cc_validate_paramet_p1,),
+    ),
+    (
+        lambda state: state.kind in _NUMBER_KINDS and not _is_number(state.value),
+        (_cc_validate_paramet_p2,),
+    ),
+    (
+        lambda state: state.kind == "enum" and state.parameter.options,
+        (_cc_validate_paramet_p3, _cc_validate_paramet_p4),
+    ),
+)
+
+
+def _cc_validate_paramet_p6(_s):
+    """Run the checker for the value's kind, chosen from a dispatch table."""
+    for matches, phases in _CC_KIND_CHECKS:
+        if matches(_s):
+            for phase in phases:
+                result = phase(_s)
+                if isinstance(result, _CcReturn):
+                    return result
+            break
+    return None
+
+
+def _cc_validate_paramet_p7(_s):
+    _s.reasons: list[str] = []
+    for name in _s.params:
+        _s.name = name
+        if _s.info.parameter(_s.name) is None:
+            _s.reasons.append(f"{_s.name} is not a parameter of {_s.info.id}")
+
+
+def _cc_validate_paramet_p8(_s):
+    for parameter in _s.info.parameters:
+        _s.parameter = parameter
+        _a = None
+        for _p in (_cc_validate_paramet_p5, _cc_validate_paramet_p6):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+            if isinstance(_r, (_CcBreak, _CcContinue)):
+                _a = _r
+                break
+        if isinstance(_a, _CcBreak):
+            break
+        if isinstance(_a, _CcContinue):
+            continue
+
+
+def _cc_validate_paramet_p9(_s):
+    if _s.reasons:
+        raise QgisSdkAlgorithmRejectedError(_s.info.id, _s.reasons)
+
+
 __all__ = [
     "DESTINATION_KINDS",
     "LAYER_KINDS",
@@ -528,40 +649,16 @@ def validate_parameters(info: AlgorithmInfo, params: Mapping[str, object]) -> No
     missing required inputs, numbers, booleans and enum choices. Layer and
     file existence are the backend's to check.
     """
-    reasons: list[str] = []
-    for name in params:
-        if info.parameter(name) is None:
-            reasons.append(f"{name} is not a parameter of {info.id}")
-    for parameter in info.parameters:
-        value = params.get(parameter.name)
-        if value is None:
-            # Absent and explicit None are the same thing: not given.
-            if parameter.required:
-                reasons.append(f"{parameter.name} is required")
-            continue
-        kind = parameter.kind
-        if kind == "boolean" and not isinstance(value, bool):
-            reasons.append(f"{parameter.name} must be a boolean")
-        elif kind in _NUMBER_KINDS and not _is_number(value):
-            reasons.append(f"{parameter.name} must be a number")
-        elif kind == "enum" and parameter.options:
-            choices = (
-                value if parameter.multiple and isinstance(value, list) else [value]
-            )
-            for choice in choices:
-                valid = (
-                    isinstance(choice, int)
-                    and not isinstance(choice, bool)
-                    and 0 <= choice < len(parameter.options)
-                ) or (isinstance(choice, str) and choice in parameter.options)
-                if not valid:
-                    reasons.append(
-                        f"{parameter.name} must be one of "
-                        f"{', '.join(parameter.options)} (or its index)"
-                    )
-                    break
-    if reasons:
-        raise QgisSdkAlgorithmRejectedError(info.id, reasons)
+    _s = _CcState(**locals())
+    for _p in (
+        _cc_validate_paramet_p7,
+        _cc_validate_paramet_p8,
+        _cc_validate_paramet_p9,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 @dataclass(frozen=True, slots=True)

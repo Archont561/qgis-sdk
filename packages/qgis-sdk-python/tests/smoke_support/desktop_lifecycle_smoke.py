@@ -21,6 +21,132 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_run_lifecycle_p1(_s):
+    from PyQt6.QtCore import QT_VERSION_STR
+
+    _s.QT_VERSION_STR = QT_VERSION_STR
+    from qgis.core import Qgis, QgsApplication
+
+    _s.Qgis = Qgis
+    _s.QgsApplication = QgsApplication
+
+    _s.QgsApplication.setPrefixPath(str(_s.prefix), True)
+    _s.application = _s.QgsApplication([b"qgis-sdk-lifecycle-smoke"], True)
+    _s.application.initQgis()
+
+    from qgis_sdk import QgisSdkPlugin
+
+    _s.QgisSdkPlugin = QgisSdkPlugin
+    from qgis_sdk.adapters.desktop import DesktopLifecycleAdapter
+
+    _s.DesktopLifecycleAdapter = DesktopLifecycleAdapter
+    from qgis_sdk.core import ResourceScope
+
+    _s.ResourceScope = ResourceScope
+
+    _s.released: list[str] = []
+
+
+def _cc_run_lifecycle_p2(_s):
+
+    class Notifications:
+        def info(self, message: str) -> None:
+            del message
+
+        _s.info = info
+
+    _s.Notifications = Notifications
+
+    _s.app = _s.QgisSdkPlugin(
+        id="qualification.lifecycle", title="Lifecycle qualification"
+    )
+
+    @_s.app.action(id="ping", title="Ping")
+    def ping(ctx: PluginContext, value: int) -> int:
+        return value
+
+    _s.ping = ping
+
+
+def _cc_run_lifecycle_p3(_s):
+
+    def context_factory(iface: object) -> PluginContext:
+        del iface  # a real Desktop iface is not available in this harness
+        scope = _s.ResourceScope()
+        for name in ("action", "signal", "dock", "work"):
+            _s.name = name
+            scope.on_close(lambda name=name: _s.released.append(name))
+        return PluginContext(_s.Notifications(), scope)
+
+    _s.context_factory = context_factory
+
+    _s.qgis_initialised = True
+
+
+def _cc_run_lifecycle_p4(_s):
+    try:
+        _s.adapter = _s.DesktopLifecycleAdapter(
+            _s.app, iface=None, context_factory=_s.context_factory
+        )
+        _s.adapter.initGui()
+        _s.plugin_started = _s.adapter.runtime.state.value == "running"
+        _s.action_names = tuple(sorted(_s.adapter.runtime.actions))
+        _s.action_result = _s.adapter.runtime.actions["ping"](PING_VALUE)
+        _s.adapter.unload()
+        _s.adapter.unload()
+        _s.plugin_unloaded = _s.adapter.runtime.state.value == "stopped"
+        _s.owned_resources_released = _s.released == [
+            "work",
+            "dock",
+            "signal",
+            "action",
+        ]
+    finally:
+        _s.application.exitQgis()
+
+
+def _cc_run_lifecycle_p5(_s):
+
+    return _CcReturn(
+        LifecycleReport(
+            platform=platform.platform(),
+            python_version=platform.python_version(),
+            qgis_version=_s.Qgis.QGIS_VERSION,
+            qt_version=_s.QT_VERSION_STR,
+            qgis_initialised=_s.qgis_initialised,
+            plugin_started=_s.plugin_started,
+            action_names=_s.action_names,
+            action_result=_s.action_result,
+            plugin_unloaded=_s.plugin_unloaded,
+            owned_resources_released=_s.owned_resources_released,
+            qgis_exited=True,
+        )
+    )
+
+
 HEADLESS_PLATFORM = "offscreen"
 PING_VALUE = 7
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -139,62 +265,15 @@ def run_smoke(prefix: Path | None = None) -> LifecycleReport:
 
 def _run_lifecycle(prefix: Path) -> LifecycleReport:
     """Run one plugin lifecycle inside a real headless QgsApplication."""
-    from PyQt6.QtCore import QT_VERSION_STR
-    from qgis.core import Qgis, QgsApplication
-
-    QgsApplication.setPrefixPath(str(prefix), True)
-    application = QgsApplication([b"qgis-sdk-lifecycle-smoke"], True)
-    application.initQgis()
-
-    from qgis_sdk import QgisSdkPlugin
-    from qgis_sdk.adapters.desktop import DesktopLifecycleAdapter
-    from qgis_sdk.core import ResourceScope
-
-    released: list[str] = []
-
-    class Notifications:
-        def info(self, message: str) -> None:
-            del message
-
-    app = QgisSdkPlugin(id="qualification.lifecycle", title="Lifecycle qualification")
-
-    @app.action(id="ping", title="Ping")
-    def ping(ctx: PluginContext, value: int) -> int:
-        return value
-
-    def context_factory(iface: object) -> PluginContext:
-        del iface  # a real Desktop iface is not available in this harness
-        scope = ResourceScope()
-        for name in ("action", "signal", "dock", "work"):
-            scope.on_close(lambda name=name: released.append(name))
-        return PluginContext(Notifications(), scope)
-
-    qgis_initialised = True
-    try:
-        adapter = DesktopLifecycleAdapter(
-            app, iface=None, context_factory=context_factory
-        )
-        adapter.initGui()
-        plugin_started = adapter.runtime.state.value == "running"
-        action_names = tuple(sorted(adapter.runtime.actions))
-        action_result = adapter.runtime.actions["ping"](PING_VALUE)
-        adapter.unload()
-        adapter.unload()
-        plugin_unloaded = adapter.runtime.state.value == "stopped"
-        owned_resources_released = released == ["work", "dock", "signal", "action"]
-    finally:
-        application.exitQgis()
-
-    return LifecycleReport(
-        platform=platform.platform(),
-        python_version=platform.python_version(),
-        qgis_version=Qgis.QGIS_VERSION,
-        qt_version=QT_VERSION_STR,
-        qgis_initialised=qgis_initialised,
-        plugin_started=plugin_started,
-        action_names=action_names,
-        action_result=action_result,
-        plugin_unloaded=plugin_unloaded,
-        owned_resources_released=owned_resources_released,
-        qgis_exited=True,
-    )
+    _s = _CcState(prefix=prefix)
+    for _p in (
+        _cc_run_lifecycle_p1,
+        _cc_run_lifecycle_p2,
+        _cc_run_lifecycle_p3,
+        _cc_run_lifecycle_p4,
+        _cc_run_lifecycle_p5,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

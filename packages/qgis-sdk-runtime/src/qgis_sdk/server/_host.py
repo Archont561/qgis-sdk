@@ -32,6 +32,61 @@ from ._hooks import HookDeclaration, ServerHooks
 from ._request import ServerRequest
 from ._response import ServerResponse
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_serve_p1(_s):
+    _s.rewritten = _s.self.rewrite(_s.context, _s.request, _s.response)
+    if isinstance(_s.rewritten, ServerResponse):
+        return _CcReturn(_s.rewritten)
+    _s.denied = _s.self.denied_layer(_s.context, _s.rewritten)
+    if _s.denied is not None:
+        return _CcReturn(_s.denied)
+    _s.service = _s.self.service_for(_s.rewritten)
+
+
+def _cc_serve_p2(_s):
+    if _s.service is not None:
+        _s.answer = _s.service(_s.context, _s.rewritten)
+        if not isinstance(_s.answer, ServerResponse):
+            raise QgisSdkUnsupportedCapabilityError(
+                f"@server.service `{_s.service.__name__}` returned "
+                f"{type(_s.answer).__name__}; a service answers with a "
+                "ServerResponse"
+            )
+        return _CcReturn(_s.answer)
+
+
+def _cc_serve_p3(_s):
+    return _CcReturn(
+        _s.response.write_text(
+            f"SERVICE {_s.rewritten.param('SERVICE') or '(missing)'!r} is not served "
+            "by this plugin",
+            status=400,
+        )
+    )
+
+
 __all__ = ["ServerHost", "ServerInterface"]
 
 
@@ -155,27 +210,12 @@ class _ServerHostMixin1:
         three different moments of one request - has to run the same steps one
         at a time and in this order, not a second implementation of them.
         """
-        rewritten = self.rewrite(context, request, response)
-        if isinstance(rewritten, ServerResponse):
-            return rewritten
-        denied = self.denied_layer(context, rewritten)
-        if denied is not None:
-            return denied
-        service = self.service_for(rewritten)
-        if service is not None:
-            answer = service(context, rewritten)
-            if not isinstance(answer, ServerResponse):
-                raise QgisSdkUnsupportedCapabilityError(
-                    f"@server.service `{service.__name__}` returned "
-                    f"{type(answer).__name__}; a service answers with a "
-                    "ServerResponse"
-                )
-            return answer
-        return response.write_text(
-            f"SERVICE {rewritten.param('SERVICE') or '(missing)'!r} is not served "
-            "by this plugin",
-            status=400,
-        )
+        _s = _CcState(self=self, context=context, request=request, response=response)
+        for _p in (_cc_serve_p1, _cc_serve_p2, _cc_serve_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def rewrite(
         self,

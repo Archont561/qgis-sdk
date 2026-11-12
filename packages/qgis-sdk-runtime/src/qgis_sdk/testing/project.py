@@ -42,6 +42,77 @@ from qgis_sdk.models.errors import QgisSdkInvalidRequestError
 from qgis_sdk.services import Layers, ProjectChanged, ProjectWatchCanceller
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_read_p1(_s):
+    _s.self._scope.ensure_open()
+    _s.source = Path(_s.source)
+    try:
+        _s.document = json.loads(_s.source.read_text(encoding="utf-8"))
+    except OSError as error:
+        _s.error = error
+        raise QgisSdkProjectFileError(str(_s.source), str(_s.error)) from _s.error
+    except ValueError as error:
+        _s.error = error
+        raise QgisSdkProjectFileError(
+            str(_s.source), f"not JSON: {_s.error}"
+        ) from _s.error
+    if not isinstance(_s.document, Mapping) or _s.document.get("format") != FORMAT:
+        raise QgisSdkProjectFileError(
+            str(_s.source), "this is not a project this backend can read"
+        )
+
+
+def _cc_read_p2(_s):
+    try:
+        _s.tree = LayerTree.from_wire(_s.document["tree"])
+        _s.variables = [
+            ProjectEntry.from_wire(item) for item in _s.document["variables"]
+        ]
+        _s.properties = [
+            ProjectEntry.from_wire(item) for item in _s.document["properties"]
+        ]
+        _s.bookmarks = [Bookmark.from_wire(item) for item in _s.document["bookmarks"]]
+    except (KeyError, TypeError, ValueError) as error:
+        _s.error = error
+        raise QgisSdkProjectFileError(str(_s.source), str(_s.error)) from _s.error
+    _s.self._nodes = list(_s.tree.nodes)
+    _s.self._crs = _s.document.get("crs")
+
+
+def _cc_read_p3(_s):
+    return _CcReturn(
+        _read_facts11234567891011121314151617(
+            bookmarks=_s.bookmarks,
+            properties=_s.properties,
+            self=_s.self,
+            source=_s.source,
+            tree=_s.tree,
+            variables=_s.variables,
+        )
+    )
+
+
 def _read_facts11234567891011121314151617(**values):
     return _read_facts112345678910111213141516(
         bookmarks=values["bookmarks"],
@@ -426,37 +497,12 @@ class _FakeProjectMixin2:
 
     def read(self, source: Path) -> LayerTree:
         """Replace this project with the one in ``source``."""
-        self._scope.ensure_open()
-        source = Path(source)
-        try:
-            document = json.loads(source.read_text(encoding="utf-8"))
-        except OSError as error:
-            raise QgisSdkProjectFileError(str(source), str(error)) from error
-        except ValueError as error:
-            raise QgisSdkProjectFileError(str(source), f"not JSON: {error}") from error
-        if not isinstance(document, Mapping) or document.get("format") != FORMAT:
-            raise QgisSdkProjectFileError(
-                str(source), "this is not a project this backend can read"
-            )
-        try:
-            tree = LayerTree.from_wire(document["tree"])
-            variables = [ProjectEntry.from_wire(item) for item in document["variables"]]
-            properties = [
-                ProjectEntry.from_wire(item) for item in document["properties"]
-            ]
-            bookmarks = [Bookmark.from_wire(item) for item in document["bookmarks"]]
-        except (KeyError, TypeError, ValueError) as error:
-            raise QgisSdkProjectFileError(str(source), str(error)) from error
-        self._nodes = list(tree.nodes)
-        self._crs = document.get("crs")
-        return _read_facts11234567891011121314151617(
-            bookmarks=bookmarks,
-            properties=properties,
-            self=self,
-            source=source,
-            tree=tree,
-            variables=variables,
-        )
+        _s = _CcState(self=self, source=source)
+        for _p in (_cc_read_p1, _cc_read_p2, _cc_read_p3):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def write(self, destination: Path, *, overwrite: bool = False) -> ProjectFile:
         """Write the project document to ``destination``, refusing silently replaced files."""

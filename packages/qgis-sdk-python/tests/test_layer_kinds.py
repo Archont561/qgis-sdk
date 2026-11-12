@@ -55,58 +55,159 @@ from qgis_sdk.testing import (
 from qgis_sdk.ui.components import LayerPicker
 
 
-def _test_a_picker_narrows_tail1(**values):
-    kind = values["kind"]
-    layers = values["layers"]
-    scope = values["scope"]
-    vector = layers.open_vector(POINTS)
-    mesh = layers.open_mesh(MESH)
-    cloud = layers.open_point_cloud(POINT_CLOUD)
-    opened = {"mesh": mesh, "point_cloud": cloud}
-    # Every picker of a new kind lists the layer of that kind and no other; the
-    # two kinds no declaration opens in this module list nothing, which is the
-    # answer a project holding none of them gives.
-    picker = LayerPicker(kind, kind=kind)  # type: ignore[arg-type]
-    picker.attach(_PickerContext(layers, scope))  # type: ignore[arg-type]
-    listing = [option.id for option in picker.options()]
-    every = LayerPicker("any", kind="any")
-    every.attach(_PickerContext(layers, scope))  # type: ignore[arg-type]
-    listed_by_any = {option.id for option in every.options()}
-    scope.close()
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
 
-    assert listing == ([opened[kind].id] if kind in opened else [])
-    assert {opened["mesh"].id, opened["point_cloud"].id, vector.id} <= listed_by_any
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
 
 
-def _test_every_open_is_tail1(**values):
-    authority = values["authority"]
-    binding = values["binding"]
-    detail = values["detail"]
-    dispatcher = values["dispatcher"]
-    layers = values["layers"]
-    scope = values["scope"]
-    tmp_path = values["tmp_path"]
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_every_open__p1(_s1):
+    _s1.dataset = _grantable(_s1.tmp_path, _s1.source)
+    _declare_at(_s1.layers, _s1.dataset, _s1.kind, **_s1.detail[_s1.kind])
+    _s1.ref = _s1.authority.grant_file(
+        _s1.binding, _s1.dataset, FilePolicy(source="picker")
+    )
+    _s1.answered = _s1.dispatcher.dispatch(
+        _s1.binding,
+        {
+            "protocol": BRIDGE_PROTOCOL_VERSION,
+            "call_id": "call",
+            "operation": f"layers.open_{_s1.kind}",
+            "payload": {"file": _s1.ref.to_wire()},
+        },
+    )
+
+
+def _cc_test_every_open__p2(_s1):
+    assert _s1.answered["ok"] is True, _s1.answered
+    assert _s1.answered["value"]["kind"] == _s1.kind
+
+
+def _cc_test_every_open__p3(_s1):
+    _s1.authority = _s1.values["authority"]
+    _s1.binding = _s1.values["binding"]
+    _s1.detail = _s1.values["detail"]
+    _s1.dispatcher = _s1.values["dispatcher"]
+    _s1.layers = _s1.values["layers"]
+    _s1.scope = _s1.values["scope"]
+    _s1.tmp_path = _s1.values["tmp_path"]
+
+
+def _cc_test_every_open__p4(_s1):
     for kind, source in (
         ("point_cloud", POINT_CLOUD),
         ("vector_tile", VECTOR_TILES),
         ("tiled_scene", TILED_SCENE),
     ):
-        dataset = _grantable(tmp_path, source)
-        _declare_at(layers, dataset, kind, **detail[kind])
-        ref = authority.grant_file(binding, dataset, FilePolicy(source="picker"))
-        answered = dispatcher.dispatch(
-            binding,
-            {
-                "protocol": BRIDGE_PROTOCOL_VERSION,
-                "call_id": "call",
-                "operation": f"layers.open_{kind}",
-                "payload": {"file": ref.to_wire()},
-            },
-        )
-        assert answered["ok"] is True, answered
-        assert answered["value"]["kind"] == kind
+        _s1.kind = kind
+        _s1.source = source
+        _a1 = None
+        for _p1 in (_cc_test_every_open__p1, _cc_test_every_open__p2):
+            _r1 = _p1(_s1)
+            if isinstance(_r1, _CcReturn1):
+                return _r1
+            if isinstance(_r1, (_CcBreak1, _CcContinue1)):
+                _a1 = _r1
+                break
+        if isinstance(_a1, _CcBreak1):
+            break
+        if isinstance(_a1, _CcContinue1):
+            continue
 
-    scope.close()
+
+def _cc_test_every_open__p5(_s1):
+
+    _s1.scope.close()
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_picker_na_p1(_s):
+    _s.kind = _s.values["kind"]
+    _s.layers = _s.values["layers"]
+    _s.scope = _s.values["scope"]
+    _s.vector = _s.layers.open_vector(POINTS)
+    _s.mesh = _s.layers.open_mesh(MESH)
+    _s.cloud = _s.layers.open_point_cloud(POINT_CLOUD)
+    _s.opened = {"mesh": _s.mesh, "point_cloud": _s.cloud}
+    # Every picker of a new kind lists the layer of that kind and no other; the
+    # two kinds no declaration opens in this module list nothing, which is the
+    # answer a project holding none of them gives.
+    _s.picker = LayerPicker(_s.kind, kind=_s.kind)  # type: ignore[arg-type]
+    _s.picker.attach(_PickerContext(_s.layers, _s.scope))  # type: ignore[arg-type]
+
+
+def _cc_test_a_picker_na_p2(_s):
+    _s.listing = [option.id for option in _s.picker.options()]
+    _s.every = LayerPicker("any", kind="any")
+    _s.every.attach(_PickerContext(_s.layers, _s.scope))  # type: ignore[arg-type]
+    _s.listed_by_any = {option.id for option in _s.every.options()}
+    _s.scope.close()
+
+    assert _s.listing == ([_s.opened[_s.kind].id] if _s.kind in _s.opened else [])
+    assert {
+        _s.opened["mesh"].id,
+        _s.opened["point_cloud"].id,
+        _s.vector.id,
+    } <= _s.listed_by_any
+
+
+def _test_a_picker_narrows_tail1(**values):
+    _s = _CcState(values=values)
+    for _p in (_cc_test_a_picker_na_p1, _cc_test_a_picker_na_p2):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
+
+
+def _test_every_open_is_tail1(**values):
+    _s1 = _CcState1(values=values)
+    for _p1 in (
+        _cc_test_every_open__p3,
+        _cc_test_every_open__p4,
+        _cc_test_every_open__p5,
+    ):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 def _declare_every_kind_facts11(layers):

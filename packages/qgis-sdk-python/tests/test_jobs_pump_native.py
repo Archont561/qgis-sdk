@@ -15,6 +15,80 @@ from dataclasses import dataclass
 
 import pytest
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_started_p_p1(_s):
+    from qgis_sdk import QgisSdkPlugin
+
+    _s.QgisSdkPlugin = QgisSdkPlugin
+
+    _s.scope = ResourceScope()
+    _s.context = PluginContext(
+        RecordingNotifications(_s.scope),
+        _s.scope,
+        PluginServices(workers=QgsTaskWorkers(_s.scope)),
+    )
+    _s.software = _s.QgisSdkPlugin(id="native.hosted", title="Native hosted")
+    _s.software.jobs = (read,)
+
+
+def _cc_test_a_started_p_p2(_s):
+
+    @_s.software.action(id="read", title="Read")
+    def read_action(ctx: PluginContext, value: int) -> JobHandle:
+        return ctx.jobs.read.delay(value=value)
+
+    _s.read_action = read_action
+
+    _s.runtime = PluginRuntime(app=_s.software, context=_s.context)
+    _s.runtime.start()
+    _s.pump = QgsJobPump(_s.runtime.jobs)
+    _s.seen: list[Reading] = []
+
+
+def _cc_test_a_started_p_p3(_s):
+    try:
+        assert _s.runtime.context.has("jobs")
+        _s.handle = _s.runtime.actions["read"](value=13)
+        _s.runtime.context.jobs.watch(
+            _s.handle, on_progress=lambda _: None, on_success=_s.seen.append
+        )
+
+        _s.pump.start()
+        spin(_s.app, lambda: _s.handle.status.settled)
+    finally:
+        _s.pump.stop()
+        _s.runtime.unload()
+
+
+def _cc_test_a_started_p_p4(_s):
+
+    assert _s.handle.status is JobStatus.SUCCEEDED
+    assert _s.seen == [Reading(13, _s.seen[0].thread)]
+    assert _s.scope.closed is True
+
+
 pytestmark = pytest.mark.qgis
 
 try:
@@ -142,41 +216,17 @@ def test_nothing_reaches_the_task_manager_until_something_ticks(
 
 
 def test_a_started_plugin_exposes_its_declared_jobs(app) -> None:
-    from qgis_sdk import QgisSdkPlugin
-
-    scope = ResourceScope()
-    context = PluginContext(
-        RecordingNotifications(scope),
-        scope,
-        PluginServices(workers=QgsTaskWorkers(scope)),
-    )
-    software = QgisSdkPlugin(id="native.hosted", title="Native hosted")
-    software.jobs = (read,)
-
-    @software.action(id="read", title="Read")
-    def read_action(ctx: PluginContext, value: int) -> JobHandle:
-        return ctx.jobs.read.delay(value=value)
-
-    runtime = PluginRuntime(app=software, context=context)
-    runtime.start()
-    pump = QgsJobPump(runtime.jobs)
-    seen: list[Reading] = []
-    try:
-        assert runtime.context.has("jobs")
-        handle = runtime.actions["read"](value=13)
-        runtime.context.jobs.watch(
-            handle, on_progress=lambda _: None, on_success=seen.append
-        )
-
-        pump.start()
-        spin(app, lambda: handle.status.settled)
-    finally:
-        pump.stop()
-        runtime.unload()
-
-    assert handle.status is JobStatus.SUCCEEDED
-    assert seen == [Reading(13, seen[0].thread)]
-    assert scope.closed is True
+    _s = _CcState(app=app)
+    for _p in (
+        _cc_test_a_started_p_p1,
+        _cc_test_a_started_p_p2,
+        _cc_test_a_started_p_p3,
+        _cc_test_a_started_p_p4,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_the_desktop_adapter_arms_the_pump_when_it_starts_and_stops_it_on_unload(

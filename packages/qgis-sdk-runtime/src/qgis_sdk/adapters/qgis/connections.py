@@ -61,6 +61,80 @@ from qgis_sdk.models import (
     VectorLayerInfo,
 )
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_open_layer_p1(_s):
+    _s.connection = _s.self._require(_s.provider, _s.name)
+    _s.schemas = _s.self._catalog(_s.connection, _s.provider, _s.name)
+
+
+def _cc_open_layer_p2(_s):
+    try:
+        _s.property = _s.connection.table(_s.schema or "", _s.item)
+    except QgsProviderConnectionException as error:
+        _s.error = error
+        # No table answers: a schema name passed as the item is refused as
+        # what it is, not as a typo - the same rule the fake applies.
+        if not _s.schema and _s.item in _s.schemas:
+            raise QgisSdkUnsupportedCapabilityError(
+                "connections.open_layer",
+                "a schema is browsed, not opened",
+            ) from _s.error
+        raise QgisSdkConnectionItemNotFoundError(
+            _s.name, _s.schema or "", _s.item
+        ) from _s.error
+
+
+def _cc_open_layer_p3(_s):
+    if _item_kind(_s.property.flags()) == "raster":
+        raise QgisSdkUnsupportedCapabilityError(
+            "connections.open_layer",
+            "a raster table is opened by its raster provider, not "
+            "described as a vector layer",
+        )
+    _s.layer_provider = _LAYER_PROVIDERS.get(_s.provider)
+    if _s.layer_provider is None:
+        raise QgisSdkUnsupportedCapabilityError(
+            "connections.open_layer",
+            f"tables of provider {_s.provider!r} are not opened by this SDK",
+        )
+
+
+def _cc_open_layer_p4(_s):
+    try:
+        _s.uri = _s.connection.tableUri(_s.schema or "", _s.item)
+    except QgsProviderConnectionException as error:
+        _s.error = error
+        raise QgisSdkConnectionItemNotFoundError(
+            _s.name, _s.schema or "", _s.item
+        ) from _s.error
+    _s.layer = QgsVectorLayer(_s.uri, _s.item, _s.layer_provider)
+    if not _s.layer.isValid():
+        raise QgisSdkConnectionItemNotFoundError(_s.name, _s.schema or "", _s.item)
+    return _CcReturn(_s.self._described(_s.layer))
+
+
 #: The provider key that opens a registry's tables as vector layers. ``ogr``
 #: is where GeoPackage connections live *and* what their table URIs open with;
 #: ``postgres`` is both for PostGIS. Every other provider is listed and browsed
@@ -161,43 +235,17 @@ class _NativeConnectionsMixin1:
     def open_layer(
         self, provider: str, name: str, schema: str, item: str
     ) -> VectorLayerInfo:
-        connection = self._require(provider, name)
-        schemas = self._catalog(connection, provider, name)
-        try:
-            property = connection.table(schema or "", item)
-        except QgsProviderConnectionException as error:
-            # No table answers: a schema name passed as the item is refused as
-            # what it is, not as a typo - the same rule the fake applies.
-            if not schema and item in schemas:
-                raise QgisSdkUnsupportedCapabilityError(
-                    "connections.open_layer",
-                    "a schema is browsed, not opened",
-                ) from error
-            raise QgisSdkConnectionItemNotFoundError(
-                name, schema or "", item
-            ) from error
-        if _item_kind(property.flags()) == "raster":
-            raise QgisSdkUnsupportedCapabilityError(
-                "connections.open_layer",
-                "a raster table is opened by its raster provider, not "
-                "described as a vector layer",
-            )
-        layer_provider = _LAYER_PROVIDERS.get(provider)
-        if layer_provider is None:
-            raise QgisSdkUnsupportedCapabilityError(
-                "connections.open_layer",
-                f"tables of provider {provider!r} are not opened by this SDK",
-            )
-        try:
-            uri = connection.tableUri(schema or "", item)
-        except QgsProviderConnectionException as error:
-            raise QgisSdkConnectionItemNotFoundError(
-                name, schema or "", item
-            ) from error
-        layer = QgsVectorLayer(uri, item, layer_provider)
-        if not layer.isValid():
-            raise QgisSdkConnectionItemNotFoundError(name, schema or "", item)
-        return self._described(layer)
+        _s = _CcState(self=self, provider=provider, name=name, schema=schema, item=item)
+        for _p in (
+            _cc_open_layer_p1,
+            _cc_open_layer_p2,
+            _cc_open_layer_p3,
+            _cc_open_layer_p4,
+        ):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r.value
+        return None
 
     def _described(self, layer: Any) -> VectorLayerInfo:
         """Adopt the table and describe its fields without the FID column.

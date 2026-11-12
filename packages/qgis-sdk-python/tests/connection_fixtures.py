@@ -27,6 +27,179 @@ import sqlite3
 import struct
 from pathlib import Path
 
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_write_geopackage_p1(_s):
+    _s.database.execute(f"PRAGMA application_id = {GPKG_APPLICATION_ID}")
+    _s.database.execute(f"PRAGMA user_version = {GPKG_USER_VERSION}")
+    _s.database.execute(
+        "CREATE TABLE gpkg_spatial_ref_sys ("
+        "srs_name TEXT NOT NULL, srs_id INTEGER NOT NULL PRIMARY KEY, "
+        "organization TEXT NOT NULL, organization_coordsys_id INTEGER NOT NULL, "
+        "definition TEXT NOT NULL, description TEXT)"
+    )
+
+
+def _cc_write_geopackage_p2(_s):
+    _s.database.executemany(
+        "INSERT INTO gpkg_spatial_ref_sys VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            ("Undefined cartesian SRS", -1, "NONE", -1, "undefined", None),
+            ("Undefined geographic SRS", 0, "NONE", 0, "undefined", None),
+            ("WGS 84 geodetic", 4326, "EPSG", 4326, WGS84_WKT, None),
+        ),
+    )
+
+
+def _cc_write_geopackage_p3(_s):
+    _s.database.execute(
+        "CREATE TABLE gpkg_contents ("
+        "table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, "
+        "identifier TEXT UNIQUE, description TEXT DEFAULT '', "
+        "last_change DATETIME NOT NULL DEFAULT (datetime('now')), "
+        "min_x DOUBLE, min_y DOUBLE, max_x DOUBLE, max_y DOUBLE, "
+        "srs_id INTEGER, "
+        "CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) "
+        "REFERENCES gpkg_spatial_ref_sys(srs_id))"
+    )
+
+
+def _cc_write_geopackage_p4(_s):
+    _s.database.execute(
+        "CREATE TABLE gpkg_geometry_columns ("
+        "table_name TEXT NOT NULL, column_name TEXT NOT NULL, "
+        "geometry_type_name TEXT NOT NULL, srs_id INTEGER NOT NULL, "
+        "z TINYINT NOT NULL, m TINYINT NOT NULL, "
+        "PRIMARY KEY (table_name, column_name), "
+        "CONSTRAINT fk_gc_tn FOREIGN KEY (table_name) "
+        "REFERENCES gpkg_contents(table_name), "
+        "CONSTRAINT fk_gc_srs FOREIGN KEY (srs_id) "
+        "REFERENCES gpkg_spatial_ref_sys(srs_id))"
+    )
+
+
+def _cc_write_geopackage_p5(_s):
+    _s.database.execute(
+        "CREATE TABLE roads ("
+        "fid INTEGER PRIMARY KEY AUTOINCREMENT, geom LINESTRING, name TEXT)"
+    )
+    _s.database.execute(
+        "CREATE TABLE places ("
+        "fid INTEGER PRIMARY KEY AUTOINCREMENT, geom POINT, "
+        "kind TEXT, name TEXT)"
+    )
+    _s.database.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT)")
+
+
+def _cc_write_geopackage_p6(_s):
+    _s.database.executemany(
+        "INSERT INTO gpkg_contents "
+        "(table_name, data_type, identifier, min_x, min_y, max_x, max_y, srs_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            (
+                GPKG_ROADS,
+                "features",
+                GPKG_ROADS,
+                21.0,
+                52.0,
+                21.3,
+                52.3,
+                4326,
+            ),
+            (
+                GPKG_PLACES,
+                "features",
+                GPKG_PLACES,
+                21.0,
+                52.0,
+                21.1,
+                52.1,
+                4326,
+            ),
+            (GPKG_NOTES, "attributes", GPKG_NOTES, None, None, None, None, None),
+        ),
+    )
+
+
+def _cc_write_geopackage_p7(_s):
+    _s.database.executemany(
+        "INSERT INTO gpkg_geometry_columns VALUES (?, ?, ?, ?, 0, 0)",
+        (
+            (GPKG_ROADS, "geom", "LINESTRING", 4326),
+            (GPKG_PLACES, "geom", "POINT", 4326),
+        ),
+    )
+
+
+def _cc_write_geopackage_p8(_s):
+    _s.database.executemany(
+        "INSERT INTO roads (geom, name) VALUES (?, ?)",
+        (
+            (
+                _geometry_blob(2, [x for point in line for x in point]),
+                f"road {index}",
+            )
+            for index, line in enumerate(ROADS, start=1)
+        ),
+    )
+
+
+def _cc_write_geopackage_p9(_s):
+    _s.database.executemany(
+        "INSERT INTO places (geom, kind, name) VALUES (?, ?, ?)",
+        ((_geometry_blob(1, [x, y]), kind, name) for x, y, kind, name in PLACES),
+    )
+    _s.database.executemany(
+        "INSERT INTO notes (id, text) VALUES (?, ?)",
+        ((index, text) for index, text in enumerate(NOTES, start=1)),
+    )
+
+
+def _cc_write_geopackage_p10(_s):
+    _s.path = Path(_s.path)
+    _s.path.parent.mkdir(parents=True, exist_ok=True)
+    if _s.path.exists():
+        _s.path.unlink()
+    with sqlite3.connect(_s.path) as _s.database:
+        for _p in (
+            _cc_write_geopackage_p1,
+            _cc_write_geopackage_p2,
+            _cc_write_geopackage_p3,
+            _cc_write_geopackage_p4,
+            _cc_write_geopackage_p5,
+            _cc_write_geopackage_p6,
+            _cc_write_geopackage_p7,
+            _cc_write_geopackage_p8,
+            _cc_write_geopackage_p9,
+        ):
+            _r = _p(_s)
+            if isinstance(_r, _CcReturn):
+                return _r
+    return _CcReturn(_s.path)
+
+
 # -- the shared vocabulary ----------------------------------------------------
 
 #: The GeoPackage connection every backend declares, and its file.
@@ -120,109 +293,9 @@ def write_geopackage(path: Path) -> Path:
     are the smallest set that names all three tables and gives the two spatial
     ones an EPSG:4326 home.
     """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        path.unlink()
-    with sqlite3.connect(path) as database:
-        database.execute(f"PRAGMA application_id = {GPKG_APPLICATION_ID}")
-        database.execute(f"PRAGMA user_version = {GPKG_USER_VERSION}")
-        database.execute(
-            "CREATE TABLE gpkg_spatial_ref_sys ("
-            "srs_name TEXT NOT NULL, srs_id INTEGER NOT NULL PRIMARY KEY, "
-            "organization TEXT NOT NULL, organization_coordsys_id INTEGER NOT NULL, "
-            "definition TEXT NOT NULL, description TEXT)"
-        )
-        database.executemany(
-            "INSERT INTO gpkg_spatial_ref_sys VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                ("Undefined cartesian SRS", -1, "NONE", -1, "undefined", None),
-                ("Undefined geographic SRS", 0, "NONE", 0, "undefined", None),
-                ("WGS 84 geodetic", 4326, "EPSG", 4326, WGS84_WKT, None),
-            ),
-        )
-        database.execute(
-            "CREATE TABLE gpkg_contents ("
-            "table_name TEXT NOT NULL PRIMARY KEY, data_type TEXT NOT NULL, "
-            "identifier TEXT UNIQUE, description TEXT DEFAULT '', "
-            "last_change DATETIME NOT NULL DEFAULT (datetime('now')), "
-            "min_x DOUBLE, min_y DOUBLE, max_x DOUBLE, max_y DOUBLE, "
-            "srs_id INTEGER, "
-            "CONSTRAINT fk_gc_r_srs_id FOREIGN KEY (srs_id) "
-            "REFERENCES gpkg_spatial_ref_sys(srs_id))"
-        )
-        database.execute(
-            "CREATE TABLE gpkg_geometry_columns ("
-            "table_name TEXT NOT NULL, column_name TEXT NOT NULL, "
-            "geometry_type_name TEXT NOT NULL, srs_id INTEGER NOT NULL, "
-            "z TINYINT NOT NULL, m TINYINT NOT NULL, "
-            "PRIMARY KEY (table_name, column_name), "
-            "CONSTRAINT fk_gc_tn FOREIGN KEY (table_name) "
-            "REFERENCES gpkg_contents(table_name), "
-            "CONSTRAINT fk_gc_srs FOREIGN KEY (srs_id) "
-            "REFERENCES gpkg_spatial_ref_sys(srs_id))"
-        )
-        database.execute(
-            "CREATE TABLE roads ("
-            "fid INTEGER PRIMARY KEY AUTOINCREMENT, geom LINESTRING, name TEXT)"
-        )
-        database.execute(
-            "CREATE TABLE places ("
-            "fid INTEGER PRIMARY KEY AUTOINCREMENT, geom POINT, "
-            "kind TEXT, name TEXT)"
-        )
-        database.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT)")
-        database.executemany(
-            "INSERT INTO gpkg_contents "
-            "(table_name, data_type, identifier, min_x, min_y, max_x, max_y, srs_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                (
-                    GPKG_ROADS,
-                    "features",
-                    GPKG_ROADS,
-                    21.0,
-                    52.0,
-                    21.3,
-                    52.3,
-                    4326,
-                ),
-                (
-                    GPKG_PLACES,
-                    "features",
-                    GPKG_PLACES,
-                    21.0,
-                    52.0,
-                    21.1,
-                    52.1,
-                    4326,
-                ),
-                (GPKG_NOTES, "attributes", GPKG_NOTES, None, None, None, None, None),
-            ),
-        )
-        database.executemany(
-            "INSERT INTO gpkg_geometry_columns VALUES (?, ?, ?, ?, 0, 0)",
-            (
-                (GPKG_ROADS, "geom", "LINESTRING", 4326),
-                (GPKG_PLACES, "geom", "POINT", 4326),
-            ),
-        )
-        database.executemany(
-            "INSERT INTO roads (geom, name) VALUES (?, ?)",
-            (
-                (
-                    _geometry_blob(2, [x for point in line for x in point]),
-                    f"road {index}",
-                )
-                for index, line in enumerate(ROADS, start=1)
-            ),
-        )
-        database.executemany(
-            "INSERT INTO places (geom, kind, name) VALUES (?, ?, ?)",
-            ((_geometry_blob(1, [x, y]), kind, name) for x, y, kind, name in PLACES),
-        )
-        database.executemany(
-            "INSERT INTO notes (id, text) VALUES (?, ?)",
-            ((index, text) for index, text in enumerate(NOTES, start=1)),
-        )
-    return path
+    _s = _CcState(path=path)
+    for _p in (_cc_write_geopackage_p10,):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

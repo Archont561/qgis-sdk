@@ -20,47 +20,137 @@ from qgis_sdk.core import UiContext
 from qgis_sdk.models import QgisSdkUiError
 
 
-def _init_gui_places_every_facts11(iface, desktop):
-    assert [action.shortcut().toString() for action in iface.shortcuts] == [
-        "Ctrl+Alt+L",
-        "Ctrl+Alt+K",
-    ]
-    assert iface.toolbar[0].isCheckable() and not iface.toolbar[1].isCheckable()
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
 
-    desktop.unload()
-    _init_gui_places_every_facts1(iface, desktop)
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
 
 
-def _init_gui_places_every_facts1(iface, desktop):
-    desktop.unload()
+class _CcReturn1:
+    """An early return travelling out of a phase."""
 
-    assert iface.toolbar == []
-    assert iface.menus == {}
-    assert iface.shortcuts == []
-    assert iface.docks == []
-    assert desktop.desktop_bindings.placed == ()
+    def __init__(_cc_self, value):
+        _cc_self.value = value
 
 
-pytestmark = pytest.mark.qgis
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
 
-try:
-    from qgis.core import QgsApplication  # noqa: F401
-    from qgis.gui import QgsMessageBar
-    from qgis.PyQt.QtWidgets import (
-        QDialog,
-        QDockWidget,
-        QMainWindow,
-        QProgressBar,
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_dock_is_o_p1(_s1):
+    _s1.plugin_module, _s1.ui_module = _s1.modules
+    _s1.toggle = next(
+        a for a in _s1.iface.toolbar if a.objectName() == "surface_tools.layer_panel"
     )
-    from qgis_sdk.adapters.desktop import host
-    from qgis_sdk.adapters.surfaces import dock_visible_setting
-except ImportError as error:  # pragma: no cover - depends on the host
-    pytest.skip(f"the surface host needs QGIS: {error}", allow_module_level=True)
+    assert _s1.toggle.isCheckable() and not _s1.toggle.isChecked()
+    assert _s1.desktop.surfaces.docks == {}
 
-PACKAGE = "surface_tools"
-SPEC = f"{PACKAGE}.plugin:app"
+    _s1.toggle.trigger()
+    pump(_s1.qgis_app)
 
-PLUGIN = """
+    _s1.dock = _s1.desktop.surfaces.docks[_s1.ui_module.LayerPanel]
+    assert isinstance(_s1.dock.widget, QDockWidget)
+
+
+def _cc_test_a_dock_is_o_p2(_s1):
+    assert _s1.dock.widget in _s1.iface.docks
+    assert len(_s1.ui_module.BUILT) == 1
+    assert _s1.plugin_module.SETTINGS[dock_visible_setting("layer_panel")] == "true"
+
+    _s1.toggle.trigger()
+    pump(_s1.qgis_app)
+    assert not _s1.dock.widget.isVisible()
+    assert _s1.plugin_module.SETTINGS[dock_visible_setting("layer_panel")] == "false"
+
+    _s1.toggle.trigger()
+    pump(_s1.qgis_app)
+    assert _s1.dock.widget.isVisible()
+
+
+def _cc_test_a_dock_is_o_p3(_s1):
+    assert _s1.desktop.surfaces.docks[_s1.ui_module.LayerPanel] is _s1.dock
+    assert len(_s1.ui_module.BUILT) == 1
+
+    _s1.dock.widget.close()
+    pump(_s1.qgis_app)
+    assert not _s1.toggle.isChecked()
+    assert _s1.plugin_module.SETTINGS[dock_visible_setting("layer_panel")] == "false"
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_a_dialog_is_p1(_s):
+    _s.plugin_module, _s.ui_module = _s.modules
+    _s.entry = _s.iface.menus["Plugins/Surface tools"][0]
+
+    _s.entry.trigger()
+
+    (_s.opened,) = _s.desktop.surfaces.dialogs
+    assert isinstance(_s.opened.widget, QDialog)
+    assert _s.opened.widget.windowTitle() == "Buffer a layer"
+    assert _s.opened.widget.isVisible()
+    assert isinstance(_s.ui_module.BUILT[0], UiContext)
+    assert _s.ui_module.BUILT[0] is _s.opened.surface.ctx
+    assert _s.opened.surface.label.text() == "distance=unset"
+
+
+def _cc_test_a_dialog_is_p2(_s):
+    assert _s.opened.view_id.startswith("surface_tools.buffer_dialog#")
+
+    # UiContext.actions from inside the surface: the same handler, coerced.
+    assert _s.opened.surface.ctx.actions.buffer(distance="2") == "buffered 2.0"
+    # The custom context supplies only settings/files; it gains UI navigation,
+    # but no absent plugin capability is silently invented for a surface.
+    assert _s.opened.surface.ctx.has("ui")
+    for capability in ("algorithms", "styles", "desktop"):
+        _s.capability = capability
+        assert not _s.opened.surface.ctx.has(_s.capability)
+    assert _s.plugin_module.CALLS == ["buffer:2.0"]
+    with pytest.raises(QgisSdkUiError, match="no action 'explode'"):
+        _s.opened.surface.ctx.actions.explode()
+
+
+def _cc_test_a_dialog_is_p3(_s):
+
+    _s.opened.surface.ctx.view.request_close()
+    pump(_s.qgis_app)
+
+    assert _s.desktop.surfaces.dialogs == ()
+    assert _s.opened.scope.closed
+    assert _s.ui_module.CLOSED == ["buffer_dialog"]
+
+    _s.entry.trigger()
+    (_s.again,) = _s.desktop.surfaces.dialogs
+    assert _s.again.surface is not _s.opened.surface
+    assert _s.again.view_id != _s.opened.view_id
+
+
+_CC_TEXT_1 = """
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -148,8 +238,7 @@ def notify(ctx: PluginContext) -> None:
     ctx.notifications.with_action("Count", "count").success("Done")
 
 """
-
-UI = """
+_CC_TEXT_2 = """
 from __future__ import annotations
 
 from qgis_sdk import menu, shortcut, toolbar
@@ -195,6 +284,51 @@ class NoteDialog(Dialog):
         self.note = Text("note", value=self.initial.get("note", ""))
         return self.note
 """
+
+
+def _init_gui_places_every_facts11(iface, desktop):
+    assert [action.shortcut().toString() for action in iface.shortcuts] == [
+        "Ctrl+Alt+L",
+        "Ctrl+Alt+K",
+    ]
+    assert iface.toolbar[0].isCheckable() and not iface.toolbar[1].isCheckable()
+
+    desktop.unload()
+    _init_gui_places_every_facts1(iface, desktop)
+
+
+def _init_gui_places_every_facts1(iface, desktop):
+    desktop.unload()
+
+    assert iface.toolbar == []
+    assert iface.menus == {}
+    assert iface.shortcuts == []
+    assert iface.docks == []
+    assert desktop.desktop_bindings.placed == ()
+
+
+pytestmark = pytest.mark.qgis
+
+try:
+    from qgis.core import QgsApplication  # noqa: F401
+    from qgis.gui import QgsMessageBar
+    from qgis.PyQt.QtWidgets import (
+        QDialog,
+        QDockWidget,
+        QMainWindow,
+        QProgressBar,
+    )
+    from qgis_sdk.adapters.desktop import host
+    from qgis_sdk.adapters.surfaces import dock_visible_setting
+except ImportError as error:  # pragma: no cover - depends on the host
+    pytest.skip(f"the surface host needs QGIS: {error}", allow_module_level=True)
+
+PACKAGE = "surface_tools"
+SPEC = f"{PACKAGE}.plugin:app"
+
+PLUGIN = _CC_TEXT_1
+
+UI = _CC_TEXT_2
 
 
 class FakeIface:
@@ -450,42 +584,16 @@ def test_the_message_bar_shows_each_level_and_a_pressable_button(
 def test_a_dialog_is_built_with_its_context_bound_shown_and_disposed_on_close(
     qgis_app: Any, desktop: Any, iface: FakeIface, modules: tuple[Any, Any]
 ) -> None:
-    plugin_module, ui_module = modules
-    entry = iface.menus["Plugins/Surface tools"][0]
-
-    entry.trigger()
-
-    (opened,) = desktop.surfaces.dialogs
-    assert isinstance(opened.widget, QDialog)
-    assert opened.widget.windowTitle() == "Buffer a layer"
-    assert opened.widget.isVisible()
-    assert isinstance(ui_module.BUILT[0], UiContext)
-    assert ui_module.BUILT[0] is opened.surface.ctx
-    assert opened.surface.label.text() == "distance=unset"
-    assert opened.view_id.startswith("surface_tools.buffer_dialog#")
-
-    # UiContext.actions from inside the surface: the same handler, coerced.
-    assert opened.surface.ctx.actions.buffer(distance="2") == "buffered 2.0"
-    # The custom context supplies only settings/files; it gains UI navigation,
-    # but no absent plugin capability is silently invented for a surface.
-    assert opened.surface.ctx.has("ui")
-    for capability in ("algorithms", "styles", "desktop"):
-        assert not opened.surface.ctx.has(capability)
-    assert plugin_module.CALLS == ["buffer:2.0"]
-    with pytest.raises(QgisSdkUiError, match="no action 'explode'"):
-        opened.surface.ctx.actions.explode()
-
-    opened.surface.ctx.view.request_close()
-    pump(qgis_app)
-
-    assert desktop.surfaces.dialogs == ()
-    assert opened.scope.closed
-    assert ui_module.CLOSED == ["buffer_dialog"]
-
-    entry.trigger()
-    (again,) = desktop.surfaces.dialogs
-    assert again.surface is not opened.surface
-    assert again.view_id != opened.view_id
+    _s = _CcState(qgis_app=qgis_app, desktop=desktop, iface=iface, modules=modules)
+    for _p in (
+        _cc_test_a_dialog_is_p1,
+        _cc_test_a_dialog_is_p2,
+        _cc_test_a_dialog_is_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_ctx_ui_open_from_an_action_opens_the_dialog_with_initial_values(
@@ -538,37 +646,16 @@ def test_ctx_ui_refuses_a_surface_the_plugin_does_not_list(desktop: Any) -> None
 def test_a_dock_is_one_instance_behind_a_checkable_toggle_with_remembered_visibility(
     qgis_app: Any, desktop: Any, iface: FakeIface, modules: tuple[Any, Any]
 ) -> None:
-    plugin_module, ui_module = modules
-    toggle = next(
-        a for a in iface.toolbar if a.objectName() == "surface_tools.layer_panel"
-    )
-    assert toggle.isCheckable() and not toggle.isChecked()
-    assert desktop.surfaces.docks == {}
-
-    toggle.trigger()
-    pump(qgis_app)
-
-    dock = desktop.surfaces.docks[ui_module.LayerPanel]
-    assert isinstance(dock.widget, QDockWidget)
-    assert dock.widget in iface.docks
-    assert len(ui_module.BUILT) == 1
-    assert plugin_module.SETTINGS[dock_visible_setting("layer_panel")] == "true"
-
-    toggle.trigger()
-    pump(qgis_app)
-    assert not dock.widget.isVisible()
-    assert plugin_module.SETTINGS[dock_visible_setting("layer_panel")] == "false"
-
-    toggle.trigger()
-    pump(qgis_app)
-    assert dock.widget.isVisible()
-    assert desktop.surfaces.docks[ui_module.LayerPanel] is dock
-    assert len(ui_module.BUILT) == 1
-
-    dock.widget.close()
-    pump(qgis_app)
-    assert not toggle.isChecked()
-    assert plugin_module.SETTINGS[dock_visible_setting("layer_panel")] == "false"
+    _s1 = _CcState1(qgis_app=qgis_app, desktop=desktop, iface=iface, modules=modules)
+    for _p1 in (
+        _cc_test_a_dock_is_o_p1,
+        _cc_test_a_dock_is_o_p2,
+        _cc_test_a_dock_is_o_p3,
+    ):
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 def test_a_visible_dock_is_restored_on_the_next_start(

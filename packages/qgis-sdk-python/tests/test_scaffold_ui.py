@@ -24,6 +24,86 @@ from qgis_sdk_tools.scaffold.options import QgisSdkScaffoldError
 from typer.testing import CliRunner
 
 
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_the_starter_p1(_s):
+    import importlib
+
+    _s.importlib = importlib
+
+    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
+
+    _s.PluginContext = PluginContext
+    _s.PluginRuntime = PluginRuntime
+    _s.ResourceScope = ResourceScope
+    from qgis_sdk.testing import RecordingNotifications, build_surface, fake_ui_context
+
+    _s.RecordingNotifications = RecordingNotifications
+    _s.build_surface = build_surface
+    _s.fake_ui_context = fake_ui_context
+    from qgis_sdk.ui import ui_snapshot
+
+    _s.ui_snapshot = ui_snapshot
+
+    _s.project = _s.tmp_path / "project"
+    write_scaffold(ScaffoldOptions.resolve("demo_tools", ui="native"), _s.project)
+    _s.monkeypatch.syspath_prepend(str(_s.project))
+    _s.plugin_module = _s.importlib.import_module("demo_tools.plugin")
+    _s.ui_module = _s.importlib.import_module("demo_tools.ui")
+    _s.importlib.reload(_s.plugin_module)
+
+
+def _cc_test_the_starter_p2(_s):
+
+    _s.scope = _s.ResourceScope()
+    _s.runtime = _s.PluginRuntime(
+        _s.plugin_module.app,
+        _s.PluginContext(_s.RecordingNotifications(_s.scope), _s.scope),
+    )
+    _s.runtime.start()
+
+
+def _cc_test_the_starter_p3(_s):
+    try:
+        _s.ctx = _s.fake_ui_context(_s.scope.child(), runtime=_s.runtime)
+        _s.built = _s.build_surface(
+            _s.ui_module.PingDialog, _s.ctx, initial={"value": 7}
+        )
+        _s.dialog = _s.built.surface
+        assert _s.dialog.value.value() == 7
+        assert _s.dialog.form.fields == (_s.dialog.value,)
+        _s.dialog.value.set_value(3)
+        _s.dialog.ping.click()
+        assert [line for line in _s.dialog.answers.lines()] == ["[info] pong value=3"]
+        _s.names = [node["name"] for node in _s.ui_snapshot(_s.built.root)["children"]]
+        assert _s.names == ["form", "ping", "answers"]
+    finally:
+        _s.runtime.unload()
+        for name in [n for n in list(sys.modules) if n.startswith("demo_tools")]:
+            _s.name = name
+            del sys.modules[_s.name]
+
+
 def content_of(plan, path: str) -> str:
     return next(file.content for file in plan if file.path == path)
 
@@ -73,40 +153,16 @@ def test_the_starter_dialog_opens_under_the_fake_with_its_initial_value(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """What the host does at ``open``: the copies, ``initial``, the wiring, a click."""
-    import importlib
-
-    from qgis_sdk.core import PluginContext, PluginRuntime, ResourceScope
-    from qgis_sdk.testing import RecordingNotifications, build_surface, fake_ui_context
-    from qgis_sdk.ui import ui_snapshot
-
-    project = tmp_path / "project"
-    write_scaffold(ScaffoldOptions.resolve("demo_tools", ui="native"), project)
-    monkeypatch.syspath_prepend(str(project))
-    plugin_module = importlib.import_module("demo_tools.plugin")
-    ui_module = importlib.import_module("demo_tools.ui")
-    importlib.reload(plugin_module)
-
-    scope = ResourceScope()
-    runtime = PluginRuntime(
-        plugin_module.app,
-        PluginContext(RecordingNotifications(scope), scope),
-    )
-    runtime.start()
-    try:
-        ctx = fake_ui_context(scope.child(), runtime=runtime)
-        built = build_surface(ui_module.PingDialog, ctx, initial={"value": 7})
-        dialog = built.surface
-        assert dialog.value.value() == 7
-        assert dialog.form.fields == (dialog.value,)
-        dialog.value.set_value(3)
-        dialog.ping.click()
-        assert [line for line in dialog.answers.lines()] == ["[info] pong value=3"]
-        names = [node["name"] for node in ui_snapshot(built.root)["children"]]
-        assert names == ["form", "ping", "answers"]
-    finally:
-        runtime.unload()
-        for name in [n for n in list(sys.modules) if n.startswith("demo_tools")]:
-            del sys.modules[name]
+    _s = _CcState(tmp_path=tmp_path, monkeypatch=monkeypatch)
+    for _p in (
+        _cc_test_the_starter_p1,
+        _cc_test_the_starter_p2,
+        _cc_test_the_starter_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def test_the_native_ui_project_passes_check(tmp_path: Path) -> None:

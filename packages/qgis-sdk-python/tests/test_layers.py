@@ -12,6 +12,7 @@ the isolated qualification probes.
 from __future__ import annotations
 
 import ast
+import copy
 import os
 import subprocess
 import sys
@@ -21,6 +22,98 @@ from pathlib import Path
 
 import layers
 import pytest
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_test_the_pure_la_p1(_s):
+    _s.script = _CC_TEXT_1
+    _s.modules = _cc_fresh_1()
+
+
+def _cc_test_the_pure_la_p2(_s):
+    _s.result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _s.script,
+            "-c",
+            str(PROJECT / "pyproject.toml"),
+            "-q",
+            "-rs",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "no:faulthandler",
+            *(str(TESTS / module) for module in _s.modules),
+        ],
+        cwd=_s.tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+def _cc_test_the_pure_la_p3(_s):
+
+    assert _s.result.returncode == 0, _s.result.stdout + _s.result.stderr
+    _s.summary = _s.result.stdout.strip().splitlines()[-1]
+    assert " passed" in _s.summary and "error" not in _s.summary, _s.summary
+    for need in ("forms", "jobs", "networking", "WebEngine", "WebChannel"):
+        _s.need = need
+        assert f"native {_s.need} need" in _s.result.stdout, (_s.need, _s.result.stdout)
+
+
+_CC_DATA_1 = [
+    "test_bridge_contract_bdd.py",
+    "test_jobs_native.py",
+    "test_network_native.py",
+    "test_webengine_native.py",
+    "test_webchannel_native.py",
+    "test_ui_native.py",
+]
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
+
+
+_CC_TEXT_1 = """
+import sys
+
+class NoBindings:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in {"qgis", "PyQt6", "PyQt5", "PySide6"}:
+            raise ModuleNotFoundError(f"No module named {fullname!r}")
+        return None
+
+sys.meta_path.insert(0, NoBindings())
+import pytest
+sys.exit(pytest.main(sys.argv[1:]))
+"""
+
 
 TESTS = Path(__file__).resolve().parent
 PROJECT = TESTS.parent
@@ -183,58 +276,14 @@ def test_a_prefix_that_cannot_see_qgis_is_left_alone(
 
 
 def test_the_pure_layer_runs_with_qgis_and_qt_unimportable(tmp_path: Path) -> None:
-    """AC 1, as an experiment rather than a reading of the markers.
-
-    A child interpreter refuses every ``qgis``/``PyQt6`` import with the same
-    ``ModuleNotFoundError`` a host without the bindings raises, then runs a pure
-    module next to the native modules of every layer: the pure tests pass, the
-    native modules skip themselves with their reasons, and nothing errors.
-    """
-    script = """
-import sys
-
-class NoBindings:
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname.split(".")[0] in {"qgis", "PyQt6", "PyQt5", "PySide6"}:
-            raise ModuleNotFoundError(f"No module named {fullname!r}")
-        return None
-
-sys.meta_path.insert(0, NoBindings())
-import pytest
-sys.exit(pytest.main(sys.argv[1:]))
-"""
-    modules = [
-        "test_bridge_contract_bdd.py",
-        "test_jobs_native.py",
-        "test_network_native.py",
-        "test_webengine_native.py",
-        "test_webchannel_native.py",
-        "test_ui_native.py",
-    ]
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            script,
-            "-c",
-            str(PROJECT / "pyproject.toml"),
-            "-q",
-            "-rs",
-            "-p",
-            "no:cacheprovider",
-            "-p",
-            "no:faulthandler",
-            *(str(TESTS / module) for module in modules),
-        ],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    summary = result.stdout.strip().splitlines()[-1]
-    assert " passed" in summary and "error" not in summary, summary
-    for need in ("forms", "jobs", "networking", "WebEngine", "WebChannel"):
-        assert f"native {need} need" in result.stdout, (need, result.stdout)
+    "AC 1, as an experiment rather than a reading of the markers.\n\n    A child interpreter refuses every ``qgis``/``PyQt6`` import with the same\n    ``ModuleNotFoundError`` a host without the bindings raises, then runs a pure\n    module next to the native modules of every layer: the pure tests pass, the\n    native modules skip themselves with their reasons, and nothing errors.\n"
+    _s = _CcState(tmp_path=tmp_path)
+    for _p in (
+        _cc_test_the_pure_la_p1,
+        _cc_test_the_pure_la_p2,
+        _cc_test_the_pure_la_p3,
+    ):
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None

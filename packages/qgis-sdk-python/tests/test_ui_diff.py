@@ -6,52 +6,59 @@ import copy
 
 from qgis_sdk_tools.ui_diff import diff_snapshots, structural_change
 
+_CC_DATA_1 = {
+    "surface": "buffer",
+    "kind": "dialog",
+    "title": "Buffer",
+    "size": {"width": 320, "height": 200},
+    "scale": 1.0,
+    "screenshot": "sha256:aaaa",
+    "nodes": [
+        {
+            "id": "root",
+            "role": "container",
+            "type": "QWidget",
+            "value": None,
+            "label": None,
+            "state": {"enabled": True, "visible": True, "focus": False},
+            "geometry": {"x": 0, "y": 0, "width": 320, "height": 200},
+            "declared": None,
+            "children": [
+                {
+                    "id": "form/distance",
+                    "role": "spinbox",
+                    "type": "QgsDoubleSpinBox",
+                    "value": 0.0,
+                    "label": "Distance",
+                    "state": {"enabled": True, "visible": True, "focus": False},
+                    "geometry": {"x": 0, "y": 0, "width": 100, "height": 20},
+                    "declared": {"field": "distance"},
+                },
+                {
+                    "id": "buttons/run",
+                    "role": "button",
+                    "type": "QPushButton",
+                    "value": "Run",
+                    "label": None,
+                    "state": {"enabled": True, "visible": True, "focus": False},
+                    "geometry": {"x": 0, "y": 24, "width": 80, "height": 24},
+                    "declared": {"button": "run"},
+                },
+            ],
+        }
+    ],
+    "findings": [],
+}
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
+
 
 def surface(**overrides):
     """A small approved-shape snapshot; overrides make the second capture."""
-    tree = {
-        "surface": "buffer",
-        "kind": "dialog",
-        "title": "Buffer",
-        "size": {"width": 320, "height": 200},
-        "scale": 1.0,
-        "screenshot": "sha256:aaaa",
-        "nodes": [
-            {
-                "id": "root",
-                "role": "container",
-                "type": "QWidget",
-                "value": None,
-                "label": None,
-                "state": {"enabled": True, "visible": True, "focus": False},
-                "geometry": {"x": 0, "y": 0, "width": 320, "height": 200},
-                "declared": None,
-                "children": [
-                    {
-                        "id": "form/distance",
-                        "role": "spinbox",
-                        "type": "QgsDoubleSpinBox",
-                        "value": 0.0,
-                        "label": "Distance",
-                        "state": {"enabled": True, "visible": True, "focus": False},
-                        "geometry": {"x": 0, "y": 0, "width": 100, "height": 20},
-                        "declared": {"field": "distance"},
-                    },
-                    {
-                        "id": "buttons/run",
-                        "role": "button",
-                        "type": "QPushButton",
-                        "value": "Run",
-                        "label": None,
-                        "state": {"enabled": True, "visible": True, "focus": False},
-                        "geometry": {"x": 0, "y": 24, "width": 80, "height": 24},
-                        "declared": {"button": "run"},
-                    },
-                ],
-            }
-        ],
-        "findings": [],
-    }
+    tree = _cc_fresh_1()
     tree.update(overrides)
     return tree
 

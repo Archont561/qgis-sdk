@@ -1,5 +1,6 @@
 """Public declaration and generated-description contract, without a host runtime."""
 
+import copy
 import json
 
 import pytest
@@ -7,6 +8,59 @@ from qgis_sdk import QgisSdkDeclarationError
 from qgis_sdk.declarations._describe import describe_plugin
 from qgis_sdk.declarations._plugin import action, plugin
 from qgis_sdk.declarations._schemas import _schema
+
+_CC_DATA_1 = [
+    {
+        "id": "sites.watch",
+        "title": "Watch one layer",
+        "handler": "watch",
+        "request": {
+            "type": "object",
+            "properties": {
+                "layer_id": {"type": "string"},
+                "every": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                },
+            },
+            "additionalProperties": False,
+            "required": ["layer_id"],
+        },
+        "events": {
+            "data": {
+                "type": "object",
+                "properties": {
+                    "layer_id": {"type": "string"},
+                    "count": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                    },
+                },
+                "additionalProperties": False,
+                "required": ["layer_id", "count"],
+            },
+            "progress": {
+                "type": "object",
+                "properties": {
+                    "done": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991,
+                    }
+                },
+                "additionalProperties": False,
+                "required": ["done"],
+            },
+        },
+    }
+]
+
+
+def _cc_fresh_1():
+    """Return a fresh copy of the shared data literal."""
+    return copy.deepcopy(_CC_DATA_1)
 
 
 def _dataclass_request_and_result_facts1(description):
@@ -519,53 +573,7 @@ def test_a_stream_is_described_beside_the_actions_with_its_events():
     assert [item.id for item in description.streams] == ["sites.watch"]
     described = json.loads(description.to_json())
     assert list(described) == ["actions", "id", "schema_version", "streams", "title"]
-    assert described["streams"] == [
-        {
-            "id": "sites.watch",
-            "title": "Watch one layer",
-            "handler": "watch",
-            "request": {
-                "type": "object",
-                "properties": {
-                    "layer_id": {"type": "string"},
-                    "every": {
-                        "type": "integer",
-                        "minimum": -9007199254740991,
-                        "maximum": 9007199254740991,
-                    },
-                },
-                "additionalProperties": False,
-                "required": ["layer_id"],
-            },
-            "events": {
-                "data": {
-                    "type": "object",
-                    "properties": {
-                        "layer_id": {"type": "string"},
-                        "count": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991,
-                        },
-                    },
-                    "additionalProperties": False,
-                    "required": ["layer_id", "count"],
-                },
-                "progress": {
-                    "type": "object",
-                    "properties": {
-                        "done": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991,
-                        }
-                    },
-                    "additionalProperties": False,
-                    "required": ["done"],
-                },
-            },
-        }
-    ]
+    assert described["streams"] == _cc_fresh_1()
 
 
 def test_an_action_only_plugin_still_serializes_an_empty_stream_list():

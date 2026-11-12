@@ -50,6 +50,1216 @@ from qgis_sdk.services import (
     Styles,
 )
 
+_CC_FAKE_SERVICE_NAMES = (
+    "ConnectionDeclaration",
+    "DeclaredOutput",
+    "FakeAlgorithms",
+    "FakeAlgorithmSetup",
+    "FakeCanvas",
+    "FakeConnections",
+    "FakeFiles",
+    "FakeLayers",
+    "FakeLayouts",
+    "FakeProject",
+    "FakeRasters",
+    "FakeSettings",
+    "FakeStyles",
+    "FakeWorkers",
+    "OtherLayerDeclaration",
+    "RecordingNotifications",
+    "TableDeclaration",
+    "VectorLayerDeclaration",
+)
+
+
+def _cc_fake_phases_1():
+    return (
+        _cc_fake_services_p1,
+        _cc_fake_services_p2,
+        _cc_fake_services_p3,
+        _cc_fake_services_p4,
+        _cc_fake_services_p5,
+        _cc_fake_services_p6,
+        _cc_fake_services_p7,
+        _cc_fake_services_p8,
+        _cc_fake_services_p9,
+        _cc_fake_services_p10,
+    )
+
+
+def _cc_fake_phases_2():
+    return (
+        _cc_fake_services_p11,
+        _cc_fake_services_p12,
+        _cc_fake_services_p13,
+        _cc_fake_services_p14,
+        _cc_fake_services_p15,
+        _cc_fake_services_p16,
+        _cc_fake_services_p17,
+        _cc_fake_services_p18,
+        _cc_fake_services_p19,
+        _cc_fake_services_p20,
+    )
+
+
+def _cc_fake_phases_3():
+    return (
+        _cc_fake_services_p21,
+        _cc_fake_services_p22,
+        _cc_fake_services_p23,
+        _cc_fake_services_p24,
+        _cc_fake_services_p25,
+        _cc_fake_services_p26,
+        _cc_fake_services_p27,
+        _cc_fake_services_p28,
+        _cc_fake_services_p29,
+        _cc_fake_services_p30,
+    )
+
+
+def _cc_fake_phases_4():
+    return (
+        _cc_fake_services_p31,
+        _cc_fake_services_p32,
+        _cc_fake_services_p33,
+        _cc_fake_services_p34,
+    )
+
+
+def _CcPhases1():
+    return (
+        _cc_fake_phases_1()
+        + _cc_fake_phases_2()
+        + _cc_fake_phases_3()
+        + _cc_fake_phases_4()
+    )
+
+
+def _CcPhases2():
+    return (
+        _cc_native_services_p1,
+        _cc_native_services_p2,
+        _cc_native_services_p3,
+        _cc_native_services_p4,
+        _cc_native_services_p5,
+        _cc_native_services_p6,
+        _cc_native_services_p7,
+        _cc_native_services_p8,
+        _cc_native_services_p9,
+        _cc_native_services_p10,
+        _cc_native_services_p11,
+        _cc_native_services_p12,
+        _cc_native_services_p13,
+        _cc_native_services_p14,
+        _cc_native_services_p15,
+        _cc_native_services_p16,
+        _cc_native_services_p17,
+        _cc_native_services_p18,
+        _cc_native_services_p19,
+        _cc_native_services_p20,
+        _cc_native_services_p21,
+        _cc_native_services_p22,
+        _cc_native_services_p23,
+        _cc_native_services_p24,
+        _cc_native_services_p25,
+        _cc_native_services_p26,
+    )
+
+
+def _cc_expr1_kw1(_s1):
+    return {
+        "canvas": _s1.canvas,
+        "draw": lambda shape: _draw_on(_s1.native_canvas, shape),
+        "is_drawing": lambda: _is_drawing(_s1.native_canvas),
+        "declare_theme": lambda name: _declare_theme(name),
+        "files": _s1.files,
+        "features": _s1.features,
+        "editable_layer": _s1.editable_layer,
+        "editable_dataset": _s1.editable_copy,
+        "fixture_layer": _s1.fixture_layer,
+        "algorithms": _s1.algorithms,
+    }
+
+
+def _cc_expr1_kw2(_s1):
+    return {
+        "model_file": _s1.model_file,
+        "drive_algorithms": _s1.drive_algorithms,
+        "algorithm_work_items": lambda: tuple(_s1.algo_workers.items),
+        "layers": _s1.layers,
+        "rasters": _s1.rasters,
+        "layouts": _s1.layouts,
+        "declare_layouts": _s1.declare_layouts,
+        "drive_layouts": _s1.drive_layouts,
+        "layout_work_items": lambda: tuple(_s1.layout_workers.items),
+        "layout_directory": lambda: _s1.layout_directory,
+    }
+
+
+def _cc_expr1_kw3(_s1):
+    return {
+        "layout_template": _s1.template_file,
+        "open_raster": _s1.open_raster,
+        "raster_dataset": _s1.raster_file,
+        "open_mesh": _s1.open_mesh,
+        "mesh_dataset": MESH_DATASET,
+        "open_annotation": _s1.open_annotation,
+        "open_point_cloud": _s1.open_point_cloud,
+        "point_cloud_dataset": _s1.point_cloud_file,
+        "open_vector_tile": _s1.open_vector_tile,
+        "vector_tile_dataset": _s1.vector_tile_file,
+    }
+
+
+def _cc_expr1_kw4(_s1):
+    return {
+        "open_tiled_scene": _s1.open_tiled_scene,
+        "tiled_scene_dataset": _s1.tiled_scene_file,
+        "project": _s1.project,
+        "project_directory": lambda: _s1.project_directory,
+        "declare_groups": _s1.declare_groups,
+        "settings": _s1.NativeSettings(
+            _s1.scope, prefix=f"qgis-sdk-contract/{_SESSION_TOKEN}"
+        ),
+        "styles": _s1.styles,
+        "connections": _s1.connections,
+    }
+
+
+def _cc_expr1_kw5(_s1):
+    return {
+        "declare_auth_configuration": _s1.declare_auth_configuration,
+        "postgis_connection": _s1.postgis_connection,
+        "notifications": _s1.NativeNotifications(_s1.scope),
+        "scope": _s1.scope,
+        "dataset": FIXTURE_DATASET,
+        "line_dataset": LINE_DATASET,
+        "minimal_dataset": MINIMAL_DATASET,
+        "compatible_style": COMPATIBLE_STYLE,
+        "incompatible_style": INCOMPATIBLE_STYLE,
+        "select": _s1.select,
+    }
+
+
+def _cc_expr1_kw6(_s1):
+    return {"work_directory": _s1.work_directory}
+
+
+def _cc_expr1_call7(_s1):
+    args = []
+    kwargs = {}
+    kwargs.update(_cc_expr1_kw1(_s1))
+    kwargs.update(_cc_expr1_kw2(_s1))
+    kwargs.update(_cc_expr1_kw3(_s1))
+    kwargs.update(_cc_expr1_kw4(_s1))
+    kwargs.update(_cc_expr1_kw5(_s1))
+    kwargs.update(_cc_expr1_kw6(_s1))
+    return Services(*args, **kwargs)
+
+
+def _cc_expr1_args8(_s1):
+    return [_cc_expr1_call7(_s1)]
+
+
+def _cc_expr1_call9(_s1):
+    args = []
+    args.extend(_cc_expr1_args8(_s1))
+    kwargs = {}
+    return _CcReturn1(*args, **kwargs)
+
+
+def _cc_expr1_apply(_s1):
+    return _cc_expr1_call9(_s1)
+
+
+def _cc_expr2_kw1(_s):
+    return {
+        "canvas": _s.canvas,
+        "draw": lambda shape: _s.canvas.draw(_drawn_geometry(shape)),
+        "is_drawing": lambda: bool(_s.canvas.open_captures()),
+        "declare_theme": lambda name: _s.canvas.declare_theme(name),
+        "files": _s.files,
+        "algorithms": _s.algorithms,
+        "features": _s.features,
+        "editable_layer": lambda: "editable",
+        "fixture_layer": lambda: FIXTURE_NAME,
+        "layers": _s.layers,
+    }
+
+
+def _cc_expr2_kw2(_s):
+    return {
+        "rasters": _s.rasters,
+        "layouts": _s.layouts,
+        "declare_layouts": _s.declare_layouts,
+        "drive_layouts": _s.drive_layouts,
+        "layout_work_items": lambda: tuple(_s.layout_workers.items),
+        "layout_directory": lambda: _s.layout_directory,
+        "layout_template": _s.template,
+        "model_file": lambda: _s.model_ref,
+        "drive_algorithms": _s.drive_algorithms,
+        "algorithm_work_items": lambda: tuple(_s.algo_workers.items),
+    }
+
+
+def _cc_expr2_kw3(_s):
+    return {
+        "open_raster": lambda: _s.rasters.open_raster(RASTER_DATASET).id,
+        "raster_dataset": RASTER_DATASET,
+        "open_mesh": lambda: _s.layers.open_mesh(MESH_DATASET).id,
+        "mesh_dataset": MESH_DATASET,
+        "open_annotation": lambda name: _s.layers.open_annotation(name).id,
+        "open_point_cloud": lambda: _s.layers.open_point_cloud(POINT_CLOUD_DATASET).id,
+        "point_cloud_dataset": POINT_CLOUD_DATASET,
+        "open_vector_tile": lambda: _s.layers.open_vector_tile(VECTOR_TILE_DATASET).id,
+        "vector_tile_dataset": VECTOR_TILE_DATASET,
+        "open_tiled_scene": lambda: _s.layers.open_tiled_scene(TILED_SCENE_DATASET).id,
+    }
+
+
+def _cc_expr2_kw4(_s):
+    return {
+        "tiled_scene_dataset": TILED_SCENE_DATASET,
+        "project": _s.project,
+        "project_directory": lambda: _s.project_directory,
+        "declare_groups": _s.declare_groups,
+        "settings": _s.FakeSettings(_s.scope),
+        "styles": _s.styles,
+        "connections": _s.connections,
+        "declare_auth_configuration": _s.connections.declare_auth_configuration,
+        "postgis_connection": connection_files.POSTGIS_CONNECTION,
+        "notifications": _s.RecordingNotifications(_s.scope),
+    }
+
+
+def _cc_expr2_kw5(_s):
+    return {
+        "scope": _s.scope,
+        "dataset": FIXTURE_DATASET,
+        "line_dataset": LINE_DATASET,
+        "minimal_dataset": MINIMAL_DATASET,
+        "compatible_style": COMPATIBLE_STYLE,
+        "incompatible_style": INCOMPATIBLE_STYLE,
+        "select": _s.layers.select,
+    }
+
+
+def _cc_expr2_call6(_s):
+    args = []
+    kwargs = {}
+    kwargs.update(_cc_expr2_kw1(_s))
+    kwargs.update(_cc_expr2_kw2(_s))
+    kwargs.update(_cc_expr2_kw3(_s))
+    kwargs.update(_cc_expr2_kw4(_s))
+    kwargs.update(_cc_expr2_kw5(_s))
+    return Services(*args, **kwargs)
+
+
+def _cc_expr2_args7(_s):
+    return [_cc_expr2_call6(_s)]
+
+
+def _cc_expr2_call8(_s):
+    args = []
+    args.extend(_cc_expr2_args7(_s))
+    kwargs = {}
+    return _CcReturn(*args, **kwargs)
+
+
+def _cc_expr2_apply(_s):
+    return _cc_expr2_call8(_s)
+
+
+class _CcState1:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn1:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak1:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue1:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_native_services_p1(_s1):
+    # The session's application, started here if no module asked before.
+    test_layers.start_application()
+
+    from qgis.core import QgsProject
+
+    _s1.QgsProject = QgsProject
+
+
+def _cc_native_services_p2(_s1):
+    from qgis_sdk.adapters.qgis import (
+        AlgorithmWiring,
+        NativeAlgorithms,
+        NativeCanvas,
+        NativeLayers,
+        NativeNotifications,
+        NativeProject,
+        NativeRasters,
+        NativeSettings,
+    )
+
+    _s1.AlgorithmWiring = AlgorithmWiring
+    _s1.NativeAlgorithms = NativeAlgorithms
+    _s1.NativeCanvas = NativeCanvas
+    _s1.NativeLayers = NativeLayers
+    _s1.NativeNotifications = NativeNotifications
+    _s1.NativeProject = NativeProject
+    _s1.NativeRasters = NativeRasters
+    _s1.NativeSettings = NativeSettings
+    from qgis_sdk.adapters.qgis.connections import NativeConnections
+
+    _s1.NativeConnections = NativeConnections
+    from qgis_sdk.adapters.qgis.styles import NativeStyles
+
+    _s1.NativeStyles = NativeStyles
+
+
+def _cc_native_services_p3(_s1):
+
+    # Contract tests share one application, so each backend instance starts from
+    # an empty project instead of inheriting the previous test's layers - and an
+    # empty *file*, so a test that saves before reading is not answering with
+    # the file another test read.
+    _s1.QgsProject.instance().removeAllMapLayers()
+    _forget_project_file(_s1.QgsProject.instance())
+
+    _s1.work_directory = _algorithm_work_directory()
+    _s1.scope = ResourceScope()
+    _s1.rasters = _s1.NativeRasters(_s1.scope)
+    _s1.layers = _s1.NativeLayers(_s1.scope, rasters=_s1.rasters)
+
+
+def _cc_native_services_p4(_s1):
+    _s1.project = _s1.NativeProject(_s1.layers, _s1.scope, rasters=_s1.rasters)
+    _s1.styles = _s1.NativeStyles(_s1.layers, _s1.scope)
+    _s1.connections = _s1.NativeConnections(_s1.layers)
+    _s1.project_directory = _project_work_directory()
+    _s1.raster_file = _geotiff_fixture()
+    # The point cloud, vector tile and tiled-scene fixtures (TASK-91), built once
+    # per backend. A layer kind is opened the way a user opens it: the provider
+    # is handed a real file and the description is what it read out of it.
+    _s1.layer_kind_directory = _layer_kind_work_directory()
+    _s1.point_cloud_file = fixture_files.write_point_cloud(
+        _s1.layer_kind_directory / "survey.las"
+    )
+
+
+def _cc_native_services_p5(_s1):
+    _s1.vector_tile_file = fixture_files.write_vector_tiles(
+        _s1.layer_kind_directory / "basemap.mbtiles"
+    )
+    _s1.tiled_scene_file = fixture_files.write_tiled_scene(
+        _s1.layer_kind_directory / "scene" / "tileset.json"
+    )
+    # The connections registry (TASK-92): the fixture GeoPackage file is built
+    # and its connection registered in QGIS's own settings, and the scope
+    # removes it again - a contract run never leaves a trace in the profile.
+    from qgis.core import QgsProviderRegistry
+
+    _s1.QgsProviderRegistry = QgsProviderRegistry
+
+    _s1.registry = _s1.QgsProviderRegistry.instance()
+
+
+def _cc_native_services_p6(_s1):
+    _s1.gpkg_file = connection_files.write_geopackage(
+        _s1.layer_kind_directory / connection_files.GPKG_FILE
+    )
+    _s1.ogr = _s1.registry.providerMetadata("ogr")
+    _s1.stored = _s1.ogr.createConnection(str(_s1.gpkg_file), {})
+    _s1.stored.store(connection_files.GPKG_CONNECTION)
+    _s1.scope.on_close(
+        lambda: _s1.ogr.deleteConnection(connection_files.GPKG_CONNECTION)
+    )
+    # The connection nothing serves: registered with a password in its settings
+    # so the no-secret claim has a secret to refuse, and pointed at a dead port
+    # so ``test`` has a verdict to answer - neither needs a server.
+    _s1.postgres = _s1.registry.providerMetadata("postgres")
+    _s1.broken = _s1.postgres.createConnection(connection_files.BROKEN_URI, {})
+
+
+def _cc_native_services_p7(_s1):
+    _s1.broken.store(connection_files.BROKEN_CONNECTION)
+    _s1.scope.on_close(
+        lambda: _s1.postgres.deleteConnection(connection_files.BROKEN_CONNECTION)
+    )
+    # The PostGIS row: registered when QGIS_SDK_TEST_POSTGIS names a server that
+    # holds ``public.points``; otherwise the row is blocked by environment.
+    _s1.postgis_connection = None
+    _s1.postgis_uri = os.environ.get("QGIS_SDK_TEST_POSTGIS")
+
+
+def _cc_native_services_p8(_s1):
+    if _s1.postgis_uri:
+        _s1.remote = _s1.postgres.createConnection(_s1.postgis_uri, {})
+        _s1.remote.store(connection_files.POSTGIS_CONNECTION)
+        _s1.scope.on_close(
+            lambda: _s1.postgres.deleteConnection(connection_files.POSTGIS_CONNECTION)
+        )
+        _s1.postgis_connection = connection_files.POSTGIS_CONNECTION
+
+
+def _cc_native_services_p9(_s1):
+
+    def declare_auth_configuration(name: str) -> str:
+        from qgis.core import QgsApplication, QgsAuthMethodConfig
+
+        _s1.QgsApplication = QgsApplication
+        _s1.QgsAuthMethodConfig = QgsAuthMethodConfig
+
+        config = QgsAuthMethodConfig()
+        config.setName(name)
+        manager = QgsApplication.authManager()
+        stored = manager.storeAuthenticationConfig(config)
+        kept = bool(config.id()) and config.id() in manager.configIds()
+        if not stored or not kept:
+            pytest.skip(
+                "the authentication registry needs a master password this "
+                "environment does not set"
+            )
+
+        def remove() -> None:
+            manager.removeAuthenticationConfig(config.id())
+
+        _s1.remove = remove
+
+        _s1.scope.on_close(remove)
+        return config.id()
+
+    _s1.declare_auth_configuration = declare_auth_configuration
+
+
+def _cc_native_services_p10(_s1):
+
+    _s1.opened_rasters: dict[str, str] = {}
+    _s1.opened_meshes: dict[str, str] = {}
+    _s1.opened_kinds: dict[str, str] = {}
+
+    def open_raster() -> str:
+        if "id" not in _s1.opened_rasters:
+            _s1.opened_rasters["id"] = _s1.rasters.open_raster(_s1.raster_file).id
+        return _s1.opened_rasters["id"]
+
+    _s1.open_raster = open_raster
+
+
+def _cc_native_services_p11(_s1):
+
+    def open_mesh() -> str:
+        if "mesh" not in _s1.opened_meshes:
+            _s1.opened_meshes["mesh"] = _s1.layers.open_mesh(MESH_DATASET).id
+        return _s1.opened_meshes["mesh"]
+
+    _s1.open_mesh = open_mesh
+
+    def open_annotation(name: str) -> str:
+        return _s1.layers.open_annotation(name).id
+
+    _s1.open_annotation = open_annotation
+
+
+def _cc_native_services_p12(_s1):
+
+    def _open_once(kind: str, opener: Callable[[], str]) -> str:
+        if kind not in _s1.opened_kinds:
+            _s1.opened_kinds[kind] = opener()
+        return _s1.opened_kinds[kind]
+
+    _s1._open_once = _open_once
+
+    def open_point_cloud() -> str:
+        return _s1._open_once(
+            "point_cloud", lambda: _s1.layers.open_point_cloud(_s1.point_cloud_file).id
+        )
+
+    _s1.open_point_cloud = open_point_cloud
+
+
+def _cc_native_services_p13(_s1):
+
+    def open_vector_tile() -> str:
+        return _s1._open_once(
+            "vector_tile", lambda: _s1.layers.open_vector_tile(_s1.vector_tile_file).id
+        )
+
+    _s1.open_vector_tile = open_vector_tile
+
+    def open_tiled_scene() -> str:
+        return _s1._open_once(
+            "tiled_scene", lambda: _s1.layers.open_tiled_scene(_s1.tiled_scene_file).id
+        )
+
+    _s1.open_tiled_scene = open_tiled_scene
+
+
+def _cc_native_services_p14(_s1):
+
+    def declare_groups() -> tuple[str, str]:
+        root = _s1.QgsProject.instance().layerTreeRoot()
+        root_group = root.insertGroup(0, ROOT_GROUP)
+        root_group.addGroup(CHILD_GROUP)
+        root_id, child_id = _s1.project.layer_tree().group_ids()
+        return root_id, child_id
+
+    _s1.declare_groups = declare_groups
+
+
+def _cc_native_services_p15(_s1):
+
+    def select(layer_id: str, feature_ids: Sequence[int]) -> None:
+        # Selecting is a host action: the curated contract reads a selection and
+        # never sets one (decision-19), so this setup drives PyQGIS directly, as
+        # a user clicking in QGIS would.
+        _s1.project.add_layer(layer_id)
+        _s1.QgsProject.instance().mapLayer(layer_id).selectByIds(list(feature_ids))
+
+    _s1.select = select
+
+    from qgis_sdk.bridge.authority import HostAuthority
+
+    _s1.HostAuthority = HostAuthority
+
+    _s1.files = FilesService(_s1.HostAuthority(), _s1.scope, owner="plugin:contract")
+    from qgis_sdk.adapters.qgis import NativeFeatures
+
+    _s1.NativeFeatures = NativeFeatures
+
+
+def _cc_native_services_p16(_s1):
+
+    _s1.features = _s1.NativeFeatures(_s1.layers, _s1.scope)
+
+    from qgis_sdk.adapters.qgis import NativeLayouts
+
+    _s1.NativeLayouts = NativeLayouts
+    from qgis_sdk.testing import FakeWorkers
+
+    _s1.FakeWorkers = FakeWorkers
+
+    _s1.algo_workers = _s1.FakeWorkers()
+
+
+def _cc_native_services_p17(_s1):
+    _s1.algorithms = _s1.NativeAlgorithms(
+        _s1.AlgorithmWiring(
+            layers=_s1.layers,
+            scope=_s1.scope,
+            working_directory=_s1.work_directory,
+            files=_s1.files,
+            workers=_s1.algo_workers,
+        )
+    )
+
+
+def _cc_native_services_p18(_s1):
+
+    def model_file():
+        """Grant the checked-in model file, one fresh ref per run."""
+        return _s1.files.grant_file(REPORT_MODEL)
+
+    _s1.model_file = model_file
+
+    def drive_algorithms() -> None:
+        """One round trip through the algorithms service's own job service."""
+        service = _s1.algorithms.jobs
+        service.tick()
+        _s1.algo_workers.run_all()
+        service.tick()
+
+    _s1.drive_algorithms = drive_algorithms
+
+
+def _cc_native_services_p19(_s1):
+
+    _s1.layout_workers = _s1.FakeWorkers()
+    _s1.layout_directory = _layout_work_directory()
+
+
+def _cc_native_services_p20(_s1):
+    # A fake worker backend on purpose: the contract is about the *render*, and
+    # running the body when the test says so keeps an offscreen QgsLayoutExporter
+    # off a Qt event loop the pure suite does not have. The real QgsTask path is
+    # ``tests/test_jobs_tasks_native.py``'s subject.
+    _s1.layouts = _s1.NativeLayouts(
+        _s1.scope,
+        workers=_s1.layout_workers,
+        files=_s1.files,
+        working_directory=_s1.layout_directory,
+    )
+
+
+def _cc_native_services_p21(_s1):
+
+    def template_file() -> Path:
+        return _s1.layout_directory / f"{TEMPLATE_LAYOUT}.qpt"
+
+    _s1.template_file = template_file
+
+
+def _cc_native_services_p22(_s1):
+
+    def declare_layouts() -> None:
+        """Put the contract's layouts in the project, and save the template."""
+        from qgis.core import QgsProject
+
+        _s1.QgsProject = QgsProject
+
+        project = QgsProject.instance()
+        manager = project.layoutManager()
+        # The coverage layer is opened the way a user opens one, and added to
+        # the project, because an atlas reads its features from a layer the
+        # project holds rather than from a file on its own.
+        layer = _native_layout_coverage(project)
+        _native_layout_pages(manager, project)
+        _native_atlas(manager, layer)
+        # The template is saved from a layout of its own name and the layout is
+        # removed again, so loading the file adds that name to the project.
+        _save_native_template(manager, _s1.template_file)
+
+    _s1.declare_layouts = declare_layouts
+
+
+def _cc_native_services_p23(_s1):
+
+    def drive_layouts() -> None:
+        service = _s1.layouts.jobs
+        service.tick()
+        _s1.layout_workers.run_all()
+        service.tick()
+
+    _s1.drive_layouts = drive_layouts
+
+    # A canvas for the canvas contract: real, offscreen, and sized, because a
+    # canvas with no output size reports no scale at all.
+    _s1.native_canvas = _offscreen_canvas()
+    _s1.canvas = _s1.NativeCanvas(
+        _s1.scope, layers=_s1.layers, canvas=_s1.native_canvas
+    )
+
+
+def _cc_native_services_p24(_s1):
+
+    # A layer the features tests ask for is opened when they ask: this backend
+    # starts with nothing open, which is a fact the algorithms contract asserts.
+    _s1.opened: dict[str, str] = {}
+
+    def _open(source: Path) -> str:
+        if str(source) not in _s1.opened:
+            _s1.opened[str(source)] = _s1.layers.open_vector(source).id
+        return _s1.opened[str(source)]
+
+    _s1._open = _open
+
+    def fixture_layer() -> str:
+        return _s1._open(FIXTURE_DATASET)
+
+    _s1.fixture_layer = fixture_layer
+
+
+def _cc_native_services_p25(_s1):
+
+    _s1.editable_copy = _feature_work_directory() / "editable.geojson"
+    shutil.copyfile(FIXTURE_DATASET, _s1.editable_copy)
+
+    def editable_layer() -> str:
+        return _s1._open(_s1.editable_copy)
+
+    _s1.editable_layer = editable_layer
+
+
+def _cc_native_services_p26(_s1):
+
+    return _cc_expr1_apply(_s1)
+
+
+class _CcState:
+    """A mutable record shared by the phases of one long function."""
+
+    def __init__(_cc_self, **values):
+        _cc_self.__dict__.update(values)
+
+
+class _CcReturn:
+    """An early return travelling out of a phase."""
+
+    def __init__(_cc_self, value):
+        _cc_self.value = value
+
+
+class _CcBreak:
+    """A loop break travelling out of a phase."""
+
+
+class _CcContinue:
+    """A loop continue travelling out of a phase."""
+
+
+def _cc_fake_services_p1(_s):
+    from qgis_sdk.models import RasterStatistics
+
+    _s.RasterStatistics = RasterStatistics
+
+
+def _cc_fake_services_p2(_s):
+    import qgis_sdk.testing as _testing
+
+    for _name in _CC_FAKE_SERVICE_NAMES:
+        setattr(_s, _name, getattr(_testing, _name))
+
+
+def _cc_fake_services_p3(_s):
+
+    _s.scope = ResourceScope()
+    # The raster fake first, because the vector fake holds it: a raster is a
+    # layer too, so ``list_layers`` answers both kinds (TASK-87).
+    _s.rasters = _s.FakeRasters(_s.scope)
+    _s.layers = _s.FakeLayers(_s.scope, rasters=_s.rasters)
+
+
+def _cc_fake_services_p4(_s):
+    _s.layers.register(
+        _s.VectorLayerDeclaration(
+            FIXTURE_DATASET,
+            name=FIXTURE_NAME,
+            geometry_type=FIXTURE_GEOMETRY,
+            field_names=FIXTURE_FIELDS,
+            crs=FIXTURE_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p5(_s):
+    _s.layers.register(
+        _s.VectorLayerDeclaration(
+            LINE_DATASET,
+            name="lines",
+            geometry_type="line",
+            field_names=("id",),
+            crs=FIXTURE_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p6(_s):
+    _s.layers.register(
+        _s.VectorLayerDeclaration(
+            MINIMAL_DATASET,
+            name="points-minimal",
+            geometry_type="point",
+            field_names=("id",),
+            crs=FIXTURE_CRS,
+        )
+    )
+    _s.files = _s.FakeFiles(_s.scope, owner="plugin:contract")
+    _s.algo_workers = _s.FakeWorkers()
+    _s.layout_workers = _s.FakeWorkers()
+
+
+def _cc_fake_services_p7(_s):
+    _s.layout_directory = _layout_work_directory()
+    _s.layouts = _s.FakeLayouts(
+        _s.scope,
+        workers=_s.layout_workers,
+        files=_s.files,
+        working_directory=_s.layout_directory,
+    )
+
+
+def _cc_fake_services_p8(_s):
+
+    def declare_layouts() -> None:
+        """Declare the layouts the contract describes, and write a template."""
+        _s.layouts.declare_layout(LAYOUT_NAME, pages=LAYOUT_PAGES)
+        _s.layouts.declare_layout(SINGLE_PAGE_LAYOUT)
+        _s.layouts.declare_atlas(
+            ATLAS_NAME,
+            coverage_layer=FIXTURE_NAME,
+            feature_ids=ATLAS_FEATURE_IDS,
+        )
+        _s.template().write_text("<!-- the fake only has to find the template -->")
+
+    _s.declare_layouts = declare_layouts
+
+
+def _cc_fake_services_p9(_s):
+
+    def template() -> Path:
+        return _s.layout_directory / f"{TEMPLATE_LAYOUT}.qpt"
+
+    _s.template = template
+
+    def drive_layouts() -> None:
+        """One round trip through the layouts service's own job service."""
+        service = _s.layouts.jobs
+        service.tick()
+        _s.layout_workers.run_all()
+        service.tick()
+
+    _s.drive_layouts = drive_layouts
+
+
+def _cc_fake_services_p10(_s):
+
+    _s.algorithms = _s.FakeAlgorithms(
+        _s.FakeAlgorithmSetup(
+            _s.layers, _s.scope, files=_s.files, workers=_s.algo_workers
+        )
+    )
+
+
+def _cc_fake_services_p11(_s):
+    _s.algorithms.declare_output(
+        _s.DeclaredOutput(
+            BufferRequest,
+            FIXTURE_ROOT / "buffer-output.gpkg",
+            name="buffer",
+            geometry_type="polygon",
+            field_names=FIXTURE_FIELDS,
+            crs=WORKING_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p12(_s):
+    _s.algorithms.declare_output(
+        _s.DeclaredOutput(
+            CentroidRequest,
+            FIXTURE_ROOT / "centroid-output.gpkg",
+            name="centroid",
+            geometry_type="point",
+            field_names=FIXTURE_FIELDS,
+            crs=FIXTURE_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p13(_s):
+    # The generic run answers from scripts: the same declared datasets for
+    # the vector algorithms, a real file on disk for the report, and the
+    # scalars the native run of ``native:basicstatisticsforfields`` yields
+    # over the three-feature fixture.
+    _s.algorithms.script_run(
+        "native:buffer", {"OUTPUT": FIXTURE_ROOT / "buffer-output.gpkg"}
+    )
+    _s.algorithms.script_run(
+        "native:centroids", {"OUTPUT": FIXTURE_ROOT / "centroid-output.gpkg"}
+    )
+
+
+def _cc_fake_services_p14(_s):
+    _s.algorithms.script_run(
+        "native:basicstatisticsforfields",
+        {"COUNT": 3, "OUTPUT_HTML_FILE": MINIMAL_DATASET},
+    )
+    # The model file (TASK-94), granted once so the scripted answers key the
+    # same ref the tests run. The fake never parses the XML - a model run's
+    # shape is the contract here, and the native lane reads the real file -
+    # but the answers are the kinds the file declares: an owned layer beside
+    # a readable report.
+    from qgis_sdk.models import VectorLayerInfo
+
+    _s.VectorLayerInfo = VectorLayerInfo
+
+    _s.model_ref = _s.files.grant_file(REPORT_MODEL)
+
+
+def _cc_fake_services_p15(_s):
+    _s.algorithms.script_run_model(
+        _s.model_ref,
+        {
+            MODEL_CENTROIDS_OUTPUT: _s.VectorLayerInfo(
+                id="model:centroids",
+                name=MODEL_CENTROIDS_OUTPUT,
+                geometry_type="point",
+                field_names=FIXTURE_FIELDS,
+                crs=FIXTURE_CRS,
+            ),
+            MODEL_REPORT_OUTPUT: _s.files.grant_file(MINIMAL_DATASET),
+        },
+    )
+
+
+def _cc_fake_services_p16(_s):
+
+    def drive_algorithms() -> None:
+        """One round trip through the algorithms service's own job service."""
+        service = _s.algorithms.jobs
+        service.tick()
+        _s.algo_workers.run_all()
+        service.tick()
+
+    _s.drive_algorithms = drive_algorithms
+
+    from qgis_sdk.testing import FakeFeatures
+
+    _s.FakeFeatures = FakeFeatures
+
+    _s.features = _s.FakeFeatures(_s.scope)
+
+
+def _cc_fake_services_p17(_s):
+    _s.features.declare(
+        FIXTURE_NAME,
+        fields=FIXTURE_FIELDS,
+        rows=[
+            (1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0)),
+            (2, {"id": 2, "value": "b"}, _point_wkt(21.1, 52.1)),
+            (3, {"id": 3, "value": "c"}, _point_wkt(21.2, 52.2)),
+        ],
+    )
+
+
+def _cc_fake_services_p18(_s):
+    _s.editable = _s.features.declare(
+        "editable",
+        fields=FIXTURE_FIELDS,
+        rows=[(1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0))],
+    )
+    del _s.editable
+    _s.styles = _s.FakeStyles(_s.layers, _s.scope)
+
+
+def _cc_fake_services_p19(_s):
+    # The connections registry (TASK-92): the GeoPackage fixture every backend
+    # declares, the PostGIS one the fake always holds, and the connection
+    # nothing serves. The GeoPackage answers provider ``ogr`` because that is
+    # the registry key its native half is listed under - QGIS implements the
+    # GeoPackage connection methods in OGR.
+    _s.connections = _s.FakeConnections(_s.layers)
+    _s.connections.declare_connection(
+        _s.ConnectionDeclaration(
+            connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
+        )
+    )
+
+
+def _cc_fake_services_p20(_s):
+    _s.connections.declare_table(
+        _s.TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_ROADS,
+            kind=connection_files.GPKG_ROADS_KIND,
+            geometries=connection_files.GPKG_ROADS_GEOMETRIES,
+            fields=connection_files.GPKG_ROADS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p21(_s):
+    _s.connections.declare_table(
+        _s.TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_PLACES,
+            kind=connection_files.GPKG_PLACES_KIND,
+            geometries=connection_files.GPKG_PLACES_GEOMETRIES,
+            fields=connection_files.GPKG_PLACES_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p22(_s):
+    _s.connections.declare_table(
+        _s.TableDeclaration(
+            connection_files.GPKG_CONNECTION,
+            connection_files.GPKG_NOTES,
+            kind=connection_files.GPKG_NOTES_KIND,
+            geometries=connection_files.GPKG_NOTES_GEOMETRIES,
+            fields=connection_files.GPKG_NOTES_FIELDS,
+        )
+    )
+
+
+def _cc_fake_services_p23(_s):
+    _s.connections.declare_connection(
+        _s.ConnectionDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            provider="postgres",
+            schemas=(connection_files.POSTGIS_SCHEMA,),
+        )
+    )
+
+
+def _cc_fake_services_p24(_s):
+    _s.connections.declare_table(
+        _s.TableDeclaration(
+            connection_files.POSTGIS_CONNECTION,
+            connection_files.POSTGIS_POINTS,
+            provider="postgres",
+            schema=connection_files.POSTGIS_SCHEMA,
+            kind=connection_files.POSTGIS_POINTS_KIND,
+            geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
+            fields=connection_files.POSTGIS_POINTS_FIELDS,
+            crs=connection_files.FIXTURE_CRS,
+        )
+    )
+
+
+def _cc_fake_services_p25(_s):
+    _s.connections.declare_connection(
+        _s.ConnectionDeclaration(
+            connection_files.BROKEN_CONNECTION,
+            provider="postgres",
+            valid=False,
+            message="connection to server at 127.0.0.1, port 1 failed: Connection refused",
+        )
+    )
+
+
+def _cc_fake_services_p26(_s):
+    _s.rasters.register(
+        RASTER_DATASET,
+        name=RASTER_NAME,
+        extent=RASTER_EXTENT,
+        band_count=RASTER_BAND_COUNT,
+        data_types=(RASTER_DATA_TYPE,),
+        no_data=(RASTER_NO_DATA,),
+        resolution=RASTER_RESOLUTION,
+        crs=FIXTURE_CRS,
+        values=(RASTER_VALUE,),
+        holes=((RASTER_HOLE_POINT.x, RASTER_HOLE_POINT.y),),
+        statistics={
+            1: _s.RasterStatistics(
+                band=1,
+                minimum=RASTER_MINIMUM,
+                maximum=RASTER_MAXIMUM,
+                mean=RASTER_MEAN,
+                std_dev=RASTER_STD_DEV,
+                valid_count=RASTER_VALID_CELLS,
+                no_data_count=RASTER_NO_DATA_CELLS,
+            )
+        },
+    )
+
+
+def _cc_fake_services_p27(_s):
+    # The mesh the layer-kind contract opens, declared with the numbers the
+    # ``.2dm`` fixture holds so both backends report the same three. No CRS is
+    # declared because the file has none: MDAL reads no projection out of a
+    # ``.2dm``, so the native layer answers null and the fake must agree.
+    _s.layers.register_layer(
+        _s.OtherLayerDeclaration(
+            MESH_DATASET,
+            name=MESH_NAME,
+            kind="mesh",
+            detail={
+                "vertex_count": MESH_VERTICES,
+                "face_count": MESH_FACES,
+                "group_count": MESH_GROUPS,
+            },
+        )
+    )
+
+
+def _cc_fake_services_p28(_s):
+    # The three containers the native half builds are declared with the numbers
+    # the built files hold. A point cloud's attributes are PDAL's dimension
+    # names, of which the contract asks for ``Z`` on both backends; a vector
+    # tile's zoom range is what its MBTiles metadata says; a tiled scene answers
+    # the box its tileset's region covers.
+    _s.layers.register_layer(
+        _s.OtherLayerDeclaration(
+            POINT_CLOUD_DATASET,
+            name=POINT_CLOUD_NAME,
+            kind="point_cloud",
+            detail={
+                "point_count": POINT_CLOUD_COUNT,
+                "attribute_names": ("X", "Y", "Z"),
+            },
+        )
+    )
+
+
+def _cc_fake_services_p29(_s):
+    _s.layers.register_layer(
+        _s.OtherLayerDeclaration(
+            VECTOR_TILE_DATASET,
+            name=VECTOR_TILE_NAME,
+            kind="vector_tile",
+            detail={
+                "source_type": "mbtiles",
+                "min_zoom": fixture_files.VECTOR_TILE_MIN_ZOOM,
+                "max_zoom": fixture_files.VECTOR_TILE_MAX_ZOOM,
+            },
+        )
+    )
+
+
+def _cc_fake_services_p30(_s):
+    _s.layers.register_layer(
+        _s.OtherLayerDeclaration(
+            TILED_SCENE_DATASET,
+            name=TILED_SCENE_NAME,
+            kind="tiled_scene",
+            detail={
+                "extent": {
+                    "x_min": fixture_files.TILED_SCENE_REGION[0],
+                    "y_min": fixture_files.TILED_SCENE_REGION[1],
+                    "x_max": fixture_files.TILED_SCENE_REGION[2],
+                    "y_max": fixture_files.TILED_SCENE_REGION[3],
+                }
+            },
+        )
+    )
+
+
+def _cc_fake_services_p31(_s):
+    _s.project = _s.FakeProject(_s.layers, _s.scope)
+    _s.project_directory = _project_work_directory()
+
+
+def _cc_fake_services_p32(_s):
+
+    def declare_groups() -> tuple[str, str]:
+        from qgis_sdk.models import LayerNode
+
+        _s.LayerNode = LayerNode
+
+        _s.project.set_tree(
+            (
+                LayerNode(id="group-root", name=ROOT_GROUP, kind="group"),
+                LayerNode(
+                    id="group-child",
+                    name=CHILD_GROUP,
+                    kind="group",
+                    parent="group-root",
+                ),
+            )
+        )
+        root_id, child_id = _s.project.layer_tree().group_ids()
+        return root_id, child_id
+
+    _s.declare_groups = declare_groups
+
+
+def _cc_fake_services_p33(_s):
+
+    _s.canvas = _s.FakeCanvas(
+        _s.scope,
+        layer_extents={FIXTURE_NAME: FIXTURE_EXTENT},
+        themes=(DECLARED_THEME,),
+    )
+
+
+def _cc_fake_services_p34(_s):
+    return _cc_expr2_apply(_s)
+
 
 def _write_layout_template(
     QgsPrintLayout, QgsProject, QgsReadWriteContext, manager, template_file
@@ -504,400 +1714,12 @@ def _point_wkt(x: float, y: float):
 
 
 def _fake_services() -> Services:
-    from qgis_sdk.models import RasterStatistics
-    from qgis_sdk.testing import (
-        ConnectionDeclaration,
-        DeclaredOutput,
-        FakeAlgorithms,
-        FakeAlgorithmSetup,
-        FakeCanvas,
-        FakeConnections,
-        FakeFiles,
-        FakeLayers,
-        FakeLayouts,
-        FakeProject,
-        FakeRasters,
-        FakeSettings,
-        FakeStyles,
-        FakeWorkers,
-        OtherLayerDeclaration,
-        RecordingNotifications,
-        TableDeclaration,
-        VectorLayerDeclaration,
-    )
-
-    scope = ResourceScope()
-    # The raster fake first, because the vector fake holds it: a raster is a
-    # layer too, so ``list_layers`` answers both kinds (TASK-87).
-    rasters = FakeRasters(scope)
-    layers = FakeLayers(scope, rasters=rasters)
-    layers.register(
-        VectorLayerDeclaration(
-            FIXTURE_DATASET,
-            name=FIXTURE_NAME,
-            geometry_type=FIXTURE_GEOMETRY,
-            field_names=FIXTURE_FIELDS,
-            crs=FIXTURE_CRS,
-        )
-    )
-    layers.register(
-        VectorLayerDeclaration(
-            LINE_DATASET,
-            name="lines",
-            geometry_type="line",
-            field_names=("id",),
-            crs=FIXTURE_CRS,
-        )
-    )
-    layers.register(
-        VectorLayerDeclaration(
-            MINIMAL_DATASET,
-            name="points-minimal",
-            geometry_type="point",
-            field_names=("id",),
-            crs=FIXTURE_CRS,
-        )
-    )
-    files = FakeFiles(scope, owner="plugin:contract")
-    algo_workers = FakeWorkers()
-    layout_workers = FakeWorkers()
-    layout_directory = _layout_work_directory()
-    layouts = FakeLayouts(
-        scope,
-        workers=layout_workers,
-        files=files,
-        working_directory=layout_directory,
-    )
-
-    def declare_layouts() -> None:
-        """Declare the layouts the contract describes, and write a template."""
-        layouts.declare_layout(LAYOUT_NAME, pages=LAYOUT_PAGES)
-        layouts.declare_layout(SINGLE_PAGE_LAYOUT)
-        layouts.declare_atlas(
-            ATLAS_NAME,
-            coverage_layer=FIXTURE_NAME,
-            feature_ids=ATLAS_FEATURE_IDS,
-        )
-        template().write_text("<!-- the fake only has to find the template -->")
-
-    def template() -> Path:
-        return layout_directory / f"{TEMPLATE_LAYOUT}.qpt"
-
-    def drive_layouts() -> None:
-        """One round trip through the layouts service's own job service."""
-        service = layouts.jobs
-        service.tick()
-        layout_workers.run_all()
-        service.tick()
-
-    algorithms = FakeAlgorithms(
-        FakeAlgorithmSetup(layers, scope, files=files, workers=algo_workers)
-    )
-    algorithms.declare_output(
-        DeclaredOutput(
-            BufferRequest,
-            FIXTURE_ROOT / "buffer-output.gpkg",
-            name="buffer",
-            geometry_type="polygon",
-            field_names=FIXTURE_FIELDS,
-            crs=WORKING_CRS,
-        )
-    )
-    algorithms.declare_output(
-        DeclaredOutput(
-            CentroidRequest,
-            FIXTURE_ROOT / "centroid-output.gpkg",
-            name="centroid",
-            geometry_type="point",
-            field_names=FIXTURE_FIELDS,
-            crs=FIXTURE_CRS,
-        )
-    )
-    # The generic run answers from scripts: the same declared datasets for
-    # the vector algorithms, a real file on disk for the report, and the
-    # scalars the native run of ``native:basicstatisticsforfields`` yields
-    # over the three-feature fixture.
-    algorithms.script_run(
-        "native:buffer", {"OUTPUT": FIXTURE_ROOT / "buffer-output.gpkg"}
-    )
-    algorithms.script_run(
-        "native:centroids", {"OUTPUT": FIXTURE_ROOT / "centroid-output.gpkg"}
-    )
-    algorithms.script_run(
-        "native:basicstatisticsforfields",
-        {"COUNT": 3, "OUTPUT_HTML_FILE": MINIMAL_DATASET},
-    )
-    # The model file (TASK-94), granted once so the scripted answers key the
-    # same ref the tests run. The fake never parses the XML - a model run's
-    # shape is the contract here, and the native lane reads the real file -
-    # but the answers are the kinds the file declares: an owned layer beside
-    # a readable report.
-    from qgis_sdk.models import VectorLayerInfo
-
-    model_ref = files.grant_file(REPORT_MODEL)
-    algorithms.script_run_model(
-        model_ref,
-        {
-            MODEL_CENTROIDS_OUTPUT: VectorLayerInfo(
-                id="model:centroids",
-                name=MODEL_CENTROIDS_OUTPUT,
-                geometry_type="point",
-                field_names=FIXTURE_FIELDS,
-                crs=FIXTURE_CRS,
-            ),
-            MODEL_REPORT_OUTPUT: files.grant_file(MINIMAL_DATASET),
-        },
-    )
-
-    def drive_algorithms() -> None:
-        """One round trip through the algorithms service's own job service."""
-        service = algorithms.jobs
-        service.tick()
-        algo_workers.run_all()
-        service.tick()
-
-    from qgis_sdk.testing import FakeFeatures
-
-    features = FakeFeatures(scope)
-    features.declare(
-        FIXTURE_NAME,
-        fields=FIXTURE_FIELDS,
-        rows=[
-            (1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0)),
-            (2, {"id": 2, "value": "b"}, _point_wkt(21.1, 52.1)),
-            (3, {"id": 3, "value": "c"}, _point_wkt(21.2, 52.2)),
-        ],
-    )
-    editable = features.declare(
-        "editable",
-        fields=FIXTURE_FIELDS,
-        rows=[(1, {"id": 1, "value": "a"}, _point_wkt(21.0, 52.0))],
-    )
-    del editable
-    styles = FakeStyles(layers, scope)
-    # The connections registry (TASK-92): the GeoPackage fixture every backend
-    # declares, the PostGIS one the fake always holds, and the connection
-    # nothing serves. The GeoPackage answers provider ``ogr`` because that is
-    # the registry key its native half is listed under - QGIS implements the
-    # GeoPackage connection methods in OGR.
-    connections = FakeConnections(layers)
-    connections.declare_connection(
-        ConnectionDeclaration(
-            connection_files.GPKG_CONNECTION, schemas=(), accepts_auth=False
-        )
-    )
-    connections.declare_table(
-        TableDeclaration(
-            connection_files.GPKG_CONNECTION,
-            connection_files.GPKG_ROADS,
-            kind=connection_files.GPKG_ROADS_KIND,
-            geometries=connection_files.GPKG_ROADS_GEOMETRIES,
-            fields=connection_files.GPKG_ROADS_FIELDS,
-            crs=connection_files.FIXTURE_CRS,
-        )
-    )
-    connections.declare_table(
-        TableDeclaration(
-            connection_files.GPKG_CONNECTION,
-            connection_files.GPKG_PLACES,
-            kind=connection_files.GPKG_PLACES_KIND,
-            geometries=connection_files.GPKG_PLACES_GEOMETRIES,
-            fields=connection_files.GPKG_PLACES_FIELDS,
-            crs=connection_files.FIXTURE_CRS,
-        )
-    )
-    connections.declare_table(
-        TableDeclaration(
-            connection_files.GPKG_CONNECTION,
-            connection_files.GPKG_NOTES,
-            kind=connection_files.GPKG_NOTES_KIND,
-            geometries=connection_files.GPKG_NOTES_GEOMETRIES,
-            fields=connection_files.GPKG_NOTES_FIELDS,
-        )
-    )
-    connections.declare_connection(
-        ConnectionDeclaration(
-            connection_files.POSTGIS_CONNECTION,
-            provider="postgres",
-            schemas=(connection_files.POSTGIS_SCHEMA,),
-        )
-    )
-    connections.declare_table(
-        TableDeclaration(
-            connection_files.POSTGIS_CONNECTION,
-            connection_files.POSTGIS_POINTS,
-            provider="postgres",
-            schema=connection_files.POSTGIS_SCHEMA,
-            kind=connection_files.POSTGIS_POINTS_KIND,
-            geometries=connection_files.POSTGIS_POINTS_GEOMETRIES,
-            fields=connection_files.POSTGIS_POINTS_FIELDS,
-            crs=connection_files.FIXTURE_CRS,
-        )
-    )
-    connections.declare_connection(
-        ConnectionDeclaration(
-            connection_files.BROKEN_CONNECTION,
-            provider="postgres",
-            valid=False,
-            message="connection to server at 127.0.0.1, port 1 failed: Connection refused",
-        )
-    )
-    rasters.register(
-        RASTER_DATASET,
-        name=RASTER_NAME,
-        extent=RASTER_EXTENT,
-        band_count=RASTER_BAND_COUNT,
-        data_types=(RASTER_DATA_TYPE,),
-        no_data=(RASTER_NO_DATA,),
-        resolution=RASTER_RESOLUTION,
-        crs=FIXTURE_CRS,
-        values=(RASTER_VALUE,),
-        holes=((RASTER_HOLE_POINT.x, RASTER_HOLE_POINT.y),),
-        statistics={
-            1: RasterStatistics(
-                band=1,
-                minimum=RASTER_MINIMUM,
-                maximum=RASTER_MAXIMUM,
-                mean=RASTER_MEAN,
-                std_dev=RASTER_STD_DEV,
-                valid_count=RASTER_VALID_CELLS,
-                no_data_count=RASTER_NO_DATA_CELLS,
-            )
-        },
-    )
-    # The mesh the layer-kind contract opens, declared with the numbers the
-    # ``.2dm`` fixture holds so both backends report the same three. No CRS is
-    # declared because the file has none: MDAL reads no projection out of a
-    # ``.2dm``, so the native layer answers null and the fake must agree.
-    layers.register_layer(
-        OtherLayerDeclaration(
-            MESH_DATASET,
-            name=MESH_NAME,
-            kind="mesh",
-            detail={
-                "vertex_count": MESH_VERTICES,
-                "face_count": MESH_FACES,
-                "group_count": MESH_GROUPS,
-            },
-        )
-    )
-    # The three containers the native half builds are declared with the numbers
-    # the built files hold. A point cloud's attributes are PDAL's dimension
-    # names, of which the contract asks for ``Z`` on both backends; a vector
-    # tile's zoom range is what its MBTiles metadata says; a tiled scene answers
-    # the box its tileset's region covers.
-    layers.register_layer(
-        OtherLayerDeclaration(
-            POINT_CLOUD_DATASET,
-            name=POINT_CLOUD_NAME,
-            kind="point_cloud",
-            detail={
-                "point_count": POINT_CLOUD_COUNT,
-                "attribute_names": ("X", "Y", "Z"),
-            },
-        )
-    )
-    layers.register_layer(
-        OtherLayerDeclaration(
-            VECTOR_TILE_DATASET,
-            name=VECTOR_TILE_NAME,
-            kind="vector_tile",
-            detail={
-                "source_type": "mbtiles",
-                "min_zoom": fixture_files.VECTOR_TILE_MIN_ZOOM,
-                "max_zoom": fixture_files.VECTOR_TILE_MAX_ZOOM,
-            },
-        )
-    )
-    layers.register_layer(
-        OtherLayerDeclaration(
-            TILED_SCENE_DATASET,
-            name=TILED_SCENE_NAME,
-            kind="tiled_scene",
-            detail={
-                "extent": {
-                    "x_min": fixture_files.TILED_SCENE_REGION[0],
-                    "y_min": fixture_files.TILED_SCENE_REGION[1],
-                    "x_max": fixture_files.TILED_SCENE_REGION[2],
-                    "y_max": fixture_files.TILED_SCENE_REGION[3],
-                }
-            },
-        )
-    )
-    project = FakeProject(layers, scope)
-    project_directory = _project_work_directory()
-
-    def declare_groups() -> tuple[str, str]:
-        from qgis_sdk.models import LayerNode
-
-        project.set_tree(
-            (
-                LayerNode(id="group-root", name=ROOT_GROUP, kind="group"),
-                LayerNode(
-                    id="group-child",
-                    name=CHILD_GROUP,
-                    kind="group",
-                    parent="group-root",
-                ),
-            )
-        )
-        root_id, child_id = project.layer_tree().group_ids()
-        return root_id, child_id
-
-    canvas = FakeCanvas(
-        scope,
-        layer_extents={FIXTURE_NAME: FIXTURE_EXTENT},
-        themes=(DECLARED_THEME,),
-    )
-    return Services(
-        canvas=canvas,
-        draw=lambda shape: canvas.draw(_drawn_geometry(shape)),
-        is_drawing=lambda: bool(canvas.open_captures()),
-        declare_theme=lambda name: canvas.declare_theme(name),
-        files=files,
-        algorithms=algorithms,
-        features=features,
-        editable_layer=lambda: "editable",
-        fixture_layer=lambda: FIXTURE_NAME,
-        layers=layers,
-        rasters=rasters,
-        layouts=layouts,
-        declare_layouts=declare_layouts,
-        drive_layouts=drive_layouts,
-        layout_work_items=lambda: tuple(layout_workers.items),
-        layout_directory=lambda: layout_directory,
-        layout_template=template,
-        model_file=lambda: model_ref,
-        drive_algorithms=drive_algorithms,
-        algorithm_work_items=lambda: tuple(algo_workers.items),
-        open_raster=lambda: rasters.open_raster(RASTER_DATASET).id,
-        raster_dataset=RASTER_DATASET,
-        open_mesh=lambda: layers.open_mesh(MESH_DATASET).id,
-        mesh_dataset=MESH_DATASET,
-        open_annotation=lambda name: layers.open_annotation(name).id,
-        open_point_cloud=lambda: layers.open_point_cloud(POINT_CLOUD_DATASET).id,
-        point_cloud_dataset=POINT_CLOUD_DATASET,
-        open_vector_tile=lambda: layers.open_vector_tile(VECTOR_TILE_DATASET).id,
-        vector_tile_dataset=VECTOR_TILE_DATASET,
-        open_tiled_scene=lambda: layers.open_tiled_scene(TILED_SCENE_DATASET).id,
-        tiled_scene_dataset=TILED_SCENE_DATASET,
-        project=project,
-        project_directory=lambda: project_directory,
-        declare_groups=declare_groups,
-        settings=FakeSettings(scope),
-        styles=styles,
-        connections=connections,
-        declare_auth_configuration=connections.declare_auth_configuration,
-        postgis_connection=connection_files.POSTGIS_CONNECTION,
-        notifications=RecordingNotifications(scope),
-        scope=scope,
-        dataset=FIXTURE_DATASET,
-        line_dataset=LINE_DATASET,
-        minimal_dataset=MINIMAL_DATASET,
-        compatible_style=COMPATIBLE_STYLE,
-        incompatible_style=INCOMPATIBLE_STYLE,
-        select=layers.select,
-    )
+    _s = _CcState()
+    for _p in _CcPhases1():
+        _r = _p(_s)
+        if isinstance(_r, _CcReturn):
+            return _r.value
+    return None
 
 
 def _native_layout_coverage(project):
@@ -952,303 +1774,12 @@ def _save_native_template(manager, template_file) -> None:
 
 
 def _native_services() -> Services:
-    # The session's application, started here if no module asked before.
-    test_layers.start_application()
-
-    from qgis.core import QgsProject
-    from qgis_sdk.adapters.qgis import (
-        AlgorithmWiring,
-        NativeAlgorithms,
-        NativeCanvas,
-        NativeLayers,
-        NativeNotifications,
-        NativeProject,
-        NativeRasters,
-        NativeSettings,
-    )
-    from qgis_sdk.adapters.qgis.connections import NativeConnections
-    from qgis_sdk.adapters.qgis.styles import NativeStyles
-
-    # Contract tests share one application, so each backend instance starts from
-    # an empty project instead of inheriting the previous test's layers - and an
-    # empty *file*, so a test that saves before reading is not answering with
-    # the file another test read.
-    QgsProject.instance().removeAllMapLayers()
-    _forget_project_file(QgsProject.instance())
-
-    work_directory = _algorithm_work_directory()
-    scope = ResourceScope()
-    rasters = NativeRasters(scope)
-    layers = NativeLayers(scope, rasters=rasters)
-    project = NativeProject(layers, scope, rasters=rasters)
-    styles = NativeStyles(layers, scope)
-    connections = NativeConnections(layers)
-    project_directory = _project_work_directory()
-    raster_file = _geotiff_fixture()
-    # The point cloud, vector tile and tiled-scene fixtures (TASK-91), built once
-    # per backend. A layer kind is opened the way a user opens it: the provider
-    # is handed a real file and the description is what it read out of it.
-    layer_kind_directory = _layer_kind_work_directory()
-    point_cloud_file = fixture_files.write_point_cloud(
-        layer_kind_directory / "survey.las"
-    )
-    vector_tile_file = fixture_files.write_vector_tiles(
-        layer_kind_directory / "basemap.mbtiles"
-    )
-    tiled_scene_file = fixture_files.write_tiled_scene(
-        layer_kind_directory / "scene" / "tileset.json"
-    )
-    # The connections registry (TASK-92): the fixture GeoPackage file is built
-    # and its connection registered in QGIS's own settings, and the scope
-    # removes it again - a contract run never leaves a trace in the profile.
-    from qgis.core import QgsProviderRegistry
-
-    registry = QgsProviderRegistry.instance()
-    gpkg_file = connection_files.write_geopackage(
-        layer_kind_directory / connection_files.GPKG_FILE
-    )
-    ogr = registry.providerMetadata("ogr")
-    stored = ogr.createConnection(str(gpkg_file), {})
-    stored.store(connection_files.GPKG_CONNECTION)
-    scope.on_close(lambda: ogr.deleteConnection(connection_files.GPKG_CONNECTION))
-    # The connection nothing serves: registered with a password in its settings
-    # so the no-secret claim has a secret to refuse, and pointed at a dead port
-    # so ``test`` has a verdict to answer - neither needs a server.
-    postgres = registry.providerMetadata("postgres")
-    broken = postgres.createConnection(connection_files.BROKEN_URI, {})
-    broken.store(connection_files.BROKEN_CONNECTION)
-    scope.on_close(
-        lambda: postgres.deleteConnection(connection_files.BROKEN_CONNECTION)
-    )
-    # The PostGIS row: registered when QGIS_SDK_TEST_POSTGIS names a server that
-    # holds ``public.points``; otherwise the row is blocked by environment.
-    postgis_connection = None
-    postgis_uri = os.environ.get("QGIS_SDK_TEST_POSTGIS")
-    if postgis_uri:
-        remote = postgres.createConnection(postgis_uri, {})
-        remote.store(connection_files.POSTGIS_CONNECTION)
-        scope.on_close(
-            lambda: postgres.deleteConnection(connection_files.POSTGIS_CONNECTION)
-        )
-        postgis_connection = connection_files.POSTGIS_CONNECTION
-
-    def declare_auth_configuration(name: str) -> str:
-        from qgis.core import QgsApplication, QgsAuthMethodConfig
-
-        config = QgsAuthMethodConfig()
-        config.setName(name)
-        manager = QgsApplication.authManager()
-        stored = manager.storeAuthenticationConfig(config)
-        kept = bool(config.id()) and config.id() in manager.configIds()
-        if not stored or not kept:
-            pytest.skip(
-                "the authentication registry needs a master password this "
-                "environment does not set"
-            )
-
-        def remove() -> None:
-            manager.removeAuthenticationConfig(config.id())
-
-        scope.on_close(remove)
-        return config.id()
-
-    opened_rasters: dict[str, str] = {}
-    opened_meshes: dict[str, str] = {}
-    opened_kinds: dict[str, str] = {}
-
-    def open_raster() -> str:
-        if "id" not in opened_rasters:
-            opened_rasters["id"] = rasters.open_raster(raster_file).id
-        return opened_rasters["id"]
-
-    def open_mesh() -> str:
-        if "mesh" not in opened_meshes:
-            opened_meshes["mesh"] = layers.open_mesh(MESH_DATASET).id
-        return opened_meshes["mesh"]
-
-    def open_annotation(name: str) -> str:
-        return layers.open_annotation(name).id
-
-    def _open_once(kind: str, opener: Callable[[], str]) -> str:
-        if kind not in opened_kinds:
-            opened_kinds[kind] = opener()
-        return opened_kinds[kind]
-
-    def open_point_cloud() -> str:
-        return _open_once(
-            "point_cloud", lambda: layers.open_point_cloud(point_cloud_file).id
-        )
-
-    def open_vector_tile() -> str:
-        return _open_once(
-            "vector_tile", lambda: layers.open_vector_tile(vector_tile_file).id
-        )
-
-    def open_tiled_scene() -> str:
-        return _open_once(
-            "tiled_scene", lambda: layers.open_tiled_scene(tiled_scene_file).id
-        )
-
-    def declare_groups() -> tuple[str, str]:
-        root = QgsProject.instance().layerTreeRoot()
-        root_group = root.insertGroup(0, ROOT_GROUP)
-        root_group.addGroup(CHILD_GROUP)
-        root_id, child_id = project.layer_tree().group_ids()
-        return root_id, child_id
-
-    def select(layer_id: str, feature_ids: Sequence[int]) -> None:
-        # Selecting is a host action: the curated contract reads a selection and
-        # never sets one (decision-19), so this setup drives PyQGIS directly, as
-        # a user clicking in QGIS would.
-        project.add_layer(layer_id)
-        QgsProject.instance().mapLayer(layer_id).selectByIds(list(feature_ids))
-
-    from qgis_sdk.bridge.authority import HostAuthority
-
-    files = FilesService(HostAuthority(), scope, owner="plugin:contract")
-    from qgis_sdk.adapters.qgis import NativeFeatures
-
-    features = NativeFeatures(layers, scope)
-
-    from qgis_sdk.adapters.qgis import NativeLayouts
-    from qgis_sdk.testing import FakeWorkers
-
-    algo_workers = FakeWorkers()
-    algorithms = NativeAlgorithms(
-        AlgorithmWiring(
-            layers=layers,
-            scope=scope,
-            working_directory=work_directory,
-            files=files,
-            workers=algo_workers,
-        )
-    )
-
-    def model_file():
-        """Grant the checked-in model file, one fresh ref per run."""
-        return files.grant_file(REPORT_MODEL)
-
-    def drive_algorithms() -> None:
-        """One round trip through the algorithms service's own job service."""
-        service = algorithms.jobs
-        service.tick()
-        algo_workers.run_all()
-        service.tick()
-
-    layout_workers = FakeWorkers()
-    layout_directory = _layout_work_directory()
-    # A fake worker backend on purpose: the contract is about the *render*, and
-    # running the body when the test says so keeps an offscreen QgsLayoutExporter
-    # off a Qt event loop the pure suite does not have. The real QgsTask path is
-    # ``tests/test_jobs_tasks_native.py``'s subject.
-    layouts = NativeLayouts(
-        scope,
-        workers=layout_workers,
-        files=files,
-        working_directory=layout_directory,
-    )
-
-    def template_file() -> Path:
-        return layout_directory / f"{TEMPLATE_LAYOUT}.qpt"
-
-    def declare_layouts() -> None:
-        """Put the contract's layouts in the project, and save the template."""
-        from qgis.core import QgsProject
-
-        project = QgsProject.instance()
-        manager = project.layoutManager()
-        # The coverage layer is opened the way a user opens one, and added to
-        # the project, because an atlas reads its features from a layer the
-        # project holds rather than from a file on its own.
-        layer = _native_layout_coverage(project)
-        _native_layout_pages(manager, project)
-        _native_atlas(manager, layer)
-        # The template is saved from a layout of its own name and the layout is
-        # removed again, so loading the file adds that name to the project.
-        _save_native_template(manager, template_file)
-
-    def drive_layouts() -> None:
-        service = layouts.jobs
-        service.tick()
-        layout_workers.run_all()
-        service.tick()
-
-    # A canvas for the canvas contract: real, offscreen, and sized, because a
-    # canvas with no output size reports no scale at all.
-    native_canvas = _offscreen_canvas()
-    canvas = NativeCanvas(scope, layers=layers, canvas=native_canvas)
-
-    # A layer the features tests ask for is opened when they ask: this backend
-    # starts with nothing open, which is a fact the algorithms contract asserts.
-    opened: dict[str, str] = {}
-
-    def _open(source: Path) -> str:
-        if str(source) not in opened:
-            opened[str(source)] = layers.open_vector(source).id
-        return opened[str(source)]
-
-    def fixture_layer() -> str:
-        return _open(FIXTURE_DATASET)
-
-    editable_copy = _feature_work_directory() / "editable.geojson"
-    shutil.copyfile(FIXTURE_DATASET, editable_copy)
-
-    def editable_layer() -> str:
-        return _open(editable_copy)
-
-    return Services(
-        canvas=canvas,
-        draw=lambda shape: _draw_on(native_canvas, shape),
-        is_drawing=lambda: _is_drawing(native_canvas),
-        declare_theme=lambda name: _declare_theme(name),
-        files=files,
-        features=features,
-        editable_layer=editable_layer,
-        editable_dataset=editable_copy,
-        fixture_layer=fixture_layer,
-        algorithms=algorithms,
-        model_file=model_file,
-        drive_algorithms=drive_algorithms,
-        algorithm_work_items=lambda: tuple(algo_workers.items),
-        layers=layers,
-        rasters=rasters,
-        layouts=layouts,
-        declare_layouts=declare_layouts,
-        drive_layouts=drive_layouts,
-        layout_work_items=lambda: tuple(layout_workers.items),
-        layout_directory=lambda: layout_directory,
-        layout_template=template_file,
-        open_raster=open_raster,
-        raster_dataset=raster_file,
-        open_mesh=open_mesh,
-        mesh_dataset=MESH_DATASET,
-        open_annotation=open_annotation,
-        open_point_cloud=open_point_cloud,
-        point_cloud_dataset=point_cloud_file,
-        open_vector_tile=open_vector_tile,
-        vector_tile_dataset=vector_tile_file,
-        open_tiled_scene=open_tiled_scene,
-        tiled_scene_dataset=tiled_scene_file,
-        project=project,
-        project_directory=lambda: project_directory,
-        declare_groups=declare_groups,
-        # A per-session prefix keeps the run out of the real profile's keys and
-        # keeps one test's values out of the next one's.
-        settings=NativeSettings(scope, prefix=f"qgis-sdk-contract/{_SESSION_TOKEN}"),
-        styles=styles,
-        connections=connections,
-        declare_auth_configuration=declare_auth_configuration,
-        postgis_connection=postgis_connection,
-        notifications=NativeNotifications(scope),
-        scope=scope,
-        dataset=FIXTURE_DATASET,
-        line_dataset=LINE_DATASET,
-        minimal_dataset=MINIMAL_DATASET,
-        compatible_style=COMPATIBLE_STYLE,
-        incompatible_style=INCOMPATIBLE_STYLE,
-        select=select,
-        work_directory=work_directory,
-    )
+    _s1 = _CcState1()
+    for _p1 in _CcPhases2():
+        _r1 = _p1(_s1)
+        if isinstance(_r1, _CcReturn1):
+            return _r1.value
+    return None
 
 
 #: The canvases this session built. QgsMapCanvas is a plain QObject owned by
