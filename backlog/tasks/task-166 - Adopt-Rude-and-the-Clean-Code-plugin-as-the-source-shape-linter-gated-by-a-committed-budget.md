@@ -33,4 +33,15 @@ Baseline at adoption: **939 findings in 268 files** (CC101 486, CC104 128, CC102
 Scope: `packages automation scripts tests examples`, stated in `automation/clean_code.py` because Rude has no exclude setting. `pixi.lock` is refreshed by the `relock` workflow after the manifest edit.
 
 Verification: `rude check --select CC` matches the budget exactly; the budget round-trips through `render`/`load` under tab indentation, which is what Biome formats; `tests/scripts` 332 passed; `alint check .` 9/9.
+**2026-11-13 - superseded mechanism, kept for the record.** decision-82 retired the
+budget this task introduced (`clean_code_budget.json`, `--rebaseline`, AC #3's
+"own step in the `Linux checks` job"). The layer itself is unchanged: Rude and
+`rude-clean-code` are still the source-shape linter, the thresholds are still
+`[tool.rude]` in `pyproject.toml`, Ruff still keeps `F`/`E`/`W` and `C901`, and
+`pixi run automation clean_code` is still the gate. What changed is what the gate
+compares against - any finding fails, with no file to rebaseline - and where it
+runs: lefthook on the staged files and before a push, and the `Fast gates` CI job
+rather than a `Linux checks` step. AC #3 and AC #4 above describe the mechanism as
+it shipped on 2026-11-10; decision-82 and decision-84 are the current record.
+
 <!-- SECTION:NOTES:END -->

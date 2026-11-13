@@ -174,4 +174,18 @@ for `qgis-sdk` and `qgis-sdk-runtime` is still 0.10.0 and npm's is still
 pair, `python-v0.11.0` and `ts-v0.8.0`, is uncut on `0737994` and waits for
 "publish"; the acceptance criteria stay unticked until it is spent.
 
+**2026-11-13 - the gate went red after the rehearsal, and was repaired.** From
+`fe0a0b9` (PR #214, 2026-11-12 23:52Z) `autorelease` failed at *Run quality gate*
+on every push to `main`, so no release could be cut from that tree. The gate ran
+`test_python` - the whole suite in one process - which no pull-request job ran;
+three tests that simulate a machine without QGIS passed in the split lanes and
+failed once both layers shared an interpreter (a fixture patching a re-export,
+and one clearing a package's own `sys.modules` entry). Both files were repaired,
+and the gate's command now runs on every pull request as
+`Both layers in one process`, with `tests/scripts/test_ci.py` failing when the
+release gate names a task no pull request runs (decision-84). `autorelease` is
+green again on `406c6e9`, which is the tree the next cut should be built from.
+The rehearsal of 2026-11-07 still stands: nothing was published, `python-v0.11.0`
+and `ts-v0.8.0` are uncut, and the stable pair is still spent only on "publish".
+
 <!-- SECTION:NOTES:END -->
