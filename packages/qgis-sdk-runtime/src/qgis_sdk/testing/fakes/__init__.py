@@ -21,6 +21,7 @@ from ._layers import (
 )
 from ._styles import (
     FakeProcessing,
+    FakeProviderRegistration,
     FakeStyles,
     RecordingLog,
     RecordingNotifications,
@@ -35,6 +36,7 @@ __all__ = [
     "FakeLayers",
     "FakeProcessing",
     "FakeProject",
+    "FakeProviderRegistration",
     "FakeSettings",
     "FakeStyles",
     "OtherLayerDeclaration",

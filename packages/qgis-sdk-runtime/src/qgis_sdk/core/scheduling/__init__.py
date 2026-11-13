@@ -7,6 +7,7 @@ from ._job import (
     StepScheduler,
 )
 from ._states import (
+    CancellationToken,
     Handoff,
     JobState,
     QuiesceOutcome,
@@ -14,6 +15,7 @@ from ._states import (
 )
 
 __all__ = [
+    "CancellationToken",
     "Handoff",
     "Job",
     "JobState",
